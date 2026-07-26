@@ -150,7 +150,9 @@ function generateStagingId(material: Partial<UniversalMaterial>, sourceName: str
     material.productName ?? "",
     material.variant ?? "",
   ].join("::");
-  return crypto.createHash("sha256").update(key).digest("hex").slice(0, 16);
+  const h = crypto.createHash("sha256").update(key).digest("hex");
+  // Format as a deterministic UUID (version 5 style): xxxxxxxx-xxxx-5xxx-yxxx-xxxxxxxxxxxx
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
 /**

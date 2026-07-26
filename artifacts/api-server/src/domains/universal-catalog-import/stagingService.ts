@@ -102,8 +102,8 @@ export async function updateJobStatus(
       counts?.totalNeedsReview ?? null,
       counts?.processedPages ?? null,
       counts?.totalPages ?? null,
-      summaries?.warnings ? JSON.stringify(summaries.warnings) : null,
-      summaries?.errors ? JSON.stringify(summaries.errors) : null,
+      summaries?.warnings ?? null,
+      summaries?.errors ?? null,
     ],
   );
 }
@@ -135,7 +135,7 @@ export async function bulkInsertStagingItems(
     for (const item of chunk) {
       const m = item.material;
       placeholders.push(
-        `($${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++})`,
+        `($${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++},$${paramIdx++})`,
       );
       values.push(
         item.stagingId,
