@@ -1,0 +1,586 @@
+MASTER TASK — PHASE 5
+CONTROLLED MATERIAL IMPORT & HUMAN REVIEW
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Base branch:
+feature/material-phase4-universal-catalog-import
+
+Create branch:
+
+feature/material-phase5-controlled-import
+
+Do NOT work directly on main.
+
+Phase 4A and Phase 4B are COMPLETE.
+
+Do not modify extraction adapters, parser engine, OCR detection, or normalization logic except to fix critical regressions.
+
+This phase begins AFTER staging.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Build a complete enterprise-grade review workflow that safely imports approved staged materials into the canonical Material Library.
+
+Human approval is mandatory.
+
+No automatic import.
+
+========================================================
+PIPELINE
+========================================================
+
+Universal Import
+
+↓
+
+Staging
+
+↓
+
+Human Review
+
+↓
+
+Approve / Reject
+
+↓
+
+Controlled Import
+
+↓
+
+Material Library
+
+↓
+
+Asset Download
+
+↓
+
+Supabase Storage
+
+↓
+
+Search Index Refresh
+
+========================================================
+IMPORT STATES
+========================================================
+
+Support:
+
+draft
+
+needs_review
+
+approved
+
+rejected
+
+importing
+
+imported
+
+failed
+
+rolled_back
+
+Every transition must be auditable.
+
+========================================================
+HUMAN REVIEW
+========================================================
+
+Create a complete review screen.
+
+Display:
+
+Preview image
+
+Collection
+
+Product code
+
+Variant
+
+Brand
+
+Category
+
+Material type
+
+Description
+
+Finish
+
+Texture
+
+Pattern
+
+Dimensions
+
+Thickness
+
+Working size
+
+PEI
+
+Shade variation
+
+Application
+
+Technical specifications
+
+Warnings
+
+Duplicate score
+
+Diff Viewer
+
+Reviewer notes
+
+Review actions:
+
+Approve
+
+Reject
+
+Approve Selected
+
+Reject Selected
+
+Approve All Safe
+
+Return for Review
+
+========================================================
+BULK OPERATIONS
+========================================================
+
+Support:
+
+Approve 1
+
+Approve many
+
+Reject 1
+
+Reject many
+
+Search
+
+Filter
+
+Pagination
+
+Sort
+
+Undo before import
+
+========================================================
+DUPLICATE RESOLUTION
+========================================================
+
+For possible duplicates:
+
+Show:
+
+Existing material
+
+Incoming material
+
+Field differences
+
+Image comparison
+
+Reviewer chooses:
+
+Keep Existing
+
+Replace Existing
+
+Merge
+
+Create New
+
+Every decision stored.
+
+========================================================
+CONTROLLED IMPORT
+========================================================
+
+Import ONLY approved materials.
+
+For each approved item:
+
+Validate
+
+Normalize
+
+Write canonical material
+
+Generate canonical UUID
+
+Link staging record
+
+Update import status
+
+Refresh search index
+
+Never import rejected materials.
+
+========================================================
+TRANSACTION SAFETY
+========================================================
+
+Each material import must run inside a transaction.
+
+If one material fails:
+
+Rollback that material only.
+
+Continue remaining approved materials.
+
+Generate import report.
+
+========================================================
+ASSET INGESTION
+========================================================
+
+Only AFTER approval.
+
+For approved materials:
+
+Download external images
+
+Validate MIME
+
+Validate size
+
+Convert to WebP
+
+Generate thumbnail
+
+Upload to Supabase Storage
+
+Store:
+
+storage path
+
+storage URL
+
+original source URL
+
+checksum
+
+If download fails:
+
+Import material
+
+Flag asset_pending
+
+Retry later.
+
+Never fail the material because one image failed.
+
+========================================================
+SUPABASE STORAGE
+========================================================
+
+Create bucket structure:
+
+material-assets/
+
+brand/
+
+collection/
+
+productCode/
+
+Store:
+
+main.webp
+
+thumb.webp
+
+gallery-01.webp
+
+gallery-02.webp
+
+Keep original source URL.
+
+========================================================
+AUDIT TRAIL
+========================================================
+
+Track:
+
+Reviewer
+
+Review date
+
+Decision
+
+Import date
+
+Import duration
+
+Imported fields
+
+Changed fields
+
+Duplicate resolution
+
+Asset download result
+
+Storage result
+
+Rollback reason
+
+========================================================
+IMPORT REPORT
+========================================================
+
+Generate report:
+
+Imported
+
+Rejected
+
+Duplicates
+
+Updated
+
+Failed
+
+Pending assets
+
+Processing time
+
+========================================================
+ADMIN DASHBOARD
+========================================================
+
+Dashboard cards:
+
+Pending Review
+
+Approved
+
+Rejected
+
+Imported
+
+Failed
+
+Pending Assets
+
+Duplicates
+
+Recent Imports
+
+========================================================
+SEARCH INDEX
+========================================================
+
+After successful import:
+
+Refresh:
+
+Material Search
+
+Material Intelligence
+
+Similarity Search
+
+Tag Index
+
+Color Index
+
+Finish Index
+
+Texture Index
+
+========================================================
+SECURITY
+========================================================
+
+Only:
+
+Super Admin
+
+Material Manager
+
+Catalog Reviewer
+
+can review/import.
+
+Every action logged.
+
+========================================================
+TESTS
+========================================================
+
+Add tests for:
+
+Approve
+
+Reject
+
+Bulk approve
+
+Bulk reject
+
+Duplicate merge
+
+Replace existing
+
+Create new
+
+Transaction rollback
+
+Partial failure
+
+Asset download
+
+Storage upload
+
+Retry asset
+
+Audit trail
+
+Search refresh
+
+Authorization
+
+Regression:
+
+Phase 1
+
+Phase 2
+
+Phase 3
+
+Phase 4A
+
+Phase 4B
+
+API build
+
+Frontend build
+
+Full regression
+
+No new failures.
+
+========================================================
+CONTROLLED UAT
+========================================================
+
+Run UAT using approved staged materials.
+
+Verify:
+
+Approve works
+
+Reject works
+
+Bulk actions work
+
+Import works
+
+Canonical material count increases correctly
+
+No duplicate imports
+
+Images uploaded to Supabase Storage
+
+Search finds imported materials
+
+Audit trail complete
+
+Rollback verified
+
+========================================================
+DOCUMENTATION
+========================================================
+
+Create:
+
+docs/material-phase5-controlled-import.md
+
+Include:
+
+Architecture
+
+Workflow
+
+Review process
+
+Import process
+
+Storage strategy
+
+Audit trail
+
+Rollback
+
+Performance
+
+Future Phase 6 hand-off
+
+========================================================
+GIT
+========================================================
+
+Commit only to:
+
+feature/material-phase5-controlled-import
+
+Do not merge.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+1. Branch
+
+2. Files changed
+
+3. Review workflow
+
+4. Import workflow
+
+5. Storage integration
+
+6. Audit implementation
+
+7. Tests
+
+8. UAT
+
+9. Performance
+
+10. Remaining blockers
+
+Use exactly one verdict:
+
+A.
+PHASE 5 CONTROLLED IMPORT COMPLETE — READY FOR PHASE 6
+
+B.
+PHASE 5 COMPLETE WITH MINOR LIMITATIONS
+
+C.
+PHASE 5 BLOCKED
+
+D.
+PHASE 5 FAILED
+
+STOP.
