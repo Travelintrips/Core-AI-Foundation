@@ -265,7 +265,9 @@ export function normalizeExternalItem(raw: unknown): NormalizationResult {
     sourceUrl: trimOrUndefined(r["sourceUrl"]),
     brand: normalizedBrand,
     productCode: trimOrUndefined(r["productCode"]),
-    productName: productName ?? "(unknown)",
+    // Empty string is intentional — downstream ExternalCatalogItemSchema (min(1))
+    // will reject it and increment invalidCount in the preview pipeline.
+    productName: productName ?? "",
     category: normalizedCategory,
     subcategory: trimOrUndefined(r["subcategory"]),
     materialType: trimOrUndefined(r["materialType"]),

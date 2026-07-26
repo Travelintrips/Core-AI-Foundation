@@ -187,12 +187,16 @@ export function mapFixturePage(
     const countryMatches = !context.country || String(raw["country"] ?? "").toUpperCase() === context.country.toUpperCase();
     return brandMatches && countryMatches;
   });
+  // Enforce the 10 MB limit against the full filtered dataset before pagination.
+  // If the provider/fixture sends more than 10 MB of data in total, reject it
+  // entirely — do not silently paginate through an oversized payload.
+  const filteredSizeBytes = Buffer.byteLength(JSON.stringify(filtered), "utf8");
+  if (filteredSizeBytes > MAX_PAYLOAD_SIZE_BYTES) {
+    throw new CatalogResponseTooLargeError(filteredSizeBytes, MAX_PAYLOAD_SIZE_BYTES);
+  }
   const page = filtered.slice(safeOffset, safeOffset + limit);
   const nextCursor = safeOffset + limit < filtered.length ? String(safeOffset + limit) : undefined;
   const payloadSizeBytes = Buffer.byteLength(JSON.stringify(page), "utf8");
-  if (payloadSizeBytes > MAX_PAYLOAD_SIZE_BYTES) {
-    throw new CatalogResponseTooLargeError(payloadSizeBytes, MAX_PAYLOAD_SIZE_BYTES);
-  }
   return {
     items: page.map(mapNiroGraniteRecord),
     nextCursor,

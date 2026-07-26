@@ -130,7 +130,9 @@ export class CatalogFeatureDisabledError extends Error {
 /** Redacts secrets from a provider config object before logging or returning. */
 export function redactProviderConfig(config: unknown): unknown {
   if (config === null || typeof config !== "object") return config;
-  const SENSITIVE_KEYS = /^(secret|key|token|password|credential|auth|apikey|api_key)/i;
+  // Match any key that contains a sensitive term anywhere (camelCase, snake_case, prefix, suffix).
+  // Examples: apiKey, accessToken, feedSecret, authHeader, x_api_key, bearerToken.
+  const SENSITIVE_KEYS = /(secret|key|token|password|credential|auth|apikey|api_key)/i;
   if (Array.isArray(config)) return config.map((value) => redactProviderConfig(value));
   const redacted: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(config as Record<string, unknown>)) {
