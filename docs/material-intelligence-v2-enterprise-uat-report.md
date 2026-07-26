@@ -454,13 +454,32 @@ One deletion staged. No unrelated modified files. No secrets or credentials in d
 
 ## 32. Remote Push Result
 
-To be recorded after push in Phase 13.
+**PUSHED SUCCESSFULLY**
+
+```
+To https://github.com/Travelintrips/Core-AI-Foundation
+   65e5065..ed48ae1  integration/material-intelligence-v2 -> integration/material-intelligence-v2
+```
+
+Remote tip after push: `ed48ae1e74eada675c6ef716e8cca39d660ba47f` (confirmed via `git ls-remote`).
 
 ---
 
 ## 33. Fresh-Checkout Verification
 
-To be recorded after push in Phase 13.
+Fresh shallow checkout from `origin/integration/material-intelligence-v2` confirmed:
+
+| Check | Result |
+|---|---|
+| 3 domain directories present | ✅ `material-library/`, `material-intelligence/`, `material-catalog-integration/` |
+| Total domain file count | ✅ 37 files across all 3 domains |
+| Phase 3 files (post-cleanup) | ✅ 20 production files + 6 test files = 26 Phase 3 files |
+| Phase 3 test suites | ✅ 6 test files in `tests/` subdirectory |
+| Feature flag default | ✅ `if (raw === undefined) return false;` |
+| Route mount count | ✅ 0 references to `material-catalog` or `import-preview` in `routes/index.ts` |
+| UAT report present | ✅ `docs/material-intelligence-v2-enterprise-uat-report.md` |
+
+**Post-merge cleanup:** Three orphan files from the older Phase 3 implementation (`catalogIntegrationService.ts`, `mockOfficialCatalogProvider.ts` at domain root, `normalizer.ts`) were retained by git during the `--strategy-option=theirs` merge because they existed only on the integration branch and were not conflicting. They were removed in the UAT cleanup commit. No production code imported them after the merge.
 
 ---
 
