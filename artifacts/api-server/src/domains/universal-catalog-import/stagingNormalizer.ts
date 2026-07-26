@@ -34,6 +34,10 @@ export interface NormalizeItemOutput {
 export function normalizeStagingItem(input: NormalizeItemInput): NormalizeItemOutput {
   const { partialMaterial, rawItem, sourceType, sourceName, index } = input;
 
+  // Pick up the AI-extracted partial material attached by the pipeline (for diff viewer)
+  // @ts-ignore — _aiExtracted is injected at pipeline time, not part of the public type
+  const aiExtracted: Partial<UniversalMaterial> | undefined = rawItem.sourceContext?.["_aiExtracted"] as Partial<UniversalMaterial> | undefined;
+
   const material: UniversalMaterial = {
     ...partialMaterial,
     sourceType,
@@ -41,7 +45,14 @@ export function normalizeStagingItem(input: NormalizeItemInput): NormalizeItemOu
     sourcePage: rawItem.sourceContext?.page,
     sourceMetadata: {
       ...partialMaterial.sourceMetadata,
-      extractionContext: rawItem.sourceContext,
+      extractionContext: {
+        page: rawItem.sourceContext?.page,
+        row: rawItem.sourceContext?.row,
+        section: rawItem.sourceContext?.section,
+        elementType: rawItem.sourceContext?.["elementType" as keyof typeof rawItem.sourceContext],
+      },
+      // Phase 4B: store AI extraction output for the Extraction Diff Viewer
+      ...(aiExtracted && Object.keys(aiExtracted).length > 0 ? { aiExtracted } : {}),
     },
   } as UniversalMaterial;
 

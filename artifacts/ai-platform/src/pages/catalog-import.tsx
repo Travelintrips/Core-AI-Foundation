@@ -5,7 +5,8 @@
  */
 
 import { useState, useRef } from "react";
-import { Upload, Globe, FileText, Table, FileJson, Code2, Cpu, AlertTriangle, CheckCircle2, Info, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { useLocation } from "wouter";
+import { Upload, Globe, FileText, Table, FileJson, Code2, Cpu, AlertTriangle, CheckCircle2, Info, Loader2, ChevronDown, ChevronRight, GitCompare } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,18 +24,42 @@ type AdapterSourceType = "pdf" | "website" | "csv" | "excel" | "json" | "xml" | 
 interface StagingItem {
   stagingId: string;
   status: string;
-  productName?: string;
-  brand?: string;
-  productCode?: string;
-  category?: string;
-  subcategory?: string;
-  materialType?: string;
-  colors?: string[];
-  finish?: string[];
+  // Identity
+  brand?: string | null;
+  collection?: string | null;
+  series?: string | null;
+  productCode?: string | null;
+  productName?: string | null;
+  variant?: string | null;
+  // Classification
+  category?: string | null;
+  subcategory?: string | null;
+  materialType?: string | null;
+  // Description
+  description?: string | null;
+  // Appearance
+  colors?: string[] | null;
+  finish?: string[] | null;
+  texture?: string | null;
+  pattern?: string | null;
+  // Dimensions
+  workingSize?: string | null;
+  thickness?: string | null;
+  numberOfFaces?: number | null;
+  // Tile
+  peiRating?: number | null;
+  shadeVariation?: string | null;
+  // Technical
+  application?: string[] | null;
+  certifications?: string[] | null;
+  // Provenance
   sourceType: string;
-  sourcePage?: number;
-  duplicateInfo?: { classification: string; matchedKey?: string; reason?: string };
+  sourceName?: string | null;
+  sourcePage?: number | null;
+  sourceVersion?: string | null;
+  duplicateInfo?: { classification: string; matchedKey?: string; reason?: string } | null;
   validationErrors: string[];
+  extractedAt?: string;
 }
 
 interface PreviewResult {
@@ -76,6 +101,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
 };
 
 export default function CatalogImportPage() {
+  const [, navigate] = useLocation();
   const [sourceType, setSourceType] = useState<AdapterSourceType>("csv");
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
@@ -376,10 +402,25 @@ export default function CatalogImportPage() {
                               : <ChevronRight className="w-3 h-3 shrink-0 text-muted-foreground" />}
                           </CollapsibleTrigger>
                           <CollapsibleContent>
-                            <div className="px-4 pb-3 pt-1 space-y-2 bg-muted/20 text-xs">
-                              {item.materialType && <p><span className="text-muted-foreground">Type:</span> {item.materialType}</p>}
-                              {item.colors && item.colors.length > 0 && <p><span className="text-muted-foreground">Colors:</span> {item.colors.join(", ")}</p>}
-                              {item.finish && item.finish.length > 0 && <p><span className="text-muted-foreground">Finish:</span> {item.finish.join(", ")}</p>}
+                            <div className="px-4 pb-3 pt-1 space-y-1.5 bg-muted/20 text-xs">
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                {item.collection && <p><span className="text-muted-foreground">Collection:</span> {item.collection}</p>}
+                                {item.series && <p><span className="text-muted-foreground">Series:</span> {item.series}</p>}
+                                {item.variant && <p><span className="text-muted-foreground">Variant:</span> {item.variant}</p>}
+                                {item.materialType && <p><span className="text-muted-foreground">Type:</span> {item.materialType}</p>}
+                                {item.subcategory && <p><span className="text-muted-foreground">Subcategory:</span> {item.subcategory}</p>}
+                                {item.description && <p className="col-span-2"><span className="text-muted-foreground">Description:</span> {item.description}</p>}
+                                {item.colors && item.colors.length > 0 && <p><span className="text-muted-foreground">Colors:</span> {item.colors.join(", ")}</p>}
+                                {item.finish && item.finish.length > 0 && <p><span className="text-muted-foreground">Finish:</span> {item.finish.join(", ")}</p>}
+                                {item.texture && <p><span className="text-muted-foreground">Texture:</span> {item.texture}</p>}
+                                {item.pattern && <p><span className="text-muted-foreground">Pattern:</span> {item.pattern}</p>}
+                                {item.workingSize && <p><span className="text-muted-foreground">Size:</span> {item.workingSize}</p>}
+                                {item.thickness && <p><span className="text-muted-foreground">Thickness:</span> {item.thickness}</p>}
+                                {item.peiRating != null && <p><span className="text-muted-foreground">PEI:</span> {item.peiRating}</p>}
+                                {item.shadeVariation && <p><span className="text-muted-foreground">Shade:</span> {item.shadeVariation}</p>}
+                                {item.application && item.application.length > 0 && <p><span className="text-muted-foreground">Application:</span> {item.application.join(", ")}</p>}
+                                {item.certifications && item.certifications.length > 0 && <p><span className="text-muted-foreground">Certifications:</span> {item.certifications.join(", ")}</p>}
+                              </div>
                               {item.duplicateInfo?.reason && (
                                 <p className="text-amber-300"><span className="text-muted-foreground">Duplicate reason:</span> {item.duplicateInfo.reason}</p>
                               )}
@@ -391,7 +432,18 @@ export default function CatalogImportPage() {
                                   ))}
                                 </div>
                               )}
-                              <p className="text-muted-foreground">Staging ID: {item.stagingId}</p>
+                              <div className="flex items-center justify-between pt-1">
+                                <p className="text-muted-foreground font-mono">ID: {item.stagingId}</p>
+                                {result && (
+                                  <button
+                                    onClick={(ev) => { ev.stopPropagation(); navigate(`/catalog-import-diff/${result.jobId}/${item.stagingId}`); }}
+                                    className="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors"
+                                  >
+                                    <GitCompare className="w-3 h-3" />
+                                    View Diff
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </CollapsibleContent>
                         </Collapsible>

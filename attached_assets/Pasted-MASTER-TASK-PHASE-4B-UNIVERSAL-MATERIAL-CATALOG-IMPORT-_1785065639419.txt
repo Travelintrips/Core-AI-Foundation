@@ -1,0 +1,424 @@
+MASTER TASK — PHASE 4B
+UNIVERSAL MATERIAL CATALOG IMPORT HARDENING
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Continue working on:
+
+feature/material-phase4-universal-catalog-import
+
+Do NOT create a new branch.
+
+Do NOT merge into main.
+
+This phase is strictly a stabilization and completion phase for Phase 4A.
+
+No architectural redesign.
+No feature expansion beyond the scope below.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Resolve the remaining extraction issues discovered during the controlled UAT so that the Universal Catalog Import Engine is production-ready for Controlled Import (Phase 5).
+
+Maintain backward compatibility.
+
+Do not modify completed Phase 1–4 functionality except where required to fix the reported issues.
+
+========================================================
+SCOPE
+========================================================
+
+Only complete the following items.
+
+1.
+PDF Extraction Engine
+
+2.
+Persist Complete Material Attributes
+
+3.
+API Response Completion
+
+4.
+Extraction Diff Viewer
+
+Nothing else.
+
+========================================================
+1. PDF EXTRACTION ENGINE
+========================================================
+
+Current issue:
+
+origPdfParse is not a function
+
+Likely caused by CommonJS / ESM interop.
+
+Tasks:
+
+- identify root cause
+- support current runtime
+- support Node version used by repository
+- support embedded text PDFs
+- keep OCR detection logic
+- preserve page batching
+- preserve checksum generation
+
+Requirements:
+
+embedded text extraction
+
+page count
+
+page numbering
+
+catalog version
+
+text blocks
+
+tables
+
+warnings
+
+errors
+
+If PDF contains no embedded text:
+
+mark page as:
+
+needsOCR=true
+
+Never fabricate text.
+
+PDF failures must never crash an import job.
+
+========================================================
+2. PERSIST COMPLETE MATERIAL ATTRIBUTES
+========================================================
+
+Current issue:
+
+attributes exist in memory
+
+but are not written into staging.
+
+Persist all supported fields.
+
+Minimum:
+
+brand
+
+collection
+
+series
+
+productCode
+
+productName
+
+variant
+
+category
+
+subcategory
+
+materialType
+
+description
+
+colors
+
+finish
+
+texture
+
+pattern
+
+dimensions
+
+workingSize
+
+thickness
+
+numberOfFaces
+
+peiRating
+
+shadeVariation
+
+technicalSpecifications
+
+application
+
+certifications
+
+thumbnailReference
+
+previewReferences
+
+sourceType
+
+sourceName
+
+sourceVersion
+
+sourceUrl
+
+sourcePage
+
+sourceMetadata
+
+Verify:
+
+INSERT
+
+UPDATE
+
+resume
+
+duplicate detection
+
+preview
+
+All fields must remain available.
+
+Do not silently discard values.
+
+========================================================
+3. API RESPONSE COMPLETION
+========================================================
+
+Current issue:
+
+variant exists in database
+
+but is missing from API.
+
+Audit every API response.
+
+Ensure all persisted attributes are returned consistently.
+
+Verify:
+
+GET items
+
+GET job
+
+Preview
+
+Pagination
+
+Sorting
+
+Filtering
+
+Search
+
+JSON schema
+
+No missing properties.
+
+========================================================
+4. EXTRACTION DIFF VIEWER
+========================================================
+
+Create an admin-only review panel.
+
+Purpose:
+
+allow reviewers to compare:
+
+SOURCE
+
+↓
+
+EXTRACTED
+
+↓
+
+NORMALIZED
+
+↓
+
+STAGED
+
+for every material.
+
+Example:
+
+Collection
+
+Product Code
+
+Variant
+
+Color
+
+Finish
+
+Dimensions
+
+Thickness
+
+PEI
+
+Shade Variation
+
+Description
+
+Image
+
+Technical Specifications
+
+Highlight:
+
+missing values
+
+changed values
+
+normalized values
+
+warnings
+
+Do not allow editing.
+
+Read-only.
+
+========================================================
+DATABASE
+========================================================
+
+Do not create unnecessary migrations.
+
+Only create a migration if the existing schema cannot store the required attributes.
+
+If a migration is required:
+
+make it backward compatible.
+
+========================================================
+TESTS
+========================================================
+
+Add tests for:
+
+PDF parser
+
+CJS/ESM compatibility
+
+embedded text
+
+image-only PDF
+
+needsOCR flag
+
+attribute persistence
+
+variant persistence
+
+API responses
+
+Extraction Diff
+
+resume
+
+duplicate detection
+
+preview
+
+Run:
+
+full regression
+
+API build
+
+frontend build
+
+Typecheck
+
+No new failures.
+
+========================================================
+CONTROLLED UAT
+========================================================
+
+Repeat UAT using the same official Niro Granite catalog.
+
+Verify:
+
+PDF imports succeed
+
+Embedded text extracted
+
+Image-only pages marked needsOCR
+
+Variant preserved
+
+Visual attributes persisted
+
+API returns every field
+
+Extraction Diff renders correctly
+
+Canonical material count unchanged
+
+Idempotency unchanged
+
+Duplicate detection unchanged
+
+Regression unchanged
+
+========================================================
+REPORT
+========================================================
+
+Create:
+
+docs/material-phase4b-hardening-report.md
+
+Include:
+
+Root cause analysis
+
+PDF fix
+
+Attribute persistence
+
+API verification
+
+Extraction Diff
+
+Screenshots
+
+Regression
+
+UAT comparison
+
+Performance
+
+Remaining limitations
+
+========================================================
+FINAL VERDICT
+========================================================
+
+Return only one verdict.
+
+A.
+PHASE 4B HARDENING COMPLETE — READY FOR PHASE 5 CONTROLLED IMPORT
+
+B.
+PHASE 4B COMPLETE WITH MINOR LIMITATIONS
+
+C.
+PHASE 4B BLOCKED
+
+D.
+PHASE 4B FAILED
+
+Do not merge.
+
+STOP.

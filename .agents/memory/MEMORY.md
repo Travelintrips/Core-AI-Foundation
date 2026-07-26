@@ -87,3 +87,4 @@
 - [canonical-public-catalog](canonical-public-catalog.md) — Public discovery is six canonical categories; preserve legacy IDs and historical category links additively
 - [material-library-phase1-remediation](material-library-phase1-remediation.md) — Relative routers must be mounted under their domain prefix; positional seed data needs shape validation
 - [phase4a-uat-bugs](phase4a-uat-bugs.md) — 4 bugs fixed (robots empty-Disallow, 29-vs-28 placeholders, hex-not-UUID stagingId, TEXT[] JSON.stringify); PDF adapter origPdfParse open
+- [phase4b-catalog-import-hardening](phase4b-catalog-import-hardening.md) — PDF CJS/ESM interop fix, 41-col INSERT, serializeItem() completeness, _aiExtracted diff carrier, vi.mock pdf-parse rule

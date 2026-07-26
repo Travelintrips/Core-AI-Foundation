@@ -1,5 +1,5 @@
 /**
- * Universal Catalog Import Engine — Phase 4A
+ * Universal Catalog Import Engine — Phase 4A/4B
  * Pipeline orchestrator: Adapter → AI Extractor → Normalizer → Staging
  *
  * Pipeline stages:
@@ -10,10 +10,23 @@
  *   5. Duplicate Detection (within normalizer, uses existing detector)
  *   6. Staging Library (stagingService)
  *
+ * Phase 4B: Each staging item's sourceMetadata.aiExtracted stores the AI's raw
+ * partial material output, enabling the Extraction Diff Viewer to compare all
+ * 4 stages (SOURCE → EXTRACTED → NORMALIZED → STAGED) without extra DB columns.
+ *
  * STOP before Canonical Material Library — no writes to materials table.
  */
 
-import type { AdapterInput, AdapterSourceType, ImportJob, PipelineOptions, PipelineResult, RawExtractedItem, StagingPreviewItem, UniversalMaterial } from "./types.js";
+import type {
+  AdapterInput,
+  AdapterSourceType,
+  ImportJob,
+  PipelineOptions,
+  PipelineResult,
+  RawExtractedItem,
+  StagingPreviewItem,
+  UniversalMaterial,
+} from "./types.js";
 import { csvAdapter } from "./adapters/csvAdapter.js";
 import { excelAdapter } from "./adapters/excelAdapter.js";
 import { jsonAdapter } from "./adapters/jsonAdapter.js";
@@ -79,7 +92,7 @@ export async function runImportPipeline(
   // If resuming a completed job, return existing staging items
   if (isExisting && (importJob.status === "complete" || importJob.status === "partial")) {
     logger.info({ domain, jobId: importJob.id }, "[pipeline] Returning existing completed job");
-    const existingItems = await getStagingItems(importJob.id, maxItems);
+    const existingItems = await getStagingItems(importJob.id, { limit: maxItems });
     return buildResult(importJob, existingItems);
   }
 
@@ -114,17 +127,20 @@ export async function runImportPipeline(
   logger.info({ domain, jobId: importJob.id, totalRaw }, "[pipeline] Extraction complete");
 
   // ── Stage 3: AI Material Extraction ──────────────────────────────────────
-  const extractedPairs: Array<{ partialMaterial: Partial<UniversalMaterial>; rawItem: RawExtractedItem }> = [];
+  // We store each AI-extracted partialMaterial alongside the rawItem so the
+  // staging normalizer can embed it in sourceMetadata for the diff viewer.
+  const extractedPairs: Array<{
+    partialMaterial: Partial<UniversalMaterial>;
+    rawItem: RawExtractedItem;
+  }> = [];
 
   if (options.skipAI) {
-    // Skip AI: pass raw items directly to normalizer with minimal mapping
     for (const rawItem of rawItems) {
       const partial = rawToPartialMaterial(rawItem, sourceType, sourceName);
       extractedPairs.push({ partialMaterial: partial, rawItem });
     }
     allWarnings.push("AI extraction skipped (skipAI=true)");
   } else {
-    // Batch raw items through AI extraction
     const batches = chunkArray(rawItems, AI_BATCH_SIZE);
     for (const batch of batches) {
       const batchText = batch.map((item) => rawItemToText(item.raw)).join("\n\n---\n\n");
@@ -141,11 +157,20 @@ export async function runImportPipeline(
       });
       allWarnings.push(...aiResult.warnings);
 
-      // Pair AI-extracted materials back to raw items (best-effort by index)
       for (let i = 0; i < batch.length; i++) {
         const rawItem = batch[i]!;
         const aiMat = aiResult.materials[i] ?? {};
-        extractedPairs.push({ partialMaterial: aiMat, rawItem });
+        // Attach the AI raw output to the rawItem so normalizeStagingItem can
+        // embed it in sourceMetadata.aiExtracted for the diff viewer.
+        const enrichedRawItem: RawExtractedItem = {
+          ...rawItem,
+          sourceContext: {
+            ...rawItem.sourceContext,
+            // @ts-ignore — carry aiExtracted through sourceContext for normalizer pickup
+            _aiExtracted: aiMat,
+          },
+        };
+        extractedPairs.push({ partialMaterial: aiMat, rawItem: enrichedRawItem });
       }
     }
   }
@@ -169,9 +194,12 @@ export async function runImportPipeline(
   // ── Stage 6: Staging Library ──────────────────────────────────────────────
   await bulkInsertStagingItems(importJob.id, stagingItems);
 
-  const finalStatus = allErrors.length > 0 && totalNormalized === 0 ? "failed"
-    : allErrors.length > 0 ? "partial"
-    : "complete";
+  const finalStatus =
+    allErrors.length > 0 && totalNormalized === 0
+      ? "failed"
+      : allErrors.length > 0
+        ? "partial"
+        : "complete";
 
   await updateJobStatus(
     importJob.id,
@@ -214,12 +242,25 @@ function buildResult(job: ImportJob, items: StagingPreviewItem[]): PipelineResul
     job,
     items,
     counts: {
-      new: items.filter((i: StagingPreviewItem) => !i.duplicateInfo || i.duplicateInfo.classification === "new").length,
-      exact_duplicate: items.filter((i: StagingPreviewItem) => i.duplicateInfo?.classification === "exact_duplicate").length,
-      possible_duplicate: items.filter((i: StagingPreviewItem) => i.duplicateInfo?.classification === "possible_duplicate").length,
-      conflicting_identity: items.filter((i: StagingPreviewItem) => i.duplicateInfo?.classification === "conflicting_identity").length,
-      invalid: items.filter((i: StagingPreviewItem) => i.validationErrors.length > 0 && i.status === "draft").length,
-      needs_review: items.filter((i: StagingPreviewItem) => i.status === "needs_review").length,
+      new: items.filter(
+        (i: StagingPreviewItem) =>
+          !i.duplicateInfo || i.duplicateInfo.classification === "new",
+      ).length,
+      exact_duplicate: items.filter(
+        (i: StagingPreviewItem) => i.duplicateInfo?.classification === "exact_duplicate",
+      ).length,
+      possible_duplicate: items.filter(
+        (i: StagingPreviewItem) => i.duplicateInfo?.classification === "possible_duplicate",
+      ).length,
+      conflicting_identity: items.filter(
+        (i: StagingPreviewItem) => i.duplicateInfo?.classification === "conflicting_identity",
+      ).length,
+      invalid: items.filter(
+        (i: StagingPreviewItem) => i.validationErrors.length > 0 && i.status === "draft",
+      ).length,
+      needs_review: items.filter(
+        (i: StagingPreviewItem) => i.status === "needs_review",
+      ).length,
     },
   };
 }
@@ -247,7 +288,6 @@ function rawToPartialMaterial(
 
   const raw = rawItem.raw as Record<string, unknown>;
 
-  // Common field name patterns across catalog exports
   const getString = (...keys: string[]): string | undefined => {
     for (const k of keys) {
       const v = raw[k] ?? raw[k.toLowerCase()] ?? raw[k.toUpperCase()];
@@ -260,7 +300,11 @@ function rawToPartialMaterial(
     for (const k of keys) {
       const v = raw[k] ?? raw[k.toLowerCase()];
       if (Array.isArray(v)) return v.map(String).filter(Boolean);
-      if (typeof v === "string" && v.trim()) return v.split(/[,;|]/).map((s) => s.trim()).filter(Boolean);
+      if (typeof v === "string" && v.trim())
+        return v
+          .split(/[,;|]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
     }
     return undefined;
   };
@@ -282,5 +326,8 @@ function rawToPartialMaterial(
     pattern: getString("pattern", "Pattern"),
     workingSize: getString("workingSize", "working_size", "size", "Size", "ukuran"),
     thickness: getString("thickness", "Thickness", "tebal"),
+    application: getArray("application", "Application"),
+    certifications: getArray("certifications", "Certification", "certification"),
+    shadeVariation: getString("shadeVariation", "shade_variation", "shadevariation"),
   };
 }
