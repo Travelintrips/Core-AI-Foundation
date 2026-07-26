@@ -1,0 +1,593 @@
+MASTER TASK — PHASE 5.1
+RELEASE VALIDATION & GO-LIVE REVIEW
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Continue on:
+
+feature/material-phase5-controlled-import
+
+Current verified commit:
+
+d201cfd
+
+Do NOT create a new branch.
+Do NOT merge to main.
+Do NOT implement new features.
+Do NOT redesign Phase 5.
+Do NOT begin Phase 6.
+
+This phase is RELEASE VALIDATION ONLY.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Prove that Phase 5 is production-ready through full browser/UI validation, security verification, regression verification, release evidence, and merge readiness.
+
+The goal is to upgrade the current verdict:
+
+B
+
+into
+
+A
+
+without changing business scope.
+
+========================================================
+RULES
+========================================================
+
+No new business features.
+
+Only:
+
+- validation
+- verification
+- bug fixes
+- documentation
+- release evidence
+
+Small bug fixes discovered during validation are allowed.
+
+Large refactoring is forbidden.
+
+========================================================
+1. PRE-RELEASE AUDIT
+========================================================
+
+Verify:
+
+- current branch
+- latest commit
+- working tree clean
+- migration status
+- build status
+- test status
+- documentation status
+
+Report:
+
+git status
+
+git log -5
+
+git diff --stat main
+
+========================================================
+2. DEV AUTH SETUP
+========================================================
+
+Seed a proper internal DEV account.
+
+Use the existing authentication system.
+
+Do NOT bypass requireAuth.
+
+Create only the minimum accounts required.
+
+Example:
+
+Owner
+
+Admin
+
+Manager
+
+Internal Staff
+
+Each account must have appropriate permissions.
+
+Document:
+
+username
+
+role
+
+permission set
+
+========================================================
+3. COMPLETE BROWSER UAT
+========================================================
+
+Run the entire Phase 5 flow using the real browser.
+
+Capture screenshots for every step.
+
+Flow:
+
+Login
+
+↓
+
+Dashboard
+
+↓
+
+Pending Review
+
+↓
+
+Search
+
+↓
+
+Filters
+
+↓
+
+Pagination
+
+↓
+
+Open Detail
+
+↓
+
+Extraction Diff
+
+↓
+
+Reviewer Notes
+
+↓
+
+Approve
+
+↓
+
+Reject
+
+↓
+
+Duplicate Dialog
+
+↓
+
+Keep Existing
+
+↓
+
+Replace Existing
+
+↓
+
+Merge
+
+↓
+
+Create New
+
+↓
+
+Import
+
+↓
+
+Import Report
+
+↓
+
+Retry Asset
+
+↓
+
+Audit History
+
+↓
+
+Material Search
+
+Every screen must render correctly.
+
+========================================================
+4. PERMISSION MATRIX UAT
+========================================================
+
+Verify:
+
+Owner
+
+Admin
+
+Manager
+
+Internal Staff
+
+For each role verify:
+
+View queue
+
+Approve
+
+Reject
+
+Duplicate resolution
+
+Import
+
+Retry asset
+
+Audit history
+
+Expected:
+
+Owner
+
+All permissions
+
+Admin
+
+All permissions
+
+Manager
+
+Review only unless import permission explicitly granted
+
+Internal Staff
+
+Cannot import
+
+Cannot replace
+
+Cannot merge
+
+Cannot perform restricted actions
+
+Verify HTTP status codes.
+
+========================================================
+5. DUPLICATE RESOLUTION UI
+========================================================
+
+Verify browser behavior.
+
+Keep Existing
+
+Replace Existing
+
+Merge
+
+Create New
+
+Ensure:
+
+Replace and Merge require target canonical material.
+
+Merge requires merge field map.
+
+Confirmation dialog appears.
+
+Import report reflects actual action.
+
+========================================================
+6. SEARCH VALIDATION
+========================================================
+
+Verify imported materials appear in:
+
+Material Search
+
+Material Intelligence
+
+Filters
+
+Finish
+
+Texture
+
+Color
+
+Category
+
+Verify:
+
+Replace Existing updates search.
+
+Merge updates search.
+
+Keep Existing does not duplicate search.
+
+========================================================
+7. ASSET VALIDATION
+========================================================
+
+Verify:
+
+Image uploaded to Supabase Storage.
+
+Main WebP.
+
+Thumbnail.
+
+Storage URL.
+
+Original URL.
+
+Asset Pending.
+
+Retry.
+
+Broken image.
+
+No binary in PostgreSQL.
+
+========================================================
+8. PERFORMANCE CHECK
+========================================================
+
+Measure:
+
+Import latency
+
+Duplicate resolution latency
+
+Search refresh latency
+
+Asset upload latency
+
+Large batch simulation
+
+Document results.
+
+========================================================
+9. SECURITY REVIEW
+========================================================
+
+Verify:
+
+Authorization
+
+Migration safety
+
+No runtime schema mutation
+
+Permission escalation
+
+Duplicate protection
+
+SQL injection review
+
+Audit integrity
+
+========================================================
+10. REGRESSION
+========================================================
+
+Run:
+
+Phase 5 tests
+
+Material Library tests
+
+Material Intelligence tests
+
+Provider tests
+
+Full regression
+
+API build
+
+Frontend build
+
+Typecheck
+
+Verify:
+
+No new failures.
+
+No new TS errors.
+
+========================================================
+11. RELEASE EVIDENCE
+========================================================
+
+Collect:
+
+Dashboard screenshot
+
+Review queue
+
+Duplicate dialog
+
+Merge dialog
+
+Import report
+
+Audit history
+
+Search result
+
+Supabase Storage
+
+Asset Pending
+
+Retry Asset
+
+Canonical material
+
+Migration applied
+
+Test summary
+
+Build summary
+
+========================================================
+12. RELEASE DOCUMENTATION
+========================================================
+
+Create:
+
+docs/material-phase5-go-live-review.md
+
+Include:
+
+Architecture summary
+
+Validation summary
+
+Permission matrix
+
+Browser UAT
+
+Performance
+
+Security review
+
+Regression
+
+Migration verification
+
+Storage verification
+
+Search verification
+
+Known limitations
+
+Release recommendation
+
+========================================================
+13. MERGE READINESS
+========================================================
+
+Verify:
+
+Working tree clean.
+
+No TODO.
+
+No FIXME.
+
+No placeholder.
+
+No debug logging.
+
+No temporary test code.
+
+Migration committed.
+
+Documentation complete.
+
+Remote branch matches local.
+
+========================================================
+14. FINAL REPORT
+========================================================
+
+Report:
+
+Branch
+
+Commit
+
+Tests
+
+Regression
+
+Browser UAT
+
+Permission Matrix
+
+Performance
+
+Security
+
+Search
+
+Storage
+
+Migration
+
+Screenshots
+
+Remaining issues
+
+Recommendation
+
+========================================================
+GO / NO-GO
+========================================================
+
+Use exactly one verdict.
+
+A.
+GO FOR MERGE
+
+Requirements:
+
+Browser UAT complete.
+
+Regression complete.
+
+No new failures.
+
+No security blocker.
+
+No migration blocker.
+
+Permission matrix verified.
+
+Search verified.
+
+Storage verified.
+
+Release evidence complete.
+
+--------------------------------------------------------
+
+B.
+GO WITH MINOR OBSERVATIONS
+
+Only cosmetic issues remain.
+
+--------------------------------------------------------
+
+C.
+NO-GO
+
+Blocking issue found.
+
+--------------------------------------------------------
+
+D.
+FAILED
+
+Critical regression introduced.
+
+========================================================
+AFTER COMPLETION
+========================================================
+
+Do NOT merge automatically.
+
+Do NOT create Phase 6.
+
+Wait for explicit approval before:
+
+- merging into main
+- tagging release
+- deploying
+
+STOP.
