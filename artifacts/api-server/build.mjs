@@ -110,6 +110,9 @@ async function buildAll() {
       "puppeteer-core",
       "electron",
       "qrcode",
+      // Phase 4A: Universal catalog import adapters
+      "pdf-parse",
+      "multer",
     ],
     sourcemap: "linked",
     plugins: [

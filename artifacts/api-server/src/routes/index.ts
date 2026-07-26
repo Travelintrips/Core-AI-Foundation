@@ -154,6 +154,8 @@ import seedKnowledgeRouter from "./seedKnowledge.js";
 import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import customsRouter from "./customs.js";
+// ── Phase 4A: Universal Material Catalog Import Engine ───────────────────
+import universalCatalogImportRouter from "./universal-catalog-import.js";
 // ── DEV-ONLY: Payment test adapter (never active in production) ───────────
 import devPaymentTestRouter from "./dev-payment-test.js";
 
@@ -321,6 +323,9 @@ router.use(exportWorkspaceRouter);
 router.use(designCostAttributionRouter);
 // ── Team 35: Design Observability & Operations ────────────────────────────────
 router.use(designObservabilityOpsRouter);
+
+// ── Phase 4A: Universal Catalog Import Engine ─────────────────────────────────
+router.use(universalCatalogImportRouter);
 
 // ── DEV-ONLY: Payment test adapter ───────────────────────────────────────────
 // Never mounted in production. Requires explicit DEV_PAYMENT_TEST_ENABLED=true
