@@ -1,0 +1,259 @@
+MASTER TASK — PUBLISH VERIFIED PHASE 3 BRANCH
+
+The Phase 3 foundation was previously reported as complete:
+
+Branch:
+feature/material-phase3-catalog-foundation
+
+Commit:
+5eb3984
+
+Expected implementation:
+
+artifacts/api-server/src/domains/material-catalog-integration/
+
+Expected contents:
+
+- 20 new files
+- 98/98 Phase 3 tests passing
+- 74/74 Phase 1 regression tests passing
+- zero existing files modified
+- feature flag defaults to false
+- route remains unmounted
+- no external network calls
+- no database writes
+
+Another audit workspace could not locate this branch or commit.
+
+Do NOT recreate Phase 3.
+Do NOT modify the implementation.
+Do NOT merge into main.
+Do NOT activate the feature.
+Do NOT begin Phase 4.
+
+========================================================
+1. VERIFY REPOSITORY IDENTITY
+========================================================
+
+Run and report:
+
+pwd
+git rev-parse --show-toplevel
+git remote -v
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git branch --all
+git log --oneline --decorate -20
+
+Confirm this is the canonical repository:
+
+Travelintrips/Core-AI-Foundation
+
+If this is a different repository, STOP and report the mismatch.
+
+========================================================
+2. VERIFY THE PHASE 3 OBJECTS
+========================================================
+
+Run:
+
+git cat-file -t 5eb3984
+git show --stat --oneline 5eb3984
+git branch --all --contains 5eb3984
+git log --all --oneline --decorate | grep 5eb3984
+
+Verify the branch:
+
+feature/material-phase3-catalog-foundation
+
+Confirm the branch HEAD and whether it equals 5eb3984.
+
+If the commit exists only in reflog or as an unreachable object, recover it without changing its contents:
+
+git branch recovery/material-phase3-catalog-foundation 5eb3984
+
+Report any recovery performed.
+
+========================================================
+3. VERIFY FILE INVENTORY
+========================================================
+
+Checkout the verified Phase 3 branch.
+
+Run:
+
+find artifacts/api-server/src/domains/material-catalog-integration \
+  -type f | sort
+
+Confirm:
+
+- exactly 20 expected files
+- production files and test files are present
+- no files outside the isolated domain were changed
+
+Run:
+
+git diff --stat <PHASE_3_BASE_COMMIT>..HEAD
+git diff --name-status <PHASE_3_BASE_COMMIT>..HEAD
+
+Expected:
+
+- 20 files added
+- zero existing files modified
+- zero deleted files
+
+========================================================
+4. VERIFY SAFETY STATE
+========================================================
+
+Search for:
+
+MATERIAL_CATALOG_INTEGRATION_ENABLED
+mockOfficialCatalogProvider
+registerProvider(
+material-catalog
+import-preview
+
+Prove:
+
+- feature flag defaults to false
+- no route is mounted
+- mock provider is not registered at production startup
+- no production provider is registered
+- no database write exists
+- no network request executes
+- no cron or background job exists
+
+Do not activate anything.
+
+========================================================
+5. RE-RUN TESTS
+========================================================
+
+Run:
+
+pnpm exec vitest run \
+  artifacts/api-server/src/domains/material-catalog-integration/tests/
+
+Run the Phase 1 regressions:
+
+- material-library-catalog.test.ts
+- material-library-seed.test.ts
+- material-library-prompt.test.ts
+
+Expected:
+
+- Phase 3: 98/98
+- Phase 1: 74/74
+
+Run the API production build.
+
+Report all failures honestly and separate pre-existing failures from new failures.
+
+========================================================
+6. PREPARE REMOTE AUTHENTICATION
+========================================================
+
+Check whether GitHub remote access works:
+
+git ls-remote origin
+
+Do not print tokens or credentials.
+
+If authentication is unavailable, report:
+
+AUTHENTICATION REQUIRED
+
+Use only:
+
+- Replit GitHub integration, or
+- an approved GitHub token stored as a Replit Secret
+
+Never place credentials in:
+
+- source files
+- prompts
+- documentation
+- shell output
+- Git remote URLs committed to history
+
+========================================================
+7. PUSH THE BRANCH
+========================================================
+
+Only after confirming:
+
+- correct repository
+- correct commit
+- correct file inventory
+- clean working tree
+- tests pass
+- build passes
+
+Push without force:
+
+git push -u origin feature/material-phase3-catalog-foundation
+
+Do not push main.
+
+Do not force-push.
+
+========================================================
+8. VERIFY REMOTE AVAILABILITY
+========================================================
+
+Run:
+
+git ls-remote --heads origin \
+  feature/material-phase3-catalog-foundation
+
+Confirm that the returned remote hash matches the verified local branch HEAD.
+
+Then create a temporary clean checkout or fresh clone and verify:
+
+- branch can be fetched
+- commit is reachable
+- Phase 3 directory exists
+- all expected tests exist
+- feature remains disabled
+- route remains unmounted
+
+========================================================
+9. FINAL REPORT
+========================================================
+
+Return:
+
+1. repository identity
+2. local branch
+3. local HEAD
+4. availability of commit 5eb3984
+5. whether recovery was required
+6. exact file count
+7. exact changed-file list
+8. test totals
+9. build result
+10. feature-flag status
+11. route status
+12. provider-registration status
+13. working-tree status
+14. remote-authentication status
+15. push result
+16. remote branch hash
+17. fresh-checkout verification
+18. remaining blockers
+
+Use one verdict only:
+
+A. PHASE 3 BRANCH PUBLISHED AND REMOTELY VERIFIABLE
+
+B. PHASE 3 FOUND LOCALLY BUT REMOTE PUSH BLOCKED
+
+C. PHASE 3 OBJECTS NOT FOUND IN THIS WORKSPACE
+
+STOP.
+
+Do not merge to main.
+Do not activate Phase 3.
+Do not begin Phase 4.
