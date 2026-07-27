@@ -467,7 +467,8 @@ Return ONLY a JSON object (no markdown) with exactly this structure:
  * The Interior Design workflow stores: Design Concept, Space Planning,
  * Material Specification, Design Copy, Interior Quality Control.
  */
-function stepsToInitialDraftData(steps: Array<{ stepName: string; output: unknown }>) {
+/** @internal Exported for unit testing. Do not call from routes or other services. */
+export function stepsToInitialDraftData(steps: Array<{ stepName: string; output: unknown }>) {
   const byName = Object.fromEntries(steps.map((s) => [s.stepName, s.output]));
 
   const conceptOut  = byName["Design Concept"]           ?? null;

@@ -138,9 +138,24 @@ export function buildInteriorImagePromptContext(
       if (typeof rawConcept === "string") return rawConcept;
       if (rawConcept && typeof rawConcept === "object") {
         const co = rawConcept as Record<string, unknown>;
-        return typeof co["visualConcept"] === "string" ? co["visualConcept"]
-             : typeof co["concept"]       === "string" ? co["concept"]
-             : "";
+        if (typeof co["visualConcept"] === "string") return co["visualConcept"];
+        if (typeof co["concept"]       === "string") return co["concept"];
+        // Interior design agent format (interiorDesignAiService.ts Agent 1)
+        if (co["design_concept"] && typeof co["design_concept"] === "object") {
+          const dc = co["design_concept"] as Record<string, unknown>;
+          const cc = co["color_concept"]   as Record<string, unknown> | undefined;
+          const sd = co["style_direction"] as Record<string, unknown> | undefined;
+          const sc = co["spatial_concept"] as Record<string, unknown> | undefined;
+          const parts: string[] = [];
+          if (dc["title"])             parts.push(String(dc["title"]));
+          if (dc["narrative"])         parts.push(String(dc["narrative"]));
+          if (sd?.["primary_style"])   parts.push(`Style: ${String(sd["primary_style"])}`);
+          if (sc?.["overall_flow"])    parts.push(`Flow: ${String(sc["overall_flow"])}`);
+          if (cc?.["palette_mood"])    parts.push(`Colour mood: ${String(cc["palette_mood"])}`);
+          if (dc["design_philosophy"]) parts.push(String(dc["design_philosophy"]));
+          return parts.join(". ");
+        }
+        return "";
       }
       return "";
     })();

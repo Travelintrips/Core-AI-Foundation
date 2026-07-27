@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { InteriorDesignEditor } from "@/components/interior-design/InteriorDesignEditor";
+import { InteriorConceptOutput } from "@/components/interior-design/InteriorConceptOutput";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateCreativeBrief,
@@ -1510,7 +1511,17 @@ type CreativeStep = NonNullable<CreativeProjectDetail["steps"]>[number];
 /** Renders interior-specific output sections from creative_project_steps outputs.
  *  Shows Moodboard, Space Plan, Materials, Design Copy, and QC sections when
  *  the project ran the Interior Design workflow. */
-function InteriorDesignOutput({ steps }: { steps: CreativeStep[] }) {
+function InteriorDesignOutput({
+  steps,
+  conceptImageUrl,
+  isGeneratingConceptImage,
+  conceptImageFailed,
+}: {
+  steps: CreativeStep[];
+  conceptImageUrl?: string | null;
+  isGeneratingConceptImage?: boolean;
+  conceptImageFailed?: boolean;
+}) {
   const byName: Record<string, CreativeStep> = Object.fromEntries(steps.map((s) => [s.stepName, s]));
 
   const conceptOut   = byName["Design Concept"]?.output ?? null;
@@ -1529,13 +1540,18 @@ function InteriorDesignOutput({ steps }: { steps: CreativeStep[] }) {
         <span className="font-mono text-sm font-semibold">Interior Design Output</span>
       </div>
 
-      {/* Moodboard & Visual Concept */}
+      {/* Moodboard & Visual Concept — rich renderer, no raw JSON */}
       {conceptOut && (
         <div className="border rounded-lg p-4 border-teal-500/20 bg-teal-500/5">
           <h4 className="text-xs font-mono font-semibold text-teal-400 mb-3 flex items-center gap-1.5">
             <Layers className="size-3.5" /> Moodboard &amp; Visual Concept
           </h4>
-          {renderOutput(conceptOut as Record<string, unknown>)}
+          <InteriorConceptOutput
+            output={conceptOut}
+            conceptImageUrl={conceptImageUrl}
+            isGeneratingImage={isGeneratingConceptImage}
+            imageGenerationFailed={conceptImageFailed}
+          />
         </div>
       )}
 
@@ -1887,7 +1903,24 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           )}
 
           {/* ── PHASE 3: Interior Design Output sections ─────────────── */}
-          {isInteriorDesign && <InteriorDesignOutput steps={dbSteps} />}
+          {isInteriorDesign && (() => {
+            const firstCompletedAsset = assets.find(
+              (a) => (a.status === "completed" || a.status === "approved") && a.imageUrl,
+            );
+            const isGeneratingConceptImage = assets.some(
+              (a) => a.status === "generating" || a.status === "pending",
+            );
+            const conceptImageFailed =
+              assets.length > 0 && assets.every((a) => a.status === "failed");
+            return (
+              <InteriorDesignOutput
+                steps={dbSteps}
+                conceptImageUrl={firstCompletedAsset?.imageUrl ?? null}
+                isGeneratingConceptImage={isGeneratingConceptImage}
+                conceptImageFailed={conceptImageFailed}
+              />
+            );
+          })()}
 
           {/* ── Interior Design Concept Approval ─────────────────────── */}
           {/* Must be approved before "Generate Images" unlocks */}
