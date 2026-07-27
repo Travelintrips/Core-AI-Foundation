@@ -42,10 +42,14 @@ import { publishSafe } from "../services/aiEventBusService.js";
 
 const router = Router();
 
-// Guard: never active in production
+// Guard: never active in production.
+// We do NOT throw here because this file is statically imported and a module-level
+// throw crashes the server before app.listen() runs, preventing port 8080 from opening.
+// The caller (routes/index.ts) is responsible for not mounting this router in production.
 if (process.env["NODE_ENV"] === "production") {
-  throw new Error("[dev-payment-test] This router must never be mounted in production.");
-}
+  // Export an empty router — no routes registered, no side-effects.
+  // The mount guard in index.ts ensures we never reach here in production anyway.
+} else {
 
 function generateToken(): string {
   return randomUUID().replace(/-/g, "");
@@ -437,5 +441,7 @@ router.post("/dev/payment-test/payment-scenarios", async (req, res): Promise<voi
     results,
   });
 });
+
+} // end: NODE_ENV !== "production" guard
 
 export default router;
