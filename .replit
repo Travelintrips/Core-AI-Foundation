@@ -19,35 +19,6 @@ expertMode = true
 path = "scripts/post-merge.sh"
 timeoutMs = 240000
 
-# ─── Non-secret environment configuration ────────────────────────────────────
-# All secrets (API keys, passwords, tokens, JWTs, database credentials) are
-# stored exclusively in Replit Secrets and are NOT present in this file.
-# See .env.example for the full list of required secret variable names.
-# ─────────────────────────────────────────────────────────────────────────────
-
-[userenv]
-
-[userenv.shared]
-SMTP_HOST = "smtp.hostinger.com"
-SMTP_PORT = "465"
-SMTP_FROM = "info@cstlogistic.co.id"
-SMTP_USER = "info@cstlogistic.co.id"
-ALLOWED_ORIGINS = "https://aicore.cstlogistic.co.id,https://core-ai-foundation-1.replit.app"
-DESIGN_AI_MULTI_AGENT_ENABLED = "true"
-SMTP_PASS = "#Admin12345@$"
-
-[userenv.development]
-SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
-VITE_SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
-SUPABASE_STORAGE_BUCKET_DEV = "https://xssrfshdrtdfupgqwfdw.storage.supabase.co/storage/v1/s3"
-SUPABASE_DATABASE_URL_DEV = "postgresql://postgres.xssrfshdrtdfupgqwfdw:nvVEWjiHruxen4cE@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
-
-[userenv.production]
-SUPABASE_URL = "https://nzdweipzckfszczzqtuw.supabase.co"
-SUPABASE_STORAGE_BUCKET = "https://nzdweipzckfszczzqtuw.storage.supabase.co/storage/v1/s3"
-PUBLIC_APP_URL = "https://aicore.cstlogistic.co.id"
-SUPABASE_DATABASE_URL = "postgresql://postgres.nzdweipzckfszczzqtuw:AnTXXOl0t1ArQOEU@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
-
 [nix]
 channel = "stable-25_05"
 
