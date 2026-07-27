@@ -70,7 +70,7 @@ export default function RoomTemplateBrowserPage() {
         ...(search     && { search }),
         ...(roomTypeId && { roomTypeId }),
       });
-      return publicFetch(`/api/ai/room-templates?${params}`);
+      return publicFetch(`/api/ai/room-catalog/templates?${params}`);
     },
   });
 

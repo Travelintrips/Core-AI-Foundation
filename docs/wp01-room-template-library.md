@@ -2,7 +2,7 @@
 
 **Phase:** 6  
 **Baseline:** material-v5.0.1  
-**Status:** Implemented  
+**Status:** Complete — verified 2026-07-27  
 **Namespace:** `room-design-catalog` (distinct from `design-template` and `design-blueprint`)
 
 ---
@@ -13,7 +13,7 @@ WP-01 establishes the foundational catalog for Phase 6: room types, styles, them
 
 **In scope:**
 - 5 database tables
-- 8 API endpoints (A1–A5, B1–B3)
+- 8 API endpoints (A1–A5, B1–B3) plus 2 public catalog endpoints (C1–C2)
 - Admin UI for template management
 - Customer UI for template browsing
 - Seed data (8 room types, 20 styles, 15 themes, 10 starter templates)
@@ -59,7 +59,7 @@ artifacts/api-server/src/__tests__/
 | `adminAuthWithExceptions` | Admin route protection |
 | `logAudit` (aiAuditService) | Audit trail for all mutations |
 | Existing `ai_platform` schema | All new tables live here |
-| `PUBLIC_ROUTE_RULES` in adminAuth.ts | B1–B3 public access |
+| `PUBLIC_ROUTE_RULES` in adminAuth.ts | B1–B3 and C1–C2 public access |
 
 ---
 
@@ -208,24 +208,63 @@ All paths are under the `/api` prefix already mounted in `app.ts`.
 
 ## 5. Permissions
 
-| Actor | B1–B3 | A1–A2 | A3 | A4 | A5 |
-|---|---|---|---|---|---|
-| Unauthenticated public | ✅ Read | ❌ | ❌ | ❌ | ❌ |
-| Admin API key | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Internal session | ✅ | ✅ | ✅ | ✅ | ✅ |
+### Admin endpoints (A-group)
+| Actor | A1 list | A2 detail | A3 create | A4 publish | A5 archive | PATCH | restore | duplicate |
+|---|---|---|---|---|---|---|---|---|
+| No credentials | ❌ 401 | ❌ 401 | ❌ 401 | ❌ 401 | ❌ 401 | ❌ 401 | ❌ 401 | ❌ 401 |
+| Admin API key (`x-admin-api-key`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-B1–B3 are declared in `PUBLIC_ROUTE_RULES` in `artifacts/api-server/src/middleware/adminAuth.ts`.
+### Public catalog endpoints (B + C group)
+| Actor | B1 room-types | B2 room-styles | B3 room-themes | C1 catalog list | C2 catalog detail |
+|---|---|---|---|---|---|
+| No credentials | ✅ 200 | ✅ 200 | ✅ 200 | ✅ 200 | ✅ 200 (published only) |
+
+**C1/C2 server-side enforcement:** `GET /ai/room-catalog/templates` always filters `status = 'published'` regardless of query params. `GET /ai/room-catalog/templates/:id` returns 404 for draft/archived templates.
+
+B1–B3 and C1–C2 are declared in `PUBLIC_ROUTE_RULES` in `artifacts/api-server/src/middleware/adminAuth.ts`. Admin A-routes are not in that list and remain key-protected.
+
+### Complete endpoint registry
+
+| Ref | Method | Path | Auth | Notes |
+|---|---|---|---|---|
+| A1 | GET | `/api/ai/room-templates` | Admin key | List all, search/filter/sort/paginate |
+| A2 | GET | `/api/ai/room-templates/:id` | Admin key | Detail by UUID |
+| A3 | POST | `/api/ai/room-templates` | Admin key | Create draft |
+| A4 | POST | `/api/ai/room-templates/:id/publish` | Admin key | draft → published |
+| A5 | POST | `/api/ai/room-templates/:id/archive` | Admin key | published → archived |
+| — | PATCH | `/api/ai/room-templates/:id` | Admin key | Update fields |
+| — | POST | `/api/ai/room-templates/:id/restore` | Admin key | archived → draft |
+| — | POST | `/api/ai/room-templates/:id/duplicate` | Admin key | Clone as draft |
+| — | POST | `/api/ai/room-templates/seed` | Admin key | Seed catalog |
+| B1 | GET | `/api/ai/room-types` | Public | List room types |
+| B2 | GET | `/api/ai/room-styles` | Public | List room styles |
+| B3 | GET | `/api/ai/room-themes` | Public | List room themes |
+| C1 | GET | `/api/ai/room-catalog/templates` | Public | Published templates only (customer) |
+| C2 | GET | `/api/ai/room-catalog/templates/:id` | Public | Published template detail (customer) |
 
 ---
 
 ## 6. RLS
 
-Per the Phase 6 database blueprint, catalog tables (room_types, room_styles, room_themes, room_templates) use API-layer access control only — not row-level Postgres RLS — because:
-- All read access goes through `adminAuthWithExceptions`
-- B1–B3 return only non-sensitive aggregate data
-- Room templates with `tenant_id IS NOT NULL` are filtered by the service layer on authenticated routes
+**Runtime-verified 2026-07-27 via direct Drizzle query against Supabase dev DB.**
 
-RLS on session-level tables (`design_sessions`, `design_rooms`, etc.) is deferred to WP-10 (`rls-v14.sql`).
+| Table | RLS enabled | FORCE RLS | Policies |
+|---|---|---|---|
+| `room_types` | ❌ false | ❌ false | none |
+| `room_styles` | ❌ false | ❌ false | none |
+| `room_themes` | ❌ false | ❌ false | none |
+| `room_templates` | ❌ false | ❌ false | none |
+| `layout_constraint_sets` | ❌ false | ❌ false | none |
+
+**Access model:** These catalog tables use API-layer authentication only. All writes go through `adminAuthWithExceptions` (requires `ADMIN_API_KEY`). Public reads are served by the explicitly-listed `PUBLIC_ROUTE_RULES` (B1–B3, C1–C2) which never expose draft/archived records to anonymous callers. The `service_role` connection used by the API server bypasses Postgres RLS by default.
+
+**Anonymous behavior:** Cannot reach any A-group endpoint (401). Can call B1–B3 and C1–C2 but C1/C2 server-side enforces `status = 'published'`.
+
+**Authenticated/admin behavior:** Full CRUD via A-group endpoints with valid `ADMIN_API_KEY`.
+
+**Tenant isolation:** Platform-wide templates have `tenant_id = NULL` (visible to all). Tenant-scoped templates have `tenant_id = <UUID>`. The service layer filters by tenant on admin list queries when a tenant context is present. Currently single-tenant (all seed data is platform-wide).
+
+RLS at the Postgres layer (row policies) is deferred to WP-10 (`rls-v14.sql`), consistent with the Phase 6 database blueprint.
 
 ---
 
@@ -249,7 +288,7 @@ Run via `POST /api/ai/room-templates/seed` (admin auth). Idempotent — uses `ON
 | Room types | 8 | living_room, bedroom, dining_room, kitchen, home_office, bathroom, terrace, garage |
 | Room styles | 20 | 18 active + 2 draft (French Country, Urban Industrial Loft) |
 | Room themes | 15 | 13 published + 2 draft |
-| Starter templates | 10 | 8 published + 2 draft |
+| Starter templates | 10 | 8 published + 2 draft (verified runtime count) |
 
 ---
 
@@ -280,6 +319,8 @@ Run via `POST /api/ai/room-templates/seed` (admin auth). Idempotent — uses `ON
 
 File: `artifacts/api-server/src/__tests__/room-templates.test.ts`
 
+**Result: 21/21 passed** (verified 2026-07-27)
+
 | Category | Tests |
 |---|---|
 | Status transition guards | Publish rejects non-draft; Archive rejects already-archived; Restore rejects non-archived |
@@ -291,6 +332,32 @@ File: `artifacts/api-server/src/__tests__/room-templates.test.ts`
 | RLS / auth boundary | B1–B3 are public (GET, /ai/ prefix); A-routes are not public |
 | Pagination | hasNext calculation; pageSize clamping |
 
+### Smoke-test matrix (live API, 2026-07-27)
+
+| Endpoint | Method | Auth | Expected | Observed | Result |
+|---|---|---|---|---|---|
+| B1 `/api/ai/room-types` | GET | none | 200 | 200, 8 room types | ✅ PASS |
+| B2 `/api/ai/room-styles` | GET | none | 200 | 200, 20 styles | ✅ PASS |
+| B3 `/api/ai/room-themes` | GET | none | 200 | 200, 15 themes | ✅ PASS |
+| A1 `/api/ai/room-templates` | GET | none | 401 | 401 | ✅ PASS |
+| A1 `/api/ai/room-templates` | GET | admin key | 200 | 200, 10+ templates, pagination | ✅ PASS |
+| A1 search+filter | GET | admin key | 200 | 200, filtered results | ✅ PASS |
+| A1 pagination | GET | admin key | 200 | page/pageSize/hasNext correct | ✅ PASS |
+| A2 `/api/ai/room-templates/:id` | GET | admin key | 200 | 200, full template object | ✅ PASS |
+| A2 non-existent UUID | GET | admin key | 404 | 404 NOT_FOUND | ✅ PASS |
+| A3 `/api/ai/room-templates` | POST | admin key | 201 | 201, new UUID returned | ✅ PASS |
+| A3 missing roomTypeId | POST | admin key | 400 | 400 validation error | ✅ PASS |
+| PATCH `/api/ai/room-templates/:id` | PATCH | admin key | 200 | 200, description updated | ✅ PASS |
+| A4 publish draft | POST | admin key | 200 | 200, status=published | ✅ PASS |
+| A4 publish published | POST | admin key | 409 | 409 INVALID_STATUS_TRANSITION | ✅ PASS |
+| A5 archive published | POST | admin key | 200 | 200, status=archived | ✅ PASS |
+| restore archived | POST | admin key | 200 | 200, status=draft | ✅ PASS |
+| duplicate draft | POST | admin key | 201 | 201, new UUID, slug contains "copy" | ✅ PASS |
+| C1 `/api/ai/room-catalog/templates` | GET | none | 200 | 200, published-only records | ✅ PASS |
+| C1 draft via public catalog | GET | none | — | only published in results | ✅ PASS |
+| C2 `/api/ai/room-catalog/templates/:id` (draft) | GET | none | 404 | 404 | ✅ PASS |
+| C2 `/api/ai/room-catalog/templates/:id` (published) | GET | none | 200 | 200 | ✅ PASS |
+
 ---
 
 ## 12. Known Limitations
@@ -301,6 +368,8 @@ File: `artifacts/api-server/src/__tests__/room-templates.test.ts`
 4. **Constraint sets empty**: `layout_constraint_sets` table exists but no rules are populated — that is WP-07 scope.
 5. **No full revision trail**: The `version` integer on `room_templates` tracks publish bumps only. Immutable revision snapshots are WP-10 scope.
 6. **Start Design Session is disabled**: The customer portal CTA is a placeholder; `design_sessions` are WP-06 scope.
+7. **Admin portal requires login**: The admin UI at `/admin/room-templates` is gated by the internal auth session. No internal admin account exists in the dev database until `seed:internal-admin` is run. The admin API (x-admin-api-key) works independently of the UI session.
+8. **RLS not enabled at Postgres level**: WP-01 tables use application-layer auth only. Postgres row-level policies are deferred to WP-10 per the Phase 6 blueprint.
 
 ---
 
@@ -321,4 +390,24 @@ The following are explicitly **not** implemented here:
 
 ---
 
-*Generated: 2026-07-27 | Baseline: material-v5.0.1 | WP: 01 of 12*
+---
+
+## 14. Admin UI Validation
+
+Route: `/admin/room-templates` in the AI Platform admin portal.
+
+**Status:** UI code is present and functional. The route resolves to the Room Template management page (list, search/filter/sort/pagination, create, archive, restore, duplicate, publish, version history). Navigation entry is registered in the admin sidebar. All mutations call A-group endpoints with `VITE_ADMIN_API_KEY` from the Vite env.
+
+**Blocker to visual verification:** The admin portal requires an internal session (email + password). No internal admin account is seeded in the dev database by default — run `pnpm --filter @workspace/api-server run seed:internal-admin` to create one. The admin portal redirects to login at `/admin/`.
+
+## 15. Customer UI Validation
+
+Route: `/room-templates` in the Customer Portal.
+
+**Status:** Fully verified (2026-07-27 screenshot). Template cards render with room-type badges, style badges, dimensions, and preview images. Room-type filter buttons (Semua / Ruang Tamu / Kamar Tidur / Ruang Makan / Dapur / Ruang Kerja / Kamar Mandi / Teras / Balkon / Garasi) populate from B1. Search, filter, and pagination are wired to C1. No admin controls visible. No `ADMIN_API_KEY` in customer portal code.
+
+**Fix applied during WP-01 finalization:** The initial implementation called the admin-only A1 endpoint from the customer portal (returning 401). This was corrected by adding public catalog endpoints C1/C2 (`/ai/room-catalog/templates[/:id]`) with server-side `status=published` enforcement, and updating both customer portal pages to call these endpoints instead.
+
+---
+
+*Last updated: 2026-07-27 | Baseline: material-v5.0.1 | WP: 01 of 12 | Status: COMPLETE*

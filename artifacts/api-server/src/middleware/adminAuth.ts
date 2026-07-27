@@ -180,6 +180,10 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "GET",  pattern: /^\/ai\/room-types$/ },
   { method: "GET",  pattern: /^\/ai\/room-styles$/ },
   { method: "GET",  pattern: /^\/ai\/room-themes$/ },
+  // Phase 6 WP-01: Public catalog endpoints for customer portal.
+  // These always enforce status=published server-side; admin A-routes remain protected.
+  { method: "GET",  pattern: /^\/ai\/room-catalog\/templates$/ },
+  { method: "GET",  pattern: /^\/ai\/room-catalog\/templates\/[0-9a-f-]+$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

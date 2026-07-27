@@ -45,7 +45,7 @@ export default function RoomTemplateDetailPage() {
 
   const { data: template, isLoading, isError } = useQuery<RoomTemplate>({
     queryKey: ["room-template-public", templateId],
-    queryFn: () => publicFetch(`/api/ai/room-templates/${templateId}`),
+    queryFn: () => publicFetch(`/api/ai/room-catalog/templates/${templateId}`),
     enabled: !!templateId,
   });
 

@@ -252,4 +252,44 @@ router.post("/ai/room-templates/:id/duplicate", async (req, res) => {
   }
 });
 
+// ── Public catalog: GET /ai/room-catalog/templates ───────────────────────────
+// Customer-facing published-only template list. Declared in PUBLIC_ROUTE_RULES.
+// Always enforces status=published — callers cannot override it.
+router.get("/ai/room-catalog/templates", async (req, res) => {
+  try {
+    const q = req.query as Record<string, string | undefined>;
+    const page     = parseInt(q["page"]     ?? "1",  10);
+    const pageSize = parseInt(q["pageSize"] ?? "12", 10);
+
+    const result = await listRoomTemplates({
+      status:     "published",           // hard-coded — public catalog shows published only
+      roomTypeId: q["roomTypeId"],
+      search:     q["search"],
+      sortBy:     (q["sortBy"] as "name" | "created_at" | "updated_at" | "status") ?? "updated_at",
+      sortDir:    (q["sortDir"] as "asc" | "desc") ?? "desc",
+      page:       isNaN(page) ? 1 : page,
+      pageSize:   Math.min(isNaN(pageSize) ? 12 : pageSize, 50), // cap at 50 for public
+    });
+
+    res.json(result);
+  } catch (err) {
+    handleServiceError(err, res);
+  }
+});
+
+// ── Public catalog: GET /ai/room-catalog/templates/:id ───────────────────────
+// Customer-facing template detail. Returns 404 for non-published templates.
+router.get("/ai/room-catalog/templates/:id", async (req, res) => {
+  try {
+    const template = await getRoomTemplate(req.params["id"]!);
+    if (!template || template.status !== "published") {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Room template not found." } });
+      return;
+    }
+    res.json(template);
+  } catch (err) {
+    handleServiceError(err, res);
+  }
+});
+
 export default router;
