@@ -1,0 +1,96 @@
+RESUME TASK — FINALIZE MATERIAL V5.0.1 BASELINE
+
+Resume from the current workspace.
+
+Do NOT repeat the full repository audit.
+Use the facts and inventories already collected.
+
+Create only:
+
+docs/baselines/material-v5.0.1-baseline.md
+
+Do NOT modify application code.
+Do NOT create migrations.
+Do NOT create or switch to any Phase 6 branch.
+Do NOT start Phase 6.
+
+The baseline must document the ACTUAL current repository state.
+
+Important release facts:
+
+- HEAD and origin/main must be recorded from current git output.
+- material-v5.0.1 is currently not visible locally or remotely.
+- Do not claim the tag exists unless a fresh git command proves it.
+- Distinguish current source evidence from older release reports.
+- Do not invent production deployment, production smoke-test, migration-application, or performance status.
+
+Required sections:
+
+1. Release identity and git state
+2. Repository cleanliness
+3. Architecture inventory
+4. Material domain inventory
+5. Dependency graph
+6. Verified material and asset API endpoints
+7. Worker inventory
+8. Scheduler and poller inventory
+9. Database and RLS inventory
+10. Complete migration source inventory
+11. Security baseline
+12. Test and regression inventory
+13. Measured versus unmeasured performance
+14. Documentation inventory
+15. Known limitations and documentation conflicts
+16. Approved Phase 6 scope
+17. Repository health score
+18. Phase 6 entry status
+
+For every API endpoint include:
+
+- HTTP method
+- final mounted path
+- source router
+- authentication
+- authorization
+- purpose
+- evidence status: verified or inferred
+
+For migrations:
+
+- list every migration file currently present
+- classify Phase 5, WP-13/security, or unrelated
+- do not claim production application without evidence
+
+After writing the document:
+
+1. Confirm the file exists.
+2. Search it for TODO, FIXME, placeholders, empty sections, and unsupported claims.
+3. Verify endpoint paths against source and route mounts.
+4. Verify worker/scheduler names against startup registration.
+5. Verify migration filenames against the repository.
+6. Run git status.
+7. Confirm only the baseline document changed.
+8. Confirm no Phase 6 branch exists.
+9. Do not commit unless explicitly required.
+10. Produce the final report.
+
+Final report must include:
+
+- file created
+- endpoint count
+- worker count
+- scheduler/poller count
+- migration file count
+- repository health score
+- git status
+- tag status
+- remaining observations
+
+Use exactly one verdict:
+
+A. BASELINE SNAPSHOT COMPLETE
+B. BASELINE SNAPSHOT COMPLETE WITH OBSERVATIONS
+C. BASELINE SNAPSHOT INCOMPLETE
+D. BASELINE SNAPSHOT FAILED
+
+STOP after the report.
