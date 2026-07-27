@@ -10492,9 +10492,9 @@ components:
         variations:
           type: integer
           minimum: 1
-          maximum: 4
+          maximum: 8
           default: 2
-          description: Number of image variations to generate (max 4)
+          description: Number of image variations to generate (max 8; interior concepts use 6)
     GenerateImageResponse:
       type: object
       required:

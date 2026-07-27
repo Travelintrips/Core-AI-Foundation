@@ -1628,9 +1628,9 @@ export interface CreativeAiAsset {
 
 export interface GenerateImageBody {
   /**
-     * Number of image variations to generate (max 4)
+     * Number of image variations to generate (max 8; interior concepts use 6)
      * @minimum 1
-     * @maximum 4
+     * @maximum 8
      */
   variations?: number;
 }

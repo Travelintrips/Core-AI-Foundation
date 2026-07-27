@@ -28,7 +28,12 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
-import { runImageDesignerPipeline, regenerateSingleAsset, isInteriorDesignProject } from "../services/imageDesignerService.js";
+import {
+  runImageDesignerPipeline,
+  regenerateSingleAsset,
+  isInteriorDesignProject,
+  getInteriorConceptVersion,
+} from "../services/imageDesignerService.js";
 import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
 
 const router = Router();
@@ -239,6 +244,29 @@ router.post("/creative-ai/projects/:id/generate-image", async (req, res): Promis
     if (!conceptDraft || conceptDraft.reviewState !== "approved_for_rendering") {
       res.status(409).json({
         error: "Interior Design concept must be approved for rendering before image generation.",
+      });
+      return;
+    }
+
+    // Idempotency boundary: an approved concept version can only have one
+    // initial visual generation. Refreshes/retries must not create another
+    // batch; the explicit asset regeneration action is the supported retry.
+    const conceptVersion = getInteriorConceptVersion(project, conceptDraft);
+    const existingVersionAssets = await db
+      .select({ id: creativeAiAssetsTable.id, status: creativeAiAssetsTable.status, metadata: creativeAiAssetsTable.metadata })
+      .from(creativeAiAssetsTable)
+      .where(eq(creativeAiAssetsTable.projectId, project.projectId));
+    const sameVersionAssets = existingVersionAssets.filter((asset) =>
+      (asset.metadata as Record<string, unknown> | null)?.conceptVersion === conceptVersion,
+    );
+    if (sameVersionAssets.length > 0) {
+      const isStillRunning = sameVersionAssets.some((asset) =>
+        asset.status === "generating" || (asset.metadata as Record<string, unknown> | null)?.generationStatus === "generating_visual",
+      );
+      res.status(409).json({
+        error: isStillRunning
+          ? "Interior visual generation is already in progress for this approved concept."
+          : "Interior visuals already exist for this approved concept. Use an asset's regenerate action to create a new version.",
       });
       return;
     }

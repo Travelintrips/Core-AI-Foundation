@@ -81,7 +81,7 @@ export const HealthCheckAllProvidersResponseItem = zod.object({
   "keyConfigured": zod.boolean(),
   "envVar": zod.string().optional(),
   "httpStatus": zod.number().nullish(),
-  "isActive": zod.boolean().describe('Admin-controlled enable/disable flag — NOT a runtime health indicator'),
+  "isActive": zod.boolean().describe('Admin-controlled enable\/disable flag — NOT a runtime health indicator'),
   "pingOk": zod.boolean().describe('True if this specific health-check ping succeeded (HTTP 2xx from the provider API)'),
   "consecutiveFailures": zod.number(),
   "lastCheckedAt": zod.coerce.date().nullish(),
@@ -104,7 +104,7 @@ export const HealthCheckProviderResponse = zod.object({
   "keyConfigured": zod.boolean(),
   "envVar": zod.string().optional(),
   "httpStatus": zod.number().nullish(),
-  "isActive": zod.boolean().describe('Admin-controlled enable/disable flag — NOT a runtime health indicator'),
+  "isActive": zod.boolean().describe('Admin-controlled enable\/disable flag — NOT a runtime health indicator'),
   "pingOk": zod.boolean().describe('True if this specific health-check ping succeeded (HTTP 2xx from the provider API)'),
   "consecutiveFailures": zod.number(),
   "lastCheckedAt": zod.coerce.date().nullish(),
@@ -1597,12 +1597,12 @@ export const GenerateImageConceptsParams = zod.object({
 })
 
 export const generateImageConceptsBodyVariationsDefault = 2;
-export const generateImageConceptsBodyVariationsMax = 4;
+export const generateImageConceptsBodyVariationsMax = 8;
 
 
 
 export const GenerateImageConceptsBody = zod.object({
-  "variations": zod.number().min(1).max(generateImageConceptsBodyVariationsMax).default(generateImageConceptsBodyVariationsDefault).describe('Number of image variations to generate (max 4)')
+  "variations": zod.number().min(1).max(generateImageConceptsBodyVariationsMax).default(generateImageConceptsBodyVariationsDefault).describe('Number of image variations to generate (max 8; interior concepts use 6)')
 })
 
 export const GenerateImageConceptsResponse = zod.object({
@@ -12922,26 +12922,3 @@ export const GetWorkspaceCreativeMarketplaceAssetsResponse = zod.object({
 })
 
 
-
-
-/**
- * @summary Get health-check history for a single AI provider
- */
-export const GetProviderHealthHistoryParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetProviderHealthHistoryQueryParams = zod.object({
-  "limit": zod.coerce.number().optional()
-})
-
-export const ProviderHealthLogItem = zod.object({
-  "id": zod.number(),
-  "providerId": zod.number(),
-  "isActive": zod.boolean(),
-  "httpStatus": zod.number().nullish(),
-  "error": zod.string().nullish(),
-  "checkedAt": zod.coerce.date()
-})
-
-export const GetProviderHealthHistoryResponse = zod.array(ProviderHealthLogItem)

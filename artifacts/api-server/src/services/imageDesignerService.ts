@@ -41,6 +41,147 @@ interface ImagePromptResult {
   negativePrompt: string;
   aspectRatio: string;
   style: string;
+  visualRole?: InteriorVisualRole;
+}
+
+export type InteriorVisualRole =
+  | "hero_concept"
+  | "moodboard"
+  | "material_reference"
+  | "furniture_reference"
+  | "lighting_reference";
+
+const INTERIOR_VISUAL_ROLES: InteriorVisualRole[] = [
+  "hero_concept",
+  "moodboard",
+  "material_reference",
+  "furniture_reference",
+  "lighting_reference",
+  "material_reference",
+];
+
+function interiorVisualRoleForIndex(index: number): InteriorVisualRole {
+  return INTERIOR_VISUAL_ROLES[index] ?? "material_reference";
+}
+
+function interiorVisualRoleHint(role: InteriorVisualRole): string {
+  switch (role) {
+    case "hero_concept":
+      return "Hero concept render: photorealistic wide interior view showing the room as a complete, coherent space.";
+    case "moodboard":
+      return "Moodboard collage: a refined editorial board combining the approved palette, material textures, furniture silhouettes, lighting mood, and style references; no readable text or labels.";
+    case "material_reference":
+      return "Material reference board: close-up editorial composition of the approved flooring, wall, fabric, stone, wood, and finish textures, arranged as a cohesive interior material palette; no readable text.";
+    case "furniture_reference":
+      return "Furniture reference board: curated visual references for the approved furniture direction, proportions, upholstery, joinery, and silhouettes; no readable text.";
+    case "lighting_reference":
+      return "Lighting reference board: visual references for the approved natural light, ambient, task, and accent lighting philosophy in the same room style; no readable text.";
+  }
+}
+
+export function isPermanentSupabaseImageUrl(url: string | null | undefined): boolean {
+  return typeof url === "string"
+    && url.startsWith("https://")
+    && url.includes("/storage/v1/object/public/ai-assets/");
+}
+
+export function getInteriorConceptVersion(
+  project: { updatedAt?: Date | null },
+  draft: { approvedAt?: Date | null; updatedAt?: Date | null } | null,
+): string {
+  const source = draft?.approvedAt ?? draft?.updatedAt ?? project.updatedAt ?? new Date(0);
+  return source.toISOString();
+}
+
+function interiorAssetMetadata(
+  role: InteriorVisualRole,
+  conceptVersion: string,
+  generationStatus: "generating_visual" | "visual_ready" | "visual_failed",
+  generationProvider: string | null,
+  generationModel: string | null,
+  generationPrompt: string,
+  generationError: string | null = null,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    ...extra,
+    conceptRole: role,
+    conceptVersion,
+    generationStatus,
+    generationProvider,
+    generationModel,
+    generationPrompt,
+    generatedAt: generationStatus === "visual_ready" || generationStatus === "visual_failed"
+      ? new Date().toISOString()
+      : null,
+    generationError,
+    storageRequired: true,
+  };
+}
+
+async function finalizeInteriorConceptMetadata(
+  projectUuid: string,
+  conceptVersion: string,
+): Promise<void> {
+  const assets = await db
+    .select()
+    .from(creativeAiAssetsTable)
+    .where(eq(creativeAiAssetsTable.projectId, projectUuid));
+
+  const interiorAssets = assets.filter((asset) => {
+    const metadata = (asset.metadata ?? {}) as Record<string, unknown>;
+    return metadata.conceptVersion === conceptVersion;
+  });
+  const byRole = new Map<string, typeof interiorAssets[number]>();
+  for (const asset of interiorAssets) {
+    const role = String(((asset.metadata ?? {}) as Record<string, unknown>).conceptRole ?? "");
+    if (role && !byRole.has(role)) byRole.set(role, asset);
+  }
+
+  const readyAssets = interiorAssets.filter((asset) => {
+    const metadata = (asset.metadata ?? {}) as Record<string, unknown>;
+    return metadata.generationStatus === "visual_ready"
+      && isPermanentSupabaseImageUrl(asset.imageUrl);
+  });
+  const firstReady = readyAssets[0];
+  const statuses = interiorAssets.map((asset) =>
+    String(((asset.metadata ?? {}) as Record<string, unknown>).generationStatus ?? "visual_failed"),
+  );
+  const generationStatus = statuses.some((status) => status === "generating_visual")
+    ? "generating_visual"
+    : readyAssets.length > 0
+      ? "visual_ready"
+      : "visual_failed";
+  const hero = byRole.get("hero_concept");
+  const moodboard = byRole.get("moodboard");
+  const refs = ["material_reference", "furniture_reference", "lighting_reference"]
+    .map((role) => byRole.get(role))
+    .filter((asset) => Boolean(asset?.imageUrl))
+    .map((asset) => asset!.imageUrl!);
+  const representative = firstReady ?? hero ?? moodboard;
+  const representativeMetadata = (representative?.metadata ?? {}) as Record<string, unknown>;
+
+  await db
+    .update(creativeProjectsTable)
+    .set({
+      lifecycleMetadata: {
+        conceptVisuals: {
+          conceptHeroImageUrl: isPermanentSupabaseImageUrl(hero?.imageUrl) ? hero?.imageUrl : null,
+          conceptMoodboardUrl: isPermanentSupabaseImageUrl(moodboard?.imageUrl) ? moodboard?.imageUrl : null,
+          conceptReferenceImages: refs,
+          generationStatus,
+          generationProvider: representativeMetadata.generationProvider ?? null,
+          generationModel: representativeMetadata.generationModel ?? null,
+          generationPrompt: representativeMetadata.generationPrompt ?? null,
+          generatedAt: representativeMetadata.generatedAt ?? null,
+          generationError: generationStatus === "visual_failed"
+            ? representativeMetadata.generationError ?? "No permanent visual asset was produced"
+            : null,
+          conceptVersion,
+        },
+      },
+    })
+    .where(eq(creativeProjectsTable.projectId, projectUuid));
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
@@ -319,18 +460,22 @@ ${JSON.stringify(furniture, null, 2).slice(0, 600)}
 LIGHTING DESIGN:
 ${lightingSummary.length > 0 ? lightingSummary.join("; ") : JSON.stringify(lighting, null, 2).slice(0, 400)}
 
-Return a JSON array with EXACTLY ${numVariations} objects. Each must have:
+  Return a JSON array with EXACTLY ${numVariations} objects. Each must have:
 {
   "prompt": "detailed interior visualization prompt, 60-150 words — describe camera angle, natural light, material textures, furniture arrangement, atmosphere, color palette",
   "negativePrompt": "comma-separated list: text, watermark, people, low quality, blurry, distorted, unrealistic, cartoon",
   "aspectRatio": "16:9",
-  "style": "photographic"
+  "style": "photographic",
+  "visualRole": "hero_concept | moodboard | material_reference | furniture_reference | lighting_reference"
 }
 
 Valid aspectRatio: "16:9", "1:1", "3:2"
 Valid style: "photographic", "3d", "illustration"
 
-Make each variation show a DIFFERENT camera angle or focal area of the same room.
+Use these visual roles in order: ${Array.from({ length: numVariations }, (_, i) => interiorVisualRoleForIndex(i)).join(", ")}.
+The hero must be a complete room render. The moodboard and references must be editorial visual boards, not random rooms.
+Make each variation use the same approved concept, palette, room function, materials, furniture, and lighting. Add the role-specific direction:
+${Array.from({ length: numVariations }, (_, i) => `${i + 1}. ${interiorVisualRoleForIndex(i)} — ${interiorVisualRoleHint(interiorVisualRoleForIndex(i))}`).join("\n")}
 
 CRITICAL: Respond with ONLY the JSON array. No markdown. No explanation.`;
 
@@ -354,18 +499,25 @@ CRITICAL: Respond with ONLY the JSON array. No markdown. No explanation.`;
   try {
     const parsed = JSON.parse(jsonStr);
     const arr: ImagePromptResult[] = Array.isArray(parsed) ? parsed : [parsed];
-    prompts = arr.slice(0, numVariations).map((p) => ({
-      prompt:        String(p.prompt        ?? "interior visualization, photorealistic, natural light"),
-      negativePrompt: String(p.negativePrompt ?? "text, watermark, people, low quality, blurry, distorted"),
-      aspectRatio:   String(p.aspectRatio   ?? "16:9"),
-      style:         String(p.style         ?? "photographic"),
-    }));
+      prompts = arr.slice(0, numVariations).map((p, i) => {
+        const visualRole = INTERIOR_VISUAL_ROLES.includes(p.visualRole as InteriorVisualRole)
+          ? p.visualRole as InteriorVisualRole
+          : interiorVisualRoleForIndex(i);
+        return {
+          prompt:        `${String(p.prompt ?? "interior visualization, photorealistic, natural light")} ${interiorVisualRoleHint(visualRole)}`,
+          negativePrompt: String(p.negativePrompt ?? "text, watermark, people, low quality, blurry, distorted"),
+          aspectRatio:   visualRole === "hero_concept" ? "16:9" : String(p.aspectRatio ?? "16:9"),
+          style:         String(p.style ?? "photographic"),
+          visualRole,
+        };
+      });
   } catch {
     prompts = Array.from({ length: numVariations }, (_, i) => ({
       prompt: `Photorealistic interior visualization of a ${String(brief["businessType"] ?? "room")}, variation ${i + 1}, ${String(visualConcept).slice(0, 120)}, natural light, professional interior photography`,
       negativePrompt: "text, watermark, people, low quality, blurry, distorted, cartoon, unrealistic",
       aspectRatio: "16:9",
       style: "photographic",
+      visualRole: interiorVisualRoleForIndex(i),
     }));
   }
 
@@ -720,12 +872,19 @@ async function persistImageBuffer(
   brandSlug: string,
   role: string,
   pathPrefix?: string,
+  fileName?: string,
 ): Promise<string | null> {
   try {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(contentType.split(";")[0].toLowerCase())) {
+      throw new Error(`Unsupported image MIME type: ${contentType}`);
+    }
+    if (buffer.byteLength > 50 * 1024 * 1024) {
+      throw new Error("Generated image exceeds the 50 MB storage limit");
+    }
     const { isSupabaseStorageAvailable, uploadToSupabase } = await import("../lib/supabaseStorage.js");
     if (!isSupabaseStorageAvailable()) return null;
     const ext = contentType.includes("png") ? "png" : contentType.includes("jpeg") ? "jpg" : "webp";
-    const storagePath = `${pathPrefix ?? `demo-portfolios/${brandSlug}`}/${role}-${Date.now()}.${ext}`;
+    const storagePath = `${pathPrefix ?? `demo-portfolios/${brandSlug}`}/${fileName ?? `${role}-${Date.now()}.${ext}`}`;
     return await uploadToSupabase(storagePath, buffer, contentType);
   } catch {
     return null;
@@ -942,7 +1101,7 @@ export async function runImageDesignerPipeline(
   requestedVariations = 2,
 ): Promise<void> {
   const guardrails = await readGuardrails();
-  const maxVariations = Math.min(Math.max(1, requestedVariations), 4);
+  const requestedMaxVariations = Math.min(Math.max(1, requestedVariations), 8);
 
   // ── Budget pre-check ──────────────────────────────────────────────────────
   if (guardrails.maxCostPerWorkflow > 0) {
@@ -975,6 +1134,16 @@ export async function runImageDesignerPipeline(
     .select()
     .from(creativeProjectStepsTable)
     .where(eq(creativeProjectStepsTable.projectId, projectDbId));
+  const isInteriorProject = isInteriorDesignProject(steps);
+  const conceptDraft = isInteriorProject
+    ? await getConceptDraftForImagePipeline(projectUuid)
+    : null;
+  const maxVariations = isInteriorProject
+    ? Math.min(Math.max(1, requestedMaxVariations), 6)
+    : Math.min(requestedMaxVariations, 4);
+  const conceptVersion = isInteriorProject
+    ? conceptVersionFor(project, conceptDraft)
+    : null;
 
   const brandStrategy =
     (steps.find((s) => s.stepName === "Brand Strategy")?.output as Record<string, unknown>) ?? {};
@@ -1076,7 +1245,7 @@ export async function runImageDesignerPipeline(
   let promptGenTokens: number;
 
   try {
-    const result = isInteriorDesignProject(steps)
+    const result = isInteriorProject
       ? await generateInteriorImagePrompts(projectUuid, steps, brief, maxVariations)
       : await generateImagePrompts(brief, brandStrategy, creativeDirection, maxVariations);
     imagePrompts = result.prompts;
@@ -1114,6 +1283,7 @@ export async function runImageDesignerPipeline(
   const assetIds: number[] = [];
   for (let i = 0; i < imagePrompts.length; i++) {
     const p = imagePrompts[i];
+    const visualRole = isInteriorProject ? (p.visualRole ?? interiorVisualRoleForIndex(i)) : null;
     const [row] = await db.insert(creativeAiAssetsTable).values({
       projectId: projectUuid,
       agentId: imageDesignerAgent?.id ?? null,
@@ -1131,7 +1301,18 @@ export async function runImageDesignerPipeline(
         : "Image generation requires REPLICATE_API_TOKEN. Set this environment variable in Replit Secrets to enable actual image generation.",
       cost: "0",
       latencyMs: 0,
-      metadata: { style: p.style, variationIndex: i + 1 },
+      metadata: isInteriorProject
+        ? interiorAssetMetadata(
+          visualRole!,
+          conceptVersion!,
+          replicateKey ? "generating_visual" : "visual_failed",
+          "replicate",
+          FLUX_SCHNELL,
+          p.prompt,
+          replicateKey ? null : "REPLICATE_API_TOKEN not configured",
+          { style: p.style, variationIndex: i + 1 },
+        )
+        : { style: p.style, variationIndex: i + 1 },
     }).returning({ id: creativeAiAssetsTable.id });
     assetIds.push(row.id);
   }
@@ -1140,6 +1321,9 @@ export async function runImageDesignerPipeline(
     await logAudit("creative-ai", "image_generation_skipped", projectUuid, "creative_project", "failure", {
       reason: "REPLICATE_API_TOKEN not set",
     });
+    if (isInteriorProject && conceptVersion) {
+      await finalizeInteriorConceptMetadata(projectUuid, conceptVersion);
+    }
     return;
   }
 
@@ -1176,6 +1360,7 @@ export async function runImageDesignerPipeline(
     let qcNotes: string | null = null;
     let generationError: string | null = null;
     let usedModel = FLUX_SCHNELL;
+    const visualRole = isInteriorProject ? (p.visualRole ?? interiorVisualRoleForIndex(i)) : null;
 
     // Try primary model (FLUX.1 Schnell), then fallback to FLUX.1 Dev if enabled
     const modelCandidates = guardrails.fallbackEnabled
@@ -1241,16 +1426,31 @@ export async function runImageDesignerPipeline(
           const buf = Buffer.from(await raw.arrayBuffer());
           const ct = raw.headers.get("content-type") || "image/webp";
           const ext = ct.includes("png") ? "png" : ct.includes("jpeg") ? "jpg" : "webp";
-          const pathKey = `creative-assets/${projectUuid}/image-concepts/concept-${i + 1}-${Date.now()}.${ext}`;
-          persistedUrl = await persistImageBuffer(buf, ct, projectUuid, `concept-${i + 1}`, `creative-assets/${projectUuid}/image-concepts`);
-          if (persistedUrl) storagePath = pathKey;
+          const fileName = `concept-${assetId}-${i + 1}.${ext}`;
+          const pathKey = `creative-assets/${projectUuid}/image-concepts/${fileName}`;
+          persistedUrl = await persistImageBuffer(
+            buf,
+            ct,
+            projectUuid,
+            `concept-${i + 1}`,
+            `creative-assets/${projectUuid}/image-concepts`,
+            fileName,
+          );
+          if (persistedUrl && isPermanentSupabaseImageUrl(persistedUrl)) storagePath = pathKey;
+          else persistedUrl = null;
         }
       } catch (err) {
         console.error(`[imageDesigner] Failed to persist concept ${i + 1} to Supabase:`, err);
       }
     }
-    // Use Supabase URL if available, otherwise keep Replicate URL as fallback
-    const finalImageUrl = persistedUrl ?? imageUrl;
+    // Interior visual concepts must be permanent Supabase assets. Other creative
+    // workflows retain the historical provider-URL fallback for compatibility.
+    const storageRequired = isInteriorProject;
+    const finalImageUrl = storageRequired ? persistedUrl : (persistedUrl ?? imageUrl);
+    if (storageRequired && imageStatus === "completed" && !finalImageUrl) {
+      imageStatus = "failed";
+      generationError = "Permanent Supabase Storage persistence failed";
+    }
 
     // QC review (runs even if image failed — scores the prompt quality)
     try {
@@ -1286,6 +1486,25 @@ export async function runImageDesignerPipeline(
         qcNotes: qcNotes ?? (generationError ? `Generation failed: ${generationError}` : null),
         cost: String(imageStatus === "completed" ? IMAGE_COST_SCHNELL.toFixed(6) : "0"),
         latencyMs: imageLatency,
+        metadata: isInteriorProject
+          ? interiorAssetMetadata(
+            visualRole!,
+            conceptVersion!,
+            imageStatus === "completed" && isPermanentSupabaseImageUrl(finalImageUrl)
+              ? "visual_ready"
+              : "visual_failed",
+            "replicate",
+            usedModel,
+            p.prompt,
+            imageStatus === "completed" ? null : generationError ?? qcNotes,
+            {
+              style: p.style,
+              variationIndex: i + 1,
+              sourceProviderUrl: imageUrl,
+              storagePath,
+            },
+          )
+          : undefined,
       })
       .where(eq(creativeAiAssetsTable.id, assetId));
 
@@ -1302,6 +1521,10 @@ export async function runImageDesignerPipeline(
   await logAudit("creative-ai", "image_pipeline_completed", projectUuid, "creative_project", "success", {
     variations: imagePrompts.length,
   });
+
+  if (isInteriorProject && conceptVersion) {
+    await finalizeInteriorConceptMetadata(projectUuid, conceptVersion);
+  }
 }
 
 /**

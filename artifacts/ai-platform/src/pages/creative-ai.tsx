@@ -681,6 +681,188 @@ function assetStatusColor(status: string) {
   }
 }
 
+type InteriorVisualRole =
+  | "hero_concept"
+  | "moodboard"
+  | "material_reference"
+  | "furniture_reference"
+  | "lighting_reference";
+
+const INTERIOR_ROLE_LABELS: Record<InteriorVisualRole, string> = {
+  hero_concept: "Hero concept render",
+  moodboard: "Moodboard collage",
+  material_reference: "Material references",
+  furniture_reference: "Furniture references",
+  lighting_reference: "Lighting references",
+};
+
+function interiorAssetRole(asset: CreativeAiAsset): InteriorVisualRole | null {
+  const metadata = asset.metadata as Record<string, unknown> | null | undefined;
+  const role = metadata?.conceptRole;
+  return typeof role === "string" && role in INTERIOR_ROLE_LABELS
+    ? role as InteriorVisualRole
+    : null;
+}
+
+function interiorAssetGenerationStatus(asset: CreativeAiAsset): string {
+  const metadata = asset.metadata as Record<string, unknown> | null | undefined;
+  return typeof metadata?.generationStatus === "string"
+    ? metadata.generationStatus
+    : asset.status;
+}
+
+function InteriorVisualGallery({
+  assets,
+  onRetry,
+  retrying,
+}: {
+  assets: CreativeAiAsset[];
+  onRetry: (assetId: number) => Promise<void>;
+  retrying: number | null;
+}) {
+  const [lightbox, setLightbox] = useState<CreativeAiAsset | null>(null);
+  const visualAssets = assets.filter((asset) => interiorAssetRole(asset));
+  const hero = visualAssets.find((asset) => interiorAssetRole(asset) === "hero_concept");
+  const moodboard = visualAssets.find((asset) => interiorAssetRole(asset) === "moodboard");
+  const references = visualAssets.filter((asset) =>
+    ["material_reference", "furniture_reference", "lighting_reference"].includes(interiorAssetRole(asset) ?? ""),
+  );
+  const isGenerating = visualAssets.some((asset) =>
+    ["generating", "pending"].includes(asset.status) || interiorAssetGenerationStatus(asset) === "generating_visual",
+  );
+  const hasFailed = visualAssets.length > 0 && visualAssets.every((asset) =>
+    ["failed", "visual_failed"].includes(interiorAssetGenerationStatus(asset)),
+  );
+  const imageErrorFallback = (asset: CreativeAiAsset) => (
+    <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-2 bg-muted/20 p-5 text-center">
+      <ImageOff className="size-7 text-muted-foreground/70" />
+      <p className="text-xs font-medium text-foreground/80">Visual tidak dapat dimuat</p>
+      <p className="text-[10px] text-muted-foreground">Coba generate ulang asset ini.</p>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 gap-1.5 text-[10px]"
+        onClick={() => void onRetry(asset.id)}
+        disabled={retrying === asset.id}
+      >
+        {retrying === asset.id ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />}
+        Retry
+      </Button>
+    </div>
+  );
+  const renderImage = (asset: CreativeAiAsset, className: string) => (
+    <img
+      src={asset.imageUrl ?? undefined}
+      alt={`${INTERIOR_ROLE_LABELS[interiorAssetRole(asset)!]} for the approved interior design concept`}
+      className={className}
+      onError={(event) => {
+        event.currentTarget.style.display = "none";
+        event.currentTarget.parentElement?.querySelector("[data-image-fallback]")?.removeAttribute("hidden");
+      }}
+      loading="lazy"
+    />
+  );
+  const renderAsset = (asset: CreativeAiAsset, className: string) => {
+    const role = interiorAssetRole(asset)!;
+    const status = interiorAssetGenerationStatus(asset);
+    const ready = Boolean(asset.imageUrl) && !["generating", "pending", "failed", "visual_failed"].includes(status);
+    return (
+      <div className="relative h-full min-h-[180px] overflow-hidden bg-muted/20">
+        {ready ? renderImage(asset, className) : null}
+        <div data-image-fallback hidden={ready ? undefined : false} className="h-full">
+          {ready ? null : status === "generating_visual" || status === "generating" || status === "pending" ? (
+            <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 p-5 text-center">
+              <div className="size-9 rounded-full border-2 border-primary/25 border-t-primary animate-spin" />
+              <p className="text-xs font-medium">Sedang membuat visual konsep…</p>
+              <p className="text-[10px] text-muted-foreground">Setiap visual akan tersimpan permanen setelah selesai.</p>
+            </div>
+          ) : imageErrorFallback(asset)}
+        </div>
+        {ready && (
+          <button
+            type="button"
+            className="absolute inset-0 cursor-zoom-in bg-black/0 transition-colors hover:bg-black/15"
+            aria-label={`Open ${INTERIOR_ROLE_LABELS[role]} fullscreen`}
+            onClick={() => setLightbox(asset)}
+          />
+        )}
+      </div>
+    );
+  };
+
+  if (visualAssets.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-4" data-testid="interior-visual-gallery">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-mono font-semibold text-teal-300">Visual Concept Presentation</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Approved concept visuals, organized by design role.</p>
+        </div>
+        <Badge variant="outline" className={cn("text-[10px] font-mono", hasFailed ? "border-red-500/30 text-red-300" : isGenerating ? "border-blue-500/30 text-blue-300" : "border-teal-500/30 text-teal-300")}>
+          {hasFailed ? "Visual failed" : isGenerating ? "Generating visual" : "Visual ready"}
+        </Badge>
+      </div>
+
+      {hero && (
+        <div className="overflow-hidden rounded-xl border border-teal-500/25 bg-card/50">
+          <div className="flex items-center justify-between border-b border-border/40 px-3 py-2">
+            <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-teal-300">{INTERIOR_ROLE_LABELS.hero_concept}</span>
+            <span className="text-[10px] text-muted-foreground">Click image to enlarge</span>
+          </div>
+          <div className="aspect-[16/8] min-h-[220px]">{renderAsset(hero, "h-full w-full object-cover")}</div>
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
+        {moodboard && (
+          <div className="overflow-hidden rounded-xl border border-border/50 bg-card/40">
+            <div className="border-b border-border/40 px-3 py-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-foreground/80">{INTERIOR_ROLE_LABELS.moodboard}</div>
+            <div className="aspect-[4/3]">{renderAsset(moodboard, "h-full w-full object-cover")}</div>
+          </div>
+        )}
+        {references.length > 0 && (
+          <div className="rounded-xl border border-border/50 bg-card/40 p-3">
+            <p className="mb-3 text-[10px] font-mono font-semibold uppercase tracking-wider text-foreground/80">Material, furniture &amp; lighting</p>
+            <div className="grid grid-cols-2 gap-2">
+              {references.map((asset) => (
+                <div key={asset.id} className="overflow-hidden rounded-lg border border-border/40 bg-muted/10">
+                  <div className="aspect-square">{renderAsset(asset, "h-full w-full object-cover")}</div>
+                  <div className="px-2 py-1.5 text-[9px] leading-tight text-muted-foreground">{INTERIOR_ROLE_LABELS[interiorAssetRole(asset)!]}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Dialog open={Boolean(lightbox)} onOpenChange={(open) => { if (!open) setLightbox(null); }}>
+        <DialogContent className="max-w-5xl border-border/60 bg-background/95 p-2 sm:p-3">
+          <DialogHeader className="px-2 pt-1">
+            <DialogTitle className="text-xs font-mono">{lightbox ? INTERIOR_ROLE_LABELS[interiorAssetRole(lightbox)!] : "Interior visual"}</DialogTitle>
+          </DialogHeader>
+          {lightbox?.imageUrl && (
+            <img
+              src={lightbox.imageUrl}
+              alt={`${INTERIOR_ROLE_LABELS[interiorAssetRole(lightbox)!]} fullscreen preview`}
+              className="max-h-[75vh] w-full rounded-lg object-contain"
+            />
+          )}
+          {lightbox?.imageUrl && (
+            <div className="flex justify-end px-2 pb-1">
+              <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 text-[10px]">
+                <a href={lightbox.imageUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-3" /> Open permanent image
+                </a>
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 interface AssetCardProps {
   asset: CreativeAiAsset;
   onApprove: (id: number) => void;
