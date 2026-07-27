@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGetProviderHealthHistory } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -7,17 +7,38 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+
+interface HealthEntry {
+  id: number;
+  isActive: boolean;
+  httpStatus: number | null;
+  error: string | null;
+  checkedAt: string;
+}
 
 interface Props {
   providerId: number;
   providerName: string;
 }
 
+function adminHeaders(): HeadersInit {
+  const key = (import.meta as unknown as { env: Record<string, string> }).env?.["VITE_ADMIN_API_KEY"] ?? "";
+  return key ? { "x-admin-api-key": key } : {};
+}
+
+async function fetchHealthHistory(providerId: number, limit = 50): Promise<HealthEntry[]> {
+  const res = await fetch(`/api/ai/providers/${providerId}/health-history?limit=${limit}`, {
+    headers: adminHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<HealthEntry[]>;
+}
+
 /** Tiny sparkline — renders a row of coloured squares representing pass/fail */
-function Sparkline({ entries }: { entries: { isActive: boolean; checkedAt: string }[] }) {
+function Sparkline({ entries }: { entries: HealthEntry[] }) {
   // Most recent on the right
   const dots = [...entries].reverse().slice(-40);
   if (dots.length === 0) return null;
@@ -37,10 +58,13 @@ function Sparkline({ entries }: { entries: { isActive: boolean; checkedAt: strin
   );
 }
 
-export function ProviderHealthHistory({ providerId, providerName }: Props) {
+export function ProviderHealthHistory({ providerId, providerName: _providerName }: Props) {
   const [open, setOpen] = useState(false);
-  const { data, isLoading } = useGetProviderHealthHistory(providerId, { limit: 50 }, {
-    query: { enabled: open, queryKey: [] },
+
+  const { data, isLoading } = useQuery<HealthEntry[]>({
+    queryKey: ["provider-health-history", providerId],
+    queryFn: () => fetchHealthHistory(providerId, 50),
+    enabled: open,
   });
 
   return (
@@ -74,8 +98,8 @@ export function ProviderHealthHistory({ providerId, providerName }: Props) {
 
             {/* Summary stats */}
             {(() => {
-              const okCount = data.filter((e: { isActive: boolean }) => e.isActive).length;
-              const failCount = data.filter((e: { isActive: boolean }) => !e.isActive).length;
+              const okCount = data.filter((e) => e.isActive).length;
+              const failCount = data.filter((e) => !e.isActive).length;
               const pct = Math.round((okCount / data.length) * 100);
               return (
                 <div className="flex items-center gap-3 text-[11px]">
@@ -88,7 +112,7 @@ export function ProviderHealthHistory({ providerId, providerName }: Props) {
 
             {/* Recent entries list */}
             <div className="space-y-0.5 max-h-48 overflow-y-auto">
-              {data.slice(0, 20).map((entry: { id: number; isActive: boolean; httpStatus: number | null; error: string | null; checkedAt: string }) => (
+              {data.slice(0, 20).map((entry) => (
                 <div
                   key={entry.id}
                   className={cn(

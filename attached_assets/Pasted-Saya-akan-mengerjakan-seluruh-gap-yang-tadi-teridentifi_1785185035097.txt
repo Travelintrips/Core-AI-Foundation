@@ -1,0 +1,57 @@
+Saya akan mengerjakan seluruh gap yang tadi teridentifikasi: pipeline visual interior (hero, moodboard, references), metadata/status permanen, UI presentasi visual, idempotensi, fallback aman, serta test dan verifikasi. Saya mulai dengan memetakan alur generate yang sudah ada supaya perubahan tetap minimal dan tidak merusak workflow lain.
+
+
+10 actions
+Saya sudah menemukan bahwa pipeline lama sebenarnya sudah punya storage, regenerate, dan approval, jadi saya akan memperluasnya secara additive—tanpa membuat provider atau tabel baru bila metadata JSONB dan asset rows yang ada sudah cukup. Berikutnya saya akan menambahkan role visual interior yang eksplisit, metadata/status konsep, dan UI gallery yang memakainya.
+
+
+13 actions
+Implementuję to jako rozszerzenie obecnego pipeline’u, a nie osobny system: użyję istniejących creative_ai_assets i pola metadata для role/status/version, żeby nie robić ryzykownej migracji. Najpierw sprawdzę zasady codegen i miejsca użycia storage, potem wprowadzę backend i UI razem, aby kontrakt pozostał spójny.
+
+
+15 actions
+Saya akan mulai dari kontrak dan pipeline backend dulu: menaikkan kapasitas khusus kebutuhan interior, memberi role visual yang konsisten, menyimpan metadata konsep lengkap, menambahkan idempotency berbasis versi konsep, dan membuat penyimpanan Supabase wajib untuk visual interior. Setelah itu UI akan membaca role tersebut untuk hero/moodboard/reference grid.
+
+
+4 actions
+Pipeline backend’e devam ediyorum: özel interior role’ları gerçek prompt’a bağlayıp 6 görsel üretecek, kalıcı Supabase URL’si yoksa interior visual’ı “ready” saymayacak, ve tüm asset’lere konsept versiyon/status metadata’sı yazacak.
+
+
+5 actions
+A közös metadata struktúra már definiálva ہے. Ahora conecto esa estructura al ciclo real de generación: versión aprobada, roles, storage path estable y estado final por asset.
+
+
+Edited imageDesignerService.ts
+El primer cambio backend ya está aplicado, pero antes de seguir voy a ejecutar una comprobación de tipos rápida: el flujo ahora toca varias rutas compartidas y quiero detectar cualquier incompatibilidad antes de completar la UI.
+
+
+3 actions
+El chequeo detectó dos cosas: hay errores preexistentes del proyecto (por ejemplo, tipos de pptxgenjs y declaraciones de lib/db desactualizadas), y además quedó una función de consolidación pendiente de conectar en mi cambio. Voy a corregir primero lo introducido por esta implementación, luego regenerar contratos y continuar con la UI.
+
+
+10 actions
+A implementação segue. Vou agora fechar os pontos de integração que ficaram abertos: idempotência no endpoint, consolidação de metadata no projeto, contratos gerados e a apresentação visual dedicada no frontend. Também vou separar falhas introduzidas por este trabalho das falhas antigas do monorepo para não mascarar regressões.
+
+
+16 actions
+Voy a cerrar ahora los dos riesgos funcionales más importantes: evitar que una segunda carga genere otra tanda para la misma versión aprobada, y presentar los roles visuales con una UI dedicada (hero, moodboard y referencias) sin quitar el texto existente. También ajustaré el estado de proyecto para que la propia consolidación no invalide la versión aprobada.
+
+
+5 actions
+Continuo desde el punto actual. Primero voy a corregir el control de idempotencia y cualquier error sintáctico introducido en el backend; después enlazaré la galería visual a los assets reales y regeneraré los tipos del contrato.
+
+
+8 actions
+El backend ya tiene el guard de idempotencia y no toca el estado comercial del proyecto. Ahora integro la galería visual en la página de concepto: hero grande, moodboard, referencias por rol, fallback/error, loading y lightbox; el renderer textual y su JSON técnico colapsable permanecen intactos.
+
+
+6 actions
+A implementação já tem o núcleo do backend e a galeria visual em andamento. Vou fazer uma rodada de estabilização agora: corrigir contratos e tipos introduzidos, conectar a galeria ao fluxo de renderização, regenerar o cliente OpenAPI e executar testes focados antes de qualquer refinamento visual.
+
+
+5 actions
+A geração do contrato expôs um problema de artefato: os arquivos gerados foram limpos, mas o workflow do frontend tentou carregá-los antes de sua presença ser confirmada. Vou validar os outputs, corrigir os erros específicos desta alteração (incluindo a referência antiga à versão do conceito), conectar a galeria ao renderer e reiniciar o frontend para confirmar que o preview volta a funcionar.
+
+
+7 actions
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
