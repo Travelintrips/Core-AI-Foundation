@@ -8,11 +8,14 @@
  *   - Furniture Placement (items per zone)
  *   - Lighting Recommendations (fixtures per zone)
  *
+ * Images: each item fetched from /api/ai/interior-design/asset-images/:projectUuid
+ * and displayed as thumbnails with skeleton + onError fallback to swatch/emoji.
+ *
  * Review state machine:
  *   ai_generated → edited_by_admin → ready_for_review / revision_requested → approved_for_rendering
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { getMaterialSwatch } from "../material-library/materialColorSwatch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +50,9 @@ import {
   ArrowDown,
   AlertTriangle,
   BookOpen,
+  Upload,
+  ImageOff,
+  RefreshCw,
 } from "lucide-react";
 import {
   MaterialSelectorDialog,
@@ -83,6 +89,23 @@ export interface ConceptDraft {
   createdAt: string;
 }
 
+/** Image metadata record from id_interior_asset_images */
+export interface ItemAssetImage {
+  id: number;
+  projectUuid: string;
+  itemType: string;
+  itemId: string;
+  thumbnailUrl: string | null;
+  imageUrl: string | null;
+  imageAlt: string | null;
+  imageSource: string | null;
+  imageSourceUrl: string | null;
+  imageLicense: string | null;
+  imageAttribution: string | null;
+  isManualUpload: boolean;
+  storagePath: string | null;
+}
+
 interface SpaceZone {
   id: string;
   name: string;
@@ -107,7 +130,6 @@ interface MaterialItem {
   priceTier: string;
   notes: string;
   status: "selected" | "rejected" | "pending";
-  // Library enrichment — optional for backward compat with existing stored data
   source?: "custom" | "material_library";
   libraryMaterialId?: number | null;
   name?: string;
@@ -125,6 +147,7 @@ interface FurnitureItem {
   quantity: string;
   dimensions: string;
   notes: string;
+  thumbnailUrl?: string;
 }
 
 interface LightingItem {
@@ -136,6 +159,7 @@ interface LightingItem {
   purpose: string;
   quantity: string;
   notes: string;
+  thumbnailUrl?: string;
 }
 
 // ── Material category options ─────────────────────────────────────────────────
@@ -216,7 +240,7 @@ const STATE_COLORS: Record<ReviewState, string> = {
   approved_for_rendering: "bg-green-500/10 text-green-400 border-green-500/20",
 };
 
-// ── Visual swatch helpers (emoji + bg colour for furniture / lighting / zones) ─
+// ── Visual swatch helpers ─────────────────────────────────────────────────────
 
 function getFurnitureSwatch(itemName: string): { emoji: string; bg: string } {
   const n = itemName.toLowerCase();
@@ -232,7 +256,6 @@ function getFurnitureSwatch(itemName: string): { emoji: string; bg: string } {
   if (/plant|tanaman|pot/.test(n))              return { emoji: "🪴", bg: "linear-gradient(135deg,#608060,#406040)" };
   if (/tv|television|screen|monitor/.test(n))   return { emoji: "📺", bg: "linear-gradient(135deg,#404858,#282e38)" };
   if (/bath|tub|shower|toilet/.test(n))         return { emoji: "🛁", bg: "linear-gradient(135deg,#c8d8e8,#a0b8c8)" };
-  // hash-based fallback so each unique item gets a consistent colour
   let hash = 0;
   for (let i = 0; i < n.length; i++) hash = (hash * 31 + n.charCodeAt(i)) & 0xffffff;
   const h = (hash % 360);
@@ -242,11 +265,11 @@ function getFurnitureSwatch(itemName: string): { emoji: string; bg: string } {
 function getLightingSwatch(colorTemp: string): { emoji: string; bg: string } {
   const k = parseInt(colorTemp, 10);
   if (!k || isNaN(k))   return { emoji: "💡", bg: "linear-gradient(135deg,#c8c0a0,#a8a080)" };
-  if (k <= 2700)        return { emoji: "🕯️", bg: "linear-gradient(135deg,#e8a030,#c07820)" };  // very warm
-  if (k <= 3200)        return { emoji: "💡", bg: "linear-gradient(135deg,#e0b850,#c09030)" };  // warm white
-  if (k <= 4000)        return { emoji: "💡", bg: "linear-gradient(135deg,#e8e0c0,#c8c0a0)" };  // neutral
-  if (k <= 5000)        return { emoji: "🔆", bg: "linear-gradient(135deg,#d8e8f0,#b0c8d8)" };  // cool white
-  return               { emoji: "🔆", bg: "linear-gradient(135deg,#b8d0e8,#80a8c8)" };           // daylight
+  if (k <= 2700)        return { emoji: "🕯️", bg: "linear-gradient(135deg,#e8a030,#c07820)" };
+  if (k <= 3200)        return { emoji: "💡", bg: "linear-gradient(135deg,#e0b850,#c09030)" };
+  if (k <= 4000)        return { emoji: "💡", bg: "linear-gradient(135deg,#e8e0c0,#c8c0a0)" };
+  if (k <= 5000)        return { emoji: "🔆", bg: "linear-gradient(135deg,#d8e8f0,#b0c8d8)" };
+  return               { emoji: "🔆", bg: "linear-gradient(135deg,#b8d0e8,#80a8c8)" };
 }
 
 function getZoneSwatch(name: string, fn: string): { emoji: string; bg: string } {
@@ -268,12 +291,211 @@ function getZoneSwatch(name: string, fn: string): { emoji: string; bg: string } 
   return { emoji: "🏠", bg: `linear-gradient(135deg,hsl(${h},25%,38%),hsl(${h},25%,26%))` };
 }
 
-// ── Helpers for library integration ──────────────────────────────────────────
-
-/** Map library price tiers to editor tiers (Standard → Mid-range). */
 function normalizePriceTier(tier: string): string {
   if (tier === "Standard") return "Mid-range";
   return tier;
+}
+
+// ── ItemThumbnail — skeleton + image + fallback ───────────────────────────────
+
+interface ItemThumbnailProps {
+  thumbnailUrl?: string | null;
+  imageAlt?: string | null;
+  fallback: React.ReactNode;
+  className?: string;
+}
+
+function ItemThumbnail({ thumbnailUrl, imageAlt, fallback, className }: ItemThumbnailProps) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">(
+    thumbnailUrl ? "loading" : "error",
+  );
+
+  // Reset when URL changes
+  useEffect(() => {
+    setState(thumbnailUrl ? "loading" : "error");
+  }, [thumbnailUrl]);
+
+  if (!thumbnailUrl || state === "error") {
+    return <>{fallback}</>;
+  }
+
+  return (
+    <div className={cn("relative overflow-hidden rounded-lg shrink-0", className)}>
+      {state === "loading" && (
+        <div className="absolute inset-0 bg-muted/40 animate-pulse rounded-lg" />
+      )}
+      <img
+        src={thumbnailUrl}
+        alt={imageAlt ?? ""}
+        className={cn(
+          "w-full h-full object-cover rounded-lg border border-border/30 transition-opacity duration-300",
+          state === "loaded" ? "opacity-100" : "opacity-0",
+        )}
+        onLoad={() => setState("loaded")}
+        onError={() => setState("error")}
+      />
+    </div>
+  );
+}
+
+// ── AdminImageControls — upload / enrich / delete ─────────────────────────────
+
+interface AdminImageControlsProps {
+  projectUuid: string;
+  itemType: string;
+  itemId: string;
+  adminKey?: string;
+  existingImage?: ItemAssetImage | null;
+  onRefresh: () => void;
+  enrichPayload?: Record<string, string>;
+}
+
+function AdminImageControls({
+  projectUuid, itemType, itemId, adminKey, existingImage, onRefresh, enrichPayload,
+}: AdminImageControlsProps) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const headers = (): Record<string, string> => ({
+    "Content-Type": "application/json",
+    ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+  });
+
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) { toast({ title: "Only image files are accepted", variant: "destructive" }); return; }
+    if (file.size > 5 * 1024 * 1024) { toast({ title: "File must be under 5 MB", variant: "destructive" }); return; }
+    setBusy(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch(`/api/ai/interior-design/asset-images/${projectUuid}/upload`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          itemType, itemId,
+          imageData: base64,
+          mimeType: file.type,
+          altText: file.name.replace(/\.[^.]+$/, ""),
+          forceReplace: Boolean(existingImage),
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json() as { error?: string };
+        toast({ title: e.error ?? "Upload failed", variant: "destructive" });
+      } else {
+        toast({ title: "Image uploaded" });
+        onRefresh();
+      }
+    } catch (e) {
+      toast({ title: String(e), variant: "destructive" });
+    }
+    setBusy(false);
+  };
+
+  const handleEnrich = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/ai/interior-design/asset-images/${projectUuid}/enrich`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ itemType, itemId, force: Boolean(existingImage), ...enrichPayload }),
+      });
+      const data = await res.json() as { result?: { status: string; thumbnailUrl?: string; error?: string } };
+      const result = data.result;
+      if (result?.status === "enriched") {
+        toast({ title: "Image found and saved" });
+        onRefresh();
+      } else if (result?.status === "no_key") {
+        toast({ title: "PEXELS_API_KEY not configured on server", variant: "destructive" });
+      } else if (result?.status === "no_results") {
+        toast({ title: "No matching image found" });
+      } else if (result?.status === "skipped") {
+        toast({ title: "Skipped (manual upload protected)" });
+      } else {
+        toast({ title: result?.error ?? "Enrichment failed", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: String(e), variant: "destructive" });
+    }
+    setBusy(false);
+  };
+
+  const handleDelete = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `/api/ai/interior-design/asset-images/${projectUuid}/${itemType}/${itemId}`,
+        { method: "DELETE", headers: headers() },
+      );
+      if (!res.ok) {
+        const e = await res.json() as { error?: string };
+        toast({ title: e.error ?? "Delete failed", variant: "destructive" });
+      } else {
+        toast({ title: "Reverted to fallback visual" });
+        onRefresh();
+      }
+    } catch (e) {
+      toast({ title: String(e), variant: "destructive" });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap mt-1">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f); e.target.value = ""; }}
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-5 text-[10px] px-1.5 gap-1 border-border/40"
+        disabled={busy}
+        onClick={() => fileRef.current?.click()}
+      >
+        <Upload className="size-2.5" />
+        {existingImage ? "Replace" : "Upload"}
+      </Button>
+      {!existingImage?.isManualUpload && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-5 text-[10px] px-1.5 gap-1 border-border/40"
+          disabled={busy}
+          onClick={() => void handleEnrich()}
+        >
+          {busy ? <Loader2 className="size-2.5 animate-spin" /> : <RefreshCw className="size-2.5" />}
+          Find
+        </Button>
+      )}
+      {existingImage && (
+        <>
+          {existingImage.imageAttribution && (
+            <span className="text-[9px] text-muted-foreground truncate max-w-[100px]">
+              © {existingImage.imageAttribution}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 text-[10px] px-1.5 gap-1 text-destructive hover:text-destructive"
+            disabled={busy}
+            onClick={() => void handleDelete()}
+          >
+            <ImageOff className="size-2.5" /> Revert
+          </Button>
+        </>
+      )}
+    </div>
+  );
 }
 
 // ── Sub-editors ───────────────────────────────────────────────────────────────
@@ -339,7 +561,6 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
     name: "", subcategory: "", description: "", thumbnailUrl: "", previewImages: [], technicalData: {},
   }]);
 
-  /** Populate a row from a library selection. */
   const applyLibraryMaterial = (itemId: string, lib: LibraryMaterial) => {
     onChange(items.map((item) =>
       item.id !== itemId ? item : {
@@ -364,7 +585,6 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
     ));
   };
 
-  /** Reset a row back to a blank custom entry. */
   const clearLibrary = (itemId: string) =>
     onChange(items.map((item) =>
       item.id !== itemId ? item : {
@@ -385,7 +605,6 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
 
       {items.map((m) => (
         <div key={m.id} className="border border-border/50 rounded-lg p-3 space-y-2 bg-muted/5">
-          {/* Row header: area badge + Browse Library + status + delete */}
           <div className="flex items-center gap-2 justify-between flex-wrap">
             <div className="flex items-center gap-1.5">
               <Badge
@@ -425,7 +644,6 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
             </div>
           </div>
 
-          {/* Library-sourced material summary card */}
           {m.source === "material_library" && m.name && (
             <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-teal-500/5 border border-teal-500/15">
               {m.thumbnailUrl ? (
@@ -452,7 +670,6 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
             </div>
           )}
 
-          {/* Editable fields — populated by library selection; user can modify freely */}
           <div className="grid grid-cols-2 gap-2">
             <div><Label className="text-[10px]">Component / Area</Label><Input className="h-7 text-xs mt-0.5" value={m.component} onChange={(e) => update(m.id, "component", e.target.value)} placeholder="e.g. Main floor" /></div>
             <div>
@@ -481,7 +698,6 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
         </div>
       ))}
 
-      {/* Single shared dialog instance — opens for whichever row triggered it */}
       <MaterialSelectorDialog
         open={dialogOpenForId !== null}
         onOpenChange={(open) => { if (!open) setDialogOpenForId(null); }}
@@ -573,9 +789,7 @@ function LightingEditor({ items, onChange }: { items: LightingItem[]; onChange: 
 // ── Main Editor ───────────────────────────────────────────────────────────────
 
 interface InteriorDesignEditorProps {
-  /** creative_projects.project_id (UUID) */
   projectUuid: string;
-  /** Callback when Generate Images gate changes (true = allowed) */
   onReadyStateChange?: (approved: boolean, hasUnsavedEdits: boolean) => void;
 }
 
@@ -589,19 +803,22 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
   const [editMode, setEditMode] = useState(false);
   const [activeSection, setActiveSection] = useState<"concept" | "space" | "materials" | "furniture" | "lighting">("concept");
 
-  // Local editable state (only active during edit mode)
+  // Asset images map: "{itemType}:{itemId}" → ItemAssetImage
+  const [assetImages, setAssetImages] = useState<Record<string, ItemAssetImage>>({});
+  const [imagesLoading, setImagesLoading] = useState(false);
+
   const [localConcept, setLocalConcept]    = useState("");
   const [localZones, setLocalZones]         = useState<SpaceZone[]>([]);
   const [localMaterials, setLocalMaterials] = useState<MaterialItem[]>([]);
   const [localFurniture, setLocalFurniture] = useState<FurnitureItem[]>([]);
   const [localLighting, setLocalLighting]   = useState<LightingItem[]>([]);
 
-  // ── API helpers ────────────────────────────────────────────────────────────
-
   const headers = (): Record<string, string> => ({
     "Content-Type": "application/json",
     ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
   });
+
+  // ── Load draft ──────────────────────────────────────────────────────────────
 
   const loadDraft = useCallback(async () => {
     setLoading(true);
@@ -614,13 +831,27 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
         data.draft.reviewState === "approved_for_rendering",
         data.draft.hasUnsavedEdits,
       );
-    } catch { /* network error — non-fatal */ }
+    } catch { /* network error */ }
     setLoading(false);
   }, [projectUuid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { void loadDraft(); }, [loadDraft]);
+  // ── Load asset images ───────────────────────────────────────────────────────
 
-  // ── Edit mode entry ────────────────────────────────────────────────────────
+  const loadImages = useCallback(async () => {
+    setImagesLoading(true);
+    try {
+      const res = await fetch(`/api/ai/interior-design/asset-images/${projectUuid}`, { headers: headers() });
+      if (res.ok) {
+        const data = await res.json() as { images: Record<string, ItemAssetImage> };
+        setAssetImages(data.images ?? {});
+      }
+    } catch { /* non-fatal */ }
+    setImagesLoading(false);
+  }, [projectUuid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { void loadDraft(); void loadImages(); }, [loadDraft, loadImages]);
+
+  // ── Edit mode entry ─────────────────────────────────────────────────────────
 
   const enterEdit = () => {
     if (!draft) return;
@@ -640,7 +871,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
 
   const cancelEdit = () => setEditMode(false);
 
-  // ── Save draft ─────────────────────────────────────────────────────────────
+  // ── Save draft ──────────────────────────────────────────────────────────────
 
   const saveDraft = async () => {
     if (!draft) return;
@@ -677,7 +908,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     setSaving(false);
   };
 
-  // ── Review state change ────────────────────────────────────────────────────
+  // ── Review state change ─────────────────────────────────────────────────────
 
   const setReviewState = async (newState: ReviewState) => {
     if (!draft) return;
@@ -704,8 +935,6 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     setSaving(false);
   };
 
-  // ── Request revision (unlock from approved_for_rendering) ─────────────────
-
   const requestRevision = async () => {
     if (!draft) return;
     setSaving(true);
@@ -731,8 +960,6 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     setSaving(false);
   };
 
-  // ── Reset to original ──────────────────────────────────────────────────────
-
   const resetSection = async (section: string) => {
     if (!draft) return;
     setSaving(true);
@@ -752,7 +979,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     setSaving(false);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -773,6 +1000,10 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     { key: "furniture", label: "Furniture",  icon: Sofa },
     { key: "lighting",  label: "Lighting",   icon: Lightbulb },
   ] as const;
+
+  // Helper: get image for an item from the loaded map
+  const getItemImage = (itemType: string, itemId: string): ItemAssetImage | null =>
+    assetImages[`${itemType}:${itemId}`] ?? null;
 
   return (
     <div className="mt-2 space-y-3 border border-teal-500/20 rounded-lg p-4 bg-teal-500/5">
@@ -821,7 +1052,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
         </div>
       </div>
 
-      {/* Unsaved edits warning (view mode) */}
+      {/* Unsaved edits warning */}
       {!editMode && draft.hasUnsavedEdits && (
         <div className="flex items-center gap-2 text-xs text-yellow-400 font-mono bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-1.5">
           <AlertTriangle className="size-3.5 shrink-0" />
@@ -829,7 +1060,6 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
         </div>
       )}
 
-      {/* Not-approved warning for Generate Images */}
       {!editMode && !isApproved && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono bg-muted/10 border border-border/30 rounded px-3 py-1.5">
           <AlertTriangle className="size-3.5 shrink-0 text-yellow-500" />
@@ -857,6 +1087,8 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
 
       {/* Section content */}
       <div className="pt-1">
+
+        {/* ── Concept ── */}
         {activeSection === "concept" && (
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -864,12 +1096,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
               {editMode && <Button variant="ghost" size="sm" className="h-5 gap-1 text-[10px] text-muted-foreground" onClick={() => void resetSection("visualConcept")}><RotateCcw className="size-3" /> Reset</Button>}
             </div>
             {editMode ? (
-              <Textarea
-                className="text-xs font-mono min-h-[140px] resize-y"
-                value={localConcept}
-                onChange={(e) => setLocalConcept(e.target.value)}
-                placeholder="Describe the visual concept, atmosphere, and design intent…"
-              />
+              <Textarea className="text-xs font-mono min-h-[140px] resize-y" value={localConcept} onChange={(e) => setLocalConcept(e.target.value)} placeholder="Describe the visual concept, atmosphere, and design intent…" />
             ) : (
               <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
                 {draft.visualConceptDraft ?? <span className="text-muted-foreground italic">No concept generated yet.</span>}
@@ -878,6 +1105,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           </div>
         )}
 
+        {/* ── Space Plan ── */}
         {activeSection === "space" && (
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -888,23 +1116,42 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
               <SpacePlanEditor zones={localZones} onChange={setLocalZones} />
             ) : (
               <div className="space-y-2">
-                {parseZones(draft.spacePlanDraft).map((z, i) => (
-                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
-                    {(() => { const s = getZoneSwatch(z.name, z.function); return (
-                      <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: s.bg }}>{s.emoji}</div>
-                    ); })()}
-                    <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold font-mono">{z.name || `Zone ${i+1}`}</span>
-                      {z.priority && <Badge variant="outline" className="text-[9px] h-3.5 px-1">{z.priority}</Badge>}
+                {parseZones(draft.spacePlanDraft).map((z, i) => {
+                  const img = getItemImage("space_plan", z.id);
+                  const swatch = getZoneSwatch(z.name, z.function);
+                  return (
+                    <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
+                      <ItemThumbnail
+                        thumbnailUrl={img?.thumbnailUrl}
+                        imageAlt={img?.imageAlt ?? `${z.name} floor plan`}
+                        className="w-10 h-10 mt-0.5"
+                        fallback={
+                          <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: swatch.bg }}>{swatch.emoji}</div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold font-mono">{z.name || `Zone ${i+1}`}</span>
+                          {z.priority && <Badge variant="outline" className="text-[9px] h-3.5 px-1">{z.priority}</Badge>}
+                          {img?.isManualUpload && <Badge variant="outline" className="text-[9px] h-3.5 px-1 text-amber-400 border-amber-500/30">Manual</Badge>}
+                        </div>
+                        {z.function && <p className="text-muted-foreground">{z.function}</p>}
+                        {z.approximateSize && <p className="text-muted-foreground">Size: {z.approximateSize}</p>}
+                        {z.adjacency && <p className="text-muted-foreground">Adjacency: {z.adjacency}</p>}
+                        {z.notes && <p className="text-muted-foreground italic">{z.notes}</p>}
+                        <AdminImageControls
+                          projectUuid={projectUuid}
+                          itemType="space_plan"
+                          itemId={z.id}
+                          adminKey={adminKey}
+                          existingImage={img}
+                          onRefresh={() => void loadImages()}
+                          enrichPayload={{ name: z.name, zone: z.function }}
+                        />
+                      </div>
                     </div>
-                    {z.function && <p className="text-muted-foreground">{z.function}</p>}
-                    {z.approximateSize && <p className="text-muted-foreground">Size: {z.approximateSize}</p>}
-                    {z.adjacency && <p className="text-muted-foreground">Adjacency: {z.adjacency}</p>}
-                    {z.notes && <p className="text-muted-foreground italic">{z.notes}</p>}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {parseZones(draft.spacePlanDraft).length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No zones specified.</p>
                 )}
@@ -913,6 +1160,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           </div>
         )}
 
+        {/* ── Materials ── */}
         {activeSection === "materials" && (
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -929,26 +1177,48 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
                   priceTier: "", notes: "", status: "pending",
                   source: "custom", libraryMaterialId: null, name: "", subcategory: "",
                   description: "", thumbnailUrl: "", previewImages: [], technicalData: {},
-                }).map((m, i) => (
-                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-3">
-                    {m.thumbnailUrl && (
-                      <img src={m.thumbnailUrl} alt={m.name ?? ""} className="w-10 h-10 rounded object-cover shrink-0 border border-border/30 mt-0.5" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <span className="font-semibold">{m.name || m.area || m.category}</span>
-                        {m.component && <span className="text-muted-foreground">/ {m.component}</span>}
-                        {m.source === "material_library" && (
-                          <Badge className="text-[9px] h-3.5 px-1 bg-teal-500/10 text-teal-400 border border-teal-500/20">Library</Badge>
-                        )}
-                        {m.status === "selected" && <Badge className="text-[9px] h-3.5 px-1 bg-green-500/10 text-green-400 border-green-500/20">Selected</Badge>}
-                        {m.status === "rejected" && <Badge className="text-[9px] h-3.5 px-1 bg-red-500/10 text-red-400 border-red-500/20">Rejected</Badge>}
+                }).map((m, i) => {
+                  const img = getItemImage("material", m.id);
+                  // Priority: asset images table → library thumbnailUrl → material swatch
+                  const resolvedThumb = img?.thumbnailUrl ?? m.thumbnailUrl ?? null;
+                  const resolvedAlt   = img?.imageAlt ?? `${m.name ?? m.materialType} ${m.category} texture`;
+                  const sw = getMaterialSwatch(m.color, m.materialType, m.finish);
+                  return (
+                    <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-3">
+                      <ItemThumbnail
+                        thumbnailUrl={resolvedThumb}
+                        imageAlt={resolvedAlt}
+                        className="w-10 h-10 mt-0.5"
+                        fallback={
+                          <div className="w-10 h-10 rounded shrink-0 border border-border/20 flex items-center justify-center text-sm mt-0.5" style={{ background: sw.background }}>{sw.patternHint}</div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <span className="font-semibold">{m.name || m.area || m.category}</span>
+                          {m.component && <span className="text-muted-foreground">/ {m.component}</span>}
+                          {m.source === "material_library" && (
+                            <Badge className="text-[9px] h-3.5 px-1 bg-teal-500/10 text-teal-400 border border-teal-500/20">Library</Badge>
+                          )}
+                          {m.status === "selected" && <Badge className="text-[9px] h-3.5 px-1 bg-green-500/10 text-green-400 border-green-500/20">Selected</Badge>}
+                          {m.status === "rejected" && <Badge className="text-[9px] h-3.5 px-1 bg-red-500/10 text-red-400 border-red-500/20">Rejected</Badge>}
+                          {img?.isManualUpload && <Badge variant="outline" className="text-[9px] h-3.5 px-1 text-amber-400 border-amber-500/30">Manual</Badge>}
+                        </div>
+                        <p className="text-muted-foreground">{[m.materialType, m.color, m.finish].filter(Boolean).join(" · ")}</p>
+                        {m.priceTier && <p className="text-muted-foreground text-[10px]">{m.priceTier}{m.brand ? ` · ${m.brand}` : ""}</p>}
+                        <AdminImageControls
+                          projectUuid={projectUuid}
+                          itemType="material"
+                          itemId={m.id}
+                          adminKey={adminKey}
+                          existingImage={img}
+                          onRefresh={() => void loadImages()}
+                          enrichPayload={{ name: m.name ?? "", category: m.category, materialType: m.materialType, color: m.color }}
+                        />
                       </div>
-                      <p className="text-muted-foreground">{[m.materialType, m.color, m.finish].filter(Boolean).join(" · ")}</p>
-                      {m.priceTier && <p className="text-muted-foreground text-[10px]">{m.priceTier}{m.brand ? ` · ${m.brand}` : ""}</p>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {parseItems<MaterialItem>(draft.materialsDraft, {
                   id:"",area:"",component:"",category:"",materialType:"",color:"",finish:"",
                   texture:"",brand:"",productCode:"",priceTier:"",notes:"",status:"pending",
@@ -962,6 +1232,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           </div>
         )}
 
+        {/* ── Furniture ── */}
         {activeSection === "furniture" && (
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -972,22 +1243,41 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
               <FurnitureEditor items={localFurniture} onChange={setLocalFurniture} />
             ) : (
               <div className="space-y-1.5">
-                {parseItems<FurnitureItem>(draft.furnitureDraft, {id:"",item:"",zone:"",quantity:"1",dimensions:"",notes:""}).map((f, i) => (
-                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
-                    {(() => { const s = getFurnitureSwatch(f.item); return (
-                      <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: s.bg }}>{s.emoji}</div>
-                    ); })()}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{f.item || "Item"}</span>
-                        {f.zone && <span className="text-muted-foreground">— {f.zone}</span>}
-                        {f.quantity && f.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{f.quantity}</Badge>}
+                {parseItems<FurnitureItem>(draft.furnitureDraft, {id:"",item:"",zone:"",quantity:"1",dimensions:"",notes:""}).map((f, i) => {
+                  const img = getItemImage("furniture", f.id);
+                  const swatch = getFurnitureSwatch(f.item);
+                  return (
+                    <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
+                      <ItemThumbnail
+                        thumbnailUrl={img?.thumbnailUrl}
+                        imageAlt={img?.imageAlt ?? `${f.item} furniture product`}
+                        className="w-10 h-10 mt-0.5"
+                        fallback={
+                          <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: swatch.bg }}>{swatch.emoji}</div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{f.item || "Item"}</span>
+                          {f.zone && <span className="text-muted-foreground">— {f.zone}</span>}
+                          {f.quantity && f.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{f.quantity}</Badge>}
+                          {img?.isManualUpload && <Badge variant="outline" className="text-[9px] h-3.5 px-1 text-amber-400 border-amber-500/30">Manual</Badge>}
+                        </div>
+                        {f.dimensions && <p className="text-muted-foreground mt-0.5">{f.dimensions}</p>}
+                        {f.notes && <p className="text-muted-foreground italic">{f.notes}</p>}
+                        <AdminImageControls
+                          projectUuid={projectUuid}
+                          itemType="furniture"
+                          itemId={f.id}
+                          adminKey={adminKey}
+                          existingImage={img}
+                          onRefresh={() => void loadImages()}
+                          enrichPayload={{ name: f.item, zone: f.zone }}
+                        />
                       </div>
-                      {f.dimensions && <p className="text-muted-foreground mt-0.5">{f.dimensions}</p>}
-                      {f.notes && <p className="text-muted-foreground italic">{f.notes}</p>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {parseItems<FurnitureItem>(draft.furnitureDraft,{id:"",item:"",zone:"",quantity:"1",dimensions:"",notes:""}).length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No furniture items specified.</p>
                 )}
@@ -996,6 +1286,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           </div>
         )}
 
+        {/* ── Lighting ── */}
         {activeSection === "lighting" && (
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -1006,23 +1297,42 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
               <LightingEditor items={localLighting} onChange={setLocalLighting} />
             ) : (
               <div className="space-y-1.5">
-                {parseItems<LightingItem>(draft.lightingDraft,{id:"",zone:"",lightingType:"",fixtureType:"",colorTemperature:"",purpose:"",quantity:"1",notes:""}).map((l, i) => (
-                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
-                    {(() => { const s = getLightingSwatch(l.colorTemperature); return (
-                      <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: s.bg }}>{s.emoji}</div>
-                    ); })()}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{l.lightingType || "Light"}</span>
-                        {l.zone && <span className="text-muted-foreground">— {l.zone}</span>}
-                        {l.quantity && l.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{l.quantity}</Badge>}
+                {parseItems<LightingItem>(draft.lightingDraft,{id:"",zone:"",lightingType:"",fixtureType:"",colorTemperature:"",purpose:"",quantity:"1",notes:""}).map((l, i) => {
+                  const img = getItemImage("lighting", l.id);
+                  const swatch = getLightingSwatch(l.colorTemperature);
+                  return (
+                    <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
+                      <ItemThumbnail
+                        thumbnailUrl={img?.thumbnailUrl}
+                        imageAlt={img?.imageAlt ?? `${l.lightingType || l.fixtureType || "light"} fixture`}
+                        className="w-10 h-10 mt-0.5"
+                        fallback={
+                          <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: swatch.bg }}>{swatch.emoji}</div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{l.lightingType || "Light"}</span>
+                          {l.zone && <span className="text-muted-foreground">— {l.zone}</span>}
+                          {l.quantity && l.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{l.quantity}</Badge>}
+                          {img?.isManualUpload && <Badge variant="outline" className="text-[9px] h-3.5 px-1 text-amber-400 border-amber-500/30">Manual</Badge>}
+                        </div>
+                        {l.fixtureType && <p className="text-muted-foreground mt-0.5">{l.fixtureType}</p>}
+                        {l.colorTemperature && <p className="text-muted-foreground text-[10px]">{l.colorTemperature}{l.purpose ? ` · ${l.purpose}` : ""}</p>}
+                        {l.notes && <p className="text-muted-foreground italic">{l.notes}</p>}
+                        <AdminImageControls
+                          projectUuid={projectUuid}
+                          itemType="lighting"
+                          itemId={l.id}
+                          adminKey={adminKey}
+                          existingImage={img}
+                          onRefresh={() => void loadImages()}
+                          enrichPayload={{ lightingType: l.lightingType, fixtureType: l.fixtureType, zone: l.zone }}
+                        />
                       </div>
-                      {l.fixtureType && <p className="text-muted-foreground mt-0.5">{l.fixtureType}</p>}
-                      {l.colorTemperature && <p className="text-muted-foreground text-[10px]">{l.colorTemperature}{l.purpose ? ` · ${l.purpose}` : ""}</p>}
-                      {l.notes && <p className="text-muted-foreground italic">{l.notes}</p>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {parseItems<LightingItem>(draft.lightingDraft,{id:"",zone:"",lightingType:"",fixtureType:"",colorTemperature:"",purpose:"",quantity:"1",notes:""}).length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No lighting items specified.</p>
                 )}
@@ -1031,6 +1341,13 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           </div>
         )}
       </div>
+
+      {/* Images loading indicator */}
+      {imagesLoading && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
+          <Loader2 className="size-2.5 animate-spin" /> Loading images…
+        </div>
+      )}
 
       {/* Last edited info */}
       {draft.lastEditedBy && (

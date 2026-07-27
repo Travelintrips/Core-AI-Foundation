@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "bash"]
+modules = ["nodejs-20", "web", "bash", "python-base-3.13"]
 
 [deployment]
 router = "application"
@@ -7,6 +7,22 @@ deploymentTarget = "autoscale"
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
+
+[[ports]]
+localPort = 23434
+externalPort = 80
+
+[[ports]]
+localPort = 20785
+externalPort = 3000
+
+[[ports]]
+localPort = 8080
+externalPort = 3001
+
+[[ports]]
+localPort = 8081
+externalPort = 3002
 
 [workflows]
 runButton = "Project"
@@ -62,6 +78,7 @@ PUBLIC_APP_URL = "https://aicore.cstlogistic.co.id"
 
 [nix]
 channel = "stable-25_05"
+<<<<<<< HEAD
 
 [[ports]]
 localPort = 8080
@@ -82,3 +99,5 @@ externalPort = 3001
 [[ports]]
 localPort = 23434
 externalPort = 80
+=======
+>>>>>>> 11c4880be26bcff26e1e9cb6e2aeb2b4814fd4c2
