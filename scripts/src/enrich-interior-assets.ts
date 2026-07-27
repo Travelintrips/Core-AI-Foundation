@@ -261,9 +261,18 @@ async function main(): Promise<void> {
         ? (raw as Record<string,unknown>)["items"] as Array<Record<string,unknown>>
         : Array.isArray(raw) ? raw as Array<Record<string,unknown>> : [];
 
-      for (const item of items) {
-        const itemId = String(item["id"] ?? "");
-        if (!itemId) continue;
+      for (let idx = 0; idx < items.length; idx++) {
+        const item = items[idx]!;
+        // Use explicit id if present, otherwise derive a stable key from item properties
+        const itemId = String(
+          item["id"] ??
+          item["area"] ??
+          item["name"] ??
+          item["zone"] ??
+          item["lightingType"] ??
+          item["fixtureType"] ??
+          `item-${idx}`
+        );
         const key = `${projectUuid}:${itemType}:${itemId}`;
         if (manualSet.has(key)) continue;          // never overwrite manual
         if (!force && enrichedSet.has(key)) continue; // already has image, skip
