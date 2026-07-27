@@ -1,0 +1,234 @@
+RESUME TASK — PHASE 5 BASELINE SNAPSHOT FINALIZATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current release:
+material-v5.0.1
+
+Current main SHA:
+b6b65f730211a697432045a01ec58c7c83d3da99
+
+IMPORTANT
+
+Resume from the existing workspace.
+
+Do NOT repeat the repository exploration unless a required fact is missing.
+
+Do NOT modify application code.
+
+Do NOT create migrations.
+
+Do NOT create a Phase 6 branch.
+
+Do NOT start Phase 6 implementation.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Finish the baseline snapshot that was interrupted by quota exhaustion.
+
+Create only:
+
+docs/baselines/material-v5.0.1-baseline.md
+
+========================================================
+REQUIRED CONTENT
+========================================================
+
+The document must include:
+
+1. Release identity
+   - repository
+   - main SHA
+   - origin/main SHA
+   - local tag
+   - tag target
+   - remote-tag status
+   - release date
+
+2. Repository state
+   - clean or dirty
+   - current branch
+   - untracked files
+   - confirmation that no Phase 6 branch exists
+
+3. Architecture inventory
+   - API server
+   - frontend applications
+   - database
+   - storage
+   - AI/provider layer
+   - workers
+   - scheduler
+   - authentication and authorization boundaries
+
+4. Material-domain inventory
+   - Material Library
+   - Material Intelligence
+   - Material Import
+   - Human Review Queue
+   - Duplicate Resolution
+   - Asset Pipeline
+
+5. Dependency graph
+   Provide a clear dependency chain between all six material domains.
+
+6. API inventory
+   - derive endpoints from actual route files and mount registry
+   - include HTTP method
+   - final externally reachable path
+   - router/source file
+   - authentication status
+   - authorization status
+   - purpose
+   - distinguish verified routes from inferred mount composition
+
+7. Worker inventory
+   - every registered worker
+   - source file
+   - job type
+   - startup registration
+   - dependencies
+
+8. Scheduler inventory
+   - every scheduler
+   - interval or trigger
+   - source file
+   - startup registration
+   - responsibilities
+
+9. Database inventory
+   - material tables
+   - import staging
+   - import audit
+   - categories
+   - assets
+   - relevant relationships
+   - RLS status
+   - service-role behavior
+
+10. Migration inventory
+    - list every migration file currently in the repository
+    - classify each as:
+      a. Phase 5 / Material release migration
+      b. security maintenance
+      c. other repository migration
+    - do not claim production application unless evidence exists
+
+11. Security baseline
+    - route protection
+    - ADMIN_API_KEY usage
+    - Supabase service-role behavior
+    - RLS and FORCE RLS
+    - SSRF protection
+    - audit trail
+    - known security limitations
+
+12. Test inventory
+    - targeted material suites
+    - documented regression baseline
+    - pre-existing failures
+    - isolation caveats
+    - do not convert undocumented results into facts
+
+13. Performance metrics
+    Include only metrics supported by existing reports or logs.
+    Clearly mark:
+    - measured
+    - observed
+    - not measured
+
+14. Documentation inventory
+    - changelog
+    - release history
+    - ADRs
+    - roadmap
+    - runbook
+    - retrospective
+    - Phase 6 backlog
+    - Phase 6 entry checklist
+    - security report
+
+15. Known limitations
+    Include at minimum:
+    - remote material-v5.0.1 tag not yet verified/pushed
+    - production deployment deferred
+    - privileged production smoke test status
+    - performance measurements that are not production benchmarks
+    - Phase 6 implementation not started
+
+16. Approved Phase 6 scope
+    - approved items
+    - deferred Phase 7 items
+    - future items
+    - deployment-first requirement
+
+17. Repository health score
+    Score:
+    - architecture
+    - security
+    - testing
+    - documentation
+    - operability
+    - maintainability
+    - release integrity
+    - overall
+
+    Explain every score and avoid unsupported claims.
+
+18. Phase 6 entry state
+    State clearly whether:
+    - planning may begin
+    - design sprint may begin
+    - implementation may begin
+    - remaining operational prerequisites
+
+========================================================
+VALIDATION
+========================================================
+
+After creating the document:
+
+1. Confirm the file exists.
+2. Check for empty sections, placeholders, TODO, FIXME, or invented data.
+3. Verify all endpoint paths against route sources and mount registry.
+4. Verify worker and scheduler names against startup registration.
+5. Verify migration filenames against the repository.
+6. Run git status.
+7. Confirm no application source file changed.
+8. Confirm no Phase 6 branch was created.
+9. Commit only the baseline document if requested by the current task policy.
+10. Report the commit SHA if committed.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+- exact file created
+- section summary
+- number of endpoints inventoried
+- number of workers inventoried
+- number of schedulers inventoried
+- number of migration files inventoried
+- repository health score
+- git status
+- commit SHA, if any
+- remaining release observations
+
+Use exactly one verdict:
+
+A. BASELINE SNAPSHOT COMPLETE
+B. BASELINE SNAPSHOT COMPLETE WITH OBSERVATIONS
+C. BASELINE SNAPSHOT INCOMPLETE
+D. BASELINE SNAPSHOT FAILED
+
+STOP.
+
+Do NOT create:
+feature/phase6-room-template-library
+
+Wait for explicit approval.
