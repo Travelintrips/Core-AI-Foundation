@@ -1,0 +1,243 @@
+Implementasikan pengisian gambar untuk modul Interior Design pada tab Materials, Furniture, Lighting, dan Space Plan.
+
+TUJUAN
+
+* Menambahkan thumbnail/gambar nyata pada setiap item.
+* Jangan mengambil gambar acak langsung dari Google Images.
+* Gunakan hanya sumber yang mengizinkan penggunaan, seperti Unsplash, Pexels, Pixabay, Openverse, katalog vendor resmi, atau aset internal.
+* Simpan seluruh gambar ke Supabase Storage.
+* Jangan melakukan hotlink permanen ke website pihak ketiga.
+* Pertahankan visual fallback swatch, pola, ikon, dan warna yang sudah ada.
+
+ALUR WAJIB
+
+1. Cari gambar berdasarkan data item:
+
+   * nama item
+   * kategori
+   * subkategori
+   * material type
+   * style
+   * color
+   * room function
+   * lighting type
+
+2. Gunakan query yang spesifik.
+
+Contoh:
+
+* Natural oak wood texture
+* White marble texture
+* Modern grey fabric sofa
+* Minimalist dining chair
+* Warm pendant lamp
+* Modern office space plan
+
+3. Download gambar yang valid.
+
+4. Optimasi gambar:
+
+   * format WebP
+   * thumbnail maksimal 600 × 600 px
+   * ukuran file ideal di bawah 250 KB
+   * crop menggunakan object-fit cover
+   * jangan merusak rasio gambar utama
+
+5. Upload ke Supabase Storage bucket:
+
+interior-assets
+
+Gunakan folder:
+
+* materials/
+* furniture/
+* lighting/
+* space-plans/
+
+6. Simpan URL hasil upload ke database.
+
+Field minimum:
+
+* thumbnail_url
+* image_url
+* image_alt
+* image_source
+* image_source_url
+* image_license
+* image_attribution
+* image_updated_at
+
+Jika field belum tersedia, buat migration minimal dan aman.
+
+Jangan menghapus field lama.
+
+ATURAN TAMPILAN FRONTEND
+
+Gunakan urutan berikut:
+
+* Jika thumbnail_url tersedia dan gambar berhasil dimuat, tampilkan gambar.
+* Jika thumbnail_url kosong atau gambar gagal dimuat, tampilkan fallback visual yang sudah ada.
+* Jangan pernah menampilkan area kosong.
+* Tambahkan loading skeleton.
+* Tambahkan onError fallback.
+* Gunakan alt text dari nama dan kategori item.
+
+Contoh:
+
+Furniture:
+“Modern grey fabric sofa”
+
+Material:
+“Natural oak wood flooring texture”
+
+Lighting:
+“Warm pendant light fixture”
+
+Space Plan:
+“Open plan living and dining room layout”
+
+MATERIALS
+
+Untuk Materials, prioritaskan gambar tekstur close-up:
+
+* wood
+* marble
+* stone
+* ceramic tile
+* fabric
+* metal
+* concrete
+* wallpaper
+* paint
+* glass
+
+Jangan menggunakan foto ruangan penuh sebagai thumbnail utama material jika tekstur close-up tersedia.
+
+FURNITURE
+
+Gunakan foto produk dengan background bersih jika tersedia.
+
+Kategori minimal:
+
+* sofa
+* chair
+* table
+* bed
+* cabinet
+* wardrobe
+* shelf
+* desk
+* bench
+* stool
+
+LIGHTING
+
+Gunakan foto bentuk fixture, bukan hanya cahaya ruangan.
+
+Kategori minimal:
+
+* pendant
+* chandelier
+* wall lamp
+* floor lamp
+* table lamp
+* spotlight
+* downlight
+* track light
+
+SPACE PLAN
+
+Untuk Space Plan, gunakan:
+
+* diagram denah
+* zoning layout
+* top-view room layout
+* simple interior floor plan
+
+Jangan menggunakan foto interior biasa sebagai pengganti space plan.
+
+BULK ENRICHMENT
+
+Buat script idempotent untuk mengisi item yang thumbnail_url-nya masih kosong.
+
+Contoh command:
+
+npm run enrich:interior-assets
+
+Script harus:
+
+* hanya memproses item tanpa thumbnail
+* mendukung limit
+* mendukung dry-run
+* mendukung per kategori
+* memiliki retry
+* memiliki rate limit
+* tidak membuat duplikasi
+* tidak menimpa gambar yang sudah diupload manual
+* menyimpan log sukses dan gagal
+* bisa dilanjutkan setelah terhenti
+
+Contoh parameter:
+
+--type=materials
+--limit=50
+--dry-run
+--force=false
+
+MATCHING DAN KUALITAS
+
+Jangan memilih gambar hanya berdasarkan satu kata umum.
+
+Gunakan minimum:
+
+* nama item
+* kategori
+* tipe
+* style atau warna jika tersedia
+
+Tolak gambar jika:
+
+* resolusi terlalu kecil
+* watermark besar
+* gambar tidak relevan
+* berupa logo
+* berupa ilustrasi acak yang tidak sesuai
+* mengandung teks promosi
+* berasal dari sumber tanpa informasi lisensi
+* URL tidak dapat diakses
+* mime type bukan gambar
+
+ADMIN UPLOAD
+
+Tambahkan atau pertahankan fitur upload manual melalui admin.
+
+Admin harus dapat:
+
+* upload gambar baru
+* mengganti gambar
+* menghapus gambar
+* melihat sumber gambar
+* melihat lisensi
+* mengembalikan item ke fallback visual
+* memilih gambar utama
+
+Upload manual harus selalu lebih diprioritaskan daripada hasil pengisian otomatis.
+
+KEAMANAN
+
+* API key sumber gambar hanya boleh disimpan di environment backend.
+* Jangan expose API key ke frontend.
+* Validasi MIME type.
+* Validasi ukuran file.
+* Gunakan filename aman.
+* Hindari path traversal.
+* Batasi ukuran upload.
+* Jangan download file dari domain yang tidak lolos validasi.
+* Jangan menggunakan Google Images scraping.
+* Jangan menggunakan browser automation untuk mengambil gambar dari hasil pencarian Google.
+
+VALIDASI
+
+Setelah implementasi, verifikasi:
+
+* Materials menampilkan thumbnail ...

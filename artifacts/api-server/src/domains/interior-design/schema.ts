@@ -184,6 +184,39 @@ export const idConceptDraftsTable = appSchema.table("id_concept_drafts", {
 export type InsertIdConceptDraft = typeof idConceptDraftsTable.$inferInsert;
 export type IdConceptDraft       = typeof idConceptDraftsTable.$inferSelect;
 
+// ── id_interior_asset_images ──────────────────────────────────────────────────
+// Stores image metadata for items inside Interior Design concept draft JSONB.
+// Keyed by (project_uuid, item_type, item_id) — one record per item.
+// Manual uploads (is_manual_upload = true) are never overwritten by auto-enrichment.
+
+export const idInteriorAssetImagesTable = appSchema.table("id_interior_asset_images", {
+  id:               bigserial("id", { mode: "number" }).primaryKey(),
+
+  projectUuid:      text("project_uuid").notNull(),
+  itemType:         text("item_type").notNull(),   // material | furniture | lighting | space_plan
+  itemId:           text("item_id").notNull(),
+
+  thumbnailUrl:     text("thumbnail_url"),
+  imageUrl:         text("image_url"),
+  imageAlt:         text("image_alt"),
+  imageSource:      text("image_source"),          // pexels | unsplash | manual | internal
+  imageSourceUrl:   text("image_source_url"),
+  imageLicense:     text("image_license"),
+  imageAttribution: text("image_attribution"),
+
+  isManualUpload:   boolean("is_manual_upload").notNull().default(false),
+  storagePath:      text("storage_path"),
+  mimeType:         text("mime_type").notNull().default("image/webp"),
+  fileSizeBytes:    integer("file_size_bytes"),
+
+  imageUpdatedAt:   timestamp("image_updated_at", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type InsertIdInteriorAssetImage = typeof idInteriorAssetImagesTable.$inferInsert;
+export type IdInteriorAssetImage       = typeof idInteriorAssetImagesTable.$inferSelect;
+
 export const CONCEPT_DRAFT_REVIEW_STATES = [
   "ai_generated",
   "edited_by_admin",

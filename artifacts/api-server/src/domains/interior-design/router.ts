@@ -36,6 +36,13 @@ import {
   resetDraftToOriginal,
   requestRevision,
 } from "./service.js";
+import {
+  getImagesByProject,
+  deleteImage,
+  adminUploadImage,
+  enrichItem,
+  type EnrichItemInput,
+} from "./interiorImageService.js";
 
 const router = Router();
 
@@ -421,6 +428,130 @@ router.post("/ai/interior-design/drafts/:projectUuid/reset", async (req, res): P
   } catch (err) {
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+// ── Asset Images ──────────────────────────────────────────────────────────────
+//
+// GET  /ai/interior-design/asset-images/:projectUuid        list all images
+// POST /ai/interior-design/asset-images/:projectUuid/upload admin manual upload
+// POST /ai/interior-design/asset-images/:projectUuid/enrich enrich a single item
+// DELETE /ai/interior-design/asset-images/:projectUuid/:itemType/:itemId  delete
+
+/**
+ * GET /ai/interior-design/asset-images/:projectUuid
+ * Returns all image records for a project as a map keyed by "{itemType}:{itemId}".
+ */
+router.get("/ai/interior-design/asset-images/:projectUuid", async (req, res): Promise<void> => {
+  try {
+    const { projectUuid } = req.params as { projectUuid: string };
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+    const images = await getImagesByProject(projectUuid);
+    const map: Record<string, unknown> = {};
+    for (const img of images) {
+      map[`${img.itemType}:${img.itemId}`] = img;
+    }
+    res.json({ images: map, total: images.length });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+/**
+ * POST /ai/interior-design/asset-images/:projectUuid/upload
+ * Admin manual image upload. Accepts base64 encoded image data.
+ *
+ * Body: { itemType, itemId, imageData (base64), mimeType, altText?, forceReplace? }
+ */
+router.post("/ai/interior-design/asset-images/:projectUuid/upload", async (req, res): Promise<void> => {
+  try {
+    const { projectUuid } = req.params as { projectUuid: string };
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+
+    const body = req.body as Record<string, unknown>;
+    const itemType     = typeof body["itemType"]      === "string" ? body["itemType"]     : null;
+    const itemId       = typeof body["itemId"]        === "string" ? body["itemId"]       : null;
+    const imageData    = typeof body["imageData"]     === "string" ? body["imageData"]    : null;
+    const mimeType     = typeof body["mimeType"]      === "string" ? body["mimeType"]     : null;
+    const altText      = typeof body["altText"]       === "string" ? body["altText"]      : undefined;
+    const forceReplace = body["forceReplace"] === true;
+
+    if (!itemType || !["material","furniture","lighting","space_plan"].includes(itemType)) {
+      res.status(400).json({ error: "itemType must be one of: material, furniture, lighting, space_plan" }); return;
+    }
+    if (!itemId)    { res.status(400).json({ error: "itemId is required" }); return; }
+    if (!imageData) { res.status(400).json({ error: "imageData (base64) is required" }); return; }
+    if (!mimeType)  { res.status(400).json({ error: "mimeType is required" }); return; }
+
+    const image = await adminUploadImage(
+      projectUuid, itemType, itemId, imageData, mimeType, altText, forceReplace,
+    );
+    res.json({ image });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+/**
+ * POST /ai/interior-design/asset-images/:projectUuid/enrich
+ * Trigger Pexels enrichment for a single item.
+ *
+ * Body: { itemType, itemId, name?, category?, materialType?, style?, color?,
+ *         zone?, lightingType?, fixtureType?, force? }
+ */
+router.post("/ai/interior-design/asset-images/:projectUuid/enrich", async (req, res): Promise<void> => {
+  try {
+    const { projectUuid } = req.params as { projectUuid: string };
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+
+    const body = req.body as Record<string, unknown>;
+    const itemType = typeof body["itemType"] === "string" ? body["itemType"] : null;
+    const itemId   = typeof body["itemId"]   === "string" ? body["itemId"]   : null;
+    const force    = body["force"] === true;
+
+    if (!itemType || !["material","furniture","lighting","space_plan"].includes(itemType)) {
+      res.status(400).json({ error: "itemType must be one of: material, furniture, lighting, space_plan" }); return;
+    }
+    if (!itemId) { res.status(400).json({ error: "itemId is required" }); return; }
+
+    const input: EnrichItemInput = {
+      projectUuid,
+      itemType: itemType as EnrichItemInput["itemType"],
+      itemId,
+      name:         typeof body["name"]         === "string" ? body["name"]         : undefined,
+      category:     typeof body["category"]     === "string" ? body["category"]     : undefined,
+      materialType: typeof body["materialType"] === "string" ? body["materialType"] : undefined,
+      style:        typeof body["style"]        === "string" ? body["style"]        : undefined,
+      color:        typeof body["color"]        === "string" ? body["color"]        : undefined,
+      zone:         typeof body["zone"]         === "string" ? body["zone"]         : undefined,
+      lightingType: typeof body["lightingType"] === "string" ? body["lightingType"] : undefined,
+      fixtureType:  typeof body["fixtureType"]  === "string" ? body["fixtureType"]  : undefined,
+    };
+
+    const result = await enrichItem(input, { force });
+    res.json({ result });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+/**
+ * DELETE /ai/interior-design/asset-images/:projectUuid/:itemType/:itemId
+ * Delete (revert to fallback visual) an image record.
+ */
+router.delete("/ai/interior-design/asset-images/:projectUuid/:itemType/:itemId", async (req, res): Promise<void> => {
+  try {
+    const { projectUuid, itemType, itemId } = req.params as {
+      projectUuid: string; itemType: string; itemId: string;
+    };
+    if (!projectUuid || !itemType || !itemId) {
+      res.status(400).json({ error: "projectUuid, itemType, itemId are required" }); return;
+    }
+    const deleted = await deleteImage(projectUuid, itemType, itemId);
+    res.json({ deleted });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
 });
 
