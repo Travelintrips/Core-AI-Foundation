@@ -9,24 +9,25 @@
 | Item | Current evidence |
 |---|---|
 | Current branch | `main` |
-| `HEAD` | `920139520e98867c3ece3ba3b4b4ccc7f26f58bd` |
-| `origin/main` | `372f1ba0ee0586a3ff25c0498eec0b14b7e7317c` |
-| Local `material-v5.0.1` tag | Not present in fresh `git tag --list` output |
-| Remote `material-v5.0.1` tag | Not visible. `git ls-remote` could not authenticate to GitHub, so remote absence is not independently queryable from this workspace |
+| `HEAD` | `b5fd8edd7a6efe35940c9a09443c3070a2dcf118` |
+| `origin/main` | `b5fd8edd7a6efe35940c9a09443c3070a2dcf118` |
+| Ahead / behind | 0 ahead, 0 behind — exactly synchronized |
+| Local `material-v5.0.1` tag | **Present.** Annotated tag created at `b5fd8edd7a6efe35940c9a09443c3070a2dcf118` during this normalization task. |
+| Remote `material-v5.0.1` tag | **Not verified — authentication blocked.** `git ls-remote --tags origin` returned "Invalid username or token. Password authentication is not supported for Git operations." Remote tag state cannot be independently confirmed from this workspace. |
 | Phase 6 branch | No local `phase6/*` branch and no visible `origin/phase6/*` or `gitsafe-backup/phase6/*` branch |
 | Older release references | Existing reports refer to `material-v5.0.0` and older commits; those references are historical, not current release proof |
 
-The requested `material-v5.0.1` release identity is therefore not proven by the current repository state. No tag is claimed.
+`HEAD` and `origin/main` are now identical. The local annotated tag `material-v5.0.1` points to the synchronized main SHA. The tag cannot be pushed to origin due to GitHub authentication failure; remote tag state remains unverified.
 
 ## 2. Repository cleanliness
 
-Before this baseline was created, the working tree contained one pre-existing untracked upload:
+The working tree is clean except for one untracked user-upload artifact:
 
 ```text
-attached_assets/Pasted-RESUME-TASK-FINALIZE-MATERIAL-V5-0-1-BASELINE-Resume-fr_1785156950421.txt
+attached_assets/Pasted-FINAL-TASK-REPOSITORY-BASELINE-NORMALIZATION-Repository_1785157898002.txt
 ```
 
-The baseline document is the only file created by this task. The uploaded instruction file remains untouched and is not part of the baseline change. No application code, migration, branch, tag, or commit was created by this task.
+This file is a user-supplied instruction upload and is intentionally excluded from all commits. No application code, migration, or business logic was modified. The only changes in this normalization task are: (1) this baseline document update and (2) creation of the local annotated tag `material-v5.0.1`.
 
 ## 3. Architecture inventory
 
@@ -385,8 +386,8 @@ The new file `docs/baselines/material-v5.0.1-baseline.md` is the current snapsho
 
 ## 15. Known limitations and documentation conflicts
 
-1. `material-v5.0.1` is not visible in local tag output. The unauthenticated remote tag query failed, so the tag cannot be asserted.
-2. `HEAD` and `origin/main` differ. Older reports describe earlier commits/releases and are not current release proof.
+1. Local annotated tag `material-v5.0.1` is now present at `b5fd8edd7a6efe35940c9a09443c3070a2dcf118`. Remote tag state cannot be verified — GitHub authentication failed (`git ls-remote --tags origin` returned "Invalid username or token"). Tag push is blocked; remote presence is unconfirmed.
+2. `HEAD` and `origin/main` are now identical at `b5fd8edd7a6efe35940c9a09443c3070a2dcf118` (0 ahead, 0 behind). Older reports describe earlier commits/releases and are not current release proof.
 3. No production deployment, privileged production smoke test, production migration application, or production performance result is evidenced here.
 4. RLS migration source exists for the Phase 5 import tables, but applied RLS state is not independently verified.
 5. `asset-intelligence-v2/index.ts` says the router is “not mounted yet,” while current `routes/index.ts` mounts it. Current mount source wins; the comment is stale.
@@ -450,8 +451,13 @@ The repository contains Phase 6 planning and approval documents, but this task d
 - **Scheduler/poller count:** 3 named services; 4 recurring loops/timers
 - **Migration file count:** 55 SQL files in migration directories; 56 including `docs/team-05-analytics-migration.sql`; additional standalone DDL sources are listed separately
 - **Repository health score:** 78/100, conditional baseline health
-- **Git status:** baseline file is new; the uploaded instruction file remains pre-existing and untracked; no application code or migrations changed
-- **Tag status:** `material-v5.0.1` not visible locally; remote query was unauthenticated and did not prove presence
-- **Remaining observations:** production/deployment/migration/performance state is unverified; RLS application is unverified; material tenant-context and stale route comments need follow-up
+- **HEAD SHA:** `b5fd8edd7a6efe35940c9a09443c3070a2dcf118`
+- **origin/main SHA:** `b5fd8edd7a6efe35940c9a09443c3070a2dcf118` (identical — 0 ahead, 0 behind)
+- **Git status:** clean; one untracked user-upload instruction artifact excluded from all commits; no application code or migrations changed
+- **Local tag status:** `material-v5.0.1` annotated tag **present** at `b5fd8edd7a6efe35940c9a09443c3070a2dcf118`
+- **Remote tag status:** **unverifiable** — GitHub authentication blocked; tag push not possible from this workspace
+- **Baseline document tracked status:** tracked and committed
+- **No Phase 6 branch created; no application code changed**
+- **Remaining observations:** production/deployment/migration/performance state is unverified; RLS application is unverified; material tenant-context and stale route comments need follow-up; remote tag push requires GitHub credential configuration
 
-**Verdict: BASELINE SNAPSHOT COMPLETE WITH OBSERVATIONS**
+**Verdict: NORMALIZED WITH LOCAL ARTIFACT OBSERVATIONS**
