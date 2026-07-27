@@ -1,0 +1,489 @@
+MASTER TASK — PHASE 6
+DESIGN SPRINT
+ROOM DESIGN PLATFORM
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Baseline Release:
+material-v5.0.1
+
+Current Branch:
+main
+
+========================================================
+OBJECTIVE
+========================================================
+
+Material Platform baseline has been officially frozen.
+
+This task is NOT implementation.
+
+This task is ONLY architecture and design.
+
+DO NOT write production code.
+
+DO NOT create database migrations.
+
+DO NOT modify business logic.
+
+DO NOT create Phase 6 implementation branches.
+
+The objective is to produce a complete architecture blueprint for Phase 6.
+
+========================================================
+PHASE 6 VISION
+========================================================
+
+Transform the existing Material Platform into an AI-powered
+Room Design Platform capable of:
+
+- Room Template Library
+- Furniture Library
+- Decoration Library
+- Lighting Library
+- AI Design Composer
+- Furniture Placement Engine
+- Layout Constraint Engine
+- Material Recommendation Engine
+- Cost Estimation Engine
+- Moodboard Generator
+- Room Specification Generator
+- Rendering Pipeline Integration
+
+========================================================
+DESIGN PRINCIPLES
+========================================================
+
+Every module must:
+
+- Single Responsibility
+- Modular
+- Extensible
+- AI Provider Agnostic
+- JSON Contract First
+- Event Driven where appropriate
+- Dependency Injection
+- No hard-coded AI provider
+- No duplicated business logic
+- Compatible with current Material Platform
+
+========================================================
+TASK 1 — DOMAIN ANALYSIS
+========================================================
+
+Define all core business domains.
+
+At minimum:
+
+Room Template
+
+Room
+
+Room Style
+
+Room Theme
+
+Room Type
+
+Furniture
+
+Furniture Category
+
+Furniture Variant
+
+Furniture Placement
+
+Decoration
+
+Lighting
+
+Material Assignment
+
+Moodboard
+
+Rendering Job
+
+Design Session
+
+Design Revision
+
+Design Version
+
+Export Package
+
+Explain:
+
+Responsibilities
+
+Relationships
+
+Lifecycle
+
+Ownership
+
+========================================================
+TASK 2 — DOMAIN MODEL
+========================================================
+
+Produce entity relationship diagrams.
+
+Define:
+
+Entities
+
+Value Objects
+
+Aggregates
+
+Repositories
+
+Services
+
+Factories
+
+Events
+
+Commands
+
+Queries
+
+========================================================
+TASK 3 — ARCHITECTURE
+========================================================
+
+Design:
+
+Frontend Architecture
+
+Backend Services
+
+Storage Layer
+
+Rendering Layer
+
+AI Layer
+
+Asset Pipeline
+
+Review Pipeline
+
+Versioning
+
+Export Pipeline
+
+Explain:
+
+Dependencies
+
+Data Flow
+
+Sequence Diagrams
+
+========================================================
+TASK 4 — AI AGENT ARCHITECTURE
+========================================================
+
+Design specialized AI agents.
+
+Example:
+
+Room Planner Agent
+
+Interior Designer Agent
+
+Furniture Selector Agent
+
+Material Advisor Agent
+
+Lighting Consultant Agent
+
+Style Advisor Agent
+
+Budget Optimizer Agent
+
+Rendering Coordinator
+
+Prompt Optimizer
+
+QA Reviewer
+
+For each agent define:
+
+Responsibilities
+
+Input Schema
+
+Output Schema
+
+Dependencies
+
+Failure Handling
+
+========================================================
+TASK 5 — DATA CONTRACTS
+========================================================
+
+Design JSON contracts.
+
+Examples:
+
+Create Design Request
+
+Room Description
+
+Furniture Recommendation
+
+Material Recommendation
+
+Layout Plan
+
+Moodboard
+
+Render Request
+
+Review Request
+
+Revision Request
+
+Export Request
+
+All contracts must be versioned.
+
+========================================================
+TASK 6 — API BLUEPRINT
+========================================================
+
+Design REST API.
+
+Do NOT implement.
+
+For each endpoint specify:
+
+Method
+
+Path
+
+Authentication
+
+Authorization
+
+Request Schema
+
+Response Schema
+
+Errors
+
+Idempotency
+
+========================================================
+TASK 7 — DATABASE BLUEPRINT
+========================================================
+
+Design future schema.
+
+Do NOT create migrations.
+
+List future tables.
+
+Relationships.
+
+Indexes.
+
+RLS considerations.
+
+Version strategy.
+
+========================================================
+TASK 8 — USER WORKFLOW
+========================================================
+
+Design complete workflows.
+
+Customer
+
+Designer
+
+Reviewer
+
+Admin
+
+Rendering Worker
+
+Asset Manager
+
+AI Agent
+
+Include sequence diagrams.
+
+========================================================
+TASK 9 — PHASE BREAKDOWN
+========================================================
+
+Split Phase 6 into implementation work packages.
+
+Suggested:
+
+WP-01
+Room Template Library
+
+WP-02
+Furniture Library
+
+WP-03
+Decoration Library
+
+WP-04
+Lighting Library
+
+WP-05
+Material Recommendation Engine
+
+WP-06
+Furniture Placement Engine
+
+WP-07
+Layout Constraint Engine
+
+WP-08
+Moodboard Generator
+
+WP-09
+Rendering Pipeline
+
+WP-10
+Review & Versioning
+
+WP-11
+Export Engine
+
+WP-12
+QA & Release
+
+For every work package define:
+
+Objectives
+
+Dependencies
+
+Estimated complexity
+
+Risk
+
+Deliverables
+
+========================================================
+TASK 10 — RISK ANALYSIS
+========================================================
+
+Identify:
+
+Technical Risks
+
+AI Risks
+
+Performance Risks
+
+Scalability Risks
+
+Security Risks
+
+Rendering Risks
+
+Data Risks
+
+Operational Risks
+
+Provide mitigation for each.
+
+========================================================
+TASK 11 — SUCCESS METRICS
+========================================================
+
+Define KPIs.
+
+Examples:
+
+Render latency
+
+Recommendation accuracy
+
+AI response quality
+
+User satisfaction
+
+Revision count
+
+Template reuse
+
+Rendering success rate
+
+Export success rate
+
+========================================================
+TASK 12 — FINAL DOCUMENTS
+========================================================
+
+Create:
+
+docs/phase6-design-sprint.md
+
+docs/phase6-domain-model.md
+
+docs/phase6-api-blueprint.md
+
+docs/phase6-database-blueprint.md
+
+docs/phase6-ai-agent-architecture.md
+
+docs/phase6-work-packages.md
+
+docs/phase6-risk-analysis.md
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use exactly one verdict.
+
+A.
+DESIGN SPRINT COMPLETE
+
+Architecture approved.
+
+Implementation may begin.
+
+--------------------------------------------------------
+
+B.
+DESIGN SPRINT COMPLETE WITH OBSERVATIONS
+
+Minor architectural refinements remain.
+
+--------------------------------------------------------
+
+C.
+DESIGN SPRINT INCOMPLETE
+
+Additional architectural work required.
+
+--------------------------------------------------------
+
+D.
+DESIGN SPRINT BLOCKED
+
+Critical architectural issue discovered.
+
+========================================================
+
+AFTER COMPLETION
+
+STOP.
+
+Do NOT implement Phase 6.
+
+Do NOT create feature branches.
+
+Wait for explicit approval before starting:
+
+WP-01 — Room Template Library.
