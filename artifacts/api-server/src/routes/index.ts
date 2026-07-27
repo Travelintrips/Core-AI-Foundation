@@ -156,11 +156,13 @@ import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
 import customsRouter from "./customs.js";
 // ── DEV-ONLY: Payment test adapter (never active in production) ───────────
 import devPaymentTestRouter from "./dev-payment-test.js";
+import materialImportRouter from "./material-import.js";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(storageRouter);
+router.use(materialImportRouter);
 router.use(internalAuthRouter);
 router.use(internalCatalogRouter);
 router.use(agentsRouter);
