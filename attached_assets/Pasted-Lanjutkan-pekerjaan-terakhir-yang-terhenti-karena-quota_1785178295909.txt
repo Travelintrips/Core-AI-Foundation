@@ -1,0 +1,227 @@
+Lanjutkan pekerjaan terakhir yang terhenti karena quota limit.
+
+Jangan mulai ulang dari nol. Audit terlebih dahulu seluruh diff yang sudah dibuat, khususnya perubahan pada imageDesignerService.ts, lalu lanjutkan hanya bagian yang belum selesai.
+
+ROOT CAUSE YANG SUDAH DITEMUKAN
+
+1. Agent interior menghasilkan:
+   - design_concept
+   - style_direction
+   - spatial_concept
+   - color_concept
+   - signature_elements
+
+2. stepsToInitialDraftData() tidak mengenali key tersebut dan jatuh ke JSON.stringify(), sehingga visualConceptDraft berisi JSON mentah.
+
+3. buildInteriorImagePromptContext() memiliki gap yang sama, sehingga context untuk image generation kosong atau tidak lengkap.
+
+4. creative-ai.tsx memakai renderOutput(conceptOut), sehingga nested object konsep interior ditampilkan sebagai JSON mentah.
+
+TARGET PERBAIKAN
+
+Perbaiki seluruh rantai berikut:
+
+A. Mapping output agent
+B. Initial draft data
+C. Image prompt context
+D. Interior concept renderer
+E. Image-generation status dan fallback
+F. Tests dan verifikasi
+
+PHASE 1 — AUDIT DIFF
+
+Periksa:
+
+- git diff
+- perubahan parsial pada imageDesignerService.ts
+- apakah ada file lain yang sempat berubah
+- apakah perubahan parsial compile
+- apakah ada implementasi setengah jadi
+
+Jangan menimpa perubahan yang sudah benar.
+
+PHASE 2 — FIX stepsToInitialDraftData()
+
+Tambahkan pengenalan khusus untuk output konsep interior.
+
+Jangan gunakan JSON.stringify sebagai presentation value untuk field tersebut.
+
+Map data menjadi struktur yang jelas, misalnya:
+
+visualConceptDraft:
+{
+  designConcept,
+  colorConcept,
+  spatialConcept,
+  styleDirection,
+  signatureElements
+}
+
+Pertahankan kompatibilitas terhadap output lama.
+
+Jangan mengubah kontrak domain lain.
+
+PHASE 3 — FIX buildInteriorImagePromptContext()
+
+Pastikan fungsi membaca seluruh field:
+
+- design_concept
+- style_direction
+- spatial_concept
+- color_concept
+- signature_elements
+
+Buat prompt context yang terstruktur dan deterministik.
+
+Minimal masukkan:
+
+- concept title
+- narrative
+- emotional intent
+- design philosophy
+- palette mood
+- accent colors
+- color flow
+- focal points
+- overall flow
+- lighting philosophy
+- indoor-outdoor connection
+- style blend
+- primary style
+- local cultural integration
+- contemporary vs traditional
+- signature elements
+
+Jangan memakai JSON mentah sebagai prompt utama.
+
+Jangan membuat nilai yang tidak ada.
+
+PHASE 4 — BUAT INTERIOR CONCEPT RENDERER
+
+Di creative-ai.tsx atau komponen terpisah, buat renderer khusus untuk konsep interior.
+
+Tampilan minimal:
+
+1. Hero concept visual
+2. Color palette swatches
+3. Design narrative
+4. Spatial concept cards
+5. Style direction cards
+6. Signature element chips/cards
+7. Technical JSON hanya dalam collapsible debug panel
+
+Jangan gunakan renderOutput generik untuk nested interior concept jika menyebabkan JSON mentah.
+
+Buat komponen terisolasi seperti:
+
+InteriorConceptOutput
+InteriorColorPalette
+InteriorSpatialConcept
+InteriorStyleDirection
+InteriorSignatureElements
+
+Gunakan existing design system.
+
+PHASE 5 — GAMBAR KONSEP
+
+Periksa apakah pipeline image generation sudah menghasilkan visual untuk step konsep.
+
+Jika image URL sudah tersedia:
+- tampilkan pada hero section
+- gunakan loading skeleton
+- gunakan onError fallback
+- jangan generate ulang saat refresh
+
+Jika image belum tersedia:
+- tampilkan status “Visual konsep belum dibuat”
+- sediakan tombol generate/regenerate sesuai permission yang sudah ada
+- jangan membuat provider baru
+- gunakan pipeline image generation yang sudah tersedia
+
+Pastikan prompt image memakai hasil dari buildInteriorImagePromptContext() yang sudah diperbaiki.
+
+PHASE 6 — FALLBACK
+
+Jika gambar gagal:
+
+- konsep teks tetap tampil
+- palette tetap tampil
+- UI tidak kosong
+- tampilkan status gagal yang jelas
+- jangan kembali menampilkan JSON mentah sebagai konten utama
+
+PHASE 7 — BACKWARD COMPATIBILITY
+
+Pastikan tetap mendukung data lama yang mungkin:
+
+- berupa string
+- berupa JSON string
+- berupa nested object
+- sebagian field kosong
+- memakai camelCase
+- memakai snake_case
+
+Buat parser yang aman.
+
+Jangan crash ketika satu bagian konsep tidak tersedia.
+
+PHASE 8 — TEST
+
+Tambahkan test untuk:
+
+1. stepsToInitialDraftData mengenali semua key interior
+2. tidak menghasilkan JSON.stringify sebagai visual utama
+3. buildInteriorImagePromptContext berisi konsep lengkap
+4. field kosong tidak menghasilkan “undefined”
+5. legacy JSON string tetap dapat dibaca
+6. renderer menampilkan palette sebagai swatch
+7. signature elements tampil sebagai cards/chips
+8. nested object tidak tampil sebagai raw JSON
+9. image loading state
+10. image failed fallback
+11. refresh tidak memicu generation ulang
+
+PHASE 9 — VALIDASI
+
+Jalankan:
+
+- targeted tests
+- typecheck package terkait
+- production build package terkait
+- inspect git diff
+- pastikan tidak ada perubahan di luar scope
+
+Verifikasi manual:
+
+- buka admin AI platform
+- buka project Interior Design
+- buka step Konsep Desain
+- pastikan tidak lagi berupa JSON mentah
+- pastikan palette tampil secara visual
+- pastikan narrative mudah dibaca
+- pastikan gambar konsep tampil jika tersedia
+- pastikan fallback bekerja jika gambar tidak ada
+
+PHASE 10 — LAPORAN
+
+Laporkan:
+
+1. Root cause
+2. File yang berubah
+3. Mapping baru
+4. Renderer baru
+5. Image prompt context yang diperbaiki
+6. Status image generation
+7. Test yang dijalankan
+8. Build/typecheck result
+9. Screenshot sebelum dan sesudah
+10. Hal yang masih belum selesai
+
+BATASAN
+
+- Jangan mengubah standalone Interior Design project page yang sudah berjalan baik kecuali benar-benar diperlukan.
+- Jangan mengganti provider image generation.
+- Jangan mengubah database tanpa kebutuhan.
+- Jangan mengubah workflow domain lain.
+- Jangan menampilkan JSON mentah sebagai UI utama.
+- Jangan menyatakan selesai sebelum build dan test dijalankan.
