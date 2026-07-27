@@ -1,0 +1,262 @@
+Perbaiki tampilan halaman “Konsep Desain” Interior AI.
+
+MASALAH SAAT INI
+
+Bagian Konsep Desain hanya menampilkan output JSON/teks seperti:
+- color concept
+- design narrative
+- spatial concept
+- style direction
+- signature elements
+
+Tidak ada gambar konsep, moodboard, material reference, furniture reference, lighting reference, atau visual ruang.
+
+TUJUAN
+
+Ubah halaman Konsep Desain menjadi presentasi visual profesional.
+
+Jangan menghapus data teks yang sudah ada. Teks tetap menjadi penjelasan pendukung, tetapi bukan tampilan utama.
+
+1. AUDIT DATA DAN WORKFLOW
+
+Periksa:
+
+- struktur output agent konsep desain
+- apakah workflow sudah menghasilkan image prompt
+- apakah ada image-generation agent/provider yang sudah tersedia
+- tabel atau JSON field tempat hasil konsep disimpan
+- Supabase Storage bucket yang digunakan untuk hasil Creative AI
+- status job image generation
+- komponen frontend yang sekarang merender JSON mentah
+
+Jangan membuat provider AI baru jika image generator sudah tersedia di sistem.
+
+2. GENERATE VISUAL CONCEPT
+
+Setelah konsep teks selesai, buat image-generation prompt terstruktur dari:
+
+- nama gaya
+- palette mood
+- accent colors
+- design narrative
+- focal points
+- overall flow
+- material palette
+- furniture direction
+- lighting philosophy
+- room type
+- room dimensions jika tersedia
+- user requirements
+- negative constraints
+
+Hasil minimal:
+
+- 1 hero concept render
+- 1 moodboard collage
+- 4–6 material/furniture/lighting references jika workflow mendukung
+
+Jangan membuat data ruang atau ukuran yang tidak diberikan pengguna.
+
+3. JENIS VISUAL
+
+Hero Concept Render:
+- visual interior realistis
+- mengikuti style direction
+- mengikuti color palette
+- mengikuti jenis ruang
+- menunjukkan focal point
+- tidak menambahkan elemen yang bertentangan dengan brief
+
+Moodboard:
+- palette warna
+- tekstur material
+- bentuk furniture
+- lighting mood
+- style reference
+
+Jika pembuatan moodboard terpisah belum tersedia, buat satu visual board komposit dari hasil yang sudah ada.
+
+4. PENYIMPANAN
+
+Simpan hasil ke Supabase Storage, bukan URL sementara provider.
+
+Gunakan folder yang mengikuti project dan request, misalnya:
+
+creative-ai/interior/{requestId}/concept/
+
+Simpan metadata minimal:
+
+- conceptHeroImageUrl
+- conceptMoodboardUrl
+- conceptReferenceImages
+- generationStatus
+- generationProvider
+- generationModel
+- generationPrompt
+- generatedAt
+- generationError
+
+Gunakan struktur data yang konsisten dengan workflow Creative AI yang sudah ada.
+
+Jangan menyimpan API key atau secret pada database/frontend.
+
+5. FRONTEND
+
+Ubah halaman Konsep Desain menjadi urutan:
+
+A. Hero Visual
+- gambar besar dengan rasio responsif
+- loading skeleton
+- tombol lihat ukuran penuh
+- tombol unduh hanya jika fitur unduh memang sudah tersedia
+- onError fallback
+
+B. Moodboard
+- grid gambar
+- dapat diperbesar
+- alt text deskriptif
+
+C. Color Palette
+- tampilkan swatch warna
+- tampilkan HEX dan nama warna
+- jangan tampilkan sebagai JSON mentah
+
+D. Design Narrative
+- tampilkan dalam card teks yang mudah dibaca
+
+E. Spatial Concept
+- tampilkan focal points, flow, lighting, indoor-outdoor connection dalam card terpisah
+
+F. Style Direction
+- tampilkan style blend, primary style, local cultural integration, contemporary vs traditional
+
+G. Signature Elements
+- tampilkan sebagai visual chips atau cards
+
+JSON mentah tidak boleh menjadi tampilan utama.
+
+Boleh sediakan tombol “Lihat data teknis” yang membuka JSON dalam collapsible panel untuk debugging/admin.
+
+6. STATUS DAN FALLBACK
+
+Gunakan status:
+
+- generating_visual
+- visual_ready
+- visual_failed
+
+Jika visual sedang dibuat:
+- tampilkan skeleton
+- tampilkan teks “Sedang membuat visual konsep…”
+
+Jika gagal:
+- tetap tampilkan seluruh konsep teks
+- tampilkan tombol “Coba Buat Ulang Visual”
+- jangan membuat halaman kosong
+- simpan error yang aman untuk audit
+
+Jika belum pernah dibuat:
+- tampilkan tombol “Buat Visual Konsep”
+
+7. IDEMPOTENSI
+
+Jangan membuat ulang gambar setiap kali halaman direfresh.
+
+Gunakan hasil yang sudah tersimpan.
+
+Generate ulang hanya jika:
+
+- pengguna menekan regenerate
+- brief berubah secara material
+- admin memilih regenerate
+- hasil sebelumnya gagal
+
+Gunakan idempotency key berbasis requestId + concept version.
+
+8. KONSISTENSI WORKFLOW
+
+Pastikan visual konsep bukan gambar acak.
+
+Visual wajib menggunakan output konsep yang sama dengan teks:
+
+- palette
+- room function
+- style
+- focal point
+- lighting
+- materials
+- client preferences
+
+Hasil konsep harus diteruskan ke phase berikutnya agar:
+
+- Materials
+- Furniture
+- Lighting
+- Space Plan
+- Final Render
+
+tetap konsisten dengan visual konsep yang sudah disetujui.
+
+9. KEAMANAN DAN VALIDASI
+
+- image URL harus HTTPS
+- file harus berasal dari Supabase Storage
+- validasi MIME image
+- batasi ukuran file
+- jangan expose provider API key
+- jangan mengambil gambar acak dari Google Images
+- jangan melakukan hotlink permanen
+- jangan membuat klaim atau elemen yang tidak berasal dari brief
+
+10. TEST
+
+Tambahkan test untuk:
+
+- konsep dengan hero image
+- konsep tanpa image
+- generation loading state
+- generation failed state
+- image error fallback
+- regenerate tidak membuat duplikasi
+- refresh tidak memicu generation baru
+- palette dirender sebagai swatch
+- JSON tidak tampil sebagai konten utama
+- mobile responsive
+
+11. VALIDASI AKHIR
+
+Pastikan:
+
+- build sukses
+- typecheck tidak menambah error baru
+- halaman tidak lagi didominasi JSON mentah
+- visual tampil pada desktop dan mobile
+- teks konsep tetap tersedia
+- hasil visual tersimpan permanen
+- tidak ada regeneration saat refresh
+- semua phase berikutnya memakai concept version yang sama
+
+LAPORAN AKHIR
+
+Laporkan:
+
+1. Penyebab gambar sebelumnya tidak muncul
+2. Provider/image engine yang digunakan
+3. File yang diubah
+4. Field/database yang ditambahkan
+5. Bucket dan path Supabase Storage
+6. Status flow generation
+7. Screenshot halaman sebelum dan sesudah
+8. Hasil build, typecheck, dan test
+9. Risiko atau keterbatasan yang masih ada
+
+BATASAN
+
+- Jangan menghapus konsep teks
+- Jangan menampilkan JSON mentah sebagai UI utama
+- Jangan mengubah autentikasi
+- Jangan mengubah modul lain
+- Jangan mengganti provider tanpa alasan
+- Jangan generate ulang pada setiap refresh
+- Jangan membuat gambar acak yang tidak sesuai brief
+- Gunakan perubahan minimal dan terisolasi
