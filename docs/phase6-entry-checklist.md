@@ -92,7 +92,7 @@
 | Supabase RLS for Phase 5 tables | ❌ Incomplete | Not independently verified for `material_import_staging` / `material_import_audit` |
 | No secrets in source files | ✅ Complete | All secrets in Replit Secrets or `.replit` non-secret userenv |
 | `ADMIN_API_KEY` valid in Replit environment | ✅ Complete | Set in `.replit` `[userenv.shared]` |
-| `SMTP_PASS` confirmed in Replit Secrets | ❌ Incomplete | Not confirmed — only `SESSION_SECRET` verified |
+| `SMTP_PASS` confirmed in Replit Secrets | ✅ Complete | Set 2026-07-27; SMTP verify() passed — `smtp.hostinger.com:465` healthy |
 
 **Section verdict: ❌ Incomplete — RLS verification and SMTP_PASS confirmation outstanding**
 

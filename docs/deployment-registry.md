@@ -86,7 +86,7 @@
 |---|---|---|
 | `SESSION_SECRET` | Express session secret | ✅ Set |
 | `OPENAI_API_KEY` | OpenAI key | ✅ Updated (was invalid) |
-| `SMTP_PASS` | Hostinger SMTP password | ⚠️ Not confirmed set |
+| `SMTP_PASS` | Hostinger SMTP password | ✅ Set and verified (2026-07-27) |
 
 ---
 
@@ -134,6 +134,6 @@ curl -o /dev/null -w "%{http_code}" https://aicore.cstlogistic.co.id/api/workspa
 ## Action Required Before Phase 6
 
 1. **Re-register Replit deployment** for production environment
-2. **Confirm `SMTP_PASS` secret** is set in Replit Secrets
+2. ~~**Confirm `SMTP_PASS` secret**~~ ✅ Set and verified — `smtp.hostinger.com:465` healthy
 3. **Run privileged smoke test** (see `docs/production-smoke-test-checklist.md`)
 4. **Create staging environment** (recommended but not blocking)

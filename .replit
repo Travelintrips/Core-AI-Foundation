@@ -34,6 +34,7 @@ SMTP_FROM = "info@cstlogistic.co.id"
 SMTP_USER = "info@cstlogistic.co.id"
 ALLOWED_ORIGINS = "https://aicore.cstlogistic.co.id,https://core-ai-foundation-1.replit.app"
 DESIGN_AI_MULTI_AGENT_ENABLED = "true"
+SMTP_PASS = "#Admin12345@$"
 
 [userenv.development]
 SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
