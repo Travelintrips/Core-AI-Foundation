@@ -89,6 +89,7 @@ import GraphicDesignPage from "@/pages/graphic-design";
 import VersionTimelinePage from "@/pages/version-timeline";
 // ── Team 17: Interior Design ─────────────────────────────────────────────
 import InteriorDesignPage from "@/pages/interior-design";
+import InteriorDesignDetailPage from "@/pages/interior-design/detail";
 // ── Team 18: Fashion Design ──────────────────────────────────────────────
 import FashionDesignPage from "@/pages/fashion-design";
 // ── Team 19: Packaging Design ────────────────────────────────────────────
@@ -188,6 +189,7 @@ function AdminRouter() {
         <Route path="/version-timeline" component={VersionTimelinePage} />
         {/* ── Team 17: Interior Design ────────────────────────────────── */}
         <Route path="/interior-design" component={InteriorDesignPage} />
+        <Route path="/interior-design/:id" component={InteriorDesignDetailPage} />
         {/* ── Team 18: Fashion Design ─────────────────────────────────── */}
         <Route path="/fashion-design" component={FashionDesignPage} />
         {/* ── Team 19: Packaging Design ───────────────────────────────── */}
