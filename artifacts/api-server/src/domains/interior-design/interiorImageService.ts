@@ -124,9 +124,33 @@ export function buildSearchQuery(item: {
   return parts.filter(Boolean).join(" ").slice(0, 120);
 }
 
+/** Retry helper with exponential backoff. Returns null if all attempts fail. */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts = 3,
+  baseDelayMs = 500,
+): Promise<T | null> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === maxAttempts) {
+        logger.warn({ err, label, attempt }, "[interiorImage] All retry attempts exhausted");
+        return null;
+      }
+      const delay = baseDelayMs * Math.pow(2, attempt - 1);
+      logger.debug({ label, attempt, delay }, "[interiorImage] Retrying after delay");
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  return null;
+}
+
 /**
  * Search Pexels for a relevant image.
  * Returns null when no key is configured or no results found.
+ * Retries up to 3 times with exponential backoff on network errors.
  */
 export async function searchPexels(query: string, perPage = 5): Promise<PexelsPhoto | null> {
   const apiKey = process.env["PEXELS_API_KEY"];
@@ -135,26 +159,24 @@ export async function searchPexels(query: string, perPage = 5): Promise<PexelsPh
     return null;
   }
 
-  try {
+  const result = await withRetry(async () => {
     const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${perPage}&orientation=square`;
     const res = await fetch(url, {
       headers: { Authorization: apiKey },
+      signal: AbortSignal.timeout(10_000),
     });
 
-    if (!res.ok) {
-      logger.warn({ status: res.status, query }, "[interiorImage] Pexels search failed");
-      return null;
-    }
+    if (res.status === 429) throw new Error("Pexels rate-limited (429)");
+    if (!res.ok) throw new Error(`Pexels HTTP ${res.status}`);
 
     const data = await res.json() as PexelsSearchResult;
     if (!data.photos || data.photos.length === 0) return null;
 
     // Pick first photo — caller may implement scoring
     return data.photos[0] ?? null;
-  } catch (err) {
-    logger.warn({ err, query }, "[interiorImage] Pexels search error");
-    return null;
-  }
+  }, `searchPexels("${query.slice(0, 40)}")`);
+
+  return result ?? null;
 }
 
 // ── Validation ─────────────────────────────────────────────────────────────────
@@ -291,14 +313,19 @@ export async function fetchAndUploadPexelsPhoto(
   // Use medium-size Pexels image (typically 400-600px — ideal thumbnail)
   const sourceUrl = photo.src.medium;
 
-  const res = await fetch(sourceUrl, {
-    headers: { "User-Agent": "Creative-AI-Studio/1.0" },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) throw new Error(`Failed to download Pexels image: ${res.status}`);
+  const downloaded = await withRetry(async () => {
+    const r = await fetch(sourceUrl, {
+      headers: { "User-Agent": "Creative-AI-Studio/1.0" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!r.ok) throw new Error(`Failed to download Pexels image: ${r.status}`);
+    const ct = r.headers.get("content-type") ?? "image/jpeg";
+    const buf = Buffer.from(await r.arrayBuffer());
+    return { contentType: ct, buffer: buf };
+  }, `downloadPexels(photo=${photo.id})`);
 
-  const contentType = res.headers.get("content-type") ?? "image/jpeg";
-  const buffer = Buffer.from(await res.arrayBuffer());
+  if (!downloaded) throw new Error("Failed to download Pexels image after retries");
+  const { contentType, buffer } = downloaded;
 
   validateImageBuffer(buffer, contentType);
 
@@ -307,7 +334,13 @@ export async function fetchAndUploadPexelsPhoto(
   const safeName = safeFilename(`${itemId}-${photo.id}`);
   const storagePath = `${folder}/${projectUuid}/${safeName}.${ext}`;
 
-  const thumbnailUrl = await uploadToInteriorBucket(storagePath, buffer, contentType);
+  const thumbnailUrl = await withRetry(
+    () => uploadToInteriorBucket(storagePath, buffer, contentType),
+    `uploadToSupabase(${storagePath.slice(-50)})`,
+  ).then((url) => {
+    if (!url) throw new Error("Upload to Supabase failed after retries");
+    return url;
+  });
 
   return {
     storagePath,

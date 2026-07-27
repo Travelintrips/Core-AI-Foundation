@@ -83,20 +83,40 @@ function log(line: string): void {
 
 const PEXELS_API_KEY = process.env["PEXELS_API_KEY"];
 
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts = 3,
+  baseDelayMs = 500,
+): Promise<T | null> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt === maxAttempts) {
+        log(`  WARN ${label} failed after ${maxAttempts} attempts: ${msg}`);
+        return null;
+      }
+      const delay = baseDelayMs * Math.pow(2, attempt - 1);
+      log(`  WARN ${label} attempt ${attempt} failed (${msg}), retrying in ${delay}ms…`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  return null;
+}
+
 async function searchPexels(query: string): Promise<{ id: number; url: string; photographer: string; src: { medium: string } } | null> {
   if (!PEXELS_API_KEY) return null;
-  try {
+  return withRetry(async () => {
     const res = await fetch(
       `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=3&orientation=square`,
-      { headers: { Authorization: PEXELS_API_KEY }, signal: AbortSignal.timeout(10_000) },
+      { headers: { Authorization: PEXELS_API_KEY! }, signal: AbortSignal.timeout(10_000) },
     );
-    if (!res.ok) { log(`  WARN Pexels ${res.status} for "${query}"`); return null; }
+    if (!res.ok) throw new Error(`Pexels HTTP ${res.status} for "${query}"`);
     const data = await res.json() as { photos: Array<{ id: number; url: string; photographer: string; src: { medium: string } }> };
     return data.photos[0] ?? null;
-  } catch (err) {
-    log(`  WARN Pexels error: ${err instanceof Error ? err.message : String(err)}`);
-    return null;
-  }
+  }, `searchPexels("${query.slice(0, 40)}")`);
 }
 
 function buildQuery(itemType: string, item: Record<string, unknown>): string {
@@ -167,20 +187,18 @@ async function uploadBuffer(storagePath: string, buffer: Buffer, contentType: st
 }
 
 async function downloadImage(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {
-  try {
+  return withRetry(async () => {
     const res = await fetch(url, {
       headers: { "User-Agent": "Creative-AI-Studio/1.0" },
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`Download HTTP ${res.status}`);
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
-    if (!contentType.startsWith("image/")) return null;
+    if (!contentType.startsWith("image/")) throw new Error(`Not an image: ${contentType}`);
     const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength < 1024) return null;
+    if (buffer.byteLength < 1024) throw new Error(`File too small (${buffer.byteLength} bytes)`);
     return { buffer, contentType };
-  } catch {
-    return null;
-  }
+  }, `downloadImage(${url.slice(-50)})`);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
