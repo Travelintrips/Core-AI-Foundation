@@ -1,0 +1,203 @@
+MASTER TASK — WP-13
+SECURITY HARDENING (RLS COMPLETION)
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Release:
+material-v5.0.0
+
+Branch:
+security/wp13-rls-completion
+
+========================================================
+OBJECTIVE
+========================================================
+
+Complete the remaining Supabase Row Level Security work
+identified during the Phase 6 Readiness Review.
+
+This is NOT Phase 6.
+
+This is a small security hardening task.
+
+Do NOT implement any Phase 6 functionality.
+
+========================================================
+SCOPE
+========================================================
+
+Only these tables:
+
+ai_platform.material_import_staging
+
+ai_platform.material_import_audit
+
+Nothing else.
+
+========================================================
+TASK 1
+========================================================
+
+Create a migration that:
+
+Enable Row Level Security.
+
+Create policies consistent with WP-12.
+
+Use the same policy style already adopted by the existing
+non-tenant tables.
+
+Do NOT invent a new security model.
+
+========================================================
+TASK 2
+========================================================
+
+Verify:
+
+SELECT
+
+INSERT
+
+UPDATE
+
+DELETE
+
+Authenticated role
+
+Anon role
+
+Service role
+
+Admin API
+
+Confirm that application behaviour remains unchanged.
+
+========================================================
+TASK 3
+========================================================
+
+Run regression tests covering:
+
+Material Import
+
+Duplicate Resolution
+
+Audit Trail
+
+Human Review
+
+Material Intelligence
+
+========================================================
+TASK 4
+========================================================
+
+Run production-safe smoke tests.
+
+Verify:
+
+Import still works.
+
+Audit still records events.
+
+Search still works.
+
+Dashboard still loads.
+
+========================================================
+TASK 5
+========================================================
+
+Update:
+
+docs/production-migration-runbook.md
+
+Add the RLS migration procedure.
+
+========================================================
+TASK 6
+========================================================
+
+Create:
+
+docs/security/wp13-rls-completion.md
+
+Include:
+
+Tables affected
+
+Policies added
+
+Risk assessment
+
+Verification evidence
+
+Regression summary
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+Migration created
+
+Policies added
+
+Regression results
+
+Smoke test results
+
+Security assessment
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+A.
+WP-13 COMPLETE
+
+RLS applied.
+
+Regression clean.
+
+Repository security baseline complete.
+
+--------------------------------------------------------
+
+B.
+WP-13 COMPLETE WITH OBSERVATIONS
+
+Minor documentation observations only.
+
+--------------------------------------------------------
+
+C.
+WP-13 BLOCKED
+
+Migration cannot safely be applied.
+
+--------------------------------------------------------
+
+D.
+WP-13 FAILED
+
+Security regression detected.
+
+========================================================
+
+AFTER COMPLETION
+
+Merge into main.
+
+Create tag:
+
+material-v5.0.1
+
+This tag represents a security maintenance release.
+
+Do NOT begin Phase 6.
+
+Wait for explicit approval.

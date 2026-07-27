@@ -312,3 +312,89 @@ Engineering lead signs off: MIGRATION COMPLETE
 | Reviewer (second engineer) | | | |
 | Engineering lead | | | |
 | Product owner (production only) | | | |
+
+---
+
+## 10. RLS Migration Procedure (WP-13)
+
+**Migration file:** `scripts/migrations/rls-v13.sql`
+**Tables:** `ai_platform.material_import_staging`, `ai_platform.material_import_audit`
+**Type:** Policy-only DDL — no schema changes, no data changes
+
+### Why this migration is safe
+
+- The API server uses a Supabase **service-role** connection which has `BYPASSRLS` privilege. RLS policies are completely transparent to the application — behaviour does not change.
+- Both `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and `DROP POLICY IF EXISTS` are idempotent — safe to re-run.
+- The `allow_authenticated USING (true)` policy is identical to the pattern used for 11 other non-tenant tables in `rls-v12.sql`.
+
+### Applying to development
+
+```bash
+# 1. Confirm connection
+psql "$SUPABASE_DATABASE_URL_DEV" -c "SELECT NOW();"
+
+# 2. Apply migration
+psql "$SUPABASE_DATABASE_URL_DEV" -f scripts/migrations/rls-v13.sql
+
+# 3. Verify policies were created (must return 2 rows)
+psql "$SUPABASE_DATABASE_URL_DEV" -c "
+  SELECT tablename, policyname, permissive, cmd, qual
+  FROM pg_policies
+  WHERE schemaname = 'ai_platform'
+    AND tablename IN ('material_import_staging', 'material_import_audit')
+  ORDER BY tablename;"
+
+# Expected output:
+#         tablename         |    policyname     | permissive | cmd | qual
+# -------------------------+-------------------+------------+-----+------
+#  material_import_audit   | allow_authenticated | YES        | ALL | true
+#  material_import_staging | allow_authenticated | YES        | ALL | true
+
+# 4. Confirm API server behaves normally
+curl http://localhost:80/api/healthz/full
+curl http://localhost:80/api/ai/materials/categories -H "x-admin-api-key: $ADMIN_API_KEY"
+# Expected: 200 OK with 13 categories
+```
+
+### Applying to production
+
+Follow the standard production workflow (Section 12) with these specifics:
+
+```bash
+# 1. Record pre-migration state
+psql "$SUPABASE_DATABASE_URL" -c "
+  SELECT tablename, (SELECT COUNT(*) FROM ai_platform.material_import_staging) AS staging_rows,
+                    (SELECT COUNT(*) FROM ai_platform.material_import_audit)   AS audit_rows;"
+
+# 2. Apply migration
+psql "$SUPABASE_DATABASE_URL" -f scripts/migrations/rls-v13.sql
+
+# 3. Verify (same query as dev step 3 above)
+
+# 4. Post-apply smoke tests
+curl https://aicore.cstlogistic.co.id/api/healthz/full
+# Expected: {"database":"ok","schema":"ok","environment":"ok"}
+
+curl https://aicore.cstlogistic.co.id/api/ai/materials/categories \
+  -H "x-admin-api-key: $ADMIN_API_KEY"
+# Expected: 13 categories
+```
+
+### Rollback (if needed)
+
+```sql
+SET search_path TO ai_platform, public;
+ALTER TABLE ai_platform.material_import_staging  DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_platform.material_import_audit    DISABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON ai_platform.material_import_staging;
+DROP POLICY IF EXISTS allow_authenticated ON ai_platform.material_import_audit;
+```
+
+No data is affected by either apply or rollback.
+
+### Migration inventory update
+
+| Order | File | Phase | Description |
+|---|---|---|---|
+| 1–9 | (see Section 3) | Pre-material through Phase 5 | Existing migrations |
+| 10 | `scripts/migrations/rls-v13.sql` | WP-13 Security | RLS policies for `material_import_staging` + `material_import_audit` |
