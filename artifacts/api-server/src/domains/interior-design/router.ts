@@ -174,12 +174,24 @@ router.get("/public/interior-design/projects/:token/outputs", async (req, res): 
     const project = await getProjectByToken(token);
     if (!project) { res.status(404).json({ error: "not found" }); return; }
 
-    const [brief, output] = await Promise.all([
+    const [brief, output, rawImages] = await Promise.all([
       getBriefByProject(project.id),
       getLatestOutput(project.id),
+      // token IS the projectUuid — safe to query here (ownership already verified above)
+      getImagesByProject(token).catch(() => []),
     ]);
 
-    res.json({ project: publicProject(project as never), brief, output });
+    // Build image map: "{itemType}:{itemId}" → image record (omit large fields for wire size)
+    const images: Record<string, { thumbnailUrl: string | null; imageAlt: string | null; isManualUpload: boolean }> = {};
+    for (const img of rawImages) {
+      images[`${img.itemType}:${img.itemId}`] = {
+        thumbnailUrl:    img.thumbnailUrl,
+        imageAlt:        img.imageAlt,
+        isManualUpload:  img.isManualUpload,
+      };
+    }
+
+    res.json({ project: publicProject(project as never), brief, output, images });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
@@ -214,7 +226,9 @@ router.get("/ai/interior-design/projects/:id", async (req, res): Promise<void> =
     ]);
     if (!project) { res.status(404).json({ error: "not found" }); return; }
 
-    res.json({ project, brief, output, outputCount: allOutputs.length });
+    // Expose accessToken as projectUuid for admin image management
+    const projectWithUuid = { ...(project as Record<string, unknown>), projectUuid: (project as Record<string, unknown>)["accessToken"] };
+    res.json({ project: projectWithUuid, brief, output, outputCount: allOutputs.length });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }

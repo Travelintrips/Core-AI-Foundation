@@ -2,7 +2,7 @@
  * Team 17 — Interior Design Planning — Admin project detail
  * Shows project info, brief, validation, outputs + "Generate" button.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -86,8 +86,15 @@ interface Output {
   createdAt: string;
 }
 
+/** Slim image record returned by the admin project endpoint */
+interface AssetImage {
+  thumbnailUrl: string | null;
+  imageAlt: string | null;
+  isManualUpload: boolean;
+}
+
 interface ProjectDetail {
-  project: Project;
+  project: Project & { projectUuid?: string };
   brief: Brief | null;
   output: Output | null;
   outputCount: number;
@@ -123,6 +130,66 @@ function InfoChip({ label, value }: { label: string; value: string }) {
   );
 }
 
+// ── Thumbnail with skeleton + fallback ─────────────────────────────────────────
+function ItemThumbnail({
+  thumbnailUrl, imageAlt, fallback, size = 14,
+}: {
+  thumbnailUrl?: string | null;
+  imageAlt?: string | null;
+  fallback: React.ReactNode;
+  size?: number;
+}) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">(
+    thumbnailUrl ? "loading" : "error",
+  );
+  useEffect(() => { setState(thumbnailUrl ? "loading" : "error"); }, [thumbnailUrl]);
+
+  if (!thumbnailUrl || state === "error") return <>{fallback}</>;
+  return (
+    <div
+      className={`relative shrink-0 rounded-lg overflow-hidden w-${size} h-${size}`}
+      style={{ background: "rgba(255,255,255,0.06)" }}
+    >
+      {state === "loading" && (
+        <div className="absolute inset-0 animate-pulse bg-muted/20" />
+      )}
+      <img
+        src={thumbnailUrl}
+        alt={imageAlt ?? "interior item"}
+        className="w-full h-full object-cover"
+        style={{ opacity: state === "loading" ? 0 : 1, transition: "opacity 0.2s" }}
+        onLoad={() => setState("loaded")}
+        onError={() => setState("error")}
+      />
+    </div>
+  );
+}
+
+const ZONE_EMOJIS: Record<string, string> = {
+  living: "🛋️", bedroom: "🛏️", kitchen: "🍳", dining: "🪑", bathroom: "🚿",
+  office: "💻", hall: "🚪",
+};
+function zoneEmoji(label: string): string {
+  const l = label.toLowerCase();
+  return Object.entries(ZONE_EMOJIS).find(([k]) => l.includes(k))?.[1] ?? "📐";
+}
+
+const FURNITURE_EMOJIS: Record<string, string> = {
+  sofa: "🛋️", chair: "🪑", table: "🪵", bed: "🛏️", cabinet: "🗄️",
+  wardrobe: "🚪", shelf: "📚", desk: "🖥️",
+};
+function furnitureEmoji(name: string): string {
+  const n = name.toLowerCase();
+  return Object.entries(FURNITURE_EMOJIS).find(([k]) => n.includes(k))?.[1] ?? "🪑";
+}
+
+const MATERIAL_EMOJIS: Record<string, string> = {
+  flooring: "🪵", walls: "🎨", ceiling: "⬜", textiles: "🧵",
+};
+const LIGHTING_EMOJIS: Record<string, string> = {
+  ambient: "💡", task: "🔦", accent: "✨", natural: "☀️",
+};
+
 export default function InteriorDesignDetailPage({ params }: { params: { id: string } }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -131,6 +198,7 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const [newStatus, setNewStatus] = useState("");
 
   const projectId = params.id;
+  const [assetImages, setAssetImages] = useState<Record<string, AssetImage>>({});
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["interior-design-project", projectId],
@@ -147,6 +215,18 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
     },
     onError: (e: Error) => toast({ title: "Gagal generate", description: e.message, variant: "destructive" }),
   });
+
+  // Load asset images when project UUID is available
+  useEffect(() => {
+    const projectUuid = data?.project?.projectUuid;
+    if (!projectUuid) return;
+    void apiFetch<{ images: Record<string, AssetImage> }>(
+      `/api/ai/interior-design/asset-images/${projectUuid}`,
+    ).then((d) => setAssetImages(d.images ?? {})).catch(() => { /* non-fatal */ });
+  }, [data?.project?.projectUuid]);
+
+  const getImg = (itemType: string, itemId: string): AssetImage | null =>
+    assetImages[`${itemType}:${itemId}`] ?? null;
 
   const updateStatusMutation = useMutation({
     mutationFn: (status: string) =>
@@ -384,40 +464,68 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
             </div>
           )}
 
-          {/* Space plan zones */}
+          {/* Space plan zones — with thumbnails */}
           {output.spacePlan?.zones && (
             <div className="rounded-xl p-5 border" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <Home className="w-4 h-4 text-muted-foreground" />Rencana Ruang
+                <Home className="w-4 h-4 text-muted-foreground" />Rencana Ruang (Space Plan)
               </h3>
-              <div className="grid grid-cols-2 gap-2">
-                {output.spacePlan.zones.map((z) => (
-                  <div key={z.id} className="p-2.5 rounded-lg" style={{ background: "rgba(255,255,255,0.04)" }}>
-                    <p className="text-xs font-medium">{z.label}</p>
-                    <p className="text-xs text-muted-foreground">{z.purpose}</p>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {output.spacePlan.zones.map((z) => {
+                  const img = getImg("space_plan", z.id);
+                  return (
+                    <div key={z.id} className="flex items-center gap-2.5 p-2.5 rounded-lg" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      <ItemThumbnail
+                        thumbnailUrl={img?.thumbnailUrl}
+                        imageAlt={img?.imageAlt ?? `${z.label} floor plan top view layout`}
+                        size={10}
+                        fallback={
+                          <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg" style={{ background: "rgba(124,110,250,0.12)" }}>
+                            {zoneEmoji(z.label)}
+                          </div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium">{z.label}</p>
+                        <p className="text-xs text-muted-foreground">{z.purpose}</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               {output.spacePlan.notes && <p className="text-xs text-muted-foreground mt-2">{output.spacePlan.notes}</p>}
             </div>
           )}
 
-          {/* Furniture */}
+          {/* Furniture — with thumbnails */}
           {output.furniturePlacement && output.furniturePlacement.length > 0 && (
             <div className="rounded-xl p-5 border" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                 <Sofa className="w-4 h-4 text-muted-foreground" />Penempatan Furnitur
               </h3>
               <div className="space-y-2">
-                {output.furniturePlacement.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b last:border-0" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-                    <span className="font-medium">{item.item}</span>
-                    <div className="flex items-center gap-3 text-muted-foreground">
-                      <span className="font-mono">{item.widthM}×{item.depthM}m</span>
-                      <span>{item.note}</span>
+                {output.furniturePlacement.map((item, i) => {
+                  const img = getImg("furniture", `furniture_${i}`);
+                  return (
+                    <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                      <ItemThumbnail
+                        thumbnailUrl={img?.thumbnailUrl}
+                        imageAlt={img?.imageAlt ?? `${item.item} furniture product white background`}
+                        size={10}
+                        fallback={
+                          <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg" style={{ background: "rgba(124,110,250,0.10)" }}>
+                            {furnitureEmoji(item.item)}
+                          </div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium">{item.item}</span>
+                        <p className="text-xs text-muted-foreground truncate">{item.note}</p>
+                      </div>
+                      <span className="text-xs font-mono text-muted-foreground shrink-0">{item.widthM}×{item.depthM}m</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -432,39 +540,73 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
             </div>
           )}
 
-          {/* Materials + Lighting side by side */}
-          <div className="grid grid-cols-2 gap-4">
-            {output.materialRecommendations && (
-              <div className="rounded-xl p-5 border" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-muted-foreground" />Material
-                </h3>
-                {Object.entries(output.materialRecommendations).map(([key, val]) => (
-                  <div key={key} className="mb-2">
-                    <p className="text-xs font-medium capitalize mb-0.5" style={{ color: SECTION_COLORS[key] ?? "#7C6EFA" }}>{key}</p>
-                    {Object.entries(val).slice(0, 2).map(([k, v]) => (
-                      <p key={k} className="text-xs text-muted-foreground">{k}: {v}</p>
-                    ))}
-                  </div>
-                ))}
+          {/* Materials — with thumbnails */}
+          {output.materialRecommendations && (
+            <div className="rounded-xl p-5 border" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-muted-foreground" />Rekomendasi Material
+              </h3>
+              <div className="space-y-2">
+                {Object.entries(output.materialRecommendations).map(([key, val]) => {
+                  const img = getImg("material", key);
+                  return (
+                    <div key={key} className="flex items-start gap-2.5 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                      <ItemThumbnail
+                        thumbnailUrl={img?.thumbnailUrl}
+                        imageAlt={img?.imageAlt ?? `${key} material texture close-up`}
+                        size={10}
+                        fallback={
+                          <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg" style={{ background: "rgba(92,70,180,0.12)" }}>
+                            {MATERIAL_EMOJIS[key] ?? "🪟"}
+                          </div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium capitalize mb-0.5" style={{ color: SECTION_COLORS[key] ?? "#7C6EFA" }}>{key}</p>
+                        {Object.entries(val).slice(0, 2).map(([k, v]) => (
+                          <p key={k} className="text-xs text-muted-foreground">{k}: {v}</p>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            {output.lightingRecommendations && (
-              <div className="rounded-xl p-5 border" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4 text-muted-foreground" />Pencahayaan
-                </h3>
-                {Object.entries(output.lightingRecommendations).map(([key, val]) => (
-                  <div key={key} className="mb-2">
-                    <p className="text-xs font-medium capitalize mb-0.5" style={{ color: SECTION_COLORS[key] ?? "#F59E0B" }}>{key}</p>
-                    {Object.entries(val).slice(0, 2).map(([k, v]) => (
-                      <p key={k} className="text-xs text-muted-foreground">{k}: {v}</p>
-                    ))}
-                  </div>
-                ))}
+            </div>
+          )}
+
+          {/* Lighting — with thumbnails */}
+          {output.lightingRecommendations && (
+            <div className="rounded-xl p-5 border" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-muted-foreground" />Rekomendasi Pencahayaan
+              </h3>
+              <div className="space-y-2">
+                {Object.entries(output.lightingRecommendations).map(([key, val]) => {
+                  const img = getImg("lighting", key);
+                  return (
+                    <div key={key} className="flex items-start gap-2.5 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                      <ItemThumbnail
+                        thumbnailUrl={img?.thumbnailUrl}
+                        imageAlt={img?.imageAlt ?? `${key} light fixture lamp`}
+                        size={10}
+                        fallback={
+                          <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg" style={{ background: "rgba(245,158,11,0.10)" }}>
+                            {LIGHTING_EMOJIS[key] ?? "💡"}
+                          </div>
+                        }
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium capitalize mb-0.5" style={{ color: SECTION_COLORS[key] ?? "#F59E0B" }}>{key}</p>
+                        {Object.entries(val).slice(0, 2).map(([k, v]) => (
+                          <p key={k} className="text-xs text-muted-foreground">{k}: {v}</p>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Vendor categories */}
           {output.vendorCategories && output.vendorCategories.length > 0 && (
