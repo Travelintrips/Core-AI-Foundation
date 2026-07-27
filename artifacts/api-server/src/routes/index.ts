@@ -162,7 +162,7 @@ const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(storageRouter);
-router.use(materialImportRouter);
+router.use('/ai/material-import', materialImportRouter);
 router.use(internalAuthRouter);
 router.use(internalCatalogRouter);
 router.use(agentsRouter);

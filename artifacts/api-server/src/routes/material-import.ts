@@ -58,11 +58,11 @@ function handle(res: Response, err: unknown): void {
 
 router.use(requireAuth, phase5Role);
 
-router.get("/ai/material-import/dashboard", async (_req, res) => {
+router.get("/dashboard", async (_req, res) => {
   try { res.json(await getMaterialImportDashboard()); } catch (err) { handle(res, err); }
 });
 
-router.get("/ai/material-import/review", async (req, res) => {
+router.get("/review", async (req, res) => {
   try {
     const status = typeof req.query.status === "string" && IMPORT_STATES.includes(req.query.status as ImportState)
       ? req.query.status as ImportState : undefined;
@@ -77,15 +77,15 @@ router.get("/ai/material-import/review", async (req, res) => {
   } catch (err) { handle(res, err); }
 });
 
-router.get("/ai/material-import/review/:id", async (req, res) => {
+router.get("/review/:id", async (req, res) => {
   try { res.json(await getStagedMaterial(Number(req.params.id))); } catch (err) { handle(res, err); }
 });
 
-router.post("/ai/material-import/staged", async (req, res) => {
+router.post("/staged", async (req, res) => {
   try { res.status(201).json({ material: await createStagedMaterial(req.body, actor(req)) }); } catch (err) { handle(res, err); }
 });
 
-router.patch("/ai/material-import/review/:id/status", async (req, res) => {
+router.patch("/review/:id/status", async (req, res) => {
   try {
     const status = req.body?.status as ImportState;
     if (!IMPORT_STATES.includes(status)) throw new Error("Invalid status");
@@ -93,7 +93,7 @@ router.patch("/ai/material-import/review/:id/status", async (req, res) => {
   } catch (err) { handle(res, err); }
 });
 
-router.post("/ai/material-import/review/bulk", async (req, res) => {
+router.post("/review/bulk", async (req, res) => {
   try {
     const status = req.body?.status as "approved" | "rejected" | "needs_review";
     if (!["approved", "rejected", "needs_review"].includes(status)) throw new Error("Bulk status must be approved, rejected, or needs_review");
@@ -101,7 +101,7 @@ router.post("/ai/material-import/review/bulk", async (req, res) => {
   } catch (err) { handle(res, err); }
 });
 
-router.post("/ai/material-import/duplicates/:id/resolve", async (req, res) => {
+router.post("/duplicates/:id/resolve", async (req, res) => {
   try {
     const resolution = req.body?.resolution as DuplicateResolution;
     const options: { targetCanonicalId?: number; mergeFieldMap?: MergeFieldMap } = {};
@@ -111,14 +111,14 @@ router.post("/ai/material-import/duplicates/:id/resolve", async (req, res) => {
   } catch (err) { handle(res, err); }
 });
 
-router.post("/ai/material-import/import", async (req, res) => {
+router.post("/import", async (req, res) => {
   try {
     const ids = req.body?.ids === "all" ? "all" : parseIds(req.body?.ids);
     res.json(await importApprovedMaterials(ids, actor(req)));
   } catch (err) { handle(res, err); }
 });
 
-router.post("/ai/material-import/review/:id/retry-asset", async (req, res) => {
+router.post("/review/:id/retry-asset", async (req, res) => {
   try { res.json(await retryAsset(Number(req.params.id), actor(req))); } catch (err) { handle(res, err); }
 });
 
