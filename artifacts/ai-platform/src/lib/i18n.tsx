@@ -404,21 +404,14 @@ const LEGACY_ID_TRANSLATIONS: Record<string, string> = {
   "Cancelled": "Dibatalkan",
   "Refunded": "Dikembalikan",
 
-  // ── Creative AI — specialist agent labels & capabilities ────────────────
-  "Specialist Agents": "Agen Spesialis",
+  // ── Creative AI — specialist agent labels (unique additions) ───────────
   "Collection Brief": "Brief Koleksi",
   "Fashion Copywriting": "Copywriting Fashion",
-  "Brand Strategy": "Strategi Brand",
   "Trend Research": "Riset Tren",
-  "Spatial Concept": "Konsep Spasial",
-  "Material Spec": "Spesifikasi Material",
-  "Client Proposal": "Proposal Klien",
-  "Style Direction": "Arahan Gaya",
 
   // ── Creative AI — project list & state ─────────────────────────────────
   "No projects yet.": "Belum ada proyek.",
   "Submit a brief to get started.": "Kirim brief untuk memulai.",
-  "New Creative Brief": "Brief Kreatif Baru",
   "Select a project": "Pilih proyek",
   "Choose a project from the left panel or create a new brief.":
     "Pilih proyek dari panel kiri atau buat brief baru.",
@@ -428,14 +421,9 @@ const LEGACY_ID_TRANSLATIONS: Record<string, string> = {
   "Budget Limit Reached": "Batas Anggaran Tercapai",
   "generating document": "membuat dokumen",
   "generating presentation": "membuat presentasi",
-  "Generating…": "Membuat…",
-  "Generation failed": "Pembuatan gagal",
 
   // ── Creative AI — JSON output key labels (auto-capitalized from keys) ───
   // renderOutput() converts snake_case keys → "Title Case" headers in the DOM
-  "Design Concept": "Konsep Desain",
-  "Spatial Concept": "Konsep Spasial",
-  "Style Direction": "Arahan Gaya",
   "Color Palette": "Palet Warna",
   "Mood Board": "Mood Board",
   "Target Audience": "Target Audiens",
@@ -493,14 +481,11 @@ const LEGACY_ID_TRANSLATIONS: Record<string, string> = {
   "Description": "Deskripsi",
   "Specifications": "Spesifikasi",
   "Requirements": "Persyaratan",
-  "Deliverables": "Hasil Kerja",
   "Timeline": "Jadwal",
   "Budget": "Anggaran",
   "Quality Score": "Skor Kualitas",
   "Qc Notes": "Catatan QC",
   "Qc Score": "Skor QC",
-  "Status": "Status",
-  "Error": "Kesalahan",
   "Warning": "Peringatan",
   "Info": "Info",
 };

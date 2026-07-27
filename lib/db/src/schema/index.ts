@@ -97,3 +97,4 @@ export * from "./annotations";
 export * from "./ai-review-workspace-meta";
 export * from "./ai-provider-health-logs";
 export * from "./material-library";
+export * from "./room-design-catalog";

@@ -1,0 +1,155 @@
+FINAL TASK — REPOSITORY BASELINE NORMALIZATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current baseline document:
+docs/baselines/material-v5.0.1-baseline.md
+
+Do NOT start Phase 6.
+Do NOT modify business logic.
+Do NOT modify migrations.
+Do NOT discard existing work.
+
+OBJECTIVE
+
+Establish one verified and reproducible repository baseline before Phase 6 implementation begins.
+
+========================================================
+1. INSPECT GIT RELATIONSHIP
+========================================================
+
+Run and report:
+
+git status --short --branch
+git branch --show-current
+git rev-parse HEAD
+git rev-parse origin/main
+git log --oneline --decorate --graph --left-right HEAD...origin/main
+git merge-base HEAD origin/main
+
+Determine exactly whether local HEAD is:
+
+- ahead of origin/main
+- behind origin/main
+- diverged
+- detached
+- on another branch
+
+Do not guess.
+
+========================================================
+2. CLASSIFY LOCAL CHANGES
+========================================================
+
+Inspect:
+
+- modified .replit
+- untracked uploaded instruction file
+- baseline document
+- any other changed or untracked files
+
+Classify each as:
+
+- required release work
+- repository configuration
+- generated artifact
+- user-upload artifact
+- unrelated local change
+
+Do NOT delete or overwrite anything.
+
+========================================================
+3. RECONCILE MAIN SAFELY
+========================================================
+
+If HEAD contains valid baseline documentation not present on origin/main:
+
+- commit only the intended baseline document
+- do not include .replit
+- do not include uploaded instruction artifacts
+- push through the configured Git integration
+
+If HEAD is behind origin/main:
+
+- update safely without losing local files
+
+If branches diverged:
+
+- stop and report the commits on each side
+- do not force push
+- do not reset --hard
+- do not rewrite history
+
+========================================================
+4. VERIFY RELEASE TAG
+========================================================
+
+Check:
+
+git tag -l material-v5.0.1
+git show-ref --tags material-v5.0.1
+git ls-remote --tags origin material-v5.0.1
+
+Report separately:
+
+- local tag status
+- remote tag status
+- tagged commit
+
+If the tag is missing and release approval already exists:
+
+- create an annotated tag only after main is synchronized
+- point it to the approved security release commit
+- do not point it to an unrelated baseline-document commit
+
+If authentication blocks the tag push, report it accurately.
+
+========================================================
+5. UPDATE BASELINE DOCUMENT
+========================================================
+
+Update only if current verified facts differ from the document.
+
+Ensure it records:
+
+- synchronized main SHA
+- origin/main SHA
+- actual local tag state
+- actual remote tag state
+- repository cleanliness
+- remaining local-only artifacts
+
+Do not rewrite the technical inventories unless incorrect.
+
+========================================================
+6. FINAL VALIDATION
+========================================================
+
+Confirm:
+
+- current branch
+- HEAD SHA
+- origin/main SHA
+- ahead/behind count
+- clean or intentionally dirty status
+- baseline document tracked status
+- local tag status
+- remote tag status
+- no Phase 6 branch created
+- no application code changed
+
+========================================================
+FINAL VERDICT
+========================================================
+
+Use exactly one:
+
+A. REPOSITORY BASELINE NORMALIZED
+B. NORMALIZED WITH LOCAL ARTIFACT OBSERVATIONS
+C. NORMALIZATION BLOCKED BY GIT DIVERGENCE
+D. NORMALIZATION BLOCKED BY AUTHENTICATION
+
+STOP.
+
+Do NOT begin Phase 6 implementation.

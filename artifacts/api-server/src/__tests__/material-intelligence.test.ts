@@ -53,6 +53,7 @@ function makeCatalog(): MaterialRecord[] {
   ];
 }
 
+
 function material(overrides: Partial<MaterialRecord> = {}): MaterialRecord {
   return {
     id: 1,
@@ -226,6 +227,7 @@ describe("Material Intelligence Phase 2 — Explicit UI Hard Filters", () => {
 });
 
 // ── Core Phase 2 tests ────────────────────────────────────────────────────────
+
 
 describe("Material Intelligence Phase 2", () => {
   beforeEach(() => resetMaterialAnalytics());

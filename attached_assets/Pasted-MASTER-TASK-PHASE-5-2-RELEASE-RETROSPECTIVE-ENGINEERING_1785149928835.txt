@@ -1,0 +1,356 @@
+MASTER TASK — PHASE 5.2
+RELEASE RETROSPECTIVE & ENGINEERING BACKLOG
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Release:
+
+material-v5.0.0
+
+Current main:
+
+d330d84
+
+========================================================
+OBJECTIVE
+========================================================
+
+Material Phase 5 has been successfully released.
+
+DO NOT implement new features.
+
+DO NOT modify business logic.
+
+DO NOT begin Phase 6.
+
+This phase exists only to:
+
+• document lessons learned
+• identify engineering improvements
+• record technical debt
+• prepare Phase 6 with a clean foundation
+
+========================================================
+RULES
+========================================================
+
+No code changes unless required to improve documentation.
+
+No refactoring.
+
+No migrations.
+
+No schema changes.
+
+No feature implementation.
+
+Only:
+
+documentation
+
+architecture review
+
+retrospective
+
+backlog preparation
+
+========================================================
+1. RELEASE RETROSPECTIVE
+========================================================
+
+Create:
+
+docs/material-phase5-retrospective.md
+
+Document:
+
+Project timeline
+
+Major milestones
+
+Implementation phases
+
+Testing phases
+
+Release process
+
+Merge process
+
+Tagging process
+
+Deployment readiness
+
+========================================================
+2. LESSONS LEARNED
+========================================================
+
+Document:
+
+What worked well
+
+What slowed development
+
+Unexpected discoveries
+
+Integration issues
+
+Testing improvements
+
+Review improvements
+
+Release improvements
+
+========================================================
+3. ROOT CAUSE ANALYSIS
+========================================================
+
+For every issue found during Phase 5:
+
+Describe:
+
+Root cause
+
+Detection method
+
+Resolution
+
+Preventive action
+
+Include:
+
+materialImportRouter global middleware issue
+
+merge conflicts
+
+i18n duplicate keys
+
+migration improvements
+
+authentication observations
+
+========================================================
+4. TECHNICAL DEBT
+========================================================
+
+List every remaining engineering debt.
+
+Classify:
+
+Low
+
+Medium
+
+High
+
+For each item include:
+
+Description
+
+Impact
+
+Suggested solution
+
+Estimated effort
+
+Expected release
+
+Examples:
+
+deprecated exports
+
+batch background jobs
+
+migration comments
+
+analytics endpoint documentation
+
+performance improvements
+
+========================================================
+5. RELEASE METRICS
+========================================================
+
+Document:
+
+Lines added
+
+Files added
+
+Tests added
+
+Test totals
+
+Regression totals
+
+Build time
+
+Search latency
+
+Import latency
+
+Migration statistics
+
+Canonical material count
+
+========================================================
+6. RELEASE QUALITY SCORE
+========================================================
+
+Score:
+
+Architecture
+
+Security
+
+Testing
+
+Documentation
+
+Performance
+
+Maintainability
+
+Release process
+
+Overall score
+
+Provide reasoning.
+
+========================================================
+7. PHASE 6 READINESS
+========================================================
+
+Evaluate whether the repository is ready for:
+
+Room Design Template Library
+
+Furniture Library
+
+AI Design Composer
+
+Multi-room composition
+
+Material recommendation engine
+
+Room rendering pipeline
+
+Identify prerequisites.
+
+========================================================
+8. PHASE 6 BACKLOG
+========================================================
+
+Create:
+
+docs/material-phase6-backlog.md
+
+Organize backlog into:
+
+Must Have
+
+Should Have
+
+Could Have
+
+Future
+
+Each item must include:
+
+Description
+
+Priority
+
+Dependencies
+
+Estimated complexity
+
+========================================================
+9. ENGINEERING STANDARDS
+========================================================
+
+Update engineering checklist.
+
+Include:
+
+Branch strategy
+
+Merge strategy
+
+Review checklist
+
+Migration checklist
+
+Security checklist
+
+Testing checklist
+
+Release checklist
+
+========================================================
+10. FINAL REPORT
+========================================================
+
+Provide:
+
+Summary
+
+Lessons learned
+
+Technical debt summary
+
+Phase 6 readiness
+
+Engineering recommendations
+
+Repository health
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use exactly one verdict.
+
+A.
+RETROSPECTIVE COMPLETE
+
+Documentation complete
+
+Backlog complete
+
+Repository ready for Phase 6 planning
+
+--------------------------------------------------------
+
+B.
+RETROSPECTIVE COMPLETE WITH OBSERVATIONS
+
+Minor documentation improvements remain
+
+--------------------------------------------------------
+
+C.
+RETROSPECTIVE BLOCKED
+
+Required release information missing
+
+--------------------------------------------------------
+
+D.
+RETROSPECTIVE FAILED
+
+Critical documentation inconsistency discovered
+
+========================================================
+
+AFTER COMPLETION
+
+STOP.
+
+Do NOT write any Phase 6 production code.
+
+Do NOT create Phase 6 branches.
+
+Wait for explicit approval before beginning:
+
+Phase 6 — Room Design Template Library.
