@@ -94,7 +94,7 @@
 | `ADMIN_API_KEY` valid in Replit environment | ✅ Complete | Set in `.replit` `[userenv.shared]` |
 | `SMTP_PASS` confirmed in Replit Secrets | ✅ Complete | Set 2026-07-27; SMTP verify() passed — `smtp.hostinger.com:465` healthy |
 
-**Section verdict: ❌ Incomplete — RLS verification and SMTP_PASS confirmation outstanding**
+**Section verdict: ⚠️ Conditional — SMTP resolved; RLS verification still outstanding**
 
 ---
 
@@ -120,18 +120,20 @@
 
 ## 8. Production Deployment Verified
 
+> **Deferred by product decision (2026-07-27).** Production deployment registration and smoke test are explicitly out of scope for this readiness gate. To be completed as a separate pre-launch activity before going live.
+
 | Item | Status | Notes |
 |---|---|---|
-| Active Replit deployment registered | 🔴 Blocked | `aicore.cstlogistic.co.id` returns "This app isn't live yet" as of 2026-07-27 |
-| `/api/healthz/full` returns HTTP 200 in production | 🔴 Blocked | Requires active deployment |
-| Staff login smoke test | 🔴 Blocked | Requires active deployment |
-| Public catalog verified (≥38 services) | 🔴 Blocked | Requires active deployment |
-| Service request → brief → quotation → payment → AI generation flow | 🔴 Blocked | Requires active deployment |
-| Worker / Queue / Scheduler confirmed in production | 🔴 Blocked | Requires active deployment |
-| AI provider health checks green (no 401) | 🔴 Blocked | Requires active deployment (OpenAI key was invalid — updated in dev, must verify in prod) |
-| Material import pipeline accessible in production | 🔴 Blocked | Requires active deployment |
+| Active Replit deployment registered | ⏸ Deferred | Out of scope for this gate |
+| `/api/healthz/full` returns HTTP 200 in production | ⏸ Deferred | Out of scope for this gate |
+| Staff login smoke test | ⏸ Deferred | Out of scope for this gate |
+| Public catalog verified (≥38 services) | ⏸ Deferred | Out of scope for this gate |
+| Service request → brief → quotation → payment → AI generation flow | ⏸ Deferred | Out of scope for this gate |
+| Worker / Queue / Scheduler confirmed in production | ⏸ Deferred | Out of scope for this gate |
+| AI provider health checks green (no 401) | ⏸ Deferred | Out of scope for this gate |
+| Material import pipeline accessible in production | ⏸ Deferred | Out of scope for this gate |
 
-**Section verdict: 🔴 Blocked — production deployment must be registered first**
+**Section verdict: ⏸ Deferred — excluded from this readiness gate by product decision**
 
 ---
 
@@ -139,9 +141,9 @@
 
 | # | Item | Severity | Owner | Notes |
 |---|---|---|---|---|
-| A | Register Replit production deployment | 🔴 Critical blocker | Engineering | Prerequisite for sections 8 and smoke test |
-| B | Execute privileged production smoke test | 🔴 Critical blocker | Engineering | Requires item A |
-| C | Confirm `SMTP_PASS` in Replit Secrets | 🔴 High | Engineering | Email notifications broken without it |
+| A | Register Replit production deployment | ⏸ Deferred | Engineering | Excluded from this gate — pre-launch activity |
+| B | Execute privileged production smoke test | ⏸ Deferred | Engineering | Excluded from this gate — pre-launch activity |
+| C | Confirm `SMTP_PASS` in Replit Secrets | ✅ Resolved | Engineering | Set and verified 2026-07-27 |
 | D | Product owner sign-off on Phase 6 backlog | 🔴 High | Product | Required before Phase 6 scope is locked |
 | E | Verify Supabase RLS on Phase 5 tables | ⚠️ Medium | Engineering | Security gate — confirm RLS active for `material_import_staging`, `material_import_audit` |
 | F | Room Template Library data model design | ⚠️ Medium | Engineering | Pre-Phase 6 design sprint (not blocking governance) |
