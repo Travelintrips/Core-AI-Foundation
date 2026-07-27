@@ -27,7 +27,7 @@
 
 ### Policy design
 
-Identical to the `allow_authenticated` policy pattern applied to 11 non-tenant-scoped tables in `rls-v12.sql`. These tables have no `tenant_id` column and are admin-only workflows — they require the same RLS posture as `ai_audit_logs`, `ai_jobs`, `creative_projects`, etc.
+Uses the same `allow_authenticated` policy name and permissive `USING (true)` posture as the 11 non-tenant-scoped tables in `rls-v12.sql`, with an explicit `TO authenticated` role restriction. These tables have no `tenant_id` column and are admin-only workflows — they require the same broad authenticated access posture as `ai_audit_logs`, `ai_jobs`, `creative_projects`, etc.
 
 ### `ai_platform.material_import_staging`
 
@@ -37,6 +37,7 @@ ALTER TABLE ai_platform.material_import_staging FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS allow_authenticated ON ai_platform.material_import_staging;
 CREATE POLICY allow_authenticated ON ai_platform.material_import_staging
+  TO authenticated
   USING (true);
 ```
 
@@ -45,6 +46,7 @@ CREATE POLICY allow_authenticated ON ai_platform.material_import_staging
 | Policy name | `allow_authenticated` |
 | Type | PERMISSIVE |
 | Applies to | ALL operations (SELECT, INSERT, UPDATE, DELETE) |
+| Role | `authenticated` only |
 | USING expression | `true` (allow all authenticated connections) |
 | WITH CHECK expression | None (INSERT/UPDATE not restricted beyond auth) |
 | FORCE ROW LEVEL SECURITY | Yes — table owner cannot bypass |
@@ -57,6 +59,7 @@ ALTER TABLE ai_platform.material_import_audit FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS allow_authenticated ON ai_platform.material_import_audit;
 CREATE POLICY allow_authenticated ON ai_platform.material_import_audit
+  TO authenticated
   USING (true);
 ```
 
@@ -65,6 +68,7 @@ CREATE POLICY allow_authenticated ON ai_platform.material_import_audit
 | Policy name | `allow_authenticated` |
 | Type | PERMISSIVE |
 | Applies to | ALL operations |
+| Role | `authenticated` only |
 | USING expression | `true` |
 | FORCE ROW LEVEL SECURITY | Yes |
 
@@ -97,14 +101,14 @@ CREATE POLICY allow_authenticated ON ai_platform.material_import_audit
 
 | Risk | Severity | Status |
 |---|---|---|
-| Anon-key direct Supabase access | ~~Medium~~ | ✅ Blocked by RLS (no anon policy = no access) |
+| Anon-key direct Supabase access | ~~Medium~~ | ✅ Blocked by explicit `TO authenticated` policy |
 | Authenticated-key direct Supabase access | ~~Low~~ | ⚠️ Permitted by `USING (true)` — same as all other non-tenant tables |
 | Service-role API server access | — | ✅ Unchanged — BYPASSRLS |
 | Application route access | — | ✅ Unchanged — ADMIN_API_KEY primary gate |
 
 ### Residual risk
 
-The `allow_authenticated USING (true)` pattern permits any authenticated Supabase JWT holder to read/write these tables. This is intentional and consistent with WP-12 policy for non-tenant tables — application-layer auth (ADMIN_API_KEY) is the primary gate. No Supabase authenticated-user flow exists in the application; all access is via service role. Residual risk is **Low**.
+The `allow_authenticated TO authenticated USING (true)` policy permits any authenticated Supabase JWT holder to read/write these tables. This broad authenticated access is intentional for the admin-only tables; application-layer auth (ADMIN_API_KEY) is the primary gate. No Supabase authenticated-user flow exists in the application; all access is via service role. Residual risk is **Low**.
 
 ---
 
@@ -224,8 +228,8 @@ Follow `docs/production-migration-runbook.md` — Section 10 (RLS Migration):
 | Item | Status |
 |---|---|
 | Migration created | ✅ `scripts/migrations/rls-v13.sql` |
-| Policies added | ✅ 2 tables, `allow_authenticated USING (true)` each |
-| Policy style consistent with WP-12 | ✅ Identical pattern to 11 existing tables |
+| Policies added | ✅ 2 tables, `allow_authenticated TO authenticated USING (true)` each |
+| Policy style consistent with WP-12 | ✅ Same broad authenticated posture, with explicit role restriction |
 | No new security model invented | ✅ |
 | Application behaviour unchanged | ✅ Service-role BYPASSRLS |
 | Task 3 regression suites | ✅ 70 / 70 |

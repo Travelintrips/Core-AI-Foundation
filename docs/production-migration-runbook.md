@@ -325,7 +325,7 @@ Engineering lead signs off: MIGRATION COMPLETE
 
 - The API server uses a Supabase **service-role** connection which has `BYPASSRLS` privilege. RLS policies are completely transparent to the application — behaviour does not change.
 - Both `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and `DROP POLICY IF EXISTS` are idempotent — safe to re-run.
-- The `allow_authenticated USING (true)` policy is identical to the pattern used for 11 other non-tenant tables in `rls-v12.sql`.
+- The `allow_authenticated TO authenticated USING (true)` policy explicitly excludes anonymous Supabase roles while matching the intended authenticated-only access posture.
 
 ### Applying to development
 
@@ -345,10 +345,10 @@ psql "$SUPABASE_DATABASE_URL_DEV" -c "
   ORDER BY tablename;"
 
 # Expected output:
-#         tablename         |    policyname     | permissive | cmd | qual
-# -------------------------+-------------------+------------+-----+------
-#  material_import_audit   | allow_authenticated | YES        | ALL | true
-#  material_import_staging | allow_authenticated | YES        | ALL | true
+#         tablename         |    policyname     | permissive | roles          | cmd | qual
+# -------------------------+-------------------+------------+----------------+-----+------
+#  material_import_audit   | allow_authenticated | YES        | {authenticated} | ALL | true
+#  material_import_staging | allow_authenticated | YES        | {authenticated} | ALL | true
 
 # 4. Confirm API server behaves normally
 curl http://localhost:80/api/healthz/full

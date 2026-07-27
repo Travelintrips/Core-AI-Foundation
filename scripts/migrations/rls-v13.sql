@@ -13,9 +13,9 @@
 -- Policy design:
 --   • Identical to the 11 non-tenant-scoped tables already in rls-v12.sql.
 --   • Both tables are admin-only (no tenant_id column, no customer data).
---   • Policy: allow_authenticated USING (true) — permits all operations for
---     any authenticated role; anonymous connections blocked by Supabase
---     PostgREST defaults.
+--   • Policy: allow_authenticated TO authenticated USING (true) — permits all
+--     operations for authenticated Supabase roles; anonymous connections are
+--     excluded explicitly by the policy.
 --   • Service-role (used by the API server) continues to bypass RLS via
 --     BYPASSRLS privilege — zero application behaviour change.
 --   • FORCE ROW LEVEL SECURITY ensures table owner cannot bypass the policy.
@@ -46,6 +46,7 @@ ALTER TABLE ai_platform.material_import_staging FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS allow_authenticated ON ai_platform.material_import_staging;
 CREATE POLICY allow_authenticated ON ai_platform.material_import_staging
+  TO authenticated
   USING (true);
 
 -- ── material_import_audit ────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ ALTER TABLE ai_platform.material_import_audit FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS allow_authenticated ON ai_platform.material_import_audit;
 CREATE POLICY allow_authenticated ON ai_platform.material_import_audit
+  TO authenticated
   USING (true);
 
 -- ── Post-apply verification ───────────────────────────────────────────────────
@@ -73,11 +75,11 @@ CREATE POLICY allow_authenticated ON ai_platform.material_import_audit
 --   ORDER BY tablename;
 --
 -- Expected: 2 rows
---   material_import_audit    | allow_authenticated | PERMISSIVE | {public} | ALL | true
---   material_import_staging  | allow_authenticated | PERMISSIVE | {public} | ALL | true
+--   material_import_audit    | allow_authenticated | PERMISSIVE | {authenticated} | ALL | true
+--   material_import_staging | allow_authenticated | PERMISSIVE | {authenticated} | ALL | true
 --
--- Fail-closed check (run as anon key — expect no change since BYPASSRLS
--- applies to service-role; anon key should still see rows via PostgREST
--- RLS-transparent behaviour for ALLOW ALL policies):
+-- Fail-closed check (run as anon key — expect no rows and no writes because
+-- the policy targets authenticated only; service-role remains unaffected via
+-- BYPASSRLS):
 --   This is a defence-in-depth measure. The primary gate remains the
 --   application-layer ADMIN_API_KEY check on all /ai/material-import/* routes.
