@@ -95,6 +95,8 @@ import FashionDesignPage from "@/pages/fashion-design";
 import PackagingDesignPage from "@/pages/packaging-design";
 // ── Team 21: Universal Material Library ──────────────────────────────────
 import MaterialLibraryPage from "@/pages/material-library";
+import RoomTemplatesPage from "@/pages/room-templates/index";
+import RoomTemplateDetailPage from "@/pages/room-templates/detail";
 // ── Phase 5: Controlled Material Import & Human Review ───────────────────
 import MaterialImportReviewPage from "@/pages/material-import-review";
 // ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
@@ -191,6 +193,9 @@ function AdminRouter() {
         {/* ── Team 19: Packaging Design ───────────────────────────────── */}
         <Route path="/packaging-design" component={PackagingDesignPage} />
         {/* ── Team 21: Universal Material Library ─────────────────────── */}
+        <Route path="/room-templates/new" component={RoomTemplateDetailPage} />
+        <Route path="/room-templates/:id" component={RoomTemplateDetailPage} />
+        <Route path="/room-templates" component={RoomTemplatesPage} />
         <Route path="/material-library" component={MaterialLibraryPage} />
         {/* ── Phase 5: Controlled Material Import Review ───────────────── */}
         <Route path="/material-import-review" component={MaterialImportReviewPage} />

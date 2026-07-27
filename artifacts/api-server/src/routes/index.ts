@@ -78,6 +78,8 @@ import serviceNormalizationRouter from "./service-normalization.js";
 import { designQualityRouter } from "./design-quality.js";
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────
 import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
+// ── Phase 6 WP-01: Room Template Library ─────────────────────────────────
+import roomTemplatesRouter from "./room-templates.js";
 // ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────
 import universalDesignRouter from "./universal-design/index.js";
 // ── Team 14: Universal Asset Browser ─────────────────────────────────────
@@ -310,6 +312,10 @@ router.use(assetBrowserRouter);
 router.use(annotationRouter);
 // ── Team 21: Universal Material Library ───────────────────────────────────────
 router.use(materialLibraryRouter);
+// ── Phase 6 WP-01: Room Template Library ─────────────────────────────────────
+// Mount before any catch-all routes. B1–B3 (room-types/styles/themes) are
+// public; A1–A5 + admin extensions require the admin key or session.
+router.use(roomTemplatesRouter);
 // ── Interior Design Material Library (Phase 1) ────────────────────────────────
 // Mount Phase 2 before Phase 1's generic /material-library/:id route so
 // /suggestions and /:id/similar are resolved by the owning domain.
