@@ -1,0 +1,147 @@
+RESUME TASK — PHASE 5 CONTROLLED MATERIAL IMPORT
+
+Continue on:
+
+feature/material-phase5-controlled-import
+
+Do not reset, recreate, or discard the existing Phase 5 implementation.
+Do not merge to main.
+
+First inspect the current git diff and continue exactly from the existing work.
+
+Priority order:
+
+1. Fix all Phase 5-specific TypeScript errors.
+   - Do not clean unrelated pre-existing baseline errors.
+   - Record the exact pre-existing baseline and prove Phase 5 adds zero new errors.
+
+2. Audit the backend implementation already added:
+   - review state machine
+   - audit/history
+   - review decisions
+   - controlled importer
+   - per-item transaction
+   - partial failure behavior
+   - duplicate resolution
+   - asset ingestion
+   - import reporting
+   - authorization
+
+3. Ensure review decisions cannot be overwritten by Phase 4B resume/upsert.
+   Preserve:
+   - approved
+   - rejected
+   - reviewer
+   - reviewer notes
+   - duplicate resolution
+   - import status
+   - imported canonical ID
+
+4. Complete the admin review UI:
+   - pending-review list
+   - filters, search, sort, pagination
+   - item details
+   - extraction diff link
+   - approve/reject
+   - bulk approve/reject
+   - duplicate comparison and resolution
+   - reviewer notes
+   - controlled import action
+   - import result report
+   - audit history
+
+5. Wire the page into the existing admin route and navigation.
+   Reuse existing design system and authorization patterns.
+
+6. Validate canonical import behavior:
+   - only approved items can import
+   - rejected or needs_review items cannot import
+   - each item imports inside its own transaction
+   - failure rolls back only that item
+   - repeated import is idempotent
+   - canonical UUID and staging linkage are preserved
+   - search/index refresh runs after success
+
+7. Validate asset handling:
+   - only after approval/import
+   - validate HTTPS, MIME, size, redirects and timeout
+   - convert supported images to WebP
+   - create thumbnail
+   - upload to Supabase Storage
+   - retain original source URL
+   - image failure must set asset_pending and must not roll back the material
+   - no binary image data stored in PostgreSQL
+
+8. Add focused tests for:
+   - valid and invalid state transitions
+   - approve/reject
+   - bulk actions
+   - reviewer-note persistence
+   - duplicate keep/replace/merge/create-new
+   - unauthorized access
+   - per-item transaction rollback
+   - partial batch failure
+   - idempotent import
+   - protection against Phase 4B upsert overwriting review decisions
+   - asset success/failure/retry
+   - audit trail
+   - canonical write guard
+   - search refresh
+
+9. Run:
+   - Phase 5 focused tests
+   - universal catalog tests
+   - Material Library tests
+   - Material Intelligence tests
+   - full regression suite
+   - API build
+   - admin frontend build
+   - typecheck comparison against baseline
+
+10. Run controlled UAT using the existing Niro Granite staging job:
+   - approve selected items
+   - reject selected items
+   - resolve at least one duplicate
+   - import approved items
+   - confirm canonical count increases only by expected new records
+   - confirm no duplicate import on second run
+   - confirm imported materials are searchable
+   - confirm audit history is complete
+   - confirm assets are in Supabase Storage or marked asset_pending
+   - confirm rejected items never enter canonical materials
+
+Create or complete:
+
+docs/material-phase5-controlled-import.md
+
+Final report must include:
+
+- branch and final commit
+- current diff/files changed
+- migrations
+- API endpoints
+- state-transition rules
+- review UI
+- duplicate-resolution behavior
+- canonical import behavior
+- transaction and rollback proof
+- asset-storage behavior
+- authorization
+- focused tests
+- full regression totals
+- build results
+- typecheck baseline comparison
+- controlled UAT counts
+- canonical before/after counts
+- remaining limitations
+
+Use exactly one verdict:
+
+A. PHASE 5 CONTROLLED IMPORT COMPLETE — READY FOR RELEASE REVIEW
+B. PHASE 5 COMPLETE WITH MINOR LIMITATIONS
+C. PHASE 5 BLOCKED
+D. PHASE 5 FAILED
+
+Do not claim completion without tests, build evidence, and controlled UAT.
+Do not merge.
+STOP.

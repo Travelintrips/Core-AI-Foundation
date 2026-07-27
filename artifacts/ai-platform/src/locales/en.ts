@@ -49,6 +49,7 @@ export const en = {
       templateMarketplace:  "Template Marketplace",
       templateEngine:       "Template Engine",
       designTemplates:      "Design Templates",
+      roomTemplates:        "Room Templates",
       designStudio:         "Design Studio",
       exportWorkspace:      "Export Workspace",
       templateLibrary:      "Template Library",

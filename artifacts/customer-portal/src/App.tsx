@@ -58,6 +58,8 @@ const ComparePage                = lazy(() => import('@/pages/creative-portfolio
 // ── Team 17: Interior Design ─────────────────────────────────────────────
 const InteriorDesignBriefPage   = lazy(() => import('@/pages/interior-design/index'));
 const InteriorDesignProjectPage = lazy(() => import('@/pages/interior-design/project'));
+const RoomTemplateBrowserPage   = lazy(() => import('@/pages/room-templates/index'));
+const RoomTemplateDetailPage    = lazy(() => import('@/pages/room-templates/detail'));
 // ── Team 18: Fashion & Apparel Design ─────────────────────────────────────
 const FashionDesignPage          = lazy(() => import('@/pages/fashion-design/index'));
 // ── Team 22: Vendor Directory ────────────────────────────────────────────
@@ -164,6 +166,8 @@ function Router() {
         {/* ── Team 18: Fashion & Apparel Design ──────────────────────── */}
         <Route path="/fashion-design" component={FashionDesignPage} />
         {/* ── Team 04: Portfolio V2 ───────────────────────────────────── */}
+        <Route path="/room-templates/:id" component={RoomTemplateDetailPage} />
+        <Route path="/room-templates" component={RoomTemplateBrowserPage} />
         <Route path="/interior-design" component={InteriorDesignBriefPage} />
         <Route path="/interior-design/:id" component={InteriorDesignProjectPage} />
         <Route path="/portfolio-v2" component={GalleryV2Page} />

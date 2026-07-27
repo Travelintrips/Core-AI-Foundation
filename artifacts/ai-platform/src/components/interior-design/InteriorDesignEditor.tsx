@@ -13,6 +13,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
+import { getMaterialSwatch } from "../material-library/materialColorSwatch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -215,6 +216,58 @@ const STATE_COLORS: Record<ReviewState, string> = {
   approved_for_rendering: "bg-green-500/10 text-green-400 border-green-500/20",
 };
 
+// ── Visual swatch helpers (emoji + bg colour for furniture / lighting / zones) ─
+
+function getFurnitureSwatch(itemName: string): { emoji: string; bg: string } {
+  const n = itemName.toLowerCase();
+  if (/sofa|couch|sectional|loveseat/.test(n)) return { emoji: "🛋️", bg: "linear-gradient(135deg,#8b6f5e,#6b4f3e)" };
+  if (/chair|kursi|armchair|stool/.test(n))    return { emoji: "🪑", bg: "linear-gradient(135deg,#a07850,#805830)" };
+  if (/bed|kasur|tempat tidur/.test(n))         return { emoji: "🛏️", bg: "linear-gradient(135deg,#607090,#405070)" };
+  if (/table|meja|desk|dining/.test(n))         return { emoji: "🪵", bg: "linear-gradient(135deg,#b08060,#907040)" };
+  if (/cabinet|lemari|wardrobe|closet|almari/.test(n)) return { emoji: "🗄️", bg: "linear-gradient(135deg,#808080,#606060)" };
+  if (/shelf|rak|bookcase|bookshelf/.test(n))   return { emoji: "📚", bg: "linear-gradient(135deg,#c09878,#a07858)" };
+  if (/mirror|cermin/.test(n))                  return { emoji: "🪞", bg: "linear-gradient(135deg,#a0b8c8,#809ab0)" };
+  if (/lamp|light|lampu/.test(n))               return { emoji: "💡", bg: "linear-gradient(135deg,#d4aa50,#b08830)" };
+  if (/rug|carpet|karpet|mat/.test(n))          return { emoji: "🟫", bg: "linear-gradient(135deg,#a08068,#806048)" };
+  if (/plant|tanaman|pot/.test(n))              return { emoji: "🪴", bg: "linear-gradient(135deg,#608060,#406040)" };
+  if (/tv|television|screen|monitor/.test(n))   return { emoji: "📺", bg: "linear-gradient(135deg,#404858,#282e38)" };
+  if (/bath|tub|shower|toilet/.test(n))         return { emoji: "🛁", bg: "linear-gradient(135deg,#c8d8e8,#a0b8c8)" };
+  // hash-based fallback so each unique item gets a consistent colour
+  let hash = 0;
+  for (let i = 0; i < n.length; i++) hash = (hash * 31 + n.charCodeAt(i)) & 0xffffff;
+  const h = (hash % 360);
+  return { emoji: "🪑", bg: `linear-gradient(135deg,hsl(${h},30%,40%),hsl(${h},30%,28%))` };
+}
+
+function getLightingSwatch(colorTemp: string): { emoji: string; bg: string } {
+  const k = parseInt(colorTemp, 10);
+  if (!k || isNaN(k))   return { emoji: "💡", bg: "linear-gradient(135deg,#c8c0a0,#a8a080)" };
+  if (k <= 2700)        return { emoji: "🕯️", bg: "linear-gradient(135deg,#e8a030,#c07820)" };  // very warm
+  if (k <= 3200)        return { emoji: "💡", bg: "linear-gradient(135deg,#e0b850,#c09030)" };  // warm white
+  if (k <= 4000)        return { emoji: "💡", bg: "linear-gradient(135deg,#e8e0c0,#c8c0a0)" };  // neutral
+  if (k <= 5000)        return { emoji: "🔆", bg: "linear-gradient(135deg,#d8e8f0,#b0c8d8)" };  // cool white
+  return               { emoji: "🔆", bg: "linear-gradient(135deg,#b8d0e8,#80a8c8)" };           // daylight
+}
+
+function getZoneSwatch(name: string, fn: string): { emoji: string; bg: string } {
+  const t = `${name} ${fn}`.toLowerCase();
+  if (/living|ruang tamu|lounge|family/.test(t))   return { emoji: "🛋️", bg: "linear-gradient(135deg,#7080a0,#506080)" };
+  if (/bedroom|kamar tidur|master|tidur/.test(t))  return { emoji: "🛏️", bg: "linear-gradient(135deg,#607090,#405070)" };
+  if (/kitchen|dapur|pantry/.test(t))              return { emoji: "🍳", bg: "linear-gradient(135deg,#a06840,#805030)" };
+  if (/dining|makan|restaurant/.test(t))           return { emoji: "🍽️", bg: "linear-gradient(135deg,#906858,#705040)" };
+  if (/bathroom|toilet|wc|shower|kamar mandi/.test(t)) return { emoji: "🚿", bg: "linear-gradient(135deg,#6090a8,#408090)" };
+  if (/office|kerja|study|work|studio/.test(t))   return { emoji: "💼", bg: "linear-gradient(135deg,#506878,#384858)" };
+  if (/kids|anak|child|play|nursery/.test(t))      return { emoji: "🎨", bg: "linear-gradient(135deg,#8060a0,#604080)" };
+  if (/gym|sport|fitness/.test(t))                 return { emoji: "🏋️", bg: "linear-gradient(135deg,#506850,#304830)" };
+  if (/garage|parkir|carport/.test(t))             return { emoji: "🚗", bg: "linear-gradient(135deg,#606060,#404040)" };
+  if (/balcony|teras|terrace|garden|outdoor/.test(t)) return { emoji: "🪴", bg: "linear-gradient(135deg,#508050,#306030)" };
+  if (/library|perpus|reading|baca/.test(t))       return { emoji: "📚", bg: "linear-gradient(135deg,#7860a0,#584080)" };
+  let hash = 0;
+  for (let i = 0; i < t.length; i++) hash = (hash * 31 + t.charCodeAt(i)) & 0xffffff;
+  const h = (hash % 360);
+  return { emoji: "🏠", bg: `linear-gradient(135deg,hsl(${h},25%,38%),hsl(${h},25%,26%))` };
+}
+
 // ── Helpers for library integration ──────────────────────────────────────────
 
 /** Map library price tiers to editor tiers (Standard → Mid-range). */
@@ -238,7 +291,10 @@ function SpacePlanEditor({ zones, onChange }: { zones: SpaceZone[]; onChange: (z
       {zones.map((z, i) => (
         <div key={z.id} className="border border-border/50 rounded-lg p-3 space-y-2 bg-muted/5">
           <div className="flex items-center gap-2 justify-between">
-            <span className="text-[10px] font-mono font-semibold text-muted-foreground">Zone {i + 1}</span>
+            {(() => { const s = getZoneSwatch(z.name, z.function); return (
+              <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-base" style={{ background: s.bg }}>{s.emoji}</div>
+            ); })()}
+            <span className="text-[10px] font-mono font-semibold text-muted-foreground flex-1">Zone {i + 1}{z.name ? ` — ${z.name}` : ""}</span>
             <div className="flex gap-1">
               <Button variant="ghost" size="icon" className="size-6" onClick={() => moveUp(i)} disabled={i === 0}><ArrowUp className="size-3" /></Button>
               <Button variant="ghost" size="icon" className="size-6" onClick={() => moveDown(i)} disabled={i === zones.length - 1}><ArrowDown className="size-3" /></Button>
@@ -372,9 +428,12 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
           {/* Library-sourced material summary card */}
           {m.source === "material_library" && m.name && (
             <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-teal-500/5 border border-teal-500/15">
-              {m.thumbnailUrl && (
+              {m.thumbnailUrl ? (
                 <img src={m.thumbnailUrl} alt={m.name} className="w-8 h-8 rounded object-cover shrink-0 border border-border/30" />
-              )}
+              ) : (() => {
+                const sw = getMaterialSwatch(m.color, m.materialType, m.finish);
+                return <div className="w-8 h-8 rounded shrink-0 border border-border/20 flex items-center justify-center text-sm" style={{ background: sw.background }}>{sw.patternHint}</div>;
+              })()}
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground truncate">{m.name}</p>
                 <p className="text-[10px] text-muted-foreground truncate">
@@ -446,8 +505,11 @@ function FurnitureEditor({ items, onChange }: { items: FurnitureItem[]; onChange
     <div className="space-y-2">
       {items.map((f) => (
         <div key={f.id} className="border border-border/50 rounded-lg p-3 space-y-2 bg-muted/5">
-          <div className="flex justify-between items-start">
-            <Input className="h-7 text-xs flex-1 mr-2 font-medium" value={f.item} onChange={(e) => update(f.id, "item", e.target.value)} placeholder="Furniture item name…" />
+          <div className="flex items-center gap-2">
+            {(() => { const s = getFurnitureSwatch(f.item); return (
+              <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-base" style={{ background: s.bg }}>{s.emoji}</div>
+            ); })()}
+            <Input className="h-7 text-xs flex-1 font-medium" value={f.item} onChange={(e) => update(f.id, "item", e.target.value)} placeholder="Furniture item name…" />
             <Button variant="ghost" size="icon" className="size-6 text-destructive hover:text-destructive shrink-0" onClick={() => remove(f.id)}><Trash2 className="size-3" /></Button>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -473,7 +535,11 @@ function LightingEditor({ items, onChange }: { items: LightingItem[]; onChange: 
     <div className="space-y-2">
       {items.map((l) => (
         <div key={l.id} className="border border-border/50 rounded-lg p-3 space-y-2 bg-muted/5">
-          <div className="flex justify-end">
+          <div className="flex items-center gap-2 justify-between">
+            {(() => { const s = getLightingSwatch(l.colorTemperature); return (
+              <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-base" style={{ background: s.bg }}>{s.emoji}</div>
+            ); })()}
+            <span className="text-[10px] font-mono text-muted-foreground flex-1">{l.lightingType || "Lighting"}{l.zone ? ` — ${l.zone}` : ""}</span>
             <Button variant="ghost" size="icon" className="size-6 text-destructive hover:text-destructive" onClick={() => remove(l.id)}><Trash2 className="size-3" /></Button>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -823,7 +889,11 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
             ) : (
               <div className="space-y-2">
                 {parseZones(draft.spacePlanDraft).map((z, i) => (
-                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs">
+                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
+                    {(() => { const s = getZoneSwatch(z.name, z.function); return (
+                      <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: s.bg }}>{s.emoji}</div>
+                    ); })()}
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold font-mono">{z.name || `Zone ${i+1}`}</span>
                       {z.priority && <Badge variant="outline" className="text-[9px] h-3.5 px-1">{z.priority}</Badge>}
@@ -832,6 +902,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
                     {z.approximateSize && <p className="text-muted-foreground">Size: {z.approximateSize}</p>}
                     {z.adjacency && <p className="text-muted-foreground">Adjacency: {z.adjacency}</p>}
                     {z.notes && <p className="text-muted-foreground italic">{z.notes}</p>}
+                    </div>
                   </div>
                 ))}
                 {parseZones(draft.spacePlanDraft).length === 0 && (
@@ -902,14 +973,19 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
             ) : (
               <div className="space-y-1.5">
                 {parseItems<FurnitureItem>(draft.furnitureDraft, {id:"",item:"",zone:"",quantity:"1",dimensions:"",notes:""}).map((f, i) => (
-                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{f.item || "Item"}</span>
-                      {f.zone && <span className="text-muted-foreground">— {f.zone}</span>}
-                      {f.quantity && f.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{f.quantity}</Badge>}
+                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
+                    {(() => { const s = getFurnitureSwatch(f.item); return (
+                      <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: s.bg }}>{s.emoji}</div>
+                    ); })()}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{f.item || "Item"}</span>
+                        {f.zone && <span className="text-muted-foreground">— {f.zone}</span>}
+                        {f.quantity && f.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{f.quantity}</Badge>}
+                      </div>
+                      {f.dimensions && <p className="text-muted-foreground mt-0.5">{f.dimensions}</p>}
+                      {f.notes && <p className="text-muted-foreground italic">{f.notes}</p>}
                     </div>
-                    {f.dimensions && <p className="text-muted-foreground mt-0.5">{f.dimensions}</p>}
-                    {f.notes && <p className="text-muted-foreground italic">{f.notes}</p>}
                   </div>
                 ))}
                 {parseItems<FurnitureItem>(draft.furnitureDraft,{id:"",item:"",zone:"",quantity:"1",dimensions:"",notes:""}).length === 0 && (
@@ -931,15 +1007,20 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
             ) : (
               <div className="space-y-1.5">
                 {parseItems<LightingItem>(draft.lightingDraft,{id:"",zone:"",lightingType:"",fixtureType:"",colorTemperature:"",purpose:"",quantity:"1",notes:""}).map((l, i) => (
-                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{l.lightingType || "Light"}</span>
-                      {l.zone && <span className="text-muted-foreground">— {l.zone}</span>}
-                      {l.quantity && l.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{l.quantity}</Badge>}
+                  <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-2.5">
+                    {(() => { const s = getLightingSwatch(l.colorTemperature); return (
+                      <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg mt-0.5" style={{ background: s.bg }}>{s.emoji}</div>
+                    ); })()}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{l.lightingType || "Light"}</span>
+                        {l.zone && <span className="text-muted-foreground">— {l.zone}</span>}
+                        {l.quantity && l.quantity !== "1" && <Badge variant="outline" className="text-[9px] h-3.5 px-1">×{l.quantity}</Badge>}
+                      </div>
+                      {l.fixtureType && <p className="text-muted-foreground mt-0.5">{l.fixtureType}</p>}
+                      {l.colorTemperature && <p className="text-muted-foreground text-[10px]">{l.colorTemperature}{l.purpose ? ` · ${l.purpose}` : ""}</p>}
+                      {l.notes && <p className="text-muted-foreground italic">{l.notes}</p>}
                     </div>
-                    {l.fixtureType && <p className="text-muted-foreground mt-0.5">{l.fixtureType}</p>}
-                    {l.colorTemperature && <p className="text-muted-foreground text-[10px]">{l.colorTemperature}{l.purpose ? ` · ${l.purpose}` : ""}</p>}
-                    {l.notes && <p className="text-muted-foreground italic">{l.notes}</p>}
                   </div>
                 ))}
                 {parseItems<LightingItem>(draft.lightingDraft,{id:"",zone:"",lightingType:"",fixtureType:"",colorTemperature:"",purpose:"",quantity:"1",notes:""}).length === 0 && (

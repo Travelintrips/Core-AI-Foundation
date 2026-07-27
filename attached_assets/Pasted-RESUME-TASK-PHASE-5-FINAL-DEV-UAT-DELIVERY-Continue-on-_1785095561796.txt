@@ -1,0 +1,384 @@
+RESUME TASK — PHASE 5 FINAL DEV UAT & DELIVERY
+
+Continue on:
+
+feature/material-phase5-controlled-import
+
+Do not reset, hard-reset, clean, or discard the current working tree.
+
+First inspect:
+
+git status
+git diff --stat
+git diff --name-only
+git log --oneline -5
+
+Preserve all current valid changes.
+
+========================================================
+CURRENT VERIFIED STATE
+========================================================
+
+Already completed:
+
+- rejection guard fixed;
+- runtime DDL removed/reduced in favor of migration;
+- canonical table naming corrected;
+- duplicate-resolution behavior started;
+- import logic now reads duplicate_resolution;
+- DEV migration applied;
+- new DEV columns exist;
+- Phase 5 focused tests pass;
+- API build passes;
+- full regression has 44 pre-existing provider-health failures only;
+- DEV canonical count before UAT = 500;
+- DEV Phase 5 staging count before UAT = 0.
+
+Current blocker:
+
+HTTP UAT was blocked because the routes require an authenticated session.
+
+A service-level DEV UAT using the real service functions and DEV Supabase was started but not completed.
+
+Do not restart the implementation.
+
+========================================================
+1. INSPECT CURRENT UAT STATE
+========================================================
+
+Check whether the interrupted session already created any DEV staging or canonical records.
+
+Query and record:
+
+- current canonical material count;
+- current Phase 5 staging rows;
+- staging rows created by the UAT session;
+- audit rows;
+- any partially imported canonical records;
+- any asset_pending rows.
+
+Use a unique UAT marker such as:
+
+phase5_uat_2026
+
+or the existing marker already used by the interrupted script.
+
+Do not duplicate existing test rows.
+
+========================================================
+2. COMPLETE SERVICE-LEVEL DEV UAT
+========================================================
+
+Use the real Phase 5 service functions against DEV Supabase.
+
+This UAT is acceptable for backend business-logic validation, but clearly label it as:
+
+service-level DEV UAT
+
+Do not claim browser/session-route UAT unless it is actually completed.
+
+Create controlled staging data covering:
+
+- one create_new;
+- one keep_existing;
+- one replace_existing;
+- one merge;
+- one rejected item;
+- one intentionally failing item;
+- one asset failure/pending item.
+
+Use existing canonical materials as duplicate targets.
+
+Do not create random uncontrolled production-like data.
+
+All UAT records must be easy to identify and clean up.
+
+========================================================
+3. VERIFY CREATE_NEW
+========================================================
+
+For one approved new material:
+
+- import it;
+- confirm exactly one canonical row is created;
+- confirm generated canonical ID;
+- confirm staging row links to canonical ID;
+- confirm provenance is preserved;
+- confirm audit record exists;
+- confirm import report.created increments by 1.
+
+========================================================
+4. VERIFY KEEP_EXISTING
+========================================================
+
+For one duplicate:
+
+- set duplicate_resolution = keep_existing;
+- require target_canonical_id;
+- import;
+- confirm no canonical row is created;
+- confirm canonical count does not increase;
+- confirm staging links to existing canonical row;
+- confirm outcome is recorded as kept_existing/skipped_existing;
+- confirm audit record exists.
+
+========================================================
+5. VERIFY REPLACE_EXISTING
+========================================================
+
+For one duplicate target:
+
+- capture target before snapshot;
+- set duplicate_resolution = replace_existing;
+- specify target_canonical_id;
+- import;
+- confirm target row is updated;
+- confirm immutable identity fields remain unchanged;
+- confirm no new canonical row;
+- confirm before/after audit snapshot;
+- confirm report.replaced increments.
+
+After proof, restore the target material to its original DEV values if the UAT used a real canonical material.
+
+========================================================
+6. VERIFY MERGE
+========================================================
+
+For one duplicate target:
+
+- set duplicate_resolution = merge;
+- specify target_canonical_id;
+- provide a validated merge_field_map;
+- test:
+  - keep_existing
+  - use_incoming
+  - combine
+- import;
+- verify final values exactly match the merge map;
+- verify untouched fields remain unchanged;
+- confirm no new canonical row;
+- confirm audit records existing, incoming, merge map, and final result;
+- confirm report.merged increments.
+
+Restore the target material afterward if necessary.
+
+========================================================
+7. VERIFY REJECTED ITEM
+========================================================
+
+- reject one staging item with required notes;
+- confirm rejection without notes fails;
+- confirm rejected item cannot import;
+- confirm canonical count does not increase;
+- confirm audit history records the rejection.
+
+========================================================
+8. VERIFY PARTIAL FAILURE
+========================================================
+
+Create one intentionally invalid approved item.
+
+Import it in the same batch as valid items.
+
+Confirm:
+
+- failing item rolls back;
+- failure_reason is stored;
+- status becomes failed;
+- valid items still succeed;
+- report.failed increments;
+- canonical count reflects only successful create_new items.
+
+========================================================
+9. VERIFY IDEMPOTENCY
+========================================================
+
+Run the exact same import again.
+
+Confirm:
+
+- no duplicate canonical rows;
+- create_new does not create a second row;
+- keep_existing remains linked;
+- replace_existing does not repeat unintended changes;
+- merge does not duplicate or corrupt data;
+- imported rows are skipped safely;
+- report reflects idempotent skips.
+
+========================================================
+10. VERIFY ASSET HANDLING
+========================================================
+
+Use one valid HTTPS test image source permitted by the implementation.
+
+Verify:
+
+- image fetch succeeds;
+- MIME and size validation;
+- WebP conversion;
+- thumbnail creation;
+- deterministic Supabase Storage path;
+- storage URL/path saved;
+- original source URL preserved;
+- no binary stored in PostgreSQL.
+
+Also test one invalid or unreachable image:
+
+- canonical import must still succeed;
+- asset_status becomes pending;
+- asset error is stored;
+- retry endpoint/service can retry safely.
+
+If no valid external image source is available, use an existing Phase 4 catalog image URL already stored in DEV.
+
+Do not fabricate storage success.
+
+========================================================
+11. VERIFY SEARCH REFRESH
+========================================================
+
+After create, replace, and merge:
+
+- run the actual search/index refresh hook;
+- query the real Material Search or Material Intelligence service;
+- confirm the new/updated material is discoverable;
+- verify relevant code/name/finish/texture fields where applicable.
+
+If search refresh is only a signal and no consumer is available, report that honestly as a blocker.
+
+========================================================
+12. PROVE CANONICAL COUNT INVARIANT
+========================================================
+
+Record:
+
+before_count
+created
+kept_existing
+replaced
+merged
+rejected
+failed
+after_count
+
+Required formula:
+
+after_count
+=
+before_count
++
+successful_create_new_count
+
+keep_existing, replace_existing, merge, rejected, and failed must not increase the canonical count.
+
+Provide exact numbers.
+
+========================================================
+13. CLEANUP UAT DATA
+========================================================
+
+After evidence is recorded:
+
+- remove temporary UAT-only staging rows if safe;
+- remove temporary canonical create_new rows if they are not intended to remain;
+- restore replaced/merged target rows;
+- preserve audit evidence only if required by the project’s UAT policy;
+- document exactly what was cleaned and what remains.
+
+Do not leave corrupted DEV canonical data.
+
+========================================================
+14. COMPLETE TESTS AND BUILDS
+========================================================
+
+Run again after UAT fixes:
+
+- Phase 5 focused tests;
+- Phase 4A tests;
+- Phase 4B tests;
+- Material Library tests;
+- Material Intelligence tests;
+- API build;
+- admin frontend build;
+- typecheck baseline comparison;
+- full regression suite.
+
+Report exact totals.
+
+Required:
+
+- zero new failures;
+- zero new TypeScript errors against baseline;
+- no Phase 5 build errors.
+
+========================================================
+15. COMPLETE DOCUMENTATION
+========================================================
+
+Finish:
+
+docs/material-phase5-controlled-import.md
+
+and:
+
+docs/material-phase5-release-hardening-report.md
+
+Include:
+
+- final migration;
+- Phase 4A handoff;
+- duplicate-resolution behavior;
+- permission matrix;
+- service-level UAT method;
+- why HTTP/browser UAT was blocked;
+- canonical before/after counts;
+- each duplicate-resolution result;
+- partial failure proof;
+- idempotency proof;
+- Supabase Storage evidence;
+- search evidence;
+- cleanup performed;
+- test totals;
+- build totals;
+- remaining limitations.
+
+Do not describe service-level UAT as full UI UAT.
+
+========================================================
+16. GIT DELIVERY
+========================================================
+
+After all work is complete:
+
+- inspect final git diff;
+- remove accidental files;
+- commit all valid changes;
+- push to origin/feature/material-phase5-controlled-import;
+- verify remote commit hash.
+
+Do not merge.
+Do not activate Phase 5.
+Do not begin Phase 6.
+
+Use exactly one verdict:
+
+A. PHASE 5 CONTROLLED IMPORT COMPLETE — READY FOR RELEASE REVIEW
+
+B. PHASE 5 RELEASE HARDENING COMPLETE WITH MINOR NON-BLOCKING LIMITATIONS
+
+C. PHASE 5 BLOCKED
+
+D. PHASE 5 FAILED
+
+Verdict A is allowed only if:
+
+- all four duplicate-resolution paths pass against DEV Supabase;
+- canonical count invariant is proven;
+- asset upload is proven;
+- search refresh is proven;
+- tests and builds pass;
+- final commit is pushed and remotely verified.
+
+If service-level UAT passes but browser/session UI UAT remains untested, use verdict B unless the release policy explicitly accepts service-level UAT as sufficient.
+
+STOP.

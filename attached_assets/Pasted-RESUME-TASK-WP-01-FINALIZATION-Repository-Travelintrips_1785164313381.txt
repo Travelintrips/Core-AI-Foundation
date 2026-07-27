@@ -1,0 +1,255 @@
+RESUME TASK — WP-01 FINALIZATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Work from the CURRENT workspace.
+
+Do NOT restart implementation.
+Do NOT redesign WP-01.
+Do NOT create WP-02 code.
+Do NOT touch rendering, furniture, moodboards, sessions, or export.
+
+Current verified state:
+
+- WP-01 code already exists in the workspace
+- migration already applied
+- API build succeeds
+- 21/21 room-template tests pass
+- navigation and i18n wiring are present
+- API server is running
+- smoke testing was interrupted while determining the correct API base URL
+
+========================================================
+1. VERIFY CURRENT GIT STATE
+========================================================
+
+Report:
+
+- current branch
+- git status
+- all WP-01 changed files
+- whether any out-of-scope files changed
+- whether migration and generated files are tracked
+
+Do not discard work.
+
+========================================================
+2. RESOLVE API BASE PATH
+========================================================
+
+Determine the actual reachable API origin and mount path.
+
+Verify using source and runtime:
+
+- API server port
+- frontend proxy port
+- API base path
+- route mount registry
+- final externally reachable room-template paths
+
+Do not guess from frontend URLs.
+
+Use direct API requests against the backend service.
+
+========================================================
+3. SMOKE TEST ALL 8 ENDPOINTS
+========================================================
+
+Smoke-test exactly the approved endpoints A1–A5 and B1–B3.
+
+For each record:
+
+- method
+- final path
+- auth header used
+- expected status
+- observed status
+- response summary
+- pass/fail
+
+Verify at minimum:
+
+- public/customer catalog access
+- template detail
+- search/filter/pagination
+- admin create
+- admin update
+- admin archive/restore or version operation according to the approved API blueprint
+- unauthorized admin access is rejected
+
+Do not expose secrets in the report.
+
+========================================================
+4. VERIFY SEED DATA
+========================================================
+
+Run or verify the approved WP-01 seed process.
+
+Confirm:
+
+- seed count
+- deterministic IDs or keys
+- no duplicates
+- rerun is idempotent
+- records visible through catalog API
+- no external/fabricated assets inserted
+
+Report exact counts.
+
+========================================================
+5. VERIFY DATABASE AND RLS
+========================================================
+
+Confirm the five approved WP-01 tables exist.
+
+Verify:
+
+- indexes
+- foreign keys
+- unique constraints
+- version fields
+- soft-delete/archive fields
+- timestamps
+- tenant fields where approved
+- RLS enabled
+- FORCE RLS where required
+- expected policies and policy roles
+- service-role behavior
+- anonymous behavior
+- authenticated/admin behavior
+
+Do not claim production application unless verified.
+
+========================================================
+6. VERIFY FRONTEND
+========================================================
+
+Verify both approved UI surfaces:
+
+Admin:
+- route resolves
+- navigation entry visible
+- list loads
+- search/filter/sort/pagination work
+- create/edit/archive/restore/duplicate/version history according to implemented scope
+
+Customer/public:
+- route resolves
+- catalog loads
+- detail opens
+- search/filter/sort/pagination work
+- no admin controls visible
+
+Capture screenshots only if the environment supports it.
+
+If browser access is blocked, report the exact blocker instead of marking pass.
+
+========================================================
+7. RUN VALIDATION
+========================================================
+
+Run:
+
+- room-template targeted tests
+- migration tests
+- authorization/tenant/RLS tests
+- relevant regression suites
+- API build
+- frontend build or typecheck according to repository conventions
+
+Clearly classify:
+
+- new failures
+- pre-existing failures
+- environment-blocked checks
+
+Do not claim full regression success unless the full suite actually ran.
+
+========================================================
+8. DOCUMENTATION
+========================================================
+
+Verify or complete:
+
+docs/wp01-room-template-library.md
+
+Ensure it contains:
+
+- implemented scope
+- five tables
+- eight endpoints
+- auth and permissions
+- tenant behavior
+- RLS
+- seed data
+- admin UI
+- customer UI
+- tests
+- migration procedure
+- known limitations
+- explicit exclusions for WP-02+
+
+========================================================
+9. FINAL SCOPE AUDIT
+========================================================
+
+Confirm no code was added for:
+
+- furniture library
+- placement engine
+- layout constraint engine
+- AI composer
+- moodboard
+- rendering
+- design sessions
+- export engine
+
+Confirm the namespace remains separate from existing design-template and design-blueprint domains.
+
+========================================================
+10. COMMIT
+========================================================
+
+If validation is clean:
+
+- commit only WP-01 changes
+- use a clear commit message
+- report commit SHA
+- do not merge to main
+- do not push unless the existing task policy explicitly allows it
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Current branch
+2. Files created
+3. Files modified
+4. Migration filename
+5. Five tables
+6. Eight endpoints and smoke-test results
+7. Seed count and idempotency result
+8. Admin UI status
+9. Customer UI status
+10. Test results
+11. Build results
+12. RLS/security verification
+13. Tenant isolation verification
+14. Pre-existing failures
+15. Known limitations
+16. Git status
+17. Commit SHA
+
+Use exactly one verdict:
+
+A. WP-01 COMPLETE
+B. WP-01 COMPLETE WITH OBSERVATIONS
+C. WP-01 INCOMPLETE
+D. WP-01 BLOCKED
+
+STOP.
+
+Do NOT start WP-02.

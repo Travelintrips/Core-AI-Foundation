@@ -1,0 +1,292 @@
+RESUME TASK — WP-01 ROOM TEMPLATE LIBRARY
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Branch:
+feature/phase6-wp01-room-template-library
+
+Baseline:
+material-v5.0.1
+
+IMPORTANT
+
+Resume from the current workspace.
+
+Do NOT repeat the full architecture exploration unless a required fact is missing.
+
+Do NOT redesign the approved Phase 6 architecture.
+
+Do NOT implement WP-02 or later.
+
+Do NOT touch rendering, furniture placement, design sessions, moodboards, export, or AI composition.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Finish the incomplete WP-01 implementation.
+
+Approved WP-01 scope:
+
+- five room catalog tables
+- endpoints A1–A5
+- endpoints B1–B3
+- seed data
+- admin catalog views
+- customer catalog views
+- tests
+- documentation
+
+Keep the new namespace distinct from existing:
+- design-template
+- design-blueprint
+
+Use:
+- existing admin auth
+- existing tenant conventions
+- existing audit conventions
+- existing OpenAPI conventions
+- existing migration conventions
+- existing repository/service patterns
+
+========================================================
+1. AUDIT CURRENT WORKSPACE
+========================================================
+
+First inspect only what has already been created or modified.
+
+Report:
+
+- current branch
+- git status
+- files already added
+- files partially implemented
+- files still missing
+- whether any out-of-scope code was added
+
+Do not discard existing work.
+
+========================================================
+2. DATABASE AND MIGRATION
+========================================================
+
+Complete only the five approved WP-01 catalog tables.
+
+Use hand-written SQL migration.
+
+Do NOT use drizzle-kit push.
+
+Implement:
+
+- primary keys
+- foreign keys
+- indexes
+- unique constraints
+- soft-delete fields where approved
+- version fields
+- timestamps
+- audit fields
+- RLS according to the approved blueprint
+- tenant isolation where required
+
+Do not add tables from WP-02 or later.
+
+========================================================
+3. DOMAIN AND SERVICE LAYER
+========================================================
+
+Complete:
+
+- room-template schema/types
+- repository
+- service
+- validation
+- search
+- filtering
+- sorting
+- pagination
+- version history
+- duplicate operation
+- archive/restore
+- audit integration
+
+Do not create a second parallel context or error model if existing project contracts already exist.
+
+========================================================
+4. API
+========================================================
+
+Implement exactly the eight approved endpoints:
+
+- A1–A5
+- B1–B3
+
+For each endpoint verify:
+
+- final mounted path
+- HTTP method
+- authentication
+- authorization
+- tenant behavior
+- request schema
+- response schema
+- error model
+- idempotency where required
+- OpenAPI registration
+
+Do not add speculative endpoints.
+
+========================================================
+5. SEED DATA
+========================================================
+
+Add only approved WP-01 room-template catalog seed data.
+
+Requirements:
+
+- deterministic
+- idempotent
+- no duplicate records
+- no fabricated external assets
+- compatible with the five-table schema
+- safe to rerun
+
+========================================================
+6. FRONTEND
+========================================================
+
+Complete only the approved WP-01 UI.
+
+Admin:
+
+- list
+- search
+- filters
+- sorting
+- pagination
+- create
+- edit
+- archive
+- restore
+- duplicate
+- version history
+- metadata preview
+- detail view
+
+Customer/public:
+
+- browse catalog
+- search
+- filters
+- sorting
+- pagination
+- template detail
+
+Reuse existing UI patterns and route wiring.
+
+Do not implement room design sessions or rendering actions.
+
+========================================================
+7. TESTING
+========================================================
+
+Add and run:
+
+- migration tests
+- repository tests
+- service tests
+- API tests
+- authorization tests
+- tenant isolation tests
+- RLS tests
+- seed idempotency tests
+- frontend component tests where the project supports them
+- targeted regression suites
+
+Clearly separate:
+
+- new failures
+- pre-existing failures
+- environment-blocked checks
+
+Do not claim full regression success unless actually run.
+
+========================================================
+8. DOCUMENTATION
+========================================================
+
+Create or complete:
+
+docs/wp01-room-template-library.md
+
+Include:
+
+- scope
+- architecture
+- five tables
+- eight endpoints
+- permissions
+- RLS
+- tenant rules
+- seed data
+- admin workflow
+- customer workflow
+- tests
+- known limitations
+- excluded WP-02+ functionality
+
+========================================================
+9. FINAL VALIDATION
+========================================================
+
+Verify:
+
+- no WP-02+ code added
+- no rendering code added
+- no furniture code added
+- no design-session code added
+- no duplicate architecture introduced
+- migration files match schema
+- route paths match mount registry
+- OpenAPI matches implementation
+- frontend routes resolve
+- application build status
+- targeted test status
+- git status
+- changed file inventory
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Files created
+2. Files modified
+3. Migration filename
+4. Tables created
+5. Endpoints implemented
+6. Seed records added
+7. UI pages/components added
+8. Tests added
+9. Test results
+10. Build results
+11. Pre-existing failures
+12. Security and RLS verification
+13. Tenant isolation verification
+14. Known limitations
+15. Git status
+16. Commit SHA, if committed
+
+Use exactly one verdict:
+
+A. WP-01 COMPLETE
+B. WP-01 COMPLETE WITH OBSERVATIONS
+C. WP-01 INCOMPLETE
+D. WP-01 BLOCKED
+
+STOP.
+
+Do NOT begin WP-02.
+Wait for explicit approval.

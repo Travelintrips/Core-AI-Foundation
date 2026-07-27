@@ -1,0 +1,342 @@
+MASTER TASK — PHASE 6
+WP-01 — ROOM TEMPLATE LIBRARY
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Baseline:
+material-v5.0.1
+
+Branch:
+feature/phase6-wp01-room-template-library
+
+========================================================
+OBJECTIVE
+========================================================
+
+Implement the Room Template Library defined in the approved
+Phase 6 Design Sprint.
+
+This is the FIRST implementation work package.
+
+All implementation must follow the approved architecture.
+
+Do NOT redesign the architecture.
+
+Do NOT implement WP-02 or later.
+
+========================================================
+IMPLEMENTATION RULES
+========================================================
+
+Implement ONLY WP-01.
+
+No rendering engine.
+
+No furniture placement engine.
+
+No AI composition engine.
+
+No moodboard generation.
+
+No rendering pipeline.
+
+No export engine.
+
+Only the Room Template Library foundation.
+
+========================================================
+SCOPE
+========================================================
+
+Implement:
+
+Room Template domain
+
+Room Type
+
+Room Style
+
+Room Theme
+
+Room Category
+
+Room Size Profile
+
+Room Template Version
+
+Room Template Metadata
+
+Template Asset References
+
+Template Validation
+
+Template Repository
+
+Template Service
+
+Template REST API
+
+Admin CRUD
+
+Public Read API
+
+Search
+
+Filtering
+
+Pagination
+
+Sorting
+
+Soft Delete
+
+Version History
+
+Audit Trail
+
+========================================================
+DATABASE
+========================================================
+
+Create only the tables required for WP-01.
+
+Follow the approved database blueprint.
+
+Hand-written SQL migrations only.
+
+Do NOT use drizzle-kit push.
+
+Implement:
+
+Indexes
+
+Foreign keys
+
+Audit fields
+
+Soft delete
+
+Version fields
+
+Created/Updated timestamps
+
+RLS according to approved blueprint.
+
+========================================================
+BACKEND
+========================================================
+
+Implement:
+
+Repository layer
+
+Service layer
+
+Validation layer
+
+REST controllers
+
+DTOs
+
+Error model
+
+Authorization
+
+Search service
+
+Filtering service
+
+Pagination
+
+Version service
+
+========================================================
+FRONTEND
+========================================================
+
+Implement:
+
+Admin Room Template Management
+
+Create
+
+Edit
+
+Archive
+
+Restore
+
+Duplicate
+
+Version History
+
+Search
+
+Filters
+
+Sorting
+
+Preview metadata
+
+Template detail page
+
+Responsive UI
+
+========================================================
+API
+========================================================
+
+Implement ONLY the endpoints defined for WP-01.
+
+Follow the approved API Blueprint exactly.
+
+Support:
+
+Validation
+
+Idempotency
+
+Audit logging
+
+Error consistency
+
+========================================================
+SECURITY
+========================================================
+
+Implement:
+
+RLS migration (v14)
+
+Tenant isolation
+
+Admin permissions
+
+Read-only public endpoints where approved
+
+Audit logging
+
+No privilege escalation
+
+========================================================
+TESTING
+========================================================
+
+Create:
+
+Unit tests
+
+Repository tests
+
+Service tests
+
+API tests
+
+Permission tests
+
+RLS tests
+
+Migration tests
+
+Regression tests
+
+Target:
+
+100% pass
+
+No regression.
+
+========================================================
+DOCUMENTATION
+========================================================
+
+Create:
+
+docs/wp01-room-template-library.md
+
+Include:
+
+Architecture
+
+Tables
+
+API
+
+Permissions
+
+RLS
+
+Examples
+
+Known limitations
+
+========================================================
+DELIVERABLES
+========================================================
+
+Provide:
+
+Files created
+
+Files modified
+
+Migration files
+
+API list
+
+Tables
+
+Tests added
+
+Coverage
+
+Performance observations
+
+Risks
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use exactly one verdict.
+
+A.
+WP-01 COMPLETE
+
+Room Template Library fully implemented.
+
+Regression clean.
+
+Ready for WP-02.
+
+--------------------------------------------------------
+
+B.
+WP-01 COMPLETE WITH OBSERVATIONS
+
+Minor issues remain but no blockers.
+
+--------------------------------------------------------
+
+C.
+WP-01 BLOCKED
+
+Dependency missing.
+
+--------------------------------------------------------
+
+D.
+WP-01 FAILED
+
+Regression or architecture violation detected.
+
+========================================================
+
+AFTER COMPLETION
+
+STOP.
+
+Do NOT begin WP-02.
+
+Wait for explicit approval.

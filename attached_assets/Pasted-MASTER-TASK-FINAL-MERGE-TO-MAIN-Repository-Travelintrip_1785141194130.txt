@@ -1,0 +1,209 @@
+MASTER TASK — FINAL MERGE TO MAIN
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Source:
+
+integration/material-v5-release
+
+Verified RC commit:
+
+66d0f2a
+
+Target:
+
+main
+
+This task is RELEASE EXECUTION ONLY.
+
+Do NOT implement new features.
+
+Do NOT refactor.
+
+Do NOT change business logic.
+
+Only perform the approved release.
+
+========================================================
+1. PRE-MERGE VERIFICATION
+========================================================
+
+Fetch latest remote.
+
+Verify:
+
+origin/main
+
+origin/integration/material-v5-release
+
+Ensure:
+
+working tree clean
+
+latest commits fetched
+
+========================================================
+2. MERGE PREVIEW
+========================================================
+
+Run merge preview.
+
+Identify conflicts.
+
+Resolve ONLY:
+
+.replit
+
+pnpm-lock.yaml
+
+route registrations
+
+documentation
+
+memory files
+
+Do NOT modify business logic.
+
+========================================================
+3. VERIFY AFTER MERGE
+========================================================
+
+Run:
+
+TypeScript
+
+API build
+
+Frontend build
+
+Phase 5 tests
+
+Smoke test
+
+Confirm:
+
+No new failures.
+
+========================================================
+4. CREATE RELEASE TAG
+========================================================
+
+Create tag:
+
+material-v5.0.0
+
+Include release message summarizing:
+
+- Controlled Import
+- Human Review
+- Duplicate Resolution
+- Audit Trail
+- Asset Pipeline
+- Material Intelligence integration
+
+========================================================
+5. PUSH
+========================================================
+
+Push:
+
+main
+
+and
+
+material-v5.0.0 tag
+
+Verify:
+
+remote main
+
+remote tag
+
+========================================================
+6. POST-MERGE VALIDATION
+========================================================
+
+Confirm:
+
+main builds successfully
+
+main boots successfully
+
+migration already applied
+
+no runtime warnings
+
+========================================================
+7. FINAL REPORT
+========================================================
+
+Provide:
+
+Merge commit SHA
+
+Tag SHA
+
+Merge conflicts encountered
+
+How each conflict was resolved
+
+Build summary
+
+Regression summary
+
+Smoke test summary
+
+Release tag verification
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use exactly one verdict.
+
+A.
+RELEASE COMPLETED
+
+Merge successful
+
+Tag created
+
+Push verified
+
+Build clean
+
+Smoke test clean
+
+--------------------------------------------------------
+
+B.
+RELEASE COMPLETED WITH MINOR OBSERVATIONS
+
+Merge successful
+
+Only cosmetic observations remain
+
+--------------------------------------------------------
+
+C.
+MERGE FAILED
+
+Blocking conflict encountered
+
+--------------------------------------------------------
+
+D.
+RELEASE ABORTED
+
+Critical issue discovered
+
+========================================================
+
+After completion:
+
+STOP.
+
+Do NOT start Phase 6 automatically.
+
+Wait for explicit approval before beginning the next development phase.

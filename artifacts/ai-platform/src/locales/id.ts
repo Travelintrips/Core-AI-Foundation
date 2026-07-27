@@ -49,6 +49,7 @@ export const id = {
       templateMarketplace:  "Marketplace Template",
       templateEngine:       "Mesin Template",
       designTemplates:      "Template Desain",
+      roomTemplates:        "Template Ruangan",
       designStudio:         "Studio Desain",
       exportWorkspace:      "Ekspor Workspace",
       templateLibrary:      "Perpustakaan Template",

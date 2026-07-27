@@ -1,0 +1,182 @@
+RESUME TASK — WP-01 CUSTOMER CATALOG FIX & FINAL REPORT
+
+Resume from the current workspace.
+
+Do NOT repeat previous exploration.
+Do NOT redesign WP-01.
+Do NOT implement WP-02 or later.
+
+Current verified state:
+
+- A1–A5 pass
+- PATCH pass
+- restore pass
+- duplicate pass
+- B1–B3 pass
+- unauthorized admin requests correctly return 401
+- seed data exists:
+  - 8 room types
+  - 20 styles
+  - 15 themes
+  - 10 templates
+- API build and route registration are working
+- customer portal currently returns 401 because it calls an admin-only room-template endpoint
+
+OBJECTIVE
+
+Fix only the customer catalog API wiring, finish RLS verification, run final validation, and produce the WP-01 final report.
+
+1. CUSTOMER PORTAL FIX
+
+Find the customer/public Room Template Catalog data client.
+
+Replace any use of admin-only A-group endpoints with the approved public B1–B3 endpoints.
+
+Verify:
+
+- customer catalog list uses public endpoint
+- customer template detail uses public endpoint
+- room type/style/theme filters use public catalog data
+- no ADMIN_API_KEY is exposed to frontend
+- no admin-only mutation endpoint is called by customer UI
+- no admin controls appear in customer UI
+
+Do not weaken backend authentication.
+
+2. CUSTOMER UI VALIDATION
+
+Verify in browser:
+
+- customer catalog route loads without authentication error
+- template cards render
+- template detail opens
+- search works
+- filters work
+- sorting works
+- pagination works
+- empty state works
+- error state works
+
+Capture screenshot evidence if browser tooling is available.
+
+3. ADMIN UI REGRESSION
+
+Verify:
+
+- admin list still loads
+- create works
+- edit works
+- archive works
+- restore works
+- duplicate works
+- version history remains accessible
+- admin routes still reject unauthenticated access
+
+4. RLS VERIFICATION
+
+Complete direct database verification for all five WP-01 tables.
+
+Report:
+
+- table name
+- RLS enabled
+- FORCE RLS status
+- policy names
+- policy roles
+- allowed operations
+- tenant condition
+- service-role behavior
+- anonymous behavior
+- authenticated/admin behavior
+
+Do not infer results from migration text only if runtime database access is available.
+
+5. FINAL TESTS
+
+Run:
+
+- room-template targeted tests
+- API authorization tests
+- tenant isolation tests
+- RLS tests
+- seed idempotency test
+- frontend typecheck/build
+- API build
+- relevant regression suites
+
+Separate:
+
+- new failures
+- pre-existing failures
+- environment-blocked checks
+
+6. DOCUMENTATION
+
+Update:
+
+docs/wp01-room-template-library.md
+
+Add:
+
+- corrected customer/public endpoint usage
+- final seed counts
+- final smoke-test matrix
+- RLS verification
+- admin/customer UI validation
+- known limitations
+
+7. SCOPE AUDIT
+
+Confirm no implementation exists for:
+
+- Furniture Library
+- Placement Engine
+- Layout Constraint Engine
+- AI Design Composer
+- Moodboard Generator
+- Rendering Pipeline
+- Design Sessions
+- Export Engine
+
+8. COMMIT
+
+If all checks pass:
+
+- commit only WP-01 changes
+- do not include unrelated .replit or upload artifacts
+- do not merge to main
+- report commit SHA
+
+FINAL REPORT
+
+Provide:
+
+1. Current branch
+2. Files created
+3. Files modified
+4. Migration filename
+5. Five tables
+6. Eight approved endpoints
+7. Complete smoke-test results
+8. Seed counts and idempotency
+9. Admin UI status
+10. Customer UI status
+11. RLS results
+12. Tenant isolation results
+13. Test results
+14. Build results
+15. Pre-existing failures
+16. Known limitations
+17. Git status
+18. Commit SHA
+
+Use exactly one verdict:
+
+A. WP-01 COMPLETE
+B. WP-01 COMPLETE WITH OBSERVATIONS
+C. WP-01 INCOMPLETE
+D. WP-01 BLOCKED
+
+STOP.
+
+Do NOT start WP-02.

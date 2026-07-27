@@ -1,0 +1,214 @@
+MASTER TASK — PROJECT GOVERNANCE FOUNDATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Release:
+
+material-v5.0.0
+
+========================================================
+OBJECTIVE
+========================================================
+
+Material Phase 5 is officially complete.
+
+Before any Phase 6 implementation begins, establish long-term project governance documentation.
+
+No feature development.
+
+No code changes.
+
+No migrations.
+
+No business logic modifications.
+
+Only documentation and repository governance.
+
+========================================================
+1. CREATE CHANGELOG
+========================================================
+
+Create:
+
+CHANGELOG.md
+
+Follow:
+
+Keep a Changelog format.
+
+Include:
+
+v5.0.0
+
+Summary
+
+Major features
+
+Architecture
+
+Security
+
+Migration
+
+Testing
+
+Known limitations
+
+========================================================
+2. CREATE RELEASE HISTORY
+========================================================
+
+Create:
+
+docs/release-history.md
+
+Document:
+
+All completed releases
+
+Tag
+
+Date
+
+Summary
+
+Major changes
+
+Migration
+
+Regression status
+
+========================================================
+3. CREATE ARCHITECTURE DECISION RECORDS
+========================================================
+
+Create:
+
+docs/adr/
+
+Add ADRs for:
+
+Controlled Import
+
+Human Review
+
+Duplicate Resolution
+
+Asset Storage
+
+Material Intelligence
+
+Migration Strategy
+
+Explain:
+
+Context
+
+Decision
+
+Alternatives
+
+Consequences
+
+========================================================
+4. CREATE ENGINEERING ROADMAP
+========================================================
+
+Create:
+
+docs/engineering-roadmap.md
+
+Include:
+
+Completed phases
+
+Current architecture
+
+Upcoming phases
+
+Dependencies
+
+Long-term vision
+
+========================================================
+5. CREATE PHASE 6 ENTRY CHECKLIST
+========================================================
+
+Create:
+
+docs/phase6-entry-checklist.md
+
+Checklist must include:
+
+Repository clean
+
+Release tagged
+
+Regression stable
+
+Backlog approved
+
+Architecture approved
+
+Security review complete
+
+Documentation complete
+
+========================================================
+6. FINAL REPORT
+========================================================
+
+Provide:
+
+Documents created
+
+Repository governance status
+
+Remaining documentation gaps
+
+Recommendations before Phase 6
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use one verdict:
+
+A.
+PROJECT GOVERNANCE COMPLETE
+
+Repository documentation is complete.
+
+Ready to begin Phase 6.
+
+--------------------------------------------------------
+
+B.
+PROJECT GOVERNANCE COMPLETE WITH MINOR OBSERVATIONS
+
+Only cosmetic documentation improvements remain.
+
+--------------------------------------------------------
+
+C.
+BLOCKED
+
+Required documentation missing.
+
+--------------------------------------------------------
+
+D.
+FAILED
+
+Major inconsistency discovered.
+
+========================================================
+
+STOP.
+
+Do NOT create Phase 6 branches.
+
+Do NOT implement Phase 6.
+
+Wait for explicit approval before starting Phase 6.

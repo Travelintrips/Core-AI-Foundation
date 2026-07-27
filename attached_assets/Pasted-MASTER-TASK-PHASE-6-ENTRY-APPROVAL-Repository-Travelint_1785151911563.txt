@@ -1,0 +1,211 @@
+MASTER TASK — PHASE 6 ENTRY APPROVAL
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Release:
+material-v5.0.0
+
+Current Status:
+
+PRE-PHASE 6 READINESS
+=
+CONDITIONAL READY
+
+========================================================
+OBJECTIVE
+========================================================
+
+Close the remaining governance gates before Phase 6 implementation begins.
+
+DO NOT implement Phase 6.
+
+DO NOT modify existing business logic.
+
+DO NOT create new migrations.
+
+This task is approval and security verification only.
+
+========================================================
+REMAINING GATES
+========================================================
+
+Only these two items remain:
+
+1.
+
+Product Owner Approval
+
+2.
+
+Supabase RLS Verification
+
+Nothing else.
+
+========================================================
+1. PRODUCT OWNER APPROVAL
+========================================================
+
+Review:
+
+docs/material-phase6-backlog.md
+
+Verify:
+
+Must Have
+
+Should Have
+
+Could Have
+
+Future
+
+Confirm:
+
+Priority
+
+Scope
+
+Dependencies
+
+Estimated complexity
+
+Business value
+
+Mark every item as:
+
+Approved
+
+Deferred
+
+Rejected
+
+Needs clarification
+
+Produce:
+
+Phase 6 Approved Scope
+
+========================================================
+2. RLS SECURITY REVIEW
+========================================================
+
+Audit:
+
+ai_platform.material_import_staging
+
+ai_platform.material_import_audit
+
+Verify:
+
+SELECT policies
+
+INSERT policies
+
+UPDATE policies
+
+DELETE policies
+
+Service Role behavior
+
+Authenticated user behavior
+
+Anonymous behavior
+
+Owner/Admin behavior
+
+Confirm:
+
+Least privilege
+
+No privilege escalation
+
+No unintended public access
+
+No write access for unauthorized roles
+
+Document every policy.
+
+========================================================
+3. SECURITY REPORT
+========================================================
+
+Produce:
+
+Current RLS policy
+
+Risk assessment
+
+Recommended improvements
+
+If changes are needed:
+
+Do NOT implement them.
+
+Document them for approval.
+
+========================================================
+4. PHASE 6 ENTRY DECISION
+========================================================
+
+Provide:
+
+Repository readiness
+
+Governance readiness
+
+Security readiness
+
+Outstanding risks
+
+Recommendation
+
+========================================================
+FINAL VERDICT
+========================================================
+
+Use exactly one verdict.
+
+A.
+PHASE 6 APPROVED
+
+Product Owner approval complete.
+
+RLS verified.
+
+Repository ready.
+
+--------------------------------------------------------
+
+B.
+PHASE 6 APPROVED WITH OBSERVATIONS
+
+Minor documentation or governance observations remain.
+
+--------------------------------------------------------
+
+C.
+PHASE 6 NOT APPROVED
+
+One gate still incomplete.
+
+--------------------------------------------------------
+
+D.
+PHASE 6 BLOCKED
+
+Critical security issue discovered.
+
+========================================================
+
+AFTER COMPLETION
+
+If verdict is A or B:
+
+STOP.
+
+Wait for explicit instruction before creating:
+
+feature/phase6-room-template-library
+
+Do NOT begin implementation automatically.

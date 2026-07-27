@@ -1,0 +1,278 @@
+MASTER TASK — PRE-PHASE 6 READINESS GATE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Release:
+material-v5.0.0
+
+Current main:
+d330d84
+
+========================================================
+OBJECTIVE
+========================================================
+
+Material Phase 5 is officially complete.
+
+Before any Phase 6 implementation begins, complete every remaining operational prerequisite.
+
+NO new features.
+
+NO business logic.
+
+NO architecture changes.
+
+NO schema redesign.
+
+This phase is operational readiness only.
+
+========================================================
+OUTSTANDING ITEMS
+========================================================
+
+Only the following items may be addressed:
+
+1.
+docs/production-migration-runbook.md
+
+2.
+Active Replit Production Deployment registration
+
+3.
+Privileged Production Smoke Test
+
+4.
+Final material_categories hierarchy validation
+
+Nothing else.
+
+========================================================
+1. PRODUCTION MIGRATION RUNBOOK
+========================================================
+
+Create:
+
+docs/production-migration-runbook.md
+
+Include:
+
+Purpose
+
+Supported environments
+
+Migration order
+
+Pre-flight checklist
+
+Backup procedure
+
+Rollback procedure
+
+Verification checklist
+
+Health checks
+
+Failure scenarios
+
+Recovery steps
+
+Post-migration validation
+
+Production approval workflow
+
+Required sign-offs
+
+The runbook must be executable by an engineer unfamiliar with the project.
+
+========================================================
+2. ACTIVE DEPLOYMENT REGISTRATION
+========================================================
+
+Document:
+
+Production deployment
+
+Staging deployment
+
+Development deployment
+
+Include:
+
+Repository
+
+Branch
+
+Deployment target
+
+URL
+
+Responsible owner
+
+Current release tag
+
+Environment variables required
+
+Deployment verification procedure
+
+========================================================
+3. PRIVILEGED PRODUCTION SMOKE TEST
+========================================================
+
+Prepare (do not invent results).
+
+Create a smoke-test checklist covering:
+
+Authentication
+
+Authorization
+
+Material Search
+
+Material Import
+
+Duplicate Resolution
+
+Asset Upload
+
+Audit Trail
+
+Material Intelligence
+
+Scheduler
+
+Workers
+
+Health endpoint
+
+Rollback verification
+
+Record:
+
+Expected result
+
+Observed result
+
+Pass / Fail
+
+Unknown
+
+Do not mark unknown items as passed.
+
+========================================================
+4. MATERIAL CATEGORY VALIDATION
+========================================================
+
+Audit the current material_categories hierarchy.
+
+Verify:
+
+No duplicate nodes
+
+No orphan categories
+
+Parent-child integrity
+
+Depth consistency
+
+Naming consistency
+
+Slug consistency
+
+Search compatibility
+
+Future Room Template compatibility
+
+Document every finding.
+
+If changes are recommended, place them in a backlog only.
+
+Do NOT modify data.
+
+========================================================
+5. PHASE 6 ENTRY REVIEW
+========================================================
+
+Review:
+
+docs/phase6-entry-checklist.md
+
+Update checklist status.
+
+Every item must be:
+
+Complete
+
+Incomplete
+
+Blocked
+
+Not Applicable
+
+Explain every incomplete item.
+
+========================================================
+6. FINAL READINESS REPORT
+========================================================
+
+Provide:
+
+Production Runbook status
+
+Deployment status
+
+Smoke Test readiness
+
+Category hierarchy assessment
+
+Outstanding risks
+
+Recommended next step
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use exactly one verdict.
+
+A.
+PHASE 6 READY
+
+All operational prerequisites complete.
+
+Repository ready for Phase 6.
+
+--------------------------------------------------------
+
+B.
+PHASE 6 READY WITH MINOR OBSERVATIONS
+
+Minor operational tasks remain but are non-blocking.
+
+--------------------------------------------------------
+
+C.
+PHASE 6 NOT READY
+
+One or more operational blockers remain.
+
+--------------------------------------------------------
+
+D.
+PHASE 6 BLOCKED
+
+Critical prerequisite missing.
+
+========================================================
+
+AFTER COMPLETION
+
+STOP.
+
+Do NOT create Phase 6 code.
+
+Do NOT create Phase 6 branches.
+
+Wait for explicit approval before beginning:
+
+Phase 6 — Room Design Template Library.

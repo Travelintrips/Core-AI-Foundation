@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { getMaterialSwatch } from "./materialColorSwatch";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -342,13 +343,20 @@ export function MaterialSelectorDialog({ open, onOpenChange, initialCategory, on
                       </span>
                     )}
 
-                    {/* Thumbnail / swatch placeholder */}
-                    <div className="w-full h-16 rounded-lg bg-gradient-to-br from-muted to-muted/60 border border-border/30 overflow-hidden flex items-center justify-center">
+                    {/* Thumbnail / swatch */}
+                    <div className="w-full h-16 rounded-lg border border-border/30 overflow-hidden flex items-center justify-center relative">
                       {m.thumbnailUrl ? (
                         <img src={m.thumbnailUrl} alt={m.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground font-mono">{m.category}</span>
-                      )}
+                      ) : (() => {
+                        const swatch = getMaterialSwatch(m.color, m.materialType, m.finish);
+                        return (
+                          <div className="w-full h-full flex items-center justify-center" style={{ background: swatch.background }}>
+                            {swatch.patternHint && (
+                              <span className="text-base opacity-40 select-none">{swatch.patternHint}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Name */}

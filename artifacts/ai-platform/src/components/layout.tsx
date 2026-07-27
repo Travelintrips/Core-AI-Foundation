@@ -124,6 +124,7 @@ const NAV_SECTIONS_DEF = [
   {
     sectionKey: "creative",
     items: [
+      { href: "/room-templates",           tKey: "nav.items.roomTemplates",        icon: LayoutGrid },
       { href: "/design-studio",           tKey: "nav.items.designStudio",         icon: LayoutTemplate },
       { href: "/export-workspace",        tKey: "nav.items.exportWorkspace",      icon: FileStack },
       { href: "/design-templates",        tKey: "nav.items.templateLibrary",      icon: FileStack },

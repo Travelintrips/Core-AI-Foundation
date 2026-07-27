@@ -18,7 +18,7 @@
 
 import { randomUUID } from "crypto";
 import type { RequestContext } from "../../security/requestContext.js";
-import type { MaterialAssignment, MaterialAssignmentValidationResult } from "./types.js";
+import type { MaterialAssignment, MaterialAssignmentValidationResult, MaterialPropertyValue } from "./types.js";
 import { getMaterial, MaterialNotFoundError, MaterialAccessDeniedError } from "./materialLibraryService.js";
 import { materialCategoryRegistry } from "./categoryRegistry.js";
 import { validateAllProperties } from "./propertySchema.js";
@@ -123,7 +123,7 @@ export function validateAssignment(
     const defs = materialCategoryRegistry.resolvePropertyDefinitions(material.categoryId);
     const result = validateAllProperties(
       defs,
-      input.overrideProperties as Record<string, unknown>,
+      input.overrideProperties as unknown as Readonly<Record<string, MaterialPropertyValue>>,
     );
     if (!result.valid) errors.push(...result.errors);
   }
@@ -160,7 +160,7 @@ export function createAssignment(
     targetArtifactId: input.targetArtifactId.trim(),
     targetElementId: input.targetElementId ?? null,
     targetRegionId: input.targetRegionId ?? null,
-    overrideProperties: (input.overrideProperties ?? {}) as Record<string, unknown>,
+    overrideProperties: (input.overrideProperties ?? {}) as unknown as Readonly<Record<string, MaterialPropertyValue>>,
     assignmentSource: input.assignmentSource ?? "user",
     capability: input.capability,
     assignedAt: now(),

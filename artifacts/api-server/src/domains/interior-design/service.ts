@@ -482,9 +482,26 @@ function stepsToInitialDraftData(steps: Array<{ stepName: string; output: unknow
     visualConcept = conceptOut;
   } else if (conceptOut && typeof conceptOut === "object") {
     const co = conceptOut as Record<string, unknown>;
-    visualConcept = typeof co["visualConcept"] === "string" ? co["visualConcept"]
-                  : typeof co["concept"]       === "string" ? co["concept"]
-                  : JSON.stringify(co).slice(0, 1000);
+    if (typeof co["visualConcept"] === "string") {
+      visualConcept = co["visualConcept"];
+    } else if (typeof co["concept"] === "string") {
+      visualConcept = co["concept"];
+    } else if (co["design_concept"] && typeof co["design_concept"] === "object") {
+      // Interior design agent format (interiorDesignAiService.ts Agent 1)
+      const dc = co["design_concept"] as Record<string, unknown>;
+      const cc = co["color_concept"] as Record<string, unknown> | undefined;
+      const lines: string[] = [];
+      if (dc["title"])            lines.push(String(dc["title"]));
+      if (dc["narrative"])        lines.push(String(dc["narrative"]));
+      if (dc["design_philosophy"]) lines.push(`Design philosophy: ${String(dc["design_philosophy"])}`);
+      if (dc["emotional_intent"]) lines.push(`Emotional intent: ${String(dc["emotional_intent"])}`);
+      if (cc?.["palette_mood"])   lines.push(`Colour mood: ${String(cc["palette_mood"])}`);
+      if (co["client_lifestyle_alignment"]) lines.push(String(co["client_lifestyle_alignment"]));
+      visualConcept = lines.join("\n\n") || null;
+    } else {
+      // Unknown format — store a truncated JSON so it is not silently lost
+      visualConcept = JSON.stringify(co).slice(0, 1000);
+    }
   }
 
   return { spacePlan, materials, furniture: designCopy, lighting: designCopy, visualConcept };
