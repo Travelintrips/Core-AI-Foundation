@@ -50,6 +50,7 @@ export const en = {
       templateEngine:       "Template Engine",
       designTemplates:      "Design Templates",
       roomTemplates:        "Room Templates",
+      interiorDesign:       "Interior Design",
       designStudio:         "Design Studio",
       exportWorkspace:      "Export Workspace",
       templateLibrary:      "Template Library",

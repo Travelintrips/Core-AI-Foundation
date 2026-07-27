@@ -50,6 +50,7 @@ export const id = {
       templateEngine:       "Mesin Template",
       designTemplates:      "Template Desain",
       roomTemplates:        "Template Ruangan",
+      interiorDesign:       "Desain Interior",
       designStudio:         "Studio Desain",
       exportWorkspace:      "Ekspor Workspace",
       templateLibrary:      "Perpustakaan Template",
