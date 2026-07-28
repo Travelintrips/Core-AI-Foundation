@@ -212,3 +212,96 @@ The following are intentionally NOT implemented in WP-02:
 
 Any downstream work depending on `furniture_items` data for placement or
 rendering belongs entirely in WP-03.
+
+---
+
+## Validation Results (Phase 6 Final — 2026-07-28)
+
+### Build & Typecheck
+| Step | Result |
+|---|---|
+| API server build (`esbuild`) | ✅ PASS — `dist/index.mjs` 8.0 MB |
+| API server starts, port 8080 | ✅ PASS |
+| Customer portal typecheck | ✅ PASS |
+| Admin platform typecheck | ✅ PASS |
+
+### Database (DEV — Supabase `ai_platform` schema)
+| Table | Exists | Seed rows |
+|---|---|---|
+| `furniture_categories` | ✅ | 12 |
+| `furniture_brands` | ✅ | 8 |
+| `furniture_collections` | ✅ | 10 |
+| `furniture_tags` | ✅ | 6 |
+| `furniture_items` | ✅ | 20 |
+| `furniture_assets` | ✅ | 0 (no images seeded) |
+| `furniture_item_tags` | ✅ | 0 (no tag assignments seeded) |
+
+Indexes: 24 total (`idx_furniture_*`), matching migration DDL.
+
+### RLS Matrix
+| Table | RLS | FORCE | Policy | USING |
+|---|---|---|---|---|
+| `furniture_categories` | ✅ | ✗ | `allow_authenticated` | `true` |
+| `furniture_brands` | ✅ | ✗ | `allow_authenticated` | `true` |
+| `furniture_collections` | ✅ | ✗ | `allow_authenticated` | `true` |
+| `furniture_items` | ✅ | ✅ | `tenant_isolation` | `tenant_id IS NULL OR tenant_id = app.current_tenant_id` |
+| `furniture_assets` | ✅ | ✗ | `allow_authenticated` | `true` |
+| `furniture_tags` | ✅ | ✗ | `allow_authenticated` | `true` |
+| `furniture_item_tags` | ✅ | ✗ | `allow_authenticated` | `true` |
+
+**Limitation:** Only superuser (service-role) connection was available; behavioral row-isolation was validated via unit tests and policy inspection only.
+
+### Seed Idempotency
+- First run: inserts 12+8+10+6+20 rows.
+- Second run: `{"categories":0,"brands":0,"collections":0,"tags":0,"items":0}` — confirmed zero new inserts.
+
+### API Smoke Tests
+| Method | Path | Auth | Expected | Observed | Result |
+|---|---|---|---|---|---|
+| GET | `/ai/furniture-catalog/items` | None | 200 | 200 | ✅ |
+| GET | `/ai/furniture-catalog/categories` | None | 200 | 200 | ✅ |
+| GET | `/ai/furniture-catalog/brands` | None | 200 | 200 | ✅ |
+| GET | `/ai/furniture-catalog/collections` | None | 200 | 200 | ✅ |
+| GET | `/ai/furniture-catalog/tags` | None | 200 | 200 | ✅ |
+| GET | `/ai/furniture-library/items` | None | 401 | 401 | ✅ |
+| GET | `/ai/furniture-library/categories` | None | 401 | 401 | ✅ |
+| POST | `/ai/furniture-library/items` | None | 401 | 401 | ✅ |
+| GET | `/ai/furniture-library/items` | Admin key | 200 | 200 | ✅ |
+| GET | `/ai/furniture-library/categories` | Admin key | 200 | 200 | ✅ |
+| GET | `/ai/furniture-library/brands` | Admin key | 200 | 200 | ✅ |
+| GET | `/ai/furniture-library/collections` | Admin key | 200 | 200 | ✅ |
+| GET | `/ai/furniture-library/tags` | Admin key | 200 | 200 | ✅ |
+| POST | `/ai/furniture-library/items` | Admin key | 201 | 201 | ✅ |
+| GET | `/ai/furniture-library/items/:id` | Admin key | 200 | 200 | ✅ |
+| PATCH | `/ai/furniture-library/items/:id` | Admin key | 200 | 200 | ✅ |
+| POST | `/ai/furniture-library/items/:id/publish` | Admin key | 200 | 200 | ✅ |
+| POST | `/ai/furniture-library/items/:id/archive` | Admin key | 200 | 200 | ✅ |
+| POST | `/ai/furniture-library/items/:id/restore` | Admin key | 200 | 200 | ✅ |
+| POST | `/ai/furniture-library/items/:id/duplicate` | Admin key | 201 | 201 | ✅ |
+| GET | `/ai/furniture-library/items/:id/history` | Admin key | 200 | 200 | ✅ |
+| DELETE | `/ai/furniture-library/items/:id` | Admin key | 200 | 200 | ✅ |
+| Security: admin key in public response | — | — | absent | absent | ✅ |
+
+### Targeted Tests (WP-02)
+- File: `artifacts/api-server/src/__tests__/furniture-library.test.ts`
+- **51 tests, 51 passed, 0 failed**
+- Suites: status transitions, lifecycle state machine, create validation, HTTP codes, auth/prefix, public catalog enforcement, pagination, seed idempotency, tenant isolation, soft delete, WP-01 regression, slug generation.
+
+### Regression Suite
+- Total: 5838 tests across 197 files
+- **5825 passed**
+- **13 pre-existing failures** — all in `src/routes/__tests__/provider-health.test.ts`
+  - Cause: pre-existing mock wiring issue with provider health-check DB calls; unrelated to WP-02 changes.
+  - WP-02 files do not overlap with provider-health routes.
+- **0 WP-02-caused failures**
+
+### Frontend
+| Surface | URL | Result |
+|---|---|---|
+| Customer Portal — Furniture Catalog | `/furniture-catalog` | ✅ Renders 20 items with search, category filter, price tier filter |
+| Customer Portal — No admin controls visible | `/furniture-catalog` | ✅ Confirmed |
+| Admin Platform — `/furniture-library` | `/admin/furniture-library` | ⚠️ Redirects to login (expected — requires internal session) |
+
+### Scope Audit
+- No placement, collision, layout, AI-composition, moodboard, design-session, render, or export code present in WP-02 files — **CLEAN**.
+- WP-01 contracts (room-templates routes/tables): **no overlap detected**.
