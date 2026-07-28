@@ -60,6 +60,9 @@ const InteriorDesignBriefPage   = lazy(() => import('@/pages/interior-design/ind
 const InteriorDesignProjectPage = lazy(() => import('@/pages/interior-design/project'));
 const RoomTemplateBrowserPage   = lazy(() => import('@/pages/room-templates/index'));
 const RoomTemplateDetailPage    = lazy(() => import('@/pages/room-templates/detail'));
+// ── Phase 6 WP-02: Furniture & Object Library ─────────────────────────────
+const FurnitureCatalogPage      = lazy(() => import('@/pages/furniture-catalog/index'));
+const FurnitureCatalogDetailPage = lazy(() => import('@/pages/furniture-catalog/detail'));
 // ── Team 18: Fashion & Apparel Design ─────────────────────────────────────
 const FashionDesignPage          = lazy(() => import('@/pages/fashion-design/index'));
 // ── Team 22: Vendor Directory ────────────────────────────────────────────
@@ -168,6 +171,9 @@ function Router() {
         {/* ── Team 04: Portfolio V2 ───────────────────────────────────── */}
         <Route path="/room-templates/:id" component={RoomTemplateDetailPage} />
         <Route path="/room-templates" component={RoomTemplateBrowserPage} />
+        {/* ── Phase 6 WP-02: Furniture Catalog ───────────────────────── */}
+        <Route path="/furniture-catalog/:id" component={FurnitureCatalogDetailPage} />
+        <Route path="/furniture-catalog" component={FurnitureCatalogPage} />
         <Route path="/interior-design" component={InteriorDesignBriefPage} />
         <Route path="/interior-design/:id" component={InteriorDesignProjectPage} />
         <Route path="/portfolio-v2" component={GalleryV2Page} />

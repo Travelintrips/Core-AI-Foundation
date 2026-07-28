@@ -184,6 +184,14 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   // These always enforce status=published server-side; admin A-routes remain protected.
   { method: "GET",  pattern: /^\/ai\/room-catalog\/templates$/ },
   { method: "GET",  pattern: /^\/ai\/room-catalog\/templates\/[0-9a-f-]+$/ },
+  // Phase 6 WP-02: Furniture & Object Library — public catalog read endpoints.
+  // Admin management routes (/ai/furniture-library/*) are NOT listed here.
+  { method: "GET",  pattern: /^\/ai\/furniture-catalog\/items$/ },
+  { method: "GET",  pattern: /^\/ai\/furniture-catalog\/items\/[0-9a-f-]+$/ },
+  { method: "GET",  pattern: /^\/ai\/furniture-catalog\/categories$/ },
+  { method: "GET",  pattern: /^\/ai\/furniture-catalog\/brands$/ },
+  { method: "GET",  pattern: /^\/ai\/furniture-catalog\/collections$/ },
+  { method: "GET",  pattern: /^\/ai\/furniture-catalog\/tags$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

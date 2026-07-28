@@ -1,0 +1,388 @@
+MASTER TASK — PHASE 6
+WP-02 — FURNITURE & OBJECT LIBRARY
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Baseline:
+material-v6.0.1-wp01
+
+Current Branch:
+main
+
+========================================================
+OBJECTIVE
+========================================================
+
+Implement ONLY WP-02 Furniture & Object Library.
+
+WP-01 is RELEASE LOCKED.
+
+Do NOT modify WP-01 contracts unless absolutely required for
+backward-compatible integration.
+
+Do NOT implement WP-03 or later.
+
+========================================================
+PREPARATION
+========================================================
+
+1.
+
+Create a new branch:
+
+feature/phase6-wp02-furniture-library
+
+Do NOT work directly on main.
+
+========================================================
+SCOPE
+========================================================
+
+Implement ONLY the Furniture & Object Library.
+
+Include:
+
+Furniture Categories
+
+Furniture Types
+
+Furniture Collections
+
+Furniture Styles
+
+Furniture Brands
+
+Furniture Materials
+
+Furniture Finishes
+
+Furniture Colors
+
+Furniture Dimensions
+
+Furniture Metadata
+
+Furniture Assets
+
+Furniture Tags
+
+Furniture Versioning
+
+Furniture Search
+
+Furniture Filtering
+
+Furniture Repository
+
+Furniture Service
+
+Furniture Validation
+
+Furniture REST API
+
+Admin CRUD
+
+Public Catalog
+
+Pagination
+
+Sorting
+
+Soft Delete
+
+Audit Trail
+
+Version History
+
+========================================================
+DO NOT IMPLEMENT
+========================================================
+
+No placement engine
+
+No collision engine
+
+No layout engine
+
+No AI composition
+
+No rendering
+
+No moodboard
+
+No design session
+
+No export
+
+No optimization engine
+
+No WP-03 functionality
+
+========================================================
+DATABASE
+========================================================
+
+Create ONLY the tables defined for WP-02.
+
+Use hand-written SQL migration.
+
+Do NOT use drizzle-kit push.
+
+Implement:
+
+Primary Keys
+
+Foreign Keys
+
+Indexes
+
+Unique Constraints
+
+Audit Fields
+
+Version Fields
+
+Created/Updated timestamps
+
+Soft Delete
+
+RLS following the approved platform pattern.
+
+========================================================
+BACKEND
+========================================================
+
+Implement:
+
+Repository Layer
+
+Service Layer
+
+Validation
+
+DTO
+
+REST Controllers
+
+Search
+
+Filtering
+
+Sorting
+
+Pagination
+
+Versioning
+
+Duplicate
+
+Archive
+
+Restore
+
+Audit Logging
+
+OpenAPI Registration
+
+========================================================
+FRONTEND
+========================================================
+
+Admin:
+
+Furniture Management
+
+Create
+
+Edit
+
+Delete (Soft Delete)
+
+Archive
+
+Restore
+
+Duplicate
+
+Version History
+
+Metadata Preview
+
+Search
+
+Filters
+
+Sorting
+
+Pagination
+
+Customer:
+
+Furniture Catalog
+
+Browse
+
+Search
+
+Filters
+
+Sorting
+
+Pagination
+
+Furniture Detail
+
+========================================================
+SECURITY
+========================================================
+
+Reuse the platform security model.
+
+Implement:
+
+Database RLS
+
+Tenant Isolation where required
+
+Admin Authorization
+
+Public Read Catalog
+
+Audit Logging
+
+No privilege escalation.
+
+========================================================
+TESTING
+========================================================
+
+Create:
+
+Unit Tests
+
+Repository Tests
+
+Service Tests
+
+API Tests
+
+Authorization Tests
+
+RLS Tests
+
+Seed Idempotency Tests
+
+Regression Tests
+
+Target:
+
+100% pass for WP-02 tests.
+
+========================================================
+DOCUMENTATION
+========================================================
+
+Create:
+
+docs/wp02-furniture-library.md
+
+Include:
+
+Architecture
+
+Database
+
+Tables
+
+API
+
+Permissions
+
+RLS
+
+Seed
+
+Search
+
+Filters
+
+Versioning
+
+Known Limitations
+
+Explicit WP-03 Exclusions
+
+========================================================
+DELIVERABLES
+========================================================
+
+Report:
+
+Files Created
+
+Files Modified
+
+Migration Files
+
+Tables
+
+Endpoints
+
+Seed Counts
+
+Frontend Pages
+
+Tests Added
+
+Coverage
+
+Performance Notes
+
+Risks
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use exactly one verdict.
+
+A.
+WP-02 COMPLETE
+
+Furniture Library fully implemented.
+
+Regression clean.
+
+Ready for WP-03.
+
+--------------------------------------------------------
+
+B.
+WP-02 COMPLETE WITH OBSERVATIONS
+
+Minor non-blocking observations remain.
+
+--------------------------------------------------------
+
+C.
+WP-02 BLOCKED
+
+Dependency missing.
+
+--------------------------------------------------------
+
+D.
+WP-02 FAILED
+
+Regression or architecture violation detected.
+
+========================================================
+
+AFTER COMPLETION
+
+STOP.
+
+Do NOT begin WP-03.
+
+Wait for explicit approval.

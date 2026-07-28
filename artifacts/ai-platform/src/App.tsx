@@ -98,6 +98,9 @@ import PackagingDesignPage from "@/pages/packaging-design";
 import MaterialLibraryPage from "@/pages/material-library";
 import RoomTemplatesPage from "@/pages/room-templates/index";
 import RoomTemplateDetailPage from "@/pages/room-templates/detail";
+// ── Phase 6 WP-02: Furniture & Object Library ─────────────────────────────
+import FurnitureLibraryPage from "@/pages/furniture-library/index";
+import FurnitureLibraryDetailPage from "@/pages/furniture-library/detail";
 // ── Phase 5: Controlled Material Import & Human Review ───────────────────
 import MaterialImportReviewPage from "@/pages/material-import-review";
 // ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
@@ -199,6 +202,10 @@ function AdminRouter() {
         <Route path="/room-templates/:id" component={RoomTemplateDetailPage} />
         <Route path="/room-templates" component={RoomTemplatesPage} />
         <Route path="/material-library" component={MaterialLibraryPage} />
+        {/* ── Phase 6 WP-02: Furniture & Object Library ────────────────── */}
+        <Route path="/furniture-library/new" component={FurnitureLibraryDetailPage} />
+        <Route path="/furniture-library/:id" component={FurnitureLibraryDetailPage} />
+        <Route path="/furniture-library" component={FurnitureLibraryPage} />
         {/* ── Phase 5: Controlled Material Import Review ───────────────── */}
         <Route path="/material-import-review" component={MaterialImportReviewPage} />
         {/* ── Team 22: Vendor Ecosystem ───────────────────────────────── */}

@@ -316,6 +316,10 @@ router.use(materialLibraryRouter);
 // Mount before any catch-all routes. B1–B3 (room-types/styles/themes) are
 // public; A1–A5 + admin extensions require the admin key or session.
 router.use(roomTemplatesRouter);
+// ── Phase 6 WP-02: Furniture & Object Library ─────────────────────────────────
+// Admin CRUD under /ai/furniture-library/*; public catalog under
+// /ai/furniture-catalog/* (declared public in adminAuth.ts).
+router.use(furnitureLibraryRouter);
 // ── Interior Design Material Library (Phase 1) ────────────────────────────────
 // Mount Phase 2 before Phase 1's generic /material-library/:id route so
 // /suggestions and /:id/similar are resolved by the owning domain.
