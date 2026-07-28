@@ -1,0 +1,276 @@
+RESUME TASK — WP-02 FURNITURE & OBJECT LIBRARY
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Baseline:
+material-v6.0.1-wp01
+
+Branch:
+feature/phase6-wp02-furniture-library
+
+IMPORTANT
+
+Resume from the CURRENT workspace.
+
+Do NOT restart implementation.
+
+Do NOT redesign WP-02.
+
+Do NOT modify WP-01 except for backward-compatible integration.
+
+Do NOT implement WP-03 or later.
+
+========================================================
+CURRENT VERIFIED STATE
+========================================================
+
+Already completed:
+
+- database schema
+- migration
+- RLS migration
+- repository
+- service
+- routes
+- public route rules
+- frontend pages
+- route wiring
+- tests
+- build started
+
+Known remaining work:
+
+- finish remaining TypeScript cast fixes
+- rerun WP-02 tests
+- verify migration
+- verify RLS
+- verify public endpoints
+- verify admin endpoints
+- verify customer UI
+- documentation
+- commit
+
+Ignore unrelated provider-health failures unless WP-02 introduced them.
+
+========================================================
+PHASE 1 — VERIFY CURRENT WORKSPACE
+========================================================
+
+Report:
+
+- current branch
+- git status
+- files already created
+- migration files
+- frontend pages
+- routes
+- tests
+- documentation status
+
+Do NOT delete or recreate existing work.
+
+========================================================
+PHASE 2 — TYPESCRIPT CLEANUP
+========================================================
+
+Resolve only WP-02 TypeScript errors.
+
+Do NOT modify unrelated modules.
+
+Classify:
+
+- WP-02 errors
+- pre-existing repository errors
+
+========================================================
+PHASE 3 — BUILD VALIDATION
+========================================================
+
+Run:
+
+- lib/db build
+- API build
+- customer portal typecheck
+- admin platform typecheck
+
+Clearly separate:
+
+- new failures
+- pre-existing failures
+
+========================================================
+PHASE 4 — DATABASE
+========================================================
+
+Verify:
+
+- migration applied
+- tables exist
+- indexes
+- foreign keys
+- constraints
+- RLS
+- FORCE RLS where required
+- policies
+- seed
+
+Confirm migration matches schema.
+
+========================================================
+PHASE 5 — API VALIDATION
+========================================================
+
+Smoke-test every approved WP-02 endpoint.
+
+Verify:
+
+Admin:
+
+- list
+- detail
+- create
+- update
+- archive
+- restore
+- duplicate
+
+Public:
+
+- categories
+- catalog
+- detail
+- filters
+
+For each endpoint report:
+
+- method
+- path
+- status
+- result
+
+========================================================
+PHASE 6 — FRONTEND
+========================================================
+
+Verify:
+
+Admin:
+
+- list
+- create
+- edit
+- archive
+- restore
+- duplicate
+- search
+- filter
+- pagination
+
+Customer:
+
+- browse
+- detail
+- cards
+- filters
+- search
+- pagination
+
+========================================================
+PHASE 7 — SECURITY
+========================================================
+
+Verify:
+
+- admin authorization
+- public catalog
+- RLS
+- tenant isolation
+- no admin key exposed
+
+========================================================
+PHASE 8 — TESTS
+========================================================
+
+Run:
+
+- WP-02 targeted tests
+- migration tests
+- repository tests
+- service tests
+- API tests
+- authorization tests
+- RLS tests
+- seed idempotency tests
+
+Separate:
+
+- WP-02 failures
+- pre-existing failures
+
+========================================================
+PHASE 9 — DOCUMENTATION
+========================================================
+
+Create or update:
+
+docs/wp02-furniture-library.md
+
+Include:
+
+- architecture
+- tables
+- API
+- RLS
+- seed
+- permissions
+- frontend
+- known limitations
+- explicit WP-03 exclusions
+
+========================================================
+PHASE 10 — COMMIT
+========================================================
+
+If validation passes:
+
+Create one commit.
+
+Do NOT merge.
+
+Do NOT start WP-03.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Files created
+2. Files modified
+3. Migration file
+4. Tables
+5. Endpoint inventory
+6. Seed counts
+7. RLS verification
+8. Admin UI status
+9. Customer UI status
+10. Test results
+11. Build results
+12. Pre-existing failures
+13. Git status
+14. Commit SHA
+
+Use exactly one verdict:
+
+A. WP-02 COMPLETE
+
+B. WP-02 COMPLETE WITH OBSERVATIONS
+
+C. WP-02 BLOCKED
+
+D. WP-02 FAILED
+
+STOP.
+
+Wait for explicit approval before beginning WP-03.

@@ -107,6 +107,11 @@ export default function FurnitureLibraryPage() {
   const [priceTierFilter, setPriceTier] = useState("all");
   const [page, setPage] = useState(1);
 
+  const apiJson = useCallback(async <T,>(url: string, opts?: RequestInit): Promise<T> => {
+    const res = await apiFetch(url, opts);
+    return res.json() as T;
+  }, [apiFetch]);
+
   const loadItems = useCallback(async () => {
     setLoading(true);
     try {
@@ -121,7 +126,7 @@ export default function FurnitureLibraryPage() {
       if (categoryFilter !== "all") params.set("categoryId", categoryFilter);
       if (priceTierFilter !== "all") params.set("priceTier", priceTierFilter);
 
-      const result = await apiFetch<ListResult>(`/ai/furniture-library/items?${params}`);
+      const result = await apiJson<ListResult>(`/ai/furniture-library/items?${params}`);
       setItems(result.data);
       setPagination(result.pagination);
     } catch (err) {
@@ -133,7 +138,7 @@ export default function FurnitureLibraryPage() {
 
   const loadCategories = useCallback(async () => {
     try {
-      const result = await apiFetch<{ data: FurnitureCategory[] }>("/ai/furniture-library/categories");
+      const result = await apiJson<{ data: FurnitureCategory[] }>("/ai/furniture-library/categories");
       setCategories(result.data);
     } catch {}
   }, [apiFetch]);
@@ -166,7 +171,7 @@ export default function FurnitureLibraryPage() {
 
   const handleSeed = async () => {
     try {
-      const result = await apiFetch<{ ok: boolean; seeded: Record<string, number> }>("/ai/furniture-library/seed", { method: "POST" });
+      const result = await apiJson<{ ok: boolean; seeded: Record<string, number> }>("/ai/furniture-library/seed", { method: "POST" });
       toast({ title: "Seeded", description: `Seeded: ${JSON.stringify(result.seeded)}` });
       loadItems();
     } catch (err: unknown) {

@@ -60,6 +60,11 @@ export default function FurnitureLibraryDetailPage() {
   const { apiFetch } = useAdminApi();
   const { toast } = useToast();
 
+  const apiJson = useCallback(async <T,>(url: string, opts?: RequestInit): Promise<T> => {
+    const res = await apiFetch(url, opts);
+    return res.json() as T;
+  }, [apiFetch]);
+
   const isNew = id === "new";
   const [item, setItem]       = useState<Partial<FurnitureItem>>({
     name: "", nameId: "", description: "", categoryId: "", priceTier: "mid",
@@ -75,9 +80,9 @@ export default function FurnitureLibraryDetailPage() {
   const loadRefs = useCallback(async () => {
     try {
       const [cats, brnds, cols] = await Promise.all([
-        apiFetch<{ data: RefItem[] }>("/ai/furniture-library/categories"),
-        apiFetch<{ data: RefItem[] }>("/ai/furniture-library/brands"),
-        apiFetch<{ data: RefItem[] }>("/ai/furniture-library/collections"),
+        apiJson<{ data: RefItem[] }>("/ai/furniture-library/categories"),
+        apiJson<{ data: RefItem[] }>("/ai/furniture-library/brands"),
+        apiJson<{ data: RefItem[] }>("/ai/furniture-library/collections"),
       ]);
       setCategories(cats.data);
       setBrands(brnds.data);
@@ -90,8 +95,8 @@ export default function FurnitureLibraryDetailPage() {
     setLoading(true);
     try {
       const [data, hist] = await Promise.all([
-        apiFetch<FurnitureItem>(`/ai/furniture-library/items/${id}`),
-        apiFetch<{ data: Record<string, unknown>[] }>(`/ai/furniture-library/items/${id}/history`),
+        apiJson<FurnitureItem>(`/ai/furniture-library/items/${id}`),
+        apiJson<{ data: Record<string, unknown>[] }>(`/ai/furniture-library/items/${id}/history`),
       ]);
       setItem(data);
       setHistory(hist.data);
@@ -115,7 +120,7 @@ export default function FurnitureLibraryDetailPage() {
     setSaving(true);
     try {
       if (isNew) {
-        const created = await apiFetch<FurnitureItem>("/ai/furniture-library/items", {
+        const created = await apiJson<FurnitureItem>("/ai/furniture-library/items", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(item),
@@ -123,7 +128,7 @@ export default function FurnitureLibraryDetailPage() {
         toast({ title: "Created", description: `"${created.name}" created as draft.` });
         navigate(`/furniture-library/${created.id}`);
       } else {
-        const updated = await apiFetch<FurnitureItem>(`/ai/furniture-library/items/${id}`, {
+        const updated = await apiJson<FurnitureItem>(`/ai/furniture-library/items/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(item),
@@ -323,7 +328,7 @@ export default function FurnitureLibraryDetailPage() {
                 <div key={i} className="text-sm flex items-start gap-3 pb-2 border-b last:border-0">
                   <Badge variant="outline" className="shrink-0 text-xs">{String(h["action"]).replace(/_/g, " ")}</Badge>
                   <span className="text-muted-foreground text-xs">{new Date(h["created_at"] as string).toLocaleString()}</span>
-                  {h["details"] && <span className="text-xs text-muted-foreground">{JSON.stringify(h["details"])}</span>}
+                  {h["details"] != null && <span className="text-xs text-muted-foreground">{JSON.stringify(h["details"])}</span>}
                 </div>
               ))}
             </div>

@@ -88,6 +88,8 @@ import assetBrowserRouter from "./asset-browser.js";
 import { annotationRouter } from "../domains/annotation-system/index.js";
 // ── Team 21: Universal Material Library ───────────────────────────────────
 import materialLibraryRouter from "./material-library.js";
+// ── Phase 6 WP-02: Furniture & Object Library ─────────────────────────────
+import furnitureLibraryRouter from "./furniture-library.js";
 // ── Interior Design Material Library (Phase 1) ────────────────────────────
 import materialLibraryCatalogRouter from "./material-library-catalog.js";
 // ── Interior Design Material Library (Phase 2 intelligence, additive) ─────
