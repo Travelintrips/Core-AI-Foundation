@@ -1,0 +1,135 @@
+MASTER TASK — WP-01 RELEASE LOCK
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Status:
+WP-01 COMPLETE
+Baseline Created
+Tag Created Locally
+
+========================================================
+OBJECTIVE
+========================================================
+
+Perform the final release lock before WP-02.
+
+This task is LIMITED to release integrity.
+
+Do NOT implement WP-02.
+
+Do NOT modify Room Template business logic.
+
+Do NOT redesign architecture.
+
+========================================================
+TASK 1 — RLS SECURITY AUDIT
+========================================================
+
+Audit the five WP-01 tables.
+
+Verify whether database-level RLS actually exists.
+
+Tables:
+
+- room_types
+- room_styles
+- room_themes
+- layout_constraint_sets
+- room_templates
+
+For each table report:
+
+- RLS enabled
+- FORCE RLS
+- Policies
+- Roles
+- Tenant filter
+- Read rules
+- Write rules
+
+If RLS is missing:
+
+DO NOT silently ignore.
+
+Create a release-blocking report.
+
+If RLS should already exist according to Phase 6 design,
+prepare the migration required to implement it.
+
+Do not apply automatically.
+
+========================================================
+TASK 2 — RELEASE TAG VERIFICATION
+========================================================
+
+Verify:
+
+material-v6.0.0-wp01
+
+Confirm:
+
+- local tag
+- commit SHA
+- annotation
+- HEAD match
+
+If remote push fails:
+
+Report only the exact Git command required after a GitHub PAT is configured.
+
+Do not retry indefinitely.
+
+========================================================
+TASK 3 — RELEASE CONSISTENCY
+========================================================
+
+Verify:
+
+- baseline matches code
+- migration matches schema
+- routes match implementation
+- documentation matches implementation
+- endpoint inventory
+- table inventory
+
+========================================================
+TASK 4 — FINAL RELEASE REPORT
+========================================================
+
+Provide:
+
+1. RLS Status
+2. Release Tag Status
+3. Remote Push Status
+4. Baseline Status
+5. Remaining Risks
+
+Use exactly one verdict:
+
+A.
+RELEASE LOCKED
+
+Everything complete.
+
+Ready for WP-02.
+
+--------------------------------------------------------
+
+B.
+RELEASE LOCKED WITH REQUIRED SECURITY FIX
+
+Only database RLS remains.
+
+WP-02 should wait until resolved.
+
+--------------------------------------------------------
+
+C.
+RELEASE BLOCKED
+
+Critical inconsistency found.
+
+STOP.
+
+Do NOT begin WP-02.
