@@ -1,0 +1,781 @@
+# PHASE 2 — ENTERPRISE DEEP AUDIT — CREATIVE AI STUDIO
+
+## MODE
+
+READ-ONLY AUDIT
+
+JANGAN melakukan:
+
+* edit source code
+* edit database
+* migration
+* deployment
+* commit
+* push
+* install package
+
+Seluruh audit hanya membaca kode, konfigurasi, schema database, API, routing, storage, workflow, dan dependency.
+
+Semua temuan WAJIB memiliki bukti berupa nama file, fungsi, route, endpoint, tabel, query, konfigurasi, atau potongan implementasi.
+
+Jangan membuat asumsi.
+
+---
+
+# OBJECTIVE
+
+Lakukan audit teknis menyeluruh terhadap seluruh Creative AI Studio untuk memastikan sistem benar-benar siap Production Enterprise.
+
+Audit harus memverifikasi implementasi nyata, bukan hanya keberadaan file.
+
+---
+
+# PHASE 1 — AI ENGINE
+
+Audit seluruh AI Engine.
+
+Verifikasi:
+
+* AI Dispatcher
+* AI Router
+* Provider Selection
+* Multi Provider
+* Failover
+* Retry
+* Queue
+* Worker
+* Scheduler
+* Cancellation
+* Timeout
+* Zombie Job Detection
+* Dead Letter Queue
+* Cost Tracking
+* Token Tracking
+* Context Window
+* Prompt Builder
+* Prompt Versioning
+* Memory
+* AI Agent Runtime
+* Streaming
+* SSE
+* WebSocket
+* AI Cache
+
+Pastikan seluruh workflow benar-benar berjalan.
+
+---
+
+# PHASE 2 — CREATIVE WORKFLOW
+
+Audit seluruh lifecycle:
+
+Customer
+
+↓
+
+Service
+
+↓
+
+Quotation
+
+↓
+
+Payment
+
+↓
+
+AI Generation
+
+↓
+
+Revision
+
+↓
+
+Approval
+
+↓
+
+Delivery
+
+↓
+
+Review
+
+↓
+
+Portfolio
+
+↓
+
+Analytics
+
+Cari:
+
+dead-end
+
+broken transition
+
+status yang tidak pernah digunakan
+
+status yang tidak pernah berubah
+
+workflow yang melompat
+
+workflow yang tidak sinkron
+
+---
+
+# PHASE 3 — MULTI TENANT SECURITY
+
+Verifikasi:
+
+tenant isolation
+
+workspace isolation
+
+asset isolation
+
+quotation isolation
+
+review isolation
+
+customer isolation
+
+provider isolation
+
+storage isolation
+
+Pastikan tenant A tidak pernah dapat mengakses data tenant B.
+
+Audit:
+
+middleware
+
+RequestContext
+
+tenantScope
+
+JWT
+
+Supabase policy
+
+Drizzle query
+
+---
+
+# PHASE 4 — DATABASE
+
+Audit seluruh schema.
+
+Cari:
+
+orphan table
+
+orphan row
+
+duplicate data
+
+unused table
+
+unused index
+
+unused foreign key
+
+unused enum
+
+soft delete
+
+cascade delete
+
+constraint
+
+index coverage
+
+query plan
+
+row count
+
+storage usage
+
+large table
+
+unused migration
+
+rollback safety
+
+migration consistency
+
+Audit seluruh:
+
+ai_*
+
+creative_*
+
+design_*
+
+asset_*
+
+render_*
+
+worker_*
+
+provider_*
+
+review_*
+
+customer_*
+
+---
+
+# PHASE 5 — SUPABASE SECURITY
+
+Verifikasi:
+
+Row Level Security
+
+Storage Policy
+
+Bucket Policy
+
+Signed URL
+
+Revocation
+
+Anon Key
+
+Service Role
+
+Realtime
+
+RPC
+
+Function
+
+Trigger
+
+View
+
+Materialized View
+
+Storage Lifecycle
+
+Bucket Visibility
+
+Semua klaim WAJIB dibuktikan.
+
+---
+
+# PHASE 6 — STORAGE
+
+Audit:
+
+Image
+
+Video
+
+Thumbnail
+
+Render
+
+Preview
+
+Temporary File
+
+Upload
+
+Download
+
+Signed URL
+
+Lifecycle
+
+Garbage Collection
+
+Duplicate Asset
+
+Orphan Asset
+
+Expired Asset
+
+Broken Reference
+
+---
+
+# PHASE 7 — AI QUALITY
+
+Audit:
+
+Prompt Builder
+
+Prompt Injection
+
+Hallucination Prevention
+
+Output Validation
+
+Schema Validation
+
+Retry Prompt
+
+Fallback Prompt
+
+Negative Prompt
+
+Provider Compatibility
+
+Temperature
+
+Top P
+
+Seed
+
+Deterministic Mode
+
+Consistency
+
+Revision Quality
+
+---
+
+# PHASE 8 — BILLING
+
+Audit:
+
+Quotation
+
+Invoice
+
+Credit
+
+Refund
+
+Payment
+
+AI Usage
+
+Credit Usage
+
+Provider Cost
+
+Margin
+
+Pricing
+
+Accounting Integration
+
+Journal
+
+Double Entry
+
+Tax
+
+PPN
+
+History
+
+Audit Trail
+
+---
+
+# PHASE 9 — API
+
+Audit seluruh endpoint.
+
+Cari:
+
+missing validation
+
+manual validation
+
+missing auth
+
+missing authorization
+
+missing rate limit
+
+missing audit log
+
+slow endpoint
+
+duplicate endpoint
+
+dead endpoint
+
+deprecated endpoint
+
+version mismatch
+
+OpenAPI mismatch
+
+Zod mismatch
+
+Response mismatch
+
+HTTP mismatch
+
+---
+
+# PHASE 10 — FRONTEND
+
+Audit:
+
+React
+
+Vite
+
+Lazy Loading
+
+Code Split
+
+Tree Shaking
+
+Hydration
+
+Suspense
+
+Error Boundary
+
+Accessibility
+
+Dark Mode
+
+Responsive
+
+Memory Leak
+
+Infinite Render
+
+Loading State
+
+Skeleton
+
+Toast
+
+Dialog
+
+Performance
+
+---
+
+# PHASE 11 — SEO
+
+Audit:
+
+Title
+
+Description
+
+Canonical
+
+OG
+
+Twitter
+
+JSON-LD
+
+FAQ
+
+Breadcrumb
+
+Review
+
+Service
+
+Organization
+
+ImageObject
+
+VideoObject
+
+Image Sitemap
+
+Sitemap
+
+Robots
+
+Rich Result
+
+Google Search Console Readiness
+
+Workspace Token Indexability
+
+Admin Indexability
+
+---
+
+# PHASE 12 — PERFORMANCE
+
+Audit:
+
+Bundle
+
+Chunk
+
+Compression
+
+Caching
+
+CDN
+
+Lighthouse
+
+Core Web Vitals
+
+LCP
+
+CLS
+
+INP
+
+TTFB
+
+API Latency
+
+DB Latency
+
+AI Latency
+
+Cold Start
+
+Memory
+
+CPU
+
+---
+
+# PHASE 13 — DEPLOYMENT
+
+Audit:
+
+Environment Variable
+
+Secret
+
+Docker
+
+Build
+
+CI
+
+CD
+
+Migration
+
+Rollback
+
+Health Check
+
+Monitoring
+
+Logging
+
+Alert
+
+Backup
+
+Restore
+
+---
+
+# PHASE 14 — AI AGENTS
+
+Audit seluruh agent.
+
+Verifikasi:
+
+Input
+
+Output
+
+Contract
+
+Dependency
+
+Provider
+
+Retry
+
+Logging
+
+Memory
+
+Lifecycle
+
+Failure Recovery
+
+Deadlock
+
+Agent Communication
+
+---
+
+# PHASE 15 — END TO END TEST
+
+Verifikasi seluruh alur:
+
+Customer membuat project
+
+↓
+
+Quotation
+
+↓
+
+Payment
+
+↓
+
+AI berjalan
+
+↓
+
+Revision
+
+↓
+
+Approval
+
+↓
+
+Delivery
+
+↓
+
+Download
+
+↓
+
+Review
+
+↓
+
+Analytics
+
+Pastikan tidak ada langkah yang terputus.
+
+---
+
+# FINAL REPORT
+
+Berikan laporan dalam format berikut.
+
+## Executive Summary
+
+Production Ready
+
+Risk Score
+
+Security Score
+
+Performance Score
+
+SEO Score
+
+AI Score
+
+Database Score
+
+Billing Score
+
+Storage Score
+
+---
+
+## Critical Findings
+
+Untuk setiap temuan:
+
+ID
+
+Severity
+
+Lokasi
+
+Bukti
+
+Penyebab
+
+Dampak
+
+Risiko
+
+Rekomendasi
+
+Estimasi Perbaikan
+
+---
+
+## Broken Workflow
+
+---
+
+## Broken API
+
+---
+
+## Broken Database
+
+---
+
+## Broken Security
+
+---
+
+## Broken Billing
+
+---
+
+## Broken AI Engine
+
+---
+
+## Broken Storage
+
+---
+
+## Broken Frontend
+
+---
+
+## Broken SEO
+
+---
+
+## False Positive
+
+Cantumkan seluruh temuan audit sebelumnya yang ternyata tidak terbukti setelah diverifikasi.
+
+---
+
+## Production Readiness Checklist
+
+Berikan checklist lengkap dengan status:
+
+PASS
+
+WARNING
+
+FAIL
+
+untuk seluruh komponen sistem.
+
+---
+
+## Go Live Verdict
+
+Berikan salah satu hasil berikut beserta alasan teknis:
+
+GO
+
+GO WITH WARNING
+
+NO GO
+
+PENTING:
+
+* Audit bersifat **READ-ONLY**.
+* Jangan melakukan perubahan apa pun.
+* Semua temuan harus berdasarkan implementasi nyata, bukan asumsi.
+* Sertakan bukti berupa nama file, route, endpoint, tabel, konfigurasi, atau potongan implementasi untuk setiap temuan.
