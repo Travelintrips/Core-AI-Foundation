@@ -1,0 +1,291 @@
+MASTER TASK — WP-01 RLS REMEDIATION & FINAL RELEASE LOCK
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Branch:
+main
+
+Current Status:
+WP-01 implemented
+Baseline created
+Local tag material-v6.0.0-wp01 exists
+RLS migration prepared but not applied
+
+Migration:
+scripts/migrations/rls-wp01-room-templates.sql
+
+========================================================
+OBJECTIVE
+========================================================
+
+Apply and verify the WP-01 database-level RLS remediation,
+then complete the final release lock.
+
+Do NOT implement WP-02.
+
+Do NOT modify Room Template business logic.
+
+Do NOT redesign the API, schema, or frontend.
+
+========================================================
+PHASE 1 — REVIEW MIGRATION
+========================================================
+
+Review:
+
+scripts/migrations/rls-wp01-room-templates.sql
+
+Confirm that it affects only:
+
+- ai_platform.room_types
+- ai_platform.room_styles
+- ai_platform.room_themes
+- ai_platform.layout_constraint_sets
+- ai_platform.room_templates
+
+Verify:
+
+- migration is idempotent
+- existing policies are dropped or replaced safely
+- no destructive DDL
+- no table or column changes
+- no seed-data changes
+- no unrelated schema changes
+
+For shared catalog tables without tenant_id:
+
+- enable RLS
+- define the approved authenticated read policy
+- do not invent tenant filtering
+
+For room_templates:
+
+- enable RLS
+- force RLS
+- enforce tenant isolation for tenant-scoped rows
+- preserve approved global rows where tenant_id IS NULL
+- fail closed when tenant context is missing for tenant-scoped data
+- define both USING and WITH CHECK where writes are allowed
+
+========================================================
+PHASE 2 — APPLY TO DEV
+========================================================
+
+Apply the hand-written migration to the DEV database only.
+
+Do NOT use drizzle-kit push.
+
+Record:
+
+- database target
+- execution timestamp
+- migration result
+- statements applied
+- any warnings or errors
+
+If the target cannot be proven to be DEV:
+
+STOP and return BLOCKED.
+
+========================================================
+PHASE 3 — DEV RLS VERIFICATION
+========================================================
+
+Verify runtime database state using pg_class and pg_policies.
+
+For every table report:
+
+- relrowsecurity
+- relforcerowsecurity
+- policy name
+- command
+- roles
+- USING expression
+- WITH CHECK expression
+
+Run behavioral tests:
+
+1. Shared catalog rows remain readable by the approved role.
+2. Anonymous access follows the approved policy.
+3. Tenant A cannot read Tenant B room_templates.
+4. Tenant A cannot update Tenant B room_templates.
+5. Tenant A cannot insert a row for Tenant B.
+6. Global template rows with tenant_id IS NULL remain available where approved.
+7. Missing tenant context cannot expose tenant-scoped rows.
+8. Service or migration role behavior is documented separately.
+9. Existing public catalog APIs still return expected results.
+10. Admin CRUD still works under a valid tenant context.
+
+Do not report RLS pass based only on migration text.
+
+========================================================
+PHASE 4 — REGRESSION
+========================================================
+
+Run:
+
+- 21 WP-01 targeted tests
+- API build
+- admin frontend typecheck
+- customer frontend typecheck
+- room-template API smoke tests
+- customer public catalog smoke test
+- admin authorization smoke test
+
+Separate:
+
+- new failures
+- pre-existing failures
+- environment-blocked checks
+
+========================================================
+PHASE 5 — APPLY TO PROD
+========================================================
+
+Proceed only if DEV verification fully passes.
+
+Before applying to PROD:
+
+- confirm the exact production database target
+- confirm a backup or recovery path exists
+- confirm no active migration conflict
+- record the current migration state
+
+Apply the same migration unchanged to PROD.
+
+Then rerun the database-level RLS verification queries.
+
+Do not run destructive rollback commands automatically.
+
+If PROD access or target identity is uncertain:
+
+STOP and report DEV COMPLETE / PROD BLOCKED.
+
+========================================================
+PHASE 6 — DOCUMENTATION
+========================================================
+
+Update:
+
+docs/wp01-room-template-library.md
+docs/baselines/wp01-room-template-baseline.md
+
+Replace the previous statement:
+
+“no DB-level RLS on WP-01 tables”
+
+with the verified final state.
+
+Include:
+
+- migration filename
+- DEV application result
+- PROD application result
+- policy inventory
+- tenant-isolation test evidence
+- remaining limitations
+- exact verification date
+
+Do not claim PROD protection unless verified directly.
+
+========================================================
+PHASE 7 — RELEASE TAG
+========================================================
+
+The existing tag:
+
+material-v6.0.0-wp01
+
+points to the implementation commit before the RLS remediation.
+
+Do NOT silently move an existing release tag.
+
+Choose the repository-safe option:
+
+Preferred:
+- keep material-v6.0.0-wp01 unchanged as the implementation baseline
+- create a new annotated security-release tag:
+
+material-v6.0.1-wp01
+
+Tag the commit containing:
+
+- RLS migration
+- verified documentation
+- final release-lock evidence
+
+Tag message:
+
+WP-01 Room Template Library Security Release
+Database RLS remediation verified.
+Ready for WP-02.
+
+Push the new tag using the repository’s authenticated GitHub integration or configured credentials.
+
+Do not place a PAT directly inside the remote URL or print secrets in logs.
+
+Verify:
+
+- tag exists remotely
+- tag points to the correct commit
+- annotation is correct
+
+========================================================
+PHASE 8 — FINAL GIT STATE
+========================================================
+
+Verify:
+
+- branch
+- HEAD SHA
+- origin/main SHA
+- ahead/behind
+- working tree clean
+- no uploaded prompt files committed
+- no .replit changes
+- no unrelated files
+- migration and documentation committed
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. DEV database target
+2. DEV migration result
+3. DEV RLS policy matrix
+4. DEV tenant-isolation test results
+5. PROD database target
+6. PROD migration result
+7. PROD RLS policy matrix
+8. Regression results
+9. Files changed
+10. Commit SHA
+11. Local tag status
+12. Remote tag status
+13. Working tree status
+14. Remaining risks
+
+Use exactly one verdict:
+
+A. WP-01 RELEASE FULLY LOCKED
+RLS applied and verified in DEV and PROD.
+Security tag pushed.
+Ready for WP-02.
+
+B. WP-01 DEV LOCKED — PROD PENDING
+DEV fully verified.
+PROD access or approval still required.
+WP-02 must wait.
+
+C. WP-01 SECURITY FIX FAILED
+Migration or tenant-isolation test failed.
+
+D. WP-01 RELEASE BLOCKED
+Database target, credentials, or recovery path cannot be verified.
+
+STOP.
+
+Do NOT begin WP-02.
