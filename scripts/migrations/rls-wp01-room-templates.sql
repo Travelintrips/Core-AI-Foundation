@@ -60,6 +60,15 @@ CREATE POLICY tenant_isolation ON ai_platform.room_templates
       current_setting('app.current_tenant_id', true),
       ''
     )
+  )
+  WITH CHECK (
+    -- Writes must target the current tenant's scope or a platform-global row.
+    -- Prevents a tenant inserting/updating a row owned by another tenant.
+    tenant_id IS NULL
+    OR tenant_id::text = COALESCE(
+      current_setting('app.current_tenant_id', true),
+      ''
+    )
   );
 
 -- ── Verification queries ──────────────────────────────────────────────────────

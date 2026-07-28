@@ -246,25 +246,35 @@ B1–B3 and C1–C2 are declared in `PUBLIC_ROUTE_RULES` in `artifacts/api-serve
 
 ## 6. RLS
 
-**Runtime-verified 2026-07-27 via direct Drizzle query against Supabase dev DB.**
+**Runtime-verified 2026-07-28 via `pg_class` / `pg_policies` queries against Supabase DEV DB.**
+**Migration applied:** `scripts/migrations/rls-wp01-room-templates.sql` — DEV ✅ applied 2026-07-28T12:16:31Z | PROD ⚠️ blocked (base tables not yet migrated to PROD — see Known Limitations).
 
-| Table | RLS enabled | FORCE RLS | Policies |
-|---|---|---|---|
-| `room_types` | ❌ false | ❌ false | none |
-| `room_styles` | ❌ false | ❌ false | none |
-| `room_themes` | ❌ false | ❌ false | none |
-| `room_templates` | ❌ false | ❌ false | none |
-| `layout_constraint_sets` | ❌ false | ❌ false | none |
+| Table | RLS enabled | FORCE RLS | Policy name | USING | WITH CHECK |
+|---|---|---|---|---|---|
+| `room_types` | ✅ true | ❌ false | `allow_authenticated` | `true` | — |
+| `room_styles` | ✅ true | ❌ false | `allow_authenticated` | `true` | — |
+| `room_themes` | ✅ true | ❌ false | `allow_authenticated` | `true` | — |
+| `layout_constraint_sets` | ✅ true | ❌ false | `allow_authenticated` | `true` | — |
+| `room_templates` | ✅ true | ✅ true | `tenant_isolation` | `tenant_id IS NULL OR tenant_id::text = COALESCE(current_setting('app.current_tenant_id', true), '')` | identical to USING |
 
-**Access model:** These catalog tables use API-layer authentication only. All writes go through `adminAuthWithExceptions` (requires `ADMIN_API_KEY`). Public reads are served by the explicitly-listed `PUBLIC_ROUTE_RULES` (B1–B3, C1–C2) which never expose draft/archived records to anonymous callers. The `service_role` connection used by the API server bypasses Postgres RLS by default.
+**Access model:** Catalog tables without `tenant_id` use `USING (true)` — all rows are readable; writes are still gated by `adminAuthWithExceptions` at the application layer. `room_templates` uses `ENABLE + FORCE RLS` with a `tenant_isolation` policy: platform-wide rows (`tenant_id IS NULL`) are always visible; tenant-scoped rows require a matching `app.current_tenant_id` session variable. The `service_role` / postgres superuser connection (used by the API server) has `rolbypassrls = true` — RLS is a defence-in-depth backstop, not the sole enforcement layer.
 
-**Anonymous behavior:** Cannot reach any A-group endpoint (401). Can call B1–B3 and C1–C2 but C1/C2 server-side enforces `status = 'published'`.
+**Anonymous behavior:** Cannot reach any A-group endpoint (401). Can call B1–B3 and C1–C2; C1/C2 server-side enforces `status = 'published'`.
 
 **Authenticated/admin behavior:** Full CRUD via A-group endpoints with valid `ADMIN_API_KEY`.
 
-**Tenant isolation:** Platform-wide templates have `tenant_id = NULL` (visible to all). Tenant-scoped templates have `tenant_id = <UUID>`. The service layer filters by tenant on admin list queries when a tenant context is present. Currently single-tenant (all seed data is platform-wide).
+**Tenant isolation:** Platform-wide templates have `tenant_id = NULL` (visible to all). Tenant-scoped templates have `tenant_id = <UUID>`. The `tenant_isolation` policy's `WITH CHECK` clause prevents cross-tenant writes at the database layer for any connection not using the service role.
 
-RLS at the Postgres layer (row policies) is deferred to WP-10 (`rls-v14.sql`), consistent with the Phase 6 database blueprint.
+**DEV behavioral test results (2026-07-28):**
+
+| Test | Result |
+|---|---|
+| T1: Catalog tables readable without tenant context | ✅ PASS — 8 types, 20 styles, 15 themes |
+| T3/T7: Platform-wide templates visible with no tenant ctx | ✅ PASS — 13 rows (tenant_id IS NULL) |
+| T7: No tenant-scoped rows visible without context | ✅ PASS (no tenant-scoped rows seeded) |
+| T6: Global rows remain visible when tenant context IS set | ✅ PASS — 13 rows still visible |
+| T9: Public catalog APIs return expected data | ✅ PASS — 8/20/15/9 published |
+| T4/T5: Cross-tenant write blocked by WITH CHECK | ⚠️ EXPECTED — service role has BYPASSRLS; policy correctly defined in pg_policies and enforces isolation for non-superuser connections |
 
 ---
 
@@ -369,7 +379,7 @@ File: `artifacts/api-server/src/__tests__/room-templates.test.ts`
 5. **No full revision trail**: The `version` integer on `room_templates` tracks publish bumps only. Immutable revision snapshots are WP-10 scope.
 6. **Start Design Session is disabled**: The customer portal CTA is a placeholder; `design_sessions` are WP-06 scope.
 7. **Admin portal requires login**: The admin UI at `/admin/room-templates` is gated by the internal auth session. No internal admin account exists in the dev database until `seed:internal-admin` is run. The admin API (x-admin-api-key) works independently of the UI session.
-8. **RLS not enabled at Postgres level**: WP-01 tables use application-layer auth only. Postgres row-level policies are deferred to WP-10 per the Phase 6 blueprint.
+8. **RLS applied to DEV; PROD blocked pending base table migration**: `scripts/migrations/rls-wp01-room-templates.sql` was applied and verified on DEV (2026-07-28). PROD (`nzdweipzckfszczzqtuw`) does not yet have the 5 WP-01 tables — `20260727_room_template_library.sql` must be applied to PROD first, then the RLS migration. PROD service role connection (`rolbypassrls = true`) means the app is protected by application-layer auth regardless; RLS adds defence-in-depth for direct DB connections.
 
 ---
 

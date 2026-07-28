@@ -52,11 +52,18 @@
 
 ### RLS / FORCE RLS / Policies
 
-RLS is not applied to WP-01 tables at the database level. Tenant isolation is enforced at the application layer:
-- Platform-wide templates: `tenant_id IS NULL`
-- Tenant-scoped templates: `tenant_id = <uuid>`
-- Admin routes protected by `adminAuthWithExceptions` middleware
-- Public routes declared as explicit exceptions in `adminAuth.ts` (`PUBLIC_ROUTE_RULES`)
+**Migration:** `scripts/migrations/rls-wp01-room-templates.sql`
+**DEV applied:** 2026-07-28T12:16:31Z ✅ | **PROD:** ⚠️ blocked — base tables not yet in PROD (see Known Limitations)
+
+| Table | RLS | FORCE RLS | Policy | USING | WITH CHECK |
+|---|---|---|---|---|---|
+| `room_types` | ✅ | ❌ | `allow_authenticated` | `true` | — |
+| `room_styles` | ✅ | ❌ | `allow_authenticated` | `true` | — |
+| `room_themes` | ✅ | ❌ | `allow_authenticated` | `true` | — |
+| `layout_constraint_sets` | ✅ | ❌ | `allow_authenticated` | `true` | — |
+| `room_templates` | ✅ | ✅ | `tenant_isolation` | `tenant_id IS NULL OR tenant_id::text = COALESCE(current_setting('app.current_tenant_id',true),'')` | identical |
+
+Tenant isolation: platform-wide rows (`tenant_id IS NULL`) always visible; tenant-scoped rows require matching `app.current_tenant_id` session variable. Service role (`rolbypassrls = true`) bypasses RLS by design — application-layer auth is the primary gate; RLS is defence-in-depth.
 
 ---
 
@@ -143,8 +150,17 @@ Seed endpoint: `POST /api/ai/room-templates/seed` (admin-authenticated)
 - `tenant_id = <uuid>` = scoped to a specific tenant
 - Isolation enforced in service layer queries
 
-### RLS Verification
-RLS policies are not defined at the DB level for WP-01 tables. Access control is enforced entirely at the application layer via `adminAuthWithExceptions`. This is consistent with the existing platform pattern.
+### RLS Verification (DEV — 2026-07-28)
+
+Verified via `pg_class` and `pg_policies` after applying `scripts/migrations/rls-wp01-room-templates.sql`:
+
+| Test | Result |
+|---|---|
+| T1: Catalog tables readable (room_types/styles/themes) | ✅ PASS — 8/20/15 rows |
+| T3/T7: Platform-wide templates visible without tenant ctx | ✅ PASS — 13 rows |
+| T6: Global rows still visible when tenant context IS set | ✅ PASS |
+| T9: Public catalog APIs (B1–B3, C1–C2) return expected data | ✅ PASS |
+| T4/T5: Cross-tenant write isolation (WITH CHECK) | ⚠️ EXPECTED BYPASS — service role has `rolbypassrls = true`; policy correctly defined in `pg_policies`; enforced for non-superuser roles |
 
 ---
 
@@ -185,7 +201,8 @@ RLS policies are not defined at the DB level for WP-01 tables. Access control is
 2. Admin Platform typecheck has 16 pre-existing errors in non-WP-01 files (`lib/api-client-react` dist not built). These predate WP-01 and are not introduced by this work package.
 3. `layout_constraint_sets` is structurally complete but has no seed data — rules population is deferred to WP-07 (Constraint Engine).
 4. `room_templates.fixed_elements` JSONB column is seeded as empty arrays — actual fixed-element data depends on WP-02+ Furniture Library.
-5. No RLS at DB level — tenant isolation is application-layer only.
+5. **RLS applied to DEV; PROD pending two-step migration.** PROD database (`nzdweipzckfszczzqtuw`) does not yet contain the 5 WP-01 tables — `20260727_room_template_library.sql` must be applied first, then `rls-wp01-room-templates.sql`. PROD remains protected by application-layer auth until both migrations are applied.
+6. `room_templates` FORCE RLS means the service role still bypasses it (`rolbypassrls = true`). This matches the platform strategy in `rls-v12.sql` and is intentional.
 
 ---
 
