@@ -1,0 +1,262 @@
+Lakukan AUDIT MENYELURUH terhadap seluruh Creative AI Studio secara READ-ONLY. Jangan mengubah source code, database, konfigurasi, migration, ataupun deployment. Tujuan audit adalah memastikan sistem siap production enterprise.
+
+Ruang lingkup audit:
+
+1. SEO & Metadata
+- Audit seluruh halaman customer portal.
+- Pastikan setiap halaman memiliki title, meta description, canonical, Open Graph, Twitter Card, robots, favicon.
+- Verifikasi og:image benar-benar direferensikan.
+- Audit sitemap.xml dan robots.txt.
+- Audit JSON-LD (Organization, Website, Service, Product, FAQ, Review, Breadcrumb).
+- Audit metadata dinamis pada seluruh halaman detail.
+- Pastikan halaman privat (workspace token, admin, login) menggunakan noindex,nofollow.
+
+2. Security
+Audit:
+- Authentication
+- Authorization
+- RBAC
+- Workspace token
+- Signed URL
+- Supabase RLS
+- API Key
+- Secret Management
+- XSS
+- CSRF
+- SSRF
+- Prompt Injection
+- SQL Injection
+- Rate Limit
+- File Upload Validation
+- Tenant Isolation
+- Audit Log
+- Session Management
+
+3. AI Engine
+Audit:
+- Workflow AI
+- Agent Pipeline
+- Queue
+- Retry
+- Timeout
+- Cancellation
+- Provider Fallback
+- Token Usage
+- Cost Tracking
+- Prompt Versioning
+- Error Recovery
+- Streaming Response
+- Render Pipeline
+- Asset Pipeline
+
+4. Customer Portal
+Audit seluruh flow:
+Landing Page
+Portfolio
+Services
+Workspace
+Quotation
+Checkout
+Payment
+Review
+Download
+Notification
+
+Pastikan seluruh flow end-to-end berjalan tanpa dead-end.
+
+5. Admin Platform
+Audit:
+Dashboard
+Analytics
+Workflow
+Design Studio
+Creative Vendor
+Template
+Asset Management
+Project Management
+Billing
+Approval
+Review
+User Management
+
+Pastikan seluruh menu berfungsi dan tidak ada broken route.
+
+6. Database Supabase
+Audit:
+- Seluruh tabel ai_*
+- Seluruh tabel creative_*
+- Foreign Key
+- Index
+- Constraint
+- Orphan Data
+- Duplicate Data
+- Soft Delete
+- zz_deleted_* table
+- Migration consistency
+- Production readiness
+
+Jangan menghapus tabel. Hanya laporkan.
+
+7. API
+Audit seluruh endpoint:
+- Authentication
+- Validation
+- Error Handling
+- Response Schema
+- HTTP Status
+- Performance
+- Idempotency
+- Logging
+- Rate Limiting
+
+8. Storage
+Audit:
+Image Storage
+Render Output
+Asset Lifecycle
+Signed URL
+Public Asset
+Private Asset
+Thumbnail
+Versioning
+
+9. Performance
+Audit:
+Bundle Size
+Lazy Loading
+Image Optimization
+Caching
+Compression
+Code Splitting
+React Query Cache
+API Cache
+Core Web Vitals
+Lighthouse
+
+10. Frontend
+Audit:
+Accessibility (WCAG)
+Responsive
+Dark Mode
+Loading State
+Error Boundary
+Skeleton
+Empty State
+Toast
+UX Consistency
+
+11. Billing
+Audit:
+Quotation
+Invoice
+Payment
+Refund
+Credit
+Usage
+Token Consumption
+Pricing Engine
+
+12. AI Workflow
+Audit seluruh pipeline:
+Customer Request
+AI Processing
+Asset Generation
+Revision
+Approval
+Delivery
+
+Pastikan tidak ada workflow yang terputus.
+
+13. Shared Library
+Audit:
+lib/api-spec
+lib/api-zod
+lib/api-client-react
+lib/db
+lib/design-components
+lib/design-workflow
+
+Pastikan sinkron dengan implementasi.
+
+14. Deployment
+Audit:
+Environment Variable
+Production Build
+Migration Status
+Feature Flag
+Static Asset
+CDN
+Health Check
+
+15. SEO Enterprise Readiness
+Nilai:
+Google Indexability
+Google Rich Result
+Social Sharing
+Open Graph
+Twitter
+Canonical
+Structured Data
+Sitemap
+Image Sitemap
+
+16. Final Report
+
+Buat laporan dengan format berikut:
+
+# EXECUTIVE SUMMARY
+
+## Status Keseluruhan
+- Production Ready / Not Ready
+- Risk Score (0-100)
+- Security Score
+- SEO Score
+- Performance Score
+- AI Workflow Score
+
+## Critical Findings (🔴)
+
+## High Findings (🟠)
+
+## Medium Findings (🟡)
+
+## Low Findings (🟢)
+
+## Broken Routes
+
+## Broken API
+
+## Broken Workflow
+
+## Database Issues
+
+## Security Issues
+
+## SEO Issues
+
+## Performance Issues
+
+## AI Engine Issues
+
+## Prioritas Perbaikan
+
+Urutkan berdasarkan:
+P1 (Critical)
+P2 (High)
+P3 (Medium)
+P4 (Low)
+
+## Estimasi Dampak
+
+Untuk setiap temuan berikan:
+- Lokasi file
+- Penyebab
+- Dampak bisnis
+- Risiko
+- Rekomendasi perbaikan
+
+PENTING:
+- Audit bersifat READ-ONLY.
+- Jangan melakukan perubahan kode, database, migration, deployment, ataupun commit.
+- Sertakan bukti berupa nama file, route, endpoint, tabel, atau konfigurasi yang diperiksa.
+- Jangan memberikan asumsi. Semua temuan harus berdasarkan hasil audit terhadap kode dan konfigurasi yang ada.
