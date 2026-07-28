@@ -112,8 +112,18 @@ router.delete("/ai/providers/:id", async (req, res): Promise<void> => {
 router.get("/ai/providers/:id/health-history", async (req, res): Promise<void> => {
   const params = GetProviderHealthHistoryParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  // Enforce positive integer — generated schema uses coerce.number() without .positive()
+  if (!Number.isInteger(params.data.id) || params.data.id <= 0) {
+    res.status(400).json({ error: "id must be a positive integer" }); return;
+  }
   const query = GetProviderHealthHistoryQueryParams.safeParse(req.query);
-  const limit = query.success && query.data.limit ? Math.min(query.data.limit, 200) : 50;
+  if (query.success && query.data.limit !== undefined) {
+    const l = query.data.limit;
+    if (!Number.isInteger(l) || l < 1 || l > 200) {
+      res.status(400).json({ error: "limit must be an integer between 1 and 200" }); return;
+    }
+  }
+  const limit = query.success && query.data.limit ? query.data.limit : 50;
 
   const logs = await db
     .select()
