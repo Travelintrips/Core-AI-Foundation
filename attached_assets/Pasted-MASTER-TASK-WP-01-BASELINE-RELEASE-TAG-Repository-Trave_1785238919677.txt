@@ -1,0 +1,313 @@
+MASTER TASK — WP-01 BASELINE & RELEASE TAG
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Branch:
+feature/phase6-wp01-room-template-library
+
+Current Status:
+WP-01 COMPLETE
+
+========================================================
+OBJECTIVE
+========================================================
+
+Create the official WP-01 baseline snapshot before starting WP-02.
+
+This task is RELEASE MANAGEMENT ONLY.
+
+Do NOT modify business logic.
+
+Do NOT change database schema.
+
+Do NOT edit migrations.
+
+Do NOT implement WP-02.
+
+Do NOT change frontend/backend behavior.
+
+========================================================
+TASK 1 — FINAL GIT VERIFICATION
+========================================================
+
+Verify:
+
+- current branch
+- git status
+- working tree clean
+- no untracked production files
+- no uploaded prompt/task files included
+- no .replit changes
+- no unrelated modifications
+
+Report the exact status.
+
+========================================================
+TASK 2 — CREATE RELEASE TAG
+========================================================
+
+Create an annotated git tag.
+
+Tag name:
+
+material-v6.0.0-wp01
+
+Tag message:
+
+WP-01 Room Template Library Baseline
+Verified implementation.
+Ready for WP-02.
+
+Verify:
+
+- tag exists locally
+- tag points to the correct commit
+- report commit SHA
+
+If repository policy allows:
+
+Push ONLY the tag.
+
+If push is not possible:
+
+Report the exact reason.
+
+========================================================
+TASK 3 — CREATE BASELINE SNAPSHOT
+========================================================
+
+Create:
+
+docs/baselines/wp01-room-template-baseline.md
+
+Include ONLY verified information.
+
+Sections:
+
+# Release Information
+
+- version
+- commit SHA
+- release date
+- branch
+
+--------------------------------------------------------
+
+# Database
+
+List:
+
+- tables
+- indexes
+- foreign keys
+- RLS
+- FORCE RLS
+- policies
+
+--------------------------------------------------------
+
+# API Inventory
+
+Separate:
+
+Admin Endpoints
+
+Public Endpoints
+
+Include:
+
+- method
+- path
+- purpose
+
+--------------------------------------------------------
+
+# Frontend
+
+Admin
+
+Customer
+
+Implemented pages
+
+Navigation
+
+--------------------------------------------------------
+
+# Seed Data
+
+Verified counts
+
+--------------------------------------------------------
+
+# Security
+
+Authentication
+
+Authorization
+
+Tenant isolation
+
+RLS verification
+
+--------------------------------------------------------
+
+# Test Results
+
+Include:
+
+API build
+
+Frontend typecheck
+
+Admin typecheck
+
+Customer typecheck
+
+Targeted WP-01 tests
+
+Regression summary
+
+--------------------------------------------------------
+
+# Performance
+
+Any measured observations.
+
+--------------------------------------------------------
+
+# Known Limitations
+
+Only verified limitations.
+
+--------------------------------------------------------
+
+# Explicitly Out Of Scope
+
+Furniture Library
+
+Placement Engine
+
+AI Composer
+
+Rendering
+
+Moodboard
+
+Export
+
+Sessions
+
+WP-02+
+
+========================================================
+TASK 4 — RELEASE INVENTORY
+========================================================
+
+Generate a release inventory containing:
+
+Files created
+
+Files modified
+
+Migration files
+
+Documentation files
+
+Seed files
+
+Routes
+
+Frontend pages
+
+Tests
+
+========================================================
+TASK 5 — BASELINE VALIDATION
+========================================================
+
+Verify that the baseline matches reality.
+
+Check:
+
+- endpoint count
+- table count
+- seed counts
+- route inventory
+- UI inventory
+- documentation consistency
+
+No fabricated information.
+
+========================================================
+TASK 6 — FINAL REPORT
+========================================================
+
+Provide:
+
+Release Tag
+
+Commit SHA
+
+Branch
+
+Working Tree Status
+
+Baseline File
+
+Endpoint Count
+
+Table Count
+
+Seed Count
+
+Test Count
+
+Documentation Status
+
+Known Limitations
+
+========================================================
+SUCCESS CRITERIA
+========================================================
+
+Use exactly one verdict.
+
+A.
+WP-01 BASELINE LOCKED
+
+Release tag created.
+
+Baseline created.
+
+Ready for WP-02.
+
+--------------------------------------------------------
+
+B.
+WP-01 BASELINE CREATED WITH OBSERVATIONS
+
+Minor documentation observations.
+
+--------------------------------------------------------
+
+C.
+BASELINE BLOCKED
+
+Repository state not clean.
+
+--------------------------------------------------------
+
+D.
+BASELINE FAILED
+
+Release integrity cannot be verified.
+
+========================================================
+
+STOP.
+
+Do NOT start WP-02.
+
+Wait for explicit approval.

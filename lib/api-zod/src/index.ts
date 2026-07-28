@@ -8,3 +8,4 @@ export * from "./schedules";
 export * from "./marketplace";
 export * from "./human-tasks";
 export * from "./image-preview-pipeline";
+export * from "./registry";
