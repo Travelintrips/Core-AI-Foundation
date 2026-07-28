@@ -53,7 +53,7 @@
 ### RLS / FORCE RLS / Policies
 
 **Migration:** `scripts/migrations/rls-wp01-room-templates.sql`
-**DEV applied:** 2026-07-28T12:16:31Z ✅ | **PROD:** ⚠️ blocked — base tables not yet in PROD (see Known Limitations)
+**DEV applied:** 2026-07-28T12:16:31Z ✅ | **PROD applied:** 2026-07-28T12:33:42Z ✅
 
 | Table | RLS | FORCE RLS | Policy | USING | WITH CHECK |
 |---|---|---|---|---|---|

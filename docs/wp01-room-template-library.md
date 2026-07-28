@@ -379,7 +379,7 @@ File: `artifacts/api-server/src/__tests__/room-templates.test.ts`
 5. **No full revision trail**: The `version` integer on `room_templates` tracks publish bumps only. Immutable revision snapshots are WP-10 scope.
 6. **Start Design Session is disabled**: The customer portal CTA is a placeholder; `design_sessions` are WP-06 scope.
 7. **Admin portal requires login**: The admin UI at `/admin/room-templates` is gated by the internal auth session. No internal admin account exists in the dev database until `seed:internal-admin` is run. The admin API (x-admin-api-key) works independently of the UI session.
-8. **RLS applied to DEV; PROD blocked pending base table migration**: `scripts/migrations/rls-wp01-room-templates.sql` was applied and verified on DEV (2026-07-28). PROD (`nzdweipzckfszczzqtuw`) does not yet have the 5 WP-01 tables — `20260727_room_template_library.sql` must be applied to PROD first, then the RLS migration. PROD service role connection (`rolbypassrls = true`) means the app is protected by application-layer auth regardless; RLS adds defence-in-depth for direct DB connections.
+8. **RLS applied to both DEV and PROD**: `scripts/migrations/rls-wp01-room-templates.sql` was applied and verified on DEV (2026-07-28T12:16:31Z) and PROD `nzdweipzckfszczzqtuw` (2026-07-28T12:33:42Z). Base migration `20260727_room_template_library.sql` was applied to PROD first (2026-07-28T12:33:12Z), then the RLS migration. PROD catalog seeded with correct counts (room_types=8, room_styles=20, room_themes=15, room_templates=10, layout_constraint_sets=0). PROD service role connection (`rolbypassrls = true`) bypasses RLS by design; RLS is defence-in-depth for direct DB connections.
 
 ---
 
@@ -420,4 +420,4 @@ Route: `/room-templates` in the Customer Portal.
 
 ---
 
-*Last updated: 2026-07-27 | Baseline: material-v5.0.1 | WP: 01 of 12 | Status: COMPLETE*
+*Last updated: 2026-07-28 | PROD deployed: 2026-07-28T12:33:12Z | Baseline: material-v6.0.1-wp01 | WP: 01 of 12 | Status: PROD DEPLOYED*
