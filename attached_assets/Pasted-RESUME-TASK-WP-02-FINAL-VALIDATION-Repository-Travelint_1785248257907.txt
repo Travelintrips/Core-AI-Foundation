@@ -1,0 +1,373 @@
+RESUME TASK — WP-02 FINAL VALIDATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Branch:
+feature/phase6-wp02-furniture-library
+
+IMPORTANT
+
+Resume from the CURRENT workspace.
+
+Do NOT repeat architecture exploration.
+
+Do NOT recreate files that already exist.
+
+Do NOT redesign WP-02.
+
+Do NOT implement WP-03 or later.
+
+The last completed change was:
+
+- missing furnitureLibraryRouter import added to routes/index.ts
+- API server rebuilt successfully
+
+========================================================
+CURRENT VERIFIED STATE
+========================================================
+
+Verified:
+
+- DB schema and exports exist
+- frontend routes exist
+- migration applied to DEV
+- RLS migration applied
+- admin frontend TypeScript fixed
+- lib builds pass
+- API build passes
+- customer portal typecheck passes
+- admin platform typecheck passes
+- furniture router import was added
+
+Still required:
+
+- restart runtime with latest API build
+- recheck public route authentication
+- recheck admin route mounting
+- targeted WP-02 tests
+- database and RLS verification
+- seed validation
+- API smoke tests
+- frontend browser verification
+- documentation
+- commit
+- final report
+
+========================================================
+PHASE 1 — RUNTIME RESTART
+========================================================
+
+Restart the managed API server or workflow so it loads the
+latest compiled build.
+
+Verify:
+
+- running process uses current dist
+- furniture route references exist in compiled output
+- no stale server process remains
+- health endpoint responds
+
+Do not continue smoke tests against a stale process.
+
+========================================================
+PHASE 2 — ROUTE AND AUTH VERIFICATION
+========================================================
+
+Confirm the final route mounting from source and runtime.
+
+Report:
+
+- router import location
+- router.use registration location
+- admin middleware mount path
+- public exception patterns
+- final public paths
+- final admin paths
+
+For any 401 or 404:
+
+- inspect runtime logs
+- identify whether it is auth, mount path, proxy, stale build, or route-order issue
+- fix only WP-02 wiring
+- do not weaken admin authentication
+
+========================================================
+PHASE 3 — DATABASE VERIFICATION
+========================================================
+
+Verify all WP-02 tables created by the migration.
+
+For every table report:
+
+- table exists
+- primary key
+- foreign keys
+- indexes
+- unique constraints
+- soft-delete/archive fields
+- version fields
+- tenant_id where applicable
+
+Confirm migration matches the Drizzle schema exactly.
+
+Do not use drizzle-kit push.
+
+========================================================
+PHASE 4 — RLS VERIFICATION
+========================================================
+
+Query pg_class and pg_policies.
+
+For every WP-02 table report:
+
+- relrowsecurity
+- relforcerowsecurity
+- policy name
+- command
+- roles
+- USING expression
+- WITH CHECK expression
+
+Run behavioral checks where a non-BYPASSRLS role is available.
+
+At minimum verify:
+
+- shared catalog rows remain readable
+- tenant rows are not exposed without tenant context
+- cross-tenant insert/update is blocked
+- service-role behavior is documented separately
+- public APIs remain read-only
+
+If only a superuser connection is available, state the limitation
+and do not overclaim behavioral isolation.
+
+========================================================
+PHASE 5 — SEED VALIDATION
+========================================================
+
+Run the approved WP-02 seed process.
+
+Verify:
+
+- exact seed counts by table
+- deterministic identifiers
+- no duplicates
+- second run inserts 0 new rows
+- no fabricated external assets
+- no unintended tenant-scoped rows
+
+Report exact counts.
+
+========================================================
+PHASE 6 — API SMOKE TEST
+========================================================
+
+Smoke-test every implemented WP-02 endpoint.
+
+Public/catalog:
+
+- categories
+- types
+- styles
+- materials
+- finishes
+- colors
+- brands
+- collections
+- furniture catalog list
+- furniture detail
+- search
+- filters
+- sorting
+- pagination
+
+Admin:
+
+- authenticated list
+- detail
+- create
+- update
+- publish
+- archive
+- restore
+- duplicate
+- version history where implemented
+
+Security:
+
+- unauthorized admin request returns 401 or 403
+- public read endpoints return 200
+- no admin key appears in responses
+- no mutation endpoint is public
+
+For each endpoint report:
+
+- method
+- path
+- expected status
+- observed status
+- pass/fail
+
+========================================================
+PHASE 7 — TARGETED TESTS
+========================================================
+
+Run only the WP-02 targeted test file first.
+
+Report:
+
+- test file
+- total tests
+- passed
+- failed
+- failure causes
+
+Then run relevant regression suites.
+
+Separate clearly:
+
+- WP-02 failures
+- pre-existing provider-health failures
+- environment-blocked checks
+
+Do not count provider-health failures as WP-02 failures unless the
+changed files directly caused them.
+
+========================================================
+PHASE 8 — FRONTEND VERIFICATION
+========================================================
+
+Admin Platform:
+
+- navigation entry visible
+- list loads
+- create works
+- edit works
+- search works
+- filters work
+- sorting works
+- pagination works
+- archive works
+- restore works
+- duplicate works
+- detail page loads
+
+Customer Portal:
+
+- catalog loads without 401
+- cards render
+- detail opens
+- search works
+- filters work
+- sorting works
+- pagination works
+- no admin controls visible
+- no admin API key exposed
+
+Capture screenshots if browser tooling is available.
+
+If login credentials block admin browser verification, report the
+exact boundary instead of marking it passed.
+
+========================================================
+PHASE 9 — DOCUMENTATION
+========================================================
+
+Create or complete:
+
+docs/wp02-furniture-library.md
+
+Include only verified information:
+
+- scope
+- architecture
+- tables
+- migration
+- RLS
+- seed counts
+- endpoints
+- permissions
+- admin UI
+- customer UI
+- tests
+- build results
+- known limitations
+- pre-existing failures
+- explicit WP-03+ exclusions
+
+========================================================
+PHASE 10 — SCOPE AUDIT
+========================================================
+
+Confirm no implementation was added for:
+
+- placement engine
+- collision engine
+- layout optimization
+- AI composition
+- rendering
+- moodboard
+- design sessions
+- export
+- WP-03+
+
+Confirm WP-01 contracts remain backward compatible.
+
+========================================================
+PHASE 11 — COMMIT
+========================================================
+
+If validation is clean:
+
+- inspect git status
+- exclude uploaded prompt files
+- exclude .replit changes
+- exclude unrelated files
+- create one WP-02 commit
+- do not merge to main
+- do not start WP-03
+
+Recommended commit message:
+
+feat(furniture-library): complete Phase 6 WP-02
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Current branch
+2. Files created
+3. Files modified
+4. Migration files
+5. Tables
+6. Endpoint inventory
+7. Seed counts
+8. RLS matrix
+9. API smoke-test results
+10. Admin UI status
+11. Customer UI status
+12. Targeted test results
+13. Build and typecheck results
+14. Pre-existing failures
+15. Known limitations
+16. Git status
+17. Commit SHA
+18. Scope audit result
+
+Use exactly one verdict:
+
+A. WP-02 COMPLETE
+
+B. WP-02 COMPLETE WITH OBSERVATIONS
+
+C. WP-02 INCOMPLETE
+
+D. WP-02 BLOCKED
+
+STOP.
+
+Do NOT begin WP-03.
+Wait for explicit approval.
