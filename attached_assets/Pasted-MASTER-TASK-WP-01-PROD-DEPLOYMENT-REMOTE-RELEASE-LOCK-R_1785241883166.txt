@@ -1,0 +1,341 @@
+MASTER TASK — WP-01 PROD DEPLOYMENT & REMOTE RELEASE LOCK
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current Branch:
+main
+
+Current Local HEAD:
+3726f6454518bd5c7836e4efe44bec7d1e097d68
+
+Current origin/main:
+8407a81
+
+Local State:
+5 commits ahead
+0 commits behind
+Working tree clean
+
+Tags:
+material-v6.0.0-wp01
+material-v6.0.1-wp01
+
+PROD Supabase Project:
+nzdweipzckfszczzqtuw
+
+========================================================
+OBJECTIVE
+========================================================
+
+Complete the production deployment and remote release lock
+for WP-01.
+
+Do NOT implement WP-02.
+
+Do NOT modify Room Template business logic.
+
+Do NOT redesign schema, API, or frontend.
+
+========================================================
+PHASE 1 — PRE-PRODUCTION SAFETY CHECK
+========================================================
+
+Before applying anything, verify:
+
+- exact PROD database identity
+- project ref matches nzdweipzckfszczzqtuw
+- ai_platform schema exists
+- the five WP-01 tables do not yet exist
+- no conflicting migration has already been applied
+- database connection is writable
+- backup or recovery path exists
+- no active migration lock or deployment conflict
+
+If the PROD target cannot be proven:
+
+STOP and report BLOCKED.
+
+========================================================
+PHASE 2 — REVIEW BASE MIGRATION
+========================================================
+
+Review:
+
+artifacts/api-server/src/migrations/20260727_room_template_library.sql
+
+Confirm:
+
+- only the five approved WP-01 tables are created
+- no DROP TABLE
+- no destructive ALTER
+- indexes and foreign keys match the Drizzle schema
+- migration is safe to apply once
+- no WP-02+ tables are included
+
+Tables:
+
+- ai_platform.room_types
+- ai_platform.room_styles
+- ai_platform.room_themes
+- ai_platform.layout_constraint_sets
+- ai_platform.room_templates
+
+========================================================
+PHASE 3 — APPLY BASE MIGRATION TO PROD
+========================================================
+
+Apply only:
+
+artifacts/api-server/src/migrations/20260727_room_template_library.sql
+
+Use hand-written SQL.
+
+Do NOT use drizzle-kit push.
+
+Record:
+
+- execution timestamp
+- statements applied
+- warnings
+- errors
+- transaction result
+
+After application, verify:
+
+- all five tables exist
+- columns match schema
+- indexes exist
+- foreign keys exist
+- unique constraints exist
+- no duplicate objects were created
+
+========================================================
+PHASE 4 — APPLY RLS MIGRATION TO PROD
+========================================================
+
+Apply:
+
+scripts/migrations/rls-wp01-room-templates.sql
+
+Verify:
+
+- RLS enabled on all five tables
+- FORCE RLS enabled on room_templates
+- allow_authenticated policies exist on four catalog tables
+- tenant_isolation exists on room_templates
+- USING and WITH CHECK are both present
+- no unrelated table policies changed
+
+========================================================
+PHASE 5 — PROD RLS VERIFICATION
+========================================================
+
+Query pg_class and pg_policies.
+
+Report for each table:
+
+- relrowsecurity
+- relforcerowsecurity
+- policy name
+- command
+- roles
+- USING expression
+- WITH CHECK expression
+
+Run behavioral checks using a non-BYPASSRLS role where possible:
+
+1. Shared catalog tables remain readable.
+2. Global room_templates remain visible.
+3. Missing tenant context does not expose tenant rows.
+4. Tenant A cannot read Tenant B rows.
+5. Tenant A cannot update Tenant B rows.
+6. Tenant A cannot insert Tenant B rows.
+7. Admin/service behavior remains documented separately.
+
+If only a superuser connection is available:
+
+- explicitly report BYPASSRLS limitation
+- do not claim behavioral tenant isolation as fully tested
+- still verify policies structurally
+
+========================================================
+PHASE 6 — SEED PROD CATALOG
+========================================================
+
+Run the approved idempotent seed process.
+
+Expected final counts:
+
+- room_types: 8
+- room_styles: 20
+- room_themes: 15
+- room_templates: 10
+- layout_constraint_sets: 0
+
+Verify:
+
+- seed completes without errors
+- rerun imports 0 duplicates
+- counts match expected values
+- no fabricated external assets
+- no tenant-scoped rows created unintentionally
+
+========================================================
+PHASE 7 — PROD SMOKE TEST
+========================================================
+
+Verify:
+
+Public catalog:
+
+- room types
+- styles
+- themes
+- templates
+- template detail
+
+Admin:
+
+- authenticated list
+- create
+- update
+- archive
+- restore
+- duplicate
+- unauthorized request rejected
+
+Customer portal:
+
+- catalog loads
+- cards render
+- filters work
+- detail opens
+- no 401
+- no admin key exposed
+
+Do not expose credentials in the report.
+
+========================================================
+PHASE 8 — REGRESSION
+========================================================
+
+Run:
+
+- 21/21 WP-01 targeted tests
+- API server build
+- Customer Portal typecheck
+- Admin Platform typecheck
+- public API smoke tests
+- admin authorization smoke tests
+
+Separate:
+
+- new failures
+- pre-existing failures
+- environment-blocked checks
+
+========================================================
+PHASE 9 — DOCUMENTATION UPDATE
+========================================================
+
+Update:
+
+docs/wp01-room-template-library.md
+docs/baselines/wp01-room-template-baseline.md
+
+Record:
+
+- PROD migration timestamp
+- PROD table verification
+- PROD RLS matrix
+- PROD seed counts
+- PROD smoke-test results
+- remaining limitations
+
+Do not retain “PROD pending” after successful verification.
+
+========================================================
+PHASE 10 — PUSH MAIN AND TAGS
+========================================================
+
+Use the repository’s authenticated GitHub integration or
+properly configured Git credentials.
+
+Do NOT embed a PAT in the remote URL.
+
+Push:
+
+- main
+- material-v6.0.0-wp01
+- material-v6.0.1-wp01
+
+Then verify remotely:
+
+- origin/main points to the expected final commit
+- both tags exist remotely
+- material-v6.0.0-wp01 remains on 2286edfea27565c60737e905c32792295d537124
+- material-v6.0.1-wp01 points to the final security-release commit
+- annotations are correct
+
+Do not force-push.
+
+========================================================
+PHASE 11 — FINAL GIT STATE
+========================================================
+
+Verify:
+
+- branch: main
+- HEAD SHA
+- origin/main SHA
+- ahead/behind: 0/0
+- working tree clean
+- no prompt files committed
+- no .replit changes
+- no unrelated files
+- both tags visible remotely
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. PROD database identity
+2. Base migration result
+3. RLS migration result
+4. PROD policy matrix
+5. Seed counts
+6. PROD smoke-test results
+7. Regression results
+8. Files changed
+9. Final commit SHA
+10. origin/main SHA
+11. material-v6.0.0-wp01 remote status
+12. material-v6.0.1-wp01 remote status
+13. Working tree status
+14. Remaining risks
+
+Use exactly one verdict:
+
+A. WP-01 RELEASE FULLY LOCKED
+PROD deployed and verified.
+Main and tags pushed.
+Ready for WP-02.
+
+B. WP-01 PROD DEPLOYED — REMOTE PUSH PENDING
+PROD complete.
+Git remote publishing still blocked.
+
+C. WP-01 REMOTE LOCKED — PROD PENDING
+Git remote complete.
+PROD migration still blocked.
+
+D. WP-01 RELEASE BLOCKED
+Critical migration, security, or environment issue remains.
+
+STOP.
+
+Do NOT start WP-02.
+Wait for explicit approval.
