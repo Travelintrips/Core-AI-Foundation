@@ -1,0 +1,642 @@
+MASTER IMPLEMENTATION TASK — RECOVER WP-03A BASELINE AND IMPLEMENT WP-03B COLLISION ENGINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target:
+WP-03B Collision Engine
+
+Current verified condition:
+
+- Active workspace does not contain WP-03B.
+- Active workspace also does not contain WP-03A placement-engine files.
+- Previous execution reported WP-03A complete with 170/170 tests passing.
+- Do not restart WP-03A blindly.
+- First recover the previously completed WP-03A implementation if it exists anywhere in the workspace, Git objects, reflog, backup remote, stash, worktrees, or local branches.
+- After WP-03A is recovered and verified, implement WP-03B.
+- Do not begin WP-03C.
+
+====================================================
+STRICT SAFETY RULES
+====================================================
+
+Do NOT:
+
+- modify main directly
+- overwrite existing unrelated work
+- delete branches
+- delete Git objects
+- force-push
+- merge to main
+- apply migrations to production
+- begin WP-03C
+- reuse Team 12 graphic-layout collision code as if it were WP-03B
+- treat documentation task files as implementation
+- commit secrets or GitHub tokens
+
+Preserve:
+
+- existing WP-01
+- existing WP-02
+- unrelated domains
+- API signatures
+- tenant isolation
+- repository contracts
+- transaction boundaries
+
+====================================================
+PHASE 1 — RECOVER WP-03A BASELINE
+====================================================
+
+Search exhaustively for the previously completed WP-03A implementation.
+
+Inspect:
+
+git branch -a
+git tag
+git reflog --all
+git stash list
+git worktree list
+git fsck --full --no-reflogs --unreachable
+git fsck --lost-found
+git log --all --oneline --decorate --graph
+git show-ref
+git remote -v
+git ls-remote gitsafe-backup
+
+Search filesystem outside the current repository root where permitted:
+
+find /home/runner -type f \( \
+  -name "placement-engine.ts" -o \
+  -name "placementEngineService.ts" -o \
+  -name "placement-engine-v2.test.ts" -o \
+  -name "wp03a-placement-engine-v2.sql" -o \
+  -name "wp03a-placement-engine-v2.md" \
+\) 2>/dev/null
+
+Search Git objects for known strings:
+
+- layout_sessions
+- placements
+- placementEngineService
+- normalizeRotation
+- snapToItemAnchor
+- wp03a-placement-engine
+- controlled placement
+- 170/170
+
+Inspect dangling commits and trees using git show.
+
+Expected WP-03A files:
+
+docs/wp03-design-sprint.md
+docs/wp03-domain-model.md
+docs/wp03-placement-engine.md
+docs/wp03-collision-model.md
+docs/wp03-layout-engine.md
+docs/wp03-api-blueprint.md
+
+lib/db/src/schema/placement-engine.ts
+
+scripts/migrations/wp03a-placement-engine-v2.sql
+scripts/migrations/rls-wp03a-placement-engine-v2.sql
+scripts/migrations/wp03a-placement-tenant-consistency-v2.sql
+
+artifacts/api-server/src/services/placementEngineService.ts
+artifacts/api-server/src/routes/placement-engine.ts
+artifacts/api-server/src/__tests__/placement-engine-v2.test.ts
+
+docs/wp03a-placement-engine-v2.md
+
+If the complete implementation is found:
+
+1. create branch:
+
+feature/phase6-wp03b-collision-engine
+
+2. restore WP-03A into that branch without modifying main
+3. verify WP-03A tests
+4. commit recovery separately
+
+Commit message:
+
+recovery(wp03a): restore verified placement engine baseline
+
+If WP-03A cannot be recovered after exhaustive search:
+
+- rebuild only the minimum verified WP-03A baseline required by WP-03B
+- preserve the previously reported contracts and expected file structure
+- do not redesign the domain
+- commit it separately before starting WP-03B
+
+Commit message:
+
+feat(wp03a): restore placement engine dependency for collision engine
+
+Do not continue to WP-03B until WP-03A targeted tests pass.
+
+====================================================
+PHASE 2 — VERIFY WP-03A BASELINE
+====================================================
+
+Verify:
+
+- layout_sessions schema exists
+- placements schema exists
+- tenant consistency exists
+- archived placements are supported
+- rotation normalization exists
+- item anchor snapping exists
+- session access is tenant-scoped
+- placement access is tenant-scoped
+- placement routes are registered
+- migrations are present
+- documentation is present
+
+Run:
+
+- WP-01 targeted tests
+- WP-02 targeted tests
+- WP-03A targeted tests
+- typecheck:libs
+- API build
+
+Record exact pass/fail counts.
+
+Do not start WP-03B if WP-03A targeted tests fail.
+
+====================================================
+PHASE 3 — WP-03B DESIGN CONTRACT
+====================================================
+
+Implement WP-03B as a deterministic 2D furniture collision engine.
+
+Canonical assumptions:
+
+- coordinate system: 2D top-down
+- unit: centimeters
+- rotation: degrees
+- rotation normalized to [0, 360)
+- broad phase: AABB
+- narrow phase: OBB using SAT
+- collision results are computed, not persisted by default
+- touching edges are not physical overlap
+- epsilon must be explicit and centralized
+- clearance violations are warnings, not physical collisions
+- archived placements are excluded
+- pair ordering must be deterministic
+- duplicate pairs are forbidden
+- tenant isolation must come from trusted request context
+
+Document decisions in:
+
+docs/wp03b-collision-engine.md
+
+The document must define:
+
+- coordinate system
+- units
+- rectangle anchor semantics
+- rotation convention
+- edge-touch policy
+- epsilon policy
+- broad-phase algorithm
+- narrow-phase algorithm
+- clearance model
+- room-boundary policy
+- deterministic ordering
+- error codes
+- performance constraints
+
+====================================================
+PHASE 4 — GEOMETRY PRIMITIVES
+====================================================
+
+Create a focused collision-engine module, for example:
+
+artifacts/api-server/src/services/collision-engine/types.ts
+artifacts/api-server/src/services/collision-engine/geometry.ts
+artifacts/api-server/src/services/collision-engine/aabb.ts
+artifacts/api-server/src/services/collision-engine/obb.ts
+artifacts/api-server/src/services/collision-engine/sat.ts
+artifacts/api-server/src/services/collision-engine/clearance.ts
+artifacts/api-server/src/services/collision-engine/roomBounds.ts
+artifacts/api-server/src/services/collision-engine/collisionEngine.ts
+artifacts/api-server/src/services/collision-engine/index.ts
+
+Required primitives:
+
+Point2D
+Vector2D
+AABB
+OBB
+ProjectionInterval
+CollisionPair
+CollisionResult
+ClearanceWarning
+RoomBoundaryViolation
+
+Implement:
+
+- vector add/subtract
+- dot product
+- normalization
+- rectangle center
+- rotated corners
+- OBB axes
+- projection on axis
+- interval overlap
+- AABB generation
+- AABB overlap
+- SAT separating-axis check
+- overlap depth
+- minimum translation axis where practical
+- epsilon-aware comparisons
+
+Avoid unnecessary third-party geometry libraries.
+
+====================================================
+PHASE 5 — COLLISION RULES
+====================================================
+
+Implement physical overlap detection:
+
+1. generate AABB
+2. reject non-overlapping pairs in broad phase
+3. generate OBB
+4. run SAT narrow phase
+5. return deterministic result
+
+Required behavior:
+
+- no overlap when separated
+- no overlap when only touching edges
+- no overlap when only touching corners
+- overlap at 0°
+- overlap at 45°
+- overlap at 90°
+- overlap at 180°
+- overlap at 270°
+- negative rotation normalization
+- rotation greater than 360°
+- very small distances handled with epsilon
+- zero/negative dimensions rejected
+- invalid numeric input rejected
+- NaN/Infinity rejected
+
+====================================================
+PHASE 6 — ROOM BOUNDARY VALIDATION
+====================================================
+
+Use the existing room/session geometry contract from WP-03A.
+
+Validate every rotated placement corner against room boundaries.
+
+Support:
+
+- rectangular room boundary at minimum
+- placement fully inside room
+- placement partially outside room
+- placement fully outside room
+- rotated placement outside room
+- edge-touch according to documented policy
+
+Return structured violations, not generic strings.
+
+Example codes:
+
+PLACEMENT_OUTSIDE_ROOM
+PLACEMENT_DIMENSIONS_INVALID
+PLACEMENT_GEOMETRY_INVALID
+
+Do not silently clamp placement coordinates.
+
+====================================================
+PHASE 7 — CLEARANCE WARNINGS
+====================================================
+
+Use furniture clearance metadata from WP-02 where available.
+
+Support:
+
+- front clearance
+- side clearance
+- back clearance when available
+- rotated clearance zones
+- collision against another placement
+- collision against room boundary
+
+Physical collision and clearance warning must remain separate.
+
+Example:
+
+{
+  "physicalCollision": false,
+  "clearanceWarnings": [...]
+}
+
+Do not classify clearance-only violations as physical overlap.
+
+====================================================
+PHASE 8 — SERVICE INTEGRATION
+====================================================
+
+Create or extend:
+
+artifacts/api-server/src/services/collisionEngineService.ts
+
+Required service operations:
+
+- checkPlacementCollision
+- checkSessionCollisions
+- checkPlacementRoomBounds
+- checkPlacementClearance
+- validatePlacementGeometry
+
+Service requirements:
+
+- load session through WP-03A repository/service
+- enforce tenant context
+- never accept trusted tenant ID from body
+- exclude archived placements
+- avoid self-collision
+- suppress duplicate pairs
+- deterministic sorting
+- structured errors
+- no SQL leakage
+- no stack traces in API responses
+
+Do not bypass repository contracts.
+
+====================================================
+PHASE 9 — API ROUTES
+====================================================
+
+Add routes under the existing placement-engine router or a dedicated collision router.
+
+Required endpoints:
+
+POST /api/ai/layout-sessions/:sessionId/collision-check
+
+GET /api/ai/layout-sessions/:sessionId/collisions
+
+POST /api/ai/layout-sessions/:sessionId/placements/:placementId/collision-check
+
+Optional pure geometry endpoint only if architecture permits:
+
+POST /api/ai/collision/check
+
+API requirements:
+
+- authenticated
+- tenant-scoped
+- strict Zod validation
+- reject unknown fields where appropriate
+- consistent error response
+- no public access
+- router registered in API server
+- no duplicate route registration
+
+Do not create a second RequestContext model.
+
+====================================================
+PHASE 10 — DATABASE AND MIGRATION DECISION
+====================================================
+
+Prefer no new collision-result table.
+
+Collision results should normally be computed.
+
+Only create schema changes if necessary for:
+
+- explicit clearance configuration
+- missing geometry fields
+- required indexes
+
+Any schema changes must include:
+
+- forward migration
+- RLS migration when tenant data is introduced
+- idempotent SQL
+- rollback notes
+- schema export wiring
+
+Do not apply migrations to production.
+
+====================================================
+PHASE 11 — TESTS
+====================================================
+
+Create targeted tests for WP-03B.
+
+Suggested files:
+
+artifacts/api-server/src/__tests__/collision-engine-geometry.test.ts
+artifacts/api-server/src/__tests__/collision-engine-service.test.ts
+artifacts/api-server/src/__tests__/collision-engine-routes.test.ts
+artifacts/api-server/src/__tests__/collision-engine-tenant.test.ts
+
+Minimum required coverage:
+
+Geometry:
+
+- AABB overlap
+- AABB separation
+- AABB edge touch
+- OBB 0°
+- OBB 45°
+- OBB 90°
+- OBB 180°
+- OBB 270°
+- negative rotations
+- rotations over 360°
+- corner touch
+- edge touch
+- epsilon
+- invalid dimensions
+- NaN
+- Infinity
+
+SAT:
+
+- separating axis found
+- no separating axis
+- correct overlap depth
+- deterministic axis selection
+
+Session collision:
+
+- no placements
+- one placement
+- multiple non-overlapping
+- one overlapping pair
+- multiple overlapping pairs
+- duplicate suppression
+- self exclusion
+- archived exclusion
+- deterministic ordering
+
+Room bounds:
+
+- inside
+- edge touch
+- partial outside
+- fully outside
+- rotated outside
+
+Clearance:
+
+- no warning
+- front warning
+- side warning
+- rotated clearance
+- boundary warning
+- warning without physical collision
+
+Tenant/security:
+
+- tenant A cannot access tenant B session
+- tenant A cannot inspect tenant B placement
+- body tenant ID ignored/rejected
+- platform scope behavior follows canonical repository contract
+
+API:
+
+- auth required
+- invalid UUID/ID
+- invalid body
+- missing session
+- missing placement
+- successful check
+- structured error
+
+All WP-03A tests must continue to pass.
+
+====================================================
+PHASE 12 — PERFORMANCE
+====================================================
+
+For normal session sizes, deterministic pairwise detection is acceptable.
+
+Requirements:
+
+- broad phase must run before SAT
+- do not perform SAT on obviously separated AABBs
+- do not load unrelated tenants
+- avoid repeated database fetch per pair
+- load placements once per session
+- document expected complexity
+
+Add a moderate stress test with a realistic placement count.
+
+Do not prematurely add spatial hashing unless required by measured performance.
+
+====================================================
+PHASE 13 — VALIDATION
+====================================================
+
+Run:
+
+1. WP-01 targeted tests
+2. WP-02 targeted tests
+3. WP-03A targeted tests
+4. WP-03B targeted tests
+5. typecheck:libs
+6. API typecheck/build
+7. relevant regression suite
+
+Report separately:
+
+- new failures
+- pre-existing failures
+- unrelated failures
+
+Do not label failing tests as pre-existing without proving they fail on the baseline commit.
+
+====================================================
+PHASE 14 — GIT CHECKPOINTS
+====================================================
+
+Work only on:
+
+feature/phase6-wp03b-collision-engine
+
+Use separate commits:
+
+1.
+recovery(wp03a): restore verified placement engine baseline
+
+Only if recovery was required.
+
+2.
+docs(wp03b): define collision engine contract
+
+3.
+feat(wp03b): implement geometry and collision engine
+
+4.
+feat(wp03b): integrate collision service and API
+
+5.
+test(wp03b): add collision engine verification suite
+
+6.
+docs(wp03b): add implementation and validation report
+
+After every commit:
+
+git status --short
+git log -1 --oneline
+
+Push only after GitHub authentication succeeds.
+
+Never claim a push succeeded without verifying:
+
+git ls-remote --heads origin feature/phase6-wp03b-collision-engine
+
+If push cannot be verified:
+
+- preserve commits locally
+- report exact SHAs
+- do not claim remote success
+
+====================================================
+FINAL REPORT
+====================================================
+
+Provide:
+
+1. Recovery source for WP-03A
+2. WP-03A baseline status
+3. Branch name
+4. Commit SHAs
+5. WP-03B file inventory
+6. Geometry capability matrix
+7. Collision behavior matrix
+8. Room-boundary results
+9. Clearance results
+10. Service integration
+11. API endpoints
+12. Tenant/security verification
+13. Migration decision
+14. Test counts
+15. Typecheck/build results
+16. Regression results
+17. Git push verification
+18. Remaining risks
+19. Whether WP-03B is ready for merge review
+20. Whether WP-03C may begin
+
+Use exactly one verdict:
+
+A. WP-03B COMPLETE AND VERIFIED — READY FOR MERGE REVIEW
+
+B. WP-03B IMPLEMENTED — MINOR REMEDIATION REQUIRED
+
+C. WP-03B PARTIALLY IMPLEMENTED — NOT READY
+
+D. WP-03A RECOVERY FAILED — WP-03B BLOCKED
+
+Do not begin WP-03C.
+
+STOP after the final report.
