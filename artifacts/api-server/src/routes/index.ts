@@ -90,6 +90,10 @@ import { annotationRouter } from "../domains/annotation-system/index.js";
 import materialLibraryRouter from "./material-library.js";
 // ── Phase 6 WP-02: Furniture & Object Library ─────────────────────────────
 import furnitureLibraryRouter from "./furniture-library.js";
+// ── Phase 6 WP-03A: Placement Engine ──────────────────────────────────────
+import placementEngineRouter from "./placement-engine.js";
+// ── Phase 6 WP-03B: Collision Engine ──────────────────────────────────────
+import collisionEngineRouter from "./collision-engine.js";
 // ── Interior Design Material Library (Phase 1) ────────────────────────────
 import materialLibraryCatalogRouter from "./material-library-catalog.js";
 // ── Interior Design Material Library (Phase 2 intelligence, additive) ─────
@@ -322,6 +326,14 @@ router.use(roomTemplatesRouter);
 // Admin CRUD under /ai/furniture-library/*; public catalog under
 // /ai/furniture-catalog/* (declared public in adminAuth.ts).
 router.use(furnitureLibraryRouter);
+// ── Phase 6 WP-03A: Placement Engine ─────────────────────────────────────────
+// Tenant-scoped layout sessions and furniture placements.
+// All routes under /ai/layout-sessions/*, admin-auth required.
+router.use(placementEngineRouter);
+// ── Phase 6 WP-03B: Collision Engine ─────────────────────────────────────────
+// Collision detection, room boundary validation, clearance warnings.
+// Routes under /ai/layout-sessions/*/collision-check, /collisions, /ai/collision/check.
+router.use(collisionEngineRouter);
 // ── Interior Design Material Library (Phase 1) ────────────────────────────────
 // Mount Phase 2 before Phase 1's generic /material-library/:id route so
 // /suggestions and /:id/similar are resolved by the owning domain.
