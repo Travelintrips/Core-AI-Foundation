@@ -1,2 +1,44 @@
 User-agent: *
 Allow: /
+
+# Public pages — crawlable
+Allow: /services
+Allow: /services/
+Allow: /portfolio
+Allow: /portfolio-gallery
+Allow: /gallery
+Allow: /vendors
+Allow: /vendors/
+Allow: /room-templates
+Allow: /room-templates/
+Allow: /furniture-catalog
+Allow: /furniture-catalog/
+Allow: /interior-design
+Allow: /fashion-design
+Allow: /tarif-kalkulator
+Allow: /customs-tariff
+Allow: /template-gallery
+Allow: /inspiration
+Allow: /portfolio-v2
+Allow: /goals
+Allow: /goals/
+Allow: /collections
+Allow: /collections/
+Allow: /start
+
+# Private / token-gated pages — do not index
+Disallow: /workspace/
+Disallow: /dashboard/
+Disallow: /review/
+Disallow: /cp-review/
+Disallow: /quotation/
+Disallow: /gate/
+Disallow: /project/
+Disallow: /request-service/
+Disallow: /access
+Disallow: /submit
+Disallow: /success
+Disallow: /dev-test
+Disallow: /creative-preview/
+
+Sitemap: https://aicore.cstlogistic.co.id/sitemap.xml
