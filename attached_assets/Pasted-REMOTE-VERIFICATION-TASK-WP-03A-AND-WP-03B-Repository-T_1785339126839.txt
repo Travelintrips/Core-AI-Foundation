@@ -1,0 +1,302 @@
+REMOTE VERIFICATION TASK — WP-03A AND WP-03B
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Objective:
+
+Verify the actual GitHub remote state for WP-03A and WP-03B.
+Do not implement new code in this task.
+
+========================================================
+STRICT RULES
+========================================================
+
+Do NOT:
+
+- modify source files
+- create implementation files
+- apply migrations
+- merge
+- tag
+- start WP-03C
+- rebuild WP-03A
+- rebuild WP-03B
+- force-push
+- delete branches
+
+Allowed:
+
+- verify authentication
+- fetch remote refs
+- inspect remote branches
+- inspect commits and files
+- create a temporary clean inspection branch only if necessary
+- run non-mutating tests after a branch is safely checked out
+
+========================================================
+PHASE 1 — VERIFY AUTHENTICATION
+========================================================
+
+Run:
+
+pwd
+git remote -v
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git rev-parse --is-shallow-repository
+
+Verify GitHub access using both:
+
+1. normal git CLI
+2. Replit Git integration
+
+Run if possible:
+
+git fetch origin --prune --tags
+git ls-remote origin HEAD
+git ls-remote --heads origin
+
+Authentication is verified only if remote heads can be listed.
+
+Report exactly:
+
+- CLI auth result
+- Replit integration auth result
+- whether remote refs are accessible
+
+Do not continue if no remote refs can be read.
+
+========================================================
+PHASE 2 — VERIFY REMOTE BRANCHES
+========================================================
+
+Check whether these branches exist remotely:
+
+feature/phase6-wp03a-rebuild-v2
+feature/phase6-wp03a-controlled-rebuild
+feature/phase6-wp03b-collision-engine
+
+Use:
+
+git ls-remote --heads origin \
+  feature/phase6-wp03a-rebuild-v2 \
+  feature/phase6-wp03a-controlled-rebuild \
+  feature/phase6-wp03b-collision-engine
+
+Also inspect all remote refs after fetch:
+
+git branch -r
+git for-each-ref refs/remotes/origin \
+  --format='%(refname:short) %(objectname:short) %(subject)'
+
+For each branch report:
+
+- exists or absent
+- HEAD SHA
+- latest commit subject
+- latest commit date
+- reachable from main or not
+
+========================================================
+PHASE 3 — INSPECT WP-03A REMOTE
+========================================================
+
+If WP-03A remote branch exists, inspect it without modifying main.
+
+Use git show against the remote ref.
+
+Verify these expected files:
+
+docs/wp03-design-sprint.md
+docs/wp03-domain-model.md
+docs/wp03-placement-engine.md
+docs/wp03-collision-model.md
+docs/wp03-layout-engine.md
+docs/wp03-api-blueprint.md
+
+lib/db/src/schema/placement-engine.ts
+
+scripts/migrations/wp03a-placement-engine-v2.sql
+scripts/migrations/rls-wp03a-placement-engine-v2.sql
+scripts/migrations/wp03a-placement-tenant-consistency-v2.sql
+
+artifacts/api-server/src/services/placementEngineService.ts
+artifacts/api-server/src/routes/placement-engine.ts
+artifacts/api-server/src/__tests__/placement-engine-v2.test.ts
+
+docs/wp03a-placement-engine-v2.md
+
+Inspect commit history:
+
+git log --oneline --decorate origin/<wp03a-branch>
+
+Classify WP-03A as:
+
+- COMPLETE ON REMOTE
+- PARTIAL ON REMOTE
+- ABSENT
+
+Do not merge.
+
+========================================================
+PHASE 4 — INSPECT WP-03B REMOTE
+========================================================
+
+If feature/phase6-wp03b-collision-engine exists, inspect it.
+
+Search that remote branch for:
+
+- collision engine service
+- geometry primitives
+- AABB
+- OBB
+- SAT
+- clearance
+- room bounds
+- collision API routes
+- collision tests
+- WP-03B documentation
+
+Use commands such as:
+
+git ls-tree -r --name-only origin/feature/phase6-wp03b-collision-engine
+
+git grep -n -i \
+  "collisionEngine\|AABB\|OBB\|SAT\|separating axis\|clearance\|room bounds" \
+  origin/feature/phase6-wp03b-collision-engine
+
+Inspect likely commits:
+
+git log --oneline --decorate \
+  origin/feature/phase6-wp03b-collision-engine
+
+Classify WP-03B as:
+
+- COMPLETE ON REMOTE
+- PARTIAL ON REMOTE
+- ABSENT
+
+Do not infer completion only from branch name.
+
+========================================================
+PHASE 5 — CHECK MAIN
+========================================================
+
+Inspect origin/main for both WP-03A and WP-03B.
+
+Report:
+
+- WP-03A merged to main: yes/no
+- WP-03B merged to main: yes/no
+- merge commit SHA if available
+- feature commits reachable from main
+- tags containing those commits
+
+Use:
+
+git branch -r --contains <sha>
+git tag --contains <sha>
+
+Do not merge.
+
+========================================================
+PHASE 6 — OPTIONAL SAFE TEST VALIDATION
+========================================================
+
+Only if WP-03A or WP-03B branch exists and can be checked out safely:
+
+1. preserve current dirty files
+2. do not overwrite replit.md
+3. do not commit task files
+4. create a temporary inspection worktree or clean temporary branch
+
+Run only non-mutating checks:
+
+- relevant lib typecheck
+- API build
+- WP-03A targeted tests
+- WP-03B targeted tests
+
+Do not apply migrations.
+
+Do not install dependencies.
+
+If safe checkout is not possible, skip tests and report why.
+
+========================================================
+DECISION LOGIC
+========================================================
+
+CASE A:
+
+WP-03A exists remotely and WP-03B exists remotely.
+
+Action:
+- report both branch states
+- recommend WP-03B validation/remediation
+- do not rebuild
+
+CASE B:
+
+WP-03A exists remotely but WP-03B is absent.
+
+Action:
+- report WP-03A as available
+- recommend starting WP-03B from WP-03A branch
+- block WP-03C
+
+CASE C:
+
+WP-03A is absent remotely.
+
+Action:
+- report critical baseline loss
+- do not start WP-03B
+- do not start WP-03C
+
+CASE D:
+
+Remote access still unavailable.
+
+Action:
+- report authentication blocker
+- do not make any completion claim
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Repository identity
+2. Current branch and HEAD
+3. Auth verification result
+4. Shallow clone status
+5. Remote branch inventory
+6. WP-03A branch and commit status
+7. WP-03A file inventory
+8. WP-03A test/build status if checked
+9. WP-03B branch and commit status
+10. WP-03B artifact inventory
+11. WP-03B test/build status if checked
+12. Whether WP-03A is merged to main
+13. Whether WP-03B is merged to main
+14. Whether WP-03C may begin
+15. Exact recommended next task
+16. Confirmation no source/database changes were made
+
+Use exactly one verdict:
+
+A. WP-03A AND WP-03B FOUND ON REMOTE — VALIDATION REQUIRED
+
+B. WP-03A FOUND, WP-03B ABSENT — START WP-03B
+
+C. WP-03A ABSENT — WP-03B AND WP-03C BLOCKED
+
+D. REMOTE VERIFICATION BLOCKED BY AUTHENTICATION
+
+STOP.
+
+Do not implement anything.
