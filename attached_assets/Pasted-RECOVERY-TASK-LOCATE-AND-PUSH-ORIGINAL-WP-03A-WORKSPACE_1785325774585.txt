@@ -1,0 +1,174 @@
+RECOVERY TASK — LOCATE AND PUSH ORIGINAL WP-03A WORKSPACE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Objective:
+
+Confirm that this workspace contains the original WP-02,
+WP-03 Design, and WP-03A implementation, then publish the complete
+baseline to GitHub.
+
+IMPORTANT:
+
+Do not implement new features.
+Do not recreate missing files.
+Do not force-push.
+Do not rewrite history.
+Do not commit attached task files.
+
+PHASE 1 — VERIFY LOCAL CONTENT
+
+Run and report:
+
+pwd
+git remote -v
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git log --all --oneline --decorate -50
+git rev-parse --is-shallow-repository
+
+Search for:
+
+git log --all --oneline --grep='WP-03A'
+git log --all --oneline --grep='placement engine'
+git log --all --oneline --grep='WP-03'
+git log --all --oneline --grep='furniture-library'
+
+Verify whether these commits exist:
+
+git cat-file -t 244fda1
+git cat-file -t 35e5c88
+
+PHASE 2 — VERIFY REQUIRED FILES
+
+Confirm these files exist:
+
+lib/db/src/schema/furniture-library.ts
+docs/wp02-furniture-library.md
+
+docs/wp03-design-sprint.md
+docs/wp03-domain-model.md
+docs/wp03-placement-engine.md
+docs/wp03-collision-model.md
+docs/wp03-layout-engine.md
+docs/wp03-api-blueprint.md
+
+lib/db/src/schema/placement-engine.ts
+scripts/migrations/wp03a-placement-engine.sql
+scripts/migrations/rls-wp03a-placement-engine.sql
+artifacts/api-server/src/services/placementEngineService.ts
+artifacts/api-server/src/routes/placement-engine.ts
+artifacts/api-server/src/__tests__/placement-engine.test.ts
+docs/wp03a-placement-engine.md
+
+If these files do not exist:
+
+STOP and report THIS IS NOT THE ORIGINAL WORKSPACE.
+
+PHASE 3 — IDENTIFY EXACT COMMITS
+
+Report:
+
+- exact WP-02 SHA
+- exact WP-03 Design SHA
+- exact WP-03A SHA
+- branch containing each commit
+- whether each is reachable from local main
+
+PHASE 4 — PROTECT LOCAL STATE
+
+Inspect uncommitted changes.
+
+Do not commit:
+
+- attached_assets task files
+- pasted prompt files
+- unrelated files
+- accidental .replit changes
+
+If verified WP-03A code is uncommitted, commit only the legitimate
+implementation using:
+
+feat(layout): implement WP-03A placement engine core
+
+PHASE 5 — SYNC SAFELY
+
+Fetch remote:
+
+git fetch origin --prune --tags
+
+Compare local branch to origin/main.
+
+If local history is only ahead, push normally.
+
+If histories diverge:
+
+- do not force-push
+- do not discard commits
+- report the divergence before resolving
+
+PHASE 6 — PUSH
+
+Push the branch containing WP-03A.
+
+Preferred when merged locally:
+
+git push origin main
+
+Otherwise:
+
+git push -u origin <wp03a-feature-branch>
+
+Then push an annotated baseline tag:
+
+material-v6.0.2-wp03a
+
+Tag message:
+
+WP-03A Placement Engine Core Baseline
+Verified placement engine implementation.
+Ready for WP-03B.
+
+Push:
+
+git push origin material-v6.0.2-wp03a
+
+PHASE 7 — VERIFY REMOTE
+
+Verify:
+
+git fetch origin --prune --tags
+git cat-file -t <WP02_SHA>
+git cat-file -t <WP03_DESIGN_SHA>
+git cat-file -t <WP03A_SHA>
+git branch -r --contains <WP03A_SHA>
+
+Confirm all required files are accessible from the remote branch.
+
+FINAL REPORT
+
+Provide:
+
+1. Repository identity
+2. Workspace path
+3. Current branch
+4. WP-02 SHA
+5. WP-03 Design SHA
+6. WP-03A SHA
+7. Branch pushed
+8. Remote push result
+9. Tag result
+10. Required file verification
+11. Working tree status
+
+Use exactly one verdict:
+
+A. ORIGINAL WP-03A WORKSPACE FOUND AND PUBLISHED
+
+B. ORIGINAL WORKSPACE FOUND BUT PUSH BLOCKED
+
+C. THIS IS NOT THE ORIGINAL WORKSPACE
+
+STOP.
