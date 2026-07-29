@@ -1,0 +1,89 @@
+Lanjutkan dari checkpoint SEO terakhir.
+
+Jangan audit ulang dari awal.
+Jangan menyentuh auth, security, database, API key, middleware, payment, atau business logic.
+
+Status saat ini:
+- 25 halaman publik sudah memiliki <SEOMeta>.
+- Infrastruktur SEO sudah tersedia.
+- sitemap.xml sudah diperbarui.
+- react-helmet-async sudah terpasang.
+- typecheck sudah bersih.
+- Build dan rendered HTML verification belum selesai.
+
+Kerjakan hanya langkah berikut:
+
+1. Tampilkan:
+   - branch;
+   - HEAD SHA;
+   - git status;
+   - daftar file SEO yang berubah;
+   - diff summary.
+
+2. Jalankan build frontend.
+   Jika command membutuhkan PORT, set PORT hanya pada command build.
+   Jangan mengubah konfigurasi permanen hanya untuk membuat build lulus.
+
+3. Jalankan typecheck ulang setelah build.
+
+4. Verifikasi metadata pada HTML hasil render untuk seluruh 25 route publik.
+
+Untuk setiap route catat:
+- title;
+- meta description;
+- canonical;
+- meta robots;
+- og:title;
+- og:description;
+- og:url;
+- og:image;
+- twitter:card;
+- twitter:title;
+- twitter:description;
+- twitter:image;
+- JSON-LD type.
+
+5. Pastikan:
+- canonical memakai domain production;
+- og:url sama dengan canonical;
+- image URL absolut;
+- tidak ada localhost;
+- tidak ada replit.app;
+- tidak ada canonical kosong;
+- tidak ada double slash;
+- tidak ada duplicate meta tag;
+- metadata setiap route sesuai isi halaman;
+- halaman dinamis memiliki fallback metadata yang aman.
+
+6. Verifikasi sitemap.xml:
+- XML valid;
+- semua route publik penting tercantum;
+- tidak ada route admin/internal;
+- tidak ada URL duplikat;
+- domain production benar.
+
+7. Verifikasi robots.txt:
+- sitemap URL benar;
+- halaman publik tidak terblokir;
+- asset penting tidak terblokir.
+
+8. Verifikasi JSON-LD:
+- JSON valid;
+- type sesuai halaman;
+- URL dan image absolut;
+- tidak ada undefined atau data palsu.
+
+9. Laporan akhir:
+- file yang berubah;
+- daftar 25 route;
+- metadata final per route;
+- hasil typecheck;
+- hasil build;
+- hasil rendered HTML;
+- status sitemap;
+- status robots;
+- status JSON-LD;
+- verdict SEO READY atau NOT READY.
+
+Jangan commit atau push.
+Berhenti setelah laporan SEO final.
