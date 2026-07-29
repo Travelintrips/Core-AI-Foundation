@@ -275,6 +275,11 @@ export default function VendorDirectoryPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOMeta
+        title="Direktori Vendor Kreatif"
+        description="Temukan vendor kreatif terpercaya di Indonesia — fotografer, illustrator, web developer, motion designer, dan profesional kreatif lainnya."
+        canonical="/vendors"
+      />
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-8">
         {/* Header */}
         <div>
