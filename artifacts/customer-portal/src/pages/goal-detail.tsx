@@ -202,8 +202,8 @@ export default function GoalDetailPage() {
   return (
     <Layout>
       <SEOMeta
-        title={goal.name}
-        description={goal.description ?? `Temukan layanan creative AI terbaik untuk ${goal.name}. Platform Creative Studio Indonesia.`}
+        title={goal?.name ?? "Tujuan Bisnis"}
+        description={goal?.description ?? `Temukan layanan creative AI terbaik untuk ${goal?.name ?? "bisnis Anda"}. Platform Creative Studio Indonesia.`}
         canonical={`/goals/${slug}`}
       />
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
