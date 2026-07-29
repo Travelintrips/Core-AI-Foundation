@@ -1,0 +1,89 @@
+Saya menyetujui BATCH 1 SAJA dengan perubahan berikut.
+
+Jangan kerjakan Batch 2 atau Batch 3 dahulu.
+
+PHASE 4.1 — EMERGENCY SECRET REMEDIATION
+
+Aturan wajib:
+
+1. Jangan mencetak, menyalin, atau menampilkan nilai secret aktual dalam terminal, diff, log, laporan, atau output.
+2. Jangan gunakan `git checkout .replit` sebagai rollback karena file lama mengandung credential yang sudah terpapar.
+3. Jangan menyisakan nilai kosong atau placeholder secret di .replit jika blok tersebut tidak diperlukan. Hapus seluruh deklarasi secret dari file tracked.
+4. Jangan commit atau push.
+5. Jangan mengubah production database.
+6. Jangan menghapus VITE_ADMIN_API_KEY sebelum replacement session-auth flow terbukti berfungsi.
+7. Semua pengujian dilakukan di DEV.
+
+Kerjakan dengan urutan berikut:
+
+STEP 1 — Secret inventory aman
+- Buat daftar NAMA environment variable saja.
+- Jangan tampilkan nilainya.
+- Kelompokkan menjadi:
+  a. harus dirotasi,
+  b. cukup dipindahkan,
+  c. deprecated/tidak digunakan,
+  d. belum diketahui penggunaannya.
+- Cari penggunaan setiap env var di codebase.
+- Tandai service yang bergantung pada masing-masing env var.
+
+STEP 2 — Replacement auth verification
+Sebelum menghapus VITE_ADMIN_API_KEY:
+- Audit endpoint login admin.
+- Audit verifySessionToken().
+- Audit cookie settings: httpOnly, secure, sameSite, domain, path, expiry.
+- Pastikan frontend request menggunakan credentials: "include".
+- Verifikasi CORS mendukung credentialed request hanya dari origin yang diizinkan.
+- Verifikasi role admin ditentukan backend, bukan frontend.
+- Buat daftar 65+ file yang masih memakai VITE_ADMIN_API_KEY dan kelompokkan berdasarkan pola penggunaan.
+- Tampilkan rencana migrasi file, jangan implementasikan semuanya sekaligus.
+
+STEP 3 — Replit Secrets readiness
+Karena pengisian dan rotasi dashboard dilakukan manual oleh pemilik akun:
+- Buat checklist nama secret yang harus dimasukkan ke Replit Secrets.
+- Jangan mengubah .replit sebelum saya menyatakan semua secret baru sudah dimasukkan.
+- Jangan menganggap secret sudah tersedia hanya karena nama variabel ada.
+
+STEP 4 — Safe repository remediation
+Setelah saya mengonfirmasi Replit Secrets sudah lengkap:
+- Hapus semua secret plaintext dari .replit.
+- Jangan menggantinya dengan dummy value.
+- Pastikan git diff tidak menampilkan secret.
+- Jalankan secret scan terhadap seluruh tracked files dan git history yang tersedia.
+- Sanitasi output scan; tampilkan hanya file, line, jenis secret, dan fingerprint sebagian.
+- Jangan menampilkan secret penuh.
+
+STEP 5 — DEV runtime verification
+Setelah .replit dibersihkan:
+- Restart seluruh service DEV.
+- Verifikasi API server, customer portal, admin platform, dan worker dapat start.
+- Jalankan health check.
+- Verifikasi provider configuration terbaca tanpa mencetak nilainya.
+- Verifikasi email/WhatsApp hanya sebatas configuration check; jangan mengirim pesan nyata.
+- Verifikasi Supabase DEV connection.
+- Jangan menyentuh Supabase PROD.
+
+STEP 6 — Admin auth migration plan
+- Buat file-by-file migration plan untuk menghapus VITE_ADMIN_API_KEY.
+- Jelaskan apakah api-client sudah mendukung credentials: "include".
+- Identifikasi endpoint yang masih hanya menerima x-admin-api-key.
+- Identifikasi perubahan backend dan frontend yang dibutuhkan.
+- Buat test plan:
+  a. login valid berhasil,
+  b. cookie dibuat,
+  c. halaman admin bisa akses API,
+  d. user non-admin ditolak,
+  e. request tanpa cookie ditolak,
+  f. browser bundle tidak berisi admin key.
+- Berhenti sebelum implementasi auth replacement.
+
+OUTPUT YANG DIMINTA:
+1. Secret inventory tanpa nilai.
+2. Dependency map per service.
+3. Session-auth verification.
+4. Daftar manual action untuk saya.
+5. File-by-file VITE_ADMIN_API_KEY migration plan.
+6. Risiko dan rollback aman.
+7. Status READY / NOT READY untuk membersihkan .replit.
+
+Berhenti setelah laporan ini dan tunggu konfirmasi saya.
