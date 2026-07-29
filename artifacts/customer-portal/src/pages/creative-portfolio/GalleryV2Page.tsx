@@ -16,7 +16,6 @@ import {
   useBeforeAfterFeed,
 } from '@/hooks/use-gallery-v2';
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   SearchFilterBar,
   PortfolioCard,
   CompareDrawer,
@@ -24,6 +23,7 @@ import { SEOMeta } from "@/components/SEOMeta";
   IndustryShowcaseSection,
   BrandDnaRecs,
 } from '@/components/creative-portfolio';
+import { SEOMeta } from "@/components/SEOMeta";
 
 // Derive token from URL if present (/workspace/:token/portfolio-v2)
 function useWorkspaceToken(): string | undefined {

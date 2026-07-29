@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   Briefcase, Globe, Star, Eye, ChevronRight, Search,
   Sparkles, ArrowRight, LayoutTemplate, Filter,
 } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

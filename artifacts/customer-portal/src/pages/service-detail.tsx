@@ -21,12 +21,12 @@ import { ServiceWorkflow } from "@/components/service-workflow";
 import { useToast } from "@/hooks/use-toast";
 import { localizePackage, localizePaymentPolicy, localizeService } from "@/lib/catalog-i18n";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   Loader2, ArrowLeft, CheckCircle2, Sparkles, Star, Clock, Shield,
   Zap, ChevronRight, Users, Award, Cpu, Package, Settings2,
   Receipt, HelpCircle, LayoutGrid, Check, FileText, Globe,
   RefreshCw, Lock, BadgeCheck, CreditCard, X, PlusCircle,
 } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Lazy AI Workforce (below-fold, safe to defer) ─────────────────────────────
 const AiWorkforceSection = lazy(() =>

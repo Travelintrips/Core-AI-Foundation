@@ -8,7 +8,6 @@
 import { useState, useCallback } from 'react';
 import { Search, Filter, Star, MapPin, Clock, CheckCircle, X } from 'lucide-react';
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   useVendors,
   useVendorCategories,
   VENDOR_TYPE_LABELS,
@@ -16,6 +15,7 @@ import { SEOMeta } from "@/components/SEOMeta";
   type PublicVendorCard,
   type VendorSearchParams,
 } from '@/hooks/use-vendors';
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Price formatter ────────────────────────────────────────────────────────────
 function formatPrice(v: number) {

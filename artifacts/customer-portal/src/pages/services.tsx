@@ -14,7 +14,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/lib/i18n";
 import { localizeCategory, localizeService, serviceSearchText } from "@/lib/catalog-i18n";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   trackCatalogCategoryViewed,
   trackCatalogServiceSelected,
   trackSearchStarted,
@@ -22,6 +21,7 @@ import { SEOMeta } from "@/components/SEOMeta";
   trackSmartChoiceSelected,
   trackSmartChoiceStarted,
 } from "@/lib/analytics";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

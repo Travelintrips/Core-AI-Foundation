@@ -3,10 +3,10 @@ import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   LayoutTemplate, Search, Star, Sparkles, Eye, Heart,
   Globe, ChevronRight, Zap, Check, MonitorPlay, Wand2,
 } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

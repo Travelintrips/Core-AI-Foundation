@@ -13,7 +13,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   Search,
   AlertTriangle,
   CheckCircle2,
@@ -29,6 +28,7 @@ import { SEOMeta } from "@/components/SEOMeta";
   Loader2,
   Calculator,
 } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── API ────────────────────────────────────────────────────────────────────────
 

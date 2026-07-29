@@ -13,7 +13,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   Calculator,
   ArrowLeft,
   Search,
@@ -29,6 +28,7 @@ import { SEOMeta } from "@/components/SEOMeta";
   ShieldAlert,
   Info,
 } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── API ────────────────────────────────────────────────────────────────────────
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";

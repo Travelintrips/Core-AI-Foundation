@@ -10,9 +10,9 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   Search, Sparkles, Star, Eye, Globe, Scale, X, Loader2,
 } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 interface GalleryCard {
   id: number;

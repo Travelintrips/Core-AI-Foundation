@@ -13,9 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { SEOMeta } from "@/components/SEOMeta";
 
 const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 

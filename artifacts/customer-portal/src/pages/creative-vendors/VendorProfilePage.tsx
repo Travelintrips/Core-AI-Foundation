@@ -11,13 +11,13 @@ import {
   Phone, Mail, Briefcase, Award, ChevronLeft, Send,
 } from 'lucide-react';
 import {
-import { SEOMeta } from "@/components/SEOMeta";
   useVendorDetail,
   useVendorPortfolio,
   useSubmitContactRequest,
   VENDOR_TYPE_LABELS,
   type VendorType,
 } from '@/hooks/use-vendors';
+import { SEOMeta } from "@/components/SEOMeta";
 
 // Pull vendor id from URL path /vendors/:id
 function useVendorId(): number | null {
