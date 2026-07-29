@@ -1,0 +1,105 @@
+Lanjutkan pekerjaan SEO dari checkpoint terakhir.
+
+Jangan audit ulang seluruh codebase.
+Jangan menyentuh auth, security, database, middleware, API key, payment, atau business logic.
+
+Status checkpoint:
+- Infrastruktur SEO sudah ada.
+- 25 halaman publik sudah memiliki <SEOMeta>.
+- Sitemap sudah diperbarui.
+- Typecheck sudah bersih.
+- react-helmet-async sudah terpasang.
+- Null-check halaman dinamis sudah diperbaiki.
+- Build dan rendered HTML verification belum selesai.
+
+Langkah selanjutnya:
+
+1. Tampilkan:
+   - branch;
+   - HEAD SHA;
+   - git status;
+   - daftar file SEO yang berubah;
+   - diff summary.
+
+2. Jalankan build frontend dengan environment yang benar.
+   Jika build memerlukan PORT, set hanya untuk command build.
+   Jangan mengubah konfigurasi aplikasi permanen hanya untuk membuat build lulus.
+
+3. Verifikasi output build:
+   - build sukses;
+   - tidak ada import error;
+   - tidak ada React Helmet provider error;
+   - tidak ada route publik yang gagal dirender.
+
+4. Verifikasi seluruh 25 route publik pada output rendered HTML atau prerender, bukan hanya DOM setelah JavaScript berjalan.
+
+Untuk setiap route catat:
+- HTTP/status render;
+- title;
+- meta description;
+- canonical;
+- meta robots;
+- og:title;
+- og:description;
+- og:url;
+- og:image;
+- twitter:card;
+- twitter:title;
+- twitter:description;
+- twitter:image;
+- JSON-LD type bila ada.
+
+5. Pastikan:
+- metadata unik dan sesuai route;
+- canonical memakai domain production;
+- og:url sama dengan canonical;
+- og:image dan twitter:image berupa URL absolut;
+- tidak ada domain replit.app;
+- tidak ada localhost;
+- tidak ada canonical kosong;
+- tidak ada double slash setelah domain;
+- tidak ada duplicate meta tag;
+- tidak ada title atau description default tertinggal pada route khusus;
+- halaman dinamis memakai data runtime yang benar atau fallback SEO yang aman.
+
+6. Verifikasi sitemap.xml:
+- XML valid;
+- seluruh route publik penting masuk;
+- tidak memasukkan route admin/internal;
+- domain production benar;
+- tidak ada duplicate URL;
+- tidak ada URL dinamis palsu tanpa slug valid.
+
+7. Verifikasi robots.txt:
+- sitemap URL benar;
+- route publik tidak terblokir;
+- route admin/internal dapat diblokir bila memang sudah direncanakan;
+- tidak memblokir asset penting untuk rendering/indexing.
+
+8. Verifikasi JSON-LD:
+- JSON valid;
+- tidak menghasilkan undefined/null yang tidak semestinya;
+- URL dan image absolut;
+- schema type sesuai halaman;
+- tidak ada schema palsu atau data yang tidak benar.
+
+9. Jalankan:
+- typecheck ulang;
+- build frontend;
+- targeted SEO tests bila ada;
+- verifikasi rendered HTML seluruh route.
+
+10. Laporan akhir wajib berisi:
+- file yang berubah;
+- daftar 25 route;
+- tabel metadata final per route;
+- hasil build;
+- hasil rendered HTML;
+- status sitemap;
+- status robots;
+- status JSON-LD;
+- error pre-existing yang tidak terkait;
+- verdict SEO READY atau NOT READY.
+
+Jangan commit atau push.
+Berhenti setelah laporan akhir SEO.

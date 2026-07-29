@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Star, Clock, SlidersHorizontal, X, TrendingUp, Sparkles, ChevronDown, ArrowRight, Images, Loader2 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { useTranslation } from "@/lib/i18n";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -290,6 +291,11 @@ export default function PortfolioPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title="Portfolio Proyek Creative AI"
+        description="Lihat portofolio proyek creative AI kami — branding, packaging, interior, fashion, dan marketing yang telah diselesaikan untuk klien di Indonesia."
+        canonical="/portfolio"
+      />
       <div className="min-h-screen bg-background">
         {/* Hero */}
         <section className="bg-gradient-to-br from-primary/5 via-background to-secondary/5 border-b border-border px-4 pt-16 pb-12">
