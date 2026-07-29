@@ -1,0 +1,306 @@
+MASTER TASK — PUBLISH MISSING WP-02, WP-03 DESIGN, AND WP-03A BASELINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Objective:
+
+Publish the missing WP-02, WP-03 Design, and WP-03A commits
+from this original workspace to GitHub so other workspaces can
+continue from the correct baseline.
+
+========================================================
+IMPORTANT
+========================================================
+
+This is a release recovery and publish task only.
+
+Do NOT implement WP-03B.
+
+Do NOT modify business logic.
+
+Do NOT recreate files.
+
+Do NOT squash or rewrite existing commit history.
+
+Do NOT force-push.
+
+Do NOT commit uploaded prompt/task files.
+
+Do NOT change .replit unless already intentionally part of the
+verified implementation.
+
+========================================================
+PHASE 1 — VERIFY THIS IS THE ORIGINAL WORKSPACE
+========================================================
+
+Report:
+
+- pwd
+- git rev-parse --show-toplevel
+- git remote -v
+- git branch --show-current
+- git rev-parse HEAD
+- git status --short
+- git log --oneline --decorate -30
+- git rev-parse --is-shallow-repository
+
+Confirm the remote is exactly:
+
+https://github.com/Travelintrips/Core-AI-Foundation
+
+Confirm the following commits or equivalent commits exist locally:
+
+- WP-02 implementation
+- WP-03 design
+- WP-03A implementation
+
+Expected historical references:
+
+- WP-02: 244fda1
+- WP-03 Design: 35e5c88
+
+Locate the exact WP-03A commit SHA.
+
+If these commits are not present locally:
+
+STOP and report that this is not the original workspace.
+
+========================================================
+PHASE 2 — VERIFY REQUIRED FILES
+========================================================
+
+Confirm these files exist locally:
+
+WP-02:
+
+- lib/db/src/schema/furniture-library.ts
+- artifacts/api-server/src/services/furnitureLibraryService.ts
+- artifacts/api-server/src/routes/furniture-library.ts
+- artifacts/api-server/src/__tests__/furniture-library.test.ts
+- docs/wp02-furniture-library.md
+
+WP-03 Design:
+
+- docs/wp03-design-sprint.md
+- docs/wp03-domain-model.md
+- docs/wp03-placement-engine.md
+- docs/wp03-collision-model.md
+- docs/wp03-layout-engine.md
+- docs/wp03-api-blueprint.md
+
+WP-03A:
+
+- lib/db/src/schema/placement-engine.ts
+- scripts/migrations/wp03a-placement-engine.sql
+- scripts/migrations/rls-wp03a-placement-engine.sql
+- artifacts/api-server/src/services/placementEngineService.ts
+- artifacts/api-server/src/routes/placement-engine.ts
+- artifacts/api-server/src/__tests__/placement-engine.test.ts
+- docs/wp03a-placement-engine.md
+
+Do not continue if any required baseline file is missing.
+
+========================================================
+PHASE 3 — PROTECT WORKSPACE STATE
+========================================================
+
+Inspect:
+
+- staged files
+- tracked modifications
+- untracked files
+- attached_assets
+- prompt/task files
+- .replit changes
+
+If legitimate source changes are uncommitted:
+
+- identify whether they belong to WP-02, WP-03 Design, or WP-03A
+- commit them using appropriate commit messages before pushing
+
+Do not commit attached task files.
+
+Recommended commit messages where needed:
+
+feat(furniture-library): complete Phase 6 WP-02
+
+docs(layout): complete WP-03 design sprint
+
+feat(layout): implement WP-03A placement engine core
+
+========================================================
+PHASE 4 — VERIFY HISTORY ORDER
+========================================================
+
+Confirm the intended ancestry:
+
+WP-01 baseline
+→ WP-02
+→ WP-03 Design
+→ WP-03A
+
+Report:
+
+- exact SHA of WP-02
+- exact SHA of WP-03 Design
+- exact SHA of WP-03A
+- branch containing each commit
+- whether each commit is already reachable from local main
+
+Do not cherry-pick or reorder commits unless required and explicitly
+safe.
+
+========================================================
+PHASE 5 — SYNC WITH REMOTE SAFELY
+========================================================
+
+Fetch current remote state:
+
+git fetch origin --prune --tags
+
+Compare local main with origin/main.
+
+Report:
+
+- local main SHA
+- origin/main SHA
+- ahead count
+- behind count
+- divergence status
+
+If local main is only ahead:
+
+- push normally
+
+If local main is both ahead and behind:
+
+- do not force-push
+- rebase or merge only after inspecting conflicts
+- preserve all verified WP-02, WP-03 Design, and WP-03A commits
+- stop and report before resolving any ambiguous conflict
+
+========================================================
+PHASE 6 — PUSH COMMITS
+========================================================
+
+Push the verified branch containing the full baseline.
+
+Preferred:
+
+git push origin main
+
+If WP-03A is intentionally on a feature branch and not merged:
+
+git push -u origin <verified-wp03a-branch>
+
+Do not force-push.
+
+Do not embed PAT in the remote URL.
+
+Use the authenticated GitHub integration or credential manager.
+
+========================================================
+PHASE 7 — REMOTE VERIFICATION
+========================================================
+
+After push, verify remotely that the following are available:
+
+- WP-02 commit
+- WP-03 Design commit
+- WP-03A commit
+- all required files
+- correct branch ancestry
+
+Verify with:
+
+git fetch origin --prune
+git cat-file -t <WP02_SHA>
+git cat-file -t <WP03_DESIGN_SHA>
+git cat-file -t <WP03A_SHA>
+
+Also verify:
+
+git branch -r --contains <WP03A_SHA>
+
+Report the exact remote branch containing WP-03A.
+
+========================================================
+PHASE 8 — CREATE BASELINE TAG
+========================================================
+
+After remote verification succeeds, create an annotated tag for the
+WP-03A baseline.
+
+Recommended tag:
+
+material-v6.0.2-wp03a
+
+Tag the exact verified WP-03A commit.
+
+Tag message:
+
+WP-03A Placement Engine Core Baseline
+Verified placement engine implementation.
+Ready for WP-03B.
+
+Push the tag:
+
+git push origin material-v6.0.2-wp03a
+
+Do not move existing WP-01 tags.
+
+========================================================
+PHASE 9 — FINAL GIT VERIFICATION
+========================================================
+
+Verify:
+
+- branch
+- HEAD SHA
+- origin branch SHA
+- ahead/behind = 0/0
+- working tree clean
+- WP-02 commit visible remotely
+- WP-03 Design commit visible remotely
+- WP-03A commit visible remotely
+- baseline tag visible remotely
+- no prompt files committed
+- no .replit changes
+- no force-push performed
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Repository identity
+2. Current branch
+3. WP-02 exact SHA
+4. WP-03 Design exact SHA
+5. WP-03A exact SHA
+6. Branch containing WP-03A
+7. Local main SHA before push
+8. origin/main SHA before push
+9. Push result
+10. Remote commit verification
+11. Remote file verification
+12. Tag name and SHA
+13. Working tree status
+14. Any remaining risks
+
+Use exactly one verdict:
+
+A. WP-03A BASELINE PUBLISHED — READY FOR WP-03B
+
+B. WP-03A PUBLISHED ON FEATURE BRANCH — MERGE REQUIRED
+
+C. ORIGINAL WORKSPACE FOUND BUT PUSH BLOCKED
+
+D. THIS IS NOT THE ORIGINAL WORKSPACE
+
+STOP.
+
+Do NOT begin WP-03B.
+Wait for explicit approval.
