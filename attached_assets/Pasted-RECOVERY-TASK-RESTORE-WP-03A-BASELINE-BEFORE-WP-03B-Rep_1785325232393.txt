@@ -1,0 +1,251 @@
+RECOVERY TASK — RESTORE WP-03A BASELINE BEFORE WP-03B
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current problem:
+
+The local repository is a shallow/incomplete clone containing only
+commit d97ab1a.
+
+The following verified commits should exist in repository history:
+
+- WP-02 commit: 244fda1
+- WP-03 design commit: 35e5c88
+- WP-03A implementation commit: locate from remote history
+
+The entire WP-03A baseline and WP-03 design documents are missing
+locally.
+
+========================================================
+IMPORTANT
+========================================================
+
+This is a repository recovery task only.
+
+Do NOT implement WP-03B.
+
+Do NOT recreate WP-03A files manually.
+
+Do NOT infer or redesign missing contracts.
+
+Do NOT create new migrations.
+
+Do NOT modify production code.
+
+Do NOT force-push.
+
+Do NOT reset or delete uncommitted user work without first
+reporting it.
+
+========================================================
+PHASE 1 — VERIFY REPOSITORY IDENTITY
+========================================================
+
+Report:
+
+- pwd
+- git rev-parse --show-toplevel
+- git remote -v
+- git branch --show-current
+- git status --short
+- git rev-parse HEAD
+- git log --oneline --decorate -20
+- git rev-parse --is-shallow-repository
+
+Confirm the remote is exactly:
+
+Travelintrips/Core-AI-Foundation
+
+If the remote points to another repository:
+
+STOP and report the mismatch.
+
+========================================================
+PHASE 2 — PROTECT LOCAL WORK
+========================================================
+
+Before fetching:
+
+- inspect tracked modifications
+- inspect staged changes
+- inspect untracked files
+- identify uploaded prompt/task files separately
+
+If real source-code changes exist:
+
+- do not discard them
+- create a temporary recovery branch or stash with a clear name
+- report exactly what was preserved
+
+Do not commit attached_assets prompt files.
+
+========================================================
+PHASE 3 — FETCH COMPLETE REMOTE HISTORY
+========================================================
+
+Fetch all current remote history safely.
+
+Use commands equivalent to:
+
+git fetch --unshallow origin
+
+If the repository is not shallow but history is incomplete, use:
+
+git fetch origin --prune --tags
+git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+
+Then report:
+
+- remote branches
+- remote tags
+- latest origin/main commit
+- whether commits 244fda1 and 35e5c88 are now available
+
+Verify with:
+
+git cat-file -t 244fda1
+git cat-file -t 35e5c88
+
+Do not proceed until both commits are available, unless remote
+history proves they were never pushed.
+
+========================================================
+PHASE 4 — LOCATE WP-03A COMMIT
+========================================================
+
+Search remote history for the WP-03A implementation.
+
+Use commit-message and path-based history searches, including:
+
+git log --all --oneline --decorate --grep='WP-03A'
+git log --all --oneline --decorate --grep='placement engine'
+git log --all --oneline -- \
+  lib/db/src/schema/placement-engine.ts \
+  scripts/migrations/wp03a-placement-engine.sql \
+  artifacts/api-server/src/services/placementEngineService.ts
+
+Identify:
+
+- WP-03A commit SHA
+- branch containing it
+- whether it is merged into origin/main
+- parent relationship to WP-03 design commit 35e5c88
+
+Do not guess the SHA.
+
+========================================================
+PHASE 5 — VERIFY REQUIRED FILES FROM REMOTE
+========================================================
+
+Using the located WP-03A commit or branch, verify these files exist:
+
+- lib/db/src/schema/placement-engine.ts
+- scripts/migrations/wp03a-placement-engine.sql
+- scripts/migrations/rls-wp03a-placement-engine.sql
+- artifacts/api-server/src/services/placementEngineService.ts
+- artifacts/api-server/src/routes/placement-engine.ts
+- artifacts/api-server/src/__tests__/placement-engine.test.ts
+- docs/wp03a-placement-engine.md
+- docs/wp03-design-sprint.md
+- docs/wp03-domain-model.md
+- docs/wp03-placement-engine.md
+- docs/wp03-collision-model.md
+- docs/wp03-layout-engine.md
+
+Use git ls-tree or git show against the remote commit.
+
+Do not create missing files.
+
+========================================================
+PHASE 6 — RESTORE CORRECT BASELINE
+========================================================
+
+Choose the safe recovery path based on the verified remote state.
+
+CASE A — WP-03A is already merged into origin/main:
+
+- switch to main
+- update local main to origin/main without force
+- verify the required files are present
+- create the WP-03B feature branch from updated main:
+
+  feature/phase6-wp03b-collision-engine
+
+CASE B — WP-03A exists on a remote feature branch but is not merged:
+
+- do not merge it into main automatically
+- create the WP-03B branch from the verified WP-03A branch or commit
+- record the exact base SHA
+
+CASE C — WP-03A exists only as local commits in another workspace
+and was never pushed:
+
+- STOP
+- report that repository recovery cannot complete from this clone
+- request that the original workspace push the WP-03A commit and
+  design commit first
+
+Do not cherry-pick partial files unless explicitly approved.
+
+========================================================
+PHASE 7 — BASELINE VALIDATION
+========================================================
+
+After recovery, verify:
+
+- all required WP-03 design files exist
+- all required WP-03A source files exist
+- WP-03A migration files exist
+- placement route is registered
+- placement schema is exported
+- WP-03A targeted test file exists
+- git history contains 244fda1 and 35e5c88
+- current branch is based on the correct WP-03A commit
+
+Run read-only validation:
+
+- WP-03A targeted tests
+- API build
+- lib/db build or typecheck
+
+Do not fix unrelated failures during this recovery task.
+
+========================================================
+PHASE 8 — FINAL REPORT
+========================================================
+
+Provide:
+
+1. Repository identity
+2. Whether clone was shallow
+3. Original HEAD
+4. Latest origin/main SHA
+5. WP-02 commit availability
+6. WP-03 design commit availability
+7. WP-03A commit SHA
+8. Branch containing WP-03A
+9. Whether WP-03A is merged into main
+10. Recovery action performed
+11. Final current branch
+12. Final base SHA
+13. Required file verification
+14. WP-03A targeted test result
+15. Build result
+16. Git status
+17. Remaining blocker, if any
+
+Use exactly one verdict:
+
+A. WP-03A BASELINE RESTORED — READY FOR WP-03B
+
+B. WP-03A FOUND BUT NOT MERGED — READY FROM VERIFIED FEATURE BASE
+
+C. WP-03A NOT PUSHED — ORIGINAL WORKSPACE ACTION REQUIRED
+
+D. REPOSITORY MISMATCH OR RECOVERY FAILED
+
+STOP.
+
+Do NOT implement WP-03B in this task.
+Wait for explicit approval after the baseline is restored.
