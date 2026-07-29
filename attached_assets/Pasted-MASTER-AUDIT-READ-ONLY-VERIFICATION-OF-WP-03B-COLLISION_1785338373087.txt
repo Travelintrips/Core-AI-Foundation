@@ -1,0 +1,819 @@
+MASTER AUDIT — READ-ONLY VERIFICATION OF WP-03B COLLISION ENGINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target scope:
+Phase 6 — WP-03B Collision Engine
+
+Known baseline:
+
+- WP-01 Room Template Library is expected to exist
+- WP-02 Furniture Library is expected to exist
+- WP-03 Design documents may exist
+- WP-03A Placement Engine may exist on:
+  feature/phase6-wp03a-rebuild-v2
+- WP-03B status is currently unknown
+- WP-03C must not be assessed as complete in this task
+
+========================================================
+STRICT READ-ONLY RULES
+========================================================
+
+This task is audit-only.
+
+Do NOT:
+
+- modify any file
+- create any file
+- delete any file
+- format any file
+- run autofix
+- change package lockfiles
+- install dependencies
+- create or switch branches unless required only to inspect an
+  already-existing remote branch
+- commit
+- push
+- merge
+- tag
+- stash
+- reset
+- cherry-pick
+- rebase
+- apply migrations
+- run database writes
+- seed data
+- start implementation
+- repair failures
+- generate missing WP-03B code
+
+Allowed:
+
+- git status
+- git log
+- git show
+- git diff
+- git fetch
+- git branch
+- find
+- grep/ripgrep
+- read files
+- run typecheck/build/tests only if they are non-mutating
+- read database metadata only
+- run SELECT-only SQL
+- inspect remote branches and commits
+
+If any command would modify repository state, do not run it.
+
+========================================================
+PHASE 1 — REPOSITORY BASELINE
+========================================================
+
+Report:
+
+pwd
+git remote -v
+git branch --show-current
+git rev-parse HEAD
+git rev-parse --is-shallow-repository
+git status --short
+git branch -a
+git log --oneline --decorate -20
+
+Run:
+
+git fetch origin --prune --tags
+
+Only if fetch can be performed without changing tracked files.
+
+Record:
+
+- repository identity
+- current branch
+- current HEAD
+- origin/main HEAD
+- current ahead/behind status
+- dirty working tree items
+- whether shallow clone limits audit reliability
+
+Do not clean the working tree.
+
+========================================================
+PHASE 2 — CONFIRM WP-03A BASELINE
+========================================================
+
+Before assessing WP-03B, verify that the required WP-03A contracts
+actually exist.
+
+Locate and inspect:
+
+- layout session schema
+- placement schema
+- placement service
+- placement API routes
+- WP-03A migrations
+- WP-03A RLS migration
+- tenant consistency migration
+- WP-03A tests
+- WP-03 placement design documents
+
+Search likely paths, including:
+
+lib/db/src/schema/
+scripts/migrations/
+artifacts/api-server/src/services/
+artifacts/api-server/src/routes/
+artifacts/api-server/src/__tests__/
+docs/
+
+Confirm:
+
+- exact table names
+- exact TypeScript types
+- session and placement identifiers
+- coordinate unit
+- rotation convention
+- width/depth convention
+- archive semantics
+- tenant semantics
+- versioning semantics
+- service exports
+- route prefix
+- current test status if test output is available
+
+Classify WP-03A baseline as:
+
+- AVAILABLE AND STABLE
+- AVAILABLE WITH OBSERVATIONS
+- PARTIAL
+- MISSING
+
+Do not fix WP-03A.
+
+========================================================
+PHASE 3 — LOCATE ALL WP-03B ARTIFACTS
+========================================================
+
+Search all tracked and untracked files for:
+
+- wp03b
+- WP-03B
+- collision engine
+- collisionEngine
+- CollisionEngine
+- collision detection
+- overlap detection
+- AABB
+- axis-aligned bounding box
+- OBB
+- oriented bounding box
+- SAT
+- separating axis theorem
+- clearance
+- broad phase
+- narrow phase
+- spatial hash
+- collision pair
+- collision result
+- interference
+- geometry intersection
+
+Search:
+
+- filenames
+- file contents
+- git history
+- all branches
+- all remote branches
+- docs
+- migrations
+- services
+- routes
+- tests
+- frontend files
+- shared libraries
+
+Suggested commands:
+
+find . -type f | sort
+
+rg -n -i \
+  "wp03b|wp-03b|collisionengine|collision engine|collision detection|aabb|axis-aligned bounding box|obb|oriented bounding box|separating axis theorem|\\bsat\\b|clearance|broad phase|narrow phase|spatial hash|collision pair|collision result|overlap detection|interference" \
+  --glob '!node_modules/**' \
+  --glob '!dist/**' \
+  --glob '!build/**' \
+  --glob '!coverage/**'
+
+git log --all --oneline --decorate --grep='WP-03B'
+git log --all --oneline --decorate --grep='collision'
+git log --all --oneline --decorate --grep='AABB'
+git log --all --oneline --decorate --grep='SAT'
+
+Also inspect commits by likely paths.
+
+For every matching artifact, report:
+
+- path
+- tracked or untracked
+- branch/commit where found
+- purpose
+- implementation status
+- whether it belongs to WP-03B or is unrelated use of the word
+  "collision"
+
+Do not assume a file is WP-03B merely because it contains generic
+collision terminology.
+
+========================================================
+PHASE 4 — DESIGN CONTRACT AUDIT
+========================================================
+
+Read the WP-03 collision design documentation.
+
+Expected design direction from prior architecture:
+
+- 2D top-down geometry
+- centimeters
+- AABB broad phase
+- OBB/SAT narrow phase
+- clearance treated as soft warning
+- no 3D physics
+- deterministic calculations
+
+Extract the actual documented contract, including:
+
+- collision input types
+- geometry representation
+- rotation handling
+- epsilon/tolerance policy
+- edge-touch behavior
+- overlap definition
+- broad-phase algorithm
+- narrow-phase algorithm
+- clearance rules
+- room-boundary rules
+- wall interaction
+- archived placement behavior
+- tenant behavior
+- expected result DTO
+- expected error model
+- intended service/API boundaries
+- exclusions
+
+Classify the design documentation as:
+
+- COMPLETE
+- PARTIAL
+- CONTRADICTORY
+- MISSING
+
+List every ambiguity that would block implementation or validation.
+
+Do not silently invent missing rules.
+
+========================================================
+PHASE 5 — DATABASE AUDIT
+========================================================
+
+Inspect schema and migrations for WP-03B-related database objects.
+
+Look for:
+
+- collision tables
+- collision result tables
+- clearance rules
+- room constraints
+- spatial indexes
+- generated geometry columns
+- collision status columns
+- collision metadata JSONB
+- new placement indexes introduced specifically for collision
+- RLS policies related to collision data
+- triggers/functions related to collision validation
+
+Audit both:
+
+- code migrations
+- actual DEV database metadata, if safe SELECT-only access is
+  available
+
+Allowed database checks are SELECT-only, for example:
+
+- information_schema.tables
+- information_schema.columns
+- pg_indexes
+- pg_constraint
+- pg_trigger
+- pg_proc
+- pg_policies
+- pg_class.relrowsecurity
+- pg_class.relforcerowsecurity
+
+Do not run INSERT, UPDATE, DELETE, DDL, migrations, or seed scripts.
+
+Report:
+
+- object name
+- purpose
+- migration file
+- whether applied in DEV
+- tenant/RLS behavior
+- whether the object is actually necessary for WP-03B
+
+A pure computational collision engine may legitimately require no
+new tables. If so, state that explicitly and confirm whether this
+matches the design.
+
+========================================================
+PHASE 6 — IMPLEMENTATION AUDIT
+========================================================
+
+If collision implementation exists, inspect it in detail.
+
+Expected capabilities to verify:
+
+Geometry primitives:
+
+- point/vector types
+- rectangle dimensions
+- rotation normalization
+- center and corner projection
+- AABB generation
+- OBB generation
+- axis projection
+- interval overlap
+- epsilon handling
+
+Broad phase:
+
+- AABB overlap
+- deterministic candidate filtering
+- edge-touch policy
+- archived placement exclusion
+- self-collision exclusion
+- same-session filtering
+- tenant-safe input sourcing
+
+Narrow phase:
+
+- OBB construction
+- SAT axes
+- projection onto axes
+- separating-axis detection
+- overlap depth, if required
+- collision normal, if required
+- symmetry:
+  collide(A,B) == collide(B,A)
+
+Clearance:
+
+- soft warning rather than hard collision
+- configurable or documented clearance distance
+- distinction between physical overlap and clearance violation
+- room/wall/furniture clearance if in scope
+
+Room bounds:
+
+- placement within room dimensions
+- rotated item boundary handling
+- out-of-bounds result type
+- treatment of edge contact
+
+Batch/session behavior:
+
+- detect collisions for one placement
+- detect all pairs in a session
+- deterministic ordering
+- duplicate pair prevention
+- archived records excluded
+- empty and single-item sessions
+- performance characteristics
+
+Integration:
+
+- uses WP-03A placement contract
+- does not duplicate placement models
+- no hidden database bypass
+- no cross-tenant reads
+- no raw SQL error leakage
+
+For every capability, classify:
+
+- IMPLEMENTED
+- PARTIAL
+- MISSING
+- OUT OF SCOPE
+- CANNOT VERIFY
+
+Cite exact file paths and exported symbols.
+
+========================================================
+PHASE 7 — API AUDIT
+========================================================
+
+Search for WP-03B endpoints.
+
+Possible endpoint patterns include, but are not limited to:
+
+POST /api/ai/layout-sessions/:sessionId/collisions/check
+GET  /api/ai/layout-sessions/:sessionId/collisions
+POST /api/ai/layout-sessions/:sessionId/placements/:placementId/collision-check
+POST /api/ai/layout-sessions/:sessionId/validate
+
+Do not require these exact paths unless the design document requires
+them.
+
+For every collision-related route, verify:
+
+- method
+- path
+- authentication
+- admin/internal/public scope
+- tenant isolation
+- Zod request validation
+- response DTO
+- structured error handling
+- 401 behavior
+- 403 behavior
+- 404 behavior
+- invalid geometry behavior
+- cross-tenant behavior
+- archived session behavior
+- whether it writes data
+- whether it incorrectly mixes WP-03C or WP-03E concerns
+
+Also confirm router registration.
+
+Classify API status as:
+
+- COMPLETE
+- PARTIAL
+- ABSENT
+- NOT REQUIRED BY DESIGN
+
+========================================================
+PHASE 8 — TEST AUDIT
+========================================================
+
+Locate all WP-03B tests and create a coverage matrix.
+
+Required geometry cases should include, where applicable:
+
+AABB:
+
+- clearly separated rectangles
+- overlapping rectangles
+- containment
+- identical rectangles
+- horizontal edge touch
+- vertical edge touch
+- corner touch
+- zero or invalid dimensions
+- floating-point tolerance
+
+OBB/SAT:
+
+- unrotated overlap
+- one rectangle rotated
+- both rotated
+- separated rotated rectangles
+- near-touching rotated rectangles
+- containment
+- symmetry
+- rotations 0, 90, 180, 270, 360
+- negative rotations
+- normalized rotations
+
+Session collision:
+
+- no placements
+- one placement
+- two colliding placements
+- two non-colliding placements
+- multiple collision pairs
+- no duplicate pairs
+- self-pair excluded
+- archived placement excluded
+- archived session behavior
+- deterministic pair ordering
+- cross-session isolation
+- cross-tenant isolation
+
+Room boundary:
+
+- inside room
+- exact wall contact
+- outside left/right/top/bottom
+- rotated item outside room
+- item larger than room
+
+Clearance:
+
+- no violation
+- warning only
+- exact threshold
+- below threshold
+- rotated clearance case
+
+API:
+
+- unauthorized
+- forbidden/cross-tenant
+- invalid payload
+- session not found
+- placement not found
+- valid response
+- stable response structure
+- raw-error leakage prevention
+
+For each test file report:
+
+- path
+- test count
+- passed
+- failed
+- skipped
+- mocked or real integration
+- gaps
+
+Run only non-mutating targeted tests.
+
+Do not update snapshots.
+
+If tests require dependencies that are unavailable, report the
+blocker rather than installing anything.
+
+========================================================
+PHASE 9 — BUILD AND REGRESSION AUDIT
+========================================================
+
+Run only non-mutating checks that are already supported:
+
+- relevant library typecheck
+- API typecheck/build
+- WP-03A tests
+- WP-03B tests
+- relevant placement/collision regression tests
+
+Do not run build commands known to rewrite generated tracked files.
+
+Before and after each check, verify:
+
+git status --short
+
+If a command modifies tracked files, stop and report it.
+
+Separate results into:
+
+- WP-03B failures
+- WP-03A dependency failures
+- pre-existing unrelated failures
+- environment/tooling failures
+
+========================================================
+PHASE 10 — ARCHITECTURE BOUNDARY AUDIT
+========================================================
+
+Verify WP-03B does not improperly implement later work packages.
+
+WP-03B must not silently absorb:
+
+WP-03C:
+- layout state manager
+- snapshot orchestration
+- state persistence workflow
+
+WP-03D:
+- undo/redo
+- command history
+
+WP-03E:
+- full constraint validation engine
+- business-rule severity orchestration
+- design standards catalog
+
+WP-03F:
+- publish flow
+- public layout version
+- approval lifecycle
+- catalog publishing
+
+Also verify WP-03B does not add:
+
+- AI auto-layout
+- rendering
+- optimization
+- 3D physics
+- frontend layout editor
+- unrelated decoration-library functionality
+
+List any scope leakage.
+
+========================================================
+PHASE 11 — SECURITY AND TENANCY AUDIT
+========================================================
+
+Verify:
+
+- tenant context is required where appropriate
+- no tenant ID accepted blindly from request body
+- platform-wide NULL tenant semantics are documented
+- sessions and placements cannot be mixed across tenants
+- collision checks cannot enumerate another tenant’s objects
+- archived objects are handled consistently
+- service does not bypass repository/transaction patterns
+- structured errors do not expose SQL or stack traces
+- API is not accidentally public
+- RLS assumptions are not used as the only service-level guard
+
+Classify each control:
+
+- PASS
+- FAIL
+- PARTIAL
+- NOT APPLICABLE
+- CANNOT VERIFY
+
+========================================================
+PHASE 12 — PERFORMANCE AND DETERMINISM AUDIT
+========================================================
+
+Assess implementation complexity.
+
+Report whether collision detection uses:
+
+- naive O(n²) pair scanning
+- AABB candidate filtering
+- spatial hash/grid
+- sweep and prune
+- database filtering
+- another strategy
+
+Check:
+
+- deterministic output ordering
+- stable collision pair identifiers
+- duplicate suppression
+- numerical tolerance stability
+- maximum practical placement count, if documented/tested
+- benchmark or performance tests
+- expensive repeated DB calls
+- N+1 queries
+- unnecessary serialization
+
+Do not run destructive load tests.
+
+A simple O(n²) implementation may be acceptable for the current
+scope if explicitly documented and bounded. State the evidence.
+
+========================================================
+PHASE 13 — GIT AND REMOTE AUDIT
+========================================================
+
+Identify all commits related to WP-03B.
+
+For each commit:
+
+- SHA
+- subject
+- author/date
+- branch reachability
+- changed files
+- whether pushed remotely
+- whether merged to main
+- whether included in a tag
+
+Check:
+
+git branch --all --contains <sha>
+git tag --contains <sha>
+
+Do not merge or tag.
+
+Confirm whether WP-03B currently exists only:
+
+- uncommitted
+- local branch
+- remote feature branch
+- main
+- release tag
+- nowhere
+
+========================================================
+PHASE 14 — COMPLETENESS MATRIX
+========================================================
+
+Produce a matrix with these rows:
+
+1. Design contract
+2. WP-03A dependency
+3. Geometry primitives
+4. AABB broad phase
+5. OBB generation
+6. SAT narrow phase
+7. Edge-touch policy
+8. Epsilon policy
+9. Room bounds
+10. Clearance warnings
+11. Single-placement collision check
+12. Session-wide pair detection
+13. Deterministic ordering
+14. Duplicate suppression
+15. Archive handling
+16. Tenant isolation
+17. Service integration
+18. API integration
+19. Schema/migration
+20. RLS
+21. Unit tests
+22. API tests
+23. Tenant tests
+24. Regression tests
+25. Typecheck/build
+26. Documentation
+27. Remote commit
+28. Main merge
+29. Release tag
+30. Scope containment
+
+For each row provide:
+
+- status
+- evidence
+- blocker
+- severity
+
+Allowed status:
+
+- PASS
+- PARTIAL
+- FAIL
+- NOT IMPLEMENTED
+- NOT REQUIRED
+- CANNOT VERIFY
+
+Severity:
+
+- CRITICAL
+- HIGH
+- MEDIUM
+- LOW
+- INFO
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Audit timestamp
+2. Repository and workspace identity
+3. Current branch and HEAD
+4. WP-03A dependency status
+5. WP-03B artifact inventory
+6. Design contract status
+7. Implementation inventory
+8. Geometry capability matrix
+9. Database/migration status
+10. API inventory
+11. Test inventory and results
+12. Build/typecheck results
+13. Security and tenant findings
+14. Performance findings
+15. Scope leakage findings
+16. Git commit and remote status
+17. Completeness matrix
+18. Critical blockers
+19. High-priority gaps
+20. Medium/low observations
+21. Exact recommendation:
+    - proceed to remediation
+    - complete WP-03B implementation
+    - merge/release review
+    - block WP-03C
+22. Confirmation no files or database objects were changed
+
+Use exactly one final verdict:
+
+A. WP-03B COMPLETE AND VERIFIED — READY FOR MERGE REVIEW
+
+B. WP-03B IMPLEMENTED WITH OBSERVATIONS — REMEDIATION REQUIRED
+
+C. WP-03B PARTIALLY IMPLEMENTED — NOT READY
+
+D. WP-03B NOT IMPLEMENTED
+
+E. WP-03B AUDIT BLOCKED
+
+Important:
+
+Do not use the word “sempurna” unless every required matrix item
+passes and the implementation is remotely committed and fully
+verified.
+
+STOP after the audit.
+
+Do not implement fixes.
+
+Do not begin WP-03C.
