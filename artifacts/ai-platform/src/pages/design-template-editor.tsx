@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 
+import { apiFetch } from "@/lib/apiFetch";
 import { canonicalToScene, sceneToCanonical } from "@/lib/designTemplateAdapter";
 import type { Scene, SceneElement } from "@/lib/designTemplateAdapter";
 import type { DesignTemplate, TemplateVariable } from "@/lib/designTemplateTypes";
@@ -38,28 +39,6 @@ import { EditorToolbar } from "@/components/design-template-editor/EditorToolbar
 import { ElementPropertiesPanel } from "@/components/design-template-editor/ElementPropertiesPanel";
 import { LayersPanel } from "@/components/design-template-editor/LayersPanel";
 import { useState } from "react";
-
-// ── API helper ─────────────────────────────────────────────────────────────────
-
-const API_BASE = "";
-
-async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    headers: {
-      ...(opts?.body ? { "Content-Type": "application/json" } : {}),
-      ...(key ? { "x-admin-api-key": key } : {}),
-      ...(opts?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try { const b = await res.json(); if (b?.error) msg = b.error; } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-  return res.json() as Promise<T>;
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -304,11 +283,13 @@ export default function DesignTemplateEditor() {
         sampleData[v.key] = v.defaultValue ?? `[${v.label}]`;
       }
 
+      // Preview returns image/blob or JSON — use raw fetch with credentials: "include"
+      // (apiFetch<T> parses JSON only; blob responses need res.blob() instead)
       const res = await fetch(`/api/ai/design-templates/${templateId}/preview`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          ...(import.meta.env.VITE_ADMIN_API_KEY ? { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY } : {}),
         },
         body: JSON.stringify({ templateJson: canonical, data: sampleData, format: "png" }),
       });

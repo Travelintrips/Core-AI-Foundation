@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 const BASE = "/api/ai/creative-commercial";
 
@@ -46,10 +47,9 @@ export default function FunnelProjectionPanel() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`${BASE}/funnel/projection?periodDays=${periodDays}`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
-    })
-      .then((r) => r.json())
+    apiFetch<FunnelProjection>(
+      `${BASE}/funnel/projection?periodDays=${periodDays}`
+    )
       .then(setData)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));

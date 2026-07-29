@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 const BASE = "/api/ai/creative-commercial";
 
@@ -33,10 +34,9 @@ export default function AttributionReportPanel() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`${BASE}/attribution/report?model=${model}&periodDays=${periodDays}`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
-    })
-      .then((r) => r.json())
+    apiFetch<AttributionReport>(
+      `${BASE}/attribution/report?model=${model}&periodDays=${periodDays}`
+    )
       .then(setData)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));

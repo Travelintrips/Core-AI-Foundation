@@ -1,0 +1,63 @@
+Lanjutkan B5C Batch 1 dari checkpoint terakhir.
+
+Jangan ulang audit dari awal kecuali file berubah sejak checkpoint.
+
+Sebelum menulis kode:
+1. Tampilkan git status.
+2. Tampilkan branch dan commit SHA.
+3. Konfirmasi apakah ada file yang sudah berubah sebelum quota habis.
+4. Jika working tree tidak clean, tampilkan daftar file dan diff summary tanpa menampilkan secret.
+5. Pastikan total production source files yang akan dimigrasikan tidak lebih dari 12.
+
+Lanjutkan implementasi sesuai scope B5C Batch 1 yang sudah disetujui:
+
+- creative-commercial files yang masih inject x-admin-api-key;
+- design-blueprints/index.tsx;
+- design-template-editor.tsx;
+- kandidat tambahan yang sudah dibaca, maksimal total 12 production files.
+
+Aturan:
+- hapus live usage VITE_ADMIN_API_KEY;
+- hapus window.__ADMIN_API_KEY__;
+- hapus x-admin-api-key dari browser request;
+- gunakan shared @/lib/apiFetch untuk JSON;
+- gunakan credentials: "include" untuk blob, stream, FormData, dan download;
+- jangan mengubah endpoint, payload, response shape, atau business logic;
+- jangan mengubah .replit, Replit Secrets, ADMIN_API_KEY backend, production, atau fail-open DEV;
+- jangan commit atau push.
+
+Perbaiki shared 401 handling bila belum aman:
+- tidak redirect saat sudah di /login;
+- multiple concurrent 401 maksimal memicu satu redirect;
+- 403 tidak redirect;
+- AbortError tetap dipertahankan.
+
+Test wajib:
+1. Tidak ada live reference VITE_ADMIN_API_KEY pada file batch.
+2. Tidak ada window.__ADMIN_API_KEY__.
+3. Tidak ada x-admin-api-key pada browser requests batch.
+4. Session admin valid berhasil.
+5. 401 ditangani tanpa redirect loop.
+6. Concurrent 401 hanya satu redirect.
+7. 403 tidak logout/redirect.
+8. Blob/download mengirim credentials include.
+9. FormData tidak diberi Content-Type manual.
+10. Existing targeted tests pass.
+11. Typecheck ai-platform.
+12. Build api-server.
+13. Auth regression B5A/B5B tetap pass.
+
+Laporan akhir harus memisahkan:
+A. Live runtime references sebelum/sesudah.
+B. Textual references di comment/test/documentation.
+
+Tampilkan:
+- file production yang berubah;
+- perubahan per file;
+- request khusus blob/FormData;
+- hasil test/typecheck/build;
+- error pre-existing;
+- risiko tersisa;
+- rekomendasi Batch 2.
+
+Berhenti setelah laporan B5C Batch 1.

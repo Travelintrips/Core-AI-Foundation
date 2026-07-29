@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 const BASE = "/api/ai/creative-commercial";
 
@@ -29,10 +30,9 @@ export default function AbandonedCheckoutPanel() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${BASE}/abandoned-checkouts?windowHours=${windowHours}&limit=50`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
-    })
-      .then((r) => r.json())
+    apiFetch<{ abandonments?: AbandonedCheckout[]; stats?: AbandonmentStats }>(
+      `${BASE}/abandoned-checkouts?windowHours=${windowHours}&limit=50`
+    )
       .then((d) => {
         setAbandonments(d.abandonments ?? []);
         setStats(d.stats ?? null);

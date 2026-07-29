@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 const BASE = "/api/ai/creative-commercial";
 
@@ -32,10 +33,9 @@ export default function RepeatOrderPanel() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${BASE}/repeat-order-candidates?inactiveDays=${inactiveDays}&limit=50`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
-    })
-      .then((r) => r.json())
+    apiFetch<{ candidates: Candidate[]; stats: Stats }>(
+      `${BASE}/repeat-order-candidates?inactiveDays=${inactiveDays}&limit=50`
+    )
       .then(setData)
       .finally(() => setLoading(false));
   }, [inactiveDays]);

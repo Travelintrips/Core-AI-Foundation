@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 // ── Types (local — no generated client until Team 24 runs codegen) ─────────────
 
@@ -98,11 +99,7 @@ function useApi<T>(url: string | null) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(fetchUrl, {
-        headers: { "x-admin-api-key": (window as any).__ADMIN_API_KEY__ ?? import.meta.env.VITE_ADMIN_API_KEY ?? "" },
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? res.statusText);
+      const json = await apiFetch<T>(fetchUrl);
       setData(json);
     } catch (e: any) {
       setError(e.message ?? "Unknown error");
@@ -353,15 +350,10 @@ function ValidatePanel() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}/validate`, {
+      const json = await apiFetch<ValidationResult>(`${BASE}/validate`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "",
-        },
         body: JSON.stringify(parsed),
       });
-      const json: ValidationResult = await res.json();
       setResult(json);
     } catch (e: any) {
       setError(e.message ?? "Request failed");
@@ -426,19 +418,14 @@ function CompatPanel() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}/check-compatibility`, {
+      const json = await apiFetch<CompatResult>(`${BASE}/check-compatibility`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "",
-        },
         body: JSON.stringify({
           blueprintId,
           schemaVersion,
           componentTypes: components.split(",").map((s) => s.trim()).filter(Boolean),
         }),
       });
-      const json: CompatResult = await res.json();
       setResult(json);
     } catch (e: any) {
       setError(e.message ?? "Request failed");
@@ -530,8 +517,6 @@ export default function DesignBlueprintsPage() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const adminKey = import.meta.env.VITE_ADMIN_API_KEY ?? "";
-
   async function loadBlueprints() {
     setLoadingBps(true);
     setFetchError(null);
@@ -540,11 +525,7 @@ export default function DesignBlueprintsPage() {
       if (domainFilter) params.set("domain", domainFilter);
       if (statusFilter) params.set("status", statusFilter);
       params.set("limit", "100");
-      const res = await fetch(`${BASE}?${params}`, {
-        headers: { "x-admin-api-key": adminKey },
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? res.statusText);
+      const json = await apiFetch<{ blueprints?: Blueprint[] }>(`${BASE}?${params}`);
       setBlueprints(json.blueprints ?? []);
     } catch (e: any) {
       setFetchError(e.message);
@@ -556,8 +537,7 @@ export default function DesignBlueprintsPage() {
   async function loadStats() {
     setLoadingStats(true);
     try {
-      const res = await fetch(`${BASE}/stats`, { headers: { "x-admin-api-key": adminKey } });
-      const json = await res.json();
+      const json = await apiFetch<Stats>(`${BASE}/stats`);
       setStats(json);
     } catch {
       // non-critical
@@ -657,7 +637,7 @@ export default function DesignBlueprintsPage() {
 
             {fetchError && (
               <div className="bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm mb-4">
-                {fetchError} — make sure the API server is running and <code>VITE_ADMIN_API_KEY</code> is set.
+                {fetchError} — make sure the API server is running and you are logged in.
               </div>
             )}
 

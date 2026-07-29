@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 const BASE = "/api/ai/creative-commercial";
 
@@ -36,10 +37,7 @@ export default function BundleCatalogPanel() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${BASE}/bundles`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
-    })
-      .then((r) => r.json())
+    apiFetch<ServiceBundle[]>(`${BASE}/bundles`)
       .then((d) => setBundles(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false));
   }, []);

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 const BASE = "/api/ai/creative-commercial";
 
@@ -32,10 +33,7 @@ export default function PendingApprovalsPanel() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`${BASE}/approvals`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
-    })
-      .then((r) => r.json())
+    apiFetch<Approval[]>(`${BASE}/approvals`)
       .then((d) => setApprovals(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false));
   }, []);
@@ -44,9 +42,8 @@ export default function PendingApprovalsPanel() {
 
   const approve = async (id: number) => {
     setProcessing(id);
-    await fetch(`${BASE}/approvals/${id}/approve`, {
+    await apiFetch(`${BASE}/approvals/${id}/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
       body: JSON.stringify({ approvedBy: "admin" }),
     });
     setProcessing(null);
@@ -55,9 +52,8 @@ export default function PendingApprovalsPanel() {
 
   const reject = async (id: number) => {
     setProcessing(id);
-    await fetch(`${BASE}/approvals/${id}/reject`, {
+    await apiFetch(`${BASE}/approvals/${id}/reject`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
       body: JSON.stringify({ rejectedBy: "admin", reason: "rejected via dashboard" }),
     });
     setProcessing(null);
