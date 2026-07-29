@@ -1,0 +1,250 @@
+RECOVERY TASK — VERIFY AND SAVE CURRENT WP-03A V2 WORK
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Expected task:
+WP-03A V2 Placement Engine rebuild
+
+Important correction:
+
+This is WP-03A, not WP-06.
+
+Do not implement new code until the current workspace state is
+fully verified.
+
+========================================================
+PHASE 1 — VERIFY CURRENT REPOSITORY STATE
+========================================================
+
+Run and report:
+
+pwd
+git remote -v
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git log --oneline --decorate -15
+git branch -a
+git rev-parse --is-shallow-repository
+
+Then verify GitHub read access:
+
+git fetch origin --prune --tags
+git ls-remote origin HEAD
+
+Do not conclude authentication is broken only from cached HTTPS
+credentials. Also test the active Replit GitHub integration.
+
+========================================================
+PHASE 2 — LOCATE CURRENT WP-03A FILES
+========================================================
+
+Check whether these files currently exist:
+
+docs/wp03-design-sprint.md
+docs/wp03-domain-model.md
+docs/wp03-placement-engine.md
+docs/wp03-collision-model.md
+docs/wp03-layout-engine.md
+docs/wp03-api-blueprint.md
+
+lib/db/src/schema/placement-engine.ts
+scripts/migrations/wp03a-placement-engine-v2.sql
+scripts/migrations/rls-wp03a-placement-engine-v2.sql
+scripts/migrations/wp03a-placement-tenant-consistency-v2.sql
+
+artifacts/api-server/src/services/placementEngineService.ts
+artifacts/api-server/src/routes/placement-engine.ts
+artifacts/api-server/src/__tests__/placement-engine-v2.test.ts
+docs/wp03a-placement-engine-v2.md
+
+Also inspect:
+
+git diff --stat
+git diff
+git diff --cached
+git ls-files --others --exclude-standard
+
+Classify each expected file as:
+
+- committed locally
+- modified/uncommitted
+- untracked
+- missing
+
+========================================================
+PHASE 3 — LOCATE COMMITS AND BRANCHES
+========================================================
+
+Search all local and remote history:
+
+git log --all --oneline --decorate --grep='rebuild WP-03'
+git log --all --oneline --decorate --grep='placement engine'
+git log --all --oneline --decorate --grep='architecture baseline'
+
+Search by path:
+
+git log --all --oneline -- \
+  docs/wp03-design-sprint.md \
+  lib/db/src/schema/placement-engine.ts \
+  artifacts/api-server/src/services/placementEngineService.ts
+
+Determine:
+
+- whether a feature branch was created
+- exact design commit SHA
+- exact implementation commit SHA
+- whether commits are reachable from any local branch
+- whether commits are reachable from any remote branch
+
+Do not assume the work was lost until path and commit searches are
+complete.
+
+========================================================
+PHASE 4 — SAVE ANY EXISTING WORK
+========================================================
+
+CASE A — Files exist and are already committed:
+
+- create or restore branch:
+
+  feature/phase6-wp03a-rebuild-v2
+
+  at the latest valid WP-03A commit if needed
+
+- do not rewrite commits
+- do not cherry-pick if already reachable
+
+CASE B — Files exist but are uncommitted:
+
+- create branch immediately:
+
+  feature/phase6-wp03a-rebuild-v2
+
+- exclude:
+  - attached_assets task files
+  - pasted prompts
+  - unrelated .replit changes
+
+- run targeted validation where possible
+- commit design documents separately:
+
+  docs(layout): rebuild WP-03 architecture baseline
+
+- commit implementation separately:
+
+  feat(layout): rebuild WP-03A placement engine v2
+
+CASE C — Only partial files exist:
+
+- preserve all legitimate partial source files on:
+
+  recovery/wp03a-v2-partial
+
+- commit with:
+
+  chore(layout): preserve partial WP-03A rebuild work
+
+- do not pretend the implementation is complete
+
+CASE D — No WP-03 files or commits exist:
+
+- report that the workspace state was reset
+- do not start a third rebuild in this recovery task
+
+========================================================
+PHASE 5 — VERIFY GITHUB WRITE ACCESS
+========================================================
+
+After ensuring the working tree is safe, verify write access using
+the actual feature or recovery branch.
+
+Push:
+
+git push -u origin <current-safe-branch>
+
+Do not push directly to main for this feature.
+
+Do not force-push.
+
+If the standard git command reports expired HTTPS credentials but
+the Replit Git integration can push, use the connected Replit Git
+integration.
+
+Report the exact push method and result.
+
+========================================================
+PHASE 6 — REMOTE VERIFICATION
+========================================================
+
+After push:
+
+git fetch origin --prune --tags
+git branch -r --contains <LATEST_SAVED_SHA>
+git ls-remote --heads origin <current-safe-branch>
+
+Confirm:
+
+- remote branch exists
+- latest saved commit is remote-reachable
+- expected files are visible in the remote branch
+- no attached task files were committed
+- no unrelated .replit changes were committed
+
+========================================================
+PHASE 7 — VALIDATION ONLY IF IMPLEMENTATION EXISTS
+========================================================
+
+Only if the complete implementation exists, run:
+
+- lib/db typecheck/build
+- API build
+- WP-03A targeted tests
+- WP-01 tests
+- WP-02 tests
+
+Do not write missing features in this phase.
+
+Do not apply database migrations yet unless the complete migration
+set exists and has been reviewed.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Repository identity
+2. Current workspace path
+3. Current branch
+4. Starting HEAD
+5. GitHub read-auth result
+6. GitHub write-auth result
+7. Expected WP-03 file inventory
+8. Local commit inventory
+9. Recovered or created branch
+10. Saved commit SHAs
+11. Push result
+12. Remote branch verification
+13. Test/build result, if applicable
+14. Working tree status
+15. Whether any work was lost
+16. Why the earlier reports conflicted
+17. Confirmation that this is WP-03A, not WP-06
+18. Confirmation WP-03B/WP-03C were not started
+
+Use exactly one verdict:
+
+A. WP-03A V2 WORK FOUND, SAVED, AND PUSHED
+
+B. PARTIAL WP-03A V2 WORK FOUND AND PRESERVED
+
+C. WP-03A V2 WORK EXISTS BUT PUSH IS BLOCKED
+
+D. WORKSPACE RESET — WP-03A V2 WORK NOT FOUND
+
+STOP.
+
+Do not continue implementation until this recovery report is
+reviewed.
