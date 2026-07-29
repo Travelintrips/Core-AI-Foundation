@@ -99,3 +99,5 @@ export * from "./ai-provider-health-logs";
 export * from "./material-library";
 export * from "./room-design-catalog";
 export * from "./furniture-library";
+// ── Phase 6 WP-03: Placement Engine ───────────────────────────────────────────
+export * from "./placement-engine";
