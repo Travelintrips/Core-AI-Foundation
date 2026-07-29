@@ -1,0 +1,289 @@
+MASTER TASK — WP-03B IMPLEMENTATION VERIFICATION (ACTIVE WORKSPACE ONLY)
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target:
+WP-03B Collision Engine
+
+====================================================
+IMPORTANT
+====================================================
+
+This task is NOT an audit of main.
+
+This task is NOT a GitHub audit.
+
+This task is NOT a shallow-clone audit.
+
+This task is NOT a WP-03A audit.
+
+The implementation of WP-03B has just been worked on in the ACTIVE
+workspace.
+
+Your job is ONLY to inspect that implementation.
+
+Do NOT restart WP-03A.
+
+Do NOT compare against main.
+
+Do NOT claim WP-03A is missing simply because main does not contain it.
+
+====================================================
+DO NOT
+====================================================
+
+- rebuild WP-03A
+- rebuild WP-03B
+- modify code
+- create files
+- delete files
+- run migrations
+- commit
+- push
+- merge
+- tag
+- format code
+- autofix tests
+
+Read-only verification only.
+
+====================================================
+PHASE 1
+VERIFY ACTIVE WORKSPACE
+====================================================
+
+Report:
+
+- current branch
+- HEAD SHA
+- working tree
+- current workspace path
+
+Do NOT inspect another workspace.
+
+====================================================
+PHASE 2
+LOCATE WP-03B FILES
+====================================================
+
+Search ONLY inside the ACTIVE workspace.
+
+Locate every file related to:
+
+Collision Engine
+
+including:
+
+geometry
+
+AABB
+
+OBB
+
+SAT
+
+clearance
+
+room bounds
+
+collision service
+
+collision routes
+
+collision tests
+
+collision docs
+
+Report:
+
+- file path
+- purpose
+- exists / missing
+
+====================================================
+PHASE 3
+VERIFY IMPLEMENTATION
+====================================================
+
+Inspect implementation.
+
+Verify:
+
+Geometry
+
+AABB
+
+OBB
+
+SAT
+
+edge touch
+
+epsilon
+
+clearance
+
+room boundary
+
+batch collision
+
+duplicate suppression
+
+tenant isolation
+
+archived placement
+
+deterministic ordering
+
+For each item classify:
+
+PASS
+
+PARTIAL
+
+FAIL
+
+NOT IMPLEMENTED
+
+====================================================
+PHASE 4
+VERIFY API
+====================================================
+
+Inspect collision endpoints.
+
+Verify:
+
+authentication
+
+tenant isolation
+
+validation
+
+DTO
+
+error handling
+
+router registration
+
+====================================================
+PHASE 5
+VERIFY TESTS
+====================================================
+
+Run ONLY WP-03B tests.
+
+Do NOT run unrelated suites.
+
+Report:
+
+number of tests
+
+pass
+
+fail
+
+skip
+
+coverage gaps
+
+====================================================
+PHASE 6
+VERIFY BUILD
+====================================================
+
+Run only:
+
+typecheck
+
+API build
+
+Report:
+
+PASS
+
+FAIL
+
+Pre-existing failures
+
+====================================================
+PHASE 7
+VERIFY GIT STATUS
+====================================================
+
+Without modifying anything report:
+
+files modified
+
+files staged
+
+commits created
+
+branch
+
+whether implementation is committed
+
+whether implementation is only local
+
+Do NOT push.
+
+====================================================
+FINAL REPORT
+====================================================
+
+Provide:
+
+1. Workspace identity
+
+2. Branch
+
+3. HEAD SHA
+
+4. WP-03B file inventory
+
+5. Geometry verification
+
+6. Collision verification
+
+7. API verification
+
+8. Test results
+
+9. Build results
+
+10. Git status
+
+11. Remaining bugs
+
+12. Missing features
+
+13. Ready for merge?
+
+Use exactly one verdict:
+
+A.
+WP-03B IMPLEMENTATION VERIFIED
+READY FOR MERGE REVIEW
+
+B.
+WP-03B IMPLEMENTED
+MINOR FIXES REQUIRED
+
+C.
+WP-03B PARTIALLY IMPLEMENTED
+
+D.
+WP-03B IMPLEMENTATION NOT FOUND
+
+IMPORTANT:
+
+Do NOT audit main.
+
+Do NOT audit shallow clone.
+
+Do NOT restart WP-03A.
+
+Only inspect the implementation that exists in the ACTIVE workspace.
+
+STOP.
