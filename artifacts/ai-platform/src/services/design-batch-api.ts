@@ -2,28 +2,13 @@
  * Design Batch API — Frontend service layer (Phase 6A/6B)
  *
  * Wraps all /api/ai/design-render-batches and /api/ai/design-templates endpoints
- * with typed fetch calls and admin-key auth.
+ * with typed fetch calls and session-cookie auth.
+ *
+ * B5B migration: removed VITE_ADMIN_API_KEY / x-admin-api-key header injection.
+ * All browser requests now use credentials: "include" via the shared apiFetch utility.
  */
 
-const API_BASE = "";
-
-async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    headers: {
-      ...(opts?.body ? { "Content-Type": "application/json" } : {}),
-      ...(key ? { "x-admin-api-key": key } : {}),
-      ...(opts?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try { const b = await res.json(); if (b?.error) msg = b.error; } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-  return res.json() as Promise<T>;
-}
+import { apiFetch } from "@/lib/apiFetch";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

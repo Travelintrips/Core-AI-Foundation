@@ -5,7 +5,9 @@
  * via TanStack Query. Never inline fetch calls in page components.
  *
  * API base: "" (relative) so Vite proxies /api/* to the api-server port.
- * Auth: VITE_ADMIN_API_KEY header (same pattern as design-studio.tsx).
+ *
+ * B5B migration: removed VITE_ADMIN_API_KEY / x-admin-api-key header injection.
+ * Browser requests now use session-cookie auth via the shared apiFetch utility.
  */
 
 import type {
@@ -15,35 +17,7 @@ import type {
   PreviewDataResponse,
   RenderedPreview,
 } from "../types/design-template-ui";
-
-// ── Internal fetch helper ─────────────────────────────────────────────────────
-
-async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
-  const hasBody = opts?.body != null;
-  const res = await fetch(path, {
-    ...opts,
-    credentials: "include",
-    headers: {
-      ...(hasBody ? { "Content-Type": "application/json" } : {}),
-      ...(key ? { "x-admin-api-key": key } : {}),
-      ...(opts?.headers ?? {}),
-    },
-  });
-
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const b = await res.json();
-      if (b?.error) msg = b.error;
-    } catch {
-      /* ignore parse error */
-    }
-    throw new Error(msg);
-  }
-
-  return res.json() as Promise<T>;
-}
+import { apiFetch } from "@/lib/apiFetch";
 
 // ── Template Library ──────────────────────────────────────────────────────────
 
@@ -119,18 +93,23 @@ export async function getPreviewData(templateId: number): Promise<PreviewDataRes
   return apiFetch<PreviewDataResponse>(`/api/ai/design-templates/${templateId}/preview`);
 }
 
+/**
+ * renderPreview — renders a template as an image blob.
+ *
+ * Uses a direct fetch (not the JSON apiFetch helper) because the response is
+ * a binary image, not JSON.  Still uses credentials: "include" and no API key.
+ */
 export async function renderPreview(
   templateId: number,
   data: Record<string, unknown>,
   opts: { format?: "png" | "jpg" | "webp"; templateVersionId?: number } = {},
 ): Promise<RenderedPreview> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
   const res = await fetch(`/api/ai/design-templates/${templateId}/preview`, {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(key ? { "x-admin-api-key": key } : {}),
+      // x-admin-api-key intentionally omitted — session cookie is the credential
     },
     body: JSON.stringify({
       data,

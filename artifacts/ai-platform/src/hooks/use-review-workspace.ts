@@ -2,27 +2,14 @@
  * use-review-workspace.ts — Team 16
  *
  * React Query hooks for the universal Review Workspace.
- * All requests are admin-authenticated via VITE_ADMIN_API_KEY.
+ *
+ * B5B migration: removed VITE_ADMIN_API_KEY.  All requests now use
+ * session-cookie auth via the shared apiFetch from @/lib/apiFetch.
  * No direct DB access from the frontend.
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-
-const ADMIN_KEY = import.meta.env["VITE_ADMIN_API_KEY"] as string | undefined;
-
-async function adminFetch<T>(url: string, opts?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(ADMIN_KEY ? { "X-Admin-Api-Key": ADMIN_KEY } : {}),
-    ...(opts?.headers as Record<string, string> | undefined),
-  };
-  const res = await fetch(url, { ...opts, headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
+import { apiFetch } from "@/lib/apiFetch";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -133,7 +120,7 @@ export function useWorkspaceSummary(reviewId: number | null) {
   return useQuery({
     queryKey: reviewId ? reviewWorkspaceKeys.summary(reviewId) : ["review-workspace", "noop"],
     queryFn: () =>
-      adminFetch<WorkspaceSummary>(`/api/review-workspace/reviews/${reviewId}/summary`),
+      apiFetch<WorkspaceSummary>(`/api/review-workspace/reviews/${reviewId}/summary`),
     enabled: reviewId != null,
     retry: false,
     staleTime: 30_000,
@@ -144,7 +131,7 @@ export function useWorkspaceChecklist(reviewId: number | null) {
   return useQuery({
     queryKey: reviewId ? reviewWorkspaceKeys.checklist(reviewId) : ["review-workspace", "checklist-noop"],
     queryFn: () =>
-      adminFetch<{ reviewId: number; items: ChecklistItem[] }>(
+      apiFetch<{ reviewId: number; items: ChecklistItem[] }>(
         `/api/review-workspace/reviews/${reviewId}/checklist`,
       ),
     enabled: reviewId != null,
@@ -156,7 +143,7 @@ export function useReviewHistory(reviewId: number | null) {
   return useQuery({
     queryKey: reviewId ? reviewWorkspaceKeys.history(reviewId) : ["review-workspace", "history-noop"],
     queryFn: () =>
-      adminFetch<{ reviewId: number; history: HistoryEvent[] }>(
+      apiFetch<{ reviewId: number; history: HistoryEvent[] }>(
         `/api/review-workspace/reviews/${reviewId}/history`,
       ),
     enabled: reviewId != null,
@@ -168,7 +155,7 @@ export function useProjectReviews(projectId: string | null) {
   return useQuery({
     queryKey: projectId ? reviewWorkspaceKeys.projectReviews(projectId) : ["review-workspace", "project-noop"],
     queryFn: () =>
-      adminFetch<ProjectReviewEntry[]>(
+      apiFetch<ProjectReviewEntry[]>(
         `/api/review-workspace/projects/${projectId}/reviews`,
       ),
     enabled: projectId != null,
@@ -182,7 +169,7 @@ export function useToggleChecklistItem(reviewId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ itemId, completed, completedBy }: { itemId: string; completed: boolean; completedBy?: string }) =>
-      adminFetch<{ reviewId: number; items: ChecklistItem[] }>(
+      apiFetch<{ reviewId: number; items: ChecklistItem[] }>(
         `/api/review-workspace/reviews/${reviewId}/checklist/${itemId}`,
         { method: "PATCH", body: JSON.stringify({ completed, completedBy }) },
       ),
@@ -196,7 +183,7 @@ export function useSetDueDate(reviewId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (dueDate: string | null) =>
-      adminFetch<{ reviewId: number; meta: WorkspaceMeta }>(
+      apiFetch<{ reviewId: number; meta: WorkspaceMeta }>(
         `/api/review-workspace/reviews/${reviewId}/due-date`,
         { method: "PATCH", body: JSON.stringify({ dueDate }) },
       ),
@@ -210,7 +197,7 @@ export function useInternalSignOff(reviewId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (signedOffBy: string) =>
-      adminFetch<{ reviewId: number; meta: WorkspaceMeta }>(
+      apiFetch<{ reviewId: number; meta: WorkspaceMeta }>(
         `/api/review-workspace/reviews/${reviewId}/internal-sign-off`,
         { method: "POST", body: JSON.stringify({ signedOffBy }) },
       ),
@@ -225,7 +212,7 @@ export function useRemoveSignOff(reviewId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      adminFetch<{ reviewId: number; meta: WorkspaceMeta }>(
+      apiFetch<{ reviewId: number; meta: WorkspaceMeta }>(
         `/api/review-workspace/reviews/${reviewId}/internal-sign-off`,
         { method: "DELETE", body: "" },
       ),
@@ -239,7 +226,7 @@ export function useCancelReview(reviewId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ reason, cancelledBy }: { reason: string; cancelledBy?: string }) =>
-      adminFetch<{ success: boolean; wsStatus: string; review: WorkspaceReview; meta: WorkspaceMeta }>(
+      apiFetch<{ success: boolean; wsStatus: string; review: WorkspaceReview; meta: WorkspaceMeta }>(
         `/api/review-workspace/reviews/${reviewId}/cancel`,
         { method: "POST", body: JSON.stringify({ reason, cancelledBy }) },
       ),

@@ -3,33 +3,13 @@
  *
  * Wraps all backend calls for the design template engine.
  * Uses the same apiFetch pattern as design-studio-editor.tsx.
+ *
+ * B5B migration: removed VITE_ADMIN_API_KEY / x-admin-api-key header injection.
+ * All browser requests now use session-cookie auth via the shared apiFetch utility.
  */
 
 import type { DesignTemplate } from "@/state/design-editor/types";
-
-const API_BASE = "";
-
-async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    credentials: "include",
-    headers: {
-      ...(opts?.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
-      ...(key ? { "x-admin-api-key": key } : {}),
-      ...(opts?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const b = await res.json();
-      if (b?.error) msg = b.error;
-    } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-  return res.json() as Promise<T>;
-}
+import { apiFetch } from "@/lib/apiFetch";
 
 // ── Response types ─────────────────────────────────────────────────────────────
 

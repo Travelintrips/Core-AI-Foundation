@@ -1,0 +1,93 @@
+B5A diterima.
+
+Koreksi keputusan readiness:
+
+1. Keberadaan 68 referensi VITE_ADMIN_API_KEY tidak menghalangi pembersihan
+   plaintext dari .replit selama nilai transisi sudah dimasukkan ke Replit
+   Secrets dan runtime DEV berhasil diverifikasi.
+
+2. Jangan hapus VITE_ADMIN_API_KEY dari Replit Secrets dahulu.
+   Pembersihan .replit dan penghapusan VITE_ADMIN_API_KEY dari codebase adalah
+   dua pekerjaan berbeda.
+
+Lanjutkan B5B — SHARED AUTH CLIENT MIGRATION, hanya di DEV.
+
+SCOPE B5B
+
+A. Shared hooks
+Migrasikan:
+- artifacts/ai-platform/src/hooks/useAdminApi.ts
+- artifacts/ai-platform/src/hooks/use-review-workspace.ts
+- artifacts/ai-platform/src/components/asset-browser/use-asset-browser.ts
+
+Ketentuan:
+- Hapus pembacaan VITE_ADMIN_API_KEY.
+- Hapus injeksi x-admin-api-key untuk request browser.
+- Gunakan credentials: "include".
+- Gunakan satu wrapper request terpusat jika memungkinkan.
+- Pertahankan error handling existing.
+- Response 401 harus memicu state unauthenticated atau redirect login yang aman.
+- Response 403 tidak boleh diperlakukan sebagai logout otomatis.
+
+B. Services
+Migrasikan:
+- artifacts/ai-platform/src/services/design-template-api.ts
+- artifacts/ai-platform/src/services/design-editor-api.ts
+- artifacts/ai-platform/src/services/design-batch-api.ts
+
+Ketentuan:
+- Hapus penggunaan VITE_ADMIN_API_KEY.
+- Semua browser request memakai session cookie.
+- Jangan menambahkan API key lain ke browser.
+- Jangan mengubah kontrak payload atau response API.
+
+C. Audit consumer
+Setelah shared hooks dan services dimigrasikan:
+- Cari consumer yang masih menambahkan x-admin-api-key sendiri.
+- Pastikan tidak terjadi duplicate header atau duplicate fetch wrapper.
+- Hitung ulang referensi VITE_ADMIN_API_KEY.
+- Kelompokkan referensi yang tersisa berdasarkan pola.
+
+D. Development auth behavior
+Audit fail-open development pada adminAuth:
+- Dokumentasikan kondisi persis yang membuat request tanpa auth diterima.
+- Jangan menghapusnya dalam B5B jika berisiko memperluas scope.
+- Buat rencana agar DEV juga fail-closed setelah migrasi selesai.
+- Pastikan test B5B tidak bergantung pada fail-open development.
+
+TEST WAJIB
+
+1. Shared apiFetch mengirim credentials: "include".
+2. Shared hooks tidak mengirim x-admin-api-key.
+3. Ketiga design services tidak mengirim x-admin-api-key.
+4. Session admin valid berhasil.
+5. Request tanpa session menghasilkan 401.
+6. User non-admin menghasilkan 403.
+7. 401 dan 403 ditangani secara berbeda.
+8. Tidak ada test yang bergantung pada NODE_ENV development fail-open.
+9. Typecheck ai-platform.
+10. Build api-server.
+11. Targeted frontend tests.
+12. Auth regression tests existing tetap pass.
+
+BATASAN
+
+- Jangan migrasikan 61 page/component files dahulu.
+- Jangan hapus VITE_ADMIN_API_KEY dari Replit Secrets.
+- Jangan membersihkan .replit sebelum saya mengonfirmasi seluruh secret tersedia.
+- Jangan mengubah atau merotasi secret.
+- Jangan menyentuh production.
+- Jangan commit atau push.
+- Jangan memperluas perubahan backend kecuali diperlukan untuk test B5B.
+
+OUTPUT
+
+1. File yang berubah.
+2. Perubahan per hook/service.
+3. Jumlah referensi VITE_ADMIN_API_KEY sebelum dan sesudah.
+4. Daftar consumer yang masih menyuntikkan API key.
+5. Hasil test dan build.
+6. Dokumentasi fail-open DEV.
+7. Status READY / NOT READY untuk migrasi 61 page/component files.
+
+Berhenti setelah B5B dan tunggu persetujuan saya.

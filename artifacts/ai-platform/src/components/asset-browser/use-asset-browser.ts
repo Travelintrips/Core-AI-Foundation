@@ -1,36 +1,15 @@
 /**
  * use-asset-browser.ts — Data-fetching hook for the Universal Asset Browser (Team 14)
  *
- * Fetches from the admin asset-browser API endpoint using the existing
- * x-admin-api-key pattern. No direct DB access from the frontend.
+ * Fetches from the admin asset-browser API endpoint using session-cookie auth.
+ *
+ * B5B migration: removed VITE_ADMIN_API_KEY / x-admin-api-key header injection.
+ * All requests now use credentials: "include" via the shared apiFetch from @/lib/apiFetch.
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/apiFetch";
 import type { AssetFilter, AssetSort, AssetPage, AssetSummary } from "./types";
-
-// ── Admin API fetch ───────────────────────────────────────────────────────────
-
-function adminHeaders(): Record<string, string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const key = ((import.meta as any).env?.["VITE_ADMIN_API_KEY"] as string | undefined) ?? "";
-  return { "x-admin-api-key": key };
-}
-
-async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { ...adminHeaders(), ...(opts?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    let msg = `API error ${res.status}`;
-    try {
-      const body = await res.json() as { error?: string };
-      if (body.error) msg = body.error;
-    } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-  return res.json() as Promise<T>;
-}
 
 // ── Query key factory ─────────────────────────────────────────────────────────
 
@@ -132,6 +111,7 @@ export function useRequestUploadUrl() {
     mutationFn: async (file: File): Promise<{ uploadURL: string; objectPath: string }> => {
       const res = await fetch("/api/storage/uploads/request-url", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: file.name,
