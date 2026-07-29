@@ -1,0 +1,674 @@
+MASTER TASK — VERIFY GITHUB AUTH AND REBUILD WP-03 DESIGN + WP-03A
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current known state:
+
+- GitHub connection has just been restored by the user
+- main is the only reliable branch currently available
+- WP-01 and WP-02 exist
+- WP-03 Design is missing
+- WP-03A is missing
+- previous unpushed WP-03A work was lost
+- WP-03B must remain blocked
+
+========================================================
+OBJECTIVE
+========================================================
+
+1. Verify GitHub authentication actually works.
+2. Create a new feature branch.
+3. Rebuild WP-03 Design documents.
+4. Rebuild WP-03A Placement Engine.
+5. Commit and push after each major milestone.
+6. Apply and validate DEV migration.
+7. Stop before WP-03B.
+
+========================================================
+IMPORTANT
+========================================================
+
+Do NOT rely on previous missing commits.
+
+Do NOT claim old SHAs were restored.
+
+Do NOT work directly on main.
+
+Do NOT begin WP-03B.
+
+Do NOT implement:
+
+- collision detection
+- AABB
+- OBB
+- SAT
+- clearance
+- undo/redo
+- constraint engine
+- publish
+- public layout catalog
+- AI layout generation
+- optimization
+- rendering
+- admin editor
+
+Do NOT use drizzle-kit push.
+
+Do NOT force-push.
+
+Do NOT commit attached_assets prompt files.
+
+========================================================
+PHASE 1 — VERIFY GITHUB AUTH
+========================================================
+
+Run and report:
+
+git remote -v
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git fetch origin --prune --tags
+git ls-remote origin HEAD
+
+Authentication is considered working only if both fetch and
+ls-remote succeed without authentication errors.
+
+Then perform a safe write test:
+
+1. create a temporary local branch:
+   auth-check/wp03a-rebuild
+
+2. create an empty commit:
+   chore: verify GitHub write access
+
+3. push the temporary branch:
+   git push -u origin auth-check/wp03a-rebuild
+
+4. verify the remote branch exists
+
+5. delete the temporary remote branch:
+   git push origin --delete auth-check/wp03a-rebuild
+
+6. return to main and delete the temporary local branch
+
+Do not continue if the write test fails.
+
+Use verdict:
+
+GITHUB AUTH VERIFIED
+
+or
+
+GITHUB AUTH STILL BLOCKED
+
+========================================================
+PHASE 2 — PREPARE CLEAN BASELINE
+========================================================
+
+Inspect:
+
+- modified tracked files
+- staged files
+- untracked files
+- .replit
+- attached_assets
+
+Do not discard legitimate work.
+
+Exclude:
+
+- attached task files
+- pasted prompts
+- unrelated .replit changes
+
+Fetch latest main:
+
+git fetch origin --prune --tags
+
+Update local main safely to origin/main.
+
+Report:
+
+- local main SHA
+- origin/main SHA
+- ahead/behind
+- working tree status
+
+========================================================
+PHASE 3 — CREATE FEATURE BRANCH
+========================================================
+
+Create:
+
+feature/phase6-wp03a-rebuild-v2
+
+Push immediately:
+
+git push -u origin feature/phase6-wp03a-rebuild-v2
+
+Confirm the branch exists remotely before writing implementation.
+
+========================================================
+PHASE 4 — REBUILD WP-03 DESIGN DOCUMENTS
+========================================================
+
+Create:
+
+docs/wp03-design-sprint.md
+docs/wp03-domain-model.md
+docs/wp03-placement-engine.md
+docs/wp03-collision-model.md
+docs/wp03-layout-engine.md
+docs/wp03-api-blueprint.md
+
+Required approved architecture:
+
+Coordinate system:
+- 2D top-down
+- centimeters
+- origin lower-left
+
+State model:
+- JSONB snapshots
+- no event sourcing
+
+Collision future design:
+- AABB broad phase
+- OBB/SAT narrow phase
+- clearance as soft warning
+
+Undo/redo future design:
+- command pattern
+- maximum 50 commands
+
+Tenant model:
+- tenant-scoped sessions and placements
+- tenant_id NULL only for platform-wide semantics
+
+Work packages:
+- WP-03A Placement Engine Core
+- WP-03B Collision Engine
+- WP-03C Layout State Manager
+- WP-03D Undo/Redo
+- WP-03E Constraint Validator
+- WP-03F Persistence and Publish
+
+Do not add production code in this phase.
+
+Commit:
+
+docs(layout): rebuild WP-03 architecture baseline
+
+Push immediately.
+
+Verify the commit is visible remotely before continuing.
+
+========================================================
+PHASE 5 — DEFINE WP-03A CONTRACT
+========================================================
+
+Document and implement the exact contract.
+
+LayoutSession fields:
+
+- id
+- tenantId
+- roomTemplateId
+- name
+- status
+- coordinateUnit
+- roomWidthCm
+- roomLengthCm
+- metadata
+- createdBy
+- createdAt
+- updatedAt
+- archivedAt
+
+Placement fields:
+
+- id
+- tenantId
+- sessionId
+- furnitureItemId
+- xCm
+- yCm
+- zCm if required
+- widthCm
+- depthCm
+- heightCm
+- rotationDeg
+- anchorType
+- anchorData
+- snapType
+- snapData
+- metadata
+- version
+- createdBy
+- createdAt
+- updatedAt
+- archivedAt
+
+Rules:
+
+- canonical unit is centimeters
+- rotation normalized to [0, 360)
+- deterministic coordinate calculations
+- no collision validation
+- no auto-placement
+- no duplicated furniture master metadata
+- use stable references to WP-01/WP-02
+
+========================================================
+PHASE 6 — DATABASE IMPLEMENTATION
+========================================================
+
+Create:
+
+lib/db/src/schema/placement-engine.ts
+
+Create only:
+
+- ai_platform.layout_sessions
+- ai_platform.placements
+
+Requirements:
+
+- UUID primary keys
+- tenant_id
+- foreign keys to approved WP-01/WP-02 tables
+- version
+- created_at
+- updated_at
+- archived_at
+- created_by
+- JSONB metadata
+- indexes for tenant, status, session, furniture item, archived state
+- no duplicate WP-01/WP-02 tables
+
+Export through:
+
+lib/db/src/schema/index.ts
+
+Create handwritten migrations:
+
+scripts/migrations/wp03a-placement-engine-v2.sql
+scripts/migrations/rls-wp03a-placement-engine-v2.sql
+scripts/migrations/wp03a-placement-tenant-consistency-v2.sql
+
+Base migration:
+
+- idempotent
+- additive
+- no destructive DDL
+- no table drop
+- no data deletion
+
+RLS:
+
+- ENABLE RLS
+- FORCE RLS
+- SELECT/INSERT/UPDATE/DELETE policies
+- USING and WITH CHECK
+- tenant isolation using existing application tenant context
+
+Tenant consistency:
+
+placements.tenant_id must be NULL-safe equal to the referenced
+layout_sessions.tenant_id.
+
+Allowed:
+
+- NULL / NULL
+- same non-NULL tenant
+
+Rejected:
+
+- NULL / non-NULL
+- non-NULL / NULL
+- different non-NULL tenants
+
+Enforce at database level and service level.
+
+========================================================
+PHASE 7 — PLACEMENT ENGINE SERVICE
+========================================================
+
+Create:
+
+artifacts/api-server/src/services/placementEngineService.ts
+
+Implement:
+
+Session:
+- create
+- get
+- list
+- update
+- archive
+- restore
+
+Placement:
+- create
+- get
+- list
+- move
+- rotate
+- duplicate
+- archive/delete
+- restore
+
+Pure helpers:
+- normalizeRotation
+- coordinate validation
+- dimension validation
+- local/world transforms
+- bounding rectangle generation
+- serialize/deserialize session
+- serialize/deserialize placement
+- grid snapping
+- wall snapping
+- corner snapping
+- item-anchor snapping
+
+Snapping priority:
+
+1. grid
+2. wall
+3. corner
+4. item anchor when explicitly requested
+
+Use first-match behavior unless the design documents explicitly
+define otherwise.
+
+No collision checks.
+
+========================================================
+PHASE 8 — API ROUTES
+========================================================
+
+Create:
+
+artifacts/api-server/src/routes/placement-engine.ts
+
+Implement admin/internal endpoints only.
+
+Session endpoints:
+
+POST   /api/ai/layout-sessions
+GET    /api/ai/layout-sessions
+GET    /api/ai/layout-sessions/:sessionId
+PATCH  /api/ai/layout-sessions/:sessionId
+POST   /api/ai/layout-sessions/:sessionId/archive
+POST   /api/ai/layout-sessions/:sessionId/restore
+
+Placement endpoints:
+
+POST   /api/ai/layout-sessions/:sessionId/placements
+GET    /api/ai/layout-sessions/:sessionId/placements
+GET    /api/ai/layout-sessions/:sessionId/placements/:placementId
+PATCH  /api/ai/layout-sessions/:sessionId/placements/:placementId
+DELETE /api/ai/layout-sessions/:sessionId/placements/:placementId
+POST   /api/ai/layout-sessions/:sessionId/placements/:placementId/restore
+POST   /api/ai/layout-sessions/:sessionId/placements/:placementId/duplicate
+
+Requirements:
+
+- admin auth
+- tenant scope
+- Zod validation
+- structured errors
+- no raw SQL errors
+- no public routes
+- no collision routes
+- no publish routes
+- no undo/redo routes
+
+Register router in:
+
+artifacts/api-server/src/routes/index.ts
+
+========================================================
+PHASE 9 — TESTS
+========================================================
+
+Create:
+
+artifacts/api-server/src/__tests__/placement-engine-v2.test.ts
+
+Minimum target:
+
+95 tests.
+
+Cover:
+
+Math and validation:
+- valid and invalid coordinates
+- dimensions
+- rotation normalization
+- 0, 90, 180, 270, 360
+- negative rotations
+- transforms
+- bounding rectangle
+- stable serialization
+
+Snapping:
+- grid
+- wall
+- corner
+- item anchor
+- disabled snapping
+- priority order
+- no eligible snap
+
+Sessions:
+- create
+- get
+- list
+- update
+- archive
+- restore
+- tenant isolation
+
+Placements:
+- create
+- move
+- rotate
+- duplicate
+- archive
+- restore
+- unknown session
+- unknown furniture
+- tenant mismatch
+
+Tenant consistency:
+- same tenant accepted
+- NULL/NULL accepted
+- NULL/non-NULL rejected
+- non-NULL/NULL rejected
+- cross-tenant rejected
+- changing session rejected
+- changing placement tenant rejected
+
+API:
+- 401 unauthorized
+- valid requests
+- invalid payloads
+- 404
+- correct status codes
+- no key leakage
+
+RLS:
+- enabled
+- FORCE enabled
+- policies present
+- USING present
+- WITH CHECK present
+
+All targeted tests must pass.
+
+========================================================
+PHASE 10 — COMMIT AND PUSH IMPLEMENTATION
+========================================================
+
+Before commit:
+
+- inspect git diff
+- exclude attached_assets
+- exclude prompt files
+- exclude unrelated .replit changes
+- exclude unrelated source files
+
+Commit:
+
+feat(layout): rebuild WP-03A placement engine v2
+
+Push immediately.
+
+Verify the commit is visible on:
+
+origin/feature/phase6-wp03a-rebuild-v2
+
+========================================================
+PHASE 11 — DEV DATABASE VALIDATION
+========================================================
+
+Apply migrations to DEV only.
+
+Before applying, verify the exact DEV project identity.
+
+Do not use destructive drop/recreate.
+
+Verify:
+
+- layout_sessions exists
+- placements exists
+- expected indexes
+- expected constraints
+- RLS enabled
+- FORCE RLS
+- all policies
+- trigger/function for tenant consistency
+- same-tenant insert succeeds
+- cross-tenant insert fails
+- NULL-safe behavior
+- migration rerun is clean
+
+Do not apply to PROD.
+
+========================================================
+PHASE 12 — BUILD AND REGRESSION
+========================================================
+
+Run:
+
+- lib/db build/typecheck
+- API build
+- ai-platform typecheck
+- customer-portal typecheck
+- WP-01 tests
+- WP-02 tests
+- WP-03A v2 tests
+- relevant API regression suite
+
+Separate:
+
+- new failures
+- pre-existing failures
+- environment limitations
+
+Do not fix unrelated failures.
+
+========================================================
+PHASE 13 — DOCUMENTATION
+========================================================
+
+Create:
+
+docs/wp03a-placement-engine-v2.md
+
+Include:
+
+- previous workspace-loss history
+- this is a new baseline
+- schema
+- migrations
+- tenant consistency
+- RLS
+- service behavior
+- snapping
+- endpoints
+- test results
+- DEV verification
+- known limitations
+- explicit WP-03B+ exclusions
+
+Commit:
+
+docs(layout): document WP-03A rebuild v2
+
+Push immediately.
+
+========================================================
+PHASE 14 — FINAL REMOTE VERIFICATION
+========================================================
+
+Verify remotely:
+
+- branch exists
+- design commit exists
+- implementation commit exists
+- documentation commit exists
+- all required files are visible
+- commits are reachable from the remote branch
+- working tree clean
+- no attached task files committed
+
+Do not merge yet.
+
+Do not tag yet.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. GitHub auth verification
+2. Temporary write test result
+3. Repository identity
+4. Base main SHA
+5. Feature branch
+6. Design commit SHA
+7. Implementation commit SHA
+8. Documentation commit SHA
+9. Files created
+10. Files modified
+11. Tables and indexes
+12. RLS matrix
+13. Tenant consistency enforcement
+14. Endpoint inventory
+15. Snapping behavior
+16. Targeted test results
+17. Regression results
+18. DEV migration result
+19. Remote verification
+20. Working tree status
+21. Remaining risks
+22. Confirmation WP-03B was not started
+
+Use exactly one verdict:
+
+A. WP-03A V2 REBUILT AND PUSHED — READY FOR REVIEW
+
+B. WP-03A V2 REBUILT WITH OBSERVATIONS
+
+C. GITHUB AUTH STILL BLOCKED
+
+D. WP-03A V2 REBUILD BLOCKED OR FAILED
+
+STOP.
+
+Do NOT start WP-03B.

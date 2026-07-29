@@ -99,3 +99,4 @@ export * from "./ai-provider-health-logs";
 export * from "./material-library";
 export * from "./room-design-catalog";
 export * from "./furniture-library";
+export * from "./placement-engine";
