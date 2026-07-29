@@ -75,18 +75,20 @@ pnpm --filter @workspace/api-server run build   # Build API server only
 
 ## Setup verification (2026-07-29)
 
-Verified after GitHub re-import:
+Verified after GitHub re-import + artifact/workflow registration via `runPostMergeSetup()`:
 
 | Check | Result |
 |---|---|
 | `pnpm install` | ✅ 784 packages resolved |
 | `tsc --build` (libs) | ✅ Clean |
 | `api-server build` (esbuild) | ✅ dist/index.mjs 8.0mb |
-| Supabase DEV connection | ✅ 15+ tables found in `ai_platform` schema |
+| Supabase DEV connection | ✅ Connected via `SUPABASE_DEV_DATABASE_URL` |
+| Artifacts registered | ✅ 4 artifacts: customer-portal, ai-platform, api-server, mockup-sandbox |
 | Customer Portal workflow | ✅ Running on port 23434 |
 | AI Platform workflow | ✅ Running on port 20785 |
-| API Server workflow | ✅ Running on port 8080, `/api/healthz` → `{"status":"ok"}` |
+| API Server workflow | ✅ Running on port 8080, `GET /api/healthz` → `{"status":"ok"}` |
 | Mockup Sandbox workflow | ✅ Running on port 8081 |
+| `.replit` modules | ✅ Includes `postgresql-16` (restored after import-time regression) |
 
 ## User preferences
 
