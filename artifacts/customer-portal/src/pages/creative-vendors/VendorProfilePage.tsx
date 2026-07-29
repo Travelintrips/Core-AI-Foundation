@@ -11,6 +11,7 @@ import {
   Phone, Mail, Briefcase, Award, ChevronLeft, Send,
 } from 'lucide-react';
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   useVendorDetail,
   useVendorPortfolio,
   useSubmitContactRequest,
@@ -171,6 +172,11 @@ export default function VendorProfilePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOMeta
+        title={vendor.displayName}
+        description={vendor.description ?? `Lihat profil vendor kreatif ${vendor.displayName} — portofolio, layanan, dan informasi kontak.`}
+        canonical={`/vendors/${vendor.id}`}
+      />
       {/* Hero */}
       <div className="relative h-48 bg-muted overflow-hidden">
         {vendor.coverUrl && (

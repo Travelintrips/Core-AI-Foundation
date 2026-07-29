@@ -11,6 +11,7 @@ import { useLocation } from 'wouter';
 import type { PublicPortfolioCard } from '@/hooks/use-gallery-v2';
 import { useGalleryV2, useComparePortfolios } from '@/hooks/use-gallery-v2';
 import { PortfolioCard, CompareDrawer } from '@/components/creative-portfolio';
+import { SEOMeta } from "@/components/SEOMeta";
 
 export default function ComparePage() {
   const [, navigate] = useLocation();
@@ -51,6 +52,11 @@ export default function ComparePage() {
 
   return (
     <div className="min-h-screen" style={{ background: '#060B18' }}>
+      <SEOMeta
+        title="Bandingkan Portfolio Kreatif"
+        description="Bandingkan beberapa portfolio kreatif secara side-by-side untuk menemukan gaya yang paling sesuai dengan kebutuhan bisnis Anda."
+        canonical="/portfolio-compare"
+      />
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
 
         {/* Header */}

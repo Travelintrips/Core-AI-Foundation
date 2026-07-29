@@ -7,6 +7,7 @@ import { Sparkles } from 'lucide-react';
 import type { Mood } from '@/hooks/use-gallery-v2';
 import { useInspirationFeed, useFavoriteIds } from '@/hooks/use-gallery-v2';
 import { InspirationGrid } from '@/components/creative-portfolio';
+import { SEOMeta } from "@/components/SEOMeta";
 
 function useWorkspaceToken(): string | undefined {
   const parts = window.location.pathname.split('/');
@@ -28,6 +29,11 @@ export default function InspirationPage() {
 
   return (
     <div className="min-h-screen" style={{ background: '#060B18' }}>
+      <SEOMeta
+        title="Inspirasi Desain & Kreasi"
+        description="Temukan inspirasi desain terkurasi berdasarkan mood — minimal, luxury, bold, corporate, playful, dan natural. Galeri karya creative AI pilihan."
+        canonical="/inspiration"
+      />
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-10">
 
         {/* Header */}

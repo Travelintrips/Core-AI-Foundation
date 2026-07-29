@@ -24,6 +24,7 @@ import {
   ArrowLeft, ArrowRight, Clock, LayoutGrid, Layers, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import type { CollectionService } from "@/lib/discoveryApi";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -176,6 +177,11 @@ export default function CollectionDetailPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title={collection?.name ?? "Koleksi Layanan"}
+        description={collection?.shortDescription ?? "Koleksi layanan creative AI yang dikurasi untuk kebutuhan bisnis Anda."}
+        canonical={`/collections/${slug}`}
+      />
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
 
         {/* ── Back ─────────────────────────────────────────────────────── */}

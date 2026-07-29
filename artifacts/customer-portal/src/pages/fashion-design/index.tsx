@@ -27,6 +27,7 @@ import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -270,6 +271,11 @@ export default function FashionDesignPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <SEOMeta
+        title="Fashion & Apparel Design AI"
+        description="Rancang koleksi fashion dan pakaian dengan bantuan AI — desain teknis, moodboard, pola, dan presentasi brand fashion profesional."
+        canonical="/fashion-design"
+      />
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
 
         {/* Header */}

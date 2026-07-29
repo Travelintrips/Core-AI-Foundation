@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   Search, Sparkles, Star, Eye, Globe, Scale, X, Loader2,
 } from "lucide-react";
 
@@ -140,6 +141,11 @@ export default function GalleryPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOMeta
+        title="Galeri Karya Kreatif"
+        description="Jelajahi galeri karya kreatif terbaik dari platform Creative Studio — inspirasi untuk proyek branding, desain, dan marketing Anda."
+        canonical="/gallery"
+      />
       <div className="border-b border-card-border bg-card">
         <div className="max-w-6xl mx-auto px-4 py-12 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-4 bg-primary/10 text-primary">

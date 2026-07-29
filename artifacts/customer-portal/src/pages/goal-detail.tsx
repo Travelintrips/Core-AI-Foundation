@@ -25,6 +25,7 @@ import {
   ArrowLeft, ArrowRight, RefreshCw, Clock, LayoutGrid, Star, AlertTriangle,
 } from "lucide-react";
 import type { GoalService } from "@/lib/discoveryApi";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -200,6 +201,11 @@ export default function GoalDetailPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title={goal.name}
+        description={goal.description ?? `Temukan layanan creative AI terbaik untuk ${goal.name}. Platform Creative Studio Indonesia.`}
+        canonical={`/goals/${slug}`}
+      />
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
 
         {/* ── Back navigation ──────────────────────────────────────────── */}

@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { Search, Filter, X, Package } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 interface FurnitureItem {
   id: string;
@@ -83,6 +84,11 @@ export default function FurnitureCatalogPage() {
 
   return (
     <div className="min-h-screen" style={{ background: "#060B18", color: "#F0F4FF" }}>
+      <SEOMeta
+        title="Katalog Furnitur Profesional"
+        description="Jelajahi katalog furnitur profesional lengkap dengan spesifikasi detail, material, dimensi, dan estimasi harga. Temukan furnitur yang tepat untuk proyek desain Anda."
+        canonical="/furniture-catalog"
+      />
       {/* Header */}
       <div className="border-b" style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(12,17,32,0.95)" }}>
         <div className="max-w-7xl mx-auto px-4 py-6">

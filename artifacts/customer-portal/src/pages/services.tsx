@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/lib/i18n";
 import { localizeCategory, localizeService, serviceSearchText } from "@/lib/catalog-i18n";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   trackCatalogCategoryViewed,
   trackCatalogServiceSelected,
   trackSearchStarted,
@@ -704,6 +705,11 @@ export default function ServicesPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title="Katalog Layanan Kreatif"
+        description="Jelajahi 50+ layanan creative AI profesional — branding, desain logo, packaging, interior, fashion, website, pitch deck, dan kampanye marketing. Mulai dari Rp 1 juta."
+        canonical="/services"
+      />
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
 
         {/* ── Template seed banner ─────────────────────────────────────── */}

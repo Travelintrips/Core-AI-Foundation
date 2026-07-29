@@ -8,6 +8,7 @@
 import { useState, useCallback } from 'react';
 import { Search, Filter, Star, MapPin, Clock, CheckCircle, X } from 'lucide-react';
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   useVendors,
   useVendorCategories,
   VENDOR_TYPE_LABELS,

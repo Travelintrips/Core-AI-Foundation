@@ -13,6 +13,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   Calculator,
   ArrowLeft,
   Search,
@@ -413,6 +414,11 @@ export default function TarifKalkulator() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "#060B18", color: "#F0F4FF" }}>
+      <SEOMeta
+        title="Kalkulator Tarif Impor"
+        description="Hitung simulasi bea masuk, PPN, PPh 22, dan total biaya impor berdasarkan kode HS secara akurat dan real-time. Gratis, tanpa login."
+        canonical="/tarif-kalkulator"
+      />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header

@@ -21,6 +21,7 @@ import { ServiceWorkflow } from "@/components/service-workflow";
 import { useToast } from "@/hooks/use-toast";
 import { localizePackage, localizePaymentPolicy, localizeService } from "@/lib/catalog-i18n";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   Loader2, ArrowLeft, CheckCircle2, Sparkles, Star, Clock, Shield,
   Zap, ChevronRight, Users, Award, Cpu, Package, Settings2,
   Receipt, HelpCircle, LayoutGrid, Check, FileText, Globe,
@@ -433,6 +434,19 @@ export default function ServiceDetailPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title={displayService.serviceName}
+        description={service.shortDescription}
+        canonical={`/services/${serviceId}`}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Service",
+          name: displayService.serviceName,
+          description: service.shortDescription,
+          url: `https://aicore.cstlogistic.co.id/services/${serviceId}`,
+          provider: { "@type": "Organization", name: "Creative Studio", url: "https://aicore.cstlogistic.co.id" },
+        }}
+      />
       {/* Flow stepper */}
       <div className="border-b border-border/40 bg-surface-1/60">
         <div className="container mx-auto px-4 md:px-8 max-w-7xl">

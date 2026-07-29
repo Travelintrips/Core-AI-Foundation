@@ -15,6 +15,7 @@ import { useTrackGoalDiscoveryViewed } from "@/hooks/use-discovery-analytics";
 import { GoalCard, GoalCardSkeleton } from "@/components/goal-card";
 import { motion } from "framer-motion";
 import { Sparkles, ArrowRight, LayoutGrid, RefreshCw, AlertTriangle } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── Animation variants ────────────────────────────────────────────────────────
 
@@ -32,6 +33,11 @@ export default function GoalsPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title="Solusi Berdasarkan Tujuan Bisnis"
+        description="Temukan layanan creative AI yang tepat berdasarkan tujuan bisnis Anda — meningkatkan penjualan, membangun brand, atau meluncurkan produk baru."
+        canonical="/goals"
+      />
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
 
         {/* ── Hero ─────────────────────────────────────────────────────── */}

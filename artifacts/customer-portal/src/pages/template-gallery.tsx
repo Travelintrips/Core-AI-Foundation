@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   LayoutTemplate, Search, Star, Sparkles, Eye, Heart,
   Globe, ChevronRight, Zap, Check, MonitorPlay, Wand2,
 } from "lucide-react";
@@ -617,6 +618,11 @@ export default function TemplateGalleryPage() {
 
   return (
     <div className="min-h-screen" style={{ background: "#080C1A" }}>
+      <SEOMeta
+        title="Template Desain Visual"
+        description="Jelajahi ratusan template desain visual profesional siap pakai — presentasi, branding, social media, packaging, dan lebih banyak lagi."
+        canonical="/template-gallery"
+      />
       {/* Live Preview Overlay */}
       {previewTemplate && (
         <LivePreviewPane

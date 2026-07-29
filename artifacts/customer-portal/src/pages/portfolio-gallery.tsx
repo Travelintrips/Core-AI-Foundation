@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   Briefcase, Globe, Star, Eye, ChevronRight, Search,
   Sparkles, ArrowRight, LayoutTemplate, Filter,
 } from "lucide-react";
@@ -158,6 +159,11 @@ export default function PortfolioGalleryPage() {
 
   return (
     <div className="min-h-screen" style={{ background: "#080C1A" }}>
+      <SEOMeta
+        title="Portfolio Proyek Kreatif"
+        description="Lihat portofolio proyek kreatif AI kami — branding, packaging, interior, fashion, dan marketing yang telah diselesaikan untuk klien di Indonesia."
+        canonical="/portfolio-gallery"
+      />
       {/* Hero */}
       <div className="relative py-16 text-center overflow-hidden px-4"
         style={{ background: "linear-gradient(180deg, rgba(59,130,246,0.15) 0%, transparent 100%)" }}>

@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { SEOMeta } from "@/components/SEOMeta";
 
 // ── API ────────────────────────────────────────────────────────────────────────
 
@@ -428,6 +429,11 @@ export default function AssetMarketplacePage() {
 
   return (
     <div className="min-h-screen" style={{ background: "#060B18", color: "#F0F4FF" }}>
+      <SEOMeta
+        title="Marketplace Aset Kreatif"
+        description="Temukan dan unduh aset kreatif premium — ikon, template, ilustrasi, foto, dan elemen desain profesional untuk proyek Anda."
+        canonical="/marketplace"
+      />
       {/* Hero */}
       <div
         className="relative overflow-hidden py-16 px-6"

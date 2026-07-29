@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { ArrowLeft, ArrowRight, Sofa, Loader2, CheckCircle, AlertTriangle, Home } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 const ROOM_TYPES = [
   { value: "living_room", label: "Ruang Tamu", emoji: "🛋️" },
@@ -292,6 +293,11 @@ export default function InteriorDesignBriefPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title="Brief Desain Interior AI"
+        description="Buat brief desain interior profesional dengan panduan AI — untuk ruang tamu, kamar, kafe, kantor, hotel, dan ruangan komersial lainnya di Indonesia."
+        canonical="/interior-design"
+      />
       <div className="min-h-screen" style={{ background: "#060B18" }}>
         <div className="container mx-auto px-4 py-12 max-w-3xl">
           {/* Header */}

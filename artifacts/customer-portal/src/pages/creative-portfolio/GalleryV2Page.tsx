@@ -16,6 +16,7 @@ import {
   useBeforeAfterFeed,
 } from '@/hooks/use-gallery-v2';
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   SearchFilterBar,
   PortfolioCard,
   CompareDrawer,
@@ -100,6 +101,11 @@ export default function GalleryV2Page() {
 
   return (
     <div className="min-h-screen" style={{ background: '#060B18' }}>
+      <SEOMeta
+        title="Portfolio Karya Terbaik"
+        description="Jelajahi portofolio karya creative AI terbaik — filter berdasarkan industri, gaya, dan paket. Bandingkan dan temukan inspirasi untuk proyek Anda."
+        canonical="/portfolio-v2"
+      />
       <div className="max-w-7xl mx-auto px-4 py-10 space-y-10">
 
         {/* Page header */}

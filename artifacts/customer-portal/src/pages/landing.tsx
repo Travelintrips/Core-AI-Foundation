@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { PROJECT_CATEGORIES } from "@/pages/start";
+import { SEOMeta } from "@/components/SEOMeta";
 
 /* ─── ANIMATION VARIANTS ─── */
 const fadeUp = {
@@ -459,6 +460,15 @@ export default function LandingPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title="Beranda"
+        description="Platform AI Creative Enterprise terdepan di Indonesia. Branding, desain, packaging, interior, fashion, dan marketing — semua dalam satu platform profesional berbasis AI."
+        canonical="/"
+        jsonLd={[
+          { "@context": "https://schema.org", "@type": "Organization", name: "Creative Studio", url: "https://aicore.cstlogistic.co.id", logo: "https://aicore.cstlogistic.co.id/favicon.svg", image: "https://aicore.cstlogistic.co.id/opengraph.jpg", description: "Platform AI Creative Enterprise terdepan di Indonesia.", address: { "@type": "PostalAddress", addressCountry: "ID" } },
+          { "@context": "https://schema.org", "@type": "WebSite", name: "Creative Studio", url: "https://aicore.cstlogistic.co.id", inLanguage: "id", potentialAction: { "@type": "SearchAction", target: { "@type": "EntryPoint", urlTemplate: "https://aicore.cstlogistic.co.id/services?q={search_term_string}" }, "query-input": "required name=search_term_string" } },
+        ]}
+      />
 
       {/* ── HERO — AI Guided Project Picker ──────── */}
       <HeroProjectPicker />

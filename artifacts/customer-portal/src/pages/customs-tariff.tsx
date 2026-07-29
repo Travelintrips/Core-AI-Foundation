@@ -13,6 +13,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   Search,
   AlertTriangle,
   CheckCircle2,
@@ -725,6 +726,11 @@ export default function CustomsTariff() {
       className="min-h-screen flex flex-col"
       style={{ background: "#060B18", color: "#F0F4FF" }}
     >
+      <SEOMeta
+        title="Pencarian Tarif BTKI & Kode HS"
+        description="Cari kode HS, tarif bea masuk, pajak impor, LARTAS, dan dokumen perizinan dari database BTKI dengan 6.990+ kode. Gratis, tanpa registrasi."
+        canonical="/customs-tariff"
+      />
       {/* ── Top nav strip ─────────────────────────────────────────── */}
       <header
         className="flex items-center gap-3 px-5 py-3 border-b shrink-0"

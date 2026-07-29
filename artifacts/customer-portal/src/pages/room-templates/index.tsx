@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+import { SEOMeta } from "@/components/SEOMeta";
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
@@ -80,6 +81,11 @@ export default function RoomTemplateBrowserPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOMeta
+        title="Template Ruangan & Interior"
+        description="Temukan template ruangan terbaik untuk berbagai jenis ruang — dari modern minimalis hingga tradisional klasik. Visualisasikan ruangan impian Anda."
+        canonical="/room-templates"
+      />
       {/* Hero */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-12 px-4">
         <div className="max-w-5xl mx-auto text-center">

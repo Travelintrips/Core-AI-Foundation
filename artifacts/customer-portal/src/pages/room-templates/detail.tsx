@@ -10,6 +10,7 @@ import { ArrowLeft, Loader2, LayoutTemplate, Maximize2, Palette } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SEOMeta } from "@/components/SEOMeta";
 
 const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -88,6 +89,11 @@ export default function RoomTemplateDetailPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOMeta
+        title={template.name}
+        description={template.description ?? `Template ruangan ${template.name} — lihat detail dimensi, gaya, dan spesifikasi lengkap.`}
+        canonical={`/room-templates/${params?.id}`}
+      />
       {/* Preview image */}
       {(template.previewImageUrl || template.thumbnailUrl) ? (
         <div className="aspect-[21/9] max-h-96 overflow-hidden bg-muted">

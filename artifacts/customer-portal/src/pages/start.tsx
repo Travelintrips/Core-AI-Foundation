@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { usePublicCatalog, type CatalogService } from "@/hooks/use-catalog";
 import { useTranslation, type Lang } from "@/lib/i18n";
+import { SEOMeta } from "@/components/SEOMeta";
 
 /* ─────────────────────────────────────────────────────────
    CONSTANTS
@@ -1476,6 +1477,11 @@ export default function StartPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "#060B18" }}>
+      <SEOMeta
+        title="Mulai Proyek Baru"
+        description="Mulai proyek creative AI Anda bersama Creative Studio — ceritakan kebutuhan Anda dan AI kami merancang workflow yang tepat."
+        noindex={true}
+      />
       {/* Minimal header */}
       <header className="sticky top-0 z-50 px-4 md:px-8 h-14 flex items-center justify-between"
         style={{ background: "rgba(6,11,24,0.90)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(30,48,87,0.60)" }}>

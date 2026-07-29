@@ -15,6 +15,7 @@ import { useTrackMarketplaceViewed } from "@/hooks/use-discovery-analytics";
 import { CollectionCard, CollectionCardSkeleton } from "@/components/collection-card";
 import { motion } from "framer-motion";
 import { Layers, ArrowRight, LayoutGrid, RefreshCw, AlertTriangle } from "lucide-react";
+import { SEOMeta } from "@/components/SEOMeta";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
@@ -30,6 +31,11 @@ export default function CollectionsPage() {
 
   return (
     <Layout>
+      <SEOMeta
+        title="Koleksi Layanan Kreatif"
+        description="Temukan koleksi layanan creative AI yang dikurasi untuk berbagai kebutuhan bisnis — dari branding lengkap hingga paket digital marketing terpadu."
+        canonical="/collections"
+      />
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
 
         {/* ── Hero ─────────────────────────────────────────────────────── */}
