@@ -455,3 +455,58 @@ describe("Auth contract — GET routes (Task 3)", () => {
     }
   });
 });
+
+// ── B4 — Admin auth for status=inactive (centralized helper) ──────────────────
+
+describe("B4 — status=inactive admin guard (isRequestAdmin helper)", () => {
+  it("status=inactive with valid admin API key returns 200", async () => {
+    const adminKey = process.env["ADMIN_API_KEY"];
+    if (!adminKey) {
+      // Dev mode with no key — guard is skipped, still returns 200
+      const res = await request(app).get("/api/material-library?status=inactive");
+      expect(res.status).toBe(200);
+    } else {
+      const res = await request(app)
+        .get("/api/material-library?status=inactive")
+        .set("x-admin-api-key", adminKey);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.items)).toBe(true);
+    }
+  });
+
+  it("status=inactive with Authorization: Bearer <key> returns 200", async () => {
+    const adminKey = process.env["ADMIN_API_KEY"];
+    if (!adminKey) return; // Skip when no key configured
+    const res = await request(app)
+      .get("/api/material-library?status=inactive")
+      .set("Authorization", `Bearer ${adminKey}`);
+    expect(res.status).toBe(200);
+  });
+
+  it("status=inactive with wrong API key returns 403", async () => {
+    const adminKey = process.env["ADMIN_API_KEY"];
+    if (!adminKey) return; // Skip when no key configured (dev fail-open)
+    const res = await request(app)
+      .get("/api/material-library?status=inactive")
+      .set("x-admin-api-key", "wrong-key");
+    expect(res.status).toBe(403);
+    expect(res.body).toHaveProperty("error");
+  });
+
+  it("status=active (not inactive) is still publicly accessible without credentials", async () => {
+    const res = await request(app).get("/api/material-library?status=active");
+    expect(res.status).toBe(200);
+  });
+
+  it("POST /api/material-library/seed → 401 without any credentials (when key is configured)", async () => {
+    const adminKey = process.env["ADMIN_API_KEY"];
+    if (adminKey) {
+      const res = await request(app).post("/api/material-library/seed");
+      expect(res.status).toBe(401);
+    } else {
+      // Dev fail-open: seed succeeds even without a key when none is configured
+      const res = await request(app).post("/api/material-library/seed").set(AUTH);
+      expect(res.status).toBe(200);
+    }
+  });
+});

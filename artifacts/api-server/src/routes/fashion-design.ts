@@ -428,9 +428,14 @@ router.get("/ai/fashion-design/orders/:id/revisions", async (req, res) => {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
-    // Allow either admin key OR matching customerEmail query param
+    // Allow either session admin (req.internalUser, set by adminAuth middleware)
+    // OR a valid ADMIN_API_KEY header (server-to-server compat) OR a matching
+    // customerEmail query param. Never trust role from body/query/headers directly.
+    const internalUser = (req as unknown as Record<string, unknown>).internalUser;
     const adminKey = req.headers["x-admin-api-key"] ?? req.headers["x-admin-key"];
-    const isAdmin = typeof adminKey === "string" && adminKey === process.env["ADMIN_API_KEY"];
+    const isAdmin =
+      Boolean(internalUser) ||
+      (typeof adminKey === "string" && adminKey === process.env["ADMIN_API_KEY"]);
 
     if (!isAdmin) {
       const customerEmail = typeof req.query["customerEmail"] === "string" ? req.query["customerEmail"] : null;

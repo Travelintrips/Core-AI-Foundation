@@ -716,3 +716,89 @@ describe("GET /ai/design/v1/projects/:id/stages", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// B2 — Session-based admin auth (req.internalUser replaces req.session)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Builds an app that simulates adminAuth having run and validated a session
+ * cookie — i.e. req.internalUser is populated, no API key header needed.
+ */
+function buildAppWithInternalUser() {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    (req as unknown as Record<string, unknown>).internalUser = {
+      id: 1,
+      email: "admin@cstlogistic.co.id",
+      role: "superadmin",
+      accountType: "internal",
+      status: "active",
+    };
+    next();
+  });
+  app.use(universalDesignRouter);
+  return app;
+}
+
+describe("B2 — Session-based admin (req.internalUser)", () => {
+  it("(session admin valid → berhasil) session admin can initialize workflow without API key", async () => {
+    const res = await request(buildAppWithInternalUser())
+      .post("/ai/design/v1/projects/42/initialize")
+      .send({ workflowId: "fashion-design-workflow-v1" });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe("initialized");
+  });
+
+  it("(session admin valid → berhasil) session admin can create review link without API key", async () => {
+    const res = await request(buildAppWithInternalUser())
+      .post("/ai/design/v1/projects/42/review")
+      .send({ type: "approval", clientEmail: "client@example.com" });
+    expect(res.status).toBe(201);
+    expect(res.body.reviewToken).toBeDefined();
+  });
+
+  it("(session admin valid → berhasil) session admin can read project overview without API key", async () => {
+    const res = await request(buildAppWithInternalUser())
+      .get("/ai/design/v1/projects/42");
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(42);
+  });
+
+  it("(tanpa session → 401) no internalUser, no API key → initialize returns 401", async () => {
+    const res = await request(buildApp())
+      .post("/ai/design/v1/projects/42/initialize")
+      .send({ workflowId: "fashion-design-workflow-v1" });
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHORIZED");
+  });
+
+  it("(user non-admin → 403) no credentials → project overview returns 403 FORBIDDEN", async () => {
+    const res = await request(buildApp())
+      .get("/ai/design/v1/projects/42");
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("(security regression) req.session.userId/role is NOT trusted — must not grant admin access", async () => {
+    // Old code checked req.session.userId && req.session.role === "admin".
+    // This test verifies that raw session data injected without going through
+    // adminAuth does not grant admin access after the B2 fix.
+    const appOldStyleSession = express();
+    appOldStyleSession.use(express.json());
+    appOldStyleSession.use((req, _res, next) => {
+      // Inject raw session like the old pattern — this must NOT grant admin access
+      (req as unknown as Record<string, unknown>).session = { userId: 999, role: "admin" };
+      next();
+    });
+    appOldStyleSession.use(universalDesignRouter);
+
+    const res = await request(appOldStyleSession)
+      .post("/ai/design/v1/projects/42/initialize")
+      .send({ workflowId: "fashion-design-workflow-v1" });
+    // Without req.internalUser or a valid API key, must be rejected
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHORIZED");
+  });
+});

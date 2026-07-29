@@ -360,7 +360,13 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Send session cookies on every request so the API server can validate the
+  // caller's session cookie without an explicit Authorization header.
+  // If the caller has already set `credentials` (e.g. "omit" for Expo/mobile
+  // calls that use bearer tokens instead), that value is preserved.
+  const credentials = init.credentials ?? "include";
+
+  const response = await fetch(input, { ...init, method, headers, credentials });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

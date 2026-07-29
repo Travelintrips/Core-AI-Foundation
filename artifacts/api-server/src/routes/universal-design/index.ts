@@ -72,17 +72,28 @@ function correlationId(req: import("express").Request): string {
   return (req.headers["x-correlation-id"] as string | undefined) ?? `ud-${Date.now()}`;
 }
 
-/** Returns true when the request has a valid admin key or internal session. */
+/** Returns true when the request carries valid admin credentials.
+ *
+ * Path 1 (preferred for browser admins): req.internalUser is populated by the
+ * centralized adminAuth middleware after it verifies the session cookie against
+ * the database. This is the ONLY trusted source of session identity — never
+ * trust role data from req.body, req.query, or raw req.session.
+ *
+ * Path 2 (server-to-server compat only): ADMIN_API_KEY in Authorization or
+ * x-admin-api-key header. Kept for internal service calls; browsers should use
+ * the session cookie instead.
+ */
 function isAdmin(req: import("express").Request): boolean {
+  // Path 1: validated internal user session (set by adminAuth middleware)
+  if ((req as unknown as Record<string, unknown>).internalUser) return true;
+  // Path 2: ADMIN_API_KEY header (server-to-server compat only)
   const adminKey = process.env.ADMIN_API_KEY;
   if (!adminKey) return false;
   const bearer = req.headers["authorization"];
-  if (bearer && bearer === `Bearer ${adminKey}`) return true;
+  if (typeof bearer === "string" && bearer === `Bearer ${adminKey}`) return true;
   const header = req.headers["x-admin-api-key"];
   if (header === adminKey) return true;
-  // Session-based admin (Express session set by internal-auth routes)
-  const session = (req as unknown as Record<string, unknown>).session as Record<string, unknown> | undefined;
-  return Boolean(session?.userId && session?.role === "admin");
+  return false;
 }
 
 /** Returns the X-Design-Access-Token if present. */
