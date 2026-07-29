@@ -1,0 +1,771 @@
+# PHASE 4 — CRITICAL SECURITY & PRODUCTION REMEDIATION
+
+## CREATIVE AI STUDIO
+
+## MODE
+
+IMPLEMENTATION MODE — CRITICAL FIXES ONLY
+
+Kerjakan hanya blocker yang sudah terverifikasi pada Phase 3.
+
+Jangan melakukan refactor besar, perubahan UI di luar kebutuhan, penghapusan tabel, atau perubahan fitur bisnis yang tidak berkaitan langsung dengan blocker.
+
+Sebelum mengubah apa pun:
+
+1. Verifikasi branch aktif.
+2. Tampilkan `git status`.
+3. Catat baseline commit SHA.
+4. Buat backup konfigurasi dan schema yang akan disentuh.
+5. Jangan menyentuh production database tanpa migration yang aman dan dapat di-rollback.
+6. Jangan mencetak secret ke terminal, log, laporan, screenshot, atau commit.
+
+---
+
+# TARGET HASIL
+
+Selesaikan blocker berikut:
+
+1. Secret plaintext dan admin key di frontend
+2. Supabase RLS untuk tabel Creative AI
+3. Bucket `payment-proofs` yang masih publik
+4. ErrorBoundary frontend dan global error handler backend
+5. Tenant isolation pada route sensitif
+6. Keputusan dan hardening alur pembayaran manual
+7. Admin dan halaman privat tidak boleh diindeks Google
+
+Setelah selesai, jalankan test, typecheck, build, dan security verification.
+
+---
+
+# PHASE 4.1 — EMERGENCY SECRET REMEDIATION
+
+## Masalah terverifikasi
+
+`.replit` mengandung secret plaintext seperti:
+
+* AI provider API keys
+* `ADMIN_API_KEY`
+* SMTP password
+* Fonnte token
+* credential eksternal lainnya
+
+`VITE_ADMIN_API_KEY` juga digunakan dalam browser bundle.
+
+## Tindakan wajib
+
+### A. Bersihkan `.replit`
+
+Hapus semua nilai secret dari:
+
+```text
+[userenv]
+[userenv.shared]
+```
+
+Jangan memasukkan nilai pengganti palsu ke repository.
+
+Pindahkan seluruh secret runtime ke Replit Secrets atau environment variable terenkripsi.
+
+### B. Hilangkan `VITE_ADMIN_API_KEY`
+
+Cari seluruh penggunaan:
+
+```text
+import.meta.env.VITE_ADMIN_API_KEY
+```
+
+di:
+
+```text
+artifacts/ai-platform/src/
+```
+
+Hapus pola autentikasi admin menggunakan static API key di browser.
+
+Jangan menggantinya dengan API key lain di frontend.
+
+Gunakan autentikasi server-side yang sudah tersedia, misalnya:
+
+* session
+* secure HTTP-only cookie
+* bearer token hasil login
+* identity user yang diverifikasi backend
+
+Pastikan backend memvalidasi role admin dari server, bukan dari nilai yang dikirim bebas oleh frontend.
+
+### C. Rotasi secret
+
+Buat daftar secret yang harus dirotasi, tetapi jangan menampilkan nilai aktualnya.
+
+Minimal:
+
+* OpenAI
+* Anthropic
+* Gemini
+* Mistral
+* Cohere
+* Replicate
+* Admin API key
+* SMTP
+* Fonnte
+* Supabase service-role jika pernah terpapar
+* secret lainnya yang ditemukan di git history
+
+Rotasi aktual yang memerlukan dashboard provider harus dilaporkan sebagai tindakan manual.
+
+### D. Git history
+
+Periksa apakah nilai secret pernah ter-commit.
+
+Gunakan pencarian aman tanpa mencetak nilai penuh.
+
+Jika pernah masuk git history:
+
+* buat daftar file dan commit terdampak
+* jangan melakukan force-push tanpa izin eksplisit
+* nyatakan bahwa rotasi tetap wajib walaupun file terbaru sudah dibersihkan
+
+---
+
+# PHASE 4.2 — SUPABASE RLS REMEDIATION
+
+## Masalah terverifikasi
+
+Hanya sekitar 35 dari 738 tabel yang memiliki RLS.
+
+Tabel inti Creative AI tidak memiliki RLS.
+
+## Prioritas tabel
+
+Minimal audit dan lindungi:
+
+```text
+ai_service_requests
+ai_quotations
+ai_jobs
+ai_cost_records
+ai_audit_logs
+ai_invoices
+ai_workers
+creative_projects
+creative_ai_assets
+customer_profiles
+customer_contexts
+creative_reviews
+creative_render_sessions
+```
+
+Tambahkan tabel terkait lain yang ditemukan melalui foreign key atau route usage.
+
+## Aturan implementasi
+
+1. Jangan menggunakan policy `USING (true)` untuk tabel sensitif.
+2. Jangan memberi anon access secara default.
+3. Terapkan prinsip deny-by-default.
+4. Service-role backend tetap dapat bekerja.
+5. Customer hanya dapat membaca data miliknya.
+6. Tenant hanya dapat membaca data tenant yang sama.
+7. Admin access harus berbasis role yang diverifikasi server.
+8. Worker hanya mendapat akses yang diperlukan.
+9. Audit log tidak boleh dapat dimodifikasi customer.
+10. Cost record dan provider configuration tidak boleh terlihat customer.
+
+## Langkah wajib
+
+### A. Petakan akses
+
+Untuk setiap tabel tentukan aktor:
+
+```text
+anonymous
+authenticated customer
+tenant staff
+admin
+AI worker
+service role
+```
+
+Tentukan operasi:
+
+```text
+SELECT
+INSERT
+UPDATE
+DELETE
+```
+
+### B. Buat migration
+
+Buat satu migration terstruktur dan idempotent.
+
+Migration harus:
+
+* enable RLS
+* menggunakan `FORCE ROW LEVEL SECURITY` bila tepat
+* membuat policy dengan nama jelas
+* tidak menghancurkan policy yang masih diperlukan
+* memiliki rollback script
+* dapat dijalankan ulang dengan aman
+
+### C. Jangan mengandalkan JWT claim yang belum ada
+
+Sebelum membuat policy berdasarkan:
+
+```sql
+auth.uid()
+tenant_id
+role
+customer_id
+```
+
+verifikasi bahwa nilai tersebut benar-benar tersedia dan konsisten.
+
+Jika aplikasi backend menggunakan service-role dan semua akses customer melewati API backend, gunakan policy deny-direct-client yang eksplisit.
+
+### D. Test isolation
+
+Buat test untuk membuktikan:
+
+* anon tidak dapat membaca tabel inti AI
+* customer A tidak dapat membaca project customer B
+* tenant A tidak dapat membaca data tenant B
+* customer tidak dapat membaca `ai_cost_records`
+* customer tidak dapat memodifikasi audit log
+* service role tetap dapat menjalankan workflow
+
+Jangan menyatakan PASS hanya karena migration berhasil.
+
+---
+
+# PHASE 4.3 — PAYMENT-PROOFS STORAGE SECURITY
+
+## Masalah terverifikasi
+
+Bucket:
+
+```text
+payment-proofs
+```
+
+masih:
+
+```text
+public=true
+```
+
+## Tindakan wajib
+
+1. Ubah bucket menjadi private.
+2. Pastikan upload hanya melalui flow yang terautentikasi atau signed upload.
+3. Pastikan download hanya melalui signed URL dengan TTL pendek.
+4. Jangan mengembalikan permanent public URL.
+5. Batasi akses berdasarkan customer, project, tenant, dan admin authorization.
+6. Jangan membuat signed URL sebelum authorization diperiksa.
+
+## Signed URL
+
+Perbaiki revocation agar tidak hanya menggunakan:
+
+```ts
+const revokedTokenIds = new Set<string>();
+```
+
+Simpan revocation secara persisten di database.
+
+Minimal field:
+
+```text
+token_id
+asset_id
+revoked_at
+revoked_by
+reason
+expires_at
+created_at
+```
+
+Saat validasi token:
+
+1. validasi signature
+2. validasi expiry
+3. validasi asset
+4. cek revocation database
+5. cek authorization pemohon bila diperlukan
+
+## File validation
+
+Pertahankan MIME validation yang sudah ada.
+
+Tambahkan:
+
+* batas ukuran eksplisit sebelum decode base64
+* validasi ekstensi
+* magic-byte/file-signature verification
+* nama file yang dihasilkan server
+* larangan SVG/HTML/executable
+* audit log upload
+* checksum untuk deteksi duplikasi
+
+Jangan hanya mempercayai MIME yang dikirim browser.
+
+---
+
+# PHASE 4.4 — FRONTEND ERROR BOUNDARY
+
+Tambahkan global ErrorBoundary pada:
+
+```text
+artifacts/customer-portal
+artifacts/ai-platform
+```
+
+## Ketentuan
+
+ErrorBoundary harus:
+
+* menangkap runtime rendering error
+* menampilkan fallback UI profesional
+* tidak menampilkan stack trace ke pengguna
+* menyediakan tombol reload
+* menyediakan tombol kembali ke halaman aman
+* mencatat error ke logger internal
+* menampilkan correlation ID
+* tidak memasukkan data customer atau secret ke log
+
+Tambahkan section-level ErrorBoundary pada area kritis:
+
+* workspace
+* design studio
+* render preview
+* quotation/payment
+* admin dashboard
+
+Pertahankan `Suspense`; ErrorBoundary bukan pengganti Suspense.
+
+## Test
+
+Buat komponen test yang sengaja melempar error dan verifikasi fallback tampil.
+
+---
+
+# PHASE 4.5 — EXPRESS GLOBAL ERROR HANDLER
+
+Tambahkan middleware global empat argumen:
+
+```ts
+(error, request, response, next)
+```
+
+Letakkan setelah seluruh route.
+
+## Perilaku wajib
+
+Untuk production:
+
+* response selalu JSON
+* tidak mengirim stack trace
+* tidak mengirim SQL error
+* tidak mengirim nama tabel internal
+* tidak mengirim path filesystem
+* tidak mengirim API key atau request authorization header
+* menghasilkan correlation/request ID
+* mapping error ke HTTP status yang benar
+* mencatat detail internal melalui logger aman
+
+Contoh response aman:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Terjadi kesalahan pada server.",
+    "requestId": "..."
+  }
+}
+```
+
+Tambahkan handler untuk:
+
+* 404 API route
+* validation error
+* authentication error
+* authorization error
+* database constraint error
+* provider timeout
+* file upload error
+* unknown error
+
+Jangan mengubah error bisnis menjadi HTTP 500 secara sembarangan.
+
+---
+
+# PHASE 4.6 — TENANT ISOLATION AUDIT & FIX
+
+Audit semua route Creative AI yang mengakses resource berdasarkan:
+
+```text
+id
+projectId
+customerId
+quotationId
+assetId
+reviewId
+workspace token
+```
+
+Cari query seperti:
+
+```ts
+where(eq(table.id, req.params.id))
+```
+
+yang tidak memiliki tenant/customer ownership check.
+
+## Prioritas route
+
+* projects
+* customer workspace
+* quotations
+* payments
+* assets
+* reviews
+* render sessions
+* service requests
+* client memory
+* analytics
+* downloads
+
+## Ketentuan
+
+Setiap resource harus diverifikasi melalui salah satu mekanisme:
+
+* tenant scope
+* customer ownership
+* server-resolved request context
+* admin role
+* signed token dengan scope terbatas
+
+Jangan percaya:
+
+* `tenantId` dari request body
+* `customerId` dari query parameter
+* role dari browser
+* static admin API key
+* resource ID saja
+
+## Test wajib
+
+Tambahkan negative authorization test:
+
+* tenant A membaca tenant B → 403/404
+* customer A membaca customer B → 403/404
+* customer mengubah quotation milik orang lain → ditolak
+* token workspace tidak dapat membuka project lain
+* asset signed URL tidak bisa digunakan untuk asset berbeda
+* admin tanpa role valid ditolak
+
+---
+
+# PHASE 4.7 — PAYMENT FLOW HARDENING
+
+Phase 3 membuktikan sistem pembayaran saat ini menggunakan transfer manual dan upload bukti.
+
+Jangan langsung mengintegrasikan payment gateway tanpa memastikan keputusan bisnis.
+
+Implementasikan hardening untuk flow manual yang sudah ada:
+
+1. Payment schedule dibuat server-side.
+2. Nominal tidak boleh dikirim bebas oleh customer.
+3. Customer hanya upload bukti untuk schedule miliknya.
+4. Verification hanya dapat dilakukan admin finance yang berwenang.
+5. Verification harus idempotent.
+6. Project tidak boleh unlock dua kali.
+7. Status pembayaran tidak boleh mundur sembarangan.
+8. Semua perubahan dicatat dalam audit log.
+9. File bukti disimpan private.
+10. Approval dan unlock harus berada dalam transaksi database.
+11. Duplicate proof harus dideteksi.
+12. Rejected proof memiliki alasan dan histori.
+
+Tambahkan status yang jelas:
+
+```text
+pending
+proof_submitted
+under_review
+verified
+rejected
+expired
+cancelled
+refunded
+```
+
+Jika status yang ada berbeda, gunakan enum existing dan jangan membuat duplikasi tanpa alasan.
+
+## Payment gateway
+
+Jangan mengintegrasikan Midtrans/Xendit pada phase ini kecuali sudah tersedia konfigurasi dan kontrak bisnis yang jelas.
+
+Sebagai gantinya:
+
+* buat interface/payment provider abstraction
+* pertahankan manual bank transfer sebagai provider
+* dokumentasikan titik integrasi gateway berikutnya
+* jangan membuat fake payment success
+
+Payment manual yang aman dapat diterima sebagai desain bisnis apabila dinyatakan eksplisit; ketidakadaan gateway bukan otomatis vulnerability.
+
+---
+
+# PHASE 4.8 — SEO PRIVACY FIXES
+
+## Admin
+
+Ubah metadata admin:
+
+```html
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
+```
+
+Ubah `robots.txt` admin:
+
+```text
+User-agent: *
+Disallow: /
+```
+
+Tambahkan header server bila domain admin terpisah:
+
+```text
+X-Robots-Tag: noindex, nofollow, noarchive
+```
+
+## Halaman privat customer
+
+Berikan `noindex, nofollow, noarchive` pada:
+
+```text
+/workspace/:token
+/review/:token
+/quotation/:token
+/access
+/login
+/payment
+```
+
+Sesuaikan dengan route privat aktual.
+
+Jangan memasukkan route privat ke sitemap.
+
+## Public portal
+
+Tambahkan:
+
+* `og:image`
+* canonical
+* sitemap.xml
+* title dan description per public route
+
+SEO lanjutan seperti JSON-LD dapat dikerjakan setelah blocker keamanan selesai.
+
+---
+
+# PHASE 4.9 — DATABASE SAFETY
+
+Jangan menghapus:
+
+* `zz_deleted_*`
+* tabel kosong
+* index
+* migration lama
+
+pada phase ini.
+
+Hanya buat daftar untuk remediation terpisah.
+
+Semua perubahan database phase ini harus terbatas pada:
+
+* RLS
+* policies
+* private storage
+* signed URL revocation persistence
+* constraint/index yang mutlak dibutuhkan oleh security fix
+
+---
+
+# PHASE 4.10 — VERIFICATION
+
+Setelah implementasi:
+
+## A. Static checks
+
+Jalankan:
+
+```text
+typecheck
+lint
+unit tests
+integration tests
+build customer portal
+build admin platform
+build API server
+```
+
+Laporkan error baru dan pre-existing secara terpisah.
+
+## B. Secret checks
+
+Buktikan:
+
+* tidak ada `VITE_ADMIN_API_KEY`
+* tidak ada provider key plaintext di tracked file
+* tidak ada password plaintext di `.replit`
+* frontend bundle tidak mengandung admin API key
+* log tidak menampilkan secret
+
+Jangan mencetak nilai secret dalam bukti.
+
+## C. Database checks
+
+Jalankan query dan tampilkan hasil:
+
+* jumlah tabel AI target dengan RLS aktif
+* jumlah policy per tabel
+* bucket `payment-proofs` sudah private
+* revocation table tersedia
+* anon access ditolak
+* service-role workflow tetap bekerja
+
+## D. Runtime security tests
+
+Verifikasi:
+
+* anonymous access AI tables ditolak
+* cross-tenant access ditolak
+* cross-customer access ditolak
+* payment proof public URL tidak dapat dibuka
+* signed URL valid dapat dibuka
+* signed URL revoked ditolak
+* unauthorized admin request ditolak
+* ErrorBoundary fallback muncul
+* API uncaught error menghasilkan JSON aman tanpa stack trace
+* payment verification idempotent
+
+## E. SEO checks
+
+Verifikasi raw HTML dan response header:
+
+* admin `noindex`
+* admin robots disallow
+* workspace/token pages `noindex`
+* public customer route tetap `index, follow`
+
+---
+
+# FINAL REPORT
+
+Gunakan format:
+
+## 1. Baseline
+
+* Branch
+* Commit SHA
+* Working tree
+* Database environment
+* Deployment environment
+
+## 2. Files Changed
+
+Untuk setiap file:
+
+* path
+* perubahan
+* alasan
+* risiko
+
+## 3. Database Changes
+
+* migration
+* policy
+* table
+* storage bucket
+* rollback procedure
+
+## 4. Secret Remediation
+
+Jangan tampilkan secret.
+
+Laporkan hanya:
+
+* jenis secret
+* lokasi lama
+* lokasi baru
+* perlu rotasi manual atau tidak
+* status rotasi
+
+## 5. Test Results
+
+* test suite
+* pass
+* fail
+* skipped
+* pre-existing error
+
+## 6. Security Proof
+
+Sertakan bukti yang sudah disanitasi.
+
+## 7. Remaining Manual Actions
+
+Contoh:
+
+* rotate provider key
+* set Replit Secrets
+* apply production migration
+* verify domain headers
+* configure provider dashboard
+
+## 8. Remaining Risks
+
+Pisahkan:
+
+* blocker
+* high
+* medium
+* backlog
+
+## 9. Final Verdict
+
+Pilih salah satu:
+
+```text
+GO
+GO WITH CONDITIONS
+NO GO
+```
+
+Jangan memberikan GO apabila:
+
+* secret masih ada di repository
+* `VITE_ADMIN_API_KEY` masih masuk bundle
+* bucket payment proof masih publik
+* tabel AI target masih dapat diakses anon
+* cross-tenant test belum lulus
+* API masih mengirim stack trace
+* frontend tidak memiliki error fallback
+
+---
+
+# ATURAN PENTING
+
+* Jangan mencetak atau menyalin secret aktual.
+* Jangan commit secret.
+* Jangan mengubah production tanpa migration dan rollback.
+* Jangan menonaktifkan security hanya agar test lulus.
+* Jangan menggunakan policy permisif `USING (true)` pada tabel sensitif.
+* Jangan mengandalkan frontend untuk authorization.
+* Jangan menyatakan masalah selesai hanya karena kode berhasil build.
+* Semua PASS harus dibuktikan dengan test atau query aktual.
+* Laporkan false positive secara terbuka.
+* Berhenti dan laporkan jika perubahan memerlukan keputusan bisnis atau kredensial yang tidak tersedia.
