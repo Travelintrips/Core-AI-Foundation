@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
-import { adminAuthWithExceptions } from "./middleware/adminAuth.js";
+import { adminAuthWithExceptions, optionalSessionAuth } from "./middleware/adminAuth.js";
 import { globalLimiter } from "./middleware/rateLimiter.js";
 import {
   suspiciousRequestLogger,
@@ -121,6 +121,12 @@ app.use(requestCounterMiddleware);
 app.use("/api", globalLimiter);
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
-app.use("/api", adminAuthWithExceptions, router);
+// optionalSessionAuth runs first: hydrates req.internalUser from the session
+// cookie without blocking.  This ensures that public routes (PUBLIC_ROUTE_RULES
+// exemptions) receive an authenticated internalUser when a valid session exists,
+// allowing route handlers to do their own admin-branching (e.g. status=inactive).
+// adminAuthWithExceptions then enforces the key/session guard for non-public routes,
+// short-circuiting the DB lookup because req.internalUser is already set.
+app.use("/api", optionalSessionAuth, adminAuthWithExceptions, router);
 
 export default app;

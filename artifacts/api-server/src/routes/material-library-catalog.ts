@@ -40,30 +40,37 @@ function handleError(res: import("express").Response, err: unknown): void {
 }
 
 /**
- * Returns true when the request carries valid admin credentials.
+ * Determines the admin authentication status of the request.
  *
- * Checks req.internalUser (set by the centralized adminAuth middleware after
- * session-cookie verification) first, then falls back to ADMIN_API_KEY headers
- * for server-to-server compat.
+ * Returns:
+ *   "admin"           — req.internalUser is set (verified browser session) OR
+ *                       a valid ADMIN_API_KEY was provided in a header.
+ *   "unauthenticated" — no credential was presented at all → 401.
+ *   "unauthorized"    — a credential was presented but is wrong → 403.
  *
  * Note: GET /material-library is in PUBLIC_ROUTE_RULES so the global
- * adminAuth is bypassed for it — internalUser is only populated here when the
- * route is reached via a non-exempted path. The check is included for
- * correctness and future-proofing; browsers rely on the API-key path in the
- * current public-route configuration.
+ * adminAuthWithExceptions bypasses adminAuth for it.  req.internalUser is
+ * populated by optionalSessionAuth (app.ts) which runs before the router and
+ * always attempts to hydrate the session cookie — meaning browser admin users
+ * correctly receive "admin" here even though adminAuth itself was bypassed.
  */
-function isRequestAdmin(req: import("express").Request): boolean {
-  // Path 1: validated internal user session (centralized adminAuth middleware)
-  if ((req as unknown as Record<string, unknown>).internalUser) return true;
+function getAdminStatus(
+  req: import("express").Request,
+): "admin" | "unauthenticated" | "unauthorized" {
+  // Path 1: validated internal-user session (populated by optionalSessionAuth)
+  if ((req as unknown as Record<string, unknown>).internalUser) return "admin";
+
   // Path 2: ADMIN_API_KEY header (server-to-server compat)
   const adminKey = process.env["ADMIN_API_KEY"];
-  if (!adminKey) return false;
   const authHeader = req.headers["authorization"] as string | undefined;
   const xKey = (req.headers["x-admin-api-key"] ?? req.headers["x-admin-key"]) as string | undefined;
   const provided = authHeader?.startsWith("Bearer ")
     ? authHeader.slice(7).trim()
     : xKey?.trim();
-  return provided === adminKey;
+
+  if (!provided) return "unauthenticated"; // no credential at all
+  if (!adminKey || provided !== adminKey) return "unauthorized"; // wrong credential
+  return "admin";
 }
 
 // ── GET /material-library/categories ─────────────────────────────────────────
@@ -93,8 +100,13 @@ router.get("/material-library", async (req, res) => {
   try {
     const rawStatus = (req.query as Record<string, unknown>)["status"];
     if (typeof rawStatus === "string" && rawStatus === "inactive") {
-      if (!isRequestAdmin(req)) {
-        res.status(403).json({ error: "status=inactive requires admin authentication" });
+      const authStatus = getAdminStatus(req);
+      if (authStatus === "unauthenticated") {
+        res.status(401).json({ error: "Authentication required to query inactive materials" });
+        return;
+      }
+      if (authStatus === "unauthorized") {
+        res.status(403).json({ error: "Admin access required for status=inactive" });
         return;
       }
     }

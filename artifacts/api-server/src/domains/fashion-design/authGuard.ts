@@ -54,15 +54,33 @@ runStartupCheck();
 /**
  * fashionDesignAuthGuard — runs BEFORE adminAuth on every admin route.
  *
- * Returns 503 if ADMIN_API_KEY is not configured, preventing adminAuth from
- * falling through to its dev-mode fail-open path.
+ * Two allowed paths:
+ *   1. req.internalUser is already set — the global adminAuth middleware verified
+ *      a valid browser admin session. Session auth is always sufficient; no
+ *      ADMIN_API_KEY header is required.
+ *   2. ADMIN_API_KEY env var is configured — the route-level adminAuth that
+ *      follows will validate the key from headers (server-to-server compat).
+ *
+ * Returns 503 only when NEITHER condition is true, i.e. no verified session AND
+ * no API key is configured — which means adminAuth would fall through to its
+ * dev-mode fail-open path and allow unauthenticated access.
  */
 export function fashionDesignAuthGuard(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  // Re-check on every request so env-var hot-reloading is picked up
+  // Path 1: valid internal-user session set by the global adminAuth middleware.
+  // This handles browser-based admin users — no API key needed.
+  const internalUser = (req as unknown as Record<string, unknown>).internalUser;
+  if (internalUser) {
+    next();
+    return;
+  }
+
+  // Path 2: ADMIN_API_KEY must be configured so that the route-level adminAuth
+  // that follows can validate the key. Without it, adminAuth would fail-open in
+  // dev — which is unacceptable for generation and mutation routes.
   const key = process.env["ADMIN_API_KEY"];
   const configured = Boolean(key && key.trim() !== "");
 

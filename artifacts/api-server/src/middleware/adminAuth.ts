@@ -16,6 +16,12 @@ import { verifySessionToken, getInternalUserById, SESSION_COOKIE_NAME } from "..
  * (dev fail-open convenience).
  */
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Short-circuit: already authenticated (e.g. by optionalSessionAuth upstream)
+  if ((req as unknown as Record<string, unknown>).internalUser) {
+    next();
+    return;
+  }
+
   // ── Path 1: session cookie from internal user login ───────────────────────
   const sessionToken = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
   if (sessionToken) {
@@ -218,3 +224,46 @@ export function adminAuthWithExceptions(req: Request, res: Response, next: NextF
 
 // Alias used by routes that import under the more explicit name
 export const requireAdminApiKey = adminAuth;
+
+/**
+ * optionalSessionAuth — globally-mounted session hydration middleware.
+ *
+ * Attempts to populate req.internalUser from the session cookie WITHOUT
+ * blocking the request if the cookie is absent or invalid.  This ensures
+ * that public routes (listed in PUBLIC_ROUTE_RULES, where adminAuth is
+ * bypassed) can still receive an authenticated internalUser for routes that
+ * perform their own role-aware branching (e.g. status=inactive on the
+ * material-library list endpoint).
+ *
+ * Must be mounted BEFORE adminAuthWithExceptions so that req.internalUser is
+ * already set when adminAuth runs — allowing adminAuth to short-circuit the
+ * redundant DB lookup.
+ */
+export async function optionalSessionAuth(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  // Already authenticated — nothing to do.
+  if ((req as unknown as Record<string, unknown>).internalUser) {
+    next();
+    return;
+  }
+
+  const sessionToken = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
+  if (sessionToken) {
+    try {
+      const payload = verifySessionToken(sessionToken);
+      if (payload) {
+        const user = await getInternalUserById(payload.sub);
+        if (user && user.status === "active" && user.accountType === "internal") {
+          req.internalUser = user;
+        }
+      }
+    } catch {
+      // Silently ignore — invalid cookie should not block the request.
+    }
+  }
+
+  next();
+}
