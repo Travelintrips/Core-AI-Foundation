@@ -1,0 +1,186 @@
+# PHASE 3 — PRODUCTION READINESS VERIFICATION
+
+MODE: STRICT VERIFICATION (READ ONLY)
+
+Jangan mengubah source code, database, konfigurasi, migration, deployment, commit, ataupun install package.
+
+Tujuan audit ini BUKAN mencari temuan baru.
+
+Tujuan audit ini adalah MEMBUKTIKAN apakah seluruh temuan Phase 1 dan Phase 2 benar-benar valid.
+
+Untuk setiap temuan gunakan salah satu status berikut:
+
+* VERIFIED ✅
+* PARTIALLY VERIFIED ⚠️
+* FALSE POSITIVE ❌
+* NOT ENOUGH EVIDENCE ❓
+
+Semua status WAJIB memiliki bukti.
+
+---
+
+## VERIFIKASI 1 — SECURITY
+
+Verifikasi ulang:
+
+* Row Level Security seluruh tabel AI
+* Supabase Policies
+* Storage Policies
+* Bucket Visibility
+* Signed URL
+* Secret Management
+* API Keys
+* Authentication
+* Authorization
+* Tenant Isolation
+
+Jangan menyimpulkan.
+
+Tampilkan query database atau implementasi yang menjadi dasar.
+
+---
+
+## VERIFIKASI 2 — PAYMENT
+
+Buktikan apakah sistem benar-benar:
+
+* hanya manual payment
+* memiliki payment gateway tersembunyi
+* memiliki webhook
+* memiliki callback payment
+* memiliki auto settlement
+
+Cari seluruh integrasi:
+
+* Midtrans
+* Xendit
+* Stripe
+* DOKU
+* PayPal
+* Paylabs
+* Fonnte Payment
+* provider lain
+
+Jika tidak ditemukan, tampilkan bukti pencarian.
+
+---
+
+## VERIFIKASI 3 — ERROR HANDLING
+
+Verifikasi:
+
+* ErrorBoundary
+* Suspense
+* Global Error Handler
+* Express Error Handler
+* React Error Handler
+
+Jangan hanya grep.
+
+Pastikan implementasi benar-benar tidak ada.
+
+---
+
+## VERIFIKASI 4 — PERFORMANCE
+
+Buktikan apakah:
+
+* Compression dilakukan di aplikasi
+* Compression dilakukan di reverse proxy
+* Compression dilakukan CDN
+* Compression dilakukan hosting
+
+Jangan langsung menyimpulkan "tidak ada compression".
+
+---
+
+## VERIFIKASI 5 — SEO
+
+Verifikasi ulang:
+
+* Canonical
+* JSON-LD
+* Dynamic Meta
+* OpenGraph
+* Twitter
+* Sitemap
+* Robots
+* Workspace noindex
+* Admin noindex
+
+Berikan bukti file.
+
+---
+
+## VERIFIKASI 6 — DATABASE
+
+Verifikasi:
+
+* jumlah tabel
+* jumlah RLS
+* orphan table
+* orphan row
+* duplicate index
+* unused migration
+* migration tracking
+
+Sertakan query SQL yang digunakan.
+
+---
+
+## VERIFIKASI 7 — AI ENGINE
+
+Verifikasi:
+
+* Retry
+* Timeout
+* Queue
+* Dead Letter Queue
+* AI Cache
+* Cost Tracking
+* Prompt Version
+* Provider Fallback
+
+Pastikan berdasarkan implementasi nyata.
+
+---
+
+## VERIFIKASI 8 — FALSE POSITIVE
+
+Audit ulang seluruh temuan Phase 1 dan Phase 2.
+
+Cari mana yang:
+
+* ternyata sudah diperbaiki
+* ternyata memang ada
+* ternyata salah baca
+* ternyata hanya berlaku di DEV
+* ternyata hanya placeholder
+
+---
+
+# FINAL REPORT
+
+Untuk setiap temuan tampilkan:
+
+* Status (VERIFIED / PARTIALLY VERIFIED / FALSE POSITIVE / NOT ENOUGH EVIDENCE)
+* Bukti
+* Lokasi file
+* Query (jika dari database)
+* Dampak
+* Tingkat keyakinan (%)
+
+Di bagian akhir buat ringkasan:
+
+* Total VERIFIED
+* Total PARTIALLY VERIFIED
+* Total FALSE POSITIVE
+* Total NOT ENOUGH EVIDENCE
+
+Kemudian berikan keputusan akhir:
+
+* GO
+* GO WITH CONDITIONS
+* NO GO
+
+Keputusan akhir hanya boleh diberikan apabila seluruh blocker telah diverifikasi berdasarkan bukti nyata, bukan inferensi.
