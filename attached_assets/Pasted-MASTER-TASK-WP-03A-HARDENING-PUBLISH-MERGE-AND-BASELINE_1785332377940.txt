@@ -1,0 +1,480 @@
+MASTER TASK — WP-03A HARDENING, PUBLISH, MERGE, AND BASELINE TAG
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current branch:
+feature/phase6-wp03a-controlled-rebuild
+
+Verified commits:
+
+- b084888 docs(layout): restore WP-03 architecture baseline
+- 00b6545 feat(layout): rebuild WP-03A placement engine core
+
+Current status:
+
+- WP-03A implementation complete
+- 95/95 targeted tests pass
+- DEV migration applied
+- RLS enabled and FORCE RLS active
+- branch not yet pushed
+- tenant consistency between placements.tenant_id and
+  layout_sessions.tenant_id is currently enforced only in service code
+
+========================================================
+OBJECTIVE
+========================================================
+
+Complete final WP-03A hardening and publish the verified baseline.
+
+This task must:
+
+1. add database-level tenant consistency enforcement;
+2. validate migration and tests;
+3. push the feature branch;
+4. merge safely into main;
+5. create and push the verified WP-03A rebuild tag.
+
+Do NOT begin WP-03B.
+
+========================================================
+IMPORTANT RULES
+========================================================
+
+Do NOT implement collision detection.
+
+Do NOT implement:
+
+- AABB
+- OBB
+- SAT
+- clearance
+- undo/redo
+- constraints
+- publish layout
+- public catalog
+- AI
+- optimization
+- rendering
+- admin editor
+- WP-03B+
+
+Do NOT rewrite existing verified migration history destructively.
+
+Do NOT use drizzle-kit push.
+
+Do NOT force-push.
+
+Do NOT commit attached_assets task files.
+
+========================================================
+PHASE 1 — VERIFY BASELINE
+========================================================
+
+Report:
+
+- repository identity
+- current branch
+- HEAD SHA
+- git status
+- local commits ahead of origin
+- origin/main SHA
+- shallow status
+- existence of commits b084888 and 00b6545
+- WP-03A files present
+- WP-03A tests present
+- DEV migration state
+
+Confirm no legitimate uncommitted source changes exist.
+
+========================================================
+PHASE 2 — TENANT CONSISTENCY DESIGN
+========================================================
+
+Inspect the actual schema for:
+
+- ai_platform.layout_sessions
+- ai_platform.placements
+
+Define a database invariant:
+
+placements.tenant_id must match layout_sessions.tenant_id
+for the referenced session_id.
+
+Also define behavior for platform-wide records where tenant_id IS NULL.
+
+Required matching semantics:
+
+- session tenant NULL + placement tenant NULL = allowed
+- session tenant non-NULL + same placement tenant = allowed
+- session tenant non-NULL + different tenant = rejected
+- session tenant NULL + placement tenant non-NULL = rejected
+- session tenant non-NULL + placement tenant NULL = rejected
+
+Do not rely only on application code.
+
+========================================================
+PHASE 3 — DATABASE HARDENING MIGRATION
+========================================================
+
+Create:
+
+scripts/migrations/wp03a-placement-tenant-consistency.sql
+
+Implement database-level enforcement using a safe PostgreSQL
+constraint trigger or validation trigger.
+
+Requirements:
+
+- validate INSERT on placements
+- validate UPDATE of session_id
+- validate UPDATE of tenant_id
+- reject mismatched tenant ownership
+- support NULL-safe equality
+- deterministic error code/message
+- idempotent migration
+- no destructive table rebuild
+- no data deletion
+- no weakening of RLS
+- no duplicate tables
+
+Suggested invariant comparison:
+
+placement.tenant_id IS NOT DISTINCT FROM session.tenant_id
+
+Raise a clear exception when mismatched.
+
+Also consider what happens when layout_sessions.tenant_id is updated.
+
+Preferred behavior:
+
+- prevent changing session tenant when existing placements would
+  become inconsistent
+
+Implement one of these safely:
+
+A. second trigger on layout_sessions tenant update; or
+B. transaction-safe validation of all child placements.
+
+Document the chosen behavior.
+
+========================================================
+PHASE 4 — DRIZZLE CONTRACT REVIEW
+========================================================
+
+Review whether any Drizzle schema metadata or relation declaration
+must change.
+
+Do not model the trigger as a normal foreign key if PostgreSQL
+cannot represent the NULL-safe tenant invariant correctly.
+
+Only modify schema files if required for documentation or relation
+clarity.
+
+Do not change the existing API contract.
+
+========================================================
+PHASE 5 — SERVICE DEFENSE IN DEPTH
+========================================================
+
+Keep the existing service-level tenant checks.
+
+Do not remove them after adding the database trigger.
+
+Ensure database trigger violations are mapped to a structured
+application error rather than exposing raw SQL internals.
+
+Expected outcome:
+
+- service validates early
+- database enforces final invariant
+- API returns controlled 400, 403, or 409 according to existing
+  error conventions
+
+Do not leak SQL trigger text or internal stack traces.
+
+========================================================
+PHASE 6 — TESTS
+========================================================
+
+Extend the WP-03A test suite.
+
+Add tests for:
+
+- matching non-NULL tenant accepted
+- mismatched tenant rejected
+- NULL/NULL accepted
+- NULL/non-NULL rejected
+- non-NULL/NULL rejected
+- changing placement session to another tenant rejected
+- changing placement tenant to mismatch rejected
+- changing session tenant with child placements rejected
+- same-tenant update accepted
+- trigger migration idempotency
+- structured API/service error mapping
+- RLS remains enabled
+- FORCE RLS remains enabled
+
+Run all existing 95 WP-03A tests plus the new tests.
+
+Target:
+
+100% WP-03A hardening tests pass.
+
+========================================================
+PHASE 7 — DEV MIGRATION
+========================================================
+
+Apply only the new hardening migration to DEV.
+
+DEV project:
+
+xssrfshdrtdfupgqwfdw
+
+Before applying, confirm project identity.
+
+Verify:
+
+- trigger function exists
+- trigger exists on placements
+- session tenant update protection exists
+- valid same-tenant insert succeeds
+- invalid cross-tenant insert fails
+- NULL-safe behavior is correct
+- migration rerun is clean
+- no existing valid WP-03A rows are broken
+- RLS and FORCE RLS remain active
+- all 8 policies remain present
+
+Do not apply to PROD in this task.
+
+========================================================
+PHASE 8 — FULL VALIDATION
+========================================================
+
+Run:
+
+- WP-03A targeted tests
+- WP-01 tests
+- WP-02 tests
+- API server build
+- lib/db build/typecheck
+- ai-platform typecheck
+- customer-portal typecheck
+- relevant API regression suite
+
+Separate:
+
+- new failures
+- pre-existing failures
+- environment limitations
+
+Do not fix unrelated provider-health or other historical failures.
+
+========================================================
+PHASE 9 — DOCUMENTATION
+========================================================
+
+Update:
+
+docs/wp03a-placement-engine-rebuild.md
+
+Document:
+
+- database tenant invariant
+- NULL-safe matching rules
+- trigger behavior
+- update restrictions
+- service defense in depth
+- migration name
+- DEV validation
+- new tests
+- remaining limitations
+
+Do not change the approved WP-03B design.
+
+========================================================
+PHASE 10 — COMMIT
+========================================================
+
+Inspect git diff.
+
+Commit only WP-03A hardening files.
+
+Recommended commit message:
+
+fix(layout): enforce placement session tenant consistency
+
+Do not include:
+
+- attached_assets
+- prompt files
+- .replit
+- unrelated changes
+
+Report the exact commit SHA.
+
+========================================================
+PHASE 11 — PUSH FEATURE BRANCH
+========================================================
+
+Ensure GitHub authentication is connected.
+
+Push:
+
+git push -u origin feature/phase6-wp03a-controlled-rebuild
+
+Do not force-push.
+
+Verify:
+
+- remote branch exists
+- b084888 is reachable remotely
+- 00b6545 is reachable remotely
+- hardening commit is reachable remotely
+
+========================================================
+PHASE 12 — MERGE SAFELY
+========================================================
+
+Fetch latest remote state:
+
+git fetch origin --prune --tags
+
+Check divergence between:
+
+- feature/phase6-wp03a-controlled-rebuild
+- origin/main
+
+If clean and mergeable:
+
+- merge through the repository’s normal review path
+- preserve all three commits
+- do not squash unless repository policy explicitly requires it
+
+If a PR workflow is available:
+
+- create PR
+- report PR URL or identifier
+- do not self-approve where review is required
+
+If direct merge is permitted and explicitly available:
+
+- merge without force
+- push main normally
+
+If conflicts are ambiguous:
+
+STOP and report them.
+
+Do not resolve unrelated conflicts by guessing.
+
+========================================================
+PHASE 13 — POST-MERGE VERIFICATION
+========================================================
+
+After merge, verify origin/main contains:
+
+- WP-03 design documents
+- WP-03A schema
+- WP-03A migrations
+- RLS migration
+- tenant consistency migration
+- service
+- router
+- tests
+- documentation
+
+Verify commit reachability:
+
+git branch -r --contains b084888
+git branch -r --contains 00b6545
+git branch -r --contains <HARDENING_SHA>
+
+Run a lightweight post-merge validation:
+
+- WP-03A targeted tests
+- API build
+
+========================================================
+PHASE 14 — BASELINE TAG
+========================================================
+
+Create an annotated tag on the exact merged WP-03A baseline commit:
+
+material-v6.0.2-wp03a-rebuild
+
+Tag message:
+
+WP-03A Controlled Rebuild Baseline
+Placement Engine Core reconstructed after original workspace loss.
+Includes tenant consistency database hardening.
+Verified and ready for WP-03B.
+
+Push:
+
+git push origin material-v6.0.2-wp03a-rebuild
+
+Verify the remote tag points to the intended commit.
+
+Do not reuse or move any existing tag.
+
+========================================================
+PHASE 15 — FINAL CLEANUP
+========================================================
+
+Verify:
+
+- main matches origin/main
+- feature branch is pushed
+- tag is pushed
+- ahead/behind = 0/0
+- working tree clean
+- no task files committed
+- no .replit changes
+- no force-push performed
+- no WP-03B code added
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Repository identity
+2. Starting branch and SHA
+3. Tenant invariant implemented
+4. Trigger/function inventory
+5. Migration file
+6. NULL-safe behavior
+7. Service error mapping
+8. New tests added
+9. Total WP-03A test result
+10. WP-01/WP-02 regression result
+11. Build/typecheck result
+12. DEV migration result
+13. RLS verification
+14. Hardening commit SHA
+15. Feature branch push result
+16. Merge or PR result
+17. Final origin/main SHA
+18. Tag name and target SHA
+19. Remote verification
+20. Working tree status
+21. Remaining risks
+22. Confirmation that WP-03B was not started
+
+Use exactly one verdict:
+
+A. WP-03A HARDENED, MERGED, AND TAGGED — READY FOR WP-03B
+
+B. WP-03A HARDENED AND PUSHED — MERGE REVIEW PENDING
+
+C. WP-03A HARDENING COMPLETE — PUSH OR AUTH BLOCKED
+
+D. WP-03A HARDENING BLOCKED OR FAILED
+
+STOP.
+
+Do NOT start WP-03B.
+Wait for explicit approval.
