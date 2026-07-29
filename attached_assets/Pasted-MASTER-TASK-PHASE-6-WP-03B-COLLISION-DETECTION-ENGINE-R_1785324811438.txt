@@ -1,0 +1,621 @@
+MASTER TASK — PHASE 6
+WP-03B — COLLISION DETECTION ENGINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+WP-03 Design Commit:
+35e5c88
+
+WP-03A Baseline:
+Current verified WP-03A implementation containing:
+
+- lib/db/src/schema/placement-engine.ts
+- scripts/migrations/wp03a-placement-engine.sql
+- scripts/migrations/rls-wp03a-placement-engine.sql
+- artifacts/api-server/src/services/placementEngineService.ts
+- artifacts/api-server/src/routes/placement-engine.ts
+- artifacts/api-server/src/__tests__/placement-engine.test.ts
+- docs/wp03a-placement-engine.md
+
+Current WP-03A validation:
+
+- 2 tables
+- 7 indexes
+- FORCE RLS on both tables
+- 72/72 targeted tests pass
+- 11 endpoint smoke tests pass
+- 13 unrelated provider-health failures remain pre-existing
+
+========================================================
+BRANCH
+========================================================
+
+Create and work only on:
+
+feature/phase6-wp03b-collision-engine
+
+Do NOT work directly on main.
+
+If the branch already exists, resume it.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Implement ONLY WP-03B Collision Detection Engine.
+
+The engine must detect geometric overlap and clearance violations
+for furniture placements inside a room layout.
+
+Follow the approved design documents:
+
+- docs/wp03-design-sprint.md
+- docs/wp03-domain-model.md
+- docs/wp03-placement-engine.md
+- docs/wp03-collision-model.md
+- docs/wp03-layout-engine.md
+
+Reuse WP-03A placement coordinates and transforms.
+
+Do not create a competing placement model.
+
+========================================================
+IMPORTANT SCOPE RULES
+========================================================
+
+Do NOT implement:
+
+- layout state manager
+- undo/redo
+- layout snapshot publishing
+- public layout catalog
+- AI layout generation
+- automatic optimization
+- room rendering
+- WebGL
+- canvas editor
+- admin layout editor
+- realtime collaboration
+- export
+- WP-03C+
+- WP-03F persistence redesign
+
+Do not create another layout_sessions or placements table.
+
+Do not rewrite WP-03A APIs.
+
+========================================================
+PHASE 1 — WP-03A CONTRACT AUDIT
+========================================================
+
+Before coding, inspect the actual WP-03A implementation.
+
+Document:
+
+- placement coordinate fields
+- dimensions
+- rotation units
+- anchor data
+- snap data
+- room boundary representation
+- serialization format
+- service interfaces
+- API DTOs
+- database columns
+
+Identify any difference between the approved design and the
+implemented WP-03A contract.
+
+WP-03B must adapt to the existing verified WP-03A contract using
+backward-compatible additions only.
+
+Do not redesign WP-03A.
+
+========================================================
+PHASE 2 — COLLISION DOMAIN TYPES
+========================================================
+
+Create typed domain models for:
+
+- Point2D
+- Vector2D
+- Axis
+- AABB
+- OBB
+- Polygon
+- Projection
+- CollisionPair
+- CollisionResult
+- CollisionSeverity
+- ClearanceZone
+- ClearanceViolation
+- BoundaryViolation
+- CollisionValidationResult
+
+Keep all geometry functions deterministic and side-effect free.
+
+Do not use any external physics engine.
+
+========================================================
+PHASE 3 — GEOMETRY PRIMITIVES
+========================================================
+
+Implement pure helpers for:
+
+- degrees to radians
+- radians to degrees
+- vector normalization
+- dot product
+- polygon projection
+- interval overlap
+- local-to-world transform
+- rotated corner generation
+- AABB generation from rotated points
+- OBB generation from placement
+- polygon containment
+- segment intersection
+- point-in-polygon
+
+Use centimeters as the canonical unit.
+
+Use the same origin and axis direction as WP-03A.
+
+Define and document floating-point epsilon handling.
+
+========================================================
+PHASE 4 — AABB BROAD PHASE
+========================================================
+
+Implement AABB broad-phase collision checks.
+
+Requirements:
+
+- fast rejection before SAT
+- touching edges are configurable
+- deterministic results
+- no false negatives before narrow phase
+- supports rotated furniture through world-space AABB generation
+- handles zero or invalid dimensions safely
+- does not mutate placement objects
+
+Expose a pure function similar to:
+
+checkAabbOverlap(a, b, options)
+
+Do not treat AABB overlap alone as a confirmed collision for
+rotated objects.
+
+========================================================
+PHASE 5 — OBB / SAT NARROW PHASE
+========================================================
+
+Implement OBB collision detection using the Separating Axis
+Theorem.
+
+Requirements:
+
+- axes derived from both rectangles
+- projection of all corners
+- overlap depth where available
+- touching behavior configurable
+- correct handling of rotations including:
+  0, 45, 90, 135, 180, 270, and 360 degrees
+- deterministic collision pair ordering
+- no false positive from AABB-only overlap
+
+Expose a pure function similar to:
+
+checkObbCollision(a, b, options)
+
+Return structured results, not only a boolean.
+
+Suggested result fields:
+
+- collides
+- touching
+- penetrationDepth
+- separatingAxis
+- pair
+- reason
+
+========================================================
+PHASE 6 — ROOM BOUNDARY VALIDATION
+========================================================
+
+Validate furniture placement against room boundaries.
+
+Support:
+
+- rectangular room boundaries
+- polygon room boundaries if already represented in the design
+- fully inside
+- partially outside
+- fully outside
+- wall penetration
+- boundary touching
+- rotation near corners
+
+Return structured violations.
+
+Do not automatically move or correct furniture.
+
+Validation only.
+
+========================================================
+PHASE 7 — CLEARANCE ZONES
+========================================================
+
+Implement clearance zones as soft validation warnings.
+
+Support clearance around:
+
+- furniture item
+- front access side
+- rear side
+- left side
+- right side
+- all sides
+
+Requirements:
+
+- clearance is not a hard collision by default
+- severity configurable
+- actual furniture overlap remains a hard error
+- clearance overlap returns warnings
+- clearance zones rotate with furniture where required
+- no persistence redesign
+
+Do not implement walkway planning beyond basic clearance-zone
+validation.
+
+========================================================
+PHASE 8 — COLLISION SERVICE
+========================================================
+
+Create a collision engine service that can:
+
+- validate one placement against all placements
+- validate all pairs in a layout session
+- detect room boundary violations
+- detect furniture collision
+- detect clearance warnings
+- exclude archived/deleted placements
+- exclude the placement itself during update
+- return stable, sorted results
+
+Suggested operations:
+
+- validatePlacementCollision
+- validateLayoutCollisions
+- findCollidingPlacements
+- validateRoomBoundary
+- validateClearanceZones
+
+Reuse the existing WP-03A placement service where appropriate.
+
+Avoid circular dependencies.
+
+========================================================
+PHASE 9 — API
+========================================================
+
+Implement only collision-validation endpoints required for WP-03B.
+
+Suggested admin-only endpoints:
+
+POST /api/ai/layout-sessions/:sessionId/collision-check
+POST /api/ai/layout-sessions/:sessionId/placements/:placementId/collision-check
+POST /api/ai/collision/check
+
+The exact route prefix must follow the existing WP-03A route
+convention.
+
+Requirements:
+
+- admin authentication
+- tenant-safe session access
+- no public mutation or validation endpoint
+- Zod validation
+- structured error responses
+- no database writes unless explicitly required for audit logging
+- no layout auto-fix
+
+Do not add save, publish, undo, redo, or optimization endpoints.
+
+========================================================
+PHASE 10 — DATABASE SCOPE
+========================================================
+
+Prefer no new tables for WP-03B.
+
+Collision results should normally be computed, not stored.
+
+A migration may only be added when the approved design explicitly
+requires fields that are impossible to represent in the existing
+WP-03A model.
+
+Before adding a migration:
+
+- explain why it is necessary
+- prove the existing schema cannot support the requirement
+- keep it additive and backward compatible
+
+Do not duplicate:
+
+- layout_sessions
+- placements
+
+Do not use drizzle-kit push.
+
+========================================================
+PHASE 11 — SECURITY
+========================================================
+
+Verify:
+
+- session tenant isolation
+- placement tenant isolation through its session
+- unauthorized requests return 401 or 403
+- tenant A cannot validate tenant B sessions
+- no public collision endpoint
+- no admin key in responses
+- no privilege escalation
+- no weakening of WP-03A RLS
+
+Use a non-BYPASSRLS role for behavioral testing where available.
+
+If only a superuser/service role is available, report that
+limitation honestly.
+
+========================================================
+PHASE 12 — TESTING
+========================================================
+
+Create comprehensive targeted tests.
+
+Minimum coverage must include:
+
+Geometry primitives:
+
+- vector normalization
+- dot product
+- projections
+- interval overlap
+- rotation
+- corners
+- AABB generation
+
+AABB:
+
+- no overlap
+- overlap
+- edge touching
+- full containment
+- rotated-item broad phase
+
+SAT/OBB:
+
+- no collision
+- collision
+- edge touching
+- corner touching
+- full containment
+- 45-degree rotation
+- 90-degree rotation
+- 180-degree rotation
+- AABB overlap but OBB no collision
+- floating-point edge cases
+
+Room boundary:
+
+- inside
+- touching wall
+- crossing wall
+- outside room
+- rotated item crossing corner
+
+Clearance:
+
+- no warning
+- clearance overlap
+- hard furniture collision
+- rotated clearance
+- severity output
+
+Service:
+
+- one-to-many validation
+- all-pairs validation
+- self-exclusion
+- archived placement exclusion
+- stable ordering
+- deterministic output
+
+API:
+
+- authentication
+- valid payload
+- invalid payload
+- unknown session
+- unknown placement
+- tenant isolation
+- correct status codes
+
+Target:
+
+100% WP-03B targeted tests pass.
+
+Do not weaken tests merely to obtain a passing result.
+
+========================================================
+PHASE 13 — PERFORMANCE VALIDATION
+========================================================
+
+Measure collision validation for layouts containing:
+
+- 10 placements
+- 25 placements
+- 50 placements
+- 100 placements
+
+Report:
+
+- pair count
+- execution time
+- broad-phase rejection count
+- SAT invocation count
+
+Do not fabricate performance numbers.
+
+Run actual measurements in the current environment.
+
+No optimization engine is required, but obvious accidental
+quadratic work beyond the approved all-pairs design should be
+identified.
+
+========================================================
+PHASE 14 — REGRESSION
+========================================================
+
+Run:
+
+- WP-03A targeted tests
+- WP-03B targeted tests
+- API build
+- database library build/typecheck
+- Customer Portal typecheck
+- Admin Platform typecheck
+- relevant API regression suite
+
+Separate:
+
+- WP-03B failures
+- newly introduced regressions
+- pre-existing provider-health failures
+- environment-blocked checks
+
+The known 13 provider-health failures must not be counted as
+WP-03B failures unless changed WP-03B files caused them.
+
+========================================================
+PHASE 15 — DOCUMENTATION
+========================================================
+
+Create:
+
+docs/wp03b-collision-engine.md
+
+Document:
+
+- scope
+- relationship to WP-03A
+- coordinate assumptions
+- AABB broad phase
+- OBB/SAT narrow phase
+- touching behavior
+- floating-point epsilon
+- room boundary validation
+- clearance zones
+- service APIs
+- REST endpoints
+- security
+- test coverage
+- actual performance results
+- known limitations
+- explicit WP-03C+ exclusions
+
+Update existing documents only where integration references are
+required.
+
+Do not rewrite approved design documents unnecessarily.
+
+========================================================
+PHASE 16 — SCOPE AUDIT
+========================================================
+
+Confirm no implementation exists for:
+
+- undo/redo
+- state snapshots
+- layout publishing
+- public layout catalog
+- auto-placement
+- optimization
+- AI composition
+- rendering
+- canvas editor
+- WP-03C+
+
+Confirm:
+
+- WP-01 contracts unchanged
+- WP-02 contracts unchanged
+- WP-03A remains backward compatible
+- no duplicate persistence model created
+
+========================================================
+PHASE 17 — COMMIT
+========================================================
+
+Before commit:
+
+- inspect git diff
+- exclude prompt/task files
+- exclude uploaded attached_assets task briefs
+- exclude .replit changes
+- exclude unrelated files
+- ensure working tree contains only WP-03B changes
+
+Commit message:
+
+feat(layout): implement WP-03B collision engine
+
+Do not merge to main.
+
+Do not create a release tag yet.
+
+Do not start WP-03C.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Provide:
+
+1. Branch
+2. Architecture summary
+3. Files created
+4. Files modified
+5. Database changes, if any
+6. Geometry functions implemented
+7. AABB behavior
+8. OBB/SAT behavior
+9. Boundary validation behavior
+10. Clearance behavior
+11. Endpoint inventory
+12. Security results
+13. Targeted test results
+14. WP-03A regression results
+15. Full regression results
+16. Performance measurements
+17. Documentation status
+18. Scope audit
+19. Known limitations
+20. Commit SHA
+21. Working tree status
+
+Use exactly one verdict:
+
+A. WP-03B COMPLETE
+
+B. WP-03B COMPLETE WITH OBSERVATIONS
+
+C. WP-03B BLOCKED
+
+D. WP-03B FAILED
+
+STOP.
+
+Do NOT begin WP-03C.
+Wait for explicit approval.
