@@ -57,6 +57,7 @@ All secrets are in `.replit [userenv]` (development/production split). The `.env
 ## User preferences
 
 - Keep existing project structure; do not restructure or migrate without asking.
+- Gunakan Bahasa Indonesia dalam semua komunikasi dengan pengguna.
 All four services start automatically via their managed workflows. No manual steps needed.
 
 ## Environment
