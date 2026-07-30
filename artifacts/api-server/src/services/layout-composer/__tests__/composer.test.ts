@@ -915,3 +915,75 @@ describe("composer facade", () => {
     expect(result.violations.filter((v) => v.severity === "error")).toHaveLength(0);
   });
 });
+
+// ── 14. WP-03B collision delegation ──────────────────────────
+
+describe("collisionDetection — WP-03B delegation", () => {
+  it("rectsOverlap delegates to WP-03B: overlapping rects return true", () => {
+    const a = box("a", 0, 0, 100, 100);
+    const b = box("b", 50, 50, 100, 100);
+    expect(rectsOverlap(a, b)).toBe(true);
+  });
+
+  it("rectsOverlap: touching edges NOT a collision (WP-03B COLLISION_EPSILON policy)", () => {
+    const a = box("a", 0, 0, 100, 100);
+    const b = box("b", 100, 0, 100, 100);
+    expect(rectsOverlap(a, b)).toBe(false);
+  });
+
+  it("findAllCollisions: no collision for exactly-touching elements (WP-03B policy)", () => {
+    const a = box("a", 0, 0, 100, 100);
+    const b = box("b", 100, 0, 100, 100);
+    expect(findAllCollisions([a, b])).toHaveLength(0);
+  });
+
+  it("findAllCollisions: rotation-aware AABB via WP-03B generateAABB", () => {
+    // 100x20 element rotated 90deg: WP-03B generateAABB expands AABB along Y axis
+    // (minY=-40, maxY=60). Element o at y=30 is BELOW the unrotated rect (maxY=20),
+    // but INSIDE the rotated AABB. Without rotation-aware AABB: no collision.
+    // With WP-03B generateAABB: collision is correctly detected.
+    const rotated = { ...box("r", 0, 0, 100, 20), rotation: 90 };
+    const other = box("o", 45, 30, 20, 10);
+    const pairs = findAllCollisions([rotated, other]);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]?.elementA).toBe("r");
+    expect(pairs[0]?.elementB).toBe("o");
+  });
+
+  it("findAllCollisions: clean separation returns no pairs", () => {
+    const a = box("a", 0, 0, 50, 50);
+    const b = box("b", 200, 200, 50, 50);
+    expect(findAllCollisions([a, b])).toHaveLength(0);
+  });
+});
+
+// ── 15. Rotation — documented known limitation ────────────────
+
+describe("rotation — documented known limitation", () => {
+  it("rotation field is accepted by solver without throwing", () => {
+    // LayoutElement.rotation is accepted and used for rotation-aware AABB.
+    // Documented limitation: push-apart vectors are axis-aligned (horizontal /
+    // vertical), not perpendicular to the rotated face.
+    // See: integration/manifests/team-12.json -> knownLimitations.rotation
+    //      integration/openapi/team-12.yaml   -> LayoutElement.rotation description
+    const rotated = { ...box("a", 0, 0, 100, 100), rotation: 45 };
+    const other = box("b", 80, 80, 100, 100);
+    expect(() => findAllCollisions([rotated, other])).not.toThrow();
+  });
+
+  it("push-apart resolution vectors are axis-aligned for rotated elements", () => {
+    // Documents the known limitation: resolveCollision produces horizontal or
+    // vertical push vectors only, never oblique, even for rotated elements.
+    const a = { ...box("a", 0, 0, 100, 100), rotation: 45 };
+    const b = box("b", 60, 60, 100, 100);
+    const pairs = findAllCollisions([a, b]);
+    if (pairs.length > 0) {
+      const adj = resolveCollision(a, b);
+      for (const delta of Object.values(adj)) {
+        // Axis-aligned: exactly one of dx or dy must be 0
+        const isAxisAligned = delta.dx === 0 || delta.dy === 0;
+        expect(isAxisAligned).toBe(true);
+      }
+    }
+  });
+});
