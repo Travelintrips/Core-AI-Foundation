@@ -1,0 +1,341 @@
+MASTER TASK — RECOVER WP-03 REMEDIATION BRANCH FROM GITHUB AND CLEAN PR #3
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target PR:
+#3
+
+Target Branch:
+fix/wp03-release-remediation
+
+Objective
+
+Workspace saat ini adalah shallow clone dari main.
+
+Branch fix/wp03-release-remediation tidak ada secara lokal.
+
+Seluruh commit WP-03 hanya ada di GitHub.
+
+Tugas:
+
+1. Pulihkan branch WP-03 dari GitHub.
+2. Bersihkan dua commit dokumentasi internal.
+3. Push ulang branch.
+4. Pastikan PR #3 sekarang bersih.
+5. Jangan merge.
+6. Jangan mulai WP-03C.
+
+==================================================
+RULES
+==================================================
+
+READ-WRITE diperbolehkan.
+
+Tetapi:
+
+JANGAN
+
+- rebuild WP-03
+- mengubah production code
+- mengubah tests
+- menambah feature baru
+- merge PR
+- mulai WP-03C
+
+==================================================
+PHASE 1
+VERIFY REPOSITORY STATE
+==================================================
+
+Laporkan:
+
+git remote -v
+
+git branch -a
+
+git status
+
+git rev-parse HEAD
+
+git log --oneline --decorate -10
+
+Pastikan benar bahwa:
+
+- workspace adalah shallow clone
+- branch fix/wp03-release-remediation tidak ada
+
+==================================================
+PHASE 2
+RECOVER BRANCH
+==================================================
+
+Gunakan seluruh kemampuan Git integration Replit.
+
+Prioritas recovery:
+
+1.
+Fetch branch:
+
+origin/fix/wp03-release-remediation
+
+2.
+
+Jika fetch gagal:
+
+gunakan Replit Git integration
+(bukan raw shell HTTPS)
+
+3.
+
+Jika tetap gagal:
+
+gunakan GitHub integration yang dipakai saat PR #3 dibuat.
+
+4.
+
+Jika branch berhasil ditemukan:
+
+checkout:
+
+fix/wp03-release-remediation
+
+Laporkan:
+
+git log --oneline -10
+
+==================================================
+PHASE 3
+VERIFY COMMITS
+==================================================
+
+Pastikan branch memiliki:
+
+KEEP
+
+6713219
+fix(wp03): move route schemas...
+
+4b4a590
+fix(wp03): enforce collision...
+
+f5f36cc
+chore(wp03): remove dead code...
+
+6b6db03
+test(regression)...
+
+REMOVE
+
+6a769f6
+Add remote verification remediation documentation
+
+5b9817e
+Add verification instruction document
+
+==================================================
+PHASE 4
+REMOVE DOCUMENTATION COMMITS
+==================================================
+
+Hapus HANYA:
+
+6a769f6
+
+5b9817e
+
+Gunakan metode paling aman.
+
+Jika dua commit berada di HEAD:
+
+gunakan reset.
+
+Jika tidak:
+
+gunakan interactive rebase.
+
+Jangan mengubah empat commit WP-03.
+
+==================================================
+PHASE 5
+VERIFY CLEAN HISTORY
+==================================================
+
+Pastikan:
+
+git log origin/main..HEAD
+
+berisi tepat:
+
+4 commit WP-03.
+
+Pastikan:
+
+attached_assets/
+
+tidak lagi muncul.
+
+==================================================
+PHASE 6
+VALIDATION
+==================================================
+
+Jalankan:
+
+typecheck
+
+API build
+
+WP-03 tests
+
+full regression
+
+Expected:
+
+PASS
+
+==================================================
+PHASE 7
+SAFE PUSH
+==================================================
+
+Push:
+
+git push --force-with-lease
+
+JANGAN
+
+git push --force
+
+==================================================
+PHASE 8
+VERIFY PR
+==================================================
+
+Pastikan PR #3 sekarang:
+
+- hanya 4 commit
+
+- tidak ada attached_assets
+
+- tidak ada prompt
+
+- tidak ada internal task
+
+- merge conflict = none
+
+==================================================
+IF BRANCH CANNOT BE RECOVERED
+==================================================
+
+Jika branch tetap tidak dapat diakses:
+
+JANGAN bilang:
+
+"Hubungkan GitHub lagi"
+
+karena sebelumnya PR #3 berhasil dibuat.
+
+Sebaliknya lakukan investigasi:
+
+- apakah workspace berubah
+
+- apakah repository di-reset
+
+- apakah Replit membuat shallow clone baru
+
+- apakah branch sudah dihapus
+
+- apakah PR #3 masih mengarah ke branch hidup
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1.
+Workspace state
+
+2.
+Recovery berhasil?
+
+3.
+Branch ditemukan?
+
+4.
+Commit WP-03 ditemukan?
+
+5.
+Commit dokumentasi ditemukan?
+
+6.
+Commit dokumentasi berhasil dihapus?
+
+7.
+PR sekarang berapa commit?
+
+8.
+Files changed
+
+9.
+Tests
+
+10.
+Typecheck
+
+11.
+Build
+
+12.
+Push
+
+13.
+Merge conflict
+
+14.
+Ready for merge?
+
+15.
+Apakah WP-03C sudah boleh dimulai?
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan SATU saja.
+
+A
+
+WP-03 BRANCH RECOVERED
+
+PR CLEAN
+
+READY FOR MERGE
+
+B
+
+WP-03 BRANCH RECOVERED
+
+CLEANUP COMPLETE
+
+PUSH FAILED
+
+C
+
+RECOVERY FAILED
+
+BRANCH NOT ACCESSIBLE
+
+D
+
+PR NO LONGER REFERENCES A LIVE BRANCH
+
+==================================================
+STOP
+
+Jangan merge.
+
+Jangan mulai WP-03C.
+
+Berhenti setelah laporan selesai.
