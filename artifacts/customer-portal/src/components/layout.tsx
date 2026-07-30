@@ -86,10 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="container mx-auto px-4 md:px-8 h-16 flex items-center justify-between max-w-7xl">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)', boxShadow: '0 2px 12px rgba(124,110,250,0.40)' }}>
-              <Diamond className="w-4 h-4 text-white" />
-            </div>
+            <img src="/logo-cst.png" alt="CST Logo" className="w-8 h-8 object-contain flex-shrink-0" />
             <span className="font-semibold text-base tracking-tight"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#F0F4FF' }}>
               Creative Studio
