@@ -1,0 +1,212 @@
+MASTER RELEASE CANDIDATE AUDIT — WP-03C LAYOUT ENGINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Branch:
+feature/phase6-wp03c-layout-engine
+
+Mode:
+READ ONLY
+
+JANGAN:
+
+- mengubah kode
+- commit
+- push
+- merge
+- memperbaiki bug
+
+==================================================
+PHASE 1 — REPOSITORY
+==================================================
+
+Laporkan:
+
+- branch
+- HEAD SHA
+- working tree
+- jumlah commit WP-03C
+- file changed
+- additions
+- deletions
+
+==================================================
+PHASE 2 — IMPLEMENTATION INVENTORY
+==================================================
+
+Daftar seluruh file baru.
+
+Daftar seluruh file yang dimodifikasi.
+
+Kelompokkan:
+
+- services
+- routes
+- schemas
+- types
+- utilities
+- tests
+- documentation
+
+==================================================
+PHASE 3 — ARCHITECTURE AUDIT
+==================================================
+
+Verifikasi:
+
+- Layout Engine memakai WP-03A
+- Collision memakai WP-03B
+- Tidak ada duplikasi algoritma
+- Tidak ada fork collision engine
+- Tidak ada fork placement engine
+
+==================================================
+PHASE 4 — API AUDIT
+==================================================
+
+Daftar endpoint baru.
+
+Untuk tiap endpoint:
+
+- method
+- path
+- request schema
+- response schema
+- auth
+- tenant isolation
+
+==================================================
+PHASE 5 — BEHAVIOR AUDIT
+==================================================
+
+Verifikasi:
+
+- deterministik
+- boundary validation
+- clearance
+- collision integration
+- rotation
+- invalid request handling
+- duplicate request handling
+
+==================================================
+PHASE 6 — BACKWARD COMPATIBILITY
+==================================================
+
+Pastikan:
+
+WP-03A tidak berubah behavior.
+
+WP-03B tidak berubah behavior.
+
+==================================================
+PHASE 7 — TEST AUDIT
+==================================================
+
+Laporkan:
+
+- test WP-03C
+- regression
+- skipped
+- todo
+- flaky
+
+==================================================
+PHASE 8 — STATIC QUALITY
+==================================================
+
+Audit:
+
+- dead code
+- dead exports
+- duplicated logic
+- TODO
+- FIXME
+- console.log
+- debug
+
+==================================================
+PHASE 9 — BUILD
+==================================================
+
+Verifikasi:
+
+typecheck
+
+API build
+
+full regression
+
+==================================================
+PHASE 10 — GIT
+==================================================
+
+Audit:
+
+- commit hygiene
+- atomic commit
+- unrelated file
+- merge risk
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1.
+Files added
+
+2.
+Files modified
+
+3.
+Services
+
+4.
+Routes
+
+5.
+Schemas
+
+6.
+Tests
+
+7.
+Regression
+
+8.
+Build
+
+9.
+Typecheck
+
+10.
+Backward compatibility
+
+11.
+Merge risk
+
+12.
+Ready for review?
+
+Gunakan tepat satu verdict:
+
+A.
+WP-03C COMPLETE — READY FOR PR
+
+B.
+WP-03C COMPLETE — MINOR CLEANUP REQUIRED
+
+C.
+WP-03C PARTIAL
+
+D.
+WP-03C FAILED
+
+STOP.
+
+Jangan commit.
+Jangan push.
+Jangan merge.
