@@ -62,11 +62,6 @@ export function checkPlacementClearance(
     }
 
     // Check against room boundary (OBB corners outside room)
-    const cx = clearanceOBB.center.x;
-    const cy = clearanceOBB.center.y;
-    const halfW = clearanceOBB.halfW;
-    const halfD = clearanceOBB.halfD;
-
     for (const corner of clearanceOBB.corners) {
       if (
         corner.x < -COLLISION_EPSILON ||
@@ -88,7 +83,6 @@ export function checkPlacementClearance(
         break; // One warning per side per boundary
       }
     }
-    void cx; void cy; void halfW; void halfD;
   }
 
   return warnings;
