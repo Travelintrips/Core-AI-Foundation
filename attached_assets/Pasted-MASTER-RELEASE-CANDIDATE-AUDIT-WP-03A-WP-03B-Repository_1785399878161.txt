@@ -1,0 +1,847 @@
+MASTER RELEASE CANDIDATE AUDIT — WP-03A + WP-03B
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target branch:
+feature/phase6-wp03b-collision-engine
+
+Scope:
+- WP-03A Placement Engine
+- WP-03B Collision Engine
+
+Current reported status:
+- WP-03A rebuilt
+- WP-03B implemented
+- WP-03B targeted tests: 107/107 PASS
+- Full suite: 6005/6005 PASS
+- Typecheck: PASS
+- API build: PASS
+
+Objective:
+Perform a final read-only Release Candidate audit before push, pull request, and merge review.
+
+====================================================
+STRICT READ-ONLY RULES
+====================================================
+
+Do NOT:
+
+- modify source files
+- modify test files
+- modify documentation
+- format files
+- run autofix
+- apply migrations
+- create migrations
+- commit
+- amend commits
+- push
+- pull
+- merge
+- rebase
+- tag
+- create pull request
+- update snapshots
+- install or upgrade dependencies
+- begin WP-03C
+- repair any finding during this audit
+
+If a defect is found:
+
+- record it
+- classify severity
+- identify exact file and line
+- do not fix it
+
+====================================================
+PHASE 1 — REPOSITORY IDENTITY
+====================================================
+
+Report:
+
+- pwd
+- repository remote
+- current branch
+- HEAD SHA
+- HEAD commit message
+- working tree status
+- staged files
+- untracked files
+- stash status
+- shallow clone status
+- origin/main SHA if available
+- ahead/behind relative to origin/main if available
+
+Confirm that the active branch is:
+
+feature/phase6-wp03b-collision-engine
+
+If not, stop and issue:
+
+AUDIT BLOCKED — WRONG BRANCH
+
+Do not checkout another branch automatically.
+
+====================================================
+PHASE 2 — CHANGE SCOPE INVENTORY
+====================================================
+
+Inspect all changes introduced for WP-03A and WP-03B.
+
+Use:
+
+git status --short
+git diff --stat origin/main...HEAD
+git diff --name-status origin/main...HEAD
+git log --oneline --decorate origin/main..HEAD
+
+If origin/main is unavailable, use the best verified local baseline and clearly state the limitation.
+
+Classify every changed file as:
+
+- WP-03A implementation
+- WP-03B implementation
+- migration
+- schema/export wiring
+- route registration
+- test
+- documentation
+- unrelated change
+- suspicious generated artifact
+- task/upload artifact
+
+Flag all unrelated modifications.
+
+Special attention:
+
+The following unrelated test changes were reported:
+
+- provider-health.test.ts
+- dev-payment-adapter.test.ts
+- material-library-catalog.test.ts
+
+For each of these files determine:
+
+1. Was the file changed on this branch?
+2. Was the change required for WP-03A/WP-03B?
+3. Does it alter production behavior or only test mocks/expectations?
+4. Is the change safe and justified?
+5. Should it remain in this branch or move to a separate remediation branch?
+
+Do not accept test changes merely because the full suite now passes.
+
+====================================================
+PHASE 3 — WP-03A FILE INVENTORY
+====================================================
+
+Verify the existence and completeness of expected WP-03A artifacts.
+
+Expected design documents:
+
+docs/wp03-design-sprint.md
+docs/wp03-domain-model.md
+docs/wp03-placement-engine.md
+docs/wp03-collision-model.md
+docs/wp03-layout-engine.md
+docs/wp03-api-blueprint.md
+
+Expected implementation:
+
+lib/db/src/schema/placement-engine.ts
+
+scripts/migrations/wp03a-placement-engine-v2.sql
+scripts/migrations/rls-wp03a-placement-engine-v2.sql
+scripts/migrations/wp03a-placement-tenant-consistency-v2.sql
+
+artifacts/api-server/src/services/placementEngineService.ts
+artifacts/api-server/src/routes/placement-engine.ts
+artifacts/api-server/src/__tests__/placement-engine-v2.test.ts
+
+docs/wp03a-placement-engine-v2.md
+
+For every artifact report:
+
+- exists
+- purpose
+- exported/registered
+- test coverage
+- incomplete/TODO indicators
+- whether it is actually referenced by runtime code
+
+Also search for alternate filenames and report any divergence from the intended structure.
+
+====================================================
+PHASE 4 — WP-03A CONTRACT AUDIT
+====================================================
+
+Verify the Placement Engine contract.
+
+Required areas:
+
+- layout session lifecycle
+- placement lifecycle
+- tenant-scoped access
+- platform scope behavior
+- archived placement behavior
+- rotation normalization
+- item anchor snapping
+- deterministic output
+- structured validation
+- structured errors
+- repository/service boundaries
+- transaction boundaries
+- no silent fallback to plain DB client
+- no duplicate RequestContext model
+- no tenant ID trusted from request body
+
+Classify each:
+
+PASS
+PASS WITH OBSERVATION
+PARTIAL
+FAIL
+NOT IMPLEMENTED
+
+For every failure include:
+
+- file
+- line
+- exact defect
+- impact
+- severity
+- blocker yes/no
+
+====================================================
+PHASE 5 — WP-03B FILE INVENTORY
+====================================================
+
+Locate all WP-03B artifacts.
+
+Expected areas include:
+
+artifacts/api-server/src/services/collision-engine/
+artifacts/api-server/src/services/collisionEngineService.ts
+collision-related route files
+collision tests
+collision documentation
+
+List every file and classify its responsibility.
+
+Confirm separation between:
+
+- geometry primitives
+- AABB broad phase
+- OBB construction
+- SAT narrow phase
+- clearance validation
+- room-boundary validation
+- application/service integration
+- API routing
+- DTO/schema validation
+- tests
+
+Flag:
+
+- oversized god files
+- duplicated geometry logic
+- copied Team 12 graphic collision code
+- domain leakage
+- circular imports
+- dead exports
+- unused files
+
+====================================================
+PHASE 6 — GEOMETRY CORRECTNESS AUDIT
+====================================================
+
+Inspect implementation, not only tests.
+
+Verify:
+
+- coordinate system is 2D top-down
+- unit is centimeters
+- rotations normalize to [0, 360)
+- negative zero is normalized where externally observable
+- Point2D and Vector2D semantics are consistent
+- AABB min/max values are correct
+- OBB center and half-extents are correct
+- rotated corner generation is correct
+- axes are normalized
+- projection intervals are correct
+- SAT checks all required axes
+- epsilon is centralized
+- edge touching is not treated as physical overlap
+- corner touching is not treated as physical overlap
+- invalid dimensions are rejected
+- NaN and Infinity are rejected
+- overlap depth cannot become negative
+- deterministic minimum-overlap axis selection
+- no floating-point exact-equality dependency where tolerance is required
+
+Review test cases for:
+
+- 0°
+- 45°
+- 90°
+- 180°
+- 270°
+- negative rotations
+- rotations over 360°
+- edge touch
+- corner touch
+- epsilon boundaries
+- very thin rectangles
+- large coordinates
+- invalid input
+
+Do not rely only on pass counts.
+
+====================================================
+PHASE 7 — BROAD/NARROW PHASE AUDIT
+====================================================
+
+Verify algorithm flow:
+
+1. AABB is calculated
+2. AABB broad-phase rejection occurs before SAT
+3. SAT only runs for candidates
+4. self-comparison is excluded
+5. archived placements are excluded
+6. duplicate pairs are suppressed
+7. pair ordering is deterministic
+8. results are deterministic across repeated calls
+
+Check whether implementation accidentally performs OBB/SAT for every pair regardless of AABB.
+
+Report expected complexity and realistic session limits.
+
+Classify performance:
+
+ACCEPTABLE
+ACCEPTABLE WITH LIMITS
+HIGH RISK
+
+====================================================
+PHASE 8 — ROOM BOUNDARY AUDIT
+====================================================
+
+Verify:
+
+- all rotated corners are checked
+- placement fully inside passes
+- edge-touch follows documented policy
+- partial outside fails
+- fully outside fails
+- rotated outside fails
+- invalid room geometry is rejected
+- no silent coordinate clamping
+- result uses structured violation codes
+- room checks are not confused with furniture collision checks
+
+Confirm whether only rectangular rooms are supported.
+
+If non-rectangular rooms are unsupported, confirm that limitation is documented honestly.
+
+====================================================
+PHASE 9 — CLEARANCE AUDIT
+====================================================
+
+Verify physical collisions are separate from clearance warnings.
+
+Check support for:
+
+- front clearance
+- side clearance
+- rear/back clearance where data exists
+- rotation-aware clearance zones
+- clearance against other furniture
+- clearance against room boundaries
+- warning without physical overlap
+- multiple warnings
+- deterministic ordering
+- missing clearance metadata
+- invalid clearance values
+
+Confirm that clearance-only violations do not block or masquerade as physical collision unless explicitly required by the contract.
+
+====================================================
+PHASE 10 — WP-02 INTEGRATION AUDIT
+====================================================
+
+Verify that collision/clearance logic reads canonical furniture data from WP-02.
+
+Check:
+
+- dimension source
+- width/depth semantics
+- anchor semantics
+- clearance metadata source
+- item lookup
+- archived/inactive furniture handling
+- tenant-specific vs platform catalog handling
+
+Flag any:
+
+- hard-coded dimensions
+- duplicated furniture model
+- unvalidated fallback geometry
+- silent default dimensions
+- unit conversion mismatch
+
+====================================================
+PHASE 11 — SERVICE AND REPOSITORY AUDIT
+====================================================
+
+Inspect collisionEngineService and related placement service integration.
+
+Verify:
+
+- session is loaded once
+- placements are loaded once
+- no N+1 database query per pair
+- trusted tenant context is required
+- cross-tenant session access is blocked
+- cross-tenant placement access is blocked
+- body tenant ID is ignored or rejected
+- platform scope behavior follows existing repository contract
+- archived records are handled consistently
+- service does not bypass repository abstractions
+- transaction-aware execution is preserved
+- errors are typed and structured
+- SQL and stack traces are not exposed
+- application service does not duplicate geometry implementation
+
+====================================================
+PHASE 12 — API AUDIT
+====================================================
+
+Inventory all WP-03A and WP-03B endpoints.
+
+Expected collision endpoints may include:
+
+POST /api/ai/layout-sessions/:sessionId/collision-check
+GET /api/ai/layout-sessions/:sessionId/collisions
+POST /api/ai/layout-sessions/:sessionId/placements/:placementId/collision-check
+POST /api/ai/collision/check
+
+For every implemented endpoint report:
+
+- method
+- path
+- route file
+- authentication
+- tenant enforcement
+- request schema
+- response schema
+- error schema
+- service called
+- router registration
+- duplicate registration status
+- public/private status
+
+Check:
+
+- UUID and parameter validation
+- strict body validation
+- unknown field policy
+- body size risk
+- mass-assignment risk
+- unsupported tenant ID input
+- status-code consistency
+- structured errors
+- no internal error leakage
+
+Flag any pure geometry endpoint that is public without a clear reason.
+
+====================================================
+PHASE 13 — SCHEMA AND MIGRATION AUDIT
+====================================================
+
+Review all WP-03A/WP-03B schema and SQL migration files.
+
+Verify:
+
+- schema matches migration
+- migrations are idempotent where intended
+- correct schema namespace
+- primary keys
+- foreign keys
+- tenant consistency
+- unique constraints
+- check constraints
+- indexes
+- archived/status fields
+- timestamps
+- JSONB usage
+- RLS enabled where required
+- RLS policies are tenant-safe
+- platform scope is deliberate
+- no permissive `USING (true)` policy
+- no migration applied automatically on application startup
+- no production migration was executed during implementation
+
+Check if WP-03B introduced persistent collision tables.
+
+If yes, require explicit justification.
+
+Preferred result:
+
+- collision results computed
+- no unnecessary collision persistence
+
+====================================================
+PHASE 14 — EXPORT AND ROUTER REGISTRATION AUDIT
+====================================================
+
+Verify all new modules are wired correctly.
+
+Check:
+
+- schema exports
+- package barrel exports
+- service exports
+- route exports
+- API root router registration
+- migration registry if applicable
+- test discovery
+- no duplicate router mounting
+- no missing import
+- no import only used by tests
+- no runtime file left unreachable
+
+Use static searches and build output.
+
+====================================================
+PHASE 15 — STATIC QUALITY AUDIT
+====================================================
+
+Search all WP-03A/WP-03B files for:
+
+TODO
+FIXME
+HACK
+TEMP
+console.log
+console.error
+debugger
+any
+@ts-ignore
+@ts-expect-error
+eslint-disable
+throw new Error
+Math.random
+Date.now
+randomUUID
+as unknown as
+non-null assertions
+silent catch
+empty catch
+JSON.stringify in error output
+raw SQL interpolation
+hard-coded tenant IDs
+hard-coded furniture dimensions
+hard-coded API secrets
+
+Classify each occurrence:
+
+- acceptable
+- observation
+- must fix before merge
+- critical
+
+Also inspect:
+
+- dead code
+- unreachable branches
+- duplicated validators
+- duplicated error codes
+- naming inconsistencies
+- unstable iteration over object keys
+- non-deterministic sorting
+
+====================================================
+PHASE 16 — TEST AUDIT
+====================================================
+
+Inventory tests separately:
+
+- WP-01
+- WP-02
+- WP-03A
+- WP-03B geometry
+- WP-03B service
+- WP-03B API
+- WP-03B tenant/security
+- WP-03B regression
+- unrelated tests changed on branch
+
+Report:
+
+- test file count
+- exact test count
+- pass
+- fail
+- skip
+- todo
+- snapshots
+- test duration
+
+Verify tests actually assert behavior and do not merely assert status code existence.
+
+Inspect for weak tests such as:
+
+- `expect(value).toBeDefined()`
+- excessively broad status lists
+- tests that accept both success and failure
+- mocked implementation under test
+- route tests that never call the service
+- tenant tests without distinct tenant IDs
+- tests that swallow exceptions
+- tests changed only to make suite green
+
+Specifically audit the changes to:
+
+provider-health.test.ts
+dev-payment-adapter.test.ts
+material-library-catalog.test.ts
+
+Determine whether those changes hide real defects.
+
+====================================================
+PHASE 17 — CLEAN BASELINE REGRESSION PROOF
+====================================================
+
+The implementation report claimed:
+
+- WP-03B: 107/107 PASS
+- Full suite: 6005/6005 PASS
+
+Re-run:
+
+1. WP-01 targeted tests
+2. WP-02 targeted tests
+3. WP-03A targeted tests
+4. WP-03B geometry tests
+5. WP-03B service tests
+6. WP-03B route tests
+7. WP-03B tenant tests
+8. full API test suite
+
+Do not update snapshots.
+
+Capture exact commands and exact output totals.
+
+If full-suite pass required unrelated test modifications, report that prominently.
+
+====================================================
+PHASE 18 — TYPECHECK AND BUILD
+====================================================
+
+Run the project’s canonical commands, not ad hoc substitutes.
+
+At minimum:
+
+- pnpm run typecheck:libs
+- API package typecheck if defined
+- API package build
+- root build only if it is part of normal verification
+
+Report:
+
+- command
+- exit code
+- error count
+- warning count
+- output artifact
+- pre-existing vs new issues
+
+Do not describe a command as passing if it exits non-zero.
+
+====================================================
+PHASE 19 — DEPENDENCY AND BOUNDARY AUDIT
+====================================================
+
+Verify WP-03A/WP-03B did not:
+
+- add unnecessary packages
+- duplicate existing geometry libraries
+- import frontend packages into backend
+- import API code into DB library
+- create circular package dependencies
+- bypass WP-02 furniture catalog
+- alter Team 12 graphic layout behavior
+- alter unrelated interior-design agent behavior
+- modify public API unrelated to placement/collision
+- change provider-health production logic
+- change payment adapter production logic
+- weaken authentication tests
+
+List package.json and lockfile changes.
+
+====================================================
+PHASE 20 — GIT HYGIENE AUDIT
+====================================================
+
+Report all commits on the branch.
+
+Expected logical separation:
+
+1. WP-03A recovery/rebuild
+2. WP-03B design contract
+3. WP-03B geometry
+4. service/API integration
+5. tests
+6. documentation/report
+
+Flag:
+
+- all work in one giant commit
+- task prompt files committed
+- attached_assets committed
+- build output committed
+- secrets committed
+- unrelated test fixes mixed in
+- generated files committed
+- replit.md modifications
+- main branch work
+- missing commit messages
+- uncommitted implementation
+
+Run secret scan on changed files for common token/key patterns.
+
+Do not print secret values; only report file and risk.
+
+====================================================
+PHASE 21 — MERGE CONFLICT RISK
+====================================================
+
+Assess likely conflicts with main and other work packages.
+
+Check changes to shared files such as:
+
+- schema index
+- API route index
+- package barrel files
+- migration registry
+- root package files
+- lockfiles
+- shared RequestContext/repository contracts
+
+Classify conflict risk:
+
+LOW
+MEDIUM
+HIGH
+
+Provide safe merge order.
+
+====================================================
+PHASE 22 — RELEASE COMPLETENESS MATRIX
+====================================================
+
+Create a matrix with at least:
+
+1. WP-03A schema
+2. WP-03A migrations
+3. WP-03A RLS
+4. WP-03A service
+5. WP-03A routes
+6. WP-03A tests
+7. WP-03A documentation
+8. WP-03B design contract
+9. geometry primitives
+10. AABB broad phase
+11. OBB construction
+12. SAT narrow phase
+13. edge-touch policy
+14. epsilon policy
+15. room bounds
+16. clearance warnings
+17. batch session collision
+18. single placement collision
+19. duplicate suppression
+20. deterministic ordering
+21. archived exclusion
+22. tenant isolation
+23. API validation
+24. error contracts
+25. schema export wiring
+26. router registration
+27. targeted tests
+28. full regression suite
+29. typecheck
+30. API build
+31. documentation
+32. Git hygiene
+33. remote readiness
+34. WP-03C dependency readiness
+
+Statuses:
+
+PASS
+PASS WITH OBSERVATION
+PARTIAL
+FAIL
+NOT APPLICABLE
+BLOCKED
+
+====================================================
+PHASE 23 — FINAL VERDICT
+====================================================
+
+Provide:
+
+1. Audit timestamp
+2. Repository identity
+3. Branch and HEAD
+4. Working-tree status
+5. Complete changed-file inventory
+6. WP-03A assessment
+7. WP-03B assessment
+8. Geometry assessment
+9. Room-boundary assessment
+10. Clearance assessment
+11. Service/repository assessment
+12. API assessment
+13. Schema/migration/RLS assessment
+14. Security and tenant assessment
+15. Performance assessment
+16. Test assessment
+17. Typecheck/build assessment
+18. Unrelated test-change assessment
+19. Git hygiene assessment
+20. Merge-conflict risk
+21. Critical blockers
+22. High-priority findings
+23. Medium/low observations
+24. Exact remediation list, without implementing it
+25. Whether branch is ready to push
+26. Whether branch is ready for PR
+27. Whether branch is ready to merge
+28. Whether WP-03C may begin
+29. Confirmation that no changes were made during audit
+
+Use exactly one final verdict:
+
+A. WP-03A + WP-03B RELEASE CANDIDATE VERIFIED — READY TO PUSH AND OPEN PR
+
+B. IMPLEMENTATION COMPLETE — MINOR REMEDIATION REQUIRED BEFORE PR
+
+C. IMPLEMENTATION PRESENT — MAJOR REMEDIATION REQUIRED
+
+D. RELEASE CANDIDATE REJECTED — CRITICAL DEFECTS FOUND
+
+E. AUDIT BLOCKED — WRONG BRANCH OR INCOMPLETE WORKSPACE
+
+Rules:
+
+- Do not use verdict A if unrelated test files were weakened merely to obtain 6005/6005.
+- Do not use verdict A if implementation is uncommitted.
+- Do not use verdict A if migrations/schema exports/router registration are incomplete.
+- Do not use verdict A if tenant isolation is unproven.
+- Do not use verdict A if branch is main.
+- Do not use verdict A if task files or secrets are included in the implementation commits.
+- Do not begin WP-03C.
+
+STOP after the audit report.
