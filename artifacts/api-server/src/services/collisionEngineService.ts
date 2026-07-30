@@ -120,12 +120,30 @@ async function loadSessionAndPlacements(
 /**
  * Checks all active placements in a session for collisions, boundary violations,
  * and clearance warnings.
+ *
+ * @param maxPlacements  Optional cap on active placements before running SAT.
+ *                       If the session has more active placements than this limit,
+ *                       a PLACEMENT_LIMIT_EXCEEDED error is thrown instead of
+ *                       silently running an O(n²) check on an oversized session.
  */
 export async function checkSessionCollisionsService(
-  sessionId: string,
-  tenantId:  string,
+  sessionId:     string,
+  tenantId:      string,
+  maxPlacements: number | undefined = undefined,
 ): Promise<CollisionResult> {
   const { room, placements } = await loadSessionAndPlacements(sessionId, tenantId);
+
+  if (maxPlacements !== undefined) {
+    const activeCount = placements.filter(p => !p.isArchived).length;
+    if (activeCount > maxPlacements) {
+      throw new PlacementEngineError(
+        `Session has ${activeCount} active placements, which exceeds the limit of ${maxPlacements}.`,
+        "PLACEMENT_LIMIT_EXCEEDED",
+        422,
+      );
+    }
+  }
+
   return checkSessionCollisions(placements, room);
 }
 
@@ -155,7 +173,7 @@ export async function getSessionCollisionSummary(
   sessionId: string,
   tenantId:  string,
 ): Promise<CollisionResult> {
-  return checkSessionCollisionsService(sessionId, tenantId);
+  return checkSessionCollisionsService(sessionId, tenantId, undefined);
 }
 
 /**
