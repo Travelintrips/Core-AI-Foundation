@@ -1,0 +1,274 @@
+MASTER REMEDIATION — WP-03C RELEASE BLOCKERS
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Branch:
+feature/12-layout-composer
+
+Mode:
+IMPLEMENTATION
+
+Objective:
+
+Selesaikan HANYA dua temuan dari RC Audit WP-03C.
+
+Jangan mengerjakan fitur lain.
+
+==================================================
+TEMUAN AUDIT
+==================================================
+
+P1
+WP-03C masih memiliki collisionDetection.ts sendiri
+(AABB internal).
+
+WP-03C harus menggunakan WP-03B sebagai canonical
+collision engine.
+
+--------------------------------------------------
+
+P2
+
+rotation?: number sudah ada di model.
+
+Tetapi solver belum meng-handle rotation.
+
+Minimal:
+
+- documented limitation
+
+atau
+
+- implement support.
+
+==================================================
+STRICT RULES
+==================================================
+
+JANGAN:
+
+- rewrite WP-03A
+- rewrite WP-03B
+- ubah public API
+- ubah request schema
+- ubah response schema
+- ubah endpoint
+- ubah database
+- ubah migration
+- mengurangi test
+- mengurangi backward compatibility
+
+==================================================
+PHASE 1
+AUDIT COLLISION INTEGRATION
+==================================================
+
+Cari seluruh penggunaan:
+
+collisionDetection.ts
+
+Cari seluruh implementasi:
+
+AABB
+
+rectsOverlap
+
+resolveCollision
+
+findAllCollisions
+
+Bandingkan dengan WP-03B.
+
+Laporkan:
+
+- bagian yang identik
+- bagian yang berbeda
+- bagian yang bisa direuse
+
+==================================================
+PHASE 2
+REMOVE COLLISION FORK
+==================================================
+
+Target:
+
+WP-03C tidak lagi memiliki implementasi collision
+yang menduplikasi WP-03B.
+
+Gunakan service WP-03B.
+
+Jika WP-03B belum menyediakan API internal yang
+dibutuhkan solver:
+
+buat adapter tipis (thin adapter)
+
+JANGAN copy-paste algoritma.
+
+JANGAN membuat collision engine kedua.
+
+==================================================
+PHASE 3
+ROTATION
+==================================================
+
+Audit seluruh penggunaan:
+
+rotation
+
+Jika memang belum didukung solver:
+
+Tambahkan:
+
+Known Limitation:
+
+- hanya axis-aligned
+- rotation belum mempengaruhi collision
+- akan ditambahkan pada WP berikutnya
+
+Masukkan ke:
+
+- manifest
+- OpenAPI description
+- developer documentation
+
+Jika implementasi rotation kecil dan aman:
+
+boleh diimplementasikan.
+
+Jika berisiko:
+
+jangan.
+
+Dokumentasikan saja.
+
+==================================================
+PHASE 4
+TEST
+==================================================
+
+Tambah test untuk:
+
+- adapter WP-03B
+- collision delegation
+- no duplicate algorithm
+
+Tambah test:
+
+rotation documented limitation
+
+Pastikan:
+
+0 skipped
+
+0 todo
+
+==================================================
+PHASE 5
+STATIC AUDIT
+==================================================
+
+Pastikan:
+
+tidak ada
+
+console.log
+
+TODO
+
+FIXME
+
+dead exports
+
+duplicated collision algorithm
+
+==================================================
+PHASE 6
+VALIDATION
+==================================================
+
+Jalankan:
+
+typecheck
+
+API build
+
+WP-03 tests
+
+full regression
+
+Semua harus PASS.
+
+==================================================
+PHASE 7
+GIT
+==================================================
+
+Commit atomik.
+
+Contoh:
+
+refactor(layout-composer):
+reuse WP-03B collision engine
+
+docs(layout-composer):
+document rotation limitation
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1.
+Files modified
+
+2.
+Files removed
+
+3.
+Collision adapter
+
+4.
+WP-03B reuse
+
+5.
+Rotation handling
+
+6.
+Tests added
+
+7.
+Regression
+
+8.
+Build
+
+9.
+Typecheck
+
+10.
+Backward compatibility
+
+11.
+Remaining known limitations
+
+Gunakan tepat satu verdict:
+
+A.
+WP-03C REMEDIATION COMPLETE
+READY FOR PR
+
+B.
+MINOR REMEDIATION REMAINING
+
+C.
+BLOCKED
+
+STOP.
+
+Jangan merge.
+
+Jangan push.
+
+Jangan mulai WP-04.
