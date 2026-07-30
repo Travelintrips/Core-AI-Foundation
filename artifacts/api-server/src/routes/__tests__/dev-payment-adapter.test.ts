@@ -104,13 +104,14 @@ describe("Development Payment Test Adapter", () => {
     vi.clearAllMocks();
   });
 
-  it("1. Router module throws if imported with NODE_ENV=production", async () => {
+  it("1. Router module resolves (does not throw) when NODE_ENV=production — guard is in index.ts", async () => {
+    // The module deliberately does NOT throw at import time (a module-level throw
+    // would crash the server before app.listen() even runs). Instead, it exports
+    // an empty router and the mount guard in routes/index.ts prevents registration.
     const savedEnv = process.env["NODE_ENV"];
     process.env["NODE_ENV"] = "production";
     try {
-      await expect(import("../dev-payment-test.js?prod-guard-test")).rejects.toThrow(
-        /must never be mounted in production/i,
-      );
+      await expect(import("../dev-payment-test.js?prod-guard-test-v2")).resolves.toBeDefined();
     } finally {
       process.env["NODE_ENV"] = savedEnv;
     }

@@ -393,9 +393,9 @@ describe("Default active filter (Task 2)", () => {
     const res = await request(app)
       .get("/api/material-library?status=inactive")
       .set({ /* no admin key */ });
-    // In dev with no ADMIN_API_KEY set, the guard skips (consistent with adminAuth dev mode).
-    // When ADMIN_API_KEY IS set, we get 403.  We test the validation error path:
-    expect([200, 403]).toContain(res.status);
+    // In dev with no ADMIN_API_KEY set, the guard skips → 200.
+    // When ADMIN_API_KEY IS set: 401 (not authenticated) or 403 (wrong key).
+    expect([200, 401, 403]).toContain(res.status);
   });
 
   it("invalid status returns 400", async () => {

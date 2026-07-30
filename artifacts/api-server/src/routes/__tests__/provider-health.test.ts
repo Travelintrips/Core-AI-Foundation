@@ -55,6 +55,8 @@ const { mockProvider } = vi.hoisted(() => {
 
 const mockDbUpdate = vi.fn();
 const mockDbSelect = vi.fn();
+const mockDbInsert = vi.fn();
+const mockDbDelete = vi.fn();
 
 vi.mock("@workspace/db", () => {
   // Fluent builder for select
@@ -80,10 +82,13 @@ vi.mock("@workspace/db", () => {
     db: {
       select: (...args: unknown[]) => mockDbSelect(...args),
       update: (...args: unknown[]) => mockDbUpdate(...args),
+      insert: (...args: unknown[]) => mockDbInsert(...args),
+      delete: (...args: unknown[]) => mockDbDelete(...args),
     },
     aiProvidersTable: { id: "id", slug: "slug" },
     aiModelsTable: {},
     aiAuditLogsTable: {},
+    aiProviderHealthLogsTable: { providerId: "providerId", checkedAt: "checkedAt" },
     pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
   };
 });
@@ -155,6 +160,20 @@ function makeUpdateThatResolves() {
   mockDbUpdate.mockReturnValue(builder);
 }
 
+function makeInsertThatResolves() {
+  const builder = {
+    values: () => Promise.resolve(),
+  };
+  mockDbInsert.mockReturnValue(builder);
+}
+
+function makeDeleteThatResolves() {
+  const builder = {
+    where: () => Promise.resolve(),
+  };
+  mockDbDelete.mockReturnValue(builder);
+}
+
 // ── Unit tests: runHealthCheck ────────────────────────────────────────────────
 
 describe("runHealthCheck — unit", () => {
@@ -163,6 +182,8 @@ describe("runHealthCheck — unit", () => {
     // Reset env key to absent by default
     delete process.env["OPENAI_API_KEY"];
     makeUpdateThatResolves();
+    makeInsertThatResolves();
+    makeDeleteThatResolves();
   });
 
   it("(1) key-not-configured: does not call fetch", async () => {
@@ -362,6 +383,8 @@ describe("POST /ai/providers/:id/health-check — route", () => {
     vi.clearAllMocks();
     delete process.env["OPENAI_API_KEY"];
     makeUpdateThatResolves();
+    makeInsertThatResolves();
+    makeDeleteThatResolves();
   });
 
   it("(11) 404 when provider not found", async () => {
@@ -408,6 +431,8 @@ describe("POST /ai/providers/health-check-all — route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env["OPENAI_API_KEY"];
+    makeInsertThatResolves();
+    makeDeleteThatResolves();
   });
 
   /**
