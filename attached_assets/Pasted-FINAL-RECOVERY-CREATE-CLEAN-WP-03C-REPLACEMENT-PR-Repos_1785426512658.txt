@@ -1,0 +1,333 @@
+FINAL RECOVERY — CREATE CLEAN WP-03C REPLACEMENT PR
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current problem:
+
+- PR WP-03C sudah dibuat
+- Remote branch feature/12-layout-composer terkontaminasi commit otomatis Replit
+- File upload/internal text sempat masuk ke history
+- Force push tidak stabil atau gagal
+- Commit remediation bersih masih tersedia secara lokal
+- Commit remediation yang sebelumnya disebut: 9c54695
+
+OBJECTIVE:
+
+Buat branch pengganti yang bersih dari origin/main,
+cherry-pick hanya commit remediation yang valid,
+push tanpa force,
+buat PR baru,
+verifikasi,
+lalu tutup PR lama.
+
+==================================================
+STRICT RULES
+==================================================
+
+JANGAN:
+
+- membuat revert commit pada branch lama
+- force push branch lama
+- memasukkan attached_assets
+- memasukkan prompt/session log
+- mengubah source code
+- menjalankan implementasi ulang
+- merge PR
+- mulai WP-04
+- menghapus branch lama sebelum PR baru berhasil
+
+==================================================
+PHASE 1 — PRESERVE CURRENT STATE
+==================================================
+
+Tampilkan:
+
+git branch --show-current
+git status --short
+git log --oneline --decorate -10
+
+Pastikan working tree tidak memiliki perubahan source yang belum tersimpan.
+
+Jika ada perubahan lokal yang bukan bagian remediation:
+stash secara aman dan laporkan.
+
+==================================================
+PHASE 2 — IDENTIFY CLEAN REMEDIATION COMMIT
+==================================================
+
+Periksa commit:
+
+git show --stat --oneline 9c54695
+git show --name-status 9c54695
+
+Pastikan commit tersebut hanya berisi perubahan remediation berikut:
+
+- collisionDetection.ts
+- collisionAdapter.ts
+- composer.test.ts
+- integration/openapi/team-12.yaml
+
+Tidak boleh ada:
+
+- attached_assets
+- pasted text
+- screenshot
+- prompt
+- session log
+- .replit
+- generated artifact
+
+Jika 9c54695 bukan commit bersih:
+cari commit remediation bersih yang benar menggunakan reflog dan log.
+
+Jangan lanjut sebelum SHA bersih ditemukan.
+
+==================================================
+PHASE 3 — CREATE REPLACEMENT BRANCH
+==================================================
+
+Fetch main:
+
+git fetch origin main
+
+Buat branch baru langsung dari remote main:
+
+git switch --detach origin/main
+git switch -c feature/wp03c-layout-composer-clean
+
+Pastikan:
+
+git merge-base --is-ancestor origin/main HEAD
+git status --short
+
+Working tree harus clean.
+
+==================================================
+PHASE 4 — CHERRY-PICK ONLY CLEAN REMEDIATION
+==================================================
+
+Cherry-pick hanya commit remediation bersih:
+
+git cherry-pick 9c54695
+
+Ganti SHA jika Phase 2 menemukan SHA bersih yang berbeda.
+
+Setelah cherry-pick, tampilkan:
+
+git log --oneline --decorate origin/main..HEAD
+git diff --stat origin/main...HEAD
+git diff --name-status origin/main...HEAD
+
+Expected:
+
+- hanya 1 commit remediation, kecuali implementasi WP-03C utama memang sudah ada pada main;
+- hanya file remediation yang diharapkan;
+- tidak ada attached_assets atau file internal.
+
+CATATAN:
+
+Audit sebelumnya menyatakan implementasi utama layout-composer sudah berada di main.
+Karena itu branch pengganti hanya perlu membawa remediation yang belum ada di main.
+
+==================================================
+PHASE 5 — CONTENT VERIFICATION
+==================================================
+
+Verifikasi:
+
+1. collisionAdapter.ts mengimpor canonical WP-03B:
+   - generateAABB
+   - aabbOverlap
+
+2. collisionDetection.ts tidak memiliki algoritma AABB inline.
+
+3. rectsOverlap mendelegasikan ke adapter.
+
+4. Rotation limitation terdokumentasi.
+
+5. Ada 10 test remediation:
+   - 7 delegation tests
+   - 3 rotation limitation tests
+
+Cari file terlarang:
+
+find . -path "*/attached_assets/*" -o \
+       -iname "*pasted*" -o \
+       -iname "*prompt*" -o \
+       -iname "*session*"
+
+Bedakan file lama yang sudah ada di main dari file baru dalam branch.
+
+Yang menjadi syarat utama:
+
+git diff --name-only origin/main...HEAD
+
+tidak boleh menampilkan file terlarang.
+
+==================================================
+PHASE 6 — VALIDATION
+==================================================
+
+Jalankan:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Expected baseline:
+
+- full regression 6056/6056 PASS
+- build PASS
+- remediation tidak menambah typecheck error
+
+Jika jumlah test berbeda karena main berubah:
+laporkan total aktual secara jujur.
+
+==================================================
+PHASE 7 — PUSH NEW BRANCH
+==================================================
+
+Push branch baru tanpa force:
+
+git push -u origin feature/wp03c-layout-composer-clean
+
+Verifikasi:
+
+git fetch origin feature/wp03c-layout-composer-clean
+git rev-parse HEAD
+git rev-parse origin/feature/wp03c-layout-composer-clean
+
+SHA lokal dan remote harus identik.
+
+==================================================
+PHASE 8 — CREATE REPLACEMENT PR
+==================================================
+
+Buat PR baru:
+
+Base:
+main
+
+Head:
+feature/wp03c-layout-composer-clean
+
+Title:
+
+refactor(wp03c): delegate layout collision checks to WP-03B
+
+Description:
+
+## Summary
+
+Final WP-03C remediation that removes the duplicate local AABB overlap implementation and delegates collision checks to the canonical WP-03B collision engine.
+
+## Changes
+
+- adds a thin Rect-to-WP-03B AABB adapter
+- delegates layout-composer overlap checks to WP-03B
+- documents axis-aligned-only rotation behavior
+- adds collision delegation and rotation limitation tests
+
+## Validation
+
+- typecheck:libs PASS
+- API build PASS
+- regression PASS
+- no skipped or todo tests
+- no attached_assets or internal prompt artifacts
+
+## Compatibility
+
+- no public API changes
+- no changes to WP-03A behavior
+- no changes to WP-03B algorithms
+- layout-composer export signatures preserved
+
+Do not merge.
+
+==================================================
+PHASE 9 — VERIFY NEW PR
+==================================================
+
+Pastikan:
+
+- PR state = open
+- base = main
+- head = feature/wp03c-layout-composer-clean
+- mergeable = clean atau pending GitHub calculation
+- changed files hanya remediation
+- tidak ada attached_assets
+- tidak ada prompt/session artifact
+- commit history bersih
+
+Laporkan:
+
+- nomor PR baru
+- URL PR
+- local SHA
+- remote SHA
+- commit count
+- changed file count
+- mergeable status
+
+==================================================
+PHASE 10 — CLOSE OLD PR
+==================================================
+
+Hanya setelah PR baru berhasil dan terverifikasi:
+
+Tutup PR lama sebagai superseded.
+
+Tambahkan komentar:
+
+Superseded by the clean replacement PR because the previous branch contained an unintended Replit-generated artifact commit. No code functionality was lost.
+
+Jangan merge PR lama.
+
+Jangan hapus remote branch lama sebelum verifikasi selesai.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1. Clean remediation SHA
+2. Replacement branch
+3. Local SHA
+4. Remote SHA
+5. SHA match
+6. Commits ahead of main
+7. Changed files
+8. Accidental files found
+9. Typecheck
+10. API build
+11. Regression tests
+12. New PR number
+13. New PR state
+14. Mergeable status
+15. Old PR closed
+16. Ready for final review
+
+Gunakan tepat satu verdict:
+
+A.
+CLEAN REPLACEMENT PR READY FOR FINAL REVIEW
+
+B.
+CLEAN BRANCH CREATED — PUSH OR PR FAILED
+
+C.
+CLEAN REMEDIATION COMMIT NOT FOUND
+
+D.
+VALIDATION FAILED
+
+E.
+OLD PR NOT CLOSED
+
+STOP.
+
+Jangan merge.
+Jangan mulai WP-04.
