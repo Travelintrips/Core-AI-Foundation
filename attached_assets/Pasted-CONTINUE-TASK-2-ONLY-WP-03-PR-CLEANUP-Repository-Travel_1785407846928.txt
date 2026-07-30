@@ -1,0 +1,208 @@
+CONTINUE TASK #2 ONLY — WP-03 PR CLEANUP
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target branch:
+fix/wp03-release-remediation
+
+Target PR:
+#3
+
+IMPORTANT:
+
+Project setup is already complete.
+All services are already running.
+
+Do NOT:
+
+- reinstall dependencies
+- restart workflows
+- inspect the UI
+- modify source code
+- modify tests
+- begin WP-03C
+- merge PR #3
+- create another task
+- mark this task complete without validation
+
+Your only task is to clean PR #3.
+
+==================================================
+PHASE 1 — VERIFY GITHUB CONNECTION
+==================================================
+
+First verify:
+
+git remote -v
+git branch --show-current
+git status --short
+
+Then try:
+
+git ls-remote origin
+
+If GitHub authentication fails:
+
+1. Re-check the Git integration available in the Replit workspace.
+2. Use Replit's authenticated Git push/fetch mechanism, not an unauthenticated raw HTTPS shell request.
+3. Do not claim the GitHub account is disconnected until you have tested the workspace Git integration.
+4. Report the exact authentication error if it still fails.
+
+Do not stop after the first failed shell command.
+
+==================================================
+PHASE 2 — FETCH TARGET BRANCH
+==================================================
+
+Fetch:
+
+git fetch origin fix/wp03-release-remediation
+
+Then checkout:
+
+git switch fix/wp03-release-remediation
+
+If the branch only exists remotely:
+
+git switch --track -c fix/wp03-release-remediation origin/fix/wp03-release-remediation
+
+Verify:
+
+git branch --show-current
+git status --short
+git log --oneline -8
+
+Required:
+- branch = fix/wp03-release-remediation
+- working tree clean
+
+==================================================
+PHASE 3 — REMOVE ONLY TWO COMMITS
+==================================================
+
+Remove exactly:
+
+6a769f6 — Add remote verification remediation documentation
+5b9817e — Add verification instruction document
+
+Keep exactly these four WP-03 commits:
+
+6713219 fix(wp03): move route schemas to shared api-zod contracts
+4b4a590 fix(wp03): enforce collision session placement limit
+f5f36cc chore(wp03): remove dead code from collision engine geometry
+6b6db03 test(regression): add WP-03 remediation verification suite
+
+Use the safest applicable method.
+
+Preferred, if the two unwanted commits are the latest two commits:
+
+git reset --hard 6b6db03
+
+Otherwise use interactive rebase and drop only the two unwanted commits.
+
+Do not squash, reorder, or modify the four valid commits.
+
+==================================================
+PHASE 4 — VERIFY CLEAN HISTORY
+==================================================
+
+Run:
+
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+git diff --stat origin/main...HEAD
+
+Verify:
+
+- exactly four WP-03 commits remain
+- no uploaded prompt TXT files remain in the PR diff
+- no attached_assets task artifacts remain
+- production code is unchanged from the reviewed remediation state
+- tests are unchanged
+
+==================================================
+PHASE 5 — VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Expected:
+
+- typecheck:libs PASS
+- API build PASS
+- full regression 6046/6046 PASS
+
+Do not mark complete if validation is not run.
+
+==================================================
+PHASE 6 — PUSH SAFELY
+==================================================
+
+Push with:
+
+git push --force-with-lease origin fix/wp03-release-remediation
+
+Never use plain:
+
+git push --force
+
+Then verify:
+
+git rev-parse HEAD
+git fetch origin fix/wp03-release-remediation
+git rev-parse origin/fix/wp03-release-remediation
+
+Local and remote SHA must match exactly.
+
+==================================================
+PHASE 7 — VERIFY PR #3
+==================================================
+
+Verify PR #3 now contains:
+
+- exactly 4 commits
+- no attached_assets prompt files
+- no merge conflict
+- base = main
+- head = fix/wp03-release-remediation
+
+Do not merge.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. GitHub authentication status
+2. Current branch
+3. Old HEAD
+4. New HEAD
+5. Removed commits
+6. Remaining commits
+7. PR file count
+8. PR commit count
+9. typecheck result
+10. API build result
+11. full regression result
+12. push result
+13. local SHA
+14. remote SHA
+15. merge conflict status
+16. ready for merge: YES or NO
+
+Use exactly one verdict:
+
+A. PR #3 CLEAN — READY FOR MERGE
+B. CLEANUP COMPLETE LOCALLY — PUSH AUTHENTICATION BLOCKED
+C. PR #3 STILL CONTAINS UNWANTED COMMITS
+D. CLEANUP OR VALIDATION FAILED
+
+Do not create a follow-up task.
+Do not mark complete without the final evidence.
+STOP.
