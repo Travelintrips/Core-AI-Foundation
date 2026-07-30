@@ -33,10 +33,22 @@
       }
     ],
     "proposedRoutes": [
-      { "method": "GET",  "path": "/ai/layout-composer/operations" },
-      { "method": "POST", "path": "/ai/layout-composer/solve" },
-      { "method": "POST", "path": "/ai/layout-composer/validate" },
-      { "method": "POST", "path": "/ai/layout-composer/plan" }
+      {
+        "method": "GET",
+        "path": "/ai/layout-composer/operations"
+      },
+      {
+        "method": "POST",
+        "path": "/ai/layout-composer/solve"
+      },
+      {
+        "method": "POST",
+        "path": "/ai/layout-composer/validate"
+      },
+      {
+        "method": "POST",
+        "path": "/ai/layout-composer/plan"
+      }
     ]
   },
   "authDependency": {
@@ -96,5 +108,17 @@
     "Response payload can be large for complex layouts with many operations and responsive variants; consumers should paginate or filter fields as needed.",
     "includeResponsive=true triggers up to 4 additional solver runs (one per non-current breakpoint); each is bounded by the same MAX_ITERATIONS and SOLVER_DEADLINE_MS caps.",
     "Content-Length header pre-check (MAX_PAYLOAD_BYTES) can be bypassed by clients that omit the header. Body has already been parsed by app-level express.json(10mb) — pre-check is a defense-in-depth measure, not a hard parse limit."
-  ]
+  ],
+  "knownLimitations": {
+    "rotation": {
+      "status": "axis-aligned-push-only",
+      "description": "LayoutElement.rotation is accepted in the request schema. AABB computation is rotation-aware via WP-03B generateAABB — collision boundaries correctly expand for rotated elements. Push-apart resolution vectors are axis-aligned (horizontal/vertical) only; they are not perpendicular to the rotated face. For highly rotated elements, residual overlap along the rotated face may remain after solver convergence.",
+      "affectedConstraints": [
+        "no_collision",
+        "safe_zone"
+      ],
+      "workaround": "Run a second solve pass if convergence on rotated elements is critical.",
+      "scheduledFor": "WP-04 or later"
+    }
+  }
 }

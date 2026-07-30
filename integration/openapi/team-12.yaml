@@ -181,7 +181,16 @@ components:
         y:         { type: number }
         width:     { type: number, minimum: 0 }
         height:    { type: number, minimum: 0 }
-        rotation:  { type: number }
+        rotation:
+          type: number
+          description: >-
+            Rotation in degrees (clockwise). Accepted by the solver — AABB
+            computation is rotation-aware via WP-03B generateAABB, so collision
+            boundaries correctly expand for rotated elements.
+            Known limitation: push-apart resolution vectors are axis-aligned
+            (horizontal/vertical), not perpendicular to the rotated face.
+            Full rotation-aware push resolution is planned for a future WP.
+            See knownLimitations.rotation in integration/manifests/team-12.json.
         zIndex:    { type: integer }
         content:   { type: string }
         textStyle: { $ref: "#/components/schemas/TextStyle" }
