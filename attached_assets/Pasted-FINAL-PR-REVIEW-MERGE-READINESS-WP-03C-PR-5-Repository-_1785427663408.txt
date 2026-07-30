@@ -1,0 +1,179 @@
+FINAL PR REVIEW + MERGE READINESS — WP-03C PR #5
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Pull Request:
+#5
+
+Base:
+main
+
+Head:
+feature/wp03c-layout-composer-clean
+
+Mode:
+READ-ONLY REVIEW
+
+Do not merge yet.
+
+==================================================
+CONTEXT
+==================================================
+
+PR #5 intentionally contains only the remaining
+documentation updates:
+
+- integration/manifests/team-12.json
+- integration/openapi/team-12.yaml
+
+The WP-03C source remediation is expected to already
+exist on main:
+
+- collisionAdapter.ts delegates to WP-03B
+- collisionDetection.ts contains no inline AABB implementation
+- rectsOverlap delegates through the adapter
+- rotation remains axis-aligned and is tested
+- remediation tests are already present
+
+==================================================
+PHASE 1 — VERIFY PR
+==================================================
+
+Verify:
+
+- PR #5 state = open
+- base = main
+- head = feature/wp03c-layout-composer-clean
+- mergeable = clean
+- exactly 1 commit
+- exactly 2 changed files
+- no attached_assets
+- no prompt/session/screenshot artifacts
+- no source-code changes
+
+==================================================
+PHASE 2 — VERIFY SOURCE REMEDIATION ON MAIN
+==================================================
+
+Fetch and inspect origin/main.
+
+Confirm these files already exist on main:
+
+- artifacts/api-server/src/services/layout-composer/collisionAdapter.ts
+- artifacts/api-server/src/services/layout-composer/collisionDetection.ts
+- artifacts/api-server/src/services/layout-composer/__tests__/composer.test.ts
+
+Verify on origin/main:
+
+1. collisionAdapter.ts imports:
+   - generateAABB
+   - aabbOverlap
+
+2. collisionDetection.ts delegates overlap checks
+   through the WP-03B adapter.
+
+3. No duplicate inline AABB overlap algorithm remains.
+
+4. Delegation and rotation limitation tests exist.
+
+5. The source remediation is not dependent on PR #5.
+
+If any source remediation is absent from main:
+STOP and report a blocker.
+
+==================================================
+PHASE 3 — REVIEW DOCUMENTATION DIFF
+==================================================
+
+Review both changed files.
+
+Verify:
+
+- rotation limitation is clear;
+- collision remains axis-aligned;
+- rotation does not affect collision geometry;
+- WP-03B remains the canonical collision implementation;
+- full OBB/SAT support is explicitly deferred;
+- no misleading claim that rotation is fully supported;
+- YAML/JSON remains valid;
+- no unrelated manifest or OpenAPI changes.
+
+==================================================
+PHASE 4 — VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Expected baseline:
+
+- typecheck PASS
+- API build PASS
+- 6056/6056 tests PASS
+
+Report any legitimate difference in test count.
+
+==================================================
+PHASE 5 — OLD PR STATUS
+==================================================
+
+Verify the old PR with head:
+
+feature/12-layout-composer
+
+is closed and not merged.
+
+If it is still open:
+report manual cleanup still pending.
+
+Do not close it using unsupported tools.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. PR #5 state
+2. Base and head
+3. Commit count
+4. Changed files
+5. Mergeable status
+6. Accidental artifacts
+7. Source remediation present on main
+8. Collision delegation verified
+9. Duplicate AABB logic found
+10. Rotation limitation accurate
+11. Manifest valid
+12. OpenAPI valid
+13. Typecheck
+14. API build
+15. Regression tests
+16. Old PR status
+17. Ready to merge
+
+Use exactly one verdict:
+
+A.
+PR #5 CLEAN — READY FOR MERGE
+
+B.
+PR #5 CLEAN — OLD PR CLOSURE STILL PENDING
+
+C.
+SOURCE REMEDIATION NOT PRESENT ON MAIN
+
+D.
+DOCUMENTATION REVIEW FAILED
+
+E.
+VALIDATION FAILED
+
+STOP.
+
+Do not merge.
+Do not begin WP-04.
