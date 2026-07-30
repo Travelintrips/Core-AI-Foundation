@@ -15,7 +15,9 @@ import {
   rectsOverlap,
   clampToRect,
   isContainedIn,
+  elementRect,
 } from "../collisionDetection.js";
+import { rectsOverlapViaWP03B, rectToWP03BAABB } from "../collisionAdapter.js";
 import {
   clampToSafeZone,
   isInSafeZone,
@@ -913,5 +915,94 @@ describe("composer facade", () => {
     });
     expect(result.valid).toBe(true);
     expect(result.violations.filter((v) => v.severity === "error")).toHaveLength(0);
+  });
+});
+
+// ── WP-03B adapter delegation ─────────────────────────────────
+// These tests verify that WP-03C collision detection delegates to WP-03B's
+// canonical AABB engine rather than re-implementing the algorithm.
+
+describe("collisionAdapter — WP-03B delegation", () => {
+  it("rectToWP03BAABB converts Rect to AABB format correctly", () => {
+    const aabb = rectToWP03BAABB({ x: 10, y: 20, width: 100, height: 50 });
+    expect(aabb.minX).toBeCloseTo(10);
+    expect(aabb.minY).toBeCloseTo(20);
+    expect(aabb.maxX).toBeCloseTo(110);
+    expect(aabb.maxY).toBeCloseTo(70);
+  });
+
+  it("rectsOverlapViaWP03B detects overlapping rects", () => {
+    const a = { x: 0, y: 0, width: 100, height: 100 };
+    const b = { x: 50, y: 50, width: 100, height: 100 };
+    expect(rectsOverlapViaWP03B(a, b)).toBe(true);
+  });
+
+  it("rectsOverlapViaWP03B returns false for adjacent rects", () => {
+    const a = { x: 0, y: 0, width: 100, height: 100 };
+    const b = { x: 100, y: 0, width: 100, height: 100 };
+    expect(rectsOverlapViaWP03B(a, b)).toBe(false);
+  });
+
+  it("rectsOverlapViaWP03B returns false for non-overlapping rects", () => {
+    const a = { x: 0, y: 0, width: 50, height: 50 };
+    const b = { x: 200, y: 200, width: 50, height: 50 };
+    expect(rectsOverlapViaWP03B(a, b)).toBe(false);
+  });
+
+  it("rectsOverlap in collisionDetection delegates to WP-03B — result matches adapter", () => {
+    const a = { x: 0, y: 0, width: 80, height: 80 };
+    const b = { x: 40, y: 40, width: 80, height: 80 };
+    // Both must agree — confirms no independent AABB implementation in WP-03C
+    expect(rectsOverlap(a, b)).toBe(rectsOverlapViaWP03B(a, b));
+  });
+
+  it("collision delegation: findAllCollisions uses adapter for overlap check", () => {
+    // Two overlapping elements → 1 collision pair via WP-03B-backed rectsOverlap
+    const a = box("a", 0, 0, 100, 100);
+    const b = box("b", 50, 50, 100, 100);
+    const pairs = findAllCollisions([a, b]);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].elementA).toBe("a");
+    expect(pairs[0].elementB).toBe("b");
+  });
+
+  it("collision delegation: adjacent elements are not reported as collision via WP-03B", () => {
+    // WP-03B edge-touch policy: touching edges = non-overlapping
+    const a = box("a", 0, 0, 100, 100);
+    const b = box("b", 100, 0, 100, 100);
+    const pairs = findAllCollisions([a, b]);
+    expect(pairs).toHaveLength(0);
+  });
+});
+
+// ── Rotation documented limitation ────────────────────────────
+// These tests verify that the rotation field is stored but does NOT affect
+// axis-aligned collision detection, and that this is the expected behaviour.
+
+describe("collisionDetection — rotation known limitation", () => {
+  it("elementRect ignores rotation — returns axis-aligned bounding box", () => {
+    const el = box("e", 10, 20, 100, 50, { rotation: 45 });
+    const rect = elementRect(el);
+    // Rect must be the raw position/size, not rotated bounds
+    expect(rect.x).toBe(10);
+    expect(rect.y).toBe(20);
+    expect(rect.width).toBe(100);
+    expect(rect.height).toBe(50);
+  });
+
+  it("rotation does not prevent collision detection — AABB is axis-aligned regardless of rotation", () => {
+    // Two clearly overlapping elements, one with rotation set
+    const a = box("a", 0, 0, 100, 100, { rotation: 45 });
+    const b = box("b", 50, 0, 100, 100, { rotation: 0 });
+    // Collision is still detected using axis-aligned bounds
+    const pairs = findAllCollisions([a, b]);
+    expect(pairs).toHaveLength(1);
+  });
+
+  it("rotation does not prevent non-collision — non-overlapping AABB stays clear regardless of rotation", () => {
+    const a = box("a", 0, 0, 50, 50, { rotation: 30 });
+    const b = box("b", 200, 200, 50, 50, { rotation: 60 });
+    const pairs = findAllCollisions([a, b]);
+    expect(pairs).toHaveLength(0);
   });
 });

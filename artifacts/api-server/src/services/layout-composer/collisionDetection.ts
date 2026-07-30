@@ -1,23 +1,44 @@
 // ============================================================
 // TEAM 12 — Collision Detection
 // AABB overlap detection and resolution
+//
+// Overlap detection delegates to WP-03B (collision-engine) via
+// collisionAdapter.ts. Do NOT add a second AABB implementation here.
+//
+// ── Known Limitations ────────────────────────────────────────
+// 1. Axis-aligned only: collision detection uses each element's
+//    axis-aligned bounding box (AABB). The `rotation` field on
+//    LayoutElement is stored but does NOT affect collision geometry.
+//    Two rotated elements are tested as if rotation = 0.
+//
+// 2. Consequence: a rotated element may appear to collide when
+//    its corners do not actually overlap, or may not collide when
+//    its rotated corners do. This is a known, documented gap.
+//
+// 3. Planned fix: full OBB (Oriented Bounding Box) support using
+//    WP-03B's SAT engine will be added in a future work package.
+//    WP-03B already provides `generateOBB` + `satTest` for this.
 // ============================================================
 
 import type { LayoutElement, CollisionPair, Rect } from "../../types/layout-composer/index.js";
+import { rectsOverlapViaWP03B } from "./collisionAdapter.js";
 
-/** Returns the bounding rect of an element (ignoring rotation) */
+/**
+ * Returns the axis-aligned bounding rect of an element.
+ *
+ * Known Limitation: `rotation` is intentionally ignored. Collision
+ * detection is axis-aligned only. See module header for full details.
+ */
 export function elementRect(el: LayoutElement): Rect {
   return { x: el.x, y: el.y, width: el.width, height: el.height };
 }
 
-/** True if two rects overlap (touching edges do NOT count as collision) */
+/**
+ * True if two rects overlap (touching edges do NOT count as collision).
+ * Delegates to WP-03B's canonical AABB overlap via collisionAdapter.
+ */
 export function rectsOverlap(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  );
+  return rectsOverlapViaWP03B(a, b);
 }
 
 /** Returns overlap extents (> 0 means collision on that axis) */

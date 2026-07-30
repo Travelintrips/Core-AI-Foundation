@@ -181,7 +181,15 @@ components:
         y:         { type: number }
         width:     { type: number, minimum: 0 }
         height:    { type: number, minimum: 0 }
-        rotation:  { type: number }
+        rotation:
+          type: number
+          description: >-
+            Visual rotation in degrees. Stored on the element but does NOT
+            affect collision detection. The no_collision constraint uses
+            axis-aligned bounding boxes (AABB) only — rotation is ignored
+            when checking or resolving overlaps.
+            Known limitation: full OBB (Oriented Bounding Box) collision
+            support is planned for a future work package.
         zIndex:    { type: integer }
         content:   { type: string }
         textStyle: { $ref: "#/components/schemas/TextStyle" }
