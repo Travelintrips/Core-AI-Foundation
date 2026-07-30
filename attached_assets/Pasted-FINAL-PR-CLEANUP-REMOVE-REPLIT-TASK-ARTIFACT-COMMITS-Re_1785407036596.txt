@@ -1,0 +1,209 @@
+FINAL PR CLEANUP — REMOVE REPLIT TASK ARTIFACT COMMITS
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Branch:
+fix/wp03-release-remediation
+
+PR:
+#3
+
+Objective:
+Remove exactly the two unwanted documentation commits from the branch,
+verify the PR now contains only the four clean WP-03 remediation commits,
+push the rewritten branch safely, and stop before merge.
+
+==================================================
+STRICT RULES
+==================================================
+
+Do NOT:
+
+- modify WP-03 production code
+- modify WP-03 tests
+- add new files
+- begin WP-03C
+- merge PR #3
+- push to main
+- use plain --force
+- delete any legitimate product documentation
+
+Only remove these two commits:
+
+6a769f6 — Add remote verification remediation documentation
+5b9817e — Add verification instruction document
+
+==================================================
+PHASE 1 — VERIFY CURRENT STATE
+==================================================
+
+Run:
+
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git log --oneline --decorate -8
+
+Required branch:
+
+fix/wp03-release-remediation
+
+Required:
+- working tree clean
+- no staged files
+- no untracked task files that could accidentally be committed
+
+If working tree is not clean:
+- report files
+- stop
+- do not rebase
+
+==================================================
+PHASE 2 — REMOVE THE TWO COMMITS
+==================================================
+
+Preferred method:
+
+git rebase --onto 6b6db03 5b9817e fix/wp03-release-remediation
+
+If commit order differs, use an interactive rebase and drop only:
+
+6a769f6
+5b9817e
+
+Expected remaining commits:
+
+6713219 fix(wp03): move route schemas to shared api-zod contracts
+4b4a590 fix(wp03): enforce collision session placement limit
+f5f36cc chore(wp03): remove dead code from collision engine geometry
+6b6db03 test(regression): add WP-03 remediation verification suite
+
+Do not reorder or squash the four valid commits unless absolutely necessary.
+
+==================================================
+PHASE 3 — VERIFY HISTORY
+==================================================
+
+Run:
+
+git log --oneline --decorate origin/main..HEAD
+git diff --name-status origin/main...HEAD
+git diff --stat origin/main...HEAD
+git ls-files attached_assets | grep -E 'FINAL-REMOTE|verification|Pasted-Saya-baca' || true
+
+Verify:
+
+- exactly four WP-03 commits remain
+- the two attached_assets prompt files are absent from the branch diff
+- no source or test file changed during cleanup
+- no legitimate documentation was removed
+- branch still contains all remediation changes
+
+==================================================
+PHASE 4 — RUN TARGETED SAFETY CHECKS
+==================================================
+
+Because only history cleanup was performed, do not modify files.
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Expected:
+
+- typecheck:libs PASS
+- API build PASS
+- full regression 6046/6046 PASS
+
+If test count differs, report the exact reason.
+
+==================================================
+PHASE 5 — SAFE PUSH
+==================================================
+
+Push using:
+
+git push --force-with-lease origin fix/wp03-release-remediation
+
+Do not use:
+
+git push --force
+
+Then verify:
+
+git ls-remote --heads origin fix/wp03-release-remediation
+git rev-parse HEAD
+git fetch origin fix/wp03-release-remediation
+git rev-parse origin/fix/wp03-release-remediation
+
+Local HEAD and remote HEAD must match exactly.
+
+==================================================
+PHASE 6 — VERIFY PR #3
+==================================================
+
+Verify PR #3 now shows:
+
+- 4 commits
+- no attached_assets prompt files
+- only WP-03 remediation files
+- no merge conflict
+- base main
+- head fix/wp03-release-remediation
+
+Report:
+
+- commit count
+- files changed
+- additions
+- deletions
+- mergeability
+- CI status if available
+
+Do not merge.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Provide:
+
+1. Branch
+2. Old HEAD
+3. New HEAD
+4. Removed commits
+5. Remaining commits
+6. Files removed from PR
+7. Files still changed
+8. typecheck:libs result
+9. API build result
+10. Full regression result
+11. Force-with-lease result
+12. Local/remote SHA match
+13. PR #3 commit count
+14. PR #3 file count
+15. Merge conflict status
+16. Ready for merge?
+17. May WP-03C begin?
+
+Use exactly one verdict:
+
+A. PR #3 CLEAN — READY FOR MERGE
+
+B. PR #3 CLEAN LOCALLY — REMOTE UPDATE FAILED
+
+C. PR #3 STILL CONTAINS UNWANTED FILES
+
+D. CLEANUP FAILED — MANUAL INTERVENTION REQUIRED
+
+Rules:
+
+- Ready for merge may be YES only if the two unwanted commits are gone.
+- WP-03C may begin only after PR #3 is merged into main.
+- Do not merge.
+- Do not begin WP-03C.
+
+STOP.
