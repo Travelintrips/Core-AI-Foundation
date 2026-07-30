@@ -8,7 +8,13 @@
  */
 
 import { Router } from "express";
-import { z } from "zod/v4";
+import {
+  wp03CreateSessionSchema,
+  wp03UpdateSessionSchema,
+  wp03CreatePlacementSchema,
+  wp03UpdatePlacementSchema,
+  uuidParamSchema,
+} from "@workspace/api-zod";
 import {
   createLayoutSession,
   getLayoutSession,
@@ -52,55 +58,15 @@ function handleError(err: unknown, res: Response): void {
   res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } });
 }
 
-// ── Validation schemas ────────────────────────────────────────────────────────
-
-const createSessionSchema = z.object({
-  name:            z.string().min(1).max(200),
-  roomTemplateId:  z.string().uuid().nullable().optional(),
-  widthCm:         z.number().positive().optional(),
-  depthCm:         z.number().positive().optional(),
-  heightCm:        z.number().positive().optional(),
-  metadata:        z.record(z.unknown()).optional(),
-}).strict();
-
-const updateSessionSchema = z.object({
-  name:     z.string().min(1).max(200).optional(),
-  widthCm:  z.number().positive().optional(),
-  depthCm:  z.number().positive().optional(),
-  heightCm: z.number().positive().optional(),
-  metadata: z.record(z.unknown()).optional(),
-}).strict();
-
-const createPlacementSchema = z.object({
-  furnitureItemId:  z.string().uuid().nullable().optional(),
-  label:            z.string().max(200).optional(),
-  xCm:              z.number().finite(),
-  yCm:              z.number().finite(),
-  widthCm:          z.number().positive().finite(),
-  depthCm:          z.number().positive().finite(),
-  rotationDeg:      z.number().finite().optional(),
-  anchorX:          z.number().min(0).max(1).optional(),
-  anchorY:          z.number().min(0).max(1).optional(),
-  clearanceFrontCm: z.number().nonnegative().optional(),
-  clearanceSideCm:  z.number().nonnegative().optional(),
-  clearanceBackCm:  z.number().nonnegative().optional(),
-  metadata:         z.record(z.unknown()).optional(),
-}).strict();
-
-const updatePlacementSchema = z.object({
-  label:            z.string().max(200).optional(),
-  xCm:              z.number().finite().optional(),
-  yCm:              z.number().finite().optional(),
-  widthCm:          z.number().positive().finite().optional(),
-  depthCm:          z.number().positive().finite().optional(),
-  rotationDeg:      z.number().finite().optional(),
-  anchorX:          z.number().min(0).max(1).optional(),
-  anchorY:          z.number().min(0).max(1).optional(),
-  clearanceFrontCm: z.number().nonnegative().optional(),
-  clearanceSideCm:  z.number().nonnegative().optional(),
-  clearanceBackCm:  z.number().nonnegative().optional(),
-  metadata:         z.record(z.unknown()).optional(),
-}).strict();
+/** Validates a UUID path param and returns 400 if invalid, without touching the DB. */
+function validateUuidParam(value: string | undefined, name: string, res: Response): string | null {
+  const parsed = uuidParamSchema.safeParse(value);
+  if (!parsed.success) {
+    res.status(400).json({ error: { code: "INVALID_UUID", message: `Invalid ${name}: must be a valid UUID.` } });
+    return null;
+  }
+  return parsed.data;
+}
 
 // ── Session routes ────────────────────────────────────────────────────────────
 
@@ -122,7 +88,7 @@ router.get("/ai/layout-sessions", async (req, res) => {
 router.post("/ai/layout-sessions", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const parsed = createSessionSchema.safeParse(req.body);
+    const parsed = wp03CreateSessionSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid request", details: parsed.error.issues } });
       return;
@@ -137,7 +103,9 @@ router.post("/ai/layout-sessions", async (req, res) => {
 router.get("/ai/layout-sessions/:sessionId", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const session = await getLayoutSession(req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const session = await getLayoutSession(sessionId, tenantId);
     res.json(session);
   } catch (err) { handleError(err, res); }
 });
@@ -146,12 +114,14 @@ router.get("/ai/layout-sessions/:sessionId", async (req, res) => {
 router.patch("/ai/layout-sessions/:sessionId", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const parsed = updateSessionSchema.safeParse(req.body);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const parsed = wp03UpdateSessionSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid request", details: parsed.error.issues } });
       return;
     }
-    const session = await updateLayoutSession(req.params["sessionId"]!, tenantId, parsed.data);
+    const session = await updateLayoutSession(sessionId, tenantId, parsed.data);
     res.json(session);
   } catch (err) { handleError(err, res); }
 });
@@ -160,7 +130,9 @@ router.patch("/ai/layout-sessions/:sessionId", async (req, res) => {
 router.post("/ai/layout-sessions/:sessionId/archive", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const session = await archiveLayoutSession(req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const session = await archiveLayoutSession(sessionId, tenantId);
     res.json({ id: session.id, status: session.status });
   } catch (err) { handleError(err, res); }
 });
@@ -169,7 +141,9 @@ router.post("/ai/layout-sessions/:sessionId/archive", async (req, res) => {
 router.post("/ai/layout-sessions/:sessionId/restore", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const session = await restoreLayoutSession(req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const session = await restoreLayoutSession(sessionId, tenantId);
     res.json({ id: session.id, status: session.status });
   } catch (err) { handleError(err, res); }
 });
@@ -178,7 +152,9 @@ router.post("/ai/layout-sessions/:sessionId/restore", async (req, res) => {
 router.delete("/ai/layout-sessions/:sessionId", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    await softDeleteLayoutSession(req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    await softDeleteLayoutSession(sessionId, tenantId);
     res.status(204).send();
   } catch (err) { handleError(err, res); }
 });
@@ -189,8 +165,10 @@ router.delete("/ai/layout-sessions/:sessionId", async (req, res) => {
 router.get("/ai/layout-sessions/:sessionId/placements", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
     const includeArchived = req.query["includeArchived"] === "true";
-    const placements = await listPlacements(req.params["sessionId"]!, tenantId, { includeArchived });
+    const placements = await listPlacements(sessionId, tenantId, { includeArchived });
     res.json({ data: placements });
   } catch (err) { handleError(err, res); }
 });
@@ -199,14 +177,16 @@ router.get("/ai/layout-sessions/:sessionId/placements", async (req, res) => {
 router.post("/ai/layout-sessions/:sessionId/placements", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const parsed = createPlacementSchema.safeParse(req.body);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const parsed = wp03CreatePlacementSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid request", details: parsed.error.issues } });
       return;
     }
     const placement = await createPlacement({
       ...parsed.data,
-      sessionId: req.params["sessionId"]!,
+      sessionId,
       tenantId,
     });
     res.status(201).json(placement);
@@ -217,7 +197,11 @@ router.post("/ai/layout-sessions/:sessionId/placements", async (req, res) => {
 router.get("/ai/layout-sessions/:sessionId/placements/:placementId", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const placement = await getPlacement(req.params["placementId"]!, req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const placementId = validateUuidParam(req.params["placementId"], "placementId", res);
+    if (placementId === null) return;
+    const placement = await getPlacement(placementId, sessionId, tenantId);
     res.json(placement);
   } catch (err) { handleError(err, res); }
 });
@@ -226,12 +210,16 @@ router.get("/ai/layout-sessions/:sessionId/placements/:placementId", async (req,
 router.patch("/ai/layout-sessions/:sessionId/placements/:placementId", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const parsed = updatePlacementSchema.safeParse(req.body);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const placementId = validateUuidParam(req.params["placementId"], "placementId", res);
+    if (placementId === null) return;
+    const parsed = wp03UpdatePlacementSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid request", details: parsed.error.issues } });
       return;
     }
-    const placement = await updatePlacement(req.params["placementId"]!, req.params["sessionId"]!, tenantId, parsed.data);
+    const placement = await updatePlacement(placementId, sessionId, tenantId, parsed.data);
     res.json(placement);
   } catch (err) { handleError(err, res); }
 });
@@ -240,7 +228,11 @@ router.patch("/ai/layout-sessions/:sessionId/placements/:placementId", async (re
 router.post("/ai/layout-sessions/:sessionId/placements/:placementId/archive", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const placement = await archivePlacement(req.params["placementId"]!, req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const placementId = validateUuidParam(req.params["placementId"], "placementId", res);
+    if (placementId === null) return;
+    const placement = await archivePlacement(placementId, sessionId, tenantId);
     res.json({ id: placement.id, isArchived: placement.isArchived });
   } catch (err) { handleError(err, res); }
 });
@@ -249,7 +241,11 @@ router.post("/ai/layout-sessions/:sessionId/placements/:placementId/archive", as
 router.delete("/ai/layout-sessions/:sessionId/placements/:placementId", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    await deletePlacement(req.params["placementId"]!, req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const placementId = validateUuidParam(req.params["placementId"], "placementId", res);
+    if (placementId === null) return;
+    await deletePlacement(placementId, sessionId, tenantId);
     res.status(204).send();
   } catch (err) { handleError(err, res); }
 });

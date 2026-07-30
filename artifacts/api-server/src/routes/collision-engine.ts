@@ -8,7 +8,11 @@
  */
 
 import { Router } from "express";
-import { z } from "zod/v4";
+import {
+  wp03StatelessCheckSchema,
+  uuidParamSchema,
+  MAX_PLACEMENTS_PER_COLLISION_SESSION,
+} from "@workspace/api-zod";
 import {
   checkSessionCollisionsService,
   checkPlacementCollisionService,
@@ -47,38 +51,26 @@ function handleError(err: unknown, res: Response): void {
   res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } });
 }
 
-// ── Validation schemas ────────────────────────────────────────────────────────
-
-const placementGeometrySchema = z.object({
-  id:              z.string().uuid(),
-  xCm:             z.number().finite(),
-  yCm:             z.number().finite(),
-  widthCm:         z.number().positive().finite(),
-  depthCm:         z.number().positive().finite(),
-  rotationDeg:     z.number().finite().optional().default(0),
-  anchorX:         z.number().min(0).max(1).optional().default(0),
-  anchorY:         z.number().min(0).max(1).optional().default(0),
-  clearanceFrontCm: z.number().nonnegative().optional().default(0),
-  clearanceSideCm:  z.number().nonnegative().optional().default(0),
-  clearanceBackCm:  z.number().nonnegative().optional().default(0),
-  isArchived:       z.boolean().optional().default(false),
-});
-
-const statelessCheckSchema = z.object({
-  room: z.object({
-    widthCm: z.number().positive().finite(),
-    depthCm: z.number().positive().finite(),
-  }),
-  placements: z.array(placementGeometrySchema).min(1).max(200),
-}).strict();
+/** Validates a UUID path param and returns 400 if invalid, without touching the DB. */
+function validateUuidParam(value: string | undefined, name: string, res: Response): string | null {
+  const parsed = uuidParamSchema.safeParse(value);
+  if (!parsed.success) {
+    res.status(400).json({ error: { code: "INVALID_UUID", message: `Invalid ${name}: must be a valid UUID.` } });
+    return null;
+  }
+  return parsed.data;
+}
 
 // ── POST /ai/layout-sessions/:sessionId/collision-check ───────────────────────
 // Check all active placements in a session.
+// Enforces MAX_PLACEMENTS_PER_COLLISION_SESSION limit before DB query.
 
 router.post("/ai/layout-sessions/:sessionId/collision-check", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const result = await checkSessionCollisionsService(req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const result = await checkSessionCollisionsService(sessionId, tenantId, MAX_PLACEMENTS_PER_COLLISION_SESSION);
     res.json(result);
   } catch (err) { handleError(err, res); }
 });
@@ -89,7 +81,9 @@ router.post("/ai/layout-sessions/:sessionId/collision-check", async (req, res) =
 router.get("/ai/layout-sessions/:sessionId/collisions", async (req, res) => {
   try {
     const tenantId = getTenantId(req);
-    const result = await getSessionCollisionSummary(req.params["sessionId"]!, tenantId);
+    const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+    if (sessionId === null) return;
+    const result = await getSessionCollisionSummary(sessionId, tenantId);
     res.json(result);
   } catch (err) { handleError(err, res); }
 });
@@ -101,9 +95,13 @@ router.post(
   async (req, res) => {
     try {
       const tenantId = getTenantId(req);
+      const sessionId = validateUuidParam(req.params["sessionId"], "sessionId", res);
+      if (sessionId === null) return;
+      const placementId = validateUuidParam(req.params["placementId"], "placementId", res);
+      if (placementId === null) return;
       const result = await checkPlacementCollisionService(
-        req.params["sessionId"]!,
-        req.params["placementId"]!,
+        sessionId,
+        placementId,
         tenantId,
       );
       res.json(result);
@@ -113,13 +111,14 @@ router.post(
 
 // ── POST /ai/collision/check — stateless pure geometry endpoint ───────────────
 // No DB access. Caller provides all geometry inline.
+// Limit enforced by wp03StatelessCheckSchema (.max(MAX_PLACEMENTS_PER_COLLISION_SESSION)).
 
 router.post("/ai/collision/check", async (req, res) => {
   try {
     // tenantId required even for stateless check (auth layer must be authenticated)
     getTenantId(req);
 
-    const parsed = statelessCheckSchema.safeParse(req.body);
+    const parsed = wp03StatelessCheckSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid request", details: parsed.error.issues } });
       return;
