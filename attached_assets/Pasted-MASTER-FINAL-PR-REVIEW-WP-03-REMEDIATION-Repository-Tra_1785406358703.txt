@@ -1,0 +1,211 @@
+MASTER FINAL PR REVIEW — WP-03 REMEDIATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target PR:
+PR #3
+
+Branch:
+fix/wp03-release-remediation
+
+Base:
+main
+
+Objective:
+
+Lakukan FINAL REVIEW terhadap Pull Request sebelum merge.
+
+READ ONLY.
+
+JANGAN mengubah kode.
+
+JANGAN amend commit.
+
+JANGAN squash.
+
+JANGAN merge.
+
+JANGAN push.
+
+==================================================
+PHASE 1 — PR VALIDATION
+==================================================
+
+Verifikasi:
+
+- PR masih terbuka
+- base = main
+- head = fix/wp03-release-remediation
+- tidak ada merge conflict
+- branch up-to-date dengan main
+
+Laporkan:
+
+- PR number
+- title
+- author
+- commit count
+- files changed
+- additions
+- deletions
+
+==================================================
+PHASE 2 — REVIEW SEMUA COMMIT
+==================================================
+
+Audit seluruh commit di PR.
+
+Untuk setiap commit tampilkan:
+
+- SHA
+- message
+- jumlah file
+- scope
+
+Pastikan commit hanya berisi:
+
+- WP-03 remediation
+- api-zod migration
+- UUID validation
+- placement limit
+- dead code cleanup
+- regression test fixes
+
+Flag bila ada:
+
+- task prompt
+- audit report
+- attached_assets
+- screenshot
+- txt prompt
+- markdown audit internal
+- experimental file
+- temporary file
+- debug file
+
+==================================================
+PHASE 3 — DOCUMENTATION REVIEW
+==================================================
+
+Audit 2 commit dokumentasi yang otomatis dibuat Replit.
+
+Untuk masing-masing:
+
+laporkan:
+
+- file apa saja
+- isi singkat
+- apakah memang dokumentasi produk
+- apakah hanya catatan internal
+- apakah sebaiknya ikut merge
+- apakah sebaiknya dipindahkan ke branch lain
+
+Jika berisi:
+
+- prompt ChatGPT
+- audit internal
+- notes development
+- task log
+
+beri status:
+
+REMOVE BEFORE MERGE
+
+==================================================
+PHASE 4 — CODE REVIEW
+==================================================
+
+Pastikan remediation hanya mencakup:
+
+- api-zod shared schema
+- UUID validation
+- placement limit
+- dead code cleanup
+- regression tests
+
+Pastikan tidak ada perubahan pada:
+
+- algoritma SAT
+- algoritma OBB
+- algoritma AABB
+- collision math
+- tenant isolation
+- placement engine behavior
+
+==================================================
+PHASE 5 — SECURITY REVIEW
+==================================================
+
+Pastikan:
+
+- tidak ada credential
+- tidak ada token
+- tidak ada API key
+- tidak ada hardcoded password
+- tidak ada console.log debug
+- tidak ada temporary bypass
+- tidak ada TODO baru
+
+==================================================
+PHASE 6 — TEST REVIEW
+==================================================
+
+Verifikasi ulang:
+
+WP-03 tests
+
+6046/6046 PASS
+
+Pastikan:
+
+- tidak ada skipped test
+- tidak ada todo test
+- tidak ada weakened expectation
+- regression masih valid
+
+==================================================
+PHASE 7 — MERGE READINESS
+==================================================
+
+Jawab:
+
+Apakah PR ini aman di-merge?
+
+Apakah ada file yang sebaiknya dikeluarkan?
+
+Apakah ada commit yang sebaiknya di-drop?
+
+Apakah documentation commit layak ikut merge?
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan tepat satu verdict:
+
+A.
+READY FOR MERGE
+
+B.
+READY FOR MERGE AFTER REMOVING DOCUMENTATION COMMITS
+
+C.
+READY FOR MERGE AFTER REMOVING SPECIFIC FILES
+
+D.
+NOT READY FOR MERGE
+
+Jika verdict A:
+
+berikan instruksi:
+
+"WP-03C MAY BEGIN AFTER THIS PR IS MERGED."
+
+Jika verdict B/C:
+
+jelaskan file atau commit yang harus dibersihkan terlebih dahulu.
+
+Jangan melakukan merge.
+Jangan mengubah branch.
+Berhenti setelah laporan selesai.
