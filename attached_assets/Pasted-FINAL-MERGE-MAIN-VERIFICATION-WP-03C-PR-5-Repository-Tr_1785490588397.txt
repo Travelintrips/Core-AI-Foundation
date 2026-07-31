@@ -1,0 +1,250 @@
+FINAL MERGE + MAIN VERIFICATION — WP-03C PR #5
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Pull Request:
+#5
+
+Base:
+main
+
+Head:
+feature/wp03c-layout-composer-clean
+
+Current verified state:
+
+- PR #5 open
+- mergeable clean
+- 1 commit
+- 2 documentation files
+- no accidental artifacts
+- source remediation already present on main
+- typecheck PASS
+- API build PASS
+- regression 6056/6056 PASS
+- old WP-03C PR has been manually closed
+
+MISSION:
+
+1. Verify old PR is closed.
+2. Merge PR #5.
+3. Verify remote main.
+4. Run post-merge validation.
+5. Do not begin WP-04.
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+
+- merge the old PR
+- modify WP-03C source code
+- add commits to PR #5
+- introduce OBB/SAT support
+- change public APIs
+- start WP-04
+- declare success without remote SHA verification
+
+==================================================
+PHASE 1 — VERIFY BOTH PRS
+==================================================
+
+Verify PR #5:
+
+- state = open
+- base = main
+- head = feature/wp03c-layout-composer-clean
+- mergeable = clean
+- commit count = 1
+- changed files = 2
+- no accidental artifacts
+- no failed required checks
+
+Verify old PR with head:
+
+feature/12-layout-composer
+
+Required:
+
+- state = closed
+- merged = false
+
+If old PR is still open:
+STOP and report.
+
+==================================================
+PHASE 2 — MERGE PR #5
+==================================================
+
+Merge PR #5 using the repository's standard merge policy.
+
+Preferred:
+
+- standard merge commit if consistent with repository history
+- do not squash unless repository policy requires it
+- do not rebase-and-merge unless repository policy requires it
+
+Record:
+
+- merge method
+- merge commit SHA
+- merged_at
+- merged_by
+
+==================================================
+PHASE 3 — SYNC MAIN
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+
+Required:
+
+- branch = main
+- working tree clean
+- local SHA = remote main SHA
+
+==================================================
+PHASE 4 — VERIFY WP-03C FINAL STATE
+==================================================
+
+Confirm on main:
+
+1. collisionAdapter.ts exists.
+
+2. collisionAdapter.ts imports:
+   - generateAABB
+   - aabbOverlap
+   from canonical WP-03B.
+
+3. collisionDetection.ts delegates overlap checks through the adapter.
+
+4. No duplicate inline AABB algorithm exists in layout-composer.
+
+5. Manifest contains:
+   knownLimitations.rotation.status =
+   "axis-aligned-push-only"
+
+6. OpenAPI accurately documents:
+   - rotation-aware AABB bounds;
+   - axis-aligned push vectors;
+   - full OBB/SAT deferred.
+
+7. Delegation and rotation limitation tests exist.
+
+==================================================
+PHASE 5 — POST-MERGE VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Expected baseline:
+
+- typecheck PASS
+- API build PASS
+- 6056/6056 tests PASS
+- 206 test files
+- 0 skipped
+- 0 todo
+
+If test count changes because main has newer work:
+report actual totals and explain the difference.
+
+Do not modify tests to force a pass.
+
+==================================================
+PHASE 6 — REMOTE VERIFICATION
+==================================================
+
+Run:
+
+git rev-parse HEAD
+git rev-parse origin/main
+git ls-remote --heads origin main
+
+All main SHAs must be consistent.
+
+Verify PR #5:
+
+- state = merged
+- merged = true
+- merge commit recorded
+
+Verify no accidental files entered main.
+
+==================================================
+PHASE 7 — BRANCH CLEANUP
+==================================================
+
+Do not delete branches until all verification passes.
+
+After all phases PASS:
+
+- remote branch feature/wp03c-layout-composer-clean may be deleted according to repository policy;
+- old branch feature/12-layout-composer may also be deleted if its PR is closed and no recovery value remains.
+
+Branch deletion is optional.
+
+Do not delete main or any unrelated branch.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Old PR state
+2. PR #5 final state
+3. Merge method
+4. Merge commit SHA
+5. Local main SHA
+6. Remote main SHA
+7. SHA match
+8. Collision delegation verified
+9. Duplicate AABB logic found
+10. Rotation limitation present
+11. Manifest valid
+12. OpenAPI valid
+13. Typecheck
+14. API build
+15. Regression result
+16. Accidental files found
+17. WP-03C final status
+18. Ready to begin next work package
+
+Use exactly one verdict:
+
+A.
+WP-03C MERGED AND VERIFIED — COMPLETE
+
+B.
+PR #5 MERGED — POST-MERGE VALIDATION FAILED
+
+C.
+OLD PR STILL OPEN
+
+D.
+PR #5 MERGE FAILED
+
+E.
+MAIN VERIFICATION FAILED
+
+STOP.
+
+Do not begin WP-04.
