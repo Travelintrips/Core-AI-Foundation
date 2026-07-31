@@ -1,0 +1,570 @@
+MASTER IMPLEMENTATION — WP-04A LAYOUT COMPOSER OBB/SAT ADAPTER
+FRESH IMPLEMENTATION FROM VERIFIED REPOSITORY STATE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+IMPORTANT CORRECTION:
+
+Previous reports claiming that WP-04A had already been implemented
+were not supported by Git evidence.
+
+The following items do NOT exist in this repository:
+
+- feature/wp04a-layout-obb-sat-adapter
+- commit 16b65e1e48a86a65803370b96621a0bfd34556ac
+- obbSatAdapter.test.ts
+- previously claimed 46 WP-04A tests
+
+Do not attempt further recovery.
+
+WP-04A must now be implemented as a new work package.
+
+==================================================
+VERIFIED FOUNDATIONS
+==================================================
+
+WP-03B geometry and collision engine:
+
+Relevant commit:
+769c4c4
+
+Canonical capabilities already available:
+
+- generateAABB
+- generateOBB
+- aabbOverlap
+- satTest
+- canonical geometry/vector types
+- canonical rotation convention
+
+WP-03C Layout Composer adapter precursor:
+
+Relevant commit:
+c537262
+
+Known behavior:
+
+- collisionAdapter.ts exists
+- currently AABB-based
+- explicitly defers OBB/SAT support to a future WP
+- must remain backward-compatible
+
+==================================================
+MISSION
+==================================================
+
+Implement WP-04A:
+
+Layout Composer OBB/SAT Collision Adapter
+
+The task must:
+
+1. Upgrade Layout Composer collision detection from AABB-only
+   narrow-phase behavior to:
+
+   - rotation-aware AABB broad phase
+   - canonical OBB generation
+   - canonical SAT narrow phase
+
+2. Reuse WP-03B functions.
+
+3. Preserve WP-03C public behavior for zero rotation.
+
+4. Preserve existing overlapExtent consumers.
+
+5. Add a typed collision result.
+
+6. Add complete targeted tests.
+
+7. Stop before WP-04B.
+
+WP-04B will handle the full iterative rotation-aware push resolver.
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+
+- duplicate SAT logic
+- duplicate OBB generation
+- implement a second geometry engine
+- replace WP-03B functions
+- remove overlapExtent
+- break existing APIs
+- modify database schema
+- create migrations
+- modify tenant/security code
+- implement Lighting Library
+- implement Tenant Hardening
+- begin WP-04B
+- commit attached_assets
+- commit uploaded prompt files
+- commit generated reports
+- invent test totals before execution
+
+==================================================
+PHASE 1 — VERIFY REPOSITORY AND BASELINE
+==================================================
+
+Run:
+
+pwd
+git rev-parse --show-toplevel
+git remote -v
+git fetch origin
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+
+Required:
+
+- repository is Travelintrips/Core-AI-Foundation
+- branch is main
+- local SHA equals origin/main
+- no tracked uncommitted changes
+
+Untracked uploaded prompt files must not be committed.
+
+Record the actual baseline SHA.
+
+==================================================
+PHASE 2 — VERIFY REQUIRED FOUNDATION EXISTS
+==================================================
+
+Locate:
+
+- collisionAdapter.ts
+- generateAABB
+- generateOBB
+- aabbOverlap
+- satTest
+- overlapExtent consumers
+
+Use repository search rather than assuming paths.
+
+Document actual signatures and locations.
+
+Verify whether commits:
+
+- 769c4c4
+- c537262
+
+are already ancestors of main.
+
+Run:
+
+git merge-base --is-ancestor 769c4c4 origin/main
+git merge-base --is-ancestor c537262 origin/main
+
+If either required foundation is not on main:
+
+STOP.
+
+Report the missing foundation and do not cherry-pick automatically.
+
+==================================================
+PHASE 3 — CREATE BRANCH
+==================================================
+
+Create from verified origin/main:
+
+feature/wp04a-layout-obb-sat-adapter
+
+Verify:
+
+git branch --show-current
+git status --short
+
+==================================================
+PHASE 4 — AUDIT ACTUAL GEOMETRY CONTRACTS
+==================================================
+
+Inspect the canonical WP-03B implementation.
+
+Document:
+
+- rectangle input type
+- coordinate origin
+- center versus top-left convention
+- width and height semantics
+- rotation unit
+- rotation direction
+- angle normalization
+- AABB result shape
+- OBB result shape
+- SAT result shape
+- collision normal direction
+- penetration depth semantics
+- touching-edge semantics
+- degenerate geometry policy
+- clearance support
+
+Do not assume degrees or radians.
+
+Do not assume SAT already returns a minimum translation vector.
+
+If canonical SAT does not expose enough information to derive
+a push vector without recreating SAT logic:
+
+STOP with:
+
+WP-03B API INSUFFICIENT — OWNER DECISION REQUIRED
+
+==================================================
+PHASE 5 — OWNER DECISIONS
+==================================================
+
+Use these decisions exactly:
+
+1. Internal unit:
+   pixels.
+
+2. Physical-unit conversion:
+   only at external boundaries.
+
+3. Push-vector convention:
+
+   resolvedPositionA =
+     originalPositionA + minimumTranslationVector
+
+4. Broad phase:
+   rotation-aware AABB.
+
+5. Narrow phase:
+   canonical OBB + SAT.
+
+6. Clearance:
+   expands collision envelope only.
+
+7. Visual width and height:
+   never mutated by clearance.
+
+8. Backward compatibility:
+   overlapExtent remains supported.
+
+9. Legacy removal:
+   not permitted in WP-04A.
+
+10. Iterative resolver:
+    belongs to WP-04B.
+
+==================================================
+PHASE 6 — DESIGN ADAPTER RESULT
+==================================================
+
+Create or extend a typed Layout Composer collision result.
+
+It must represent the repository-equivalent of:
+
+- collides
+- broadPhasePassed
+- algorithm
+- rotationAware
+- penetrationDepth
+- collisionNormal
+- minimumTranslationVector
+- legacyOverlapExtent
+
+Use existing naming conventions where equivalent fields already exist.
+
+Requirements:
+
+- deterministic
+- finite numeric output
+- no NaN
+- no Infinity
+- no input mutation
+- no public breaking change
+
+Any new public-facing fields must be optional unless the response
+is internal-only.
+
+==================================================
+PHASE 7 — IMPLEMENT BROAD PHASE
+==================================================
+
+For objects A and B:
+
+1. Validate finite geometry input.
+2. Preserve original rendering dimensions.
+3. Build collision envelopes using clearance.
+4. Generate canonical rotation-aware AABBs.
+5. Run canonical aabbOverlap.
+6. If AABBs do not overlap:
+   return no collision.
+7. Do not call SAT after broad-phase miss.
+
+The implementation must make SAT skipping testable.
+
+==================================================
+PHASE 8 — IMPLEMENT OBB/SAT NARROW PHASE
+==================================================
+
+When broad phase overlaps:
+
+1. Generate canonical OBB for A.
+2. Generate canonical OBB for B.
+3. Call canonical satTest.
+4. Map the canonical SAT result into the adapter result.
+5. Derive the minimum translation vector only from canonical
+   SAT output.
+6. Preserve the push convention:
+
+   A.position + MTV
+
+7. Generate legacy overlapExtent compatibility output.
+
+Do not add private:
+
+- separating-axis loops
+- polygon projections
+- OBB corner algorithms
+- SAT normal calculations
+
+==================================================
+PHASE 9 — LEGACY COMPATIBILITY
+==================================================
+
+Audit every existing overlapExtent consumer.
+
+Verify:
+
+- overlapExtent still exists
+- existing required fields are unchanged
+- zero-rotation behavior remains equivalent
+- no route consumer breaks
+- no shared Zod schema breaks
+- no OpenAPI contract breaks
+- no consumer is forced to adopt SAT fields
+
+Where needed, add a compatibility mapper rather than altering
+existing consumer behavior.
+
+==================================================
+PHASE 10 — TARGETED TESTS
+==================================================
+
+Create:
+
+obbSatAdapter.test.ts
+
+or the repository-consistent equivalent path.
+
+Cover at minimum:
+
+1. AABB miss skips SAT.
+2. AABB hit runs SAT.
+3. Zero-rotation collision matches legacy behavior.
+4. Rotated rectangles collide.
+5. Rotated rectangles do not collide.
+6. Touching edges.
+7. Positive clearance creates envelope overlap.
+8. Clearance does not mutate visual dimensions.
+9. Negative clearance is rejected or normalized per policy.
+10. Non-finite input is rejected.
+11. Minimum translation vector uses A + vector.
+12. Reversing A and B yields consistent direction.
+13. Repeated calls are deterministic.
+14. Input objects remain unchanged.
+15. Very small rectangles.
+16. Very large rectangles.
+17. Rotation normalization.
+18. Legacy overlapExtent compatibility.
+19. Canonical WP-03B functions are delegated to.
+20. No SAT call on broad-phase miss.
+21. No duplicate SAT helper exists.
+22. No duplicate OBB helper exists.
+
+Do not manufacture an arbitrary test count.
+
+Report the actual number added.
+
+==================================================
+PHASE 11 — PERFORMANCE VALIDATION
+==================================================
+
+Create a bounded benchmark or non-flaky performance test.
+
+Scenario:
+
+- up to 500 elements
+- representative rotated and unrotated objects
+- finite pair count
+- no iterative WP-04B resolver
+- no unbounded recursion
+- no unbounded loops
+
+Measure:
+
+- total pairs
+- SAT calls
+- broad-phase skips
+- execution duration
+
+Do not make a fragile sub-second assertion part of the normal test suite.
+
+Report the actual measured duration.
+
+==================================================
+PHASE 12 — DUPLICATION AUDIT
+==================================================
+
+Search Layout Composer changes for:
+
+- projection code
+- separating axes
+- OBB corners
+- inline rotated AABB generation
+- polygon min/max helpers
+- duplicate normal calculations
+
+All geometry must delegate to WP-03B.
+
+Report any remaining duplicate logic.
+
+==================================================
+PHASE 13 — VALIDATION
+==================================================
+
+Run targeted tests first.
+
+Then run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Report actual results:
+
+- typecheck
+- build
+- test files
+- passed tests
+- failed tests
+- skipped tests
+- todo tests
+- duration
+
+Do not use previously claimed totals as expected truth.
+
+The new baseline must come from the actual run.
+
+==================================================
+PHASE 14 — DOCUMENTATION
+==================================================
+
+Update only directly related documentation.
+
+Document:
+
+- pixel unit
+- AABB broad phase
+- OBB/SAT narrow phase
+- canonical WP-03B delegation
+- clearance envelope
+- push-vector convention
+- overlapExtent compatibility
+- WP-04B still pending
+
+Do not claim all of WP-04 is complete.
+
+Do not commit the forensic or implementation prompt.
+
+==================================================
+PHASE 15 — GIT HYGIENE
+==================================================
+
+Review:
+
+git status --short
+git diff --name-status origin/main...HEAD
+git diff --stat origin/main...HEAD
+git log --oneline origin/main..HEAD
+
+Required:
+
+- no attached_assets
+- no prompt files
+- no Replit backup files
+- no generated output
+- no unrelated source changes
+
+Use small atomic commits, preferably:
+
+1.
+feat(layout-composer): add canonical OBB SAT collision adapter
+
+2.
+test(layout-composer): cover rotation-aware collision adapter
+
+3.
+docs(layout-composer): document WP-04A collision semantics
+
+Do not push.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Repository
+2. Branch
+3. Base SHA
+4. Head SHA
+5. Foundation commits on main
+6. Files changed
+7. Canonical functions reused
+8. Broad phase implemented
+9. SAT narrow phase implemented
+10. Rotation unit
+11. Pixel convention
+12. Clearance behavior
+13. Push-vector convention
+14. overlapExtent compatibility
+15. Public API changes
+16. Targeted test files
+17. Number of tests added
+18. Performance result
+19. Duplicate geometry found
+20. Typecheck
+21. Build
+22. Full regression total
+23. Failed/skipped/todo
+24. Accidental files
+25. Commits created
+26. Ready for RC audit
+
+Use exactly one verdict:
+
+A.
+WP-04A IMPLEMENTED — READY FOR RELEASE-CANDIDATE AUDIT
+
+B.
+WP-03B FOUNDATION NOT AVAILABLE ON MAIN
+
+C.
+WP-03B API INSUFFICIENT — OWNER DECISION REQUIRED
+
+D.
+BACKWARD COMPATIBILITY FAILED
+
+E.
+VALIDATION FAILED
+
+F.
+WP-04A IMPLEMENTATION FAILED
+
+STOP.
+
+Do not push.
+Do not create PR.
+Do not begin WP-04B.
