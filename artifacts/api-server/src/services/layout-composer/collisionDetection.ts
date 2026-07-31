@@ -6,18 +6,19 @@
 // collisionAdapter.ts. Do NOT add a second AABB implementation here.
 //
 // ── Known Limitations ────────────────────────────────────────
-// 1. Axis-aligned only: collision detection uses each element's
-//    axis-aligned bounding box (AABB). The `rotation` field on
-//    LayoutElement is stored but does NOT affect collision geometry.
-//    Two rotated elements are tested as if rotation = 0.
+// 1. Axis-aligned only: collision detection in this module uses each
+//    element's AABB. The `rotation` field on LayoutElement is stored
+//    but does NOT affect geometry here.
 //
 // 2. Consequence: a rotated element may appear to collide when
 //    its corners do not actually overlap, or may not collide when
-//    its rotated corners do. This is a known, documented gap.
+//    its rotated corners do.
 //
-// 3. Planned fix: full OBB (Oriented Bounding Box) support using
-//    WP-03B's SAT engine will be added in a future work package.
-//    WP-03B already provides `generateOBB` + `satTest` for this.
+// 3. Fix available: WP-04A adds full OBB/SAT support in
+//    obbSatAdapter.ts. Use obbSatCollide / obbSatCollideElements
+//    for rotation-aware detection.
+//    WP-03B delegation: generateAABB + generateOBB + satTest.
+//    WP-04B (iterative resolver) is still pending.
 // ============================================================
 
 import type { LayoutElement, CollisionPair, Rect } from "../../types/layout-composer/index.js";
