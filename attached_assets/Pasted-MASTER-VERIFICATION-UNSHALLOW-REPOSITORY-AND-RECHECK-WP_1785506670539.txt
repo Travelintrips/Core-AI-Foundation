@@ -1,0 +1,368 @@
+MASTER VERIFICATION — UNSHALLOW REPOSITORY AND RECHECK WP-04A
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Known target SHA:
+16b65e1e48a86a65803370b96621a0bfd34556ac
+
+Known expected files:
+- collisionAdapter.ts
+- obbSatAdapter.test.ts
+
+Known expected symbols:
+- legacyOverlapExtent
+- broadPhasePassed
+- minimumTranslationVector
+- generateOBB
+- satTest
+
+MISSION:
+
+Convert the current shallow clone into a full-history clone if possible,
+then repeat the WP-04A forensic search against the complete repository history.
+
+Do not modify source code.
+Do not create a branch.
+Do not commit.
+Do not push.
+Do not reimplement WP-04A.
+Do not touch feature/team-b/wp04-wp05.
+
+==================================================
+PHASE 1 — VERIFY CURRENT REPOSITORY STATE
+==================================================
+
+Run:
+
+pwd
+git rev-parse --show-toplevel
+git remote -v
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse --is-shallow-repository
+
+Report:
+
+- repository root
+- origin URL
+- current branch
+- current HEAD
+- whether repository is shallow
+- tracked and untracked working-tree files
+
+If tracked changes exist:
+
+STOP and report them.
+
+Do not stash automatically.
+
+==================================================
+PHASE 2 — RECORD CURRENT REFERENCES
+==================================================
+
+Before fetching, run:
+
+git branch -a
+git tag --list
+git show-ref
+git count-objects -v
+
+Record:
+
+- branch count
+- tag count
+- current refs
+- object database size
+
+This is evidence for before/after comparison.
+
+==================================================
+PHASE 3 — ATTEMPT FULL-HISTORY FETCH
+==================================================
+
+If:
+
+git rev-parse --is-shallow-repository
+
+returns:
+
+true
+
+run:
+
+git fetch --unshallow origin --tags --prune
+
+If that command fails, record the exact error and try:
+
+git fetch origin \
+  --depth=1000000 \
+  --tags \
+  --prune
+
+Then run:
+
+git fetch --all --tags --prune
+
+Do not reset, merge, rebase, or switch branches.
+
+If authentication fails:
+
+STOP and report the exact authentication error.
+
+Do not claim that full history was fetched.
+
+==================================================
+PHASE 4 — VERIFY UNSHALLOW RESULT
+==================================================
+
+Run:
+
+git rev-parse --is-shallow-repository
+git count-objects -v
+git branch -a
+git tag --list
+git log --all --oneline --decorate -n 30
+
+Required for successful unshallow:
+
+git rev-parse --is-shallow-repository
+
+must return:
+
+false
+
+If it still returns true:
+
+report:
+
+FULL HISTORY FETCH FAILED
+
+and do not continue to implementation.
+
+==================================================
+PHASE 5 — CHECK EXACT WP-04A SHA
+==================================================
+
+Run:
+
+git cat-file -t \
+  16b65e1e48a86a65803370b96621a0bfd34556ac
+
+If found, run:
+
+git show --stat --oneline \
+  16b65e1e48a86a65803370b96621a0bfd34556ac
+
+git show --name-status \
+  16b65e1e48a86a65803370b96621a0bfd34556ac
+
+git branch -a --contains \
+  16b65e1e48a86a65803370b96621a0bfd34556ac
+
+git tag --contains \
+  16b65e1e48a86a65803370b96621a0bfd34556ac
+
+Report:
+
+- object found
+- object type
+- commit message
+- changed files
+- containing branches or tags
+
+Do not create a recovery branch yet.
+
+==================================================
+PHASE 6 — SEARCH FULL HISTORY FOR WP-04A CONTENT
+==================================================
+
+Run:
+
+git log --all \
+  -S"legacyOverlapExtent" \
+  --oneline \
+  --decorate
+
+git log --all \
+  -S"broadPhasePassed" \
+  --oneline \
+  --decorate
+
+git log --all \
+  -S"minimumTranslationVector" \
+  --oneline \
+  --decorate
+
+git log --all \
+  -S"obbSatAdapter" \
+  --oneline \
+  --decorate
+
+git log --all \
+  -S"generateOBB" \
+  --oneline \
+  --decorate \
+  -- artifacts/api-server/src/services/layout-composer
+
+git log --all \
+  -S"satTest" \
+  --oneline \
+  --decorate \
+  -- artifacts/api-server/src/services/layout-composer
+
+Also run:
+
+git log --all \
+  --name-only \
+  --pretty=format:"COMMIT %H %s" \
+  | grep -Ei \
+  "collisionAdapter\.ts|obbSatAdapter\.test\.ts|wp04a|obb-sat"
+
+Report all candidate SHAs.
+
+==================================================
+PHASE 7 — SEARCH ALL BRANCHES AND TAGS
+==================================================
+
+Search names:
+
+git branch -a | grep -Ei \
+"wp04a|obb-sat|layout-obb|collision"
+
+git tag --list | grep -Ei \
+"wp04a|obb-sat|layout-obb|collision"
+
+For every candidate branch:
+
+- report branch name
+- report head SHA
+- do not switch to it yet
+
+==================================================
+PHASE 8 — VERIFY CANDIDATE COMMITS
+==================================================
+
+For every plausible candidate SHA, inspect:
+
+git show --stat <SHA>
+git show --name-status <SHA>
+git grep -n "generateOBB" <SHA>
+git grep -n "satTest" <SHA>
+git grep -n "legacyOverlapExtent" <SHA>
+git grep -n "broadPhasePassed" <SHA>
+git grep -n "minimumTranslationVector" <SHA>
+
+A valid WP-04A candidate must contain:
+
+1. Layout Composer collision adapter changes.
+2. Canonical generateOBB usage.
+3. Canonical satTest usage.
+4. Rotation-aware broad-phase or narrow-phase logic.
+5. Legacy overlapExtent compatibility or equivalent.
+6. Targeted OBB/SAT tests.
+
+Reject:
+
+- prompt files
+- discovery documents
+- WP-03B-only engine commits
+- WP-03C AABB-only adapter commits
+- unrelated Team B WP-04/WP-05 work
+
+==================================================
+PHASE 9 — VERIFY FILE HISTORY
+==================================================
+
+Run:
+
+git log --all --follow -- \
+  artifacts/api-server/src/services/layout-composer/collisionAdapter.ts
+
+Search for the test file in all history:
+
+git log --all --name-only --pretty=format: \
+  | grep "obbSatAdapter.test.ts"
+
+Also inspect likely test directories:
+
+find artifacts/api-server/src \
+  -type f \
+  | grep -Ei \
+  "obb.*sat.*test|collision.*adapter.*test"
+
+Report:
+
+- collisionAdapter.ts history
+- whether obbSatAdapter.test.ts ever existed
+- closest matching test files
+
+==================================================
+PHASE 10 — DECISION
+==================================================
+
+Use the following logic:
+
+A. If the exact SHA or a verified WP-04A candidate is found:
+   report it and stop.
+   Do not recover or cherry-pick yet.
+
+B. If full history is available but no WP-04A candidate exists:
+   conclude that WP-04A was not pushed to this repository.
+
+C. If the repository remains shallow:
+   do not conclude that WP-04A never existed.
+   report full-history fetch failure.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Repository
+2. Current branch
+3. Initial shallow status
+4. Unshallow command used
+5. Unshallow result
+6. Final shallow status
+7. Initial object count
+8. Final object count
+9. Exact SHA found
+10. Exact SHA type
+11. Candidate branches
+12. Candidate tags
+13. Content-search candidate SHAs
+14. collisionAdapter.ts history
+15. obbSatAdapter.test.ts history
+16. Verified WP-04A candidate
+17. WP-03B-only candidates
+18. WP-03C-only candidates
+19. Authentication or fetch errors
+20. Recommended next action
+
+Use exactly one verdict:
+
+A.
+WP-04A FOUND IN FULL HISTORY — RECOVERY POSSIBLE
+
+B.
+FULL HISTORY VERIFIED — WP-04A WAS NOT PUSHED TO THIS REPOSITORY
+
+C.
+REPOSITORY REMAINS SHALLOW — VERIFICATION INCOMPLETE
+
+D.
+FULL-HISTORY FETCH FAILED DUE TO AUTHENTICATION
+
+E.
+CANDIDATE FOUND BUT VERIFICATION INCONCLUSIVE
+
+STOP.
+
+Do not modify code.
+Do not create branches.
+Do not commit.
+Do not push.
+Do not reimplement WP-04A.
