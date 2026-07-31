@@ -1,0 +1,178 @@
+FORENSIC RECOVERY ONLY — DO NOT SEARCH BRANCH NAME AGAIN
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Known lost WP-04A SHA:
+16b65e1e48a86a65803370b96621a0bfd34556ac
+
+Known files:
+- collisionAdapter.ts
+- obbSatAdapter.test.ts
+
+IMPORTANT:
+
+The branch-name search was already completed and failed.
+
+DO NOT repeat:
+
+git branch -a | grep ...
+git fetch --all --prune
+branch existence checks
+
+This task is now forensic commit and workspace recovery.
+
+Do not modify any branch.
+Do not commit.
+Do not push.
+Do not reimplement WP-04A.
+
+==================================================
+STEP 1 — CHECK EXACT COMMIT OBJECT
+==================================================
+
+Run exactly:
+
+git cat-file -t 16b65e1e48a86a65803370b96621a0bfd34556ac
+
+If it returns "commit", immediately run:
+
+git show --stat --oneline 16b65e1e48a86a65803370b96621a0bfd34556ac
+git show --name-status 16b65e1e48a86a65803370b96621a0bfd34556ac
+git branch -a --contains 16b65e1e48a86a65803370b96621a0bfd34556ac
+
+Report the result before continuing.
+
+==================================================
+STEP 2 — SEARCH REFLOG
+==================================================
+
+Run:
+
+git reflog --all --date=iso | grep -Ei \
+"16b65e1|wp04a|obb|sat|collision"
+
+Also run:
+
+git log -g --all --oneline --decorate | grep -Ei \
+"16b65e1|wp04a|obb|sat|collision"
+
+Report all candidate SHAs.
+
+==================================================
+STEP 3 — SEARCH UNREACHABLE COMMITS
+==================================================
+
+Run:
+
+git fsck --full --no-reflogs --unreachable --lost-found
+
+For every unreachable or dangling commit returned, inspect only candidates
+that contain any of:
+
+- collisionAdapter.ts
+- obbSatAdapter.test.ts
+- legacyOverlapExtent
+- broadPhasePassed
+- minimumTranslationVector
+- generateOBB
+- satTest
+
+Use:
+
+git show --name-only <SHA>
+git grep -n "legacyOverlapExtent" <SHA>
+git grep -n "broadPhasePassed" <SHA>
+git grep -n "obbSatAdapter" <SHA>
+
+Do not inspect unrelated commits deeply.
+
+==================================================
+STEP 4 — SEARCH ALL GIT OBJECTS BY CONTENT
+==================================================
+
+Run:
+
+git log --all -S"legacyOverlapExtent" --oneline
+git log --all -S"broadPhasePassed" --oneline
+git log --all -S"minimumTranslationVector" --oneline
+git log --all -S"obbSatAdapter" --oneline
+git log --all -S"generateOBB" --oneline -- \
+  artifacts/api-server/src/services/layout-composer
+
+Report candidate commits.
+
+==================================================
+STEP 5 — SEARCH LOCAL WORKSPACES
+==================================================
+
+Run:
+
+find /home/runner /home/oai /workspace \
+  -type f \
+  \( -name "collisionAdapter.ts" -o -name "obbSatAdapter.test.ts" \) \
+  2>/dev/null
+
+For every result, report:
+
+- full path
+- nearest git root
+- git remote -v
+- current branch
+- git status --short
+
+Do not modify those workspaces.
+
+==================================================
+STEP 6 — SEARCH STASH, WORKTREE, AND BACKUP REFS
+==================================================
+
+Run:
+
+git stash list
+git worktree list
+git show-ref | grep -Ei \
+"backup|checkpoint|replit|gitsafe|wp04a|obb|sat|collision"
+
+Report all matching refs and SHAs.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Report:
+
+1. Exact SHA object found: YES/NO
+2. Exact SHA type
+3. Reflog candidates
+4. Dangling/unreachable candidates
+5. Content-search candidates
+6. Other workspace paths
+7. Stash/worktree/backup refs
+8. Best recovery candidate SHA
+9. Whether both required files were verified
+10. Recommended recovery action
+
+Use exactly one verdict:
+
+A.
+EXACT WP-04A COMMIT FOUND
+
+B.
+WP-04A FOUND IN REFLOG OR DANGLING OBJECTS
+
+C.
+WP-04A FOUND IN ANOTHER WORKSPACE
+
+D.
+PARTIAL WP-04A EVIDENCE FOUND
+
+E.
+NO WP-04A EVIDENCE FOUND — REIMPLEMENTATION MAY BE REQUIRED
+
+STOP.
+
+Do not create a branch.
+Do not modify files.
+Do not push.
+Do not reimplement.
