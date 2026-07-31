@@ -1,0 +1,358 @@
+MASTER PLANNING TASK — WP-04 DISCOVERY, SCOPE, AND IMPLEMENTATION PLAN
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current baseline:
+
+- WP-03A complete
+- WP-03B complete
+- WP-03C complete
+- WP-03C merged and verified on main
+- main SHA:
+  7f4e3b4adbce27c2d62006efa91c30aaa3e93fa3
+- regression baseline:
+  6056/6056 tests PASS
+- API build PASS
+- typecheck PASS
+
+MISSION:
+
+Perform a complete read-only discovery and planning audit for WP-04.
+
+Do not implement WP-04 yet.
+
+The goal is to determine:
+
+1. What WP-04 is supposed to deliver.
+2. Which existing modules it depends on.
+3. Whether requirements already exist in repository documents.
+4. What code, API, schema, tests, and integrations would be affected.
+5. How to divide the work safely into isolated sub-work-packages.
+6. What must be validated before implementation begins.
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+
+- modify source code
+- modify tests
+- create migrations
+- create implementation branches
+- change OpenAPI
+- change manifests
+- change database schema
+- push commits
+- create PR
+- start implementation
+- infer requirements without evidence
+
+This is READ-ONLY discovery.
+
+==================================================
+PHASE 1 — VERIFY BASELINE
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+
+Required:
+
+- branch = main
+- working tree clean
+- local SHA = origin/main
+- SHA =
+  7f4e3b4adbce27c2d62006efa91c30aaa3e93fa3
+
+If main has moved forward legitimately:
+report the actual SHA and explain.
+
+==================================================
+PHASE 2 — FIND WP-04 REQUIREMENTS
+==================================================
+
+Search the entire repository for:
+
+- WP-04
+- WP04
+- Work Package 04
+- Phase 4
+- phase-4
+- next work package
+- OBB
+- SAT
+- rotation
+- layout composer
+- collision engine
+- spatial engine
+- placement engine
+- geometry engine
+- roadmap
+- backlog
+- milestone
+
+Inspect:
+
+- README files
+- docs
+- integration manifests
+- OpenAPI files
+- architecture documents
+- task specifications
+- ADRs
+- roadmap files
+- package manifests
+- test plans
+- comments in WP-03 modules
+
+Report every authoritative reference found.
+
+For each reference include:
+
+- file path
+- relevant section
+- exact stated requirement
+- whether it is authoritative, provisional, or ambiguous
+
+Do not treat uploaded prompt artifacts or attached_assets as authoritative requirements.
+
+==================================================
+PHASE 3 — AUDIT CURRENT ARCHITECTURE
+==================================================
+
+Map the current implementation of:
+
+- WP-03A
+- WP-03B
+- WP-03C
+
+Identify:
+
+- public APIs
+- internal service boundaries
+- type definitions
+- Zod schemas
+- adapters
+- geometry primitives
+- collision functions
+- layout-composer flow
+- OpenAPI routes
+- manifest ownership
+- tests
+- known limitations
+
+Specifically verify:
+
+- canonical AABB implementation
+- collisionAdapter boundary
+- rotation handling
+- axis-aligned push limitation
+- any deferred OBB/SAT references
+- any TODO/FIXME related to WP-04
+
+==================================================
+PHASE 4 — DETERMINE WP-04 SCOPE
+==================================================
+
+Based only on repository evidence, classify WP-04 as one of:
+
+A. Clearly defined
+B. Partially defined
+C. Not defined
+D. Conflicting definitions exist
+
+If clearly or partially defined, produce:
+
+- objective
+- in-scope features
+- out-of-scope features
+- dependencies
+- API impact
+- schema impact
+- database impact
+- backward-compatibility constraints
+- performance constraints
+- security constraints
+- deterministic behavior requirements
+- test requirements
+
+If not defined:
+do not invent WP-04.
+Report which decisions must be supplied by the owner.
+
+==================================================
+PHASE 5 — GAP ANALYSIS
+==================================================
+
+Compare the expected WP-04 scope against current main.
+
+For each requirement classify:
+
+- already implemented
+- partially implemented
+- missing
+- blocked
+- ambiguous
+
+Identify risks such as:
+
+- duplicate geometry logic
+- public API breakage
+- rotation semantics mismatch
+- AABB versus OBB inconsistency
+- nondeterministic placement
+- unbounded computation
+- performance regression
+- test coverage gaps
+- OpenAPI mismatch
+- manifest mismatch
+- cross-team ownership conflict
+
+==================================================
+PHASE 6 — PROPOSE SAFE WORK BREAKDOWN
+==================================================
+
+Create a proposed implementation sequence.
+
+Use isolated work packages such as:
+
+- WP-04A
+- WP-04B
+- WP-04C
+
+Only create these names if justified by the scope.
+
+For each proposed sub-package provide:
+
+- objective
+- owned files/directories
+- prohibited files
+- dependencies
+- expected outputs
+- required tests
+- merge order
+- conflict risk
+- acceptance criteria
+
+The plan must prevent two teams from editing the same files simultaneously.
+
+==================================================
+PHASE 7 — BRANCHING AND MERGE STRATEGY
+==================================================
+
+Recommend:
+
+- base branch
+- feature branch names
+- commit boundaries
+- PR order
+- integration branch if needed
+- required pre-merge gates
+- rollback strategy
+
+Do not create branches yet.
+
+==================================================
+PHASE 8 — VALIDATION PLAN
+==================================================
+
+Define exact validation commands for future implementation.
+
+At minimum include:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Also identify targeted tests needed for WP-04.
+
+Define expected regression baseline:
+
+6056/6056 tests PASS
+
+If main has changed, report the new baseline.
+
+==================================================
+PHASE 9 — FINAL DISCOVERY REPORT
+==================================================
+
+Create:
+
+WP04_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+The report must contain:
+
+1. Baseline SHA
+2. Sources inspected
+3. Authoritative WP-04 references
+4. Scope classification
+5. Proposed objective
+6. In scope
+7. Out of scope
+8. Current architecture map
+9. Gap analysis
+10. Risks
+11. Proposed work breakdown
+12. File ownership matrix
+13. Branch strategy
+14. Merge order
+15. Test strategy
+16. Acceptance criteria
+17. Open questions
+18. Go/no-go recommendation
+
+Do not commit the report unless explicitly instructed.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Report:
+
+1. Baseline branch
+2. Baseline SHA
+3. Working tree status
+4. WP-04 references found
+5. Scope classification
+6. Main objective
+7. Number of proposed sub-work-packages
+8. Highest risks
+9. Open decisions required
+10. Recommended next action
+11. Report path
+
+Use exactly one verdict:
+
+A.
+WP-04 DEFINED — READY FOR IMPLEMENTATION PROMPT
+
+B.
+WP-04 PARTIALLY DEFINED — OWNER DECISIONS REQUIRED
+
+C.
+WP-04 NOT DEFINED — DO NOT IMPLEMENT
+
+D.
+WP-04 REQUIREMENTS CONFLICT — RESOLUTION REQUIRED
+
+E.
+DISCOVERY FAILED
+
+STOP.
+
+Do not implement WP-04.
+Do not create a branch.
+Do not push.
+Do not create a PR.
