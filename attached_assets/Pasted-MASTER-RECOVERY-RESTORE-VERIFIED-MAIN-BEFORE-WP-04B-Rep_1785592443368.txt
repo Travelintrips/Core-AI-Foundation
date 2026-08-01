@@ -1,0 +1,313 @@
+MASTER RECOVERY — RESTORE VERIFIED MAIN BEFORE WP-04B
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Known verified merge history:
+
+WP-03C merge commit:
+7f4e3b4adbce27c2d62006efa91c30aaa3e93fa3
+
+WP-04A merge commit:
+922ff765cd851b93c878d5158f2210ea2dd63bc4
+
+Known verified regression after WP-04A:
+6087/6087 PASS
+
+IMPORTANT:
+
+The current workspace reports only 6005 tests and missing WP-03C/WP-04A files.
+This indicates a stale or shallow checkout.
+
+Do NOT:
+
+- reimplement WP-03C
+- reimplement WP-04A
+- begin WP-04B rebuild
+- trust the current local main as authoritative
+- create branches
+- commit files
+- push
+- modify source code
+
+MISSION:
+
+Verify the actual GitHub remote main, restore the workspace to the verified
+remote baseline, then determine whether WP-04B can be recovered.
+
+==================================================
+PHASE 1 — VERIFY TOKEN SECURELY
+==================================================
+
+Run:
+
+test -n "$GITHUB_TOKEN" \
+  && echo "GITHUB_TOKEN_AVAILABLE" \
+  || echo "GITHUB_TOKEN_MISSING"
+
+Do not print the token.
+
+If missing:
+STOP.
+
+==================================================
+PHASE 2 — TEMPORARY GIT AUTH
+==================================================
+
+Create a temporary askpass script outside the repository:
+
+AUTH_SCRIPT="$(mktemp)"
+
+cat > "$AUTH_SCRIPT" <<'EOF'
+#!/bin/sh
+case "$1" in
+  *Username*) printf '%s\n' "x-access-token" ;;
+  *Password*) printf '%s\n' "$GITHUB_TOKEN" ;;
+  *) printf '\n' ;;
+esac
+EOF
+
+chmod 700 "$AUTH_SCRIPT"
+
+Do not save the token in .git/config or the remote URL.
+
+==================================================
+PHASE 3 — VERIFY REMOTE MAIN DIRECTLY
+==================================================
+
+Run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git ls-remote --heads origin main
+
+Record the exact remote main SHA.
+
+Then check whether the known merge commits exist remotely:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git fetch origin \
+  7f4e3b4adbce27c2d62006efa91c30aaa3e93fa3
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git fetch origin \
+  922ff765cd851b93c878d5158f2210ea2dd63bc4
+
+Verify:
+
+git cat-file -t \
+  7f4e3b4adbce27c2d62006efa91c30aaa3e93fa3
+
+git cat-file -t \
+  922ff765cd851b93c878d5158f2210ea2dd63bc4
+
+Expected:
+both return commit.
+
+If either commit does not exist remotely:
+STOP and report the exact missing commit.
+
+==================================================
+PHASE 4 — FETCH FULL CURRENT MAIN
+==================================================
+
+Run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git fetch origin \
+  refs/heads/main:refs/remotes/origin/main \
+  --tags \
+  --prune
+
+If repository is shallow:
+
+git rev-parse --is-shallow-repository
+
+and output is true, run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git fetch --unshallow origin --tags --prune
+
+Then verify:
+
+git rev-parse --is-shallow-repository
+git rev-parse origin/main
+
+==================================================
+PHASE 5 — RESTORE LOCAL MAIN
+==================================================
+
+First inspect:
+
+git status --short
+
+If tracked changes exist:
+STOP and report them.
+
+An untracked uploaded task file may remain uncommitted.
+
+Then run:
+
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git branch --show-current
+git rev-parse HEAD
+git rev-parse origin/main
+git status --short
+
+Required:
+
+- branch = main
+- HEAD = origin/main
+- no tracked modifications
+
+==================================================
+PHASE 6 — VERIFY WP-03C AND WP-04A ON MAIN
+==================================================
+
+Verify these files exist:
+
+find artifacts/api-server/src/services/layout-composer \
+  -type f \
+  \( \
+    -name "collisionAdapter.ts" \
+    -o -name "obbSatAdapter.ts" \
+    -o -name "obbSatAdapter.test.ts" \
+  \)
+
+Also verify:
+
+git merge-base --is-ancestor \
+  7f4e3b4adbce27c2d62006efa91c30aaa3e93fa3 \
+  HEAD
+
+git merge-base --is-ancestor \
+  922ff765cd851b93c878d5158f2210ea2dd63bc4 \
+  HEAD
+
+Both commands must return exit code 0.
+
+Inspect:
+
+- collisionAdapter.ts
+- obbSatAdapter.ts
+- obbSatAdapter.test.ts
+
+Confirm:
+
+- WP-03C exists
+- WP-04A exists
+- generateAABB, aabbOverlap, generateOBB, and satTest are present in the expected call path
+
+==================================================
+PHASE 7 — VALIDATE RESTORED MAIN
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Expected historical baseline:
+
+6087/6087 PASS
+
+If main has advanced:
+report actual totals honestly.
+
+Do not modify tests.
+
+==================================================
+PHASE 8 — SEARCH FOR WP-04B RECOVERY
+==================================================
+
+Only after WP-03C and WP-04A are confirmed on main, search for WP-04B:
+
+git branch -a | grep -Ei \
+"wp04b|rotation-resolver"
+
+git log --all -S"rotationAwareResolver" --oneline --decorate
+
+git log --all --name-only --pretty=format: \
+  | grep -E \
+  "rotationAwareResolver\.ts|rotationAwareResolver\.test\.ts|wp04b-rotation-aware-resolver\.md"
+
+git reflog --all | grep -Ei \
+"wp04b|rotationAwareResolver|rotation-resolver"
+
+git fsck --full --unreachable --no-reflogs
+
+Also search local files:
+
+find /home/runner /workspace \
+  -type f \
+  \( \
+    -name "rotationAwareResolver.ts" \
+    -o -name "rotationAwareResolver.test.ts" \
+    -o -name "wp04b-rotation-aware-resolver.md" \
+  \) 2>/dev/null
+
+Do not implement anything.
+
+==================================================
+PHASE 9 — REMOVE TEMP AUTH
+==================================================
+
+Run:
+
+rm -f "$AUTH_SCRIPT"
+
+Verify no token-bearing git config exists:
+
+git config --local --get-regexp \
+  'url\..*github|http\..*extraHeader' || true
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Remote main SHA
+2. Local main SHA before recovery
+3. Local main SHA after recovery
+4. Shallow status before
+5. Shallow status after
+6. WP-03C merge commit found
+7. WP-04A merge commit found
+8. collisionAdapter.ts present
+9. obbSatAdapter.ts present
+10. obbSatAdapter.test.ts present
+11. Typecheck result
+12. API build result
+13. Regression result
+14. WP-04B branch found
+15. WP-04B commit found
+16. WP-04B files found
+17. Recommended next action
+
+Use exactly one verdict:
+
+A. VERIFIED MAIN RESTORED — WP-04B RECOVERY AVAILABLE
+
+B. VERIFIED MAIN RESTORED — WP-04B MUST BE REIMPLEMENTED
+
+C. REMOTE MAIN DOES NOT CONTAIN VERIFIED WP-03C/WP-04A MERGES
+
+D. GITHUB AUTHENTICATION FAILED
+
+E. MAIN RESTORE OR VALIDATION FAILED
+
+STOP.
+
+Do not reimplement anything.
+Do not create a branch.
+Do not push.
