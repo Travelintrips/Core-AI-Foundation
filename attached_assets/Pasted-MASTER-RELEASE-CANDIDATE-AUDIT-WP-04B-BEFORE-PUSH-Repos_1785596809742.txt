@@ -1,0 +1,350 @@
+MASTER RELEASE-CANDIDATE AUDIT — WP-04B BEFORE PUSH
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target branch:
+feature/wp04b-layout-rotation-resolver
+
+Known commit:
+fb06541
+
+Verified base:
+main at 922ff765cd851b93c878d5158f2210ea2dd63bc4
+
+IMPORTANT:
+
+Do NOT push any branch yet.
+
+Do NOT push feature/12-layout-composer.
+
+Do NOT create a PR.
+
+Do NOT begin WP-05.
+
+MISSION:
+
+Audit WP-04B locally, resolve the test-count inconsistency,
+verify production integration, and determine whether the branch is truly ready for push.
+
+==================================================
+PHASE 1 — VERIFY BRANCH AND COMMIT
+==================================================
+
+Run:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git show --stat --oneline fb06541
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+
+Required:
+
+- branch = feature/wp04b-layout-rotation-resolver
+- HEAD contains fb06541
+- no tracked uncommitted changes
+- no attached_assets in branch diff
+- no unrelated files
+
+If branch differs:
+STOP.
+
+==================================================
+PHASE 2 — VERIFY FILE INVENTORY
+==================================================
+
+Confirm actual files:
+
+- artifacts/api-server/src/services/layout-composer/obbSatAdapter.ts
+- artifacts/api-server/src/services/layout-composer/rotationAwareResolver.ts
+- artifacts/api-server/src/services/layout-composer/constraintSolver.ts
+- artifacts/api-server/src/services/layout-composer/__tests__/rotationAwareResolver.test.ts
+
+Also locate any:
+
+- integration test
+- composeLayout test
+- route test
+- WP-04B documentation
+
+Report exact paths.
+
+==================================================
+PHASE 3 — TEST DISCOVERY AUDIT
+==================================================
+
+Inspect the Vitest configuration and test include patterns.
+
+Verify rotationAwareResolver.test.ts is actually discovered.
+
+Run targeted test directly:
+
+pnpm --filter api-server vitest run \
+  artifacts/api-server/src/services/layout-composer/__tests__/rotationAwareResolver.test.ts
+
+Report:
+
+- test file found
+- exact test count
+- passed
+- failed
+- skipped
+- todo
+
+Then run:
+
+pnpm --filter api-server vitest list \
+  | grep -Ei "rotationAwareResolver|wp04b"
+
+If `vitest list` is unsupported, use the repository-supported equivalent.
+
+The reported “33 test cases” must be proven by actual test output.
+
+==================================================
+PHASE 4 — EXPLAIN REGRESSION COUNT MISMATCH
+==================================================
+
+Baseline before WP-04B:
+
+6087 tests
+
+Reported after WP-04B:
+
+6089 tests
+
+But claimed new test count:
+
+33
+
+Determine exactly why only 2 tests were added to the full regression count.
+
+Check for:
+
+- describe blocks without test/it
+- parameterized tests counted differently
+- tests outside configured include path
+- `.skip`
+- `.todo`
+- `.only`
+- syntax that prevents discovery
+- duplicate test names
+- setup-time assertions
+- generated cases not registered
+- test file excluded by package config
+
+Do not change tests yet.
+
+Report root cause first.
+
+==================================================
+PHASE 5 — PRODUCTION INTEGRATION AUDIT
+==================================================
+
+Inspect the actual no_collision flow.
+
+Verify:
+
+- constraintSolver.ts calls rotationAwareResolver for rotated elements
+- zero rotation uses the documented compatibility path
+- WP-04A adapter is used
+- WP-03B geometry remains canonical
+- width/height preserved
+- rotation preserved
+- locked/fixed behavior correct
+- deadline propagated
+- pair cap propagated
+- translation cap propagated
+- no-progress detection active
+- input not mutated
+
+Document the exact call path.
+
+==================================================
+PHASE 6 — E2E COVERAGE AUDIT
+==================================================
+
+Verify whether tests exist for the full production path:
+
+route
+→ composeLayout
+→ constraintSolver
+→ no_collision
+→ rotationAwareResolver
+→ obbSatAdapter
+
+At minimum verify coverage for:
+
+1. Rotated collision resolves through full solve.
+2. Rotated non-collision remains unchanged.
+3. Locked vs movable.
+4. Locked vs locked warning.
+5. Width/height unchanged.
+6. Rotation unchanged.
+7. Bounds preserved.
+8. Safe zone preserved.
+9. Deterministic repeated full request.
+10. Input request not mutated.
+11. Deadline/cap warning propagation.
+12. Route success for rotated layout.
+13. Structured invalid-input error.
+
+If these tests do not exist, classify as P1 before push.
+
+==================================================
+PHASE 7 — BACKWARD COMPATIBILITY
+==================================================
+
+Verify:
+
+- WP-03C public exports unchanged
+- WP-04A exports unchanged
+- overlapExtent remains
+- resolveCollision remains callable
+- zero-rotation fixtures unchanged
+- no route schema break
+- no OpenAPI break
+- no shared Zod break
+- no required response field removed
+
+==================================================
+PHASE 8 — STATIC QUALITY
+==================================================
+
+Search changed files for:
+
+TODO
+FIXME
+HACK
+console.log
+console.error
+debugger
+@ts-ignore
+@ts-expect-error
+as unknown as
+silent catch
+empty catch
+Math.random
+Date.now
+unbounded while
+recursive resolver
+duplicate geometry
+hardcoded duplicate caps
+
+Classify every occurrence.
+
+==================================================
+PHASE 9 — VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Report actual totals:
+
+- test files
+- passed
+- failed
+- skipped
+- todo
+- duration
+- typecheck exit code
+- build exit code
+
+Do not rely on the previously reported 6089 number without rerunning.
+
+==================================================
+PHASE 10 — OLD WP-03C BRANCH SAFETY
+==================================================
+
+Inspect only:
+
+git log --oneline origin/main..origin/feature/12-layout-composer
+git diff --name-status origin/main...origin/feature/12-layout-composer
+
+Do not modify or push it.
+
+Report:
+
+- whether branch still exists
+- whether its PR is closed
+- whether it contains accidental artifacts
+- whether it is already superseded
+
+Default action:
+DO NOT PUSH feature/12-layout-composer.
+
+==================================================
+PHASE 11 — RC REPORT
+==================================================
+
+Create:
+
+WP04B_RELEASE_CANDIDATE_AUDIT.md
+
+Do not commit it.
+
+Include:
+
+1. Branch and SHA
+2. Changed files
+3. Test discovery result
+4. Regression-count explanation
+5. Production call path
+6. Integration findings
+7. E2E coverage
+8. Compatibility
+9. Static quality
+10. Validation
+11. P0/P1/P2/P3 findings
+12. Push recommendation
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Branch
+2. Head SHA
+3. Files changed
+4. rotationAwareResolver test discovered
+5. Exact targeted test count
+6. Regression count mismatch root cause
+7. Production integration verified
+8. E2E coverage complete
+9. Backward compatibility
+10. Typecheck
+11. API build
+12. Full regression result
+13. Accidental files
+14. Old feature/12-layout-composer branch status
+15. P0 findings
+16. P1 findings
+17. P2 findings
+18. Ready to push
+19. Ready for PR
+20. Report path
+
+Use exactly one verdict:
+
+A. WP-04B RC APPROVED — READY TO PUSH AND CREATE PR
+
+B. WP-04B FUNCTIONALLY COMPLETE — TEST DISCOVERY FIX REQUIRED
+
+C. WP-04B CORE COMPLETE — E2E INTEGRATION COVERAGE REQUIRED
+
+D. WP-04B VALIDATION FAILED
+
+E. WP-04B AUDIT INCONCLUSIVE
+
+STOP.
+
+Do not push.
+Do not create PR.
+Do not push feature/12-layout-composer.
+Do not begin WP-05.
