@@ -126,7 +126,7 @@ describe("normalizeRotation", () => {
   it("returns 0 for 360", () => expect(normalizeRotation(360)).toBe(0));
   it("returns 90 for 450", () => expect(normalizeRotation(450)).toBe(90));
   it("returns 270 for -90", () => expect(normalizeRotation(-90)).toBe(270));
-  it("returns 0 for -360", () => expect(normalizeRotation(-360)).toBe(0));
+  it("returns 0 for -360", () => expect(Object.is(normalizeRotation(-360), 0)).toBe(true));
   it("returns 90 for -270", () => expect(normalizeRotation(-270)).toBe(90));
   it("returns 0 for Infinity (non-finite)", () =>
     expect(normalizeRotation(Infinity)).toBe(0));
@@ -664,12 +664,12 @@ describe("snapping priority contract", () => {
     expect(r.snapType).toBe("corner");
   });
   it("item_anchor snap only applies when explicitly requested", () => {
-    // Without item_anchor request, result should have snapType "none"
-    const r = snapToItemAnchor(300, 400, {
+    // Left edge anchor is at (xMin=300, centerY=(400+460)/2=430).
+    // Query (300, 430) has distance 0 → snapped with tight threshold.
+    const r = snapToItemAnchor(300, 430, {
       anchorItemBounds: { xMin: 300, yMin: 400, xMax: 390, yMax: 460, widthCm: 90, depthCm: 60 },
-      snapDistanceCm: 1,  // very tight threshold
+      snapDistanceCm: 1,
     });
-    // 300 is exactly at xMin → distance 0 → snapped
     expect(r.snapped).toBe(true);
     expect(r.snapType).toBe("item_anchor");
   });
@@ -713,16 +713,23 @@ describe("API — layout sessions", () => {
   });
 
   it("GET /ai/layout-sessions — 200 with sessions array", async () => {
-    vi.mocked(db.select).mockReturnValue({
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      offset: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockImplementation(() => {
-        // First call returns sessions, second returns count
-        return Promise.resolve([]);
-      }),
-    } as unknown as ReturnType<typeof db.select>);
+    // listSessions uses Promise.all([rowsQuery, countQuery]).
+    // Make the chain itself a thenable Promise so any terminal call resolves.
+    function makeThenable(result: unknown[]) {
+      const p = Promise.resolve(result);
+      return Object.assign(p, {
+        from:    () => makeThenable(result),
+        where:   () => makeThenable(result),
+        limit:   () => makeThenable(result),
+        offset:  () => makeThenable(result),
+        orderBy: () => makeThenable(result),
+      });
+    }
+    let callCount = 0;
+    vi.mocked(db.select).mockImplementation(() => {
+      const isCount = (++callCount) % 2 === 0;
+      return makeThenable(isCount ? [{ count: 0 }] : []) as unknown as ReturnType<typeof db.select>;
+    });
 
     const res = await request(app).get("/ai/layout-sessions");
     expect(res.status).toBe(200);
@@ -792,13 +799,21 @@ describe("API — placements", () => {
   });
 
   it("GET /ai/layout-sessions/:id/placements — 200 with placements array", async () => {
-    vi.mocked(db.select).mockReturnValue({
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      offset: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockResolvedValue([]),
-    } as unknown as ReturnType<typeof db.select>);
+    function makeThenable(result: unknown[]) {
+      const p = Promise.resolve(result);
+      return Object.assign(p, {
+        from:    () => makeThenable(result),
+        where:   () => makeThenable(result),
+        limit:   () => makeThenable(result),
+        offset:  () => makeThenable(result),
+        orderBy: () => makeThenable(result),
+      });
+    }
+    let callCount = 0;
+    vi.mocked(db.select).mockImplementation(() => {
+      const isCount = (++callCount) % 2 === 0;
+      return makeThenable(isCount ? [{ count: 0 }] : []) as unknown as ReturnType<typeof db.select>;
+    });
 
     const res = await request(app).get("/ai/layout-sessions/s1/placements");
     expect(res.status).toBe(200);
@@ -855,9 +870,12 @@ describe("API — placements", () => {
 describe("RLS / database policy expectations", () => {
   it("migration file exists: wp03a-placement-engine-v2.sql", async () => {
     const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
+    const { resolve, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    // Workspace root is 3 levels up from artifacts/api-server/src/__tests__/
+    const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
     const content = readFileSync(
-      resolve(process.cwd(), "scripts/migrations/wp03a-placement-engine-v2.sql"),
+      resolve(workspaceRoot, "scripts/migrations/wp03a-placement-engine-v2.sql"),
       "utf-8",
     );
     expect(content).toContain("layout_sessions");
@@ -866,9 +884,11 @@ describe("RLS / database policy expectations", () => {
 
   it("RLS migration file exists: rls-wp03a-placement-engine-v2.sql", async () => {
     const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
+    const { resolve, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
     const content = readFileSync(
-      resolve(process.cwd(), "scripts/migrations/rls-wp03a-placement-engine-v2.sql"),
+      resolve(workspaceRoot, "scripts/migrations/rls-wp03a-placement-engine-v2.sql"),
       "utf-8",
     );
     expect(content).toContain("ENABLE ROW LEVEL SECURITY");
@@ -877,31 +897,39 @@ describe("RLS / database policy expectations", () => {
 
   it("RLS migration has 4 policies for layout_sessions", async () => {
     const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
+    const { resolve, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
     const content = readFileSync(
-      resolve(process.cwd(), "scripts/migrations/rls-wp03a-placement-engine-v2.sql"),
+      resolve(workspaceRoot, "scripts/migrations/rls-wp03a-placement-engine-v2.sql"),
       "utf-8",
     );
-    const sessionPolicies = (content.match(/sessions_\w+_tenant/g) ?? []).length;
+    // Count only CREATE POLICY lines (policy name appears twice: DROP + CREATE)
+    const sessionPolicies = (content.match(/CREATE POLICY sessions_\w+_tenant/g) ?? []).length;
     expect(sessionPolicies).toBe(4);
   });
 
   it("RLS migration has 4 policies for placements", async () => {
     const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
+    const { resolve, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
     const content = readFileSync(
-      resolve(process.cwd(), "scripts/migrations/rls-wp03a-placement-engine-v2.sql"),
+      resolve(workspaceRoot, "scripts/migrations/rls-wp03a-placement-engine-v2.sql"),
       "utf-8",
     );
-    const placementPolicies = (content.match(/placements_\w+_tenant/g) ?? []).length;
+    // Count only CREATE POLICY lines (policy name appears twice: DROP + CREATE)
+    const placementPolicies = (content.match(/CREATE POLICY placements_\w+_tenant/g) ?? []).length;
     expect(placementPolicies).toBe(4);
   });
 
   it("tenant consistency migration has both triggers", async () => {
     const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
+    const { resolve, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
     const content = readFileSync(
-      resolve(process.cwd(), "scripts/migrations/wp03a-placement-tenant-consistency-v2.sql"),
+      resolve(workspaceRoot, "scripts/migrations/wp03a-placement-tenant-consistency-v2.sql"),
       "utf-8",
     );
     expect(content).toContain("trg_placements_tenant_consistency");

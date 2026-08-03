@@ -52,6 +52,7 @@ export class PlacementEngineError extends Error {
 export function normalizeRotation(deg: number): number {
   if (!Number.isFinite(deg)) return 0;
   const mod = deg % 360;
+  if (mod === 0) return 0; // guard against -0 (Object.is(-0, 0) === false)
   return mod < 0 ? mod + 360 : mod;
 }
 
