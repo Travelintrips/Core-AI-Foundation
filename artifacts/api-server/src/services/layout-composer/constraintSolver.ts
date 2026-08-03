@@ -695,6 +695,16 @@ export interface SolverInput {
   maxIterations?: number;
   /** Wall-clock budget in ms. Solver aborts early if exceeded. Default 5 000. */
   deadlineMs?: number;
+  /**
+   * Maximum collision pairs evaluated per no_collision constraint per iteration.
+   * Default: MAX_ELEMENTS × 2. Fires a warning violation when reached.
+   */
+  pairCap?: number;
+  /**
+   * Maximum cumulative translation per element during collision resolution (px).
+   * Default: 10 000. Fires a warning violation when reached.
+   */
+  translationCapPx?: number;
 }
 
 export function solve(input: SolverInput): LayoutPlan {
@@ -703,6 +713,8 @@ export function solve(input: SolverInput): LayoutPlan {
     zones = [],
     maxIterations = MAX_ITERATIONS,
     deadlineMs = SOLVER_DEADLINE_MS,
+    pairCap,
+    translationCapPx,
   } = input;
 
   // Sort constraints: hard → soft → hint, then by order within tier
@@ -715,6 +727,7 @@ export function solve(input: SolverInput): LayoutPlan {
 
   let state = cloneElements(input.elements);
   const allOps: LayoutOperation[] = [];
+  const allWarnings: ConstraintViolation[] = [];
   let iterations = 0;
   let converged = false;
   let timedOut = false;
@@ -732,11 +745,17 @@ export function solve(input: SolverInput): LayoutPlan {
     let anyChange = false;
 
     for (const constraint of sorted) {
-      const { state: newState, ops } = applyConstraint(constraint, state, canvas, zones, iter);
+      const { state: newState, ops, warnings } = applyConstraint(
+        constraint, state, canvas, zones, iter,
+        { pairCap, translationCapPx, deadlineAbsolute: deadline },
+      );
       if (ops.length > 0) {
         allOps.push(...ops);
         state = newState;
         anyChange = true;
+      }
+      if (warnings.length > 0) {
+        allWarnings.push(...warnings);
       }
     }
 
@@ -747,6 +766,15 @@ export function solve(input: SolverInput): LayoutPlan {
   }
 
   const violations = checkViolations(sorted, state, canvas, zones);
+  // Append cap/deadline warnings from the resolver (deduplicated by message)
+  const seen = new Set(violations.map((v) => v.message));
+  for (const w of allWarnings) {
+    if (!seen.has(w.message)) {
+      violations.push(w);
+      seen.add(w.message);
+    }
+  }
+
   const hardCount = sorted.filter((c) => c.priority === "hard").length;
   const hardViolations = violations.filter((v) => v.severity === "error").length;
   const satisfactionScore =

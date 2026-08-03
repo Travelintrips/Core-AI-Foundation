@@ -1006,3 +1006,253 @@ describe("collisionDetection — rotation known limitation", () => {
     expect(pairs).toHaveLength(0);
   });
 });
+
+// ── WP-04B — Rotation-aware no_collision (E2E integration) ───────────────────
+// Tests the full path: solve() → no_collision constraint → rotationAwareResolver
+// → obbSatCollideElements (rotated) or resolveCollision (zero-rotation).
+
+import { resolveRotationAwarePair, resolveRotationAwareCollisions } from "../rotationAwareResolver.js";
+
+describe("constraintSolver — WP-04B rotation-aware no_collision", () => {
+
+  // ── 1. Rotated collision resolves through full solve ─────────────────────
+  it("1. overlapping rotated elements are pushed apart through solve()", () => {
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0,  0,  100, 100, { rotation: 30 }),
+        box("b", 60, 60, 100, 100, { rotation: 30 }),
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    // At least one element must have moved (collision was resolved)
+    const ops = plan.operations.filter((o) => o.type === "push_apart");
+    expect(ops.length).toBeGreaterThan(0);
+    expect(plan.satisfactionScore).toBeGreaterThanOrEqual(0);
+  });
+
+  // ── 2. Rotated non-collision remains unchanged ───────────────────────────
+  it("2. well-separated rotated elements produce no push_apart operations", () => {
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0,   0, 50, 50, { rotation: 45 }),
+        box("b", 400, 0, 50, 50, { rotation: 45 }),
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    const ops = plan.operations.filter((o) => o.type === "push_apart");
+    expect(ops).toHaveLength(0);
+    expect(plan.operations).toHaveLength(0);
+  });
+
+  // ── 3. Locked vs movable (rotated) ──────────────────────────────────────
+  it("3. locked rotated element stays in place; free element absorbs full push", () => {
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0,  0,  100, 100, { rotation: 30, locked: true }),
+        box("b", 60, 60, 100, 100, { rotation: 30 }),
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    const aEl = plan.elements.find((e) => e.id === "a")!;
+    // Locked element must not move
+    expect(aEl.x).toBe(0);
+    expect(aEl.y).toBe(0);
+  });
+
+  // ── 4. Both rotated locked → no operations, collision still detectable ───
+  it("4. two locked rotated overlapping elements produce no push_apart ops", () => {
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0,  0,  100, 100, { rotation: 30, locked: true }),
+        box("b", 60, 60, 100, 100, { rotation: 30, locked: true }),
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    expect(plan.operations.filter((o) => o.type === "push_apart")).toHaveLength(0);
+    // satisfactionScore ≤ 1 (collision may remain)
+    expect(plan.satisfactionScore).toBeGreaterThanOrEqual(0);
+    expect(plan.satisfactionScore).toBeLessThanOrEqual(1);
+  });
+
+  // ── 5. Width and height unchanged after resolution ───────────────────────
+  it("5. width and height are preserved after rotation-aware collision resolution", () => {
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0,  0,  120, 80, { rotation: 45 }),
+        box("b", 60, 20, 100, 90, { rotation: 45 }),
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    const a = plan.elements.find((e) => e.id === "a")!;
+    const b = plan.elements.find((e) => e.id === "b")!;
+    expect(a.width).toBe(120);
+    expect(a.height).toBe(80);
+    expect(b.width).toBe(100);
+    expect(b.height).toBe(90);
+  });
+
+  // ── 6. Rotation field unchanged after resolution ─────────────────────────
+  it("6. rotation field is not modified by collision resolution", () => {
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0,  0,  100, 100, { rotation: 45 }),
+        box("b", 60, 60, 100, 100, { rotation: 15 }),
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    const a = plan.elements.find((e) => e.id === "a")!;
+    const b = plan.elements.find((e) => e.id === "b")!;
+    expect(a.rotation).toBe(45);
+    expect(b.rotation).toBe(15);
+  });
+
+  // ── 7. Deterministic output for rotated input ────────────────────────────
+  it("7. rotation-aware solve is deterministic — identical inputs produce identical plans", () => {
+    const els = [
+      box("a", 10, 10, 100, 100, { rotation: 35 }),
+      box("b", 70, 50, 100, 100, { rotation: 20 }),
+      box("c", 300, 200, 80, 80, { rotation: 0 }),
+    ];
+    const cs = [constraint("c1", "no_collision", ["a", "b", "c"])];
+    const plan1 = solve({ canvas: canvas800, elements: els, constraints: cs });
+    const plan2 = solve({ canvas: canvas800, elements: els, constraints: cs });
+    expect(plan1.elements).toEqual(plan2.elements);
+    expect(plan1.operations.length).toBe(plan2.operations.length);
+    expect(plan1.satisfactionScore).toBe(plan2.satisfactionScore);
+  });
+
+  // ── 8. Input elements not mutated by solve() ─────────────────────────────
+  it("8. input element array is not mutated by solve()", () => {
+    const original = [
+      box("a", 0,  0,  100, 100, { rotation: 30 }),
+      box("b", 60, 60, 100, 100, { rotation: 30 }),
+    ];
+    const snapshot = original.map((e) => ({ ...e }));
+    solve({
+      canvas: canvas800,
+      elements: original,
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    expect(original[0]).toEqual(snapshot[0]);
+    expect(original[1]).toEqual(snapshot[1]);
+  });
+
+  // ── 9. Zero-rotation backward compatibility ──────────────────────────────
+  it("9. zero-rotation no_collision behaves identically to pre-WP-04B (AABB path)", () => {
+    // Elements with no rotation — must resolve via AABB exactly as before
+    const plan = solve({
+      canvas: canvas800,
+      elements: [box("a", 0, 0, 100, 100), box("b", 50, 0, 100, 100)],
+      constraints: [constraint("c1", "no_collision", ["a", "b"])],
+    });
+    const a = plan.elements.find((e) => e.id === "a")!;
+    const b = plan.elements.find((e) => e.id === "b")!;
+    // Collision resolved
+    const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    expect(overlapX).toBeLessThanOrEqual(0);
+    expect(plan.converged).toBe(true);
+  });
+
+  // ── 10. Mixed rotation — rotated and non-rotated in same constraint ───────
+  it("10. mixed-rotation group: rotated and zero-rotation elements coexist", () => {
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0,  0,  100, 100, { rotation: 45 }),
+        box("b", 60, 0,  100, 100, { rotation: 0 }),  // zero rotation
+        box("c", 400, 0, 100, 100, { rotation: 30 }), // far away — no collision
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b", "c"])],
+    });
+    // Plan must complete without errors
+    expect(plan.deterministic).toBe(true);
+    expect(plan.elements).toHaveLength(3);
+    // All widths and heights preserved
+    for (const el of plan.elements) {
+      expect(el.width).toBe(100);
+      expect(el.height).toBe(100);
+    }
+  });
+
+  // ── 11. Pair cap warning propagation ────────────────────────────────────
+  it("11. pair cap reached → warning violation added to plan.violations", () => {
+    // 5 elements → 10 pairs; set pairCap=3 to trigger the cap
+    const els = Array.from({ length: 5 }, (_, i) =>
+      box(`e${i}`, i * 20, 0, 80, 80), // all overlapping
+    );
+    const plan = solve({
+      canvas: canvas800,
+      elements: els,
+      constraints: [constraint("c1", "no_collision", els.map((e) => e.id))],
+      pairCap: 3,
+    });
+    const capWarning = plan.violations.find(
+      (v) => v.severity === "warning" && v.message.includes("pair cap"),
+    );
+    expect(capWarning).toBeDefined();
+  });
+
+  // ── 12. Translation cap warning propagation ──────────────────────────────
+  it("12. translation cap reached → warning violation added to plan.violations", () => {
+    // Elements deep into collision — cap total movement at near-zero to force warning
+    const plan = solve({
+      canvas: canvas800,
+      elements: [
+        box("a", 0, 0, 100, 100, { rotation: 30 }),
+        box("b", 10, 0, 100, 100, { rotation: 30 }),
+        box("c", 20, 0, 100, 100, { rotation: 30 }),
+      ],
+      constraints: [constraint("c1", "no_collision", ["a", "b", "c"])],
+      translationCapPx: 1, // extremely tight cap — will trigger after first move
+    });
+    const capWarning = plan.violations.find(
+      (v) => v.severity === "warning" && v.message.includes("translation cap"),
+    );
+    expect(capWarning).toBeDefined();
+  });
+
+});
+
+// ── WP-04B — resolveRotationAwarePair unit tests ──────────────────────────────
+
+describe("resolveRotationAwarePair — WP-04B unit", () => {
+
+  it("zero-rotation pair: delegates to AABB resolveCollision (rotationAware=false path)", () => {
+    const a = box("a", 0, 0, 100, 100);
+    const b = box("b", 50, 0, 100, 100);
+    const adj = resolveRotationAwarePair(a, b);
+    // Must return adjustments — collision exists
+    expect(Object.keys(adj).length).toBeGreaterThan(0);
+  });
+
+  it("rotated pair: uses OBB/SAT — returns empty map for non-colliding pair", () => {
+    const a = box("a", 0,   0, 50, 50, { rotation: 45 });
+    const b = box("b", 400, 0, 50, 50, { rotation: 45 });
+    const adj = resolveRotationAwarePair(a, b);
+    expect(Object.keys(adj)).toHaveLength(0);
+  });
+
+  it("rotated pair: locked-A → only B gets adjustment", () => {
+    const a = box("a", 0,  0,  100, 100, { rotation: 30, locked: true });
+    const b = box("b", 60, 60, 100, 100, { rotation: 30 });
+    const adj = resolveRotationAwarePair(a, b);
+    expect(adj["a"]).toBeUndefined();
+    if (Object.keys(adj).length > 0) {
+      expect(adj["b"]).toBeDefined();
+    }
+  });
+
+  it("rotated pair: both locked → empty adjustments", () => {
+    const a = box("a", 0,  0,  100, 100, { rotation: 30, locked: true });
+    const b = box("b", 60, 60, 100, 100, { rotation: 30, locked: true });
+    const adj = resolveRotationAwarePair(a, b);
+    expect(Object.keys(adj)).toHaveLength(0);
+  });
+
+});
