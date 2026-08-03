@@ -1142,7 +1142,7 @@ export async function runImageDesignerPipeline(
     ? Math.min(Math.max(1, requestedMaxVariations), 6)
     : Math.min(requestedMaxVariations, 4);
   const conceptVersion = isInteriorProject
-    ? conceptVersionFor(project, conceptDraft)
+    ? getInteriorConceptVersion(project, conceptDraft)
     : null;
 
   const brandStrategy =

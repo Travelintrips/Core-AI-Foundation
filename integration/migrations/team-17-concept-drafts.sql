@@ -43,6 +43,22 @@ CREATE TABLE IF NOT EXISTS ai_platform.id_concept_drafts (
 
   has_unsaved_edits        BOOLEAN NOT NULL DEFAULT FALSE,
 
+  -- ── Approved snapshot (frozen when approved_for_rendering) ────────────────
+  -- Preserved as an immutable record of exactly what was approved.
+  -- NOT cleared when revision_requested — the snapshot stays until next approval.
+  approved_space_plan      JSONB,
+  approved_materials       JSONB,
+  approved_furniture       JSONB,
+  approved_lighting        JSONB,
+  approved_visual_concept  TEXT,
+  approved_at              TIMESTAMPTZ,
+  approved_by              TEXT,
+
+  -- ── Revision audit ────────────────────────────────────────────────────────
+  revision_requested_by    TEXT,
+  revision_requested_at    TIMESTAMPTZ,
+  revision_reason          TEXT,
+
   -- ── Audit ─────────────────────────────────────────────────────────────────
   last_edited_by           TEXT,
   last_edited_at           TIMESTAMPTZ,
