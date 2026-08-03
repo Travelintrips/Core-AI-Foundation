@@ -1,0 +1,448 @@
+MASTER RELEASE-CANDIDATE AUDIT — WP-04B CURRENT IMPLEMENTATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Target branch:
+feature/wp04b-layout-rotation-resolver
+
+Current claimed implementation:
+
+- rotationAwareResolver.ts added
+- constraintSolver.ts integrated with rotation-aware resolver
+- pairCap supported
+- translationCapPx supported
+- deadline enforcement supported
+- warnings merged into plan.violations
+- 16 new tests added
+- full regression 6103/6103 PASS
+- no new typecheck errors in Layout Composer files
+
+MISSION:
+
+Perform a strict read-only RC audit against the actual current branch.
+
+Resolve the discrepancy between earlier reports of:
+
+- 48 WP-04B tests / 6135 total tests
+
+and the current report of:
+
+- 16 new tests / 6103 total tests
+
+Do not modify code.
+Do not commit.
+Do not push.
+Do not create or merge a PR.
+Do not begin WP-05.
+
+==================================================
+PHASE 1 — VERIFY BRANCH AND BASE
+==================================================
+
+Run:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+git diff --stat origin/main...HEAD
+
+Report:
+
+- current branch
+- base SHA
+- head SHA
+- commits ahead
+- changed files
+- tracked/untracked working-tree state
+
+Required:
+
+- branch = feature/wp04b-layout-rotation-resolver
+- no tracked uncommitted changes
+- no attached_assets in tracked diff
+- no unrelated generated files
+
+==================================================
+PHASE 2 — FILE INVENTORY
+==================================================
+
+Verify actual existence and paths of:
+
+- rotationAwareResolver.ts
+- constraintSolver.ts
+- constants.ts
+- composer.test.ts
+- rotationAwareResolver.test.ts, if any
+- WP-04B documentation
+
+Report which test file actually contains the WP-04B tests.
+
+Do not assume both test files exist.
+
+==================================================
+PHASE 3 — COMMIT HISTORY REVIEW
+==================================================
+
+Inspect every commit ahead of origin/main.
+
+For each report:
+
+- SHA
+- message
+- files changed
+- purpose
+- atomicity
+- unrelated changes
+- attached_assets contamination
+- generated-file contamination
+
+Any prompt/session/attached_assets file is a P0 blocker.
+
+==================================================
+PHASE 4 — PRODUCTION CALL PATH
+==================================================
+
+Verify the actual runtime call path:
+
+POST /api/layout-composer/solve
+→ route
+→ solve()
+→ applyConstraint()
+→ no_collision
+→ resolveRotationAwareCollisions()
+→ resolveRotationAwarePair()
+→ obbSatCollideElements()
+→ WP-03B geometry
+
+Confirm:
+
+- zero-rotation pairs use the intended AABB-compatible path
+- rotated pairs use WP-04A OBB/SAT
+- mixed rotated/unrotated layouts use the intended behavior
+- public route response remains unchanged
+- no duplicate geometry was introduced
+
+==================================================
+PHASE 5 — RESOURCE-CAP REVIEW
+==================================================
+
+Verify actual implementation and behavior of:
+
+- pairCap
+- translationCapPx
+- deadline
+- iteration limit
+- no-progress detection
+
+Confirm:
+
+- limits are finite
+- limits are deterministic
+- cap warnings are structured
+- warnings propagate through applyConstraint()
+- warnings are merged into plan.violations
+- warning deduplication is deterministic
+- limits do not silently truncate without warning
+
+Report default values and source locations.
+
+==================================================
+PHASE 6 — RESOLVER CORRECTNESS
+==================================================
+
+Verify:
+
+- deterministic pair ordering
+- duplicate/self pairs excluded
+- movable vs movable behavior
+- movable vs locked behavior
+- locked vs movable behavior
+- locked vs locked behavior
+- input immutability
+- width preserved
+- height preserved
+- rotation preserved
+- metadata preserved
+- MTV direction correct
+- negative-zero normalized
+- no-progress detection active
+- no unbounded loop or recursion
+
+==================================================
+PHASE 7 — TEST-DISCOVERY AUDIT
+==================================================
+
+Run targeted test discovery.
+
+First locate all WP-04B tests:
+
+grep -Rni \
+  "resolveRotationAwarePair\|resolveRotationAwareCollisions\|pairCap\|translationCapPx" \
+  artifacts/api-server/src \
+  --include="*.test.ts"
+
+Then run each matching test file directly.
+
+Report for every file:
+
+- path
+- test count
+- passed
+- failed
+- skipped
+- todo
+
+Determine exactly:
+
+- how many WP-04B tests exist
+- whether the current addition is 16 tests
+- whether the earlier 48-test report came from a different branch or workspace
+- why the full regression total is 6103 rather than 6135
+
+Do not alter tests.
+
+==================================================
+PHASE 8 — REQUIRED COVERAGE MATRIX
+==================================================
+
+Verify explicit behavioral coverage for:
+
+1. rotated collision
+2. rotated non-collision
+3. zero-rotation compatibility
+4. mixed rotated/unrotated layout
+5. deterministic repeated runs
+6. input-order behavior
+7. movable vs movable
+8. movable vs locked
+9. locked vs movable
+10. locked vs locked
+11. width preserved
+12. height preserved
+13. rotation preserved
+14. metadata preserved
+15. input immutability
+16. pair cap
+17. translation cap
+18. deadline
+19. warning propagation
+20. warning deduplication
+21. tiny penetration
+22. touching edge
+23. negative rotation
+24. rotation above 360 degrees
+25. no-progress detection
+26. full solve production path
+27. WP-04A delegation
+28. no duplicate geometry
+29. bounded large-element scenario
+30. invalid input behavior
+
+Classify each:
+
+- covered explicitly
+- covered implicitly
+- missing
+
+Missing pair/deadline/translation warning tests are P1.
+
+==================================================
+PHASE 9 — VIOLATION REPORTING
+==================================================
+
+Inspect whether final `checkViolations()` for `no_collision` uses:
+
+- rotation-aware collision checking when rotation exists
+
+or:
+
+- legacy AABB-only detection
+
+Create no code.
+
+Report actual behavior and severity.
+
+If rotated OBB-only violations can be missed, classify as P1.
+
+==================================================
+PHASE 10 — BOUNDS AND SAFE-ZONE
+==================================================
+
+Verify:
+
+- proposed translations respect canvas bounds
+- safe-zone policy is preserved
+- no silent clamping
+- invalid movement retains previous position
+- warning is emitted
+- locked elements remain unchanged
+
+If bounds/safe-zone enforcement depends on a separate constraint,
+document whether that constraint is guaranteed in the full solve path.
+
+==================================================
+PHASE 11 — STATIC QUALITY
+==================================================
+
+Search changed files for:
+
+TODO
+FIXME
+HACK
+console.log
+console.error
+console.info
+debugger
+@ts-ignore
+@ts-expect-error
+as unknown as
+silent catch
+empty catch
+Math.random
+Date.now
+unbounded while
+recursion
+duplicate AABB
+duplicate OBB
+duplicate SAT
+hardcoded duplicate limits
+raw secrets
+
+Classify every occurrence.
+
+==================================================
+PHASE 12 — FULL VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Report actual:
+
+- test files
+- passed
+- failed
+- skipped
+- todo
+- duration
+- typecheck exit code
+- build exit code
+
+Do not use any previous test total as truth.
+
+The current branch’s actual run is authoritative.
+
+==================================================
+PHASE 13 — GIT HYGIENE
+==================================================
+
+Verify:
+
+git diff --name-only origin/main...HEAD \
+  | grep -E \
+  'attached_assets|Pasted-|prompt|session|screenshot|mockup-components|\.replit' \
+  || true
+
+Expected:
+no output.
+
+Report any local-only auto-commit separately from the PR diff.
+
+==================================================
+PHASE 14 — RC REPORT
+==================================================
+
+Create:
+
+WP04B_CURRENT_RC_AUDIT.md
+
+Do not commit it.
+
+Include:
+
+1. Branch and SHAs
+2. Commit inventory
+3. Changed files
+4. Actual test-discovery result
+5. Explanation of 6103 vs 6135
+6. Production integration
+7. Resolver correctness
+8. Resource caps
+9. Warning propagation
+10. Coverage matrix
+11. Violation reporting
+12. Bounds and safe-zone
+13. Compatibility
+14. Static quality
+15. Validation results
+16. P0/P1/P2/P3 findings
+17. Required remediation
+18. Push/merge recommendation
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Branch
+2. Base SHA
+3. Head SHA
+4. Commits ahead
+5. Changed files
+6. Actual WP-04B test files
+7. Actual WP-04B test count
+8. Test-count discrepancy root cause
+9. Production integration verified
+10. Pair cap verified
+11. Translation cap verified
+12. Deadline verified
+13. Warning propagation verified
+14. Deterministic behavior
+15. Input immutability
+16. Bounds behavior
+17. Safe-zone behavior
+18. Violation checker behavior
+19. Backward compatibility
+20. Duplicate geometry found
+21. Typecheck
+22. API build
+23. Full regression result
+24. Accidental artifacts
+25. P0 findings
+26. P1 findings
+27. P2 findings
+28. Ready to push
+29. Ready to merge
+30. Report path
+
+Use exactly one verdict:
+
+A.
+WP-04B RC APPROVED — READY TO PUSH AND FINAL REVIEW
+
+B.
+WP-04B FUNCTIONALLY COMPLETE — MINOR TEST REMEDIATION REQUIRED
+
+C.
+WP-04B PRODUCTION CORRECTNESS REMEDIATION REQUIRED
+
+D.
+WP-04B VALIDATION FAILED
+
+E.
+WP-04B AUDIT INCONCLUSIVE
+
+STOP.
+
+Do not modify code.
+Do not push.
+Do not create or merge a PR.
+Do not begin WP-05.
