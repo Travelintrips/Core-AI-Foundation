@@ -1,0 +1,243 @@
+Repository:
+Travelintrips/Core-AI-Foundation
+
+MISSION
+
+Lakukan audit menyeluruh terhadap implementasi Interior Design Concept Draft.
+
+JANGAN mengubah source code.
+JANGAN membuat commit.
+JANGAN push.
+JANGAN merge.
+
+==================================================
+PHASE 1 — GIT STATE
+==================================================
+
+Verifikasi:
+
+- current branch
+- HEAD SHA
+- origin/main SHA
+- working tree
+- untracked files
+- staged files
+
+==================================================
+PHASE 2 — BUILD
+==================================================
+
+Jalankan:
+
+pnpm run typecheck:libs
+
+pnpm --filter api-server run build
+
+Pastikan:
+
+PASS
+0 error baru
+
+==================================================
+PHASE 3 — DATABASE
+==================================================
+
+Verifikasi migration:
+
+id_concept_drafts
+
+id_interior_asset_images
+
+Pastikan:
+
+- tabel ada
+- index ada
+- foreign key valid
+- tidak ada migration pending
+
+==================================================
+PHASE 4 — API
+==================================================
+
+Audit:
+
+interiorDesignRouter
+
+Semua endpoint:
+
+- create draft
+- update draft
+- request review
+- request revision
+- approve
+- publish snapshot
+
+Pastikan:
+
+- auth
+- validation
+- response schema
+- error handling
+
+==================================================
+PHASE 5 — FRONTEND
+==================================================
+
+Audit:
+
+InteriorDesignEditor
+
+creative-ai.tsx
+
+Pastikan:
+
+- editor load
+- autosave
+- review state
+- approved state
+- revision state
+- snapshot state
+
+==================================================
+PHASE 6 — STORAGE
+==================================================
+
+Audit:
+
+id_interior_asset_images
+
+Pastikan:
+
+- upload
+- delete
+- replace
+- metadata
+- snapshot reference
+
+==================================================
+PHASE 7 — TESTS
+==================================================
+
+Run:
+
+targeted tests
+
+full regression
+
+Laporkan:
+
+total files
+
+passed
+
+failed
+
+skipped
+
+==================================================
+PHASE 8 — STATIC ANALYSIS
+==================================================
+
+Cari:
+
+TODO
+FIXME
+console.log
+debugger
+ts-ignore
+unused imports
+dead code
+
+==================================================
+PHASE 9 — SECURITY
+==================================================
+
+Audit:
+
+tenant isolation
+
+authorization
+
+draft ownership
+
+review ownership
+
+snapshot immutability
+
+==================================================
+PHASE 10 — PERFORMANCE
+==================================================
+
+Audit:
+
+draft loading
+
+snapshot loading
+
+asset loading
+
+N+1 query
+
+duplicate fetch
+
+==================================================
+PHASE 11 — RELEASE READINESS
+==================================================
+
+Verifikasi:
+
+- build
+- tests
+- migrations
+- router
+- frontend
+- backend
+- storage
+- documentation
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1. Branch
+2. HEAD SHA
+3. Working tree
+4. Build
+5. Typecheck
+6. Database
+7. API
+8. Frontend
+9. Storage
+10. Tests
+11. Security
+12. Performance
+13. Static analysis
+14. Migration status
+15. Release blockers (P0)
+16. Release blockers (P1)
+17. Release blockers (P2)
+18. Ready for PR
+19. Ready for Merge
+20. Ready for Production
+
+Gunakan salah satu verdict:
+
+A.
+RELEASE CANDIDATE VERIFIED — READY FOR PR
+
+B.
+READY FOR PR WITH MINOR REMEDIATION
+
+C.
+REMEDIATION REQUIRED
+
+D.
+BUILD OR TEST FAILURE
+
+STOP.
+
+Jangan memperbaiki code.
+Jangan membuat commit.
+Jangan merge.
