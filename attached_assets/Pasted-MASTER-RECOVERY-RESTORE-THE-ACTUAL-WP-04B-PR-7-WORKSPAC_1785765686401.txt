@@ -1,0 +1,372 @@
+MASTER RECOVERY — RESTORE THE ACTUAL WP-04B PR #7 WORKSPACE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Expected remote branch:
+feature/wp04b-layout-rotation-resolver
+
+Expected previously verified remote SHA:
+5fdeb888419fdfc8024a7c0a3bb217090beb7fb6
+
+Expected Pull Request:
+#7
+
+MISSION:
+
+Determine why the current workspace cannot see the verified WP-04B branch,
+restore the actual remote PR branch into a clean detached worktree,
+then rerun the audit against that exact remote branch.
+
+Do not implement WP-04B again.
+Do not modify source code.
+Do not commit.
+Do not push.
+Do not merge.
+Do not begin WP-05.
+
+==================================================
+PHASE 1 — VERIFY ACTUAL REPOSITORY
+==================================================
+
+Run:
+
+pwd
+git rev-parse --show-toplevel
+git remote -v
+git config --get remote.origin.url
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git rev-parse --is-shallow-repository
+
+Required origin:
+
+https://github.com/Travelintrips/Core-AI-Foundation
+
+If origin points elsewhere:
+STOP and report WORKSPACE_REPOSITORY_MISMATCH.
+
+==================================================
+PHASE 2 — SECURE GITHUB AUTH
+==================================================
+
+Check:
+
+test -n "$GITHUB_TOKEN" \
+  && echo "TOKEN_AVAILABLE" \
+  || echo "TOKEN_MISSING"
+
+Do not print the token.
+
+If a token is available, create a temporary askpass script outside the repo:
+
+AUTH_SCRIPT="$(mktemp)"
+
+cat > "$AUTH_SCRIPT" <<'EOF'
+#!/bin/sh
+case "$1" in
+  *Username*) printf '%s\n' "x-access-token" ;;
+  *Password*) printf '%s\n' "$GITHUB_TOKEN" ;;
+  *) printf '\n' ;;
+esac
+EOF
+
+chmod 700 "$AUTH_SCRIPT"
+
+Use GIT_ASKPASS and GIT_TERMINAL_PROMPT=0 for all remote commands.
+
+Do not store credentials in git config or remote URL.
+
+==================================================
+PHASE 3 — QUERY REMOTE DIRECTLY
+==================================================
+
+Run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git ls-remote --heads origin \
+  feature/wp04b-layout-rotation-resolver
+
+Also run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git ls-remote --heads origin main
+
+Record the exact SHAs.
+
+Decision:
+
+A. If branch exists:
+   continue.
+
+B. If branch does not exist:
+   query PR #7 through GitHub API or gh CLI and report:
+   - PR state
+   - head repo
+   - head branch
+   - head SHA
+   - base branch
+   - whether the branch came from a fork
+
+C. If authentication fails:
+   STOP.
+
+Do not conclude that WP-04B never existed before checking PR #7.
+
+==================================================
+PHASE 4 — FETCH COMPLETE REMOTE HISTORY
+==================================================
+
+Run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git fetch origin \
+  refs/heads/main:refs/remotes/origin/main \
+  --tags \
+  --prune
+
+If the WP-04B branch exists, run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git fetch origin \
+  refs/heads/feature/wp04b-layout-rotation-resolver:refs/remotes/origin/feature/wp04b-layout-rotation-resolver
+
+If repository is shallow:
+
+git rev-parse --is-shallow-repository
+
+and output is true, run:
+
+GIT_ASKPASS="$AUTH_SCRIPT" \
+GIT_TERMINAL_PROMPT=0 \
+git fetch --unshallow origin --tags --prune
+
+Verify:
+
+git rev-parse --is-shallow-repository
+git rev-parse origin/main
+git rev-parse origin/feature/wp04b-layout-rotation-resolver
+
+==================================================
+PHASE 5 — VERIFY THE EXPECTED SHA
+==================================================
+
+Run:
+
+git cat-file -t \
+  5fdeb888419fdfc8024a7c0a3bb217090beb7fb6
+
+git show --stat --oneline \
+  5fdeb888419fdfc8024a7c0a3bb217090beb7fb6
+
+git branch -a --contains \
+  5fdeb888419fdfc8024a7c0a3bb217090beb7fb6
+
+If the current remote SHA differs from 5fdeb888:
+
+- do not immediately fail;
+- inspect the latest remote branch commit;
+- determine whether it legitimately superseded 5fdeb888;
+- compare changed files and ancestry.
+
+==================================================
+PHASE 6 — CREATE CLEAN TEMPORARY WORKTREE
+==================================================
+
+Do not checkout the PR branch in the current workspace.
+
+Create an isolated worktree:
+
+rm -rf /tmp/wp04b-pr7-audit
+
+git worktree add --detach \
+  /tmp/wp04b-pr7-audit \
+  origin/feature/wp04b-layout-rotation-resolver
+
+Inside `/tmp/wp04b-pr7-audit`, verify:
+
+git rev-parse HEAD
+git status --short
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+
+Expected WP-04B files include repository-equivalent paths for:
+
+- rotationAwareResolver.ts
+- constraintSolver.ts
+- constants.ts
+- rotationAwareResolver.test.ts
+- WP-04B documentation
+
+There must be no:
+
+- attached_assets
+- prompt/session logs
+- screenshots
+- unrelated generated files
+
+==================================================
+PHASE 7 — VERIFY IMPLEMENTATION CONTENT
+==================================================
+
+Inside the clean worktree, search:
+
+find artifacts/api-server/src \
+  -type f \
+  \( \
+    -name "rotationAwareResolver.ts" \
+    -o -name "rotationAwareResolver.test.ts" \
+    -o -name "obbSatAdapter.ts" \
+  \)
+
+grep -Rni \
+  "resolveRotationAwarePair\|resolveRotationAwareCollisions\|pairCap\|translationCapPx" \
+  artifacts/api-server/src \
+  --include="*.ts"
+
+Verify the production call path:
+
+constraintSolver
+→ no_collision
+→ rotation-aware resolver
+→ obbSatAdapter
+→ WP-03B geometry
+
+If these files and symbols exist:
+the previous audit workspace was stale/wrong.
+
+If they do not exist in the actual remote PR branch:
+report the exact remote SHA and branch contents.
+
+==================================================
+PHASE 8 — RUN AUTHORITATIVE VALIDATION
+==================================================
+
+Inside `/tmp/wp04b-pr7-audit`, install dependencies only if missing.
+
+Run:
+
+pnpm run typecheck:libs
+
+pnpm --filter api-server run build
+
+pnpm --filter api-server vitest run
+
+Report actual:
+
+- test files
+- passed
+- failed
+- skipped
+- todo
+- duration
+- typecheck result
+- build result
+
+The result from this clean PR worktree is authoritative.
+
+Do not compare against 5434 from the stale workspace except to explain the mismatch.
+
+==================================================
+PHASE 9 — VERIFY PR #7
+==================================================
+
+Using GitHub API or gh CLI, verify:
+
+- PR number = 7
+- state
+- base repo
+- base branch
+- head repo
+- head branch
+- head SHA
+- commit count
+- changed files
+- mergeability
+
+Determine whether PR #7 still points to:
+
+feature/wp04b-layout-rotation-resolver
+
+If it points to another repository or fork, report the exact repository.
+
+==================================================
+PHASE 10 — CLEAN UP TEMPORARY AUTH
+==================================================
+
+Run:
+
+rm -f "$AUTH_SCRIPT"
+
+Verify:
+
+git config --local --get-regexp \
+  'url\..*github|http\..*extraHeader' || true
+
+Remove the temporary worktree only after all evidence is recorded:
+
+git worktree remove /tmp/wp04b-pr7-audit
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Actual repository URL
+2. Initial workspace branch
+3. Initial workspace HEAD
+4. Initial shallow status
+5. GitHub authentication result
+6. Remote main SHA
+7. Remote WP-04B branch found
+8. Remote WP-04B SHA
+9. Expected SHA 5fdeb888 found
+10. PR #7 state
+11. PR #7 head repo
+12. PR #7 head branch
+13. PR #7 head SHA
+14. Clean worktree created
+15. rotationAwareResolver.ts found
+16. rotationAwareResolver.test.ts found
+17. pairCap found
+18. translationCapPx found
+19. Production integration found
+20. Actual test total
+21. Typecheck
+22. API build
+23. Root cause of the 5434-test audit
+24. Recommended next action
+
+Use exactly one verdict:
+
+A.
+WP-04B REMOTE BRANCH RESTORED — CONTINUE FINAL PR REVIEW
+
+B.
+PR #7 EXISTS IN A DIFFERENT FORK OR REPOSITORY
+
+C.
+REMOTE WP-04B BRANCH NO LONGER EXISTS — PR RECOVERY REQUIRED
+
+D.
+REMOTE BRANCH EXISTS BUT DOES NOT CONTAIN WP-04B IMPLEMENTATION
+
+E.
+GITHUB AUTHENTICATION OR FETCH FAILED
+
+F.
+WORKSPACE REPOSITORY MISMATCH
+
+STOP.
+
+Do not reimplement WP-04B.
+Do not modify code.
+Do not push.
+Do not merge.
+Do not begin WP-05.
