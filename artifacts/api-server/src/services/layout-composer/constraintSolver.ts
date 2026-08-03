@@ -43,6 +43,11 @@ import {
 } from "./collisionDetection.js";
 
 import { clampToSafeZone, innerRect } from "./safeZones.js";
+import {
+  requiresRotationAwareResolution,
+  findRotationAwareCollisions,
+  resolveRotationAwareCollision,
+} from "./rotationAwareResolver.js";
 import { checkTextFit, shrinkFontToFit, expandHeightToFit } from "./textFitting.js";
 import { findZoneById, clampElementsToZones } from "./zoneLayouts.js";
 
@@ -447,26 +452,107 @@ function applyConstraint(
     // ── Collision detection & resolution ────────────────────
     case "no_collision": {
       const freshEls = elementsByIds(current, constraint.elementIds);
-      const pairs = findAllCollisions(freshEls);
-      for (const pair of pairs) {
-        const a = elementById(current, pair.elementA)!;
-        const b = elementById(current, pair.elementB)!;
-        const adjustments = resolveCollision(a, b);
-        for (const [id, { dx, dy }] of Object.entries(adjustments)) {
-          if (Math.abs(dx) < EPSILON && Math.abs(dy) < EPSILON) continue;
-          const el = elementById(current, id)!;
-          const op: LayoutOperation = {
-            type: "push_apart",
-            elementId: id,
-            constraintId: constraint.id,
-            before: { x: el.x, y: el.y },
-            after: { x: Math.round(el.x + dx), y: Math.round(el.y + dy) },
-            reason: `Collision with ${id === pair.elementA ? pair.elementB : pair.elementA}`,
-            iteration,
+
+      // WP-04B: use OBB/SAT when any element carries a non-zero rotation;
+      // fall back to the existing AABB path for fully axis-aligned sets.
+      if (requiresRotationAwareResolution(freshEls)) {
+        // Float shadow: track raw (unrounded) positions per-element to
+        // prevent rounding accumulation across multi-pair resolutions.
+        // Rounding happens only at op.after, never on the shadow values.
+        const floatX = new Map<string, number>();
+        const floatY = new Map<string, number>();
+        for (const el of freshEls) {
+          floatX.set(el.id, el.x);
+          floatY.set(el.id, el.y);
+        }
+
+        // Build snapshot of elements at their current float positions
+        const atFloat = (): LayoutElement[] =>
+          freshEls.map((el) => ({
+            ...el,
+            x: floatX.get(el.id) ?? el.x,
+            y: floatY.get(el.id) ?? el.y,
+          }));
+
+        const pairs = findRotationAwareCollisions(
+          atFloat(),
+          LAYOUT_LIMITS.ROTATION_RESOLVER_CLEARANCE_PX,
+        );
+
+        for (const pair of pairs) {
+          const a = elementById(current, pair.elementA)!;
+          const b = elementById(current, pair.elementB)!;
+
+          // Present A and B at their float shadow positions to the resolver
+          const aAtFloat: LayoutElement = {
+            ...a,
+            x: floatX.get(a.id) ?? a.x,
+            y: floatY.get(a.id) ?? a.y,
           };
-          if (hasChanged(op)) {
-            ops.push(op);
-            current = applyDelta(current, id, op.after);
+          const bAtFloat: LayoutElement = {
+            ...b,
+            x: floatX.get(b.id) ?? b.x,
+            y: floatY.get(b.id) ?? b.y,
+          };
+
+          const adjustments = resolveRotationAwareCollision(
+            aAtFloat,
+            bAtFloat,
+            pair.collisionResult,
+          );
+
+          for (const [id, { dx, dy }] of Object.entries(adjustments)) {
+            if (Math.abs(dx) < EPSILON && Math.abs(dy) < EPSILON) continue;
+
+            // Update float shadow with raw value (no rounding here)
+            floatX.set(id, (floatX.get(id) ?? 0) + dx);
+            floatY.set(id, (floatY.get(id) ?? 0) + dy);
+
+            const el = elementById(current, id)!;
+            const op: LayoutOperation = {
+              type: "push_apart",
+              elementId: id,
+              constraintId: constraint.id,
+              before: { x: el.x, y: el.y },
+              // Round only here — op.after is the public record
+              after: {
+                x: Math.round(floatX.get(id)!),
+                y: Math.round(floatY.get(id)!),
+              },
+              reason: `Rotation-aware collision with ${
+                id === pair.elementA ? pair.elementB : pair.elementA
+              }`,
+              iteration,
+            };
+            if (hasChanged(op)) {
+              ops.push(op);
+              current = applyDelta(current, id, op.after);
+            }
+          }
+        }
+      } else {
+        // Axis-aligned: use existing AABB resolver — behaviour unchanged
+        const pairs = findAllCollisions(freshEls);
+        for (const pair of pairs) {
+          const a = elementById(current, pair.elementA)!;
+          const b = elementById(current, pair.elementB)!;
+          const adjustments = resolveCollision(a, b);
+          for (const [id, { dx, dy }] of Object.entries(adjustments)) {
+            if (Math.abs(dx) < EPSILON && Math.abs(dy) < EPSILON) continue;
+            const el = elementById(current, id)!;
+            const op: LayoutOperation = {
+              type: "push_apart",
+              elementId: id,
+              constraintId: constraint.id,
+              before: { x: el.x, y: el.y },
+              after: { x: Math.round(el.x + dx), y: Math.round(el.y + dy) },
+              reason: `Collision with ${id === pair.elementA ? pair.elementB : pair.elementA}`,
+              iteration,
+            };
+            if (hasChanged(op)) {
+              ops.push(op);
+              current = applyDelta(current, id, op.after);
+            }
           }
         }
       }

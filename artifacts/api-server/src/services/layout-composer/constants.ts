@@ -33,6 +33,15 @@ export const LAYOUT_LIMITS = {
    * is 10 MB; we tighten this to 512 KB for the layout domain.
    */
   MAX_PAYLOAD_BYTES: 512 * 1024,
+
+  // ── WP-04B: Rotation-Aware Resolver ──────────────────────────────────────
+
+  /**
+   * Uniform clearance (px) added to each element's OBB collision envelope
+   * in the rotation-aware resolver. 0 = physical bounds only (no gap).
+   * Increase to enforce a visual breathing margin between rotated elements.
+   */
+  ROTATION_RESOLVER_CLEARANCE_PX: 0,
 } as const;
 
 export type LayoutLimitKey = keyof typeof LAYOUT_LIMITS;
