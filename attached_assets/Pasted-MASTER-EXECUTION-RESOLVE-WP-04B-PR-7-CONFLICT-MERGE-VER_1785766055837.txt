@@ -1,0 +1,710 @@
+MASTER EXECUTION — RESOLVE WP-04B PR #7 CONFLICT, MERGE, VERIFY MAIN, PREPARE NEXT WP
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Pull Request:
+#7
+
+Base:
+main
+
+Head:
+feature/wp04b-layout-rotation-resolver
+
+Verified remote head:
+5fdeb888419fdfc8024a7c0a3bb217090beb7fb6
+
+Current verified facts:
+
+- PR #7 is open
+- PR is not a draft
+- PR is not from a fork
+- remote branch exists at exact SHA 5fdeb888...
+- rotationAwareResolver.ts exists
+- rotationAwareResolver.test.ts exists
+- obbSatAdapter.ts delegates to canonical WP-03B geometry
+- production call path is integrated
+- targeted validation: 165 tests passed across 3 files
+- 48 resolver test cases exist
+- only confirmed merge blocker:
+  mergeable_state = dirty
+- pairCap / translationCapPx naming and implementation must still be verified
+- do not trust stale workspaces or stale branch history
+
+MISSION:
+
+1. Resolve the PR #7 merge conflict against current origin/main.
+2. Preserve all valid WP-04B behavior.
+3. Verify explicit resource caps.
+4. Revalidate the branch.
+5. Update PR #7 safely.
+6. Perform a fresh final review.
+7. Merge only if all blockers are cleared.
+8. Revalidate main.
+9. Discover the next authoritative work package.
+10. Do not blindly implement an undefined next WP.
+
+==================================================
+GLOBAL STRICT RULES
+==================================================
+
+DO NOT:
+
+- reimplement WP-04B
+- duplicate AABB, OBB, or SAT logic
+- remove WP-04A delegation
+- remove legacy AABB fallback
+- commit attached_assets
+- commit prompt/session files
+- commit screenshots
+- commit Replit-generated unrelated files
+- use plain --force
+- push directly to main
+- resolve conflicts by choosing “ours” or “theirs” blindly
+- weaken tests
+- merge while P0 or P1 findings remain
+- begin WP-05 implementation without authoritative scope
+
+Use `--force-with-lease` only if history rewrite is required.
+
+==================================================
+PHASE 1 — SECURE AUTH AND FETCH
+==================================================
+
+Verify GitHub access without printing tokens.
+
+Fetch:
+
+git fetch origin main
+git fetch origin feature/wp04b-layout-rotation-resolver
+
+Record:
+
+MAIN_SHA="$(git rev-parse origin/main)"
+WP04B_REMOTE_SHA="$(git rev-parse origin/feature/wp04b-layout-rotation-resolver)"
+
+Verify:
+
+WP04B_REMOTE_SHA =
+5fdeb888419fdfc8024a7c0a3bb217090beb7fb6
+
+If the remote SHA has changed:
+inspect the new remote state before continuing.
+
+==================================================
+PHASE 2 — CREATE SAFETY REFERENCES
+==================================================
+
+Create local safety refs:
+
+git branch backup/wp04b-before-conflict-resolution \
+  origin/feature/wp04b-layout-rotation-resolver
+
+git branch backup/main-before-wp04b-merge \
+  origin/main
+
+Do not push backup branches.
+
+Record both SHAs.
+
+==================================================
+PHASE 3 — CREATE CLEAN CONFLICT-RESOLUTION BRANCH
+==================================================
+
+Create a new local branch from the remote WP-04B branch:
+
+git switch --detach \
+  origin/feature/wp04b-layout-rotation-resolver
+
+git switch -c resolution/wp04b-pr7
+
+Verify:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+
+Required:
+
+- branch = resolution/wp04b-pr7
+- HEAD = remote WP-04B SHA
+- tracked working tree clean
+
+==================================================
+PHASE 4 — MERGE CURRENT MAIN INTO WP-04B
+==================================================
+
+Run:
+
+git merge --no-commit --no-ff origin/main
+
+If there are conflicts:
+
+1. List every conflicted file:
+
+git diff --name-only --diff-filter=U
+
+2. For each file, inspect:
+
+- origin/main version
+- WP-04B version
+- merge-base version
+- all consumers
+- related tests
+
+3. Resolve with these rules:
+
+- preserve current main changes unrelated to WP-04B
+- preserve rotationAwareResolver integration
+- preserve WP-04A obbSatAdapter delegation
+- preserve canonical WP-03B geometry imports
+- preserve zero-rotation AABB compatibility
+- preserve current public contracts
+- do not reintroduce attached_assets
+- do not reintroduce generated mockup files
+- do not remove newer main fixes
+
+4. Do not use blanket checkout commands such as:
+
+git checkout --ours .
+git checkout --theirs .
+
+5. Document each conflict and resolution.
+
+After resolution:
+
+git diff --check
+git status --short
+
+Commit:
+
+merge(main): resolve WP-04B integration conflicts
+
+==================================================
+PHASE 5 — VERIFY RESOURCE CAPS
+==================================================
+
+Audit actual WP-04B implementation for:
+
+- pair-evaluation cap
+- translation cap
+- iteration cap
+- deadline cap
+- no-progress detection
+
+Important:
+
+`ROTATION_RESOLVER_CLEARANCE_PX` is a clearance constant, not a pair cap.
+
+Float-shadow maps preserve subpixel movement, but they are not a translation cap.
+
+Required:
+
+1. Pair cap must limit total pair evaluations deterministically.
+2. Translation cap must limit total or per-element movement according to a documented policy.
+3. Cap exhaustion must emit structured warnings.
+4. Cap warnings must propagate into solver output.
+5. No silent truncation.
+6. Defaults must be finite.
+7. Limits must not conflict with existing `LAYOUT_LIMITS`.
+
+If explicit pair and translation caps already exist:
+document their exact names, defaults, and source locations.
+
+If they do not exist:
+classify as P1 and implement the smallest backward-compatible fix.
+
+Preferred fields:
+
+- `pairCap`
+- `translationCapPx`
+
+or repository-consistent equivalents.
+
+Do not rename public fields unnecessarily.
+
+==================================================
+PHASE 6 — VERIFY PRODUCTION CALL PATH
+==================================================
+
+Confirm the actual call path after conflict resolution:
+
+POST /api/layout-composer/solve
+→ route
+→ solve()
+→ applyConstraint()
+→ no_collision
+→ resolveRotationAwareCollisions()
+→ resolveRotationAwarePair()
+→ obbSatCollideElements()
+→ canonical WP-03B geometry
+
+Verify:
+
+- rotated pairs use OBB/SAT
+- zero-rotation pairs use documented AABB-compatible behavior
+- mixed layouts use the intended rotation-aware path
+- no geometry implementation is duplicated
+- width remains unchanged
+- height remains unchanged
+- rotation remains unchanged
+- metadata remains unchanged
+- input remains immutable
+- warnings propagate deterministically
+
+==================================================
+PHASE 7 — BOUNDS, SAFE-ZONE, AND VIOLATIONS
+==================================================
+
+Verify:
+
+- translated positions respect canvas bounds
+- safe-zone policy is applied according to current solver architecture
+- invalid movement is not silently clamped
+- invalid movement leaves previous position
+- warning is emitted
+- locked elements never move
+
+Inspect `checkViolations()`.
+
+For rotated layouts, verify violation checking uses rotation-aware collision detection.
+
+For all-zero rotation layouts, preserve the AABB fast path.
+
+If `checkViolations()` is still AABB-only and misses a demonstrated OBB/SAT collision:
+classify as P1 and fix with a backward-compatible branch.
+
+Preserve the existing violation response shape.
+
+==================================================
+PHASE 8 — COMPLETE TEST COVERAGE
+==================================================
+
+Run existing targeted tests first.
+
+Verify explicit tests for:
+
+1. Rotated collision
+2. Rotated non-collision
+3. Mixed rotated/unrotated layout
+4. Zero-rotation compatibility
+5. Deterministic repeated runs
+6. Input-order behavior
+7. Movable vs movable
+8. Movable vs locked
+9. Locked vs movable
+10. Locked vs locked
+11. Width preserved
+12. Height preserved
+13. Rotation preserved
+14. Metadata preserved
+15. Input immutability
+16. Float-shadow convergence
+17. Negative-zero normalization
+18. No-progress detection
+19. Iteration cap
+20. Deadline cap
+21. Pair cap
+22. Translation cap
+23. Cap warning propagation
+24. Tiny penetration
+25. Large geometry
+26. Negative rotation
+27. Rotation above 360 degrees
+28. Touching edge
+29. Bounds-invalid movement
+30. Safe-zone-invalid movement
+31. Rotation-aware violation reporting
+32. Full solve production path
+33. WP-04A adapter delegation
+34. No duplicate geometry
+35. 500-element bounded scenario
+
+If any P1 case is missing:
+add focused behavioral tests.
+
+No:
+
+- test.skip
+- test.todo
+- test.only
+- describe.only
+- swallowed exceptions
+- status-only route assertions
+
+==================================================
+PHASE 9 — STATIC QUALITY
+==================================================
+
+Search all changed files for:
+
+TODO
+FIXME
+HACK
+console.log
+console.error
+console.info
+debugger
+@ts-ignore
+@ts-expect-error
+as unknown as
+silent catch
+empty catch
+Math.random
+Date.now
+unbounded while
+recursion
+duplicate limits
+duplicate AABB
+duplicate OBB
+duplicate SAT
+raw secrets
+hardcoded tenant IDs
+
+Classify every occurrence.
+
+Remove only new accidental debug or dead code.
+
+Do not perform unrelated refactoring.
+
+==================================================
+PHASE 10 — VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+
+pnpm --filter api-server run build
+
+pnpm --filter api-server vitest run \
+  artifacts/api-server/src/services/layout-composer
+
+Then run:
+
+pnpm --filter api-server vitest run
+
+Report actual:
+
+- targeted test files
+- targeted passed
+- full test files
+- full passed
+- failed
+- skipped
+- todo
+- duration
+- typecheck exit code
+- build exit code
+
+Do not rely on old totals.
+
+The current conflict-resolved branch result is authoritative.
+
+==================================================
+PHASE 11 — GIT HYGIENE
+==================================================
+
+Inspect:
+
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+git diff --stat origin/main...HEAD
+
+Forbidden path check:
+
+git diff --name-only origin/main...HEAD \
+  | grep -E \
+  'attached_assets|Pasted-|session|prompt|screenshot|mockup-components|\.replit' \
+  || true
+
+Expected:
+no output.
+
+Ensure only WP-04B source, tests, documentation, and conflict resolutions remain.
+
+==================================================
+PHASE 12 — UPDATE REMOTE BRANCH
+==================================================
+
+Fetch the latest remote branch again:
+
+git fetch origin feature/wp04b-layout-rotation-resolver
+
+Capture exact lease:
+
+REMOTE_OLD_SHA="$(
+  git rev-parse origin/feature/wp04b-layout-rotation-resolver
+)"
+
+LOCAL_FINAL_SHA="$(git rev-parse HEAD)"
+
+Push with exact force lease only if required:
+
+git push \
+  --force-with-lease=refs/heads/feature/wp04b-layout-rotation-resolver:$REMOTE_OLD_SHA \
+  origin \
+  HEAD:refs/heads/feature/wp04b-layout-rotation-resolver
+
+A normal push is preferred if the merge commit creates a fast-forward path.
+
+Never use plain `--force`.
+
+If lease fails:
+STOP and do not overwrite newer remote work.
+
+==================================================
+PHASE 13 — FINAL PR #7 REVIEW
+==================================================
+
+Wait for GitHub recalculation.
+
+Verify PR #7:
+
+- state = open
+- isDraft = false
+- base = main
+- head = feature/wp04b-layout-rotation-resolver
+- head SHA = LOCAL_FINAL_SHA
+- mergeable = clean
+- no conflict
+- no accidental files
+- required checks passing
+- P0 findings = 0
+- P1 findings = 0
+
+Assess merge risk:
+
+- conflict risk
+- WP-03C risk
+- WP-04A risk
+- public API risk
+- resource-cap risk
+- bounds/safe-zone risk
+- rollback simplicity
+
+If any P0 or P1 remains:
+STOP.
+Do not merge.
+
+==================================================
+PHASE 14 — MERGE PR #7
+==================================================
+
+Only after Phase 13 passes completely.
+
+Merge PR #7 using the repository standard merge method.
+
+Preferred:
+standard merge commit.
+
+Record:
+
+- merge method
+- merge commit SHA
+- merged_at
+- merged_by
+
+==================================================
+PHASE 15 — RESTORE AND VERIFY MAIN
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+git ls-remote --heads origin main
+
+Required:
+
+- branch = main
+- no tracked changes
+- local SHA = origin/main SHA = ls-remote SHA
+
+==================================================
+PHASE 16 — POST-MERGE VALIDATION
+==================================================
+
+Verify on main:
+
+- rotationAwareResolver.ts exists
+- constraintSolver uses it
+- WP-04A obbSatAdapter remains intact
+- WP-03C fallback remains intact
+- resource caps exist
+- warning propagation exists
+- no attached_assets entered main
+- no unrelated generated files entered main
+- public contracts remain compatible
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Required:
+
+- typecheck PASS
+- API build PASS
+- all tests PASS
+- 0 failed
+- 0 skipped
+- 0 todo
+
+==================================================
+PHASE 17 — DISCOVER NEXT WORK PACKAGE
+==================================================
+
+Only after WP-04B is merged and main is verified.
+
+Search authoritative repository sources for:
+
+- WP-05
+- WP05
+- Work Package 05
+- Phase 6 WP-05
+- layout optimizer
+- placement optimizer
+- automatic layout
+- next work package
+- roadmap
+- milestone
+- backlog
+
+Inspect:
+
+- docs/
+- READMEs
+- roadmap files
+- architecture documents
+- ADRs
+- integration manifests
+- OpenAPI
+- WP-04B documentation
+
+Ignore:
+
+- attached_assets
+- prompt files
+- session logs
+- agent narration
+
+Classify:
+
+A. Clearly defined
+B. Partially defined
+C. Not defined
+D. Conflicting definitions
+
+Create:
+
+WP05_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+Do not commit it.
+
+==================================================
+PHASE 18 — TRANSITION
+==================================================
+
+If WP-05 is clearly defined and has no owner decisions:
+
+Create a branch from verified origin/main:
+
+feature/wp05-<authoritative-name>
+
+Do not implement yet.
+
+If partially defined:
+remain on main and report decisions required.
+
+If undefined:
+remain on main and request roadmap.
+
+If conflicting:
+remain on main and list conflicts.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+WP-04B
+
+1. Original PR head SHA
+2. Current main SHA before resolution
+3. Conflict files
+4. Conflict resolutions
+5. Pair cap status
+6. Translation cap status
+7. Deadline status
+8. Bounds status
+9. Safe-zone status
+10. Violation checker status
+11. Tests added
+12. Targeted result
+13. Full regression result
+14. Typecheck
+15. API build
+16. Final PR head SHA
+17. Final changed files
+18. Accidental files
+19. P0 findings
+20. P1 findings
+21. P2 findings
+22. Mergeability
+23. Merge method
+24. Merge commit SHA
+25. Main local SHA
+26. Main remote SHA
+27. SHA match
+28. Post-merge regression
+29. WP-04B final status
+
+NEXT WP
+
+30. Authoritative WP-05 references
+31. Scope classification
+32. Objective
+33. Dependencies
+34. Owner decisions
+35. New branch created
+36. Current branch
+37. Implementation started
+38. Report path
+39. Recommended next action
+
+Use exactly one verdict:
+
+A.
+WP-04B MERGED AND VERIFIED — NEXT WP BRANCH READY
+
+B.
+WP-04B MERGED AND VERIFIED — NEXT WP OWNER DECISIONS REQUIRED
+
+C.
+WP-04B MERGED AND VERIFIED — NEXT WP NOT DEFINED
+
+D.
+WP-04B CONFLICT OR REMEDIATION FAILED
+
+E.
+WP-04B POST-MERGE VALIDATION FAILED
+
+F.
+NEXT WP REQUIREMENTS CONFLICT
+
+STOP.
+
+Do not blindly implement the next WP.
+Do not push next-WP work before scope approval.
