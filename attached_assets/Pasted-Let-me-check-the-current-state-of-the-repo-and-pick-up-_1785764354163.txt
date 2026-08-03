@@ -1,0 +1,97 @@
+Let me check the current state of the repo and pick up the WP-04B remediation work.
+
+
+9 actions
+Remote SHA confirmed. Let me read all the relevant files in parallel before writing the remediation.
+
+
+5 actions
+Now let me get the full constraintSolver to see the no_collision handler and checkViolations function completely.
+
+
+6 actions
+I have all the context I need. Let me check the LayoutPlan type and then build the remediation branch.
+
+
+3 actions
+Good — I have everything I need. Time to create the remediation branch and implement all three P1 fixes plus the 12 test gaps.
+
+
+2 actions
+Branch is ready. Now I'll read the working-tree files in parallel, then apply all edits.
+
+
+4 actions
+Now I'll apply all three P1 fixes in parallel — constants, types, and solver.
+
+
+5 actions
+Now I need to apply the three changes to constraintSolver.ts. Let me read the exact text for the sections I need to edit.
+
+
+5 actions
+Now I'll apply all three P1 fixes to constraintSolver.ts in one pass.
+
+
+3 actions
+Let me find the return statement at the end of applyConstraint and the remaining sections to edit.
+
+
+2 actions
+Now fix the remaining return statement in applyConstraint, the rotation-aware no_collision branch (pair cap + translation cap), checkViolations, and solve() — all in parallel.
+
+
+7 actions
+Now update solve() to collect warnings from applyConstraint and surface them in the plan.
+
+
+2 actions
+Now I need to declare allWarnings in solve() and include it in the return value.
+
+
+9 actions
+Now I'll add the 12 missing test cases. First let me check the end of the test file.
+
+
+2 actions
+Good. Let me check the noCollisionConstraint helper and the imports in the test file so I can write the new sections correctly.
+
+
+5 actions
+Now I'll append the 12 new test cases and add the LAYOUT_LIMITS import in one shot.
+
+
+4 actions
+Add the LAYOUT_LIMITS import, then append all 12 new test cases.
+
+
+2 actions
+Now append all 12 new test cases covering the gaps.
+
+
+2 actions
+Now run typecheck and the tests in parallel.
+
+
+3 actions
+The typecheck errors are pre-existing (lib/db dist not built). Let me find the correct way to run the layout-composer tests.
+
+
+3 actions
+Two issues to fix: await in non-async it() callbacks, and incomplete ObbSatResult fixtures. Let me check the type first.
+
+
+3 actions
+Let me see the full ObbSatResult interface so I can build correct fixtures.
+
+
+2 actions
+I need to check the CollisionAlgorithm type values, then rewrite the affected test sections with proper async callbacks and complete fixtures.
+
+
+2 actions
+Now I'll rewrite the new test sections with correct async callbacks and complete ObbSatResult fixtures. First trim the bad sections.
+
+
+Counted lines
+You've reached your monthly free quota limit. It will reset on August 23, 2026.

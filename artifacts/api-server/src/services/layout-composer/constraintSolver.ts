@@ -47,6 +47,7 @@ import { checkTextFit, shrinkFontToFit, expandHeightToFit } from "./textFitting.
 import { findZoneById, clampElementsToZones } from "./zoneLayouts.js";
 
 import { LAYOUT_LIMITS } from "./constants.js";
+import { resolveRotationAwareCollisions } from "./rotationAwareResolver.js";
 
 const MAX_ITERATIONS = LAYOUT_LIMITS.MAX_ITERATIONS;
 const PRIORITY_ORDER: ConstraintPriority[] = ["hard", "soft", "hint"];
@@ -91,18 +92,26 @@ function hasChanged(op: LayoutOperation): boolean {
 
 // ── Constraint handlers ───────────────────────────────────────
 
+interface ApplyConstraintOptions {
+  pairCap?: number;
+  translationCapPx?: number;
+  deadlineAbsolute?: number;
+}
+
 function applyConstraint(
   constraint: Constraint,
   state: LayoutElement[],
   canvas: LayoutCanvas,
   zones: LayoutZone[],
-  iteration: number
-): { state: LayoutElement[]; ops: LayoutOperation[] } {
+  iteration: number,
+  resolverOpts?: ApplyConstraintOptions
+): { state: LayoutElement[]; ops: LayoutOperation[]; warnings: ConstraintViolation[] } {
   const ops: LayoutOperation[] = [];
+  const warnings: ConstraintViolation[] = [];
   let current = state;
 
   const elements = elementsByIds(current, constraint.elementIds);
-  if (elements.length === 0) return { state: current, ops };
+  if (elements.length === 0) return { state: current, ops, warnings };
 
   const p = constraint.params as Record<string, unknown> | undefined;
 
@@ -444,30 +453,41 @@ function applyConstraint(
       break;
     }
 
-    // ── Collision detection & resolution ────────────────────
+    // ── Collision detection & resolution (WP-04B: rotation-aware) ──────────
     case "no_collision": {
       const freshEls = elementsByIds(current, constraint.elementIds);
-      const pairs = findAllCollisions(freshEls);
-      for (const pair of pairs) {
-        const a = elementById(current, pair.elementA)!;
-        const b = elementById(current, pair.elementB)!;
-        const adjustments = resolveCollision(a, b);
-        for (const [id, { dx, dy }] of Object.entries(adjustments)) {
-          if (Math.abs(dx) < EPSILON && Math.abs(dy) < EPSILON) continue;
-          const el = elementById(current, id)!;
-          const op: LayoutOperation = {
-            type: "push_apart",
-            elementId: id,
-            constraintId: constraint.id,
-            before: { x: el.x, y: el.y },
-            after: { x: Math.round(el.x + dx), y: Math.round(el.y + dy) },
-            reason: `Collision with ${id === pair.elementA ? pair.elementB : pair.elementA}`,
-            iteration,
-          };
-          if (hasChanged(op)) {
-            ops.push(op);
-            current = applyDelta(current, id, op.after);
-          }
+
+      // Delegate to rotation-aware resolver (WP-04B).
+      // Zero-rotation pairs fall back to the existing AABB path automatically.
+      const resolved = resolveRotationAwareCollisions(freshEls, {
+        constraintId:    constraint.id,
+        iteration,
+        pairCap:         resolverOpts?.pairCap,
+        translationCapPx: resolverOpts?.translationCapPx,
+        deadlineAbsolute: resolverOpts?.deadlineAbsolute,
+      });
+
+      // Collect any cap/deadline warnings
+      if (resolved.warnings.length > 0) {
+        warnings.push(...resolved.warnings);
+      }
+
+      // Apply adjustments as push_apart operations
+      for (const [id, { dx, dy }] of Object.entries(resolved.adjustments)) {
+        if (Math.abs(dx) < EPSILON && Math.abs(dy) < EPSILON) continue;
+        const el = elementById(current, id)!;
+        const op: LayoutOperation = {
+          type: "push_apart",
+          elementId: id,
+          constraintId: constraint.id,
+          before: { x: el.x, y: el.y },
+          after: { x: Math.round(el.x + dx), y: Math.round(el.y + dy) },
+          reason: `Rotation-aware collision resolution (WP-04B)`,
+          iteration,
+        };
+        if (hasChanged(op)) {
+          ops.push(op);
+          current = applyDelta(current, id, op.after);
         }
       }
       break;
@@ -529,7 +549,7 @@ function applyConstraint(
       break;
   }
 
-  return { state: current, ops };
+  return { state: current, ops, warnings };
 }
 
 // ── Violation checker ─────────────────────────────────────────

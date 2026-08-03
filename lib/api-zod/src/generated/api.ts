@@ -184,23 +184,6 @@ export const DeleteProviderParams = zod.object({
 
 export const DeleteProviderResponse = zod.void()
 
-export const GetProviderHealthHistoryParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetProviderHealthHistoryQueryParams = zod.object({
-  "limit": zod.coerce.number().optional()
-})
-
-export const GetProviderHealthHistoryResponse = zod.array(zod.object({
-  "id": zod.number(),
-  "providerId": zod.number(),
-  "isActive": zod.boolean(),
-  "httpStatus": zod.number().nullable(),
-  "error": zod.string().nullable(),
-  "checkedAt": zod.coerce.date()
-}))
-
 
 /**
  * @summary List all AI models
