@@ -1,0 +1,222 @@
+FINAL GIT EXECUTION — PUSH TEAM 17 INTERIOR CONCEPT DRAFT + CREATE PR
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Branch:
+feature/team17-interior-concept-draft-final
+
+Expected local SHA:
+d618f0d
+
+Known validation:
+
+- ownership guard implemented
+- vi.mock moved to top-level
+- 11 ownership tests PASS
+- full regression 6114/6114 PASS
+- typecheck PASS
+- API build PASS
+- changed files:
+  - service.ts
+  - idor.test.ts
+  - concept-draft-ownership.test.ts
+- no accidental files
+
+MISSION:
+
+1. Verify GitHub authentication.
+2. Push the clean feature branch.
+3. Create the PR.
+4. Verify PR contents and mergeability.
+5. Do not merge.
+
+==================================================
+PHASE 1 — VERIFY LOCAL STATE
+==================================================
+
+Run:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+
+Required:
+
+- branch = feature/team17-interior-concept-draft-final
+- HEAD starts with d618f0d
+- no tracked changes
+- exactly the intended 3 files
+- no attached_assets
+- no .replit
+- no screenshots
+- no unrelated files
+
+If anything differs:
+STOP and report.
+
+==================================================
+PHASE 2 — VERIFY AUTHENTICATION
+==================================================
+
+Check:
+
+test -n "$GITHUB_TOKEN" \
+  && echo "TOKEN_AVAILABLE" \
+  || echo "TOKEN_MISSING"
+
+If token missing, try Replit Git integration.
+
+Do not print credentials.
+
+If neither works:
+STOP with AUTHENTICATION_FAILED.
+
+==================================================
+PHASE 3 — VERIFY REMOTE BRANCH
+==================================================
+
+Run:
+
+git ls-remote --heads origin \
+  feature/team17-interior-concept-draft-final
+
+If branch does not exist:
+push normally.
+
+If branch exists:
+fetch and compare SHAs before pushing.
+
+Do not force-push unless absolutely required.
+
+==================================================
+PHASE 4 — PUSH
+==================================================
+
+Push:
+
+git push -u origin \
+  feature/team17-interior-concept-draft-final
+
+If rejected due to divergence:
+STOP and report exact remote SHA.
+
+Do not use plain --force.
+
+==================================================
+PHASE 5 — VERIFY REMOTE SHA
+==================================================
+
+Run:
+
+git fetch origin feature/team17-interior-concept-draft-final
+
+Verify:
+
+git rev-parse HEAD
+git rev-parse origin/feature/team17-interior-concept-draft-final
+
+Required:
+
+local SHA = remote SHA
+
+==================================================
+PHASE 6 — CREATE PR
+==================================================
+
+Create PR:
+
+Base:
+main
+
+Head:
+feature/team17-interior-concept-draft-final
+
+Title:
+
+feat(interior-design): finalize concept draft ownership and release readiness
+
+Body:
+
+## Summary
+
+Finalizes release readiness for Interior Design Concept Draft.
+
+## Changes
+
+- adds per-admin draft ownership enforcement
+- protects update, approval, revision, and reset operations
+- moves `vi.mock("@workspace/db")` to top-level
+- adds ownership and authorization tests
+
+## Validation
+
+- typecheck: PASS
+- API build: PASS
+- regression: 6114/6114 PASS
+- failed: 0
+- skipped: 0
+
+## Scope
+
+- no database migration
+- no public API breaking change
+- no unrelated files
+- no attached_assets or Replit artifacts
+
+Do not merge.
+
+==================================================
+PHASE 7 — VERIFY PR
+==================================================
+
+Verify:
+
+- PR state = open
+- base = main
+- head = feature/team17-interior-concept-draft-final
+- changed files = exactly 3
+- no attached_assets
+- no unrelated files
+- mergeable = clean or pending
+- checks passing
+- commit count correct
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Local SHA
+2. Remote SHA
+3. SHA match
+4. Push status
+5. PR number
+6. PR URL
+7. PR state
+8. Mergeable status
+9. Changed files
+10. Typecheck
+11. API build
+12. Regression
+13. Accidental files
+14. Ready for final review
+
+Use one verdict only:
+
+A. BRANCH PUSHED — PR READY FOR FINAL REVIEW
+
+B. AUTHENTICATION FAILED
+
+C. REMOTE DIVERGED
+
+D. PUSH FAILED
+
+E. PR CREATION FAILED
+
+STOP.
+
+Do not merge.
