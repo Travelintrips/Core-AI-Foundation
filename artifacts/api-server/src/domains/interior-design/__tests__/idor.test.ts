@@ -12,6 +12,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
 
+// ── Top-level mock (vi.mock hoisted by vitest — must be at module scope) ──────
+vi.mock("@workspace/db", () => ({
+  db: {
+    select: vi.fn().mockReturnThis(),
+    from:   vi.fn().mockReturnThis(),
+    where:  vi.fn().mockReturnThis(),
+    limit:  vi.fn().mockImplementation(function () {
+      return Promise.resolve([]); // wrong token → empty result by default
+    }),
+  },
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function repoRoot() {
@@ -143,19 +155,6 @@ describe("P1 IDOR: Token-based ownership — service layer", () => {
     // Simulate two projects with different tokens
     const projectA = { id: 1, accessToken: "token-aaa-111", title: "Project A", roomType: "bedroom", status: "draft" };
     const projectB = { id: 2, accessToken: "token-bbb-222", title: "Project B", roomType: "office", status: "draft" };
-
-    // Mock db query: only returns a project if token matches
-    vi.mock("@workspace/db", () => ({
-      db: {
-        select: vi.fn().mockReturnThis(),
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockImplementation(function() {
-          // Simulate: only token-aaa-111 resolves to projectA
-          return Promise.resolve([]);  // wrong token → empty result
-        }),
-      },
-    }));
 
     // Direct logic test: token !== project.accessToken → no result
     // Using actual comparison logic from getProjectByToken
