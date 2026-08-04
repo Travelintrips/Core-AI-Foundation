@@ -1,0 +1,757 @@
+MASTER IMPLEMENTATION — WP-05 MATERIAL RECOMMENDATION ENGINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Baseline branch:
+main
+
+Verified baseline SHA:
+c7e8bc7389eb5fcf39be5ead8ebcbbcc1a4ff8a0
+
+Target branch:
+feature/wp05-material-recommendation-engine
+
+Authoritative owner decisions:
+
+1. Work package:
+   Phase 6 WP-05 — Material Recommendation Engine
+
+2. Data enrichment:
+   Store recommendation metadata in:
+   materials.technicalData JSONB
+
+3. Recommendation strategy:
+   Rule-based scoring only
+
+4. LLM usage:
+   Not allowed in WP-05
+
+MISSION:
+
+Implement a deterministic Material Recommendation Engine for Interior Design.
+
+The engine must recommend suitable materials for:
+
+- flooring
+- walls
+- ceiling
+- furniture
+
+based on room style and available material attributes.
+
+It must integrate with the existing Material Library and Interior Design
+workflow without breaking WP-01 through WP-04B.
+
+Do not push.
+Do not create PR.
+Do not begin WP-06.
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+
+- use LLMs
+- call OpenAI, Anthropic, Gemini, or another AI provider
+- generate natural-language recommendations through an AI model
+- duplicate Material Library records
+- create a second material catalog
+- change existing material IDs
+- break existing public APIs
+- modify unrelated Interior Design state machines
+- modify WP-03 or WP-04 collision/layout engines
+- create database migrations before auditing the actual schema
+- commit attached_assets
+- commit prompt/session files
+- commit screenshots
+- push before RC audit
+- begin WP-06
+
+==================================================
+PHASE 1 — VERIFY BASELINE
+==================================================
+
+Run:
+
+git switch main
+git fetch origin main
+git reset --hard origin/main
+
+Verify:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+
+Required:
+
+- branch = main
+- HEAD = origin/main
+- SHA = c7e8bc7389eb5fcf39be5ead8ebcbbcc1a4ff8a0
+  or a newer verified main SHA
+- no tracked changes
+- untracked uploaded prompt files remain uncommitted
+
+Record the actual baseline SHA.
+
+==================================================
+PHASE 2 — CREATE FEATURE BRANCH
+==================================================
+
+Create:
+
+feature/wp05-material-recommendation-engine
+
+Verify:
+
+git branch --show-current
+git status --short
+
+==================================================
+PHASE 3 — AUDIT EXISTING MATERIAL CONTRACTS
+==================================================
+
+Inspect the actual Material Library implementation.
+
+Locate:
+
+- material schema
+- material service
+- material routes
+- material categories
+- material technicalData
+- room styles
+- interior design concept styles
+- existing filters and tags
+- existing material seed data
+- existing tenant/platform scope
+- Material Library tests
+- API Zod contracts
+- OpenAPI definitions
+
+Document the actual fields available for scoring.
+
+Do not assume field names.
+
+Determine whether `technicalData` already contains or can contain:
+
+- compatibleStyles
+- roomTypes
+- applications
+- durability
+- moistureResistance
+- stainResistance
+- fireResistance
+- acousticPerformance
+- maintenanceLevel
+- priceTier
+- sustainability
+- indoorOutdoor
+- colorFamilies
+- textureFamilies
+- finishTypes
+- climateSuitability
+- recommendedFor
+- notRecommendedFor
+
+If equivalent fields already exist, reuse them.
+
+Do not introduce duplicate semantics under different names.
+
+==================================================
+PHASE 4 — DEFINE RECOMMENDATION INPUT
+==================================================
+
+Create a typed internal input contract using repository conventions.
+
+It should support repository-equivalent fields for:
+
+- tenantId
+- roomType
+- targetStyle
+- application:
+  - flooring
+  - wall
+  - ceiling
+  - furniture
+- preferredColorFamilies
+- preferredTextureFamilies
+- budgetTier
+- durabilityNeed
+- moistureExposure
+- maintenancePreference
+- sustainabilityPreference
+- climate
+- excludedMaterialIds
+- requiredTags
+- limit
+
+Use existing enums/types where available.
+
+Do not expose new public fields unless required.
+
+==================================================
+PHASE 5 — DEFINE RECOMMENDATION RESULT
+==================================================
+
+Create a typed result with repository-equivalent fields for:
+
+- materialId
+- score
+- rank
+- matchedRules
+- warnings
+- styleScore
+- applicationScore
+- durabilityScore
+- environmentScore
+- budgetScore
+- maintenanceScore
+- sustainabilityScore
+- technicalDataSnapshot
+
+Requirements:
+
+- deterministic
+- sortable
+- explainable
+- no hidden AI output
+- finite scores
+- no NaN
+- no Infinity
+- stable tie-breaking by material identity
+
+Public additions must be backward-compatible.
+
+==================================================
+PHASE 6 — RULE-BASED SCORING DESIGN
+==================================================
+
+Implement a documented weighted scoring model.
+
+Preferred total score range:
+
+0–100
+
+Suggested dimensions:
+
+- style compatibility
+- application compatibility
+- room-type compatibility
+- durability suitability
+- moisture/environment suitability
+- maintenance suitability
+- budget compatibility
+- sustainability preference
+- color compatibility
+- texture/finish compatibility
+
+Use actual repository data availability.
+
+Do not invent unsupported criteria.
+
+Rules must:
+
+- be deterministic
+- have centralized weights
+- avoid double-counting
+- return explanations
+- support hard exclusions
+- support soft penalties
+- apply stable sorting
+- apply tenant scope
+- exclude archived/inactive materials
+- handle incomplete technicalData safely
+
+Document every weight.
+
+==================================================
+PHASE 7 — TECHNICAL DATA NORMALIZATION
+==================================================
+
+Create normalization helpers for `materials.technicalData`.
+
+Requirements:
+
+- safely handle null
+- safely handle arrays and strings
+- normalize casing
+- normalize whitespace
+- validate numeric ranges
+- ignore unknown keys
+- preserve original JSONB
+- do not mutate database records
+- do not silently overwrite technicalData
+
+If runtime validation is needed, use shared Zod contracts.
+
+Do not add a migration unless the actual schema requires it.
+
+==================================================
+PHASE 8 — ENGINE IMPLEMENTATION
+==================================================
+
+Create a repository-consistent service, for example:
+
+artifacts/api-server/src/services/materialRecommendationService.ts
+
+or the existing domain-equivalent path.
+
+Implement:
+
+- list eligible materials
+- normalize recommendation input
+- normalize technicalData
+- apply hard exclusions
+- calculate component scores
+- calculate total score
+- generate matched-rule explanations
+- apply stable tie-breaking
+- apply result limit
+- return deterministic results
+
+Do not query one material at a time.
+
+Avoid N+1 queries.
+
+==================================================
+PHASE 9 — DATABASE AND TENANT SCOPE
+==================================================
+
+Use the existing Material Library repository/service.
+
+Verify:
+
+- tenant-scoped materials
+- platform-wide materials where tenant_id is null, if that is the current contract
+- archived materials excluded
+- inactive materials excluded
+- deleted materials excluded
+- no cross-tenant leakage
+- no service-role bypass assumption in application logic
+
+Do not create a second tenant model.
+
+==================================================
+PHASE 10 — API DESIGN
+==================================================
+
+Audit whether recommendation should be exposed through:
+
+A. Material Library API
+B. Interior Design API
+C. internal-only service
+D. both internal service and authenticated admin endpoint
+
+Choose the smallest architecture consistent with current patterns.
+
+Preferred endpoint, if needed:
+
+POST /api/ai/materials/recommend
+
+or repository-consistent equivalent.
+
+Request:
+
+- recommendation input
+
+Response:
+
+- ranked recommendations
+- scoring breakdown
+- matched rules
+- warnings
+- result metadata
+
+Requirements:
+
+- admin-only unless an existing public design flow requires token access
+- shared api-zod contracts
+- UUID validation where applicable
+- request body validation
+- response validation
+- structured errors
+- pagination or limit cap
+- no raw database object leakage
+- no technical secrets
+
+Do not add public access without a proven requirement.
+
+==================================================
+PHASE 11 — INTERIOR DESIGN INTEGRATION
+==================================================
+
+Integrate with the existing Interior Design Concept Draft workflow.
+
+Preferred integration:
+
+- editor requests material recommendations by room/style/application
+- recommendations are advisory
+- no automatic overwrite of approved snapshots
+- no automatic mutation of concept draft
+- user/admin explicitly applies a selected recommendation
+- approved_for_rendering remains immutable
+- request revision remains the only path to change approved content
+
+Verify:
+
+- project/style context is mapped correctly
+- material selection uses canonical material IDs
+- recommendation results do not bypass ownership rules
+- no IDOR regression
+- no autosave assumptions introduced
+
+==================================================
+PHASE 12 — MATERIAL ENRICHMENT
+==================================================
+
+Add or update `technicalData` values only through an explicit enrichment path.
+
+Possible scope:
+
+- seed enrichment
+- admin enrichment
+- idempotent script
+- service normalization
+
+Requirements:
+
+- do not overwrite existing valid keys
+- do not remove unknown keys
+- idempotent
+- dry-run support if script-based
+- report inserted/updated/skipped counts
+- tenant-safe
+- no LLM-generated metadata
+
+If the current material dataset lacks enough attributes for scoring:
+
+create a deterministic enrichment mapping based on existing categories,
+tags, and material properties.
+
+Document assumptions.
+
+==================================================
+PHASE 13 — TESTS: UNIT
+==================================================
+
+Add focused unit tests for at least:
+
+1. Exact style match scores highest.
+2. Partial style match.
+3. Style mismatch penalty.
+4. Correct application match.
+5. Wrong application hard exclusion.
+6. Room-type match.
+7. Moisture-resistant material for wet room.
+8. Moisture-sensitive material penalized.
+9. Durability requirement.
+10. Low-maintenance preference.
+11. Budget match.
+12. Budget mismatch penalty.
+13. Sustainability preference.
+14. Color-family match.
+15. Texture-family match.
+16. Missing technicalData.
+17. Malformed technicalData.
+18. Unknown technicalData keys ignored.
+19. Archived material excluded.
+20. Inactive material excluded.
+21. Explicitly excluded material omitted.
+22. Required tag enforced.
+23. Stable tie-breaking.
+24. Deterministic repeated calls.
+25. Input immutability.
+26. Material record immutability.
+27. Score finite and bounded.
+28. Limit cap.
+29. Tenant isolation.
+30. Platform-wide material inclusion.
+31. No LLM/provider call.
+32. No N+1 query behavior.
+33. Empty eligible material set.
+34. Warning for incomplete data.
+
+No skipped/todo tests.
+
+==================================================
+PHASE 14 — TESTS: INTEGRATION
+==================================================
+
+Add integration tests for:
+
+- authenticated recommendation endpoint
+- invalid request rejected
+- unauthorized request rejected
+- tenant scope
+- ranked response ordering
+- scoring breakdown
+- matched rule explanations
+- limit enforcement
+- Interior Design style mapping
+- advisory-only behavior
+- approved snapshot not mutated
+- ownership guard preserved
+- no public route exposure unless required
+
+Use behavioral assertions.
+
+==================================================
+PHASE 15 — PERFORMANCE
+==================================================
+
+Create a bounded non-flaky performance test.
+
+Representative scenario:
+
+- up to 1,000 eligible materials
+- multiple scoring dimensions
+- no N+1 query
+- deterministic output
+- bounded execution
+
+Measure:
+
+- material count
+- normalization count
+- excluded count
+- scored count
+- returned count
+- elapsed duration
+
+Do not use strict wall-clock assertions in normal CI.
+
+Assert:
+
+- result limit respected
+- deterministic ranking
+- no unbounded loops
+- finite scoring
+
+==================================================
+PHASE 16 — SECURITY
+==================================================
+
+Audit:
+
+- admin authentication
+- tenant isolation
+- ownership integration
+- request validation
+- result field allowlist
+- technicalData exposure
+- IDOR
+- injection risk
+- JSONB handling
+- rate/limit caps
+- resource exhaustion
+
+No user-controlled dynamic code execution.
+
+No regex denial-of-service patterns.
+
+==================================================
+PHASE 17 — STATIC QUALITY
+==================================================
+
+Search changed files for:
+
+TODO
+FIXME
+HACK
+console.log
+console.error
+console.info
+debugger
+@ts-ignore
+@ts-expect-error
+as unknown as
+silent catch
+empty catch
+Math.random
+Date.now
+raw SQL interpolation
+duplicate scoring logic
+hardcoded tenant ID
+LLM/provider imports
+
+Classify all occurrences.
+
+No new debug code.
+
+==================================================
+PHASE 18 — DOCUMENTATION
+==================================================
+
+Create:
+
+docs/wp05-material-recommendation-engine.md
+
+Document:
+
+- objective
+- architecture
+- input contract
+- scoring formula
+- weights
+- hard exclusions
+- soft penalties
+- tie-breaking
+- technicalData schema
+- tenant behavior
+- API
+- Interior Design integration
+- performance
+- security
+- known limitations
+- explicit WP-06 boundary
+
+Do not claim AI/LLM reasoning.
+
+==================================================
+PHASE 19 — VALIDATION
+==================================================
+
+Run targeted WP-05 tests first.
+
+Then:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Baseline:
+
+- 207 test files
+- 6103/6103 PASS
+
+Report actual final:
+
+- unit tests
+- integration tests
+- route tests
+- test files
+- passed
+- failed
+- skipped
+- todo
+- duration
+- typecheck
+- build
+
+Do not modify unrelated tests to force green.
+
+==================================================
+PHASE 20 — GIT HYGIENE
+==================================================
+
+Create atomic commits, preferably:
+
+1.
+feat(materials): add deterministic recommendation engine
+
+2.
+feat(interior-design): integrate material recommendations
+
+3.
+test(materials): add scoring and integration coverage
+
+4.
+docs(materials): document WP-05 recommendation engine
+
+5.
+chore(materials): add deterministic technical-data enrichment
+   only if needed
+
+Verify:
+
+git status --short
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+git diff --stat origin/main...HEAD
+
+Required:
+
+- no attached_assets
+- no prompt/session files
+- no screenshots
+- no .replit
+- no unrelated generated files
+- no unrelated feature changes
+
+Do not push.
+Do not create PR.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Repository
+2. Branch
+3. Base SHA
+4. Head SHA
+5. Files added
+6. Files modified
+7. Material contracts audited
+8. technicalData fields used
+9. Scoring dimensions
+10. Scoring weights
+11. Hard exclusions
+12. Soft penalties
+13. Tie-breaking
+14. Tenant behavior
+15. Platform-wide behavior
+16. API endpoint
+17. Authentication
+18. Interior Design integration
+19. Approved snapshot behavior
+20. Enrichment method
+21. Idempotency
+22. Unit test count
+23. Integration test count
+24. Route test count
+25. Performance result
+26. Security findings
+27. Duplicate scoring logic found
+28. LLM/provider calls found
+29. Typecheck
+30. API build
+31. Full regression result
+32. Failed/skipped/todo
+33. Accidental files
+34. Commits created
+35. Ready for RC audit
+
+Use exactly one verdict:
+
+A.
+WP-05 IMPLEMENTED — READY FOR RELEASE-CANDIDATE AUDIT
+
+B.
+WP-05 CORE COMPLETE — INTERIOR DESIGN INTEGRATION REMAINS
+
+C.
+WP-05 BLOCKED — MATERIAL DATA INSUFFICIENT
+
+D.
+WP-05 BLOCKED — EXISTING CONTRACT INSUFFICIENT
+
+E.
+BACKWARD COMPATIBILITY FAILED
+
+F.
+VALIDATION FAILED
+
+G.
+IMPLEMENTATION FAILED
+
+STOP.
+
+Do not push.
+Do not create PR.
+Do not begin WP-06.
