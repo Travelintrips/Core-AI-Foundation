@@ -2,20 +2,20 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
-import { generateCandidates, evaluateHardRules, validatePlacementRequest, MAX_ITEMS } from "./lib/placement.mjs";
+import { generateCandidates, evaluateHardRules, MAX_ITEMS } from "./lib/placement.mjs";
+import { isUuid, validatePlacementRequest } from "./lib/contracts.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(root, "public");
 const sessionId = "7cb3f3a4-04d8-47b0-8c28-4e87c3c187b0";
 const tenantId = "tenant-atelier";
 
-const room = { id: "room-template-living-01", name: "Sonder living room", width: 6.4, depth: 4.8, defaultClearance: 0.35 };
+const room = { id: "08cbf12b-4a1e-46d7-8f2b-9ac5b8fe4f10", name: "Sonder living room", width: 6.4, depth: 4.8, defaultClearance: 0.35 };
 const initialItems = [
-  { id: "sofa-01", name: "Cloud sofa", category: "Seating", color: "#C47B5A", x: 0.55, y: 0.55, width: 2.45, depth: 0.92, height: 0.78, rotation: 0, locked: true, manual: true, clearanceZone: { x: 0.18, y: 0.28 } },
-  { id: "table-01", name: "Low oak table", category: "Table", color: "#D7B47D", x: 2.85, y: 1.7, width: 1.35, depth: 0.72, height: 0.42, rotation: 0, locked: false, manual: false, clearanceZone: { x: 0.2, y: 0.2 } },
-  { id: "chair-01", name: "Bouclé lounge chair", category: "Seating", color: "#7D9A91", x: 4.5, y: 2.9, width: 0.88, depth: 0.88, height: 0.82, rotation: 0, locked: false, manual: false, clearanceZone: { x: 0.18, y: 0.18 } },
-  { id: "plant-01", name: "Olive tree", category: "Decor", color: "#9AA866", x: 5.35, y: 0.62, width: 0.58, depth: 0.58, height: 1.65, rotation: 0, locked: false, manual: false }
+  { id: "3d08c1a1-2f2a-4f9e-8a2a-7e0d835dc101", name: "Cloud sofa", category: "Seating", color: "#C47B5A", x: 0.55, y: 0.55, width: 2.45, depth: 0.92, height: 0.78, rotation: 0, locked: true, manual: true, clearanceZone: { x: 0.18, y: 0.28 } },
+  { id: "3d08c1a1-2f2a-4f9e-8a2a-7e0d835dc102", name: "Low oak table", category: "Table", color: "#D7B47D", x: 2.85, y: 1.7, width: 1.35, depth: 0.72, height: 0.42, rotation: 0, locked: false, manual: false, clearanceZone: { x: 0.2, y: 0.2 } },
+  { id: "3d08c1a1-2f2a-4f9e-8a2a-7e0d835dc103", name: "Bouclé lounge chair", category: "Seating", color: "#7D9A91", x: 4.5, y: 2.9, width: 0.88, depth: 0.88, height: 0.82, rotation: 0, locked: false, manual: false, clearanceZone: { x: 0.18, y: 0.18 } },
+  { id: "3d08c1a1-2f2a-4f9e-8a2a-7e0d835dc104", name: "Olive tree", category: "Decor", color: "#9AA866", x: 5.35, y: 0.62, width: 0.58, depth: 0.58, height: 1.65, rotation: 0, locked: false, manual: false }
 ];
 const state = {
   tenantId,
@@ -68,6 +68,10 @@ async function api(req, res, pathname) {
     error(res, 401, "ADMIN_REQUIRED", "Admin access is required for placement operations.");
     return true;
   }
+  if (!isUuid(match[1])) {
+    error(res, 422, "INVALID_UUID", "sessionId must be a valid UUID.");
+    return true;
+  }
   if (match[1] !== sessionId) {
     error(res, 404, "SESSION_NOT_FOUND", "Layout session was not found in this tenant.");
     return true;
@@ -96,9 +100,21 @@ async function api(req, res, pathname) {
     error(res, 404, "SESSION_NOT_FOUND", "Layout session was not found in this tenant.");
     return true;
   }
+  if (body.sessionId && body.sessionId !== sessionId) {
+    error(res, 404, "SESSION_NOT_FOUND", "Layout session was not found in this tenant.");
+    return true;
+  }
+  if (body.roomTemplateId && body.roomTemplateId !== room.id) {
+    error(res, 422, "ROOM_TEMPLATE_MISMATCH", "The room template does not belong to this layout session.");
+    return true;
+  }
   const requestedItems = body.items || state.placements;
   if (!Array.isArray(requestedItems) || requestedItems.length > MAX_ITEMS) {
     error(res, 422, "CAPACITY_EXCEEDED", `At most ${MAX_ITEMS} items can be placed.`);
+    return true;
+  }
+  if (body.maxItems !== undefined && requestedItems.length > body.maxItems) {
+    error(res, 422, "CAPACITY_EXCEEDED", `This request allows at most ${body.maxItems} items.`);
     return true;
   }
   const candidates = generateCandidates(room, requestedItems, body);
@@ -110,7 +126,7 @@ async function api(req, res, pathname) {
     error(res, 409, "SNAPSHOT_APPROVED", "Approved rendering snapshots are immutable. Create a new revision to apply placement.");
     return true;
   }
-  const candidate = candidates.find((entry) => entry.id === body.candidateId) || (body.candidate ? body.candidate : null);
+  const candidate = candidates.find((entry) => entry.id === body.candidateId) || null;
   if (!candidate || !Array.isArray(candidate.items)) {
     error(res, 422, "CANDIDATE_REQUIRED", "Select a preview candidate before applying placement.");
     return true;
@@ -128,6 +144,10 @@ async function api(req, res, pathname) {
   const hardRules = evaluateHardRules(room, candidate.items, body);
   if (hardRules.length) {
     error(res, 422, "HARD_RULE_VIOLATION", "This candidate violates hard placement rules.", hardRules);
+    return true;
+  }
+  if (JSON.stringify(candidate.items) === JSON.stringify(state.placements)) {
+    json(res, 200, { sessionId, applied: true, idempotent: true, revision: state.revision, placements: structuredClone(state.placements) });
     return true;
   }
   state.placements = structuredClone(candidate.items);

@@ -6,7 +6,7 @@ WP-06A provides a deterministic, advisory-first foundation for suggesting furnit
 
 ## Architecture
 
-The placement engine is a pure module. It evaluates room-aware footprints, hard constraints, and soft scoring, then creates candidates using five bounded strategies: `WALL_LEFT`, `WALL_RIGHT`, `WALL_TOP`, `WALL_BOTTOM`, and `CENTER`. The server exposes admin-only JSON endpoints and keeps the example session in memory so the project can run without a migration.
+The placement engine is a pure module. Shared runtime contracts and JSDoc wire shapes live in `lib/contracts.mjs`; it validates UUIDs, finite geometry, positive dimensions, limits, and deadlines before the service runs. The engine evaluates room-aware footprints, hard constraints, and soft scoring, then creates candidates using five bounded strategies: `WALL_LEFT`, `WALL_RIGHT`, `WALL_TOP`, `WALL_BOTTOM`, and `CENTER`. The server exposes admin-only JSON endpoints and keeps the example session in memory so the project can run without a migration.
 
 ## Hard rules
 
@@ -27,7 +27,7 @@ SR-1 wall alignment, SR-2 symmetry, SR-3 25 cm grid snap, SR-4 open center, SR-5
 
 ## Preview and apply
 
-`POST /api/ai/layout-sessions/:sessionId/suggest-placement` returns at most three ranked alternatives and never mutates placements. `POST /api/ai/layout-sessions/:sessionId/apply-placement` requires an explicit `candidateId`, revalidates the candidate, protects locked/manual items, and persists the complete placement set atomically in the in-memory session.
+`POST /api/ai/layout-sessions/:sessionId/suggest-placement` returns at most three ranked alternatives and never mutates placements. `POST /api/ai/layout-sessions/:sessionId/apply-placement` requires an explicit preview `candidateId` (raw candidate payloads are rejected), revalidates the candidate, protects locked/manual items, and persists the complete placement set atomically in the in-memory session. Re-applying the same resulting placement is idempotent and does not create a new revision.
 
 ## Security and snapshot safety
 
