@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#171a19" />
+    <link rel="icon" href="/favicon.svg" />
+    <title>Atelier / Placement review</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">a</span><span>atelier</span><span class="brand-beta">AI</span></div>
+        <div class="workspace-label">WORKSPACE</div>
+        <nav>
+          <a href="#" class="nav-item"><span class="nav-icon">⌂</span>Overview</a>
+          <a href="#" class="nav-item active"><span class="nav-icon">⌑</span>Layout sessions</a>
+          <a href="#" class="nav-item"><span class="nav-icon">▧</span>Furniture library</a>
+          <a href="#" class="nav-item"><span class="nav-icon">◒</span>Material recommendations</a>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="system-card"><span class="status-dot"></span><div><strong>Placement engine</strong><small>Operational · v0.6A</small></div></div>
+          <div class="user-row"><div class="avatar">JD</div><div><strong>Jordan Davis</strong><small>Admin workspace</small></div><span class="dots">···</span></div>
+        </div>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <div class="breadcrumbs"><span>Layout sessions</span><b>/</b><strong>Sonder living room</strong></div>
+          <div class="top-actions"><button class="icon-button" aria-label="Help">?</button><button class="icon-button" aria-label="Notifications">♧</button><div class="avatar small">JD</div></div>
+        </header>
+        <section class="page-heading">
+          <div><div class="eyebrow">LAYOUT SESSION · REVISION 12</div><h1>Placement review</h1><p>Review deterministic furniture arrangements before applying them to the session.</p></div>
+          <div class="heading-actions"><span class="safe-pill"><i></i> Preview only</span><button class="ghost-button" id="resetBtn">Reset preview</button><button class="primary-button" id="applyBtn">Apply placement <span>→</span></button></div>
+        </section>
+        <section class="layout-grid">
+          <div class="workspace-card">
+            <div class="workspace-toolbar"><div class="toolbar-title"><span class="room-icon">▦</span><div><strong>Sonder living room</strong><small>Living room · 6.4m × 4.8m</small></div></div><div class="toolbar-controls"><button class="toolbar-btn" id="zoomOut">−</button><span id="zoomValue">100%</span><button class="toolbar-btn" id="zoomIn">+</button><span class="toolbar-divider"></span><button class="toolbar-btn">⌗</button><button class="toolbar-btn">⋮</button></div></div>
+            <div class="canvas-wrap"><div class="canvas" id="canvas"><div class="wall wall-top"></div><div class="wall wall-left"></div><div class="wall wall-right"></div><div class="wall wall-bottom"></div><div class="window window-left">window</div><div class="door">door</div><div class="zone-label">CENTRAL CIRCULATION</div><div class="center-zone"></div><div id="furnitureLayer"></div><div class="dimension dim-width">6.4m</div><div class="dimension dim-depth">4.8m</div></div></div>
+            <div class="canvas-footer"><div class="legend"><span><i class="legend-dot locked"></i> Locked / manual</span><span><i class="legend-dot suggested"></i> Suggested</span><span><i class="legend-dot clearance"></i> Clearance zone</span></div><span class="canvas-hint">Drag to inspect · Scroll to zoom</span></div>
+          </div>
+          <aside class="review-panel">
+            <div class="panel-section alternatives"><div class="section-heading"><div><span class="eyebrow">SUGGESTED LAYOUTS</span><h2>Choose an alternative</h2></div><span class="count-badge" id="altCount">3</span></div><div id="alternatives"></div></div>
+            <div class="panel-section rules-panel"><div class="section-heading"><div><span class="eyebrow">RULE AUDIT</span><h2>Why this layout?</h2></div><span class="valid-badge" id="validBadge">VALID</span></div><div class="rule-list" id="ruleList"></div></div>
+            <div class="panel-section constraints"><div class="section-heading"><div><span class="eyebrow">SESSION CONSTRAINTS</span><h2>Protected items</h2></div><button class="text-button">Manage</button></div><div class="constraint-row"><span class="constraint-icon lock">⌑</span><div><strong id="lockedCount">1 locked item</strong><small>Locked items never move</small></div><span class="check">✓</span></div><div class="constraint-row"><span class="constraint-icon grid">⌗</span><div><strong>25 cm snap grid</strong><small>Deterministic placement grid</small></div><span class="check">✓</span></div><div class="constraint-row"><span class="constraint-icon room">□</span><div><strong>Room bounds</strong><small>6.4m × 4.8m · 35 cm clearances</small></div><span class="check">✓</span></div></div>
+          </aside>
+        </section>
+        <footer class="page-footer"><span><span class="status-dot"></span> All changes are local to this preview</span><span>WP-06A · Deterministic placement foundation</span></footer>
+      </main>
+    </div>
+    <div class="toast" id="toast"></div>
+  </body>
+</html>

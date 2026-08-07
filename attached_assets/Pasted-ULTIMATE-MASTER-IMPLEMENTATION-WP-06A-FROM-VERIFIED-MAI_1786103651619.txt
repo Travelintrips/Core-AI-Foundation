@@ -1,0 +1,833 @@
+ULTIMATE MASTER IMPLEMENTATION — WP-06A FROM VERIFIED MAIN
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+IMPORTANT CORRECTION:
+
+WP-06A does NOT already exist.
+
+Do NOT search for an old WP-06A branch.
+Do NOT require an existing WP-06A commit.
+Do NOT stop because WP-06A files are missing.
+
+The absence of WP-06A files is EXPECTED.
+
+The task is to IMPLEMENT WP-06A NEW from the current verified main.
+
+Current roadmap state:
+
+- WP-01 complete
+- WP-02 complete
+- WP-03 complete
+- WP-04 complete
+- WP-05 complete
+- WP-06 discovery complete
+- WP-06A is the next new implementation
+
+==================================================
+OWNER DECISIONS — FINAL
+==================================================
+
+Persistence:
+Reuse existing:
+- layout_sessions
+- placements
+
+Do NOT create:
+- design_sessions
+
+Placement mode:
+Advisory first.
+
+Approved snapshot:
+Immutable.
+
+Maximum alternatives:
+3.
+
+Placement strategy:
+Deterministic greedy + bounded backtracking.
+
+Maximum furniture:
+50.
+
+Locked/manual furniture:
+Never move.
+
+Access:
+Admin only.
+
+Preview:
+Must not persist active placements.
+
+Apply:
+Explicit action only.
+
+LLM:
+Forbidden.
+
+==================================================
+MISSION
+==================================================
+
+Implement WP-06A completely from scratch on top of current main.
+
+WP-06A scope:
+
+Furniture Placement Rules + Constraint Foundation
+
+Deliver:
+
+1. typed contracts
+2. deterministic rule engine
+3. hard constraints
+4. soft preferences
+5. candidate generation
+6. scoring
+7. preview endpoint
+8. apply endpoint
+9. tenant isolation
+10. approved snapshot protection
+11. tests
+12. docs
+13. build/typecheck/regression
+14. RC audit
+15. clean git history
+16. push
+17. PR
+18. final review
+19. merge
+20. verify main
+21. prepare WP-06B discovery
+
+Do not stop just because WP-06A does not exist yet.
+
+==================================================
+PHASE 1 — VERIFY CURRENT MAIN
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+
+Required:
+
+- branch = main
+- local SHA = origin/main SHA
+- no tracked changes
+
+If attached_assets prompt file is untracked:
+leave it uncommitted.
+
+==================================================
+PHASE 2 — VERIFY DEPENDENCIES
+==================================================
+
+Verify existing foundations only:
+
+- layout_sessions
+- placements
+- room templates
+- furniture library
+- WP-03B collision engine
+- WP-04A OBB/SAT adapter
+- WP-04B resolver if present on main
+- WP-05 material recommendation
+- Interior Design Concept Draft
+- approved snapshot state machine
+- ownership guard
+- admin auth
+- tenant scope
+
+If one of these foundations is genuinely missing:
+report it.
+
+Do NOT require WP-06A files.
+
+==================================================
+PHASE 3 — CREATE WP-06A BRANCH
+==================================================
+
+Create:
+
+feature/wp06a-furniture-placement-foundation
+
+Verify:
+
+git branch --show-current
+git status --short
+
+==================================================
+PHASE 4 — IMPLEMENT CONTRACTS
+==================================================
+
+Create shared Zod/types using repository conventions.
+
+Recommended file:
+
+lib/api-zod/src/wp06a.ts
+
+Define contracts for:
+
+PlacementRuleType
+PlacementRuleSeverity
+PlacementRuleResult
+PlacementCandidate
+PlacementPreviewRequest
+PlacementPreviewResponse
+PlacementApplyRequest
+PlacementApplyResponse
+
+Input fields should include repository-equivalent forms of:
+
+- sessionId
+- roomTemplateId
+- furnitureItemId/items
+- x/y
+- width/depth/height
+- rotation
+- locked/manual placements
+- preferred zones
+- excluded zones
+- clearance
+- maxAlternatives
+- maxItems
+- deadline
+
+Validate:
+
+maxAlternatives <= 3
+maxItems <= 50
+finite geometry
+UUIDs
+positive dimensions
+
+==================================================
+PHASE 5 — IMPLEMENT HARD RULES
+==================================================
+
+Create deterministic hard rule engine.
+
+At minimum:
+
+HR-1 Room bounds
+HR-2 Positive dimensions
+HR-3 Furniture footprint overlap
+HR-4 Clearance encroachment
+HR-5 Wall gap
+HR-6 Minimum item spacing
+HR-7 Clearance-zone overlap
+HR-8 Session capacity
+
+Hard violation:
+candidate invalid.
+
+Reuse canonical geometry.
+
+Do not duplicate:
+
+AABB
+OBB
+SAT
+MTV
+
+==================================================
+PHASE 6 — IMPLEMENT SOFT RULES
+==================================================
+
+At minimum:
+
+SR-1 Wall alignment
+SR-2 Symmetry
+SR-3 Grid snap
+SR-4 Center open
+SR-5 Balanced quadrant
+SR-6 Clearance-inside-room
+
+Return score 0–100.
+
+Requirements:
+
+- deterministic
+- finite
+- no NaN
+- no Infinity
+- centralized weights
+- explanation per score
+- stable tie breaking
+
+==================================================
+PHASE 7 — CANDIDATE GENERATION
+==================================================
+
+Implement at least:
+
+WALL_LEFT
+WALL_RIGHT
+WALL_TOP
+WALL_BOTTOM
+CENTER
+
+Candidates must be:
+
+- deterministic
+- finite
+- bounded
+- stable ordering
+- no randomness
+- room-aware
+- compatible with locked placements
+
+Ranking:
+
+1. valid candidates first
+2. score descending
+3. fewer warnings
+4. stable deterministic tie breaker
+
+==================================================
+PHASE 8 — PREVIEW SERVICE
+==================================================
+
+Implement a placement preview service.
+
+Preview must:
+
+- read session
+- load room
+- load furniture
+- respect tenant scope
+- preserve locked placements
+- generate candidates
+- evaluate hard rules
+- score soft rules
+- return up to 3 alternatives
+- NOT persist active placement changes
+
+No mutation of approved snapshot.
+
+==================================================
+PHASE 9 — APPLY SERVICE
+==================================================
+
+Implement explicit apply behavior.
+
+Apply must:
+
+- require admin auth
+- validate session
+- validate tenant
+- re-run hard rules
+- preserve locked items
+- reject invalid candidate with 422
+- allow override only when explicitly supported
+- reject approved_for_rendering state with 409
+- persist in transaction
+- avoid partial writes
+- remain idempotent where practical
+
+Do NOT automatically apply preview.
+
+==================================================
+PHASE 10 — ROUTES
+==================================================
+
+Add admin-only endpoints:
+
+POST /api/ai/layout-sessions/:sessionId/suggest-placement
+
+POST /api/ai/layout-sessions/:sessionId/apply-placement
+
+Use:
+
+- shared api-zod
+- UUID validation
+- structured errors
+- tenant guards
+- response allowlists
+
+Register router correctly.
+
+No public endpoint.
+
+==================================================
+PHASE 11 — SECURITY
+==================================================
+
+Verify:
+
+- admin-only
+- tenant isolation
+- IDOR protection
+- session ownership
+- furniture ownership/platform visibility
+- archived/inactive exclusion
+- max 50 items
+- payload caps
+- approved snapshot immutability
+- no service-role bypass assumptions
+- no public mutation
+
+==================================================
+PHASE 12 — TESTS
+==================================================
+
+Create comprehensive tests.
+
+Minimum required coverage:
+
+1. room bounds
+2. positive dimensions
+3. footprint overlap
+4. clearance encroachment
+5. wall gap
+6. min item spacing
+7. clearance zone overlap
+8. session capacity
+9. wall alignment score
+10. symmetry score
+11. grid snap
+12. center open
+13. balanced quadrant
+14. clearance inside room
+15. WALL_LEFT
+16. WALL_RIGHT
+17. WALL_TOP
+18. WALL_BOTTOM
+19. CENTER
+20. valid before invalid
+21. stable ranking
+22. deterministic repeat
+23. input immutability
+24. locked placement preserved
+25. preview no persistence
+26. apply persists
+27. apply revalidates
+28. hard violation -> 422
+29. override behavior
+30. approved snapshot -> 409
+31. revision state permits apply
+32. tenant isolation
+33. platform-wide furniture
+34. archived furniture excluded
+35. missing furniture item
+36. invalid UUID
+37. unauthorized request
+38. empty feasible result
+39. partial placement
+40. max 50 items
+41. max 3 alternatives
+42. finite score
+43. score range 0–100
+44. no geometry duplication
+45. no LLM/provider usage
+46. transaction rollback
+47. no partial writes
+48. route registration
+49. response schema
+50. concurrency/idempotency where applicable
+
+No skip.
+No todo.
+No only.
+
+==================================================
+PHASE 13 — PERFORMANCE
+==================================================
+
+Test:
+
+10 items
+25 items
+50 items
+
+Measure:
+
+- candidate count
+- rule evaluations
+- collision checks
+- rejected candidates
+- valid candidates
+- elapsed time
+
+Assert:
+
+- finite completion
+- deterministic totals
+- cap respected
+- no unbounded loop
+- no recursion
+- no N+1 query pattern
+
+Do not assert flaky strict wall time.
+
+==================================================
+PHASE 14 — DOCUMENTATION
+==================================================
+
+Create:
+
+docs/wp06a-placement-rules.md
+
+Document:
+
+- objective
+- architecture
+- persistence reuse
+- hard rules
+- soft rules
+- scoring
+- candidate generation
+- preview/apply
+- approved snapshot safety
+- tenant behavior
+- limits
+- security
+- performance
+- known limitations
+- WP-06B boundary
+
+==================================================
+PHASE 15 — STATIC AUDIT
+==================================================
+
+Search changed files for:
+
+TODO
+FIXME
+HACK
+console.log
+console.error
+debugger
+@ts-ignore
+@ts-expect-error
+as unknown as
+silent catch
+empty catch
+Math.random
+duplicate geometry
+hardcoded tenant ID
+LLM/provider imports
+raw SQL interpolation
+
+Remove new accidental issues only.
+
+==================================================
+PHASE 16 — VALIDATION
+==================================================
+
+Run targeted tests.
+
+Then:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Required:
+
+- typecheck PASS
+- build PASS
+- full regression PASS
+- 0 failed
+- 0 skipped
+- 0 todo
+
+Report actual counts.
+
+==================================================
+PHASE 17 — RC AUDIT
+==================================================
+
+Perform a full internal release audit.
+
+Classify:
+
+P0
+P1
+P2
+P3
+
+Required before push:
+
+P0 = 0
+P1 = 0
+
+Auto-remediate legitimate WP-06A P0/P1 issues.
+
+Re-run validation after remediation.
+
+==================================================
+PHASE 18 — GIT HYGIENE
+==================================================
+
+Verify:
+
+git status --short
+git log --oneline origin/main..HEAD
+git diff --name-status origin/main...HEAD
+
+Forbidden:
+
+attached_assets
+Pasted-*.txt
+prompt/session logs
+screenshots
+.replit
+mockup generated files
+unrelated source files
+
+If gitsafe contaminated history:
+
+create a clean branch from origin/main
+and cherry-pick only valid WP-06A commits.
+
+==================================================
+PHASE 19 — COMMITS
+==================================================
+
+Preferred atomic commits:
+
+feat(placement): add WP-06A rule engine
+
+feat(placement): add placement preview and apply APIs
+
+test(placement): cover WP-06A rules and safety
+
+docs(placement): document WP-06A foundation
+
+==================================================
+PHASE 20 — PUSH
+==================================================
+
+Push clean branch.
+
+If remote branch absent:
+normal push.
+
+If remote diverged:
+exact --force-with-lease only.
+
+Never plain force.
+
+==================================================
+PHASE 21 — CREATE PR
+==================================================
+
+Base:
+main
+
+Head:
+feature/wp06a-furniture-placement-foundation
+
+Title:
+
+feat(placement): add WP-06A furniture placement foundation
+
+PR body must include:
+
+- hard rules
+- soft rules
+- candidate strategies
+- preview/apply endpoints
+- snapshot protection
+- tenant isolation
+- test totals
+- no DB migration
+- no LLM
+- no accidental files
+
+==================================================
+PHASE 22 — FINAL PR REVIEW
+==================================================
+
+Verify:
+
+- PR open
+- not draft
+- correct base/head
+- mergeable clean
+- checks passing
+- no accidental files
+- P0 = 0
+- P1 = 0
+
+If blocker exists:
+remediate and update PR.
+
+==================================================
+PHASE 23 — MERGE
+==================================================
+
+If completely clean:
+
+merge using repository standard merge method.
+
+Record:
+
+- PR number
+- merge method
+- merge SHA
+- merged_at
+- merged_by
+
+==================================================
+PHASE 24 — VERIFY MAIN
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+local main SHA =
+origin/main SHA =
+remote main SHA
+
+Run again:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server vitest run
+
+Required:
+all green.
+
+==================================================
+PHASE 25 — WP-06B DISCOVERY
+==================================================
+
+After WP-06A merge:
+
+Search authoritative sources for:
+
+WP-06B
+Furniture Placement Canvas
+2D placement canvas
+drag-and-drop furniture
+placement editor
+lock/unlock items
+apply placement preview
+layout alternatives UI
+room canvas
+
+Create:
+
+WP06B_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+Do not commit.
+
+Classify:
+
+A. Clearly defined
+B. Partially defined
+C. Not defined
+D. Conflicting
+
+==================================================
+PHASE 26 — TRANSITION
+==================================================
+
+If clearly defined:
+
+create:
+
+feature/wp06b-placement-canvas
+
+Do NOT implement yet.
+
+If partially defined:
+remain on main and list owner decisions.
+
+If undefined:
+remain on main.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+WP-06A
+1. Base SHA
+2. Feature branch
+3. Head SHA
+4. Files added
+5. Files modified
+6. Hard rules
+7. Soft rules
+8. Candidate strategies
+9. Preview endpoint
+10. Apply endpoint
+11. Tenant isolation
+12. Snapshot safety
+13. Targeted tests
+14. Full regression
+15. Typecheck
+16. API build
+17. Performance
+18. P0
+19. P1
+20. P2
+21. Commit list
+22. PR number
+23. PR URL
+24. Mergeability
+25. Merge SHA
+26. Main SHA
+27. Post-merge regression
+28. WP-06A final status
+
+WP-06B
+29. References found
+30. Scope classification
+31. Objective
+32. Owner decisions
+33. Branch created
+34. Current branch
+35. Implementation started
+36. Report path
+37. Recommended next action
+
+Use exactly one verdict:
+
+A.
+WP-06A IMPLEMENTED, MERGED, VERIFIED — WP-06B BRANCH READY
+
+B.
+WP-06A IMPLEMENTED, MERGED, VERIFIED — WP-06B OWNER DECISIONS REQUIRED
+
+C.
+WP-06A IMPLEMENTED, MERGED, VERIFIED — WP-06B NOT DEFINED
+
+D.
+WP-06A IMPLEMENTATION OR MERGE FAILED
+
+E.
+WP-06A POST-MERGE VALIDATION FAILED
+
+F.
+WP-06B REQUIREMENTS CONFLICT
+
+IMPORTANT:
+
+The fact that WP-06A files do not exist at the beginning is NOT a blocker.
+
+That is the expected starting condition.
+
+Implement WP-06A new.
+
+STOP only for a genuine external or architectural blocker.
