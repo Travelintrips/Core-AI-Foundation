@@ -1,0 +1,649 @@
+ULTIMATE MASTER EXECUTION — WP-06B PLACEMENT CANVAS
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current roadmap state:
+
+- WP-01 complete
+- WP-02 complete
+- WP-03 complete
+- WP-04 complete
+- WP-05 complete
+- WP-06A complete
+- WP-06B is the NEXT work package
+
+IMPORTANT:
+
+DO NOT re-audit or reimplement WP-06A.
+
+DO NOT search for old WP-06A branches.
+
+DO NOT go backwards to WP-06A unless a hard runtime dependency is truly missing.
+
+MISSION:
+
+Implement WP-06B — 2D Furniture Placement Canvas / Placement Editor
+on top of the completed WP-06A placement engine.
+
+Goal:
+
+Provide an admin-facing visual 2D editor that can:
+
+- display room geometry
+- display furniture placements
+- drag furniture
+- rotate furniture
+- lock/unlock furniture
+- preview WP-06A placement alternatives
+- apply a selected placement
+- show collisions and rule violations
+- preserve approved snapshot immutability
+- remain deterministic and backward-compatible
+
+Do not begin WP-06C.
+
+==================================================
+PHASE 1 — VERIFY BASELINE
+==================================================
+
+Verify:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Run:
+
+git rev-parse HEAD
+git rev-parse origin/main
+git status --short
+
+Required:
+
+- local main = origin/main
+- no tracked changes
+
+Do not require WP-06B files to already exist.
+
+==================================================
+PHASE 2 — VERIFY WP-06A CONTRACTS
+==================================================
+
+Confirm existing WP-06A endpoints/services:
+
+POST /api/ai/layout-sessions/:sessionId/suggest-placement
+
+POST /api/ai/layout-sessions/:sessionId/apply-placement
+
+Verify available data for:
+
+- room dimensions
+- placements
+- furniture dimensions
+- rotation
+- locked state
+- candidate score
+- hard violations
+- soft warnings
+
+Do not modify WP-06A behavior unless required for integration.
+
+==================================================
+PHASE 3 — CREATE FEATURE BRANCH
+==================================================
+
+Create:
+
+feature/wp06b-placement-canvas
+
+Never work on main.
+
+==================================================
+PHASE 4 — AUDIT EXISTING UI
+==================================================
+
+Inspect:
+
+- Admin Platform
+- InteriorDesignEditor
+- Layout Composer UI
+- any existing canvas implementation
+- drag/drop libraries
+- zoom/pan utilities
+- room preview components
+
+Reuse existing UI foundations where possible.
+
+Do not create a second design editor.
+
+==================================================
+PHASE 5 — CANVAS ARCHITECTURE
+==================================================
+
+Implement a 2D top-down placement canvas.
+
+Required capabilities:
+
+- room boundary rendering
+- grid
+- furniture rectangle/footprint rendering
+- rotation visualization
+- lock indicator
+- selected item state
+- collision indicator
+- rule violation overlay
+- placement score display
+- zoom
+- pan
+- reset view
+
+Use existing room coordinate conventions.
+
+Do not introduce a conflicting coordinate system.
+
+==================================================
+PHASE 6 — COORDINATE TRANSFORMS
+==================================================
+
+Create deterministic transforms between:
+
+- room coordinates
+- canvas coordinates
+- screen coordinates
+
+Requirements:
+
+- reversible
+- finite
+- stable
+- no hidden unit conversion
+- same placement values map consistently after zoom/pan
+- zoom/pan must not modify placement data
+
+==================================================
+PHASE 7 — FURNITURE INTERACTION
+==================================================
+
+Implement:
+
+- select
+- drag
+- rotate
+- lock
+- unlock
+
+Rules:
+
+- dragging updates preview state only
+- locked items cannot drag
+- rotation uses existing canonical rotation semantics
+- dimensions unchanged during drag/rotation
+- no mutation of server state until Apply/Save
+- invalid placement visually marked
+
+==================================================
+PHASE 8 — WP-06A PREVIEW INTEGRATION
+==================================================
+
+Connect:
+
+suggest-placement
+
+UI flow:
+
+1. Admin opens placement canvas.
+2. Select furniture item.
+3. Click "Suggest Placement".
+4. Request WP-06A preview.
+5. Display up to 3 alternatives.
+6. Show:
+   - candidate position
+   - score
+   - hard violations
+   - soft warnings
+7. Admin selects one candidate.
+8. Preview it on canvas.
+9. Nothing is persisted yet.
+
+==================================================
+PHASE 9 — APPLY PLACEMENT
+==================================================
+
+Connect:
+
+apply-placement
+
+Apply behavior:
+
+- explicit button only
+- candidateId required
+- server revalidates
+- UI handles:
+  - success
+  - 409 immutable snapshot
+  - 422 hard violation
+  - 401 auth
+  - 404 tenant/session
+- refresh placements after successful apply
+- idempotent retry must not duplicate placement/revision
+
+==================================================
+PHASE 10 — MANUAL EDIT VALIDATION
+==================================================
+
+When admin manually drags or rotates:
+
+- validate locally for immediate feedback if possible
+- canonical server validation remains authoritative
+- show hard violations
+- show soft warnings
+- do not silently snap invalid placements unless configured
+
+If manual placement persistence endpoint already exists:
+reuse it.
+
+If not:
+do not invent a new public API without auditing existing contracts.
+
+==================================================
+PHASE 11 — LOCKED ITEMS
+==================================================
+
+Locked placement behavior:
+
+- visible lock state
+- drag disabled
+- rotation disabled
+- auto-placement cannot move it
+- candidate preview respects it
+- apply cannot override it silently
+
+==================================================
+PHASE 12 — APPROVED SNAPSHOT SAFETY
+==================================================
+
+If concept state = approved_for_rendering:
+
+- editor becomes read-only
+- no drag
+- no rotate
+- no apply
+- no auto-placement
+- show clear immutable-state notice
+
+Changes become available only after request revision.
+
+==================================================
+PHASE 13 — ALTERNATIVE LAYOUT UI
+==================================================
+
+Support up to 3 WP-06A alternatives.
+
+UI must show:
+
+- rank
+- score
+- valid/invalid
+- warnings
+- explanation
+- preview button
+- apply button
+
+Do not persist alternative selection automatically.
+
+==================================================
+PHASE 14 — COLLISION + RULE VISUALIZATION
+==================================================
+
+Render:
+
+- collision highlight
+- out-of-bounds highlight
+- clearance violation
+- locked conflict
+- warnings
+
+Reuse WP-03/WP-04/WP-06A data.
+
+Do not duplicate geometry algorithms in frontend.
+
+Frontend visualization may use returned geometry/flags,
+but backend remains authoritative.
+
+==================================================
+PHASE 15 — STATE MANAGEMENT
+==================================================
+
+Separate:
+
+SERVER STATE
+- persisted placements
+- room
+- furniture records
+
+PREVIEW STATE
+- candidate placement
+- manual drag position
+- selected alternative
+
+VIEW STATE
+- zoom
+- pan
+- selection
+- overlays
+
+Do not mix view coordinates with persisted room coordinates.
+
+==================================================
+PHASE 16 — UNSAVED CHANGES
+==================================================
+
+Add dirty-state handling.
+
+If user has manual changes not applied:
+
+- show unsaved state
+- confirm before leaving/reloading
+- allow reset to persisted placement
+- alternative preview must not overwrite persisted state
+
+==================================================
+PHASE 17 — ACCESSIBILITY
+==================================================
+
+Support:
+
+- keyboard selection
+- arrow-key movement if feasible
+- accessible labels
+- lock/unlock buttons with text/aria-label
+- color-independent violation indicators
+- focus states
+
+==================================================
+PHASE 18 — PERFORMANCE
+==================================================
+
+Target:
+
+- smooth interaction up to 50 furniture items
+- no API request per mouse move
+- drag state local
+- server validation debounced or explicit
+- avoid rerendering all furniture unnecessarily
+
+Measure representative:
+
+10
+25
+50 items
+
+No strict flaky FPS assertion.
+
+==================================================
+PHASE 19 — TESTS
+==================================================
+
+Add unit/component/integration tests for at least:
+
+1. Room renders.
+2. Furniture renders.
+3. Correct coordinate transform.
+4. Zoom does not mutate placement.
+5. Pan does not mutate placement.
+6. Drag updates preview only.
+7. Locked drag rejected.
+8. Rotate updates preview only.
+9. Locked rotation rejected.
+10. Suggest API called correctly.
+11. 3 alternatives render.
+12. Alternative score shown.
+13. Hard violations shown.
+14. Soft warnings shown.
+15. Preview does not persist.
+16. Apply uses candidateId.
+17. Apply success refreshes state.
+18. 422 displayed.
+19. 409 approved state displayed.
+20. 401 handled.
+21. 404 handled.
+22. Apply idempotent retry.
+23. Approved state read-only.
+24. Revision state editable.
+25. Reset preview.
+26. Unsaved changes indicator.
+27. Input/server data immutability.
+28. Stable rendering after repeated load.
+29. No LLM calls.
+30. No frontend duplicate SAT/OBB/AABB.
+31. 50-item rendering scenario.
+32. Accessibility labels.
+33. Keyboard behavior.
+34. Tenant/session context retained.
+35. Existing Interior Design flow unchanged.
+
+No skip/todo/only.
+
+==================================================
+PHASE 20 — STATIC QUALITY
+==================================================
+
+Search changed files for:
+
+TODO
+FIXME
+HACK
+console.log
+debugger
+@ts-ignore
+@ts-expect-error
+as unknown as
+Math.random
+duplicate geometry
+hardcoded tenant ID
+LLM/provider imports
+
+Remove new accidental issues.
+
+==================================================
+PHASE 21 — DOCUMENTATION
+==================================================
+
+Create:
+
+docs/wp06b-placement-canvas.md
+
+Document:
+
+- architecture
+- coordinate model
+- state separation
+- drag/rotate
+- locking
+- preview/apply
+- alternatives
+- immutable approved state
+- performance
+- accessibility
+- security
+- known limitations
+- WP-06C boundary
+
+==================================================
+PHASE 22 — VALIDATION
+==================================================
+
+Run:
+
+- targeted WP-06B tests
+- frontend typecheck/build
+- API typecheck/build if touched
+- full regression
+
+All tests must pass.
+
+==================================================
+PHASE 23 — RC AUDIT
+==================================================
+
+Audit:
+
+- UI correctness
+- WP-06A integration
+- tenant safety
+- approved snapshot safety
+- dirty-state safety
+- coordinate correctness
+- performance
+- accessibility
+- no duplicate geometry
+- no accidental artifacts
+
+P0 = 0
+P1 = 0 before push.
+
+Auto-remediate legitimate WP-06B blockers.
+
+==================================================
+PHASE 24 — GIT HYGIENE
+==================================================
+
+Ensure no:
+
+- attached_assets
+- prompt files
+- screenshots
+- .replit
+- unrelated generated files
+
+Create clean atomic commits:
+
+1.
+feat(placement-ui): add WP-06B 2D placement canvas
+
+2.
+feat(placement-ui): integrate placement preview and apply
+
+3.
+test(placement-ui): add canvas interaction coverage
+
+4.
+docs(placement-ui): document WP-06B canvas
+
+==================================================
+PHASE 25 — PUSH + PR + MERGE
+==================================================
+
+Push clean branch.
+
+Create PR to main.
+
+Perform final PR review.
+
+If:
+- mergeable clean
+- checks green
+- P0 = 0
+- P1 = 0
+
+then merge using repository standard strategy.
+
+==================================================
+PHASE 26 — POST-MERGE VERIFY MAIN
+==================================================
+
+Fetch/reset main.
+
+Verify local SHA = remote SHA.
+
+Run:
+
+typecheck
+build
+full regression
+
+All green required.
+
+==================================================
+PHASE 27 — NEXT WP DISCOVERY
+==================================================
+
+After WP-06B is merged:
+
+Search authoritative sources for:
+
+- WP-06C
+- layout alternatives
+- automatic layout ranking
+- furniture layout optimization
+- WP-07
+- next work package
+
+Create:
+
+NEXT_WP_AFTER_06B_DISCOVERY.md
+
+Do not implement next WP yet.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. Base SHA
+2. WP-06B branch
+3. Head SHA
+4. Canvas component files
+5. Coordinate system
+6. State architecture
+7. Drag behavior
+8. Rotation behavior
+9. Locked behavior
+10. Preview integration
+11. Apply integration
+12. Alternative UI
+13. Approved snapshot behavior
+14. Test counts
+15. Performance
+16. Accessibility
+17. Typecheck
+18. Build
+19. Regression
+20. P0
+21. P1
+22. P2
+23. Commits
+24. PR number
+25. PR URL
+26. Merge SHA
+27. Main SHA
+28. Post-merge validation
+29. Next WP discovered
+30. Ready for next WP
+
+Use exactly one verdict:
+
+A.
+WP-06B IMPLEMENTED, MERGED, VERIFIED — READY FOR NEXT WP
+
+B.
+WP-06B IMPLEMENTED — READY FOR PR
+
+C.
+WP-06B REMEDIATION REQUIRED
+
+D.
+WP-06B BLOCKED BY EXISTING CONTRACT
+
+E.
+VALIDATION FAILED
+
+IMPORTANT:
+
+DO NOT go back to WP-06A.
+
+WP-06A is considered complete for roadmap progression.
+
+The next implementation is WP-06B.
