@@ -9,4 +9,5 @@ export * from "./marketplace";
 export * from "./human-tasks";
 export * from "./image-preview-pipeline";
 export * from "./wp03";
+export * from "./wp06a";
 export * from "./registry";

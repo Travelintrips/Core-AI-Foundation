@@ -94,6 +94,8 @@ import furnitureLibraryRouter from "./furniture-library.js";
 import placementEngineRouter from "./placement-engine.js";
 // ── Phase 6 WP-03B: Collision Engine ──────────────────────────────────────
 import collisionEngineRouter from "./collision-engine.js";
+// ── Phase 6 WP-06A: Furniture Placement Rules ─────────────────────────────
+import placementRuleEngineRouter from "./placement-rule-engine.js";
 // ── Interior Design Material Library (Phase 1) ────────────────────────────
 import materialLibraryCatalogRouter from "./material-library-catalog.js";
 // ── Interior Design Material Library (Phase 2 intelligence, additive) ─────
@@ -334,6 +336,7 @@ router.use(placementEngineRouter);
 // Collision detection, room boundary validation, clearance warnings.
 // Routes under /ai/layout-sessions/*/collision-check, /collisions, /ai/collision/check.
 router.use(collisionEngineRouter);
+router.use(placementRuleEngineRouter);
 // ── Interior Design Material Library (Phase 1) ────────────────────────────────
 // Mount Phase 2 before Phase 1's generic /material-library/:id route so
 // /suggestions and /:id/similar are resolved by the owning domain.

@@ -2,12 +2,12 @@
  * Team 17 — Interior Design Planning — Admin project detail
  * Shows project info, brief, validation, outputs + "Generate" button.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Home, Palette, Layers, Lightbulb, ShoppingBag, Shield,
-  Sparkles, Loader2, CheckCircle, AlertTriangle, RefreshCw, Sofa, Edit,
+  Sparkles, Loader2, CheckCircle, AlertTriangle, RefreshCw, Sofa, Edit, LayoutTemplate,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { PlacementCanvas, type CanvasPlacement, type PlacementCandidate } from "@/components/interior-design/PlacementCanvas";
 
 const API_BASE = "";
 
@@ -31,7 +32,11 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try { const b = await res.json() as { error?: string }; if (b?.error) msg = b.error; } catch { /* ignore */ }
+    try {
+      const b = await res.json() as { error?: string | { message?: string } };
+      if (typeof b?.error === "string") msg = b.error;
+      else if (b?.error?.message) msg = b.error.message;
+    } catch { /* ignore */ }
     throw new Error(msg);
   }
   return res.json() as Promise<T>;
@@ -67,7 +72,7 @@ interface Output {
   id: number;
   moodboard?: { palette?: string[]; moodWords?: string[]; styleDescription?: string; lightingMood?: string } | null;
   spacePlan?: { zones?: Array<{ id: string; label: string; purpose: string }>; notes?: string } | null;
-  furniturePlacement?: Array<{ item: string; widthM: number; depthM: number; note: string }> | null;
+  furniturePlacement?: Array<{ item: string; widthM: number; depthM: number; xM?: number; yM?: number; rotation?: number; note: string }> | null;
   circulationAnalysis?: string | null;
   materialRecommendations?: Record<string, Record<string, string>> | null;
   lightingRecommendations?: Record<string, Record<string, string>> | null;
@@ -91,6 +96,19 @@ interface ProjectDetail {
   brief: Brief | null;
   output: Output | null;
   outputCount: number;
+}
+
+interface LayoutSession {
+  id: string;
+  name: string;
+  status: string;
+  widthCm: string | number;
+  depthCm: string | number;
+  metadata?: Record<string, unknown>;
+}
+
+interface LayoutPlacement extends CanvasPlacement {
+  furnitureItemId?: string | null;
 }
 
 const ROOM_LABELS: Record<string, string> = {
@@ -129,6 +147,9 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const [, navigate] = useLocation();
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState("");
+  const [candidateList, setCandidateList] = useState<PlacementCandidate[]>([]);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [canvasDirty, setCanvasDirty] = useState(false);
 
   const projectId = params.id;
 
@@ -137,6 +158,86 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
     queryFn: () => apiFetch<ProjectDetail>(`/api/ai/interior-design/projects/${projectId}`),
     refetchInterval: (query) =>
       query.state.data?.project.status === "analyzing" ? 5000 : false,
+  });
+
+  const { data: sessionList, isLoading: sessionLoading } = useQuery({
+    queryKey: ["placement-sessions", projectId],
+    queryFn: () => apiFetch<{ data: LayoutSession[] }>(`/api/ai/layout-sessions?pageSize=100`),
+  });
+
+  const canvasSession = sessionList?.data.find((session) => session.metadata?.["interiorProjectId"] === Number(projectId));
+
+  const { data: placementData, isLoading: placementsLoading } = useQuery({
+    queryKey: ["placement-session-placements", canvasSession?.id],
+    queryFn: () => apiFetch<{ data: LayoutPlacement[] }>(`/api/ai/layout-sessions/${canvasSession!.id}/placements`),
+    enabled: Boolean(canvasSession?.id),
+  });
+
+  const createCanvasMutation = useMutation({
+    mutationFn: async () => {
+      if (!brief) throw new Error("Brief belum tersedia.");
+      const session = await apiFetch<LayoutSession>("/api/ai/layout-sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          name: `Interior ${project.title}`,
+          widthCm: Number(brief.roomLengthM) * 100,
+          depthCm: Number(brief.roomWidthM) * 100,
+          heightCm: Number(brief.ceilingHeightM) * 100,
+          metadata: { interiorProjectId: Number(projectId), roomType: project.roomType },
+        }),
+      });
+      const furniture = output?.furniturePlacement ?? [];
+      await Promise.all(furniture.map((item, index) => apiFetch(`/api/ai/layout-sessions/${session.id}/placements`, {
+        method: "POST",
+        body: JSON.stringify({
+          label: item.item,
+          xCm: (item.xM ?? 0.25 + index * 0.15) * 100,
+          yCm: (item.yM ?? 0.25 + index * 0.15) * 100,
+          widthCm: Math.max(1, item.widthM * 100),
+          depthCm: Math.max(1, item.depthM * 100),
+          rotationDeg: item.rotation ?? 0,
+          metadata: { source: "interior-design-output" },
+        }),
+      })));
+      return session;
+    },
+    onSuccess: () => {
+      toast({ title: "Canvas placement siap" });
+      void qc.invalidateQueries({ queryKey: ["placement-sessions", projectId] });
+    },
+    onError: (e: Error) => toast({ title: "Gagal membuat canvas", description: e.message, variant: "destructive" }),
+  });
+
+  const suggestMutation = useMutation({
+    mutationFn: (input: { placements: CanvasPlacement[]; targetPlacementId: string }) =>
+      apiFetch<{ sessionId: string; candidates: PlacementCandidate[] }>(
+        `/api/ai/layout-sessions/${canvasSession!.id}/suggest-placement`,
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+    onSuccess: (result) => {
+      setCandidateList(result.candidates);
+      setSelectedCandidateId(result.candidates.find((candidate) => candidate.valid)?.candidateId ?? null);
+      setCanvasDirty(true);
+      toast({ title: "Alternatif placement tersedia", description: `${result.candidates.length} kandidat dihitung secara deterministik.` });
+    },
+    onError: (e: Error) => toast({ title: "Suggest gagal", description: e.message, variant: "destructive" }),
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: (candidateId: string) =>
+      apiFetch<LayoutPlacement>(`/api/ai/layout-sessions/${canvasSession!.id}/apply-placement`, {
+        method: "POST",
+        body: JSON.stringify({ candidateId }),
+      }),
+    onSuccess: () => {
+      setCandidateList([]);
+      setSelectedCandidateId(null);
+      setCanvasDirty(false);
+      toast({ title: "Placement diterapkan", description: "Layout tersimpan dan canvas diperbarui." });
+      void qc.invalidateQueries({ queryKey: ["placement-session-placements", canvasSession?.id] });
+      void qc.invalidateQueries({ queryKey: ["placement-sessions", projectId] });
+    },
+    onError: (e: Error) => toast({ title: "Apply gagal", description: e.message, variant: "destructive" }),
   });
 
   const generateMutation = useMutation({
@@ -192,6 +293,12 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
     ...(output?.validationResults?.circulationWarnings ?? []),
   ];
   const canGenerate = !!brief && !["completed"].includes(project.status) && !generateMutation.isPending;
+  const canvasPlacements = placementData?.data ?? [];
+  const canvasReadOnly = canvasSession?.metadata?.["approvedForRendering"] === true;
+
+  useEffect(() => {
+    if (!canvasSession) setCandidateList([]);
+  }, [canvasSession]);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -321,6 +428,51 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
       {/* Output sections */}
       {output && (
         <div className="space-y-4">
+          <section className="rounded-xl border border-violet-300/20 bg-violet-400/5 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-violet-400/15 p-2 text-violet-200"><LayoutTemplate className="h-5 w-5" /></div>
+                <div>
+                  <h2 className="text-sm font-semibold">Furniture Placement Workspace</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Atur preview secara lokal, minta alternatif deterministik, lalu simpan hanya kandidat yang dipilih.
+                  </p>
+                </div>
+              </div>
+              {!canvasSession && (
+                <Button
+                  size="sm"
+                  onClick={() => createCanvasMutation.mutate()}
+                  disabled={createCanvasMutation.isPending || sessionLoading}
+                >
+                  {createCanvasMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LayoutTemplate className="h-3.5 w-3.5" />}
+                  {createCanvasMutation.isPending ? "Menyiapkan..." : "Buat Canvas"}
+                </Button>
+              )}
+            </div>
+          </section>
+
+          {canvasSession && !placementsLoading && (
+            <PlacementCanvas
+              room={{ widthCm: Number(canvasSession.widthCm), depthCm: Number(canvasSession.depthCm) }}
+              placements={canvasPlacements}
+              candidates={candidateList}
+              selectedCandidateId={selectedCandidateId}
+              isSuggesting={suggestMutation.isPending}
+              isApplying={applyMutation.isPending}
+              readOnly={canvasReadOnly}
+              dirty={canvasDirty}
+              onSuggest={(placements, targetPlacementId) => suggestMutation.mutate({ placements, targetPlacementId })}
+              onSelectCandidate={setSelectedCandidateId}
+              onApply={(candidateId) => applyMutation.mutate(candidateId)}
+              onReset={() => {
+                setCandidateList([]);
+                setSelectedCandidateId(null);
+                setCanvasDirty(false);
+              }}
+            />
+          )}
+
           {/* Meta */}
           <div className="flex items-center justify-between px-1">
             <p className="text-xs text-muted-foreground">

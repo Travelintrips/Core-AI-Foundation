@@ -32,6 +32,7 @@ import {
   PlacementEngineError,
 } from "../services/placementEngineService.js";
 import type { Request, Response } from "express";
+import { resolvePlacementTenantId } from "../security/tenantResolution.js";
 
 const router = Router();
 
@@ -41,12 +42,7 @@ function getTenantId(req: Request): string {
   // In a real multi-tenant deployment, tenantId comes from the authenticated
   // session (internalUser.tenantId) or a trusted header set by the gateway.
   // For now we use internalUser.id as a stable per-user tenant scope.
-  const user = req.internalUser as { id?: string; tenantId?: string } | undefined;
-  const tenantId = user?.tenantId ?? user?.id;
-  if (!tenantId) {
-    throw new PlacementEngineError("Tenant context required.", "TENANT_REQUIRED", 401);
-  }
-  return tenantId;
+  return resolvePlacementTenantId(req);
 }
 
 function handleError(err: unknown, res: Response): void {

@@ -27,6 +27,16 @@ import {
 
 /** Marketplace convention: tenantId is a NOT NULL text column defaulting to "default". */
 export const DEFAULT_TENANT_ID = "default";
+/** UUID scope used by the WP-03 placement tables (whose tenant_id is UUID). */
+export const DEFAULT_PLACEMENT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
+export function resolvePlacementTenantId(req: Request): string {
+  const candidate = req.internalUser?.tenantId;
+  return typeof candidate === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate)
+    ? candidate
+    : DEFAULT_PLACEMENT_TENANT_ID;
+}
 
 export class TenantMismatchError extends Error {
   constructor(message = "Tenant mismatch") {

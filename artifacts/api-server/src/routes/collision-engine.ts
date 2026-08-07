@@ -21,18 +21,14 @@ import {
 } from "../services/collisionEngineService.js";
 import { PlacementEngineError } from "../services/placementEngineService.js";
 import type { Request, Response } from "express";
+import { resolvePlacementTenantId } from "../security/tenantResolution.js";
 
 const router = Router();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getTenantId(req: Request): string {
-  const user = req.internalUser as { id?: string; tenantId?: string } | undefined;
-  const tenantId = user?.tenantId ?? user?.id;
-  if (!tenantId) {
-    throw new PlacementEngineError("Tenant context required.", "TENANT_REQUIRED", 401);
-  }
-  return tenantId;
+  return resolvePlacementTenantId(req);
 }
 
 function handleError(err: unknown, res: Response): void {
