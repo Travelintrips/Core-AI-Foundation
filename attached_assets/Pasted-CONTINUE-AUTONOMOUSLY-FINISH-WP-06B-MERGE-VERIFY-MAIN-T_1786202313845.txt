@@ -1,0 +1,620 @@
+CONTINUE AUTONOMOUSLY — FINISH WP-06B, MERGE, VERIFY MAIN, THEN START WP-07
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current WP:
+WP-06B — Placement Canvas Rebuild on Real Monorepo
+
+Known valid branch:
+feature/wp06b-placement-canvas-rebuild
+
+Known remote branch SHA:
+79593855a7b0af06252dc6cbb29ab1a3087f425b
+
+Known valid WP-06B commits include:
+- 226b466 feat(placement-ui): add safe canvas view controls
+- 809c264 feat(placement): harden suggest and apply contracts
+
+Known verified state:
+
+- merge-base with origin/main exists
+- branch diff clean
+- no attached_assets
+- no prompt/session files
+- no screenshot
+- no .replit
+- no standalone server
+- library typecheck PASS
+- API build PASS
+- API tests 6103/6103 PASS
+- AI Platform typecheck PASS
+- AI Platform tests 493/493 PASS
+- AI Platform production build PASS
+- GitHub is now connected
+
+IMPORTANT:
+
+DO NOT:
+- reimplement WP-06B
+- go back to WP-06A
+- create a new standalone branch
+- change valid code unless final PR review finds a real blocker
+- stop after PR creation if PR is clean
+- begin WP-07 before WP-06B is merged and main verified
+
+MISSION:
+
+1. Verify GitHub write access
+2. Push/update WP-06B branch
+3. Create PR if missing
+4. Final review
+5. Merge if clean
+6. Verify main
+7. Run post-merge validation
+8. Mark WP-06B COMPLETE
+9. Discover authoritative WP-07
+10. If WP-07 is clearly defined and no critical owner decision remains:
+    create WP-07 branch and IMPLEMENT IT immediately
+11. Continue WP-07 through validation, RC audit, push, PR, review, merge, and main verification
+12. Stop only for a genuine architectural/external blocker
+
+==================================================
+PHASE 1 — VERIFY GITHUB WRITE ACCESS
+==================================================
+
+Verify:
+
+git ls-remote --heads origin main
+
+Then:
+
+git push --dry-run origin \
+  feature/wp06b-placement-canvas-rebuild
+
+If dry-run succeeds:
+continue immediately.
+
+If it fails:
+diagnose auth only.
+
+Do not modify source code.
+
+==================================================
+PHASE 2 — VERIFY LATEST REMOTE STATE
+==================================================
+
+Run:
+
+git fetch origin --tags --prune
+
+Verify:
+
+git rev-parse origin/main
+git rev-parse origin/feature/wp06b-placement-canvas-rebuild
+git merge-base \
+  origin/main \
+  origin/feature/wp06b-placement-canvas-rebuild
+
+Confirm valid merge-base exists.
+
+==================================================
+PHASE 3 — SYNC WP-06B WITH CURRENT MAIN
+==================================================
+
+If origin/main advanced:
+
+merge current origin/main into:
+
+feature/wp06b-placement-canvas-rebuild
+
+Resolve conflicts carefully.
+
+Rules:
+
+- preserve newer main changes
+- preserve suggest-placement
+- preserve candidateId-only apply
+- preserve tenant isolation
+- preserve transaction/idempotency
+- preserve locked behavior
+- preserve approved read-only behavior
+- preserve canvas integration
+- do not globally choose ours/theirs
+
+After conflict resolution:
+
+git diff --check
+
+rerun validation.
+
+==================================================
+PHASE 4 — PRE-PR VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+
+pnpm --filter api-server run build
+
+pnpm --filter api-server test
+
+Run AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Expected historical results:
+
+API:
+6103/6103 PASS
+
+AI Platform:
+493/493 PASS
+
+Use actual current totals as authoritative.
+
+Required:
+
+- 0 failed
+- 0 skipped
+- 0 todo
+- build PASS
+- typecheck PASS
+
+==================================================
+PHASE 5 — PUSH WP-06B
+==================================================
+
+Push:
+
+feature/wp06b-placement-canvas-rebuild
+
+Use normal push if possible.
+
+If remote history diverged:
+use exact --force-with-lease only.
+
+Never use plain --force.
+
+==================================================
+PHASE 6 — CREATE OR UPDATE WP-06B PR
+==================================================
+
+Search existing PR with head:
+
+feature/wp06b-placement-canvas-rebuild
+
+If missing:
+create it.
+
+Base:
+main
+
+Head:
+feature/wp06b-placement-canvas-rebuild
+
+Title:
+
+feat(placement-ui): rebuild WP-06B placement canvas on monorepo
+
+==================================================
+PHASE 7 — FINAL WP-06B PR REVIEW
+==================================================
+
+Verify:
+
+- PR open
+- not draft
+- base = main
+- correct head
+- merge-base exists
+- mergeable clean
+- checks green
+- no accidental files
+- no unrelated changes
+
+Audit:
+
+- suggest-placement
+- candidateId-only apply
+- raw-coordinate rejection
+- server revalidation
+- tenant isolation
+- transaction safety
+- optimistic concurrency
+- idempotency
+- locked placements
+- approved state
+- coordinate transforms
+- XSS-safe rendering
+- no duplicate SAT/OBB/AABB
+- frontend state separation
+- test quality
+
+Classify:
+
+P0
+P1
+P2
+P3
+
+Required:
+
+P0 = 0
+P1 = 0
+
+If P0/P1 exists:
+fix only that issue,
+rerun validation,
+update PR,
+review again.
+
+==================================================
+PHASE 8 — MERGE WP-06B
+==================================================
+
+If all review gates pass:
+
+merge PR using repository-standard merge strategy.
+
+Record:
+
+- PR number
+- PR URL
+- merge method
+- merge SHA
+- merged_at
+- merged_by
+
+==================================================
+PHASE 9 — VERIFY MAIN AFTER WP-06B
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git rev-parse HEAD
+git rev-parse origin/main
+git ls-remote --heads origin main
+
+Required:
+
+local main SHA =
+origin/main SHA =
+remote main SHA
+
+==================================================
+PHASE 10 — POST-MERGE WP-06B VALIDATION
+==================================================
+
+Run again:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server test
+
+Run AI Platform:
+
+- typecheck
+- tests
+- build
+
+Verify WP-06B production files/endpoints exist on main.
+
+Required:
+all green.
+
+Then mark:
+
+WP-06B COMPLETE.
+
+==================================================
+PHASE 11 — DISCOVER WP-07
+==================================================
+
+Now search authoritative repository sources for:
+
+- WP-07
+- WP07
+- Work Package 07
+- Phase 6 WP-07
+- next work package
+- next milestone
+- layout optimization
+- ranking
+- alternatives
+- auto arrangement
+- lighting
+- rendering
+- decor
+- roadmap
+
+Inspect:
+
+docs/
+README files
+architecture docs
+roadmap
+implementation plans
+manifests
+OpenAPI
+WP-06B documentation
+
+Ignore:
+
+attached_assets
+prompt files
+session logs
+agent narration
+
+Determine exact:
+
+WP07_TITLE
+WP07_OBJECTIVE
+WP07_DEPENDENCIES
+WP07_SCOPE
+WP07_OWNER_DECISIONS
+
+==================================================
+PHASE 12 — WP-07 DECISION POLICY
+==================================================
+
+If WP-07 is CLEARLY DEFINED:
+
+Use safe defaults for minor implementation choices.
+
+Do NOT stop just to ask permission.
+
+Create:
+
+feature/wp07-<authoritative-name>
+
+from verified origin/main.
+
+Then IMPLEMENT WP-07 immediately.
+
+Stop for owner decision only if the unresolved choice changes:
+
+- database/persistence architecture
+- public access/auth
+- tenant security
+- approved snapshot behavior
+- LLM/provider usage
+- breaking API contracts
+- irreversible data behavior
+
+==================================================
+PHASE 13 — IMPLEMENT WP-07
+==================================================
+
+Use the authoritative scope discovered in Phase 11.
+
+Before coding:
+
+- audit reusable foundations
+- identify file ownership
+- avoid duplication
+- preserve WP-01 through WP-06B behavior
+
+Implement:
+
+- domain logic
+- contracts
+- API if required
+- persistence only if authoritative scope requires it
+- admin UI if required
+- tests
+- docs
+
+Do not invent scope outside the roadmap.
+
+==================================================
+PHASE 14 — WP-07 VALIDATION
+==================================================
+
+Run:
+
+- targeted WP-07 tests
+- typecheck:libs
+- API build
+- API full regression
+- relevant frontend tests
+- frontend production build
+
+Required:
+
+- all tests pass
+- no regression
+- 0 failed
+- 0 skipped
+- 0 todo
+
+==================================================
+PHASE 15 — WP-07 RC AUDIT
+==================================================
+
+Audit:
+
+- architecture
+- security
+- tenant scope
+- API compatibility
+- DB safety
+- performance
+- test quality
+- accidental artifacts
+- duplicate logic
+- static quality
+
+P0 = 0
+P1 = 0 before push.
+
+Auto-remediate legitimate WP-07 blockers.
+
+==================================================
+PHASE 16 — WP-07 GIT HYGIENE
+==================================================
+
+Forbidden:
+
+- attached_assets
+- Pasted-* files
+- prompt/session logs
+- screenshots
+- .replit
+- unrelated generated files
+- unrelated feature changes
+
+Create atomic commits.
+
+==================================================
+PHASE 17 — WP-07 PUSH / PR / REVIEW / MERGE
+==================================================
+
+Push WP-07 feature branch.
+
+Create PR to main.
+
+Perform final review.
+
+If clean:
+
+merge.
+
+Then verify main and rerun full regression.
+
+==================================================
+PHASE 18 — AUTO-DISCOVER NEXT WP
+==================================================
+
+After WP-07 is merged and verified:
+
+search for:
+
+WP-08
+WP08
+next WP
+next milestone
+roadmap
+
+If clearly defined and no human-level decision exists:
+
+create the next branch and continue automatically.
+
+Use the same lifecycle:
+
+IMPLEMENT
+→ TEST
+→ BUILD
+→ RC AUDIT
+→ GIT HYGIENE
+→ PUSH
+→ PR
+→ REVIEW
+→ MERGE
+→ VERIFY MAIN
+→ DISCOVER NEXT WP
+
+==================================================
+AUTONOMOUS LOOP
+==================================================
+
+Continue through clearly-defined WPs automatically.
+
+Do NOT ask for another prompt for routine lifecycle operations.
+
+Stop only when:
+
+1. Roadmap ends/project complete
+2. Next WP is undefined
+3. Authoritative requirements conflict
+4. Human architecture/security decision is genuinely required
+5. GitHub/external dependency is unavailable
+6. Validation cannot be safely repaired
+
+==================================================
+FINAL REPORT
+==================================================
+
+For WP-06B report:
+
+1. GitHub auth
+2. feature SHA
+3. main SHA before merge
+4. validation
+5. PR number
+6. PR URL
+7. P0/P1
+8. merge SHA
+9. post-merge main SHA
+10. post-merge validation
+11. WP-06B status
+
+For WP-07 report:
+
+12. title
+13. scope
+14. branch
+15. implementation summary
+16. tests
+17. build
+18. RC findings
+19. PR
+20. merge SHA
+21. post-merge validation
+
+For every subsequent completed WP report:
+
+- WP name
+- branch
+- implementation
+- tests
+- PR
+- merge SHA
+- main SHA
+
+Finally report:
+
+22. Last completed WP
+23. Current main SHA
+24. Next WP
+25. Why execution stopped
+26. Remaining owner decision, if any
+27. Overall project status
+
+Use exactly one final verdict:
+
+A.
+WP-06B AND ALL SUBSEQUENT CLEARLY-DEFINED WPS COMPLETED AND VERIFIED
+
+B.
+AUTONOMOUS EXECUTION PAUSED — OWNER DECISION REQUIRED
+
+C.
+AUTONOMOUS EXECUTION PAUSED — ROADMAP ENDED OR NEXT WP NOT DEFINED
+
+D.
+AUTONOMOUS EXECUTION PAUSED — REQUIREMENTS CONFLICT
+
+E.
+AUTONOMOUS EXECUTION PAUSED — EXTERNAL BLOCKER
+
+F.
+AUTONOMOUS EXECUTION PAUSED — VALIDATION FAILURE
+
+IMPORTANT:
+
+GitHub is now connected.
+
+Do not stop merely to ask whether you should push, create PR, merge,
+or start the next clearly-defined WP.
+
+Continue automatically.
