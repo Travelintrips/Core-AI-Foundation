@@ -9,6 +9,7 @@ import { db, layoutSessionsTable, placementsTable } from "@workspace/db";
 import {
   wp06aSuggestSchema,
   wp06aApplySchema,
+  WP06A_MAX_CANDIDATES,
   type Wp06aPlacementInput,
   type Wp06aCandidate,
 } from "@workspace/api-zod";
@@ -150,6 +151,11 @@ function ruleMessages(result: ReturnType<typeof checkGeometryCollision>): { hard
   };
 }
 
+function isLocked(row: Pick<PlacementRow, "metadata">): boolean {
+  const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+  return metadata["locked"] === true;
+}
+
 function candidatePayload(sessionId: string, target: Wp06aPlacementInput, strategy: Strategy): Record<string, unknown> {
   return {
     version: 1,
@@ -180,6 +186,19 @@ export async function suggestPlacement(
 
   const roomWidth = Number(session.widthCm);
   const roomDepth = Number(session.depthCm);
+  const [persistedTarget] = await db
+    .select()
+    .from(placementsTable)
+    .where(and(
+      eq(placementsTable.id, target.id),
+      eq(placementsTable.sessionId, sessionId),
+      eq(placementsTable.tenantId, tenantId),
+    ))
+    .limit(1);
+  if (!persistedTarget) throw new PlacementEngineError("Placement not found.", "PLACEMENT_NOT_FOUND", 404);
+  if (isLocked(persistedTarget)) {
+    throw new PlacementEngineError("Locked placements cannot be moved by a suggestion.", "PLACEMENT_LOCKED", 409);
+  }
   const candidates = STRATEGIES.map((strategy, index) => {
     const moved = placementForStrategy(target, strategy, roomWidth, roomDepth);
     const geometry = parsed.data.placements.map((p) => p.id === target.id ? moved : p);
@@ -196,6 +215,7 @@ export async function suggestPlacement(
       valid,
       targetPlacementId: target.id,
       placement: moved,
+      hardViolations: rules.hard,
       warnings,
       explanation: valid
         ? `${strategy.replaceAll("_", " ").toLowerCase()} keeps the item inside the room without hard-rule violations.`
@@ -205,7 +225,12 @@ export async function suggestPlacement(
   });
 
   candidates.sort((a, b) => Number(b.valid) - Number(a.valid) || b.score - a.score || a.strategy.localeCompare(b.strategy));
-  return { sessionId, candidates: candidates.map((candidate, index) => ({ ...candidate, rank: index + 1 })) };
+  return {
+    sessionId,
+    candidates: candidates
+      .slice(0, WP06A_MAX_CANDIDATES)
+      .map((candidate, index) => ({ ...candidate, rank: index + 1 })),
+  };
 }
 
 export async function applyPlacement(
@@ -233,8 +258,19 @@ export async function applyPlacement(
       .limit(1);
     if (!current) throw new PlacementEngineError("Placement not found.", "PLACEMENT_NOT_FOUND", 404);
     if (current.isArchived) throw new PlacementEngineError("Archived placements cannot be applied.", "PLACEMENT_ARCHIVED", 409);
+    if (isLocked(current)) {
+      throw new PlacementEngineError("Locked placements cannot be moved by a candidate.", "PLACEMENT_LOCKED", 409);
+    }
     const expectedVersion = Number(payload["baseVersion"]);
     const base = payload["base"];
+    const target = parsePlacement(current);
+    const moved = placementForStrategy(target, strategy as Strategy, Number(session.widthCm), Number(session.depthCm));
+
+    // Applying the same candidate twice is safe and idempotent. The first
+    // application increments the version, so this check must happen before
+    // the normal optimistic-concurrency validation.
+    if (Number(current.xCm) === moved.xCm && Number(current.yCm) === moved.yCm) return current;
+
     if (!base || typeof base !== "object" || current.version !== expectedVersion ||
         Number(current.xCm) !== Number((base as Record<string, unknown>)["xCm"]) ||
         Number(current.yCm) !== Number((base as Record<string, unknown>)["yCm"])) {
@@ -245,8 +281,6 @@ export async function applyPlacement(
       .select()
       .from(placementsTable)
       .where(and(eq(placementsTable.sessionId, sessionId), eq(placementsTable.tenantId, tenantId)));
-    const target = parsePlacement(current);
-    const moved = placementForStrategy(target, strategy as Strategy, Number(session.widthCm), Number(session.depthCm));
     const geometry = all.map((p) => p.id === current.id ? moved : parsePlacement(p));
     const validation = checkGeometryCollision(geometry, { widthCm: Number(session.widthCm), depthCm: Number(session.depthCm) });
     const rules = ruleMessages(validation);

@@ -9,10 +9,12 @@ import { z } from "zod";
 import { wp03PlacementGeometrySchema } from "./wp03";
 
 export const WP06A_MAX_PLACEMENTS = 50;
+export const WP06A_MAX_CANDIDATES = 3;
 
 export const wp06aPlacementInputSchema = wp03PlacementGeometrySchema.extend({
   label: z.string().max(200).optional(),
   version: z.number().int().positive().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export const wp06aSuggestSchema = z.object({
@@ -40,13 +42,14 @@ export const wp06aCandidateSchema = z.object({
   valid: z.boolean(),
   targetPlacementId: z.string().uuid(),
   placement: wp06aPlacementInputSchema,
+  hardViolations: z.array(z.string()),
   warnings: z.array(z.string()),
   explanation: z.string(),
 }).strict();
 
 export const wp06aSuggestResponseSchema = z.object({
   sessionId: z.string().uuid(),
-  candidates: z.array(wp06aCandidateSchema).max(5),
+  candidates: z.array(wp06aCandidateSchema).max(WP06A_MAX_CANDIDATES),
 }).strict();
 
 export type Wp06aPlacementInput = z.infer<typeof wp06aPlacementInputSchema>;
