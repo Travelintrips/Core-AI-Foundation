@@ -1,0 +1,536 @@
+ULTIMATE FINALIZATION — WP-06B PUSH, PR, MERGE, VERIFY MAIN, THEN START WP-07 DISCOVERY
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current branch:
+feature/wp06b-placement-canvas-rebuild
+
+Known local WP-06B commit:
+226b46627a500f778355a061429151c499330db2
+
+Known validated state:
+
+- WP-06B implemented on real monorepo
+- suggest-placement endpoint works
+- apply-placement endpoint works
+- candidateId-only apply enforced
+- raw coordinates/items rejected
+- tenant isolation preserved
+- locked placements protected
+- approved layout immutable
+- transaction + optimistic version check active
+- idempotent re-apply works
+- admin canvas integrated into Interior Design
+- coordinate transforms safe/reversible
+- no unsafe innerHTML path
+- no duplicate AABB/OBB/SAT engine
+- library typecheck PASS
+- API build PASS
+- API tests: 6103/6103 PASS
+- AI Platform tests: 493/493 PASS
+- admin build PASS
+- 4 workflows running
+- no prompt upload committed
+
+MISSION:
+
+Finish WP-06B lifecycle now:
+
+1. verify GitHub auth
+2. verify clean branch
+3. push branch
+4. create PR
+5. final PR review
+6. resolve conflict if any
+7. merge if all gates pass
+8. verify main
+9. rerun validation
+10. mark WP-06B complete
+11. discover WP-07
+12. create WP-07 branch if clearly defined
+13. do not implement WP-07 yet
+
+Do not modify WP-06B code unless final PR review finds a genuine blocker.
+
+==================================================
+PHASE 1 — VERIFY GITHUB AUTH
+==================================================
+
+Check:
+
+test -n "$GITHUB_TOKEN" \
+  && echo "TOKEN_AVAILABLE" \
+  || echo "TOKEN_MISSING"
+
+Do not print the token.
+
+If token exists, use temporary GIT_ASKPASS.
+
+If token does not exist, try Replit Git integration.
+
+If neither works:
+STOP with AUTHENTICATION_BLOCKED.
+
+==================================================
+PHASE 2 — VERIFY LOCAL WP-06B
+==================================================
+
+Run:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+
+Required:
+
+branch =
+feature/wp06b-placement-canvas-rebuild
+
+HEAD =
+226b46627a500f778355a061429151c499330db2
+or a later clean commit derived from it
+
+Verify:
+
+git diff --name-status origin/main...HEAD
+
+Forbidden:
+
+attached_assets
+Pasted-*.txt
+prompt/session logs
+screenshots
+.replit
+standalone server.mjs
+unrelated generated files
+
+If contamination exists:
+clean branch before push.
+
+==================================================
+PHASE 3 — FETCH LATEST MAIN
+==================================================
+
+Run:
+
+git fetch origin main --prune
+
+Record:
+
+MAIN_SHA="$(git rev-parse origin/main)"
+
+Verify merge base:
+
+git merge-base origin/main HEAD
+
+If main advanced, merge current origin/main into the WP-06B branch.
+
+Resolve conflicts carefully.
+
+Do not globally choose ours/theirs.
+
+Preserve:
+
+- newer main fixes
+- candidateId-only contract
+- locked behavior
+- snapshot immutability
+- canvas integration
+- tenant isolation
+
+Then rerun validation.
+
+==================================================
+PHASE 4 — PRE-PUSH VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+
+pnpm --filter api-server run build
+
+pnpm --filter api-server vitest run
+
+Run AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Required:
+
+all green.
+
+Record actual totals.
+
+==================================================
+PHASE 5 — PUSH
+==================================================
+
+Push:
+
+feature/wp06b-placement-canvas-rebuild
+
+If remote branch absent:
+normal push.
+
+If remote branch exists and diverged:
+use exact --force-with-lease only.
+
+Never plain --force.
+
+==================================================
+PHASE 6 — CREATE PR
+==================================================
+
+Create PR if none exists.
+
+Base:
+main
+
+Head:
+feature/wp06b-placement-canvas-rebuild
+
+Title:
+
+feat(placement-ui): rebuild WP-06B placement canvas on monorepo
+
+PR description:
+
+- real monorepo implementation
+- suggest-placement
+- candidateId-only apply
+- raw payload rejection
+- tenant isolation
+- locked placement safety
+- approved read-only mode
+- transaction/idempotency
+- canvas integration
+- coordinate validation
+- safe React rendering
+- API + admin test totals
+- no standalone branch history
+- no accidental artifacts
+
+==================================================
+PHASE 7 — FINAL PR REVIEW
+==================================================
+
+Verify:
+
+- PR open
+- not draft
+- base = main
+- correct head
+- merge-base exists
+- mergeable clean
+- required checks passing
+- no accidental files
+- no unrelated changes
+
+Review:
+
+- auth
+- tenant isolation
+- candidateId-only apply
+- server revalidation
+- transaction safety
+- optimistic concurrency
+- idempotency
+- locked placements
+- approved state
+- coordinate safety
+- XSS safety
+- no duplicate geometry
+- performance
+- test quality
+
+Classify:
+
+P0
+P1
+P2
+P3
+
+Required:
+
+P0 = 0
+P1 = 0
+
+If P0/P1 exists:
+remediate only WP-06B scope,
+push update,
+repeat review.
+
+==================================================
+PHASE 8 — MERGE WP-06B
+==================================================
+
+Only if final review passes.
+
+Merge using repository-standard method.
+
+Record:
+
+- PR number
+- PR URL
+- merge method
+- merge commit SHA
+- merged_at
+- merged_by
+
+==================================================
+PHASE 9 — VERIFY MAIN
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git rev-parse HEAD
+git rev-parse origin/main
+git ls-remote --heads origin main
+
+Required:
+
+local main SHA =
+origin/main SHA =
+remote main SHA
+
+==================================================
+PHASE 10 — POST-MERGE VALIDATION
+==================================================
+
+Verify on main:
+
+- suggest-placement exists
+- apply-placement exists
+- candidateId-only apply exists
+- canvas exists in admin Interior Design
+- locked state preserved
+- approved state read-only
+- no standalone files entered main
+- no attached_assets entered main
+
+Run again:
+
+pnpm run typecheck:libs
+
+pnpm --filter api-server run build
+
+pnpm --filter api-server vitest run
+
+Run AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Required:
+
+all green.
+
+==================================================
+PHASE 11 — MARK WP-06B COMPLETE
+==================================================
+
+WP-06B may be considered COMPLETE only if:
+
+- PR merged
+- local/remote main SHA match
+- post-merge validation green
+- no accidental artifacts
+- P0 = 0
+- P1 = 0
+
+==================================================
+PHASE 12 — DISCOVER WP-07
+==================================================
+
+Now search authoritative repository sources for:
+
+WP-07
+WP07
+Work Package 07
+Phase 6 WP-07
+next work package
+next milestone
+layout optimization
+layout ranking
+layout alternatives
+furniture optimization
+lighting
+rendering
+decor
+roadmap
+
+Inspect:
+
+docs/
+READMEs
+architecture docs
+roadmap
+implementation plans
+manifests
+OpenAPI
+WP-06B documentation
+
+Ignore:
+
+attached_assets
+prompt/session logs
+agent narration
+
+==================================================
+PHASE 13 — CLASSIFY WP-07
+==================================================
+
+Use:
+
+A. Clearly Defined
+B. Partially Defined
+C. Not Defined
+D. Conflicting Definitions
+
+Report:
+
+- WP-07 title
+- objective
+- dependencies
+- in-scope
+- out-of-scope
+- DB impact
+- API impact
+- UI impact
+- security impact
+- owner decisions
+
+==================================================
+PHASE 14 — CREATE WP-07 PLAN
+==================================================
+
+Create:
+
+WP07_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+Do not commit it.
+
+Include:
+
+1. Verified main SHA
+2. Authoritative references
+3. Scope classification
+4. Objective
+5. Dependencies
+6. In-scope
+7. Out-of-scope
+8. Architecture
+9. Risks
+10. Security
+11. Database impact
+12. API impact
+13. UI impact
+14. Test strategy
+15. Proposed branch
+16. Owner decisions
+17. Go/no-go recommendation
+
+==================================================
+PHASE 15 — TRANSITION TO WP-07
+==================================================
+
+If WP-07 is clearly defined and has no human-level decisions:
+
+Create:
+
+feature/wp07-<authoritative-name>
+
+from verified origin/main.
+
+Do not implement yet.
+
+If partially defined:
+remain on main and list owner decisions.
+
+If undefined:
+remain on main.
+
+If conflicting:
+remain on main and list conflicts.
+
+==================================================
+FINAL REPORT
+==================================================
+
+WP-06B
+
+1. GitHub auth
+2. Initial feature SHA
+3. Current main SHA
+4. Merge-base status
+5. Final feature SHA
+6. Changed files
+7. Typecheck
+8. API build
+9. API regression
+10. AI Platform tests
+11. Admin build
+12. P0
+13. P1
+14. Push status
+15. PR number
+16. PR URL
+17. Mergeability
+18. Merge SHA
+19. Local main SHA
+20. Remote main SHA
+21. SHA match
+22. Post-merge validation
+23. WP-06B final status
+
+WP-07
+
+24. WP-07 references
+25. Scope classification
+26. WP-07 title
+27. Objective
+28. Dependencies
+29. Owner decisions
+30. Branch created
+31. Current branch
+32. Implementation started
+33. Plan path
+34. Recommended next action
+
+Use exactly one verdict:
+
+A.
+WP-06B MERGED AND VERIFIED — WP-07 BRANCH READY
+
+B.
+WP-06B MERGED AND VERIFIED — WP-07 OWNER DECISIONS REQUIRED
+
+C.
+WP-06B MERGED AND VERIFIED — WP-07 NOT DEFINED
+
+D.
+WP-06B FINALIZATION FAILED
+
+E.
+WP-06B POST-MERGE VALIDATION FAILED
+
+F.
+WP-07 REQUIREMENTS CONFLICT
+
+STOP.
+
+Do not go back to WP-06A.
+Do not use standalone WP-06B history.
+Do not implement WP-07 in this task.
