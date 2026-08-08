@@ -1,0 +1,44 @@
+Saya akan membaca instruksi yang diunggah, memahami bagian terakhir yang harus dilanjutkan, lalu meneruskan pekerjaan di aplikasi tanpa mengubah struktur yang sudah ada.
+
+
+2 actions
+Saya akan memeriksa perubahan WP-08 yang sudah ada dan kontrak interior/render saat ini, lalu melanjutkan implementasinya dengan menjaga kompatibilitas alur customer yang sudah berjalan. Setelah itu saya akan menjalankan pemeriksaan tipe dan memuat ulang tampilan aplikasinya.
+
+
+11 actions
+Saya menemukan fondasi pipeline preview/final sudah tersedia, tetapi ada dua celah yang perlu diselesaikan agar sesuai keputusan WP-08: ambang QC masih 70 (harus 80), dan belum ada aksi reject/recompose yang aman. Saya akan memetakan identitas proyek interior serta kontrak API yang ada, lalu menutup celah tersebut tanpa membuat tabel baru.
+
+
+48 actions
+Saya akan menutup implementasi dalam tiga bagian: membuat pipeline interior memakai session/aset yang sama dengan metadata sumber yang jelas, menambahkan keputusan approve/recompose berbasis token agar aman untuk customer, dan memperketat QC ke 80 dengan status recompose bila gagal. Setelah itu saya akan menghubungkan halaman hasil interior ke sesi moodboard tersebut.
+
+
+18 actions
+Saya sudah mengikat pipeline ke proyek interior melalui referensi interior:<id> tanpa mencampur ID numerik dengan UUID. Sekarang saya akan memperbaiki sisa transisi status yang masih mengasumsikan proyek UUID, lalu menambahkan endpoint customer untuk approve/recompose berbasis access token dan menyambungkan tampilan hasilnya.
+
+
+6 actions
+Saya akan menyelesaikan pengamanan dan wiring customer sekarang: endpoint moodboard berbasis token untuk membaca status/aset, meminta recompose, dan menyetujui hasil; proses brief interior juga akan otomatis memulai satu session yang dapat dipantau setelah refresh.
+
+
+Show less
+
+Edited imagePreviewService.ts
+Evaluating database updates
+
+Evaluating database updates
+Designing UI components
+
+Designing UI components
+
+Edited imagePreviewService.ts
+
+Edited router.ts
+Inspecting compile errors
+
+Inspecting compile errors
+Saya melanjutkan validasi setelah wiring endpoint. Pemeriksaan sebelumnya terkena artefak build library yang belum diperbarui dan beberapa error lama di API; saya akan rebuild library terlebih dahulu, lalu memperbaiki hanya error yang berasal dari perubahan WP-08 dan memastikan UI customer benar-benar menampilkan serta menjalankan aksi moodboard.
+
+
+23 actions
+Validasi library sudah bersih; typecheck API masih gagal hanya pada kumpulan error lama yang tidak terkait WP-08, jadi saya tidak akan menyamarkannya sebagai error baru. Saya menemukan dua celah fungsional yang perlu ditutup sebelum selesai: status pipeline tidak boleh ditimpa oleh generator interior lama, dan recompose harus menilai hanya aset final dari percobaan terbaru. Saya perbaiki keduanya sekaligus dengan UI pilih konsep/final/recompose/approve di halaman customer.

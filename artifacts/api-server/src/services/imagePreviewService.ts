@@ -25,6 +25,7 @@ import {
   creativeAiAssetsTable,
   creativeRenderSessionsTable,
 } from "@workspace/db";
+import { idProjectsTable, idBriefsTable } from "../domains/interior-design/schema.js";
 import { executeAI } from "./aiExecutionService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { logAudit } from "./aiAuditService.js";
@@ -51,6 +52,135 @@ const PREVIEW_CONFIG = {
   estimatedFinalCostUsd: { standard: 0.003, premium: 0.025, enterprise: 0.025 },
   estimatedRenderTimeMs: { standard: 15000, premium: 45000, enterprise: 60000 },
 };
+
+/** Final images must pass this gate before they can be approved by a customer. */
+export const FINAL_QC_THRESHOLD = 80;
+
+type PipelineSourceContext = {
+  sourceType: "creative" | "interior";
+  projectRef: string;
+  numericProjectId: number;
+  brief: Record<string, unknown>;
+  brandStrategy: Record<string, unknown>;
+  creativeDirection: Record<string, unknown>;
+};
+
+/**
+ * The image pipeline is shared by creative-project UUIDs and the Interior
+ * Design brief domain. Interior IDs are deliberately namespaced as
+ * `interior:<numeric-id>` so the two identity systems can never be confused.
+ */
+async function loadPipelineSourceContext(
+  projectRef: string,
+  numericProjectId?: number,
+): Promise<PipelineSourceContext | null> {
+  if (projectRef.startsWith("interior:")) {
+    const id = Number.parseInt(projectRef.slice("interior:".length), 10);
+    if (!Number.isInteger(id) || id <= 0) return null;
+
+    const [project] = await db.select().from(idProjectsTable).where(eq(idProjectsTable.id, id)).limit(1);
+    const [brief] = await db.select().from(idBriefsTable).where(eq(idBriefsTable.projectId, id)).limit(1);
+    if (!project || !brief) return null;
+
+    return {
+      sourceType: "interior",
+      projectRef,
+      numericProjectId: id,
+      brief: {
+        domain: "interior",
+        title: project.title,
+        roomType: project.roomType,
+        roomLengthM: brief.roomLengthM,
+        roomWidthM: brief.roomWidthM,
+        ceilingHeightM: brief.ceilingHeightM,
+        stylePreference: brief.style,
+        primaryColors: brief.primaryColors,
+        secondaryColors: brief.secondaryColors,
+        furnitureNeeds: brief.furnitureNeeds,
+        materialsPreference: brief.materialsPreference,
+        lightingPreference: brief.lightingPreference,
+        additionalNotes: brief.additionalNotes,
+      },
+      brandStrategy: {},
+      creativeDirection: {},
+    };
+  }
+
+  const [project] = await db
+    .select()
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, projectRef));
+  if (!project) return null;
+
+  const steps = await db
+    .select()
+    .from(creativeProjectStepsTable)
+    .where(eq(creativeProjectStepsTable.projectId, numericProjectId ?? project.id));
+
+  return {
+    sourceType: "creative",
+    projectRef,
+    numericProjectId: numericProjectId ?? project.id,
+    brief: {
+      domain: "creative",
+      brandName: project.brandName,
+      businessType: project.businessType,
+      targetMarket: project.targetMarket,
+      productOrService: project.productOrService,
+      stylePreference: project.stylePreference,
+      goal: project.goal,
+    },
+    brandStrategy:
+      (steps.find((s) => s.stepName === "Brand Strategy")?.output as Record<string, unknown>) ?? {},
+    creativeDirection:
+      (steps.find((s) => s.stepName === "Creative Direction")?.output as Record<string, unknown>) ?? {},
+  };
+}
+
+async function updatePipelineSourceStatus(projectRef: string, status: string): Promise<void> {
+  if (projectRef.startsWith("interior:")) {
+    const id = Number.parseInt(projectRef.slice("interior:".length), 10);
+    if (Number.isInteger(id)) {
+      // id_projects has a deliberately small legacy status vocabulary. Keep
+      // pipeline lifecycle details in creative_render_sessions and expose the
+      // closest customer-facing interior status without violating its check.
+      const interiorStatus =
+        status === "planning" || status === "preview_generating" ||
+        status === "final_generating" || status === "quality_check"
+          ? "analyzing"
+          : status === "preview_ready"
+            ? "outputs_ready"
+            : status === "recompose_required"
+              ? "revision_requested"
+              : status === "failed"
+                ? "revision_requested"
+                : status === "waiting_client_review"
+                  ? "outputs_ready"
+                  : status;
+      await db
+        .update(idProjectsTable)
+        .set({ status: interiorStatus, updatedAt: new Date() })
+        .where(and(
+          eq(idProjectsTable.id, id),
+          // Legacy interior generation must not overwrite active pipeline
+          // statuses after the preview workflow has taken ownership.
+          sql`status NOT IN ('analyzing', 'outputs_ready', 'revision_requested', 'completed') OR ${interiorStatus} IN ('analyzing', 'outputs_ready', 'revision_requested', 'completed')`,
+        ));
+    }
+    return;
+  }
+
+  await db
+    .update(creativeProjectsTable)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(creativeProjectsTable.projectId, projectRef));
+}
+
+function metadataObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -355,7 +485,7 @@ async function reviewFinalImage(
   imageUrl: string,
 ): Promise<{ score: number; notes: string; tokensUsed: number; latencyMs: number }> {
   const agentCtx = await getAgentBySlug("image-qc");
-  if (!agentCtx) return { score: 70, notes: "image-qc agent not found; skipping QC.", tokensUsed: 0, latencyMs: 0 };
+  if (!agentCtx) return { score: 0, notes: "image-qc agent not found; QC failed closed.", tokensUsed: 0, latencyMs: 0 };
 
   const systemPrompt = (agentCtx.agent.metadata as { systemPrompt?: string } | null)?.systemPrompt ?? "";
   const userPrompt = `Review this AI-generated final image for a brand campaign.
@@ -402,7 +532,7 @@ Respond with ONLY valid JSON:
       latencyMs,
     };
   } catch {
-    return { score: 70, notes: "QC agent call failed; defaulting to 70.", tokensUsed: 0, latencyMs: 0 };
+    return { score: 0, notes: "QC agent call failed; QC failed closed.", tokensUsed: 0, latencyMs: 0 };
   }
 }
 
@@ -419,12 +549,8 @@ export async function startPreviewSession(
 ): Promise<{ sessionId: number; message: string }> {
   const { packageTier = "standard", previewCount = 4, requestedFinalCount = 1 } = opts;
 
-  // Verify project exists
-  const [project] = await db
-    .select()
-    .from(creativeProjectsTable)
-    .where(eq(creativeProjectsTable.projectId, projectUuid));
-  if (!project) throw new Error(`Project ${projectUuid} not found`);
+  const source = await loadPipelineSourceContext(projectUuid);
+  if (!source) throw new Error(`Project ${projectUuid} not found or has no brief`);
 
   // Create the session
   const [session] = await db
@@ -443,14 +569,11 @@ export async function startPreviewSession(
     sessionId: session.id, packageTier, previewCount,
   });
 
-  // Update project status to planning
-  await db
-    .update(creativeProjectsTable)
-    .set({ status: "planning" })
-    .where(eq(creativeProjectsTable.projectId, projectUuid));
+  // Update the owning domain through the namespaced source reference.
+  await updatePipelineSourceStatus(projectUuid, "planning");
 
   // Fire preview generation in background
-  runPreviewGeneration(session.id, projectUuid, project.id).catch(async (err) => {
+  runPreviewGeneration(session.id, projectUuid, source.numericProjectId).catch(async (err) => {
     console.error(`[preview-pipeline] Preview generation failed for session ${session.id}:`, err);
     await db
       .update(creativeRenderSessionsTable)
@@ -482,29 +605,13 @@ export async function runPreviewGeneration(
     .set({ sessionStatus: "preview_generating", updatedAt: new Date() })
     .where(eq(creativeRenderSessionsTable.id, sessionId));
 
-  await db
-    .update(creativeProjectsTable)
-    .set({ status: "preview_generating" })
-    .where(eq(creativeProjectsTable.projectId, projectUuid));
+  await updatePipelineSourceStatus(projectUuid, "preview_generating");
 
-  // Load project + steps for brief context
-  const [project] = await db
-    .select().from(creativeProjectsTable).where(eq(creativeProjectsTable.projectId, projectUuid));
-  const steps = await db
-    .select().from(creativeProjectStepsTable).where(eq(creativeProjectStepsTable.projectId, projectDbId));
-
-  const brandStrategy =
-    (steps.find((s) => s.stepName === "Brand Strategy")?.output as Record<string, unknown>) ?? {};
-  const creativeDirection =
-    (steps.find((s) => s.stepName === "Creative Direction")?.output as Record<string, unknown>) ?? {};
-  const brief: Record<string, unknown> = {
-    brandName: project?.brandName,
-    businessType: project?.businessType,
-    targetMarket: project?.targetMarket,
-    productOrService: project?.productOrService,
-    stylePreference: project?.stylePreference,
-    goal: project?.goal,
-  };
+  // Load the source through the namespaced reference. Interior projects use
+  // id_projects/id_briefs and never query creative_projects.
+  const source = await loadPipelineSourceContext(projectUuid, projectDbId);
+  if (!source) throw new Error(`Source ${projectUuid} not found`);
+  const { brief, brandStrategy, creativeDirection } = source;
 
   const previewCount = session.previewCount ?? 4;
   const packageTier = (session.packageTier ?? "standard") as keyof typeof TIER_CONFIG;
@@ -650,10 +757,7 @@ export async function runPreviewGeneration(
     })
     .where(eq(creativeRenderSessionsTable.id, sessionId));
 
-  await db
-    .update(creativeProjectsTable)
-    .set({ status: "preview_ready" })
-    .where(eq(creativeProjectsTable.projectId, projectUuid));
+  await updatePipelineSourceStatus(projectUuid, "preview_ready");
 
   await logAudit("preview-pipeline", "preview_ready", projectUuid, "creative_render_session", "success", {
     sessionId, previewCount: previewPrompts.length, totalPreviewCost,
@@ -672,18 +776,13 @@ export async function selectConcept(
 
   const [concept] = await db
     .select().from(creativeAiAssetsTable).where(eq(creativeAiAssetsTable.id, conceptAssetId));
-  if (!concept) throw new Error(`Concept asset ${conceptAssetId} not found`);
+  if (!concept || concept.renderSessionId !== sessionId || concept.renderStage !== "preview") {
+    throw new Error(`Concept asset ${conceptAssetId} does not belong to this preview session`);
+  }
 
-  // Load project for brief context
-  const [project] = await db
-    .select().from(creativeProjectsTable).where(eq(creativeProjectsTable.projectId, session.projectId));
-
-  const brief: Record<string, unknown> = {
-    brandName: project?.brandName,
-    businessType: project?.businessType,
-    stylePreference: project?.stylePreference,
-    goal: project?.goal,
-  };
+  const source = await loadPipelineSourceContext(session.projectId);
+  if (!source) throw new Error(`Source ${session.projectId} not found`);
+  const { brief } = source;
 
   // AI prompt refinement
   let refinedPrompt = concept.prompt;
@@ -733,10 +832,7 @@ export async function selectConcept(
     })
     .where(eq(creativeRenderSessionsTable.id, sessionId));
 
-  await db
-    .update(creativeProjectsTable)
-    .set({ status: "waiting_client_review" })
-    .where(eq(creativeProjectsTable.projectId, session.projectId));
+  await updatePipelineSourceStatus(session.projectId, "waiting_client_review");
 
   await logAudit("preview-pipeline", "concept_selected", session.projectId, "creative_render_session", "success", {
     sessionId, conceptAssetId, hasFeedback: !!(feedback?.trim()),
@@ -764,32 +860,29 @@ export async function runFinalGeneration(
     .set({ sessionStatus: "final_generating", requestedFinalCount: finalCount, updatedAt: new Date() })
     .where(eq(creativeRenderSessionsTable.id, sessionId));
 
-  await db
-    .update(creativeProjectsTable)
-    .set({ status: "final_generating" })
-    .where(eq(creativeProjectsTable.projectId, projectUuid));
+  await updatePipelineSourceStatus(projectUuid, "final_generating");
 
   // Load selected concept for prompt
   const [selectedConcept] = await db
     .select().from(creativeAiAssetsTable).where(eq(creativeAiAssetsTable.id, session.selectedConceptId));
-  if (!selectedConcept) throw new Error("Selected concept asset not found");
+  if (
+    !selectedConcept ||
+    selectedConcept.renderSessionId !== sessionId ||
+    selectedConcept.renderStage !== "preview"
+  ) {
+    throw new Error("Selected concept asset does not belong to this session");
+  }
 
   const refinedData = (selectedConcept.metadata as Record<string, unknown> | null) ?? {};
   const prompt = String(refinedData["refinedPrompt"] ?? selectedConcept.prompt);
   const negativePrompt = String(refinedData["refinedNegativePrompt"] ?? (selectedConcept.negativePrompt ?? "text, watermark, low quality, blurry, distorted"));
   const aspectRatio = String(refinedData["refinedAspectRatio"] ?? (selectedConcept.aspectRatio ?? "1:1"));
 
-  // Load project brief
-  const [project] = await db
-    .select().from(creativeProjectsTable).where(eq(creativeProjectsTable.projectId, projectUuid));
-  const brief: Record<string, unknown> = {
-    brandName: project?.brandName,
-    businessType: project?.businessType,
-    targetMarket: project?.targetMarket,
-    productOrService: project?.productOrService,
-    stylePreference: project?.stylePreference,
-    goal: project?.goal,
-  };
+  const source = await loadPipelineSourceContext(projectUuid);
+  if (!source) throw new Error(`Source ${projectUuid} not found`);
+  const { brief } = source;
+  const sessionMetadata = metadataObject(session.metadata);
+  const finalAttempt = Number(sessionMetadata["finalAttempt"] ?? 1);
 
   const guardrails = await readGuardrails();
   const replicateKey = getProviderApiKey("replicate");
@@ -817,6 +910,7 @@ export async function runFinalGeneration(
           packageTier,
           fromConceptId: session.selectedConceptId,
           finalVariationIndex: i + 1,
+          finalAttempt,
         },
         cost: "0",
         latencyMs: 0,
@@ -828,8 +922,9 @@ export async function runFinalGeneration(
   if (!replicateKey) {
     await db
       .update(creativeRenderSessionsTable)
-      .set({ sessionStatus: "completed", updatedAt: new Date() })
+      .set({ sessionStatus: "failed", updatedAt: new Date() })
       .where(eq(creativeRenderSessionsTable.id, sessionId));
+    await updatePipelineSourceStatus(projectUuid, "failed");
     return;
   }
 
@@ -881,10 +976,7 @@ export async function runFinalGeneration(
     let qcNotes: string | null = null;
 
     if (imageStatus === "completed" && finalImageUrl) {
-      await db
-        .update(creativeProjectsTable)
-        .set({ status: "quality_check" })
-        .where(eq(creativeProjectsTable.projectId, projectUuid));
+      await updatePipelineSourceStatus(projectUuid, "quality_check");
       await db
         .update(creativeRenderSessionsTable)
         .set({ sessionStatus: "quality_check", updatedAt: new Date() })
@@ -914,7 +1006,9 @@ export async function runFinalGeneration(
       .update(creativeAiAssetsTable)
       .set({
         imageUrl: finalImageUrl,
-        status: imageStatus === "completed" ? (qcScore && qcScore >= 70 ? "completed" : "needs_revision") : "failed",
+        status: imageStatus === "completed"
+          ? (qcScore !== null && qcScore >= FINAL_QC_THRESHOLD ? "completed" : "needs_revision")
+          : "failed",
         qcScore,
         qcNotes: qcNotes ?? errorNote,
         cost: String(imageCost.toFixed(6)),
@@ -938,10 +1032,28 @@ export async function runFinalGeneration(
   const prevPreviewCost = parseFloat(String(session.previewCostUsd ?? "0"));
   const totalCost = prevPreviewCost + totalFinalCost + totalQcCost;
 
+  const latestFinalAssets = await db
+    .select({
+      status: creativeAiAssetsTable.status,
+      qcScore: creativeAiAssetsTable.qcScore,
+      metadata: creativeAiAssetsTable.metadata,
+    })
+    .from(creativeAiAssetsTable)
+    .where(and(
+      eq(creativeAiAssetsTable.renderSessionId, sessionId),
+      eq(creativeAiAssetsTable.renderStage, "final"),
+    ));
+  const attemptAssets = latestFinalAssets.filter((asset) =>
+    Number(metadataObject(asset.metadata)["finalAttempt"] ?? 1) === finalAttempt,
+  );
+  const allLatestPassed = attemptAssets.length === finalCount &&
+    attemptAssets.every((asset) => asset.status === "completed" && (asset.qcScore ?? 0) >= FINAL_QC_THRESHOLD);
+  const nextSessionStatus = allLatestPassed ? "completed" : "recompose_required";
+
   await db
     .update(creativeRenderSessionsTable)
     .set({
-      sessionStatus: "completed",
+      sessionStatus: nextSessionStatus,
       finalCostUsd: String(totalFinalCost.toFixed(6)),
       qcCostUsd: String(totalQcCost.toFixed(6)),
       totalCostUsd: String(totalCost.toFixed(6)),
@@ -949,13 +1061,10 @@ export async function runFinalGeneration(
     })
     .where(eq(creativeRenderSessionsTable.id, sessionId));
 
-  await db
-    .update(creativeProjectsTable)
-    .set({ status: "completed" })
-    .where(eq(creativeProjectsTable.projectId, projectUuid));
+  await updatePipelineSourceStatus(projectUuid, nextSessionStatus === "completed" ? "completed" : "recompose_required");
 
-  await logAudit("preview-pipeline", "final_completed", projectUuid, "creative_render_session", "success", {
-    sessionId, finalCount, totalFinalCost, totalQcCost, packageTier,
+  await logAudit("preview-pipeline", nextSessionStatus === "completed" ? "final_completed" : "final_recompose_required", projectUuid, "creative_render_session", nextSessionStatus === "completed" ? "success" : "warning", {
+    sessionId, finalCount, finalAttempt, totalFinalCost, totalQcCost, packageTier, qcThreshold: FINAL_QC_THRESHOLD,
   });
 }
 
@@ -988,10 +1097,8 @@ export async function generateMorePreviews(
     })
     .where(eq(creativeRenderSessionsTable.id, sessionId));
 
-  // Find project db id
-  const [project] = await db
-    .select().from(creativeProjectsTable).where(eq(creativeProjectsTable.projectId, session.projectId));
-  if (!project) throw new Error("Project not found for session");
+  const source = await loadPipelineSourceContext(session.projectId);
+  if (!source) throw new Error("Project not found for session");
 
-  await runPreviewGeneration(sessionId, session.projectId, project.id);
+  await runPreviewGeneration(sessionId, session.projectId, source.numericProjectId);
 }
