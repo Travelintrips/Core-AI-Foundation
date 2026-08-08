@@ -581,6 +581,30 @@ export interface UpdateDraftSections {
 }
 
 /**
+ * Assert per-admin draft ownership.
+ *
+ * Ownership is established on the first edit of a draft (lastEditedBy becomes
+ * the owner). An unowned draft (lastEditedBy === null) is open to any admin —
+ * the first caller to write it claims ownership automatically.
+ *
+ * Once owned, only the owning admin may update, approve, request revision, or
+ * reset the draft. This prevents two admins from stomping each other's work.
+ *
+ * @throws 403 if a different admin already owns the draft
+ */
+function assertDraftOwnership(draft: IdConceptDraft, editorId: string): void {
+  if (draft.lastEditedBy !== null && draft.lastEditedBy !== editorId) {
+    throw Object.assign(
+      new Error(
+        `Draft is owned by ${draft.lastEditedBy}. ` +
+        `Only the owning admin may edit, approve, revise, or reset this draft.`,
+      ),
+      { status: 403 },
+    );
+  }
+}
+
+/**
  * Update one or more sections of the editable draft.
  * Uses optimistic concurrency: if expectedUpdatedAt is provided and does not
  * match the stored updatedAt, throws a conflict error rather than overwriting.
@@ -606,6 +630,9 @@ export async function updateConceptDraft(
       { status: 409 },
     );
   }
+
+  // Ownership guard — only the owning admin may edit the draft.
+  assertDraftOwnership(existing, editorId);
 
   // Optimistic concurrency guard
   if (expectedUpdatedAt) {
@@ -675,6 +702,9 @@ export async function updateDraftReviewState(
     );
   }
 
+  // Ownership guard — only the owning admin may change the review state.
+  assertDraftOwnership(existing, editorId);
+
   // Capture an immutable approved snapshot when transitioning TO approved_for_rendering.
   // The snapshot records exactly what the admin approved — subsequent revision cycles
   // do not overwrite it until a new approval is recorded.
@@ -739,6 +769,9 @@ export async function requestRevision(
     );
   }
 
+  // Ownership guard — only the owning admin may request a revision.
+  assertDraftOwnership(existing, requestedBy);
+
   const [updated] = await db
     .update(idConceptDraftsTable)
     .set({
@@ -771,6 +804,9 @@ export async function resetDraftToOriginal(
     .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
     .limit(1);
   if (!existing) throw Object.assign(new Error(`No concept draft found for project ${projectUuid}`), { status: 404 });
+
+  // Ownership guard — only the owning admin may reset sections to original.
+  assertDraftOwnership(existing, editorId);
 
   const updates: Partial<typeof idConceptDraftsTable.$inferInsert> = {
     lastEditedBy: editorId,
