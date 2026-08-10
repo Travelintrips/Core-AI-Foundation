@@ -198,9 +198,15 @@ describe("imagePreviewService", () => {
       const updateSet = vi.fn().mockReturnValue({ where: updateSetWhere });
       const updateMock = vi.fn().mockReturnValue({ set: updateSet });
       vi.mocked(db.update).mockImplementation(updateMock);
+      const selectWhere = vi
+        .fn()
+        .mockResolvedValueOnce([mockSession])
+        .mockResolvedValueOnce([mockAsset])
+        .mockResolvedValueOnce([mockProject])
+        .mockResolvedValueOnce([]);
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([mockSession]),
+          where: selectWhere,
         }),
       } as unknown as ReturnType<typeof db.select>);
 
