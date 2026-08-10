@@ -264,6 +264,8 @@ import type {
   KnowledgeBaseUpdate,
   KnowledgeDocument,
   KnowledgeDocumentInput,
+  LayoutConstraintEvaluationRequest,
+  LayoutConstraintEvaluationResult,
   ListAssetLibraryParams,
   ListAuditLogsParams,
   ListCommercialGatesParams,
@@ -30872,4 +30874,75 @@ export function useGetWorkspaceCreativeMarketplaceAssets<TData = Awaited<ReturnT
 
 
 
+
+export const getEvaluateLayoutSessionConstraintsUrl = (sessionId: string,) => {
+
+
+
+
+  return `/api/ai/layout-sessions/${sessionId}/constraints/evaluate`
+}
+
+/**
+ * @summary Evaluate a complete layout against deterministic constraints
+ */
+export const evaluateLayoutSessionConstraints = async (sessionId: string,
+    layoutConstraintEvaluationRequest?: LayoutConstraintEvaluationRequest, options?: RequestInit): Promise<LayoutConstraintEvaluationResult> => {
+
+  return customFetch<LayoutConstraintEvaluationResult>(getEvaluateLayoutSessionConstraintsUrl(sessionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(layoutConstraintEvaluationRequest)
+  }
+);}
+
+
+
+
+export const getEvaluateLayoutSessionConstraintsMutationOptions = <TError = ErrorType<BadRequestResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof evaluateLayoutSessionConstraints>>, TError,{sessionId: string;data?: BodyType<LayoutConstraintEvaluationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof evaluateLayoutSessionConstraints>>, TError,{sessionId: string;data?: BodyType<LayoutConstraintEvaluationRequest>}, TContext> => {
+
+const mutationKey = ['evaluateLayoutSessionConstraints'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof evaluateLayoutSessionConstraints>>, {sessionId: string;data?: BodyType<LayoutConstraintEvaluationRequest>}> = (props) => {
+          const {sessionId,data} = props ?? {};
+
+          return  evaluateLayoutSessionConstraints(sessionId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EvaluateLayoutSessionConstraintsMutationResult = NonNullable<Awaited<ReturnType<typeof evaluateLayoutSessionConstraints>>>
+    export type EvaluateLayoutSessionConstraintsMutationBody = BodyType<LayoutConstraintEvaluationRequest> | undefined
+    export type EvaluateLayoutSessionConstraintsMutationError = ErrorType<BadRequestResponse | void | NotFoundResponse>
+
+    /**
+ * @summary Evaluate a complete layout against deterministic constraints
+ */
+export const useEvaluateLayoutSessionConstraints = <TError = ErrorType<BadRequestResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof evaluateLayoutSessionConstraints>>, TError,{sessionId: string;data?: BodyType<LayoutConstraintEvaluationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof evaluateLayoutSessionConstraints>>,
+        TError,
+        {sessionId: string;data?: BodyType<LayoutConstraintEvaluationRequest>},
+        TContext
+      > => {
+      return useMutation(getEvaluateLayoutSessionConstraintsMutationOptions(options));
+    }
 

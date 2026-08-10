@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { AlertTriangle, CheckCircle, Lock, LockOpen, Maximize2, Minus, Move, Plus, RotateCw, Sparkles, Undo2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, LockOpen, Maximize2, Minus, Move, Plus, RotateCw, Sparkles, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createCoordinateTransform } from "./coordinateTransforms";
 
@@ -34,13 +34,16 @@ export interface PlacementCandidate {
   explanation: string;
 }
 
-export interface LayoutEvaluationResult {
+export interface ConstraintEvaluation {
   valid: boolean;
-  score: number;
-  violations?: string[];
-  warnings?: string[];
-  rules?: string[] | null;
-  evaluatedAt?: string;
+  totalScore: number;
+  hardViolations: Array<{ ruleId: string; itemIds: string[]; message: string }>;
+  softWarnings: Array<{ ruleId: string; itemIds: string[]; message: string }>;
+  ruleResults: Array<{ ruleId: string; category: "hard" | "soft"; status: string; score: number | null; message: string; itemIds: string[] }>;
+  scoreBreakdown: Array<{ ruleId: string; weight: number; score: number | null; weightedScore: number; status: string }>;
+  explanation: string;
+  suggestedRemediations: Array<{ ruleId: string; action: string; message: string; itemIds: string[] }>;
+  metadata: { itemsEvaluated: number; rulesEvaluated: number; pairChecks: number; hardViolationCount: number; softWarningCount: number; elapsedMs: number };
 }
 
 interface PlacementCanvasProps {
@@ -50,16 +53,16 @@ interface PlacementCanvasProps {
   selectedCandidateId: string | null;
   isSuggesting: boolean;
   isApplying: boolean;
-  isEvaluating?: boolean;
   readOnly?: boolean;
   dirty: boolean;
-  evaluationResult?: LayoutEvaluationResult | null;
   collisionPlacementIds?: string[];
   onSuggest: (placements: CanvasPlacement[], targetPlacementId: string) => void;
   onSelectCandidate: (candidateId: string) => void;
   onApply: (candidateId: string) => void;
-  onEvaluate: (placements: CanvasPlacement[]) => void;
   onReset: () => void;
+  constraintEvaluation: ConstraintEvaluation | null;
+  isEvaluating: boolean;
+  onEvaluate: () => void;
 }
 
 const CANVAS_WIDTH = 720;
@@ -87,16 +90,16 @@ export function PlacementCanvas({
   selectedCandidateId,
   isSuggesting,
   isApplying,
-  isEvaluating = false,
   readOnly = false,
   dirty,
-  evaluationResult = null,
   collisionPlacementIds = [],
   onSuggest,
   onSelectCandidate,
   onApply,
-  onEvaluate,
   onReset,
+  constraintEvaluation,
+  isEvaluating,
+  onEvaluate,
 }: PlacementCanvasProps) {
   const [preview, setPreview] = useState(placements);
   const [localDirty, setLocalDirty] = useState(false);
@@ -247,10 +250,6 @@ export function PlacementCanvas({
           <Button variant="outline" size="sm" onClick={() => { setPreview(placements); setLocalDirty(false); onReset(); }} disabled={!isDirty || readOnly}>
             <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Reset
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onEvaluate(preview)} disabled={readOnly || isEvaluating}>
-            {isEvaluating ? <Sparkles className="mr-1.5 h-3.5 w-3.5 animate-pulse" /> : <CheckCircle className="mr-1.5 h-3.5 w-3.5" />}
-            {isEvaluating ? "Evaluating..." : "Evaluate Layout"}
-          </Button>
           <Button
             size="sm"
             onClick={() => selected && onSuggest(preview, selected.id)}
@@ -258,6 +257,14 @@ export function PlacementCanvas({
           >
             <Sparkles className="mr-1.5 h-3.5 w-3.5" />
             {isSuggesting ? "Mencari..." : "Suggest Placement"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onEvaluate}
+            disabled={isEvaluating}
+          >
+            {isEvaluating ? "Validating..." : "Evaluate Layout"}
           </Button>
         </div>
       </div>
@@ -382,56 +389,76 @@ export function PlacementCanvas({
             </div>
           )}
 
-          <div className="rounded-lg border border-border/60 bg-background/40 p-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Layout evaluation</p>
-            {evaluationResult ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`text-sm font-medium ${evaluationResult.valid ? "text-emerald-300" : "text-rose-300"}`}>
-                    {evaluationResult.valid ? "Valid" : "Tidak valid"}
-                  </span>
-                  <span className="font-mono text-sm text-muted-foreground">
-                    Score {Number.isFinite(evaluationResult.score) ? evaluationResult.score.toFixed(0) : "N/A"}
-                  </span>
+          {constraintEvaluation && (
+            <div className={`rounded-lg border p-3 ${constraintEvaluation.valid ? "border-emerald-300/25 bg-emerald-400/5" : "border-rose-300/25 bg-rose-400/5"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {constraintEvaluation.valid
+                    ? <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                    : <AlertTriangle className="h-4 w-4 text-rose-300" />}
+                  <div>
+                    <p className={`text-sm font-semibold ${constraintEvaluation.valid ? "text-emerald-200" : "text-rose-200"}`}>
+                      {constraintEvaluation.valid ? "Layout valid" : "Layout perlu diperbaiki"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{constraintEvaluation.explanation}</p>
+                  </div>
                 </div>
-                <div className="space-y-2 text-xs">
-                  <div>
-                    <p className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Violations</p>
-                    {evaluationResult.violations?.length ? (
-                      <ul className="space-y-1">
-                        {evaluationResult.violations.map((item, index) => (
-                          <li key={index} className="flex gap-1.5 text-rose-300"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{item}</li>
-                        ))}
-                      </ul>
-                    ) : <p className="text-muted-foreground">N/A</p>}
-                  </div>
-                  <div>
-                    <p className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Warnings</p>
-                    {evaluationResult.warnings?.length ? (
-                      <ul className="space-y-1">
-                        {evaluationResult.warnings.map((item, index) => (
-                          <li key={index} className="flex gap-1.5 text-amber-300"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{item}</li>
-                        ))}
-                      </ul>
-                    ) : <p className="text-muted-foreground">N/A</p>}
-                  </div>
-                  <div>
-                    <p className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Rules</p>
-                    {evaluationResult.rules?.length ? (
-                      <ul className="space-y-1">
-                        {evaluationResult.rules.map((item, index) => (
-                          <li key={index} className="text-muted-foreground">• {item}</li>
-                        ))}
-                      </ul>
-                    ) : <p className="text-muted-foreground">N/A</p>}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">Evaluated at: {evaluationResult.evaluatedAt ?? "N/A"}</p>
+                <span className="rounded-full border border-border/60 px-2 py-0.5 font-mono text-xs">
+                  {constraintEvaluation.totalScore.toFixed(1)}
+                </span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                <div className="rounded bg-background/40 px-1.5 py-1">
+                  <p className="font-semibold text-rose-200">{constraintEvaluation.hardViolations.length}</p>
+                  <p className="text-muted-foreground">Hard</p>
+                </div>
+                <div className="rounded bg-background/40 px-1.5 py-1">
+                  <p className="font-semibold text-amber-200">{constraintEvaluation.softWarnings.length}</p>
+                  <p className="text-muted-foreground">Warnings</p>
+                </div>
+                <div className="rounded bg-background/40 px-1.5 py-1">
+                  <p className="font-semibold text-cyan-200">{constraintEvaluation.metadata.pairChecks}</p>
+                  <p className="text-muted-foreground">Pair checks</p>
                 </div>
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Belum ada hasil evaluasi layout.</p>
-            )}
-          </div>
+
+              {(constraintEvaluation.hardViolations.length > 0 || constraintEvaluation.softWarnings.length > 0) && (
+                <div className="mt-3 space-y-2">
+                  {constraintEvaluation.hardViolations.map((violation) => (
+                    <div key={`${violation.ruleId}-${violation.itemIds.join("-")}`} className="rounded border border-rose-300/15 bg-rose-400/5 p-2">
+                      <p className="text-[10px] font-semibold text-rose-200">{violation.ruleId} · Hard violation</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">{violation.message}</p>
+                    </div>
+                  ))}
+                  {constraintEvaluation.softWarnings.map((warning) => (
+                    <div key={`${warning.ruleId}-${warning.itemIds.join("-")}`} className="rounded border border-amber-300/15 bg-amber-400/5 p-2">
+                      <p className="text-[10px] font-semibold text-amber-200">{warning.ruleId} · Soft warning</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">{warning.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <details className="mt-3">
+                <summary className="cursor-pointer text-[10px] font-medium text-cyan-200">Rule results & remediation</summary>
+                <div className="mt-2 space-y-1.5">
+                  {constraintEvaluation.ruleResults.map((rule) => (
+                    <div key={rule.ruleId} className="flex items-start justify-between gap-2 text-[10px]">
+                      <span className="font-mono text-muted-foreground">{rule.ruleId}</span>
+                      <span className="flex-1 text-right">{rule.status.replaceAll("_", " ")}</span>
+                      <span className="font-mono">{rule.score == null ? "—" : rule.score.toFixed(0)}</span>
+                    </div>
+                  ))}
+                  {constraintEvaluation.suggestedRemediations.map((remediation) => (
+                    <p key={`${remediation.ruleId}-${remediation.itemIds.join("-")}`} className="border-t border-border/40 pt-1.5 text-[10px] text-muted-foreground">
+                      {remediation.message}
+                    </p>
+                  ))}
+                </div>
+              </details>
+            </div>
+          )}
         </aside>
       </div>
     </section>

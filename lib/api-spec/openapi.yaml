@@ -8112,6 +8112,33 @@ paths:
 
   # ── End V4.7 Creative Marketplace ────────────────────────────────────────────
 
+  # ── Phase 6 WP-07: Layout Constraint Engine ───────────────────────────────────
+  /ai/layout-sessions/{sessionId}/constraints/evaluate:
+    post:
+      operationId: evaluateLayoutSessionConstraints
+      tags: [interior-design]
+      summary: Evaluate a complete layout against deterministic constraints
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LayoutConstraintEvaluationRequest" }
+      responses:
+        "200":
+          description: Deterministic layout constraint evaluation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LayoutConstraintEvaluationResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: Authentication required }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { description: Layout exceeds configured evaluation bounds }
+
 components:
   responses:
     NotFound:
@@ -8160,6 +8187,86 @@ components:
             properties:
               error: { type: string }
   schemas:
+    LayoutConstraintEvaluationRequest:
+      type: object
+      additionalProperties: false
+    LayoutConstraintRuleResult:
+      type: object
+      required: [ruleId, category, status, score, message, itemIds]
+      properties:
+        ruleId: { type: string }
+        category: { type: string, enum: [hard, soft] }
+        status: { type: string, enum: [pass, fail, warning, not_applicable] }
+        score: { type: number, nullable: true }
+        message: { type: string }
+        itemIds: { type: array, items: { type: string, format: uuid } }
+    LayoutConstraintViolation:
+      type: object
+      required: [ruleId, itemIds, message]
+      properties:
+        ruleId: { type: string }
+        itemIds: { type: array, items: { type: string, format: uuid } }
+        message: { type: string }
+    LayoutConstraintWarning:
+      type: object
+      required: [ruleId, itemIds, message]
+      properties:
+        ruleId: { type: string }
+        itemIds: { type: array, items: { type: string, format: uuid } }
+        message: { type: string }
+    LayoutConstraintScoreBreakdown:
+      type: object
+      required: [ruleId, weight, score, weightedScore, status]
+      properties:
+        ruleId: { type: string }
+        weight: { type: number }
+        score: { type: number, nullable: true }
+        weightedScore: { type: number }
+        status: { type: string, enum: [pass, warning, not_applicable] }
+    LayoutConstraintRemediation:
+      type: object
+      required: [ruleId, action, message, itemIds]
+      properties:
+        ruleId: { type: string }
+        action: { type: string }
+        message: { type: string }
+        itemIds: { type: array, items: { type: string, format: uuid } }
+    LayoutConstraintEvaluationMetadata:
+      type: object
+      required: [sessionId, itemsEvaluated, rulesEvaluated, pairChecks, hardViolationCount, softWarningCount, elapsedMs, approvedLayout]
+      properties:
+        sessionId: { type: string, format: uuid }
+        itemsEvaluated: { type: integer }
+        rulesEvaluated: { type: integer }
+        pairChecks: { type: integer }
+        hardViolationCount: { type: integer }
+        softWarningCount: { type: integer }
+        elapsedMs: { type: number }
+        approvedLayout: { type: boolean }
+    LayoutConstraintEvaluationResult:
+      type: object
+      required: [valid, totalScore, hardViolations, softWarnings, ruleResults, scoreBreakdown, explanation, suggestedRemediations, deterministic, metadata]
+      properties:
+        valid: { type: boolean }
+        totalScore: { type: number, minimum: 0, maximum: 100 }
+        hardViolations:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutConstraintViolation" }
+        softWarnings:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutConstraintWarning" }
+        ruleResults:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutConstraintRuleResult" }
+        scoreBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutConstraintScoreBreakdown" }
+        explanation: { type: string }
+        suggestedRemediations:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutConstraintRemediation" }
+        deterministic: { type: boolean, enum: [true] }
+        metadata: { $ref: "#/components/schemas/LayoutConstraintEvaluationMetadata" }
     CpReviewContext:
       type: object
       required: [reviewId, projectId, clientName, reviewStatus, brandName, businessType, documentReady, watermarked, filesUnlocked, totalVersions, totalComments, resolvedComments, pendingComments, comments, sectionsIncluded, sectionsSkipped, qcWarnings, createdAt]

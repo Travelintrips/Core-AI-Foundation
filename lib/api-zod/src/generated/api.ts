@@ -12922,3 +12922,68 @@ export const GetWorkspaceCreativeMarketplaceAssetsResponse = zod.object({
 })
 
 
+/**
+ * @summary Evaluate a complete layout against deterministic constraints
+ */
+export const EvaluateLayoutSessionConstraintsParams = zod.object({
+  "sessionId": zod.coerce.string().uuid()
+})
+
+export const EvaluateLayoutSessionConstraintsBody = zod.object({
+
+})
+
+export const evaluateLayoutSessionConstraintsResponseTotalScoreMin = 0;
+export const evaluateLayoutSessionConstraintsResponseTotalScoreMax = 100;
+
+
+
+export const EvaluateLayoutSessionConstraintsResponse = zod.object({
+  "valid": zod.boolean(),
+  "totalScore": zod.number().min(evaluateLayoutSessionConstraintsResponseTotalScoreMin).max(evaluateLayoutSessionConstraintsResponseTotalScoreMax),
+  "hardViolations": zod.array(zod.object({
+  "ruleId": zod.string(),
+  "itemIds": zod.array(zod.string().uuid()),
+  "message": zod.string()
+})),
+  "softWarnings": zod.array(zod.object({
+  "ruleId": zod.string(),
+  "itemIds": zod.array(zod.string().uuid()),
+  "message": zod.string()
+})),
+  "ruleResults": zod.array(zod.object({
+  "ruleId": zod.string(),
+  "category": zod.enum(['hard', 'soft']),
+  "status": zod.enum(['pass', 'fail', 'warning', 'not_applicable']),
+  "score": zod.number().nullable(),
+  "message": zod.string(),
+  "itemIds": zod.array(zod.string().uuid())
+})),
+  "scoreBreakdown": zod.array(zod.object({
+  "ruleId": zod.string(),
+  "weight": zod.number(),
+  "score": zod.number().nullable(),
+  "weightedScore": zod.number(),
+  "status": zod.enum(['pass', 'warning', 'not_applicable'])
+})),
+  "explanation": zod.string(),
+  "suggestedRemediations": zod.array(zod.object({
+  "ruleId": zod.string(),
+  "action": zod.string(),
+  "message": zod.string(),
+  "itemIds": zod.array(zod.string().uuid())
+})),
+  "deterministic": zod.literal(true),
+  "metadata": zod.object({
+  "sessionId": zod.string().uuid(),
+  "itemsEvaluated": zod.number(),
+  "rulesEvaluated": zod.number(),
+  "pairChecks": zod.number(),
+  "hardViolationCount": zod.number(),
+  "softWarningCount": zod.number(),
+  "elapsedMs": zod.number(),
+  "approvedLayout": zod.boolean()
+})
+})
+
+
