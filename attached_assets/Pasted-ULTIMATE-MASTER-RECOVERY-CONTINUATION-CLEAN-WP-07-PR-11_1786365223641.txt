@@ -1,0 +1,968 @@
+ULTIMATE MASTER RECOVERY + CONTINUATION
+CLEAN WP-07 PR #11 → RESOLVE WP-08 CANONICAL SCOPE → IMPLEMENT WP-08
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+ACTIVE ROADMAP:
+Interior Design / Layout
+
+CURRENT FACTS:
+
+- WP-06B = COMPLETE
+- WP-07 = Layout Constraint Engine
+- WP-07 implementation itself has already passed validation
+- PR #11 is OPEN
+- PR #11 is NOT safe to merge because attached_assets/instruction artifacts
+  are still present in the PR diff
+- DO NOT reimplement WP-07
+- WP-08 intended domain is Interior Design / Layout
+- Candidate WP-08 title = Moodboard Generator
+- Repository contains conflicting WP-08 definitions
+- No WP-08 product code has been changed yet
+- No WP-08 branch has been created yet
+
+MISSION:
+
+Perform this autonomously in ONE execution:
+
+1. Clean PR #11 without changing WP-07 product behavior
+2. Revalidate WP-07
+3. Push clean WP-07 branch
+4. Verify PR #11 remotely
+5. Merge PR #11 if clean
+6. Verify post-merge main
+7. Resolve WP-08 definition conflict using repository authority/lineage
+8. If Moodboard Generator is confirmed as canonical Interior Design WP-08:
+   immediately implement it
+9. Test WP-08
+10. RC audit WP-08
+11. Push WP-08
+12. Create PR
+13. Review and merge WP-08 if all gates pass
+14. Verify main
+15. Discover WP-09
+16. Do NOT implement WP-09
+
+Do not ask for another prompt for normal engineering decisions.
+
+==================================================
+SECTION 1 — RECOVER CORRECT BASELINE
+==================================================
+
+First:
+
+git fetch --all --tags --prune
+
+Record:
+
+- local HEAD
+- origin/main SHA
+- WP-07 local SHA
+- WP-07 remote SHA
+- PR #11 head SHA
+- merge-base
+
+Do not trust previous textual reports over current Git state.
+
+Git object/database state is authoritative.
+
+==================================================
+SECTION 2 — FORENSIC PR #11 DIFF
+==================================================
+
+Inspect EXACT PR diff against its actual merge base.
+
+Run equivalent of:
+
+git diff --name-status origin/main...origin/feature/wp07-layout-constraint-engine
+git log --oneline --decorate origin/main..origin/feature/wp07-layout-constraint-engine
+
+Classify every changed file:
+
+A. WP-07 PRODUCT
+B. WP-07 TEST
+C. WP-07 CONTRACT
+D. WP-07 DOCUMENTATION
+E. GENERATED CONTRACT
+F. CONTAMINATION
+G. UNRELATED
+
+CONTAMINATION includes:
+
+attached_assets/**
+Pasted-*.txt
+prompt files
+session transcripts
+screenshots
+.agent/.agents memory created only from prompts
+.replit changes unrelated to WP-07
+uploaded instruction documents
+temporary audit reports not intended for product repository
+
+Produce exact contamination list before remediation.
+
+==================================================
+SECTION 3 — CLEAN WP-07 HISTORY SAFELY
+==================================================
+
+Do NOT delete legitimate WP-07 source code.
+
+Preferred strategy:
+
+Create a temporary clean rebuild branch directly from current origin/main.
+
+Example:
+
+git switch --detach origin/main
+git switch -c cleanup/wp07-final
+
+Then recover ONLY legitimate WP-07 commits/files.
+
+If existing WP-07 commits are individually clean:
+cherry-pick only clean commits.
+
+If commits mix product code and contamination:
+do NOT cherry-pick blindly.
+
+Instead restore only legitimate WP-07 files from the verified implementation
+and create a new clean commit.
+
+Final clean branch must contain ONLY:
+
+- WP-07 constraint engine
+- route integration
+- contracts/Zod/OpenAPI/generated client required by WP-07
+- Placement Canvas WP-07 integration
+- WP-07 tests
+- WP-07 technical/roadmap documentation that is genuinely repository documentation
+
+It must contain ZERO:
+
+attached_assets
+prompt/session artifacts
+screenshots
+.replit
+unrelated memory
+unrelated technical debt remediation
+
+==================================================
+SECTION 4 — VERIFY PRODUCT EQUIVALENCE
+==================================================
+
+Before replacing remote branch, prove that cleanup did NOT alter WP-07 behavior.
+
+Compare legitimate product files between:
+
+OLD WP-07 implementation
+
+and
+
+CLEAN WP-07 rebuild
+
+They must be semantically identical unless a genuine blocker is found.
+
+Explicitly verify:
+
+11 hard constraints
+9 soft constraints
+deterministic scoring
+tenant isolation
+IDOR
+no mutation
+approved-state safety
+resource bounds
+canonical collision reuse
+canvas integration
+API endpoint
+
+Do not opportunistically refactor WP-07.
+
+==================================================
+SECTION 5 — WP-07 VALIDATION
+==================================================
+
+Run repository-supported commands for:
+
+- shared/library typecheck
+- WP-07 targeted tests
+- API build
+- API regression
+- AI Platform typecheck
+- AI Platform tests
+- AI Platform production build
+
+Compare against known baseline.
+
+Known unrelated API typecheck debt remains separate.
+
+Do NOT fix TD-01..TD-04.
+
+Required:
+
+P0 = 0
+P1 = 0
+
+==================================================
+SECTION 6 — REPLACE CONTAMINATED REMOTE SAFELY
+==================================================
+
+Fetch remote immediately before push.
+
+Capture exact current remote SHA.
+
+If remote branch has not received legitimate newer work:
+
+replace:
+
+feature/wp07-layout-constraint-engine
+
+with clean branch using:
+
+--force-with-lease
+
+NEVER plain --force.
+
+If remote changed unexpectedly:
+inspect before overwriting.
+
+After push:
+
+fetch again.
+
+Required:
+
+local clean SHA == remote feature SHA.
+
+==================================================
+SECTION 7 — VERIFY PR #11 REMOTELY
+==================================================
+
+Inspect PR #11 again from GitHub.
+
+Required:
+
+- open
+- not draft
+- base = main
+- correct head branch
+- clean head SHA
+- merge-base valid
+- no conflicts
+- no attached_assets
+- no prompt
+- no screenshot
+- no .replit
+- no unrelated files
+
+Do NOT rely only on local diff.
+
+The REMOTE PR diff is the release gate.
+
+If GitHub is recalculating mergeability:
+wait/recheck rather than assuming failure.
+
+==================================================
+SECTION 8 — MERGE WP-07
+==================================================
+
+If:
+
+P0 = 0
+P1 = 0
+PR clean
+checks pass
+mergeable
+
+then merge PR #11 through GitHub PR workflow.
+
+Do NOT substitute direct push to main.
+
+Record merge SHA.
+
+==================================================
+SECTION 9 — POST-MERGE MAIN VERIFICATION
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify local SHA == origin/main SHA.
+
+Verify WP-07 exists in main.
+
+Rerun release validation.
+
+If green:
+
+WP-07 = CLOSED.
+
+==================================================
+SECTION 10 — RESOLVE WP-08 CONFLICT ONCE
+==================================================
+
+Now perform repository archaeology for WP-08.
+
+This is NOT permission to reopen WP-07 namespace.
+
+Search authoritative repository history for:
+
+WP-08
+WP08
+Moodboard Generator
+Interior Design Moodboard
+Phase 6
+Interior Design roadmap
+Layout roadmap
+work package 08
+
+Inspect:
+
+- tracked roadmap documents
+- architecture documents
+- implementation master plans
+- ADRs
+- manifests
+- OpenAPI history
+- commit history
+- merged PR lineage
+- predecessor/successor references
+- WP-05/WP-06/WP-07 docs
+
+EXCLUDE FROM AUTHORITY:
+
+attached_assets
+prompt documents
+session transcripts
+agent-generated temporary reports
+untracked files
+standalone clone artifacts
+
+==================================================
+SECTION 11 — AUTHORITY RULE FOR WP-08
+==================================================
+
+When two WP-08 definitions conflict, rank evidence:
+
+1. merged/tracked canonical roadmap for Interior Design/Layout
+2. explicit successor definition from merged WP-07 lineage
+3. tracked architecture/implementation plan
+4. merged implementation manifests/contracts
+5. newer tracked roadmap amendment that explicitly supersedes older definition
+6. other repository docs
+
+Prompt/session/upload files have ZERO authority.
+
+Do not resolve conflict merely by newest filesystem timestamp.
+
+Determine whether the conflicting WP-08 belongs to:
+
+- another roadmap/track
+- obsolete roadmap
+- completed historical work
+- Interior Design/Layout roadmap
+
+Create:
+
+docs/roadmap/WP08_NAMESPACE_RESOLUTION.md
+
+or use the repository's canonical roadmap documentation location.
+
+Document:
+
+- every WP-08 definition found
+- source
+- commit/lineage
+- roadmap
+- status
+- authority
+- canonical active WP-08
+- excluded definitions
+- reason
+
+This resolution must prevent the same namespace conflict from recurring.
+
+==================================================
+SECTION 12 — GO/NO-GO WP-08
+==================================================
+
+If evidence establishes:
+
+WP-08 = Moodboard Generator
+for Interior Design/Layout
+
+then classify:
+
+GO
+
+and CONTINUE AUTOMATICALLY.
+
+Do NOT ask owner merely because another unrelated roadmap also used WP-08.
+
+Only STOP if canonical repository evidence genuinely cannot resolve a
+material architecture question.
+
+==================================================
+SECTION 13 — DETERMINE MOODBOARD ARCHITECTURE FROM CODE
+==================================================
+
+Before coding audit existing:
+
+Interior Design Concept Draft
+approved snapshot lifecycle
+Material Recommendation Engine
+material catalog
+Furniture Library
+interior asset images
+imageDesignerService
+image provider abstractions
+Supabase Storage
+ai-assets/interior-assets buckets
+InteriorDesignEditor
+existing project/draft JSONB
+existing versioning/revision models
+
+Resolve the three previously ambiguous questions from existing architecture:
+
+1. PERSISTENCE
+
+Prefer canonical existing persistence.
+
+Do not create a table merely because a table is convenient.
+
+If moodboard logically belongs to concept draft/snapshot and an existing
+versioned JSONB model supports it safely, reuse it.
+
+Create migration only if repository architecture clearly requires independent
+persistent moodboard entity/versioning.
+
+2. IMAGE PROVIDER
+
+Prefer composition from existing canonical assets.
+
+If actual generated moodboard imagery is required by canonical scope:
+reuse existing image provider abstraction.
+
+Never create another provider integration.
+
+3. APPROVED STATE
+
+Approved concept/layout state must remain immutable.
+
+Moodboard generation must not silently mutate approved canonical design state.
+
+If moodboard can be generated from approved data, treat source data read-only.
+
+==================================================
+SECTION 14 — CREATE WP-08 BRANCH
+==================================================
+
+Only after WP-07 merged and main verified:
+
+git switch main
+git reset --hard origin/main
+
+Create:
+
+feature/wp08-moodboard-generator
+
+Record BASE_SHA.
+
+==================================================
+SECTION 15 — IMPLEMENT WP-08
+==================================================
+
+Implement canonical Moodboard Generator.
+
+Minimum capabilities:
+
+A. Structured moodboard
+
+- project UUID
+- moodboard ID/version if architecture requires
+- design style
+- palette
+- selected/recommended materials
+- furniture references
+- visual/reference images
+- sections/groups
+- warnings
+- metadata
+
+B. Palette
+
+Deterministic palette derived from canonical project/concept/material data.
+
+Support semantic roles such as:
+
+primary
+secondary
+accent
+neutral/background
+
+C. Materials
+
+Reuse WP-05 and canonical material records.
+
+Never duplicate materials.
+
+D. Furniture
+
+Reuse canonical furniture records/library.
+
+Never duplicate furniture records.
+
+Moodboard must not reposition furniture.
+
+E. Images
+
+Reuse canonical project/interior image records and storage.
+
+No unnecessary duplicate uploads.
+
+Preserve source/license/attribution metadata where available.
+
+F. Approved state
+
+Read-only.
+
+No hidden approved snapshot mutation.
+
+==================================================
+SECTION 16 — CONTRACTS
+==================================================
+
+Use repository conventions.
+
+Add typed/Zod contracts for canonical equivalents of:
+
+MoodboardGenerateRequest
+MoodboardResult
+MoodboardPalette
+MoodboardMaterial
+MoodboardFurniture
+MoodboardImage
+MoodboardSection
+MoodboardMetadata
+
+Do not expose provider internals.
+
+==================================================
+SECTION 17 — API
+==================================================
+
+Use canonical route naming after auditing existing Interior Design router.
+
+Expected conceptual operations:
+
+POST .../:projectUuid/moodboard/generate
+GET  .../:projectUuid/moodboard
+
+Do not create duplicate route families if existing pattern suggests another
+canonical location.
+
+Require:
+
+admin auth
+UUID validation
+tenant/project scope
+ownership
+Zod validation
+resource limits
+safe response allowlist
+consistent error model
+
+==================================================
+SECTION 18 — UI
+==================================================
+
+Integrate into existing InteriorDesignEditor.
+
+NO standalone app.
+
+Provide Moodboard workspace/panel containing:
+
+style
+palette
+material cards
+furniture cards
+reference images
+sections
+warnings
+generation status
+
+Actions according to canonical lifecycle:
+
+Generate
+Regenerate where allowed
+Reload/view
+
+Approved source state remains read-only.
+
+==================================================
+SECTION 19 — SECURITY
+==================================================
+
+Verify:
+
+unauthorized → correct auth response
+cross-tenant → non-disclosure behavior
+invalid UUID
+IDOR
+ownership
+approved immutability
+safe image URLs
+safe React rendering
+no dangerouslySetInnerHTML for untrusted data
+server-only provider secrets
+resource caps
+storage path safety
+no cross-project asset leakage
+
+==================================================
+SECTION 20 — PERFORMANCE
+==================================================
+
+No N+1.
+
+Bulk fetch:
+
+materials
+furniture
+images
+
+Bound maximum counts.
+
+Do not make provider call per individual card/image unless canonical
+architecture explicitly requires it.
+
+==================================================
+SECTION 21 — TESTS
+==================================================
+
+Add comprehensive tests.
+
+At minimum cover:
+
+- valid generation
+- unauthorized
+- invalid UUID
+- wrong tenant
+- project not found
+- missing concept
+- palette
+- materials
+- furniture
+- image assets
+- missing images
+- manual upload preservation
+- deterministic structured output
+- input immutability
+- approved state
+- ownership
+- no duplicate material
+- no duplicate furniture
+- no unnecessary duplicate image
+- request validation
+- response validation
+- resource caps
+- safe URLs
+- UI loading
+- UI failure
+- UI success
+- palette UI
+- material UI
+- furniture UI
+- attribution
+- regeneration
+- repeated generation
+- partial data
+- empty data
+- no N+1
+- representative maximum-size case
+
+No skip.
+No todo.
+No only.
+
+==================================================
+SECTION 22 — DOCUMENTATION
+==================================================
+
+Create canonical:
+
+docs/wp08-moodboard-generator.md
+
+Document:
+
+objective
+architecture
+canonical namespace
+generation mode
+persistence
+palette
+materials
+furniture
+images
+API
+UI
+security
+approved-state semantics
+determinism
+performance
+limitations
+
+==================================================
+SECTION 23 — WP-08 VALIDATION
+==================================================
+
+Run:
+
+targeted WP-08 tests
+shared typecheck
+API build
+API regression
+AI Platform typecheck
+AI Platform tests
+AI Platform production build
+
+Compare baseline before/after.
+
+No new type errors.
+
+Do not clean legacy API technical debt.
+
+==================================================
+SECTION 24 — WP-08 RC AUDIT
+==================================================
+
+Fresh read-only audit of implementation.
+
+Review:
+
+scope
+contracts
+persistence
+provider reuse
+approved state
+tenant isolation
+IDOR
+storage
+API
+UI
+XSS
+performance
+determinism
+tests
+git hygiene
+
+Classify:
+
+P0
+P1
+P2
+P3
+
+Required:
+
+P0 = 0
+P1 = 0
+
+Remediate only WP-08 P0/P1.
+
+Then rerun gates.
+
+==================================================
+SECTION 25 — CLEAN WP-08 GIT HISTORY
+==================================================
+
+Before commit/push verify ZERO:
+
+attached_assets
+prompt files
+session logs
+screenshots
+.replit
+secret values
+unrelated technical debt
+
+Create clean atomic commits.
+
+==================================================
+SECTION 26 — PUSH + PR WP-08
+==================================================
+
+Push:
+
+feature/wp08-moodboard-generator
+
+Create PR:
+
+main ← feature/wp08-moodboard-generator
+
+Title:
+
+feat(interior-design): implement WP-08 moodboard generator
+
+Verify REMOTE PR diff, not just local diff.
+
+==================================================
+SECTION 27 — FINAL WP-08 REVIEW + MERGE
+==================================================
+
+Required:
+
+clean merge base
+P0 = 0
+P1 = 0
+checks green
+no contamination
+no WP-07 regression
+
+If clean:
+merge through GitHub PR workflow.
+
+Never bypass PR with direct main push.
+
+==================================================
+SECTION 28 — POST-MERGE WP-08
+==================================================
+
+Sync main.
+
+Verify:
+
+local main SHA == origin/main SHA
+
+Run full release gates again.
+
+If green:
+
+WP-08 = COMPLETE.
+
+==================================================
+SECTION 29 — WP-09 DISCOVERY ONLY
+==================================================
+
+Now discover canonical Interior Design/Layout WP-09.
+
+Create:
+
+WP09_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+If clearly defined:
+you may create its feature branch from verified main.
+
+DO NOT implement WP-09.
+
+==================================================
+AUTONOMOUS EXECUTION RULE
+==================================================
+
+Do not stop merely because:
+
+- cleanup required cherry-pick/rebuild
+- remote branch requires force-with-lease
+- tests need rerun
+- GitHub recalculates mergeability
+- a minor implementation choice exists
+- another unrelated roadmap reused a WP number
+
+Handle these autonomously.
+
+STOP only for:
+
+1. GitHub authentication truly unavailable
+2. merge operation unavailable after verified authenticated alternatives
+3. destructive database decision not resolvable from canonical architecture
+4. canonical WP-08 evidence remains genuinely contradictory after lineage analysis
+5. security architecture requires owner policy decision
+6. validation cannot be repaired without leaving WP-08 scope
+
+==================================================
+FINAL REPORT
+==================================================
+
+WP-07
+
+1. Original PR #11 head SHA
+2. Contamination found
+3. Clean rebuild strategy
+4. Clean SHA
+5. Remote SHA
+6. Remote PR changed files
+7. Tests
+8. P0
+9. P1
+10. Merge SHA
+11. Post-merge main SHA
+12. Post-merge regression
+13. Final status
+
+WP-08 resolution
+
+14. Conflicting definitions found
+15. Evidence for each
+16. Canonical roadmap
+17. Canonical WP-08 title
+18. Resolution document
+19. GO/NO-GO
+
+WP-08 implementation
+
+20. Branch
+21. Base SHA
+22. Final SHA
+23. Architecture
+24. Persistence model
+25. Generation model
+26. Image provider strategy
+27. Approved-state behavior
+28. API
+29. UI
+30. Palette
+31. Materials
+32. Furniture
+33. Images/storage
+34. Security
+35. Targeted tests
+36. API regression
+37. AI Platform regression
+38. Build/typecheck
+39. P0
+40. P1
+41. PR number
+42. PR URL
+43. Merge SHA
+44. Final main SHA
+45. Post-merge result
+
+WP-09
+
+46. Canonical title
+47. Scope classification
+48. Branch created
+49. Plan path
+50. Implementation started = NO
+
+Use exactly one verdict:
+
+A. WP-07 AND WP-08 MERGED AND VERIFIED — WP-09 READY
+B. WP-07 MERGED — WP-08 CANONICAL OWNER DECISION REQUIRED
+C. WP-07 CLEANUP OR MERGE FAILED
+D. WP-08 IMPLEMENTATION OR VALIDATION FAILED
+E. EXTERNAL/GITHUB BLOCKER
+F. WP-08 CANONICAL DEFINITION UNRESOLVED
+
+CRITICAL:
+
+DO NOT reimplement WP-07.
+DO NOT blindly trust earlier reports.
+DO NOT merge contaminated PR #11.
+DO NOT allow attached_assets into either PR.
+DO NOT let unrelated WP numbering collisions block WP-08 once repository
+lineage proves which roadmap they belong to.
+DO NOT stop after WP-08 discovery if Moodboard Generator is canonically proven.
