@@ -1,0 +1,411 @@
+MASTER CONTINUATION — CLOSE WP-06B, ISOLATE TYPECHECK DEBT, DISAMBIGUATE WP-07
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Verified main:
+09065b58e88c4e6b09731e3baf819b77c7efd280
+
+Current verified facts:
+
+- WP-06B implementation is already present in origin/main.
+- Commits 33aab04, 226b466, and 809c264 are ancestors of main.
+- Local main matches origin/main.
+- Remote branch feature/wp06b-placement-canvas-rebuild must NOT be merged;
+  it only contains .replit / instruction artifacts beyond main.
+- Library typecheck PASS.
+- API build PASS.
+- API regression 6103/6103 PASS.
+- AI Platform typecheck PASS.
+- AI Platform tests 493/493 PASS.
+- AI Platform production build PASS.
+- Workflows running.
+- Full API typecheck still has 127 pre-existing errors in 40 legacy files.
+- WP-07 has conflicting definitions.
+
+MISSION:
+
+1. Close WP-06B administratively without reimplementation.
+2. Prevent accidental merge of the obsolete WP-06B feature branch.
+3. Verify GitHub state if authentication is available.
+4. Separate the 127 typecheck errors into an independent technical-debt track.
+5. Resolve the authoritative meaning of WP-07.
+6. Do not implement WP-07 until the conflict is resolved.
+
+==================================================
+PHASE 1 — VERIFY MAIN
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git rev-parse HEAD
+git rev-parse origin/main
+git status --short
+
+Required:
+
+HEAD =
+09065b58e88c4e6b09731e3baf819b77c7efd280
+or a newer verified origin/main SHA.
+
+==================================================
+PHASE 2 — VERIFY WP-06B IS ALREADY IN MAIN
+==================================================
+
+Verify ancestry:
+
+git merge-base --is-ancestor 33aab04 origin/main
+git merge-base --is-ancestor 226b466 origin/main
+git merge-base --is-ancestor 809c264 origin/main
+
+Verify production files/endpoints on main:
+
+- placement canvas
+- suggest-placement
+- apply-placement
+- candidateId-only apply
+- locked placement protection
+- approved-state immutability
+
+If all confirmed:
+
+mark WP-06B as:
+
+COMPLETE — PRESENT IN MAIN
+
+Do NOT create another WP-06B PR.
+
+==================================================
+PHASE 3 — QUARANTINE OBSOLETE WP-06B BRANCH
+==================================================
+
+Inspect:
+
+origin/feature/wp06b-placement-canvas-rebuild
+
+Diff it against main.
+
+If the only remaining diff is:
+
+- .replit
+- prompt/instruction files
+- session artifacts
+- unrelated config
+
+then classify the branch:
+
+OBSOLETE — DO NOT MERGE
+
+If there is an open PR for that branch:
+
+close it as superseded.
+
+Suggested comment:
+
+"WP-06B implementation is already present in main. This branch now contains only Replit/config/instruction artifacts and must not be merged."
+
+Do not delete the branch unless repository policy allows it.
+
+==================================================
+PHASE 4 — GITHUB WRITE VERIFICATION
+==================================================
+
+If GitHub write auth is available:
+
+verify PR/branch state directly.
+
+If not available:
+
+do not block technical analysis.
+
+Report:
+
+GITHUB_WRITE_AUTH = AVAILABLE / UNAVAILABLE
+
+WP-06B completion must be based on main ancestry,
+not on creating a redundant PR.
+
+==================================================
+PHASE 5 — REVALIDATE WP-06B MAIN
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server test
+
+Run AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Report actual totals.
+
+Keep the 127 legacy API typecheck errors separate.
+
+==================================================
+PHASE 6 — FREEZE API TYPECHECK BASELINE
+==================================================
+
+Run the full API typecheck and capture all 127 errors.
+
+Create a machine-readable inventory:
+
+docs/technical-debt/API_TYPECHECK_BASELINE.md
+
+Include:
+
+- exact command
+- total error count
+- total file count
+- error code distribution
+- file list
+- whether each error predates WP-06B
+- domain/module
+- likely root cause
+- recommended remediation grouping
+
+Do not commit yet.
+
+==================================================
+PHASE 7 — CLASSIFY 127 ERRORS
+==================================================
+
+Group errors into root-cause families, for example:
+
+- missing generated/shared types
+- stale Zod imports
+- incorrect literal unions
+- mock typing
+- PptxGenJS namespace typing
+- legacy nullable mismatch
+- route DTO mismatch
+- test-only typing
+- duplicate registry/export
+- stale service interfaces
+
+Do not fix all 127 errors in this task.
+
+Recommend isolated technical-debt work packages, such as:
+
+TD-01 Shared contract/type generation
+TD-02 Route/service typing
+TD-03 Test typing
+TD-04 Presentation/render typing
+
+==================================================
+PHASE 8 — WP-07 FORENSIC DISCOVERY
+==================================================
+
+Search authoritative sources for all WP-07 definitions:
+
+- WP-07
+- WP07
+- Work Package 07
+- Phase 6 WP-07
+- layout constraint engine
+- canonical audit log
+- SSE tenant isolation
+- material recommendation
+- next milestone
+
+Inspect:
+
+docs/
+README*
+architecture docs
+roadmaps
+implementation plans
+ADRs
+manifests
+OpenAPI
+git history
+
+IGNORE as authoritative:
+
+- attached_assets
+- prompt files
+- session logs
+- agent narration
+- temporary task docs
+
+==================================================
+PHASE 9 — BUILD WP-07 SOURCE MATRIX
+==================================================
+
+For every WP-07 definition found, report:
+
+1. source file
+2. commit SHA
+3. date
+4. domain/team
+5. objective
+6. dependencies
+7. whether it supersedes another definition
+8. whether code already exists
+9. whether it belongs to the same roadmap as WP-06B
+10. confidence level
+
+Create a comparison table.
+
+==================================================
+PHASE 10 — RESOLVE WP-07 NAMESPACE
+==================================================
+
+Determine whether:
+
+A. One WP-07 clearly supersedes the others
+B. The references belong to different roadmaps/domains
+C. Repository contains a naming collision
+D. No authoritative WP-07 exists
+
+Important:
+
+Do NOT choose merely by newest timestamp.
+
+Use:
+
+- roadmap lineage
+- dependency chain
+- domain continuity
+- architecture documents
+- merge history
+- explicit supersession language
+
+==================================================
+PHASE 11 — DEFINE THE NEXT REAL WORK PACKAGE
+==================================================
+
+If the WP directly following WP-06B is clearly identified:
+
+report:
+
+NEXT_WP_NAME
+NEXT_WP_TITLE
+NEXT_WP_OBJECTIVE
+NEXT_WP_DEPENDENCIES
+NEXT_WP_SCOPE
+NEXT_WP_OUT_OF_SCOPE
+
+If it is not actually called WP-07:
+use the authoritative name/number.
+
+Do not rename work packages merely for convenience.
+
+==================================================
+PHASE 12 — CREATE DISAMBIGUATION REPORT
+==================================================
+
+Create:
+
+WP07_NAMESPACE_AND_ROADMAP_RESOLUTION.md
+
+Do not commit it yet.
+
+Include:
+
+1. Verified main SHA
+2. WP-06B completion evidence
+3. All WP-07 references
+4. Source matrix
+5. Roadmap lineage
+6. Conflicting namespaces
+7. Recommended authoritative next WP
+8. Rejected interpretations
+9. Owner decisions, if any
+10. Recommended branch name
+11. GO / NO-GO
+
+==================================================
+PHASE 13 — TRANSITION POLICY
+==================================================
+
+If authoritative next WP is CLEARLY RESOLVED and there is no human-level architecture decision:
+
+create:
+
+feature/<authoritative-next-wp-name>
+
+from verified origin/main.
+
+Do NOT implement it yet.
+
+If conflict remains:
+
+stay on main.
+
+Do not create speculative feature branches.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+WP-06B
+1. Main SHA
+2. WP-06B commits present in main
+3. WP-06B endpoints present
+4. Canvas present
+5. Obsolete branch status
+6. Redundant PR status
+7. Library typecheck
+8. API build
+9. API regression
+10. AI Platform tests/build
+11. WP-06B final status
+
+TECH DEBT
+12. Full API typecheck error count
+13. Files affected
+14. Root-cause groups
+15. Recommended TD work packages
+16. Baseline report path
+
+NEXT WP
+17. Number of conflicting WP-07 definitions
+18. Source matrix summary
+19. Authoritative next WP
+20. Objective
+21. Scope classification
+22. Owner decisions
+23. Recommended branch
+24. Branch created
+25. Current branch
+26. Report path
+27. Recommended next action
+
+Use exactly one verdict:
+
+A.
+WP-06B CLOSED — NEXT WP AUTHORITATIVELY RESOLVED
+
+B.
+WP-06B CLOSED — NEXT WP OWNER DECISION REQUIRED
+
+C.
+WP-06B CLOSED — WP-07 NAMESPACE CONFLICT UNRESOLVED
+
+D.
+WP-06B CLOSED — NEXT WP NOT DEFINED
+
+E.
+WP-06B MAIN VALIDATION FAILED
+
+IMPORTANT:
+
+Do not reimplement WP-06B.
+
+Do not merge the obsolete WP-06B branch.
+
+Do not mix the 127 typecheck cleanup into the next feature WP.
+
+Do not implement WP-07 until its authoritative namespace is resolved.

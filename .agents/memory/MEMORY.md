@@ -87,3 +87,4 @@
 - [canonical-public-catalog](canonical-public-catalog.md) — Public discovery is six canonical categories; preserve legacy IDs and historical category links additively
 - [material-library-phase1-remediation](material-library-phase1-remediation.md) — Relative routers must be mounted under their domain prefix; positional seed data needs shape validation
 - [uploaded-prompt-commit-hygiene](uploaded-prompt-commit-hygiene.md) — Imported prompt uploads can appear as a local commit; reset feature history to origin/main before committing product changes
+- [wp07-namespace-collision](wp07-namespace-collision.md) — WP-07 names separate P0 audit, SSE, and Phase 6 constraint-engine lineages; resolve roadmap authority before implementing
