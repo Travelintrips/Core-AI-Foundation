@@ -1,0 +1,769 @@
+CONTINUE IMMEDIATELY — VERIFY WP-07 MERGE, THEN IMPLEMENT WP-08 MOODBOARD GENERATOR
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+CURRENT STATE:
+
+- WP-07 clean branch:
+  feature/wp07-layout-constraint-engine-clean
+
+- PR:
+  #12
+
+- WP-07 validation already passed:
+  - 38 targeted tests PASS
+  - API regression 6141/6141 PASS
+  - AI Platform tests 493/493 PASS
+  - Library typecheck PASS
+  - AI Platform typecheck PASS
+  - API build PASS
+  - AI Platform production build PASS
+  - API health PASS
+
+MISSION:
+
+1. Verify PR #12 has been merged.
+2. Sync local main to origin/main.
+3. Re-run post-merge validation.
+4. Mark WP-07 COMPLETE.
+5. Immediately start WP-08 — Moodboard Generator.
+6. Implement WP-08 end-to-end.
+7. Validate.
+8. RC audit.
+9. Push.
+10. Create PR.
+11. Final review.
+12. Merge if clean.
+13. Verify main.
+14. Discover WP-09 only.
+
+Do not reimplement WP-07.
+Do not return to WP-06.
+Do not clean unrelated legacy typecheck debt.
+Do not start WP-09 implementation.
+
+==================================================
+PHASE 1 — VERIFY PR #12 MERGE
+==================================================
+
+Verify from GitHub:
+
+- PR #12 state = merged
+- base = main
+- head = feature/wp07-layout-constraint-engine-clean
+
+Record:
+
+- merge commit SHA
+- merged_at
+- merged_by
+
+If PR #12 is still open:
+STOP and report:
+PR #12 NOT MERGED YET
+
+Do not start WP-08 before merge is confirmed.
+
+==================================================
+PHASE 2 — SYNC MAIN
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+git rev-parse HEAD
+git rev-parse origin/main
+
+Required:
+
+local main SHA = origin/main SHA
+
+==================================================
+PHASE 3 — POST-MERGE WP-07 VALIDATION
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server test
+
+Run AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Run WP-07 targeted tests.
+
+Required:
+
+- all green
+- no new type errors
+- no regression
+
+Known unrelated legacy API typecheck debt remains out of scope.
+
+If validation passes:
+
+MARK:
+WP-07 COMPLETE
+
+==================================================
+PHASE 4 — CREATE WP-08 BRANCH
+==================================================
+
+Create from verified main:
+
+feature/wp08-moodboard-generator
+
+Never work directly on main.
+
+==================================================
+PHASE 5 — VERIFY WP-08 CANONICAL SCOPE
+==================================================
+
+WP-08 active roadmap:
+Interior Design / Layout
+
+WP-08 title:
+Moodboard Generator
+
+Audit authoritative repository sources only.
+
+Ignore:
+
+- attached_assets
+- prompt/session files
+- screenshots
+- agent narration
+- temporary recovery docs
+
+Confirm actual architecture for:
+
+- Interior Design Concept Draft
+- Material Recommendation Engine
+- Furniture Library
+- interior asset images
+- imageDesignerService
+- Supabase Storage
+- ai-assets / canonical storage
+- InteriorDesignEditor
+- approved snapshot lifecycle
+- tenant ownership
+- admin auth
+
+Do not create duplicate models/services.
+
+==================================================
+PHASE 6 — ARCHITECTURE DEFAULTS
+==================================================
+
+Use these safe defaults unless authoritative repository architecture says otherwise:
+
+1. Moodboard is STRUCTURED FIRST.
+2. Reuse existing materials.
+3. Reuse existing furniture.
+4. Reuse existing image assets/storage.
+5. No duplicate image provider.
+6. No duplicate DB table unless canonical architecture requires it.
+7. Approved state remains immutable.
+8. Admin-only initial workflow.
+9. No automatic changes to layout/material/furniture records.
+10. Deterministic structured result.
+
+Stop only if a material decision would change:
+
+- persistence architecture
+- provider policy
+- public access/security
+- approved snapshot mutation
+- breaking API contracts
+- irreversible data behavior
+
+==================================================
+PHASE 7 — SHARED CONTRACTS
+==================================================
+
+Implement canonical typed/Zod equivalents of:
+
+MoodboardGenerateRequest
+MoodboardResult
+MoodboardPalette
+MoodboardMaterialItem
+MoodboardFurnitureItem
+MoodboardImageItem
+MoodboardSection
+MoodboardGenerationMetadata
+
+Response should include repository-equivalent fields:
+
+- moodboardId
+- projectUuid
+- title
+- style
+- colorPalette
+- materials
+- furniture
+- referenceImages
+- sections
+- warnings
+- status
+- metadata
+
+No raw provider responses.
+
+==================================================
+PHASE 8 — MOODBOARD SERVICE
+==================================================
+
+Create repository-consistent service:
+
+moodboardService.ts
+
+or equivalent canonical location.
+
+Responsibilities:
+
+- resolve project
+- enforce tenant/ownership
+- load concept draft
+- load style/context
+- load selected/recommended materials
+- load furniture
+- load canonical images
+- build structured palette
+- build moodboard sections
+- build warnings
+- produce deterministic structured result
+- preserve input immutability
+- avoid N+1 queries
+
+==================================================
+PHASE 9 — COLOR PALETTE
+==================================================
+
+Generate deterministic palette using canonical project/design data.
+
+Support semantic roles:
+
+- primary
+- secondary
+- accent
+- neutral/background
+
+Requirements:
+
+- deterministic
+- stable ordering
+- explainable source where practical
+- no Math.random
+- no source mutation
+
+==================================================
+PHASE 10 — MATERIAL INTEGRATION
+==================================================
+
+Reuse canonical WP-05 material records.
+
+Include:
+
+- canonical ID
+- name
+- category
+- finish
+- color
+- texture
+- image where available
+
+Do not duplicate material rows.
+
+==================================================
+PHASE 11 — FURNITURE INTEGRATION
+==================================================
+
+Reuse Furniture Library.
+
+Include:
+
+- canonical furniture ID
+- name
+- category
+- style/finish
+- image where available
+
+Moodboard must not reposition furniture.
+
+==================================================
+PHASE 12 — IMAGE INTEGRATION
+==================================================
+
+Reuse existing:
+
+- interior/project asset image records
+- canonical storage service
+- ai-assets or current canonical bucket
+- source/license/attribution metadata
+
+Protect:
+
+- manual uploads
+- project/tenant scope
+- safe URL handling
+- no duplicate uploads unless required
+
+If generated visual imagery is part of canonical scope:
+
+reuse existing image provider abstraction.
+
+Do not add a new AI image provider.
+
+==================================================
+PHASE 13 — PERSISTENCE
+==================================================
+
+Audit existing schema first.
+
+Preferred:
+
+reuse existing concept/project JSONB or canonical existing model.
+
+Do NOT create a new table merely for convenience.
+
+Create migration only if:
+
+- WP-08 canonically requires persistence/versioning
+- no existing model safely supports it
+
+==================================================
+PHASE 14 — API
+==================================================
+
+Use existing Interior Design route conventions.
+
+Implement canonical equivalents of:
+
+POST /api/ai/interior-design/projects/:projectUuid/moodboard/generate
+
+GET /api/ai/interior-design/projects/:projectUuid/moodboard
+
+Requirements:
+
+- admin auth
+- UUID validation
+- tenant/project scope
+- ownership
+- Zod request validation
+- Zod response validation
+- resource caps
+- structured errors
+- no provider secret leakage
+- approved state respected
+
+==================================================
+PHASE 15 — UI
+==================================================
+
+Integrate into existing InteriorDesignEditor.
+
+Add Moodboard section/tab/panel.
+
+Display:
+
+- title/style
+- color palette
+- material cards
+- furniture cards
+- reference images
+- sections
+- warnings
+- generation status
+
+Actions according to canonical lifecycle:
+
+- Generate
+- Regenerate where allowed
+- Reload/view
+
+Approved state:
+read-only.
+
+Do not create standalone UI.
+
+==================================================
+PHASE 16 — SECURITY
+==================================================
+
+Verify:
+
+- admin auth
+- tenant isolation
+- IDOR
+- ownership
+- invalid UUID handling
+- safe image URLs
+- no cross-project image leakage
+- safe React rendering
+- no unsafe innerHTML
+- provider secrets server-only
+- payload/resource caps
+- storage path safety
+
+==================================================
+PHASE 17 — TEST MATRIX
+==================================================
+
+Add comprehensive tests for at least:
+
+1. valid moodboard
+2. invalid UUID
+3. unauthorized
+4. wrong tenant
+5. project not found
+6. missing concept
+7. style mapping
+8. palette generation
+9. materials
+10. furniture
+11. images
+12. missing image fallback
+13. manual upload protection
+14. deterministic structured result
+15. input immutability
+16. empty materials
+17. empty furniture
+18. partial assets
+19. warnings
+20. safe URLs
+21. approved-state behavior
+22. ownership
+23. no duplicate material
+24. no duplicate furniture
+25. no duplicate image storage
+26. request validation
+27. response validation
+28. UI loading
+29. UI error
+30. UI success
+31. safe rendering
+32. palette UI
+33. material cards
+34. furniture cards
+35. attribution
+36. regeneration
+37. repeated generation
+38. resource caps
+39. no N+1
+40. representative maximum-size moodboard
+
+If image generation exists:
+also test provider failure/fallback/no secret exposure.
+
+No skip/todo/only.
+
+==================================================
+PHASE 18 — PERFORMANCE
+==================================================
+
+Bound:
+
+- material count
+- furniture count
+- image count
+
+Use bulk reads.
+
+Record diagnostics:
+
+- materials loaded
+- furniture loaded
+- images loaded
+- elapsedMs
+- query count where practical
+
+No flaky strict timing assertions.
+
+==================================================
+PHASE 19 — DOCUMENTATION
+==================================================
+
+Create:
+
+docs/wp08-moodboard-generator.md
+
+Document:
+
+- objective
+- architecture
+- generation mode
+- persistence
+- color palette
+- materials
+- furniture
+- images/storage
+- API
+- UI
+- security
+- deterministic boundary
+- performance
+- limitations
+- WP-09 boundary
+
+==================================================
+PHASE 20 — VALIDATION
+==================================================
+
+Run targeted WP-08 tests.
+
+Then:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server test
+
+AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Required:
+
+- all targeted tests pass
+- API regression pass
+- AI Platform regression pass
+- builds pass
+- no new TypeScript errors
+
+Do not clean unrelated legacy TD.
+
+==================================================
+PHASE 21 — RC AUDIT
+==================================================
+
+Audit:
+
+- canonical scope
+- architecture reuse
+- persistence
+- provider reuse
+- tenant isolation
+- ownership
+- IDOR
+- storage
+- API
+- UI
+- XSS safety
+- determinism
+- performance
+- tests
+- git hygiene
+
+Classify:
+
+P0
+P1
+P2
+P3
+
+Required:
+
+P0 = 0
+P1 = 0
+
+Fix only genuine WP-08 blockers.
+
+==================================================
+PHASE 22 — GIT HYGIENE
+==================================================
+
+Required ZERO:
+
+- attached_assets
+- prompt/session files
+- screenshots
+- .replit
+- secrets
+- unrelated typecheck cleanup
+- unrelated feature changes
+
+Create clean atomic commits.
+
+==================================================
+PHASE 23 — PUSH WP-08
+==================================================
+
+Push:
+
+feature/wp08-moodboard-generator
+
+Normal push preferred.
+
+If remote diverged:
+use exact --force-with-lease only.
+
+Never plain --force.
+
+==================================================
+PHASE 24 — CREATE WP-08 PR
+==================================================
+
+Base:
+main
+
+Head:
+feature/wp08-moodboard-generator
+
+Title:
+
+feat(interior-design): implement WP-08 moodboard generator
+
+Verify remote PR diff.
+
+==================================================
+PHASE 25 — FINAL WP-08 REVIEW
+==================================================
+
+Required:
+
+- clean merge-base
+- no contamination
+- no secrets
+- P0 = 0
+- P1 = 0
+- checks green
+- no WP-07 regression
+
+Fix only genuine WP-08 blockers.
+
+==================================================
+PHASE 26 — MERGE WP-08
+==================================================
+
+If clean:
+merge through GitHub PR workflow.
+
+Record:
+
+- PR number
+- merge method
+- merge SHA
+- merged_at
+- merged_by
+
+==================================================
+PHASE 27 — POST-MERGE WP-08
+==================================================
+
+Sync main.
+
+Verify:
+
+local main SHA = origin/main SHA
+
+Run full validation again.
+
+If green:
+
+MARK WP-08 COMPLETE
+
+==================================================
+PHASE 28 — DISCOVER WP-09
+==================================================
+
+Search authoritative Interior Design/Layout roadmap for:
+
+WP-09
+WP09
+next work package
+next milestone
+
+Create:
+
+WP09_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+If clearly defined:
+create WP-09 branch.
+
+DO NOT implement WP-09.
+
+==================================================
+FINAL REPORT
+==================================================
+
+WP-07
+
+1. PR #12 state
+2. WP-07 merge SHA
+3. Main SHA
+4. Post-merge validation
+5. WP-07 final status
+
+WP-08
+
+6. Branch
+7. Base SHA
+8. Final SHA
+9. Generation model
+10. Persistence model
+11. API
+12. UI
+13. Palette
+14. Material integration
+15. Furniture integration
+16. Image/storage integration
+17. Security
+18. Targeted tests
+19. API regression
+20. AI Platform regression
+21. Typecheck delta
+22. Builds
+23. P0
+24. P1
+25. PR number
+26. PR URL
+27. Merge SHA
+28. Final main SHA
+29. Post-merge validation
+30. WP-08 final status
+
+WP-09
+
+31. Canonical title
+32. Scope classification
+33. Owner decisions
+34. Branch created
+35. Plan path
+
+Use exactly one final verdict:
+
+A.
+WP-07 AND WP-08 MERGED AND VERIFIED — WP-09 READY
+
+B.
+WP-07 MERGED — WP-08 OWNER DECISION REQUIRED
+
+C.
+WP-08 IMPLEMENTED — GITHUB BLOCKER
+
+D.
+WP-08 VALIDATION FAILED
+
+E.
+WP-07 NOT MERGED
+
+F.
+WP-08 IMPLEMENTATION BLOCKED
+
+IMPORTANT:
+
+- Do not reimplement WP-07.
+- Do not go back to WP-06.
+- Once PR #12 is confirmed merged, begin WP-08 immediately.
+- Do not implement WP-09.
