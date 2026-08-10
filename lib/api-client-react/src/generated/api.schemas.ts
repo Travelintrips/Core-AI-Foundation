@@ -5,6 +5,99 @@
  * AI Platform Enterprise API
  * OpenAPI spec version: 0.1.0
  */
+export interface LayoutConstraintEvaluationRequest { [key: string]: unknown }
+
+export type LayoutConstraintRuleResultCategory = typeof LayoutConstraintRuleResultCategory[keyof typeof LayoutConstraintRuleResultCategory];
+
+
+export const LayoutConstraintRuleResultCategory = {
+  hard: 'hard',
+  soft: 'soft',
+} as const;
+
+export type LayoutConstraintRuleResultStatus = typeof LayoutConstraintRuleResultStatus[keyof typeof LayoutConstraintRuleResultStatus];
+
+
+export const LayoutConstraintRuleResultStatus = {
+  pass: 'pass',
+  fail: 'fail',
+  warning: 'warning',
+  not_applicable: 'not_applicable',
+} as const;
+
+export interface LayoutConstraintRuleResult {
+  ruleId: string;
+  category: LayoutConstraintRuleResultCategory;
+  status: LayoutConstraintRuleResultStatus;
+  score: number | null;
+  message: string;
+  itemIds: string[];
+}
+
+export interface LayoutConstraintViolation {
+  ruleId: string;
+  itemIds: string[];
+  message: string;
+}
+
+export interface LayoutConstraintWarning {
+  ruleId: string;
+  itemIds: string[];
+  message: string;
+}
+
+export type LayoutConstraintScoreBreakdownStatus = typeof LayoutConstraintScoreBreakdownStatus[keyof typeof LayoutConstraintScoreBreakdownStatus];
+
+
+export const LayoutConstraintScoreBreakdownStatus = {
+  pass: 'pass',
+  warning: 'warning',
+  not_applicable: 'not_applicable',
+} as const;
+
+export interface LayoutConstraintScoreBreakdown {
+  ruleId: string;
+  weight: number;
+  score: number | null;
+  weightedScore: number;
+  status: LayoutConstraintScoreBreakdownStatus;
+}
+
+export interface LayoutConstraintRemediation {
+  ruleId: string;
+  action: string;
+  message: string;
+  itemIds: string[];
+}
+
+export interface LayoutConstraintEvaluationMetadata {
+  sessionId: string;
+  itemsEvaluated: number;
+  rulesEvaluated: number;
+  pairChecks: number;
+  hardViolationCount: number;
+  softWarningCount: number;
+  elapsedMs: number;
+  approvedLayout: boolean;
+}
+
+export interface LayoutConstraintEvaluationResult {
+  valid: boolean;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  totalScore: number;
+  hardViolations: LayoutConstraintViolation[];
+  softWarnings: LayoutConstraintWarning[];
+  ruleResults: LayoutConstraintRuleResult[];
+  scoreBreakdown: LayoutConstraintScoreBreakdown[];
+  explanation: string;
+  suggestedRemediations: LayoutConstraintRemediation[];
+  deterministic: true;
+  metadata: LayoutConstraintEvaluationMetadata;
+}
+
 export type CpReviewContextReviewStatus = typeof CpReviewContextReviewStatus[keyof typeof CpReviewContextReviewStatus];
 
 
