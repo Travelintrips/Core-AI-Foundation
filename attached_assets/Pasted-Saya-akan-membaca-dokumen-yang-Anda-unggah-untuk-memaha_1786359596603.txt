@@ -1,0 +1,85 @@
+Saya akan membaca dokumen yang Anda unggah untuk memahami instruksi WP-07 dan menentukan pekerjaan yang perlu dikerjakan berikutnya.
+
+
+2 actions
+Dokumennya memerintahkan implementasi penuh WP-07: mesin validasi layout deterministik yang terintegrasi ke Placement Canvas, bukan aplikasi terpisah. Saya akan memeriksa keputusan roadmap dan fondasi yang sudah ada terlebih dahulu, lalu mengerjakan hanya bagian WP-07 tanpa menghapus pekerjaan pengguna.
+
+
+5 actions
+Fondasinya sudah ada: WP-06B Placement Canvas dan engine geometri kanonik sudah terdeteksi. Saya akan mengaudit kontrak sesi, service placement, route API, serta canvas yang sebenarnya dipakai, lalu menambahkan engine constraint di atas fondasi tersebut.
+
+
+10 actions
+Kontrak dan alur existing sudah jelas: sesi serta placement sudah tenant-scoped, approved layout sudah dilindungi pada operasi mutasi, dan canvas yang dipakai adalah PlacementCanvas di halaman detail interior. Berikutnya saya akan menambahkan kontrak API, service evaluasi lengkap, endpoint, serta panel hasil evaluasi pada canvas.
+
+
+31 actions
+Saya sudah membuat cabang fitur bersih dari origin/main dan memastikan file unggahan tetap tidak tersentuh. Sekarang saya menerapkan kontrak WP-07 dan engine deterministiknya, lalu menyambungkan endpoint serta hasilnya ke canvas yang sudah ada.
+
+
+5 actions
+Kontrak internal dan engine inti sudah ditambahkan. Saya akan menyelesaikan kontrak OpenAPI/codegen terlebih dahulu, kemudian menambahkan panel evaluasi eksplisit di canvas agar hasil validasi benar-benar terlihat dan tidak memicu request saat drag.
+
+
+3 actions
+Codegen berhasil dan shared types sudah diperbarui. Saya akan menyambungkan aksi “Evaluate Layout” ke halaman/canvas sekarang, termasuk status valid/tidak valid, skor, pelanggaran, peringatan, rincian aturan, dan saran perbaikan.
+
+
+3 actions
+Integrasi UI sudah selesai. Saya akan menjalankan pemeriksaan tipe untuk shared contracts, API server, dan AI Platform sekaligus agar segera menangkap mismatch sebelum menulis dokumentasi dan test matrix WP-07.
+
+
+5 actions
+Hasil pemeriksaan menunjukkan shared contracts dan AI Platform bersih. API server masih memiliki 129 error baseline yang sudah ada di 41 file, dan ada 2 error baru di service WP-07 yang perlu saya perbaiki sekarang; saya tidak akan menyentuh error legacy lainnya.
+
+
+4 actions
+Saya sudah memperbaiki dua error yang memang berasal dari kode WP-07. Selanjutnya saya menambahkan dokumentasi keputusan roadmap dan test terarah untuk memastikan batas room, rotasi, collision, metadata N/A, determinism, immutability, kapasitas, dan skenario hingga 50 item.
+
+
+3 actions
+Test matrix dan dokumentasi WP-07 sudah ditambahkan. Saya akan menjalankan test terarah dan build API, lalu memperbaiki hanya regresi atau error baru yang terkait WP-07 sebelum verifikasi akhir.
+
+
+4 actions
+Ada satu kegagalan test WP-07 yang nyata: input NaN/Infinity sudah ditolak sebagai hard violation, tetapi masih ikut dihitung oleh soft scoring sehingga menghasilkan NaN. Saya akan mengecualikan geometri invalid dari soft scoring agar hasil akhir selalu finite, lalu mengulang test dan verifikasi.
+
+
+2 actions
+Perbaikan finite-score sudah diterapkan. Saya akan mengulang test WP-07, memastikan tidak ada error tipe baru di file WP-07, lalu memeriksa diff dan menjalankan verifikasi aplikasi yang relevan.
+
+
+5 actions
+Ditemukan satu error tipe WP-07 yang tersisa pada pengambilan bobot soft rule (bukan error baseline). Saya akan memperbaiki narrowing tipe itu, lalu menjalankan ulang pemeriksaan targeted dan mencatat baseline API 129 error versus hasil akhir tanpa error baru WP-07.
+
+
+4 actions
+Error tipe WP-07 terakhir sudah diperbaiki. Saya akan melakukan verifikasi akhir: targeted test, typecheck API yang difilter ke file WP-07, build, restart preview agar perubahan aktif, lalu memeriksa hasil visual canvas.
+
+
+5 actions
+Verifikasi akhir menunjukkan: 10/10 test WP-07 lulus, build API lulus, AI Platform typecheck lulus, dan tidak ada error tipe baru pada file WP-07. Typecheck API total turun dari baseline 129 menjadi 127 pesan karena dua error WP-07 sudah diperbaiki; error yang tersisa berada di kode legacy lain. Saya akan me-restart API dan AI Platform lalu memeriksa log serta preview.
+
+
+3 actions
+Workflow restart tidak tersedia karena lingkungan ini belum memiliki workflow yang terdaftar, meskipun metadata artifact sudah ada. Saya akan tetap menyelesaikan verifikasi melalui build/typecheck/test yang sudah lulus, menyimpan perubahan dalam commit terpisah sesuai struktur WP-07, lalu menampilkan artifact yang ada untuk pemeriksaan hasil.
+
+
+3 actions
+Implementasi inti dan validasi terarah sudah selesai. Saya akan melakukan pemeriksaan akhir terhadap kebersihan branch, memastikan payload kosong tetap diterima aman, lalu menyimpan perubahan WP-07 tanpa memasukkan file prompt unggahan.
+
+
+8 actions
+Sebelum menyimpan perubahan, saya menambah beberapa verifikasi unit yang langsung memetakan aturan wajib WP-07—terutama semantik not_applicable, layout approved, skor finite/terbatas, archived item, dan kontrak response—agar cakupan pengujian tidak hanya bergantung pada satu skenario gabungan.
+
+
+Edited layoutConstraintEngineService.test.ts
+Saya menambahkan cakupan test menjadi 31 kasus terarah untuk aturan hard/soft, N/A, approved state, deterministic ordering, remediation, dan batas 50 item. Saya akan menjalankan seluruh suite WP-07 sekarang, lalu memperbaiki jika ada asumsi test yang tidak sesuai dengan perilaku geometri kanonik.
+
+
+Ran tests
+Suite WP-07 kini lulus 38/38. Saya akan melakukan pemeriksaan release terakhir, memperbarui memory dengan aturan non-obvious tentang finite scoring/N-A metadata, lalu commit hanya file implementasi WP-07—file prompt upload tetap tidak disentuh.
+
+
+3 actions
+You've reached your monthly free quota limit. It will reset on August 17, 2026.

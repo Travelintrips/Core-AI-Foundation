@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Lock, LockOpen, Maximize2, Minus, Move, Plus, RotateCw, Sparkles, Undo2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, Lock, LockOpen, Maximize2, Minus, Move, Plus, RotateCw, Sparkles, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createCoordinateTransform } from "./coordinateTransforms";
 
@@ -34,6 +34,15 @@ export interface PlacementCandidate {
   explanation: string;
 }
 
+export interface LayoutEvaluationResult {
+  valid: boolean;
+  score: number;
+  violations?: string[];
+  warnings?: string[];
+  rules?: string[] | null;
+  evaluatedAt?: string;
+}
+
 interface PlacementCanvasProps {
   room: { widthCm: number; depthCm: number };
   placements: CanvasPlacement[];
@@ -41,12 +50,15 @@ interface PlacementCanvasProps {
   selectedCandidateId: string | null;
   isSuggesting: boolean;
   isApplying: boolean;
+  isEvaluating?: boolean;
   readOnly?: boolean;
   dirty: boolean;
+  evaluationResult?: LayoutEvaluationResult | null;
   collisionPlacementIds?: string[];
   onSuggest: (placements: CanvasPlacement[], targetPlacementId: string) => void;
   onSelectCandidate: (candidateId: string) => void;
   onApply: (candidateId: string) => void;
+  onEvaluate: (placements: CanvasPlacement[]) => void;
   onReset: () => void;
 }
 
@@ -75,12 +87,15 @@ export function PlacementCanvas({
   selectedCandidateId,
   isSuggesting,
   isApplying,
+  isEvaluating = false,
   readOnly = false,
   dirty,
+  evaluationResult = null,
   collisionPlacementIds = [],
   onSuggest,
   onSelectCandidate,
   onApply,
+  onEvaluate,
   onReset,
 }: PlacementCanvasProps) {
   const [preview, setPreview] = useState(placements);
@@ -232,6 +247,10 @@ export function PlacementCanvas({
           <Button variant="outline" size="sm" onClick={() => { setPreview(placements); setLocalDirty(false); onReset(); }} disabled={!isDirty || readOnly}>
             <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Reset
           </Button>
+          <Button variant="outline" size="sm" onClick={() => onEvaluate(preview)} disabled={readOnly || isEvaluating}>
+            {isEvaluating ? <Sparkles className="mr-1.5 h-3.5 w-3.5 animate-pulse" /> : <CheckCircle className="mr-1.5 h-3.5 w-3.5" />}
+            {isEvaluating ? "Evaluating..." : "Evaluate Layout"}
+          </Button>
           <Button
             size="sm"
             onClick={() => selected && onSuggest(preview, selected.id)}
@@ -362,6 +381,57 @@ export function PlacementCanvas({
               <p className="mt-2 text-[10px] text-muted-foreground">Pilih kandidat valid, lalu Apply untuk menyimpan ke layout.</p>
             </div>
           )}
+
+          <div className="rounded-lg border border-border/60 bg-background/40 p-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Layout evaluation</p>
+            {evaluationResult ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-sm font-medium ${evaluationResult.valid ? "text-emerald-300" : "text-rose-300"}`}>
+                    {evaluationResult.valid ? "Valid" : "Tidak valid"}
+                  </span>
+                  <span className="font-mono text-sm text-muted-foreground">
+                    Score {Number.isFinite(evaluationResult.score) ? evaluationResult.score.toFixed(0) : "N/A"}
+                  </span>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <p className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Violations</p>
+                    {evaluationResult.violations?.length ? (
+                      <ul className="space-y-1">
+                        {evaluationResult.violations.map((item, index) => (
+                          <li key={index} className="flex gap-1.5 text-rose-300"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{item}</li>
+                        ))}
+                      </ul>
+                    ) : <p className="text-muted-foreground">N/A</p>}
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Warnings</p>
+                    {evaluationResult.warnings?.length ? (
+                      <ul className="space-y-1">
+                        {evaluationResult.warnings.map((item, index) => (
+                          <li key={index} className="flex gap-1.5 text-amber-300"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{item}</li>
+                        ))}
+                      </ul>
+                    ) : <p className="text-muted-foreground">N/A</p>}
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Rules</p>
+                    {evaluationResult.rules?.length ? (
+                      <ul className="space-y-1">
+                        {evaluationResult.rules.map((item, index) => (
+                          <li key={index} className="text-muted-foreground">• {item}</li>
+                        ))}
+                      </ul>
+                    ) : <p className="text-muted-foreground">N/A</p>}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Evaluated at: {evaluationResult.evaluatedAt ?? "N/A"}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Belum ada hasil evaluasi layout.</p>
+            )}
+          </div>
         </aside>
       </div>
     </section>

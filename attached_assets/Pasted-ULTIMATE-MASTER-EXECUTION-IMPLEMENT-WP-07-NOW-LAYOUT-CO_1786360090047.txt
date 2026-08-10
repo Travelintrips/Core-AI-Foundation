@@ -1,0 +1,1045 @@
+ULTIMATE MASTER EXECUTION — IMPLEMENT WP-07 NOW
+LAYOUT CONSTRAINT ENGINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+ACTIVE ROADMAP:
+Interior Design / Layout
+
+PREDECESSOR:
+WP-06B — Placement Canvas
+
+ACTIVE WORK PACKAGE:
+WP-07 — Layout Constraint Engine
+
+TARGET BRANCH:
+feature/wp07-layout-constraint-engine
+
+==================================================
+OWNER DECISION — FINAL AND LOCKED
+==================================================
+
+WP-07 for the Interior Design / Layout roadmap is:
+
+LAYOUT CONSTRAINT ENGINE
+
+Namespace collision is CLOSED.
+
+Do NOT reopen this decision.
+
+The following similarly numbered packages belong to separate roadmaps:
+
+- Canonical Audit Log
+- SSE Tenant Isolation
+
+They are OUT OF SCOPE.
+
+WP-06B is already complete in main.
+
+Do NOT:
+- reimplement WP-06A
+- reimplement WP-06B
+- revisit WP-07 namespace discovery
+- implement Canonical Audit Log
+- implement SSE Tenant Isolation
+- clean the 127 legacy API typecheck errors
+- mix TD-01 through TD-04 into this feature
+- create a standalone application
+- duplicate AABB/OBB/SAT algorithms
+
+START IMPLEMENTATION NOW.
+
+Do not stop merely because previous instructions said implementation
+had not yet been authorized.
+
+THIS PROMPT IS THE EXPLICIT AUTHORIZATION TO IMPLEMENT WP-07.
+
+==================================================
+PHASE 1 — RECOVER AUTHORITATIVE MAIN
+==================================================
+
+Run:
+
+git fetch origin --tags --prune
+git switch main
+git reset --hard origin/main
+
+Record:
+
+BASE_SHA="$(git rev-parse HEAD)"
+
+Verify:
+
+git rev-parse HEAD
+git rev-parse origin/main
+git status --short
+
+Local main must match origin/main.
+
+Do not delete untracked user-upload files.
+Do not commit them.
+
+==================================================
+PHASE 2 — VERIFY PREDECESSOR
+==================================================
+
+Verify WP-06B production capabilities exist on main:
+
+- Placement Canvas
+- suggest-placement
+- apply-placement
+- candidateId-only apply
+- locked item protection
+- approved-state read-only behavior
+
+Also verify canonical foundations:
+
+WP-03B
+- AABB
+- OBB
+- SAT
+- geometry primitives
+
+WP-04A
+- OBB/SAT adapter
+
+WP-04B
+- rotation-aware collision resolution
+
+WP-05
+- Material Recommendation Engine if present
+
+WP-06A
+- placement rule/candidate engine
+
+WP-06B
+- placement canvas
+
+Do not modify these foundations unless WP-07 integration genuinely
+requires a minimal backward-compatible change.
+
+==================================================
+PHASE 3 — CREATE FEATURE BRANCH
+==================================================
+
+Create:
+
+feature/wp07-layout-constraint-engine
+
+directly from verified origin/main.
+
+If branch already exists:
+
+inspect it first.
+
+Never overwrite valid implementation blindly.
+
+If existing branch contains only:
+
+- attached_assets
+- prompts
+- screenshots
+- .replit
+- session logs
+
+do NOT use its contaminated history.
+
+Create a clean branch from origin/main and preserve only legitimate
+WP-07 implementation commits if any exist.
+
+==================================================
+PHASE 4 — RECORD ROADMAP DECISION
+==================================================
+
+Create/update:
+
+docs/roadmap/wp07-layout-roadmap-resolution.md
+
+Record:
+
+Roadmap:
+Interior Design / Layout
+
+WP-07:
+Layout Constraint Engine
+
+Predecessor:
+WP-06B Placement Canvas
+
+Separate tracks:
+Canonical Audit Log
+SSE Tenant Isolation
+
+Status:
+NAMESPACE RESOLVED — OWNER DECISION FINAL
+
+Do not rewrite unrelated historical roadmap documents.
+
+==================================================
+PHASE 5 — AUDIT REUSABLE ARCHITECTURE
+==================================================
+
+Before implementing algorithms, inspect actual interfaces for:
+
+- LayoutSession
+- LayoutElement / Placement
+- room geometry
+- doors
+- windows
+- excluded zones
+- preferred zones
+- locked/manual placements
+- approved state
+- tenant/company ownership
+- room function
+- style metadata
+- material metadata
+- placement canvas state
+
+Identify canonical services and repositories.
+
+REUSE FIRST.
+
+Do not create parallel models if equivalent canonical models exist.
+
+==================================================
+PHASE 6 — IMPLEMENT SHARED CONTRACTS
+==================================================
+
+Using existing @workspace/api-zod conventions, implement typed schemas
+for WP-07.
+
+Required conceptual contracts:
+
+LayoutConstraintRequest
+LayoutConstraintResult
+ConstraintRuleResult
+ConstraintViolation
+ConstraintWarning
+ConstraintScoreBreakdown
+ConstraintEvaluationMetadata
+ConstraintRemediation
+
+Use repository naming conventions if equivalent names already exist.
+
+Result must support:
+
+{
+  valid,
+  totalScore,
+  hardViolations,
+  softWarnings,
+  ruleResults,
+  scoreBreakdown,
+  explanation,
+  suggestedRemediations,
+  deterministic,
+  metadata
+}
+
+Rules:
+
+- totalScore finite
+- 0 <= totalScore <= 100
+- deterministic output ordering
+- structured rule IDs
+- no arbitrary untyped JSON when typed representation is feasible
+
+==================================================
+PHASE 7 — IMPLEMENT CANONICAL ENGINE
+==================================================
+
+Create repository-consistent service, preferably:
+
+artifacts/api-server/src/services/layoutConstraintEngineService.ts
+
+unless existing architecture indicates a more canonical location.
+
+This service evaluates the COMPLETE LAYOUT.
+
+It must NOT merely evaluate one furniture candidate.
+
+Responsibilities:
+
+1. load canonical layout/session
+2. enforce tenant/session scope
+3. obtain canonical room geometry
+4. normalize input safely
+5. evaluate hard constraints
+6. evaluate soft constraints
+7. calculate normalized score
+8. produce per-rule results
+9. generate explainable remediation hints
+10. preserve input immutability
+11. produce deterministic results
+
+No LLM.
+
+No external AI provider.
+
+Rule-based deterministic engine only.
+
+==================================================
+PHASE 8 — HARD CONSTRAINTS
+==================================================
+
+Implement or reuse the following hard constraints.
+
+HC-01 ROOM_BOUNDS
+Furniture footprint must remain inside room geometry.
+
+HC-02 FURNITURE_COLLISION
+Furniture must not overlap another furniture item.
+
+For rotated items:
+reuse canonical WP-03B/WP-04 geometry.
+
+DO NOT implement SAT/AABB/OBB again.
+
+HC-03 LOCKED_ITEM_INTEGRITY
+Evaluation must recognize locked items and must never mutate them.
+
+HC-04 DOOR_CLEARANCE
+Respect door clearance where canonical door metadata exists.
+
+Do not fabricate door metadata.
+
+HC-05 WINDOW_CLEARANCE
+Respect window clearance where canonical window metadata exists.
+
+If the data model lacks usable window metadata:
+report rule as not_applicable rather than inventing data.
+
+HC-06 WALKWAY_CLEARANCE
+Validate minimum circulation/walkway clearance according to existing
+room/layout configuration.
+
+HC-07 FURNITURE_CLEARANCE
+Validate configured minimum spacing between furniture.
+
+HC-08 EXCLUDED_ZONES
+Placements may not violate canonical excluded zones.
+
+HC-09 INVALID_GEOMETRY
+Reject:
+
+- NaN
+- Infinity
+- negative dimensions
+- zero dimensions
+- malformed coordinates
+- invalid rotations where canonical model restricts them
+
+HC-10 SESSION_CAPACITY
+Respect existing maximum item/session limits.
+
+Do not invent an arbitrary higher limit.
+
+HC-11 APPROVED_LAYOUT_IMMUTABILITY
+Evaluation endpoint itself must never mutate an approved layout.
+
+If mutation functionality is encountered:
+keep it outside WP-07.
+
+==================================================
+PHASE 9 — SOFT CONSTRAINTS
+==================================================
+
+Implement deterministic soft scoring.
+
+Required categories:
+
+SC-01 WALL_ALIGNMENT
+SC-02 CIRCULATION_QUALITY
+SC-03 SYMMETRY
+SC-04 ZONING
+SC-05 FOCAL_POINT_ORIENTATION
+SC-06 SPACING_BALANCE
+SC-07 ROOM_FUNCTION_COMPATIBILITY
+SC-08 STYLE_COMPATIBILITY
+SC-09 PREFERRED_ZONE_ADHERENCE
+
+Important:
+
+If metadata required for a soft rule does not exist:
+
+return:
+
+status = not_applicable
+
+Do NOT fabricate metadata.
+
+A not-applicable rule must not unfairly reduce score.
+
+==================================================
+PHASE 10 — SCORING MODEL
+==================================================
+
+Build deterministic scoring:
+
+0–100.
+
+Requirements:
+
+- finite
+- stable
+- deterministic
+- explainable
+- no Math.random
+- no LLM
+- no hidden nondeterministic ordering
+
+Document exact weighting.
+
+Hard constraints determine:
+
+valid = false
+
+but scoring should still provide useful diagnostic information unless
+architecture explicitly prevents it.
+
+Soft scoring must provide score breakdown.
+
+Repeated evaluation of identical state must return identical semantic
+result.
+
+==================================================
+PHASE 11 — REMEDIATION HINTS
+==================================================
+
+For violations/warnings provide structured suggestions such as:
+
+- move item inside room
+- increase clearance
+- move item away from door
+- resolve overlap
+- improve wall alignment
+- improve circulation
+- move toward preferred zone
+
+Hints are ADVISORY.
+
+WP-07 must NOT automatically reposition furniture.
+
+Automatic optimization belongs to a later WP unless explicitly
+documented otherwise.
+
+==================================================
+PHASE 12 — API
+==================================================
+
+Implement:
+
+POST /api/ai/layout-sessions/:sessionId/constraints/evaluate
+
+Requirements:
+
+- existing admin authentication
+- UUID validation
+- tenant isolation
+- IDOR protection
+- session existence validation
+- Zod request validation
+- Zod response contract
+- payload bounds
+- structured errors
+- no persistence by default
+- no layout mutation
+- no public route
+
+Prefer server-side canonical state.
+
+Do not trust client geometry as source of truth when canonical
+persistent state exists.
+
+==================================================
+PHASE 13 — PERFORMANCE SAFETY
+==================================================
+
+Protect evaluation against resource exhaustion.
+
+Use:
+
+- existing max session item count
+- bounded pair evaluation
+- deterministic loops
+- no recursion proportional to uncontrolled user input
+- no unbounded retries
+
+Record metadata such as:
+
+itemsEvaluated
+rulesEvaluated
+pairChecks
+hardViolationCount
+softWarningCount
+elapsedMs
+
+elapsedMs may be diagnostic only.
+
+Do not make flaky tests with strict wall-clock limits.
+
+==================================================
+PHASE 14 — WP-06B CANVAS INTEGRATION
+==================================================
+
+Integrate WP-07 into the REAL existing WP-06B Placement Canvas.
+
+Add a validation/evaluation action.
+
+Display:
+
+- Valid / Invalid
+- total score
+- hard violations
+- soft warnings
+- score breakdown
+- per-rule result
+- remediation suggestions
+
+Use existing design system.
+
+Requirements:
+
+- no standalone UI
+- no duplicate canvas
+- no automatic furniture movement
+- no API call per drag pointer event
+- evaluation must be explicit or appropriately debounced according to
+  existing architecture
+- approved state remains read-only
+- React-safe text rendering
+- no raw innerHTML
+
+==================================================
+PHASE 15 — REQUIRED TEST MATRIX
+==================================================
+
+Implement at least these 30 verification areas:
+
+01 room bounds
+02 rotated room-bound violation
+03 furniture collision
+04 rotated furniture collision
+05 locked integrity
+06 door clearance
+07 window clearance / not-applicable
+08 walkway clearance
+09 furniture spacing
+10 excluded zone
+11 zero dimension
+12 negative dimension
+13 NaN
+14 Infinity
+15 empty layout
+16 valid simple layout
+17 wall alignment
+18 circulation
+19 symmetry
+20 zoning
+21 focal point
+22 spacing balance
+23 room-function compatibility
+24 style compatibility
+25 preferred zone
+26 deterministic repeated evaluation
+27 input immutability
+28 tenant isolation / IDOR
+29 unauthorized request
+30 approved state immutability
+
+Also test:
+
+31 invalid UUID
+32 session not found
+33 cross-tenant session
+34 finite score
+35 score bounded 0–100
+36 stable rule ordering
+37 max item/session limit
+38 10-item scenario
+39 25-item scenario
+40 50-item scenario
+41 no duplicate geometry implementation
+42 canvas result rendering
+43 hard violation UI
+44 soft warning UI
+45 remediation UI
+46 API response validation
+
+No:
+
+.skip
+.todo
+.only
+
+==================================================
+PHASE 16 — TARGETED SECURITY TESTS
+==================================================
+
+Prove:
+
+Unauthenticated
+→ 401
+
+Invalid UUID
+→ validation error according to canonical API convention
+
+Wrong tenant
+→ 404 or canonical non-disclosure response
+
+Unknown session
+→ canonical not-found response
+
+Approved layout
+→ evaluation allowed if read-only, but absolutely no mutation
+
+Cross-tenant geometry
+→ never returned
+
+==================================================
+PHASE 17 — PERFORMANCE TEST
+==================================================
+
+Evaluate representative layouts:
+
+10 items
+25 items
+50 items
+
+Record:
+
+- pairChecks
+- rulesEvaluated
+- elapsedMs
+- violations
+- score
+
+Do not assert fragile absolute timing.
+
+Assert bounded behavior.
+
+==================================================
+PHASE 18 — DOCUMENTATION
+==================================================
+
+Create:
+
+docs/wp07-layout-constraint-engine.md
+
+Document:
+
+1. objective
+2. architecture
+3. dependency chain
+4. hard constraints
+5. soft constraints
+6. scoring weights
+7. not-applicable semantics
+8. API
+9. tenant/security behavior
+10. canvas integration
+11. performance bounds
+12. deterministic guarantees
+13. limitations
+14. WP-07 / future optimizer boundary
+
+==================================================
+PHASE 19 — VALIDATION
+==================================================
+
+Establish current baseline first.
+
+Then run repository-supported commands.
+
+At minimum:
+
+pnpm run typecheck:libs
+
+pnpm --filter api-server run build
+
+pnpm --filter api-server test
+
+AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Run WP-07 targeted tests separately as well.
+
+Known legacy technical debt:
+
+127 API TypeScript errors / 40 files
+
+These belong to TD-01..TD-04.
+
+Rules:
+
+- do NOT clean them in WP-07
+- do NOT increase them
+- no NEW WP-07 TypeScript error
+- no new regression
+
+Record:
+
+baseline errors
+post-WP07 errors
+delta
+
+Required delta:
+
+0 new errors.
+
+==================================================
+PHASE 20 — RC AUDIT
+==================================================
+
+Audit complete WP-07 implementation.
+
+Architecture:
+- canonical reuse
+- no duplicate geometry
+- no parallel session model
+
+Security:
+- auth
+- tenant isolation
+- IDOR
+- payload bounds
+- resource exhaustion
+
+Correctness:
+- deterministic
+- finite scoring
+- hard rules
+- soft rules
+- N/A semantics
+
+UI:
+- real WP-06B integration
+- no automatic movement
+- safe rendering
+
+Performance:
+- bounded 50-item evaluation
+
+Compatibility:
+- WP-06B behavior preserved
+- existing APIs preserved
+
+Classify:
+
+P0
+P1
+P2
+P3
+
+Required:
+
+P0 = 0
+P1 = 0
+
+Automatically fix legitimate WP-07 P0/P1 issues.
+
+Then rerun tests/build.
+
+==================================================
+PHASE 21 — GIT HYGIENE
+==================================================
+
+Before committing:
+
+git status --short
+git diff --check
+git diff --name-status origin/main...HEAD
+git diff --stat origin/main...HEAD
+
+Forbidden:
+
+attached_assets
+Pasted-*.txt
+prompt files
+session logs
+screenshots
+.replit
+temporary reports
+unrelated technical debt
+unrelated feature code
+
+The namespace resolution docs are allowed because they are part of
+the explicit WP-07 owner decision.
+
+==================================================
+PHASE 22 — COMMIT
+==================================================
+
+Use atomic commits.
+
+Recommended structure:
+
+1.
+docs(roadmap): resolve WP-07 layout roadmap namespace
+
+2.
+feat(layout): implement WP-07 layout constraint engine
+
+3.
+feat(layout-ui): integrate constraint evaluation into placement canvas
+
+4.
+test(layout): cover WP-07 constraint engine
+
+5.
+docs(layout): document WP-07 constraint engine
+
+Exact grouping may follow actual repository structure.
+
+==================================================
+PHASE 23 — PUSH
+==================================================
+
+Verify GitHub write authentication.
+
+Push:
+
+feature/wp07-layout-constraint-engine
+
+Use normal push.
+
+If exact remote branch legitimately diverged:
+use --force-with-lease only after verifying remote SHA.
+
+Never plain --force.
+
+If GitHub authentication fails:
+
+DO NOT modify implementation.
+
+Report EXTERNAL BLOCKER.
+
+==================================================
+PHASE 24 — CREATE PR
+==================================================
+
+Create PR:
+
+base:
+main
+
+head:
+feature/wp07-layout-constraint-engine
+
+Title:
+
+feat(layout): implement WP-07 layout constraint engine
+
+PR body must include:
+
+- owner namespace decision
+- architecture
+- hard constraints
+- soft constraints
+- scoring
+- API
+- canvas integration
+- security
+- performance
+- tests
+- typecheck baseline/delta
+- technical debt exclusion
+- P0/P1 status
+
+==================================================
+PHASE 25 — FINAL PR REVIEW
+==================================================
+
+Review actual PR diff.
+
+Verify:
+
+- correct merge-base
+- no accidental files
+- no unrelated TD cleanup
+- no duplicate geometry
+- no security regression
+- no API breaking change
+- no WP-06B regression
+- checks green
+- P0 = 0
+- P1 = 0
+
+If blocker found:
+
+fix it,
+validate,
+push,
+review again.
+
+==================================================
+PHASE 26 — MERGE
+==================================================
+
+If all gates pass and GitHub permits it:
+
+merge PR using repository-standard strategy.
+
+Do not stop merely to ask whether merge is allowed.
+
+This prompt authorizes merge after all release gates pass.
+
+Record:
+
+PR number
+PR URL
+merge method
+merge SHA
+
+==================================================
+PHASE 27 — POST-MERGE VERIFICATION
+==================================================
+
+Run:
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+local HEAD =
+origin/main =
+remote main
+
+Then run again:
+
+library typecheck
+API build
+API regression
+AI Platform typecheck
+AI Platform tests
+AI Platform build
+WP-07 targeted tests
+
+Verify production call path.
+
+==================================================
+PHASE 28 — DISCOVER WP-08
+==================================================
+
+Only after WP-07 is merged and verified.
+
+Search the AUTHORITATIVE:
+
+Interior Design / Layout roadmap
+
+for:
+
+WP-08
+WP08
+next work package
+next Phase 6 milestone
+
+Ignore similarly numbered work packages from unrelated roadmaps.
+
+Create:
+
+WP08_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+Do not commit unless repository policy requires roadmap reports.
+
+Determine:
+
+WP08_TITLE
+WP08_OBJECTIVE
+WP08_DEPENDENCIES
+WP08_SCOPE
+WP08_OWNER_DECISIONS
+WP08_GO_NO_GO
+
+If clearly defined and no major owner decision exists:
+
+create the recommended WP-08 feature branch from verified main.
+
+Do NOT implement WP-08 in this execution.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Base main SHA
+2. WP-07 namespace status
+3. WP-07 branch
+4. Final feature SHA
+5. Changed files
+6. Contracts
+7. Hard constraints implemented
+8. Soft constraints implemented
+9. Scoring model
+10. API endpoint
+11. Tenant isolation
+12. IDOR
+13. Canvas integration
+14. Input immutability
+15. Determinism
+16. 10-item performance
+17. 25-item performance
+18. 50-item performance
+19. WP-07 targeted test count
+20. API regression
+21. AI Platform regression
+22. Typecheck baseline
+23. Typecheck post-WP07
+24. Typecheck delta
+25. API build
+26. AI Platform build
+27. P0 findings
+28. P1 findings
+29. P2 findings
+30. Git hygiene
+31. PR number
+32. PR URL
+33. Merge status
+34. Merge SHA
+35. Final main SHA
+36. Post-merge validation
+37. WP-07 final status
+38. WP-08 title
+39. WP-08 scope classification
+40. WP-08 owner decisions
+41. WP-08 branch created
+42. Recommended next action
+
+Use exactly one verdict:
+
+A.
+WP-07 IMPLEMENTED, MERGED AND VERIFIED — WP-08 READY
+
+B.
+WP-07 IMPLEMENTED AND VERIFIED — READY FOR PR
+
+C.
+WP-07 IMPLEMENTED — EXTERNAL/GITHUB BLOCKER
+
+D.
+WP-07 IMPLEMENTATION BLOCKED — OWNER DECISION REQUIRED
+
+E.
+WP-07 VALIDATION FAILED
+
+F.
+WP-07 PR/INTEGRATION FAILED
+
+IMPORTANT FINAL RULES:
+
+- START WP-07 IMPLEMENTATION NOW.
+- Namespace decision is final.
+- Do not ask again which WP-07 is active.
+- Do not return to WP-06B.
+- Do not clean TD-01..TD-04.
+- Do not duplicate geometry.
+- Do not automatically reposition furniture.
+- Do not start WP-08 implementation.

@@ -111,6 +111,15 @@ interface LayoutPlacement extends CanvasPlacement {
   furnitureItemId?: string | null;
 }
 
+interface LayoutEvaluationResult {
+  valid: boolean;
+  score: number;
+  violations?: string[];
+  warnings?: string[];
+  rules?: string[] | null;
+  evaluatedAt?: string;
+}
+
 const ROOM_LABELS: Record<string, string> = {
   living_room: "Ruang Tamu", bedroom: "Kamar Tidur", kitchen: "Dapur",
   office: "Kantor", cafe: "Kafe", restaurant: "Restoran",
@@ -150,6 +159,7 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const [candidateList, setCandidateList] = useState<PlacementCandidate[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [canvasDirty, setCanvasDirty] = useState(false);
+  const [layoutEvaluation, setLayoutEvaluation] = useState<LayoutEvaluationResult | null>(null);
 
   const projectId = params.id;
 
@@ -240,6 +250,19 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
     onError: (e: Error) => toast({ title: "Apply gagal", description: e.message, variant: "destructive" }),
   });
 
+  const evaluateMutation = useMutation({
+    mutationFn: (placements: CanvasPlacement[]) =>
+      apiFetch<LayoutEvaluationResult>(`/api/ai/layout-sessions/${canvasSession!.id}/evaluate-layout`, {
+        method: "POST",
+        body: JSON.stringify({ placements }),
+      }),
+    onSuccess: (result) => {
+      setLayoutEvaluation(result);
+      toast({ title: "Layout dievaluasi", description: result.valid ? "Layout valid." : "Layout belum valid." });
+    },
+    onError: (e: Error) => toast({ title: "Evaluate gagal", description: e.message, variant: "destructive" }),
+  });
+
   const generateMutation = useMutation({
     mutationFn: () => apiFetch(`/api/ai/interior-design/projects/${projectId}/generate`, { method: "POST" }),
     onSuccess: () => {
@@ -298,6 +321,10 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
 
   useEffect(() => {
     if (!canvasSession) setCandidateList([]);
+  }, [canvasSession]);
+
+  useEffect(() => {
+    if (!canvasSession) setLayoutEvaluation(null);
   }, [canvasSession]);
 
   return (
@@ -460,15 +487,19 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
               selectedCandidateId={selectedCandidateId}
               isSuggesting={suggestMutation.isPending}
               isApplying={applyMutation.isPending}
+              isEvaluating={evaluateMutation.isPending}
               readOnly={canvasReadOnly}
               dirty={canvasDirty}
+              evaluationResult={layoutEvaluation}
               onSuggest={(placements, targetPlacementId) => suggestMutation.mutate({ placements, targetPlacementId })}
               onSelectCandidate={setSelectedCandidateId}
               onApply={(candidateId) => applyMutation.mutate(candidateId)}
+              onEvaluate={(placements) => evaluateMutation.mutate(placements)}
               onReset={() => {
                 setCandidateList([]);
                 setSelectedCandidateId(null);
                 setCanvasDirty(false);
+                setLayoutEvaluation(null);
               }}
             />
           )}
