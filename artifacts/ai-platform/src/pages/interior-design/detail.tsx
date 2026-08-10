@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { PlacementCanvas, type CanvasPlacement, type PlacementCandidate } from "@/components/interior-design/PlacementCanvas";
+import { PlacementCanvas, type CanvasPlacement, type ConstraintEvaluation, type PlacementCandidate } from "@/components/interior-design/PlacementCanvas";
 
 const API_BASE = "";
 
@@ -111,15 +111,6 @@ interface LayoutPlacement extends CanvasPlacement {
   furnitureItemId?: string | null;
 }
 
-interface LayoutEvaluationResult {
-  valid: boolean;
-  score: number;
-  violations?: string[];
-  warnings?: string[];
-  rules?: string[] | null;
-  evaluatedAt?: string;
-}
-
 const ROOM_LABELS: Record<string, string> = {
   living_room: "Ruang Tamu", bedroom: "Kamar Tidur", kitchen: "Dapur",
   office: "Kantor", cafe: "Kafe", restaurant: "Restoran",
@@ -159,7 +150,7 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const [candidateList, setCandidateList] = useState<PlacementCandidate[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [canvasDirty, setCanvasDirty] = useState(false);
-  const [layoutEvaluation, setLayoutEvaluation] = useState<LayoutEvaluationResult | null>(null);
+  const [constraintEvaluation, setConstraintEvaluation] = useState<ConstraintEvaluation | null>(null);
 
   const projectId = params.id;
 
@@ -251,16 +242,19 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   });
 
   const evaluateMutation = useMutation({
-    mutationFn: (placements: CanvasPlacement[]) =>
-      apiFetch<LayoutEvaluationResult>(`/api/ai/layout-sessions/${canvasSession!.id}/evaluate-layout`, {
-        method: "POST",
-        body: JSON.stringify({ placements }),
-      }),
+    mutationFn: () =>
+      apiFetch<ConstraintEvaluation>(
+        `/api/ai/layout-sessions/${canvasSession!.id}/constraints/evaluate`,
+        { method: "POST", body: JSON.stringify({}) },
+      ),
     onSuccess: (result) => {
-      setLayoutEvaluation(result);
-      toast({ title: "Layout dievaluasi", description: result.valid ? "Layout valid." : "Layout belum valid." });
+      setConstraintEvaluation(result);
+      toast({
+        title: result.valid ? "Layout valid" : "Layout perlu diperbaiki",
+        description: `Skor deterministik ${result.totalScore.toFixed(1)} · ${result.hardViolations.length} hard violation`,
+      });
     },
-    onError: (e: Error) => toast({ title: "Evaluate gagal", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Evaluasi gagal", description: e.message, variant: "destructive" }),
   });
 
   const generateMutation = useMutation({
@@ -320,11 +314,10 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const canvasReadOnly = canvasSession?.metadata?.["approvedForRendering"] === true;
 
   useEffect(() => {
-    if (!canvasSession) setCandidateList([]);
-  }, [canvasSession]);
-
-  useEffect(() => {
-    if (!canvasSession) setLayoutEvaluation(null);
+    if (!canvasSession) {
+      setCandidateList([]);
+      setConstraintEvaluation(null);
+    }
   }, [canvasSession]);
 
   return (
@@ -487,20 +480,20 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
               selectedCandidateId={selectedCandidateId}
               isSuggesting={suggestMutation.isPending}
               isApplying={applyMutation.isPending}
-              isEvaluating={evaluateMutation.isPending}
               readOnly={canvasReadOnly}
               dirty={canvasDirty}
-              evaluationResult={layoutEvaluation}
               onSuggest={(placements, targetPlacementId) => suggestMutation.mutate({ placements, targetPlacementId })}
               onSelectCandidate={setSelectedCandidateId}
               onApply={(candidateId) => applyMutation.mutate(candidateId)}
-              onEvaluate={(placements) => evaluateMutation.mutate(placements)}
               onReset={() => {
                 setCandidateList([]);
                 setSelectedCandidateId(null);
                 setCanvasDirty(false);
-                setLayoutEvaluation(null);
+                setConstraintEvaluation(null);
               }}
+              constraintEvaluation={constraintEvaluation}
+              isEvaluating={evaluateMutation.isPending}
+              onEvaluate={() => evaluateMutation.mutate()}
             />
           )}
 
