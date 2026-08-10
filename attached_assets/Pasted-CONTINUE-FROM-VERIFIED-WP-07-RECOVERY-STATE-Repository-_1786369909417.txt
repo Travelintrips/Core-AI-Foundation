@@ -1,0 +1,279 @@
+CONTINUE FROM VERIFIED WP-07 RECOVERY STATE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+DO NOT:
+- re-audit WP-07
+- reimplement WP-07
+- recreate cleanup
+- change product code
+- add new tests unless remote review finds a real blocker
+- include attached_assets
+- include uploaded instruction files
+- start WP-08 before WP-07 merge
+
+VERIFIED STATE:
+
+Clean local WP-07 recovery commit:
+3dae02d
+
+Contaminated remote PR #11 head:
+301e189
+
+PR:
+#11
+
+Only blocker:
+GitHub write authentication.
+
+MISSION:
+
+1. Verify GitHub write auth.
+2. Verify remote PR #11 head SHA.
+3. Replace contaminated WP-07 remote branch with clean commit 3dae02d using exact --force-with-lease.
+4. Verify remote SHA == clean local SHA.
+5. Verify PR #11 diff contains ZERO attached_assets/prompt/session/.replit/screenshot files.
+6. Run final PR checks.
+7. Merge PR #11 through GitHub PR workflow.
+8. Sync local main to origin/main.
+9. Run post-merge validation.
+10. Mark WP-07 COMPLETE.
+11. Immediately resolve canonical WP-08 and, if Moodboard Generator is confirmed, start WP-08 implementation.
+
+==================================================
+PHASE 1 — AUTH
+==================================================
+
+Check available write authentication:
+
+- Replit Git integration
+- GITHUB_TOKEN
+- temporary GIT_ASKPASS
+- gh authentication
+
+Do not print token values.
+
+Test with:
+
+git ls-remote --heads origin main
+
+and a safe push dry-run.
+
+If write auth still fails:
+STOP and report AUTH ONLY.
+
+Do not touch code.
+
+==================================================
+PHASE 2 — VERIFY CLEAN LOCAL COMMIT
+==================================================
+
+Verify:
+
+git cat-file -t 3dae02d
+git show --stat 3dae02d
+
+Confirm clean WP-07 implementation exists.
+
+No attached_assets or instruction artifact may be part of the clean diff.
+
+==================================================
+PHASE 3 — VERIFY REMOTE LEASE
+==================================================
+
+Fetch:
+
+git fetch origin main
+git fetch origin feature/wp07-layout-constraint-engine
+
+Record current remote feature SHA.
+
+Expected contaminated SHA:
+301e189
+or a descendant that must be inspected.
+
+If remote contains legitimate newer product changes:
+STOP before overwrite.
+
+Otherwise continue.
+
+==================================================
+PHASE 4 — CLEAN REMOTE PUSH
+==================================================
+
+Push clean recovery commit using exact force-with-lease:
+
+git push \
+  --force-with-lease=refs/heads/feature/wp07-layout-constraint-engine:<CURRENT_REMOTE_SHA> \
+  origin \
+  3dae02d:refs/heads/feature/wp07-layout-constraint-engine
+
+Never use plain --force.
+
+==================================================
+PHASE 5 — VERIFY REMOTE
+==================================================
+
+Fetch again.
+
+Required:
+
+origin/feature/wp07-layout-constraint-engine SHA
+=
+3dae02d
+
+Then inspect PR #11 remotely.
+
+Required:
+
+- open
+- not draft
+- base main
+- clean head
+- no attached_assets
+- no prompt/session files
+- no .replit
+- no screenshots
+- only legitimate WP-07 files
+
+==================================================
+PHASE 6 — FINAL VALIDATION
+==================================================
+
+Run repository-supported:
+
+pnpm run typecheck:libs
+pnpm --filter api-server run build
+pnpm --filter api-server test
+
+AI Platform:
+
+- typecheck
+- tests
+- production build
+
+Known baseline:
+
+WP-07 targeted tests: green
+API regression: green
+AI Platform regression: green
+
+Known legacy API typecheck debt remains separate.
+
+Required:
+
+P0 = 0
+P1 = 0
+
+==================================================
+PHASE 7 — MERGE PR #11
+==================================================
+
+If PR clean and mergeable:
+
+MERGE PR #11.
+
+Do not push directly to main.
+
+Record merge SHA.
+
+==================================================
+PHASE 8 — VERIFY MAIN
+==================================================
+
+git fetch origin main
+git switch main
+git reset --hard origin/main
+
+Verify:
+
+local main SHA = origin/main SHA
+
+Rerun:
+
+- shared typecheck
+- API build
+- API regression
+- AI Platform tests/build
+- WP-07 targeted tests
+
+If green:
+
+WP-07 = COMPLETE.
+
+==================================================
+PHASE 9 — START WP-08
+==================================================
+
+Now resolve WP-08 only from authoritative Interior Design/Layout roadmap.
+
+Ignore unrelated WP numbering in other roadmaps.
+
+If canonical WP-08 is confirmed as:
+
+Moodboard Generator
+
+then:
+
+create:
+
+feature/wp08-moodboard-generator
+
+and START IMPLEMENTATION immediately.
+
+Do not stop merely to ask permission.
+
+Follow full lifecycle:
+
+IMPLEMENT
+→ TEST
+→ BUILD
+→ RC AUDIT
+→ GIT HYGIENE
+→ PUSH
+→ PR
+→ REVIEW
+→ MERGE
+→ VERIFY MAIN
+
+Stop only if WP-08 requires a genuine owner-level decision about:
+
+- database architecture
+- provider policy
+- public access/security
+- approved snapshot mutation
+- breaking API changes
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. GitHub auth status
+2. Old remote WP-07 SHA
+3. Clean WP-07 SHA
+4. Remote SHA after cleanup
+5. PR #11 clean diff status
+6. PR #11 merge state
+7. WP-07 merge SHA
+8. Final main SHA
+9. Post-merge validation
+10. WP-07 final status
+11. WP-08 canonical title
+12. WP-08 branch
+13. WP-08 implementation status
+14. WP-08 PR/merge status if completed
+
+Final verdict:
+
+A. WP-07 MERGED — WP-08 IMPLEMENTATION STARTED
+B. WP-07 AND WP-08 MERGED AND VERIFIED
+C. GITHUB AUTH STILL BLOCKED
+D. WP-08 OWNER DECISION REQUIRED
+
+IMPORTANT:
+
+Do not repeat WP-07 implementation.
+The next technical work after successful merge is WP-08.
