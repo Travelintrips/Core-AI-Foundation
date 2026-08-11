@@ -1,0 +1,198 @@
+CONTINUE WP-09 FROM CURRENT IMPLEMENTATION STATE — DO NOT REPEAT DISCOVERY
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Current WP:
+WP-09 — Rendering Pipeline
+
+CURRENT VERIFIED DESIGN:
+- approved source = immutable id_concept_drafts snapshot
+- no layout_sessions → creative_projects migration
+- persistence reuse:
+  creative_render_sessions
+  creative_ai_assets
+  ai_cost_records
+- existing job/queue architecture reused
+- tenant stamp + retry reused
+- idempotency hash stored in render session metadata
+- Universal Renderer = deterministic scene/pre-render layer
+- existing executeAI()/provider abstraction = photorealistic final render
+- existing storage reused
+- no new provider/storage/job architecture
+
+MISSION:
+Finish WP-09 implementation from the current branch/state.
+
+DO NOT:
+- restart discovery
+- change owner decisions
+- create new tables unless absolutely required by existing schema constraints
+- create new provider abstraction
+- create new queue system
+- mutate approved snapshot
+- clean legacy 127 TS errors
+- include attached_assets/prompt/session/.replit/screenshots
+- start next WP
+
+COMPLETE THESE REMAINING STEPS:
+
+1. Finish WP-09 contracts/service/worker/routes.
+2. Implement canonical render flow:
+
+approved snapshot
+→ normalized scene spec
+→ deterministic Universal Renderer input/pre-render
+→ existing AI photorealistic provider via executeAI()
+→ render session/job status
+→ storage
+→ creative_ai_assets
+→ ai_cost_records
+→ final render output
+
+3. Required behavior:
+- admin auth
+- tenant isolation / IDOR
+- approved snapshot required
+- source immutable
+- deterministic scene spec
+- idempotent duplicate render request
+- bounded render variants
+- retry-safe jobs
+- provider timeout/failure handling
+- bounded concurrency/resource caps
+- safe storage paths/URLs
+- no secret/provider raw response leakage
+- cost/provider/token usage recorded using existing tracking
+
+4. Add repository-consistent API for:
+- create/start render
+- get render status
+- list/get render outputs
+- retry only if existing job architecture supports it
+
+Use existing route naming conventions; do not invent parallel API families.
+
+5. Integrate Render panel into existing InteriorDesignEditor:
+- Start Render
+- status/progress
+- variants/views
+- final images
+- failure/retry state
+- relevant admin provider/cost metadata
+- source approved state read-only
+
+No standalone UI.
+
+6. Add tests for:
+- approved snapshot input
+- missing/unapproved source
+- deterministic scene spec
+- idempotent duplicate request
+- tenant isolation
+- unauthorized
+- invalid UUID
+- cross-tenant/IDOR
+- provider success
+- provider failure
+- timeout
+- retry
+- job status transitions
+- bounded variants
+- storage write
+- asset metadata
+- cost record
+- immutable source
+- no duplicate assets/jobs
+- UI loading/success/failure/retry
+- safe URLs/rendering
+- resource caps
+- no duplicate provider/storage/queue architecture
+
+No skip/todo/only.
+
+7. Validate:
+- WP-09 targeted tests
+- Interior Design tests
+- API regression
+- AI Platform tests
+- shared typecheck
+- API build
+- AI Platform typecheck/build
+- runtime smoke
+
+Known legacy API TS errors remain OUT OF SCOPE.
+Required WP-09 new TS errors = 0.
+
+8. RC audit:
+P0 = 0
+P1 = 0
+
+Fix only genuine WP-09 blockers.
+
+9. Git hygiene:
+ZERO:
+attached_assets
+prompt/session files
+screenshots
+.replit
+memory artifacts
+secrets
+unrelated legacy fixes
+
+10. Commit cleanly.
+
+11. Push current WP-09 branch.
+
+12. Create PR to main:
+title:
+feat(interior-design): implement WP-09 rendering pipeline
+
+13. Audit REMOTE PR.
+If clean + mergeable + tests green + P0/P1 zero:
+MERGE through GitHub PR workflow.
+
+14. Sync main and run post-merge validation.
+
+15. If green:
+MARK:
+WP-09 COMPLETE — MERGED AND VERIFIED
+
+16. Discover next canonical Interior Design/Layout WP only.
+Create discovery plan and branch if clearly defined.
+DO NOT implement next WP.
+
+IMPORTANT:
+- Continue automatically through implementation → tests → RC → push → PR → merge → post-merge.
+- Do not stop just for a progress report.
+- Stop only for genuine architecture/security/data blocker or external GitHub/provider blocker.
+
+FINAL REPORT ONLY:
+- WP-09 branch/base/final SHA
+- files changed
+- render pipeline stages
+- scene spec
+- provider reuse
+- queue/job reuse
+- persistence
+- storage/assets
+- idempotency/retry
+- cost tracking
+- API
+- UI
+- targeted tests
+- regressions
+- typecheck delta
+- P0/P1
+- PR
+- merge SHA
+- final main SHA
+- post-merge validation
+- next WP title/scope
+
+VERDICT:
+A. WP-09 MERGED AND VERIFIED — NEXT WP READY
+B. WP-09 IMPLEMENTED AND VERIFIED — READY FOR PR
+C. WP-09 VALIDATION FAILED
+D. WP-09 ARCHITECTURE BLOCKED
+E. GITHUB/PROVIDER EXTERNAL BLOCKER
