@@ -70,15 +70,20 @@ export const moodboardGenerationMetadataSchema = z.object({
 
 export const moodboardResultSchema = z.object({
   schemaVersion: z.literal("wp08.v1"),
+  moodboardId: z.string().min(1).max(200),
   projectUuid: z.string().uuid(),
   title: z.string().min(1).max(240),
   roomType: z.string().min(1).max(100),
+  style: z.string().min(1).max(100),
+  colorPalette: z.array(z.string().min(1).max(80)).max(8),
   palette: moodboardPaletteSchema,
   materials: z.array(moodboardMaterialItemSchema).max(MOODBOARD_MAX_ITEMS),
   furniture: z.array(moodboardFurnitureItemSchema).max(MOODBOARD_MAX_ITEMS),
   images: z.array(moodboardImageItemSchema).max(MOODBOARD_MAX_ITEMS),
+  referenceImages: z.array(moodboardImageItemSchema).max(MOODBOARD_MAX_ITEMS),
   sections: z.array(moodboardSectionSchema).max(MOODBOARD_MAX_SECTIONS),
   warnings: z.array(z.string().max(500)).max(40),
+  status: z.enum(["ready"]),
   metadata: moodboardGenerationMetadataSchema,
 }).strict();
 

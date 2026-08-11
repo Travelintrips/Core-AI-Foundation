@@ -95,12 +95,15 @@ components:
         reused: { type: boolean }
     MoodboardResult:
       type: object
-      required: [schemaVersion, projectUuid, title, roomType, palette, materials, furniture, images, sections, warnings, metadata]
+      required: [schemaVersion, moodboardId, projectUuid, title, roomType, style, colorPalette, palette, materials, furniture, images, referenceImages, sections, warnings, status, metadata]
       properties:
         schemaVersion: { type: string, const: wp08.v1 }
+        moodboardId: { type: string }
         projectUuid: { type: string, format: uuid }
         title: { type: string }
         roomType: { type: string }
+        style: { type: string }
+        colorPalette: { type: array, maxItems: 8, items: { type: string } }
         palette: { $ref: "#/components/schemas/MoodboardPalette" }
         materials:
           type: array
@@ -114,6 +117,10 @@ components:
           type: array
           maxItems: 24
           items: { $ref: "#/components/schemas/MoodboardImageItem" }
+        referenceImages:
+          type: array
+          maxItems: 24
+          items: { $ref: "#/components/schemas/MoodboardImageItem" }
         sections:
           type: array
           maxItems: 12
@@ -121,6 +128,7 @@ components:
         warnings:
           type: array
           items: { type: string }
+        status: { type: string, enum: [ready] }
         metadata: { $ref: "#/components/schemas/MoodboardGenerationMetadata" }
     MoodboardPalette:
       type: object

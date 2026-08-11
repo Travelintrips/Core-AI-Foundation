@@ -102,6 +102,8 @@ function canonicalItemId(item: JsonRecord, index: number, prefix: string): strin
     asString(item["code"]) ??
     asString(item["productCode"]) ??
     asString(item["libraryFurnitureId"]) ??
+    asString(item["furnitureCode"]) ??
+    asString(item["code"]) ??
     asString(item["id"]) ??
     `${prefix}-${index + 1}`
   ).slice(0, 160);
@@ -160,9 +162,18 @@ function urlOrNull(value: unknown): string | null {
   }
 }
 
-function extractExistingMoodboard(result: unknown): MoodboardResult | null {
+function extractExistingMoodboard(result: unknown, projectUuid: string): MoodboardResult | null {
   const moodboard = asRecord(result)["moodboard"];
-  const parsed = moodboardResultSchema.safeParse(moodboard);
+  const record = asRecord(moodboard);
+  const legacyCompatible = {
+    ...record,
+    moodboardId: record["moodboardId"] ?? `moodboard-${projectUuid}`,
+    style: record["style"] ?? asRecord(record["palette"])["style"] ?? "balanced",
+    colorPalette: record["colorPalette"] ?? asRecord(record["palette"])["colors"] ?? [],
+    referenceImages: record["referenceImages"] ?? record["images"] ?? [],
+    status: record["status"] ?? "ready",
+  };
+  const parsed = moodboardResultSchema.safeParse(legacyCompatible);
   return parsed.success ? parsed.data : null;
 }
 
@@ -286,7 +297,10 @@ function makeSections(
 
 export async function getMoodboard(projectUuid: string): Promise<MoodboardResult | null> {
   const project = await readProject(projectUuid);
-  return project ? extractExistingMoodboard(project.result) : null;
+  if (!project) {
+    throw Object.assign(new Error("Creative project not found"), { status: 404, code: "PROJECT_NOT_FOUND" });
+  }
+  return extractExistingMoodboard(project.result, projectUuid);
 }
 
 export async function generateMoodboard(
@@ -298,7 +312,7 @@ export async function generateMoodboard(
     throw Object.assign(new Error("Creative project not found"), { status: 404, code: "PROJECT_NOT_FOUND" });
   }
 
-  const existing = extractExistingMoodboard(project.result);
+  const existing = extractExistingMoodboard(project.result, projectUuid);
   if (existing && !options.force) return { moodboard: existing, reused: true };
 
   const draft = await readDraft(projectUuid);
@@ -336,7 +350,7 @@ export async function generateMoodboard(
       thumbnailUrl: urlOrNull(canonical?.thumbnail_url ?? item["thumbnailUrl"]),
       source: canonical ? "material_library" : "concept_draft",
     };
-  });
+  }).filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index);
 
   const furniture: MoodboardFurnitureItem[] = furnitureDraftItems.slice(0, MOODBOARD_MAX_ITEMS).map((item, index) => {
     const id = canonicalItemId(item, index, "furniture");
@@ -352,7 +366,7 @@ export async function generateMoodboard(
       thumbnailUrl: urlOrNull(canonical?.thumbnail_url ?? item["thumbnailUrl"]),
       source: canonical ? "furniture_library" : "concept_draft",
     };
-  });
+  }).filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index);
 
   const moodboardImages: MoodboardImageItem[] = images.flatMap((row): MoodboardImageItem[] => {
     const url = urlOrNull(row.image_url ?? row.thumbnail_url);
@@ -381,7 +395,9 @@ export async function generateMoodboard(
       sourceItemId: null,
     });
   }
-  const cappedImages = moodboardImages.slice(0, MOODBOARD_MAX_ITEMS);
+  const cappedImages = moodboardImages
+    .filter((image, index, items) => items.findIndex((candidate) => candidate.url === image.url) === index)
+    .slice(0, MOODBOARD_MAX_ITEMS);
   const truncated = materialDraftItems.length > MOODBOARD_MAX_ITEMS ||
     furnitureDraftItems.length > MOODBOARD_MAX_ITEMS ||
     moodboardImages.length > MOODBOARD_MAX_ITEMS ||
@@ -394,6 +410,7 @@ export async function generateMoodboard(
 
   const style = asString(project.style_preference) ?? "balanced";
   const palette = paletteFromBrief(style, project.color_preference);
+  const moodboardId = `moodboard-${projectUuid}`;
   const sourcePayload = {
     project: { title: project.title, style: project.style_preference, colors: project.color_preference, notes: project.notes },
     draft,
@@ -403,9 +420,12 @@ export async function generateMoodboard(
   };
   const moodboard: MoodboardResult = {
     schemaVersion: "wp08.v1",
+    moodboardId,
     projectUuid,
     title: project.title,
     roomType: "interior",
+    style,
+    colorPalette: palette.colors,
     palette: {
       colors: palette.colors,
       moodWords: styleMoodWords(style),
@@ -415,8 +435,10 @@ export async function generateMoodboard(
     materials,
     furniture,
     images: cappedImages,
+    referenceImages: cappedImages,
     sections: makeSections(materials, furniture, cappedImages, style),
     warnings: unique(warnings).slice(0, 40),
+    status: "ready",
     metadata: {
       algorithmVersion: ALGORITHM_VERSION,
       sourceFingerprint: fingerprint(sourcePayload),

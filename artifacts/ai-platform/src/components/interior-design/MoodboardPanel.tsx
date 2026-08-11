@@ -47,8 +47,11 @@ type MoodboardImage = {
 
 type Moodboard = {
   schemaVersion: "wp08.v1";
+  moodboardId: string;
   title: string;
   roomType: string;
+  style: string;
+  colorPalette: string[];
   palette: {
     colors: string[];
     moodWords: string[];
@@ -58,8 +61,10 @@ type Moodboard = {
   materials: MoodboardMaterial[];
   furniture: MoodboardFurniture[];
   images: MoodboardImage[];
+  referenceImages: MoodboardImage[];
   sections: Array<{ id: string; title: string; description: string; itemIds: string[]; imageIds: string[] }>;
   warnings: string[];
+  status: "ready";
   metadata: {
     algorithmVersion: string;
     sourceFingerprint: string;
@@ -76,13 +81,14 @@ type MoodboardResponse = {
 
 interface MoodboardPanelProps {
   projectUuid: string;
+  approved?: boolean;
 }
 
 function sourceLabel(source: string): string {
   return source === "material_library" || source === "furniture_library" ? "Library" : "Concept";
 }
 
-export function MoodboardPanel({ projectUuid }: MoodboardPanelProps) {
+export function MoodboardPanel({ projectUuid, approved = false }: MoodboardPanelProps) {
   const { toast } = useToast();
   const [moodboard, setMoodboard] = useState<Moodboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,11 +163,13 @@ export function MoodboardPanel({ projectUuid }: MoodboardPanelProps) {
             size="sm"
             className="h-7 gap-1.5 text-[10px] font-mono bg-violet-600 hover:bg-violet-500"
             onClick={() => void generate(Boolean(moodboard))}
-            disabled={generating}
+            disabled={generating || approved}
+            title={approved ? "Approved concept is read-only" : undefined}
           >
             {generating ? <Loader2 className="size-3 animate-spin" /> : <Brush className="size-3" />}
             {moodboard ? "Regenerate" : "Generate"}
           </Button>
+          {approved && <Badge variant="outline" className="text-[10px] text-emerald-300 border-emerald-400/30">Approved · read-only</Badge>}
         </div>
       </div>
 

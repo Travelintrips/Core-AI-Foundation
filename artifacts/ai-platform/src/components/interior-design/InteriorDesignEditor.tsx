@@ -1068,7 +1068,7 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
         </div>
       )}
 
-      {!editMode && <MoodboardPanel projectUuid={projectUuid} />}
+      {!editMode && <MoodboardPanel projectUuid={projectUuid} approved={isApproved} />}
 
       {/* Section tabs */}
       <div className="flex gap-1 flex-wrap">

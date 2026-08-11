@@ -33,6 +33,9 @@ or its approved snapshot.
 - Existing interior asset images and completed creative AI assets are reused.
 - Resource caps are 24 items/images and 12 sections.
 - A SHA-256 source fingerprint and algorithm version make the result auditable.
+- The response exposes `moodboardId`, `style`, `colorPalette`, `referenceImages`,
+  and `status` as canonical aliases while retaining the structured `palette` and
+  `images` fields for compatibility.
 
 ## WP-09 boundary
 
