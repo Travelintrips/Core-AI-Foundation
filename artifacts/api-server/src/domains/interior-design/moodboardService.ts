@@ -182,7 +182,7 @@ async function readDraft(projectUuid: string): Promise<DraftRow | null> {
             lighting_draft, space_plan_draft, approved_materials,
             approved_furniture, approved_lighting, approved_space_plan
        FROM ai_platform.id_concept_drafts
-      WHERE project_uuid = $1 AND deleted_at IS NULL
+      WHERE project_uuid = $1
       LIMIT 1`,
     [projectUuid],
   );
