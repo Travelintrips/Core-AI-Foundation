@@ -1,0 +1,45 @@
+{
+  "team": "17-wp08",
+  "branch": "feature/wp08-moodboard-generator",
+  "domain": "Interior Design Moodboard Generator",
+  "status": "draft-for-integration",
+  "ownership": {
+    "apiDomain": "artifacts/api-server/src/domains/interior-design/",
+    "apiService": "artifacts/api-server/src/domains/interior-design/moodboardService.ts",
+    "apiSchemas": "artifacts/api-server/src/domains/interior-design/moodboardSchemas.ts",
+    "adminUi": "artifacts/ai-platform/src/components/interior-design/MoodboardPanel.tsx",
+    "openapi": "integration/openapi/team-17-wp08.yaml",
+    "manifest": "integration/manifests/team-17-wp08.json",
+    "docs": "docs/wp08-moodboard-generator.md"
+  },
+  "routesToMount": [
+    {
+      "file": "artifacts/api-server/src/domains/interior-design/router.ts",
+      "statement": "Already included in the existing Team 17 interior-design router; no new global router registration required."
+    }
+  ],
+  "sharedFileRequests": [
+    {
+      "file": "lib/api-spec/openapi.yaml",
+      "action": "merge integration/openapi/team-17-wp08.yaml",
+      "owner": "Team 24"
+    }
+  ],
+  "persistence": {
+    "strategy": "Additive namespace in creative_projects.result JSONB",
+    "migration": "none",
+    "approvedSnapshot": "Moodboard reads approved_* concept fields when review_state is approved_for_rendering and never mutates id_concept_drafts."
+  },
+  "security": [
+    "Admin-only through the global session/API-key middleware.",
+    "projectUuid is validated as UUID and resolved server-side against creative_projects.",
+    "Tenant context is resolved server-side; no tenantId is accepted from client input.",
+    "No provider key or secret is exposed to the frontend."
+  ],
+  "integrationNotes": [
+    "Merge the OpenAPI fragment into the canonical spec before running codegen.",
+    "The service is deterministic and reuses an existing persisted moodboard unless force=true.",
+    "No new AI image provider or furniture placement mutation is introduced.",
+    "WP-09 Rendering Pipeline remains documentation-only and is not implemented here."
+  ]
+}

@@ -43,8 +43,18 @@ import {
   enrichItem,
   type EnrichItemInput,
 } from "./interiorImageService.js";
+import { resolveAuthenticatedTenantContext } from "../../security/tenantResolution.js";
+import {
+  moodboardGenerateRequestSchema,
+  moodboardProjectUuidSchema,
+} from "./moodboardSchemas.js";
+import { generateMoodboard, getMoodboard } from "./moodboardService.js";
 
 const router = Router();
+
+function structuredError(code: string, message: string, details?: unknown) {
+  return { error: { code, message, ...(details === undefined ? {} : { details }) } };
+}
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -286,6 +296,45 @@ router.get("/ai/interior-design/projects/:id/outputs", async (req, res): Promise
     res.json({ items: outputs, total: outputs.length });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+// ── Admin: deterministic Moodboard Generator (WP-08) ────────────────────────
+//
+// The project UUID is resolved against creative_projects server-side. The
+// tenant context is also resolved from the authenticated request; no tenant
+// identifier from body/query/header is accepted.
+router.post("/ai/interior-design/projects/:projectUuid/moodboard/generate", async (req, res): Promise<void> => {
+  try {
+    const projectUuid = req.params["projectUuid"] ?? "";
+    if (!moodboardProjectUuidSchema.safeParse(projectUuid).success) {
+      res.status(400).json(structuredError("INVALID_PROJECT_UUID", "projectUuid must be a valid UUID")); return;
+    }
+    const body = moodboardGenerateRequestSchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json(structuredError("INVALID_REQUEST", "Invalid moodboard generation request", body.error.flatten())); return;
+    }
+    resolveAuthenticatedTenantContext(req);
+    const result = await generateMoodboard(projectUuid, { force: body.data.force });
+    res.status(result.reused ? 200 : 201).json({ moodboard: result.moodboard, available: true, reused: result.reused });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    const code = (err as { code?: string }).code ?? "MOODBOARD_GENERATION_FAILED";
+    res.status(status).json(structuredError(code, err instanceof Error ? err.message : "Moodboard generation failed"));
+  }
+});
+
+router.get("/ai/interior-design/projects/:projectUuid/moodboard", async (req, res): Promise<void> => {
+  try {
+    const projectUuid = req.params["projectUuid"] ?? "";
+    if (!moodboardProjectUuidSchema.safeParse(projectUuid).success) {
+      res.status(400).json(structuredError("INVALID_PROJECT_UUID", "projectUuid must be a valid UUID")); return;
+    }
+    resolveAuthenticatedTenantContext(req);
+    const moodboard = await getMoodboard(projectUuid);
+    res.json({ moodboard, available: Boolean(moodboard) });
+  } catch (err) {
+    res.status(500).json(structuredError("MOODBOARD_READ_FAILED", err instanceof Error ? err.message : "Moodboard read failed"));
   }
 });
 

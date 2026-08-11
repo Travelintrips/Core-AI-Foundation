@@ -66,7 +66,11 @@ export async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> 
     let msg = `HTTP ${res.status}`;
     try {
       const b = await res.json();
-      if (typeof b?.error === "string") msg = b.error;
+      if (typeof b?.error === "string") {
+        msg = b.error;
+      } else if (b?.error && typeof b.error.message === "string") {
+        msg = b.error.message;
+      }
     } catch {
       /* ignore JSON parse error — keep the generic HTTP status message */
     }

@@ -58,6 +58,7 @@ import {
   MaterialSelectorDialog,
   type LibraryMaterial,
 } from "@/components/material-library/MaterialSelectorDialog";
+import { MoodboardPanel } from "./MoodboardPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1066,6 +1067,8 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           Approve concept before generating images to ensure the render uses the latest draft.
         </div>
       )}
+
+      {!editMode && <MoodboardPanel projectUuid={projectUuid} approved={isApproved} />}
 
       {/* Section tabs */}
       <div className="flex gap-1 flex-wrap">
