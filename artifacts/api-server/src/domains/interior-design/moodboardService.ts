@@ -339,6 +339,7 @@ export async function generateMoodboard(
   const materials: MoodboardMaterialItem[] = materialDraftItems.slice(0, MOODBOARD_MAX_ITEMS).map((item, index) => {
     const id = canonicalItemId(item, index, "material");
     const canonical = materialByKey.get(id);
+    const source: MoodboardMaterialItem["source"] = canonical ? "material_library" : "concept_draft";
     if (!canonical) warnings.push(`Material reference "${id}" is not available in the active canonical library.`);
     return {
       id,
@@ -348,13 +349,14 @@ export async function generateMoodboard(
       finish: canonical?.finish ?? asString(item["finish"]),
       texture: canonical?.texture ?? asString(item["texture"]),
       thumbnailUrl: urlOrNull(canonical?.thumbnail_url ?? item["thumbnailUrl"]),
-      source: canonical ? "material_library" : "concept_draft",
+      source,
     };
   }).filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index);
 
   const furniture: MoodboardFurnitureItem[] = furnitureDraftItems.slice(0, MOODBOARD_MAX_ITEMS).map((item, index) => {
     const id = canonicalItemId(item, index, "furniture");
     const canonical = furnitureByKey.get(id);
+    const source: MoodboardFurnitureItem["source"] = canonical ? "furniture_library" : "concept_draft";
     if (!canonical) warnings.push(`Furniture reference "${id}" is not available in the published canonical library.`);
     return {
       id,
@@ -364,7 +366,7 @@ export async function generateMoodboard(
       materials: canonical?.primary_materials ?? asStringArray(item["materials"]),
       colors: canonical?.colors ?? asStringArray(item["colors"]),
       thumbnailUrl: urlOrNull(canonical?.thumbnail_url ?? item["thumbnailUrl"]),
-      source: canonical ? "furniture_library" : "concept_draft",
+      source,
     };
   }).filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index);
 
