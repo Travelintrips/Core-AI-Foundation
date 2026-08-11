@@ -99,6 +99,7 @@ function canonicalItemId(item: JsonRecord, index: number, prefix: string): strin
   return (
     asString(item["libraryMaterialId"]) ??
     asString(item["materialCode"]) ??
+    asString(item["code"]) ??
     asString(item["productCode"]) ??
     asString(item["libraryFurnitureId"]) ??
     asString(item["id"]) ??
