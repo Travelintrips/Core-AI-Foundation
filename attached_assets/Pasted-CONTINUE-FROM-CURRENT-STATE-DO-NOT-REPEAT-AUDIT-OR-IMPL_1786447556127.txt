@@ -1,0 +1,121 @@
+CONTINUE FROM CURRENT STATE — DO NOT REPEAT AUDIT OR IMPLEMENTATION
+
+Verified:
+- PR #14 OPEN
+- base = main
+- head = fix/wp08-moodboard-source-literal-types
+- SHA = 9e65b15
+- mergeable = true
+- merge state = clean
+- diff = 1 legitimate WP-08 hotfix file
+- WP-08 validation already PASS
+- Replit GitHub Integration UI says not_setup
+- GitHub secret/token previously worked for authenticated GitHub API/push
+
+DO NOT re-audit WP-08.
+DO NOT modify WP-08 code.
+DO NOT direct-push to main.
+
+MISSION:
+
+1. Use the already-available GitHub credential securely.
+   - Never print/store token.
+   - Do not depend only on Replit Integration status.
+   - Test authenticated GitHub API access.
+
+2. If authenticated GitHub API permits PR merge:
+   merge PR #14 through the GitHub Pull Request API/workflow.
+   Repository:
+   Travelintrips/Core-AI-Foundation
+   PR: #14
+
+3. Verify from GitHub that:
+   - PR #14 = merged
+   - record merge SHA
+
+4. Immediately sync:
+   git fetch origin main
+   git switch main
+   git reset --hard origin/main
+
+5. Verify:
+   local main SHA = origin/main SHA
+   and hotfix 9e65b15 is in main ancestry.
+
+6. Run post-merge validation only:
+   - WP-08 tests
+   - Interior Design tests
+   - API regression
+   - API build
+   - AI Platform tests
+   - AI Platform typecheck
+   - AI Platform production build
+   - relevant shared typecheck/baseline comparison
+
+Expected:
+- WP-08 new errors = 0
+- P0 = 0
+- P1 = 0
+- historical 127 legacy errors remain OUT OF SCOPE.
+
+If PASS, mark:
+WP-08 COMPLETE — MERGED AND FULLY VERIFIED
+
+THEN CONTINUE AUTOMATICALLY TO WP-09 PREPARATION.
+
+CANONICAL DECISION:
+- Active roadmap = Interior Design / Layout
+- WP-09 = Rendering Pipeline
+- Quotation soft-delete belongs to another roadmap.
+- Namespace conflict = RESOLVED. Do not reopen it.
+
+7. Audit only existing foundations needed by Rendering Pipeline:
+   approved snapshot, Moodboard, placement/layout, materials,
+   furniture, imageDesignerService, image providers,
+   Supabase/storage, jobs/queues, cost/token tracking,
+   InteriorDesignEditor, auth/tenant/ownership.
+
+8. REUSE FIRST.
+   No duplicate provider/table/storage/service architecture.
+
+9. Create:
+   WP09_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+Include:
+- objective
+- inputs
+- pipeline stages
+- approved snapshot boundary
+- render variants
+- provider reuse
+- persistence
+- storage
+- jobs/queue
+- idempotency/retry
+- API
+- UI
+- tenant/security
+- AI cost tracking
+- resource limits
+- tests
+- migrations
+- genuine owner decisions
+
+10. If clearly defined with no material owner decision:
+    create from verified main:
+    feature/wp09-rendering-pipeline
+
+11. DO NOT IMPLEMENT WP-09 YET.
+
+STOP only if:
+A. authenticated GitHub API genuinely cannot merge PR #14;
+B. post-merge validation fails;
+C. WP-09 has a genuine architecture/security/data owner decision.
+
+Do not stop for progress reports.
+
+FINAL VERDICT ONLY:
+A. WP-08 FULLY VERIFIED — WP-09 RENDERING PIPELINE READY
+B. WP-08 FULLY VERIFIED — WP-09 OWNER DECISIONS REQUIRED
+C. WP-08 POST-MERGE VALIDATION FAILED
+D. GITHUB API MERGE BLOCKED
