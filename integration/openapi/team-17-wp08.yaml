@@ -1,0 +1,201 @@
+openapi: 3.1.0
+info:
+  title: Team 17 — WP-08 Moodboard Generator
+  version: "1.0.0"
+  description: >
+    Admin-only, deterministic moodboard composition from an Interior Design
+    concept draft and canonical material, furniture, and image resources.
+paths:
+  /ai/interior-design/projects/{projectUuid}/moodboard/generate:
+    post:
+      tags: [interior-design-admin]
+      operationId: generateInteriorDesignMoodboard
+      summary: Generate or reuse a structured moodboard
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectUuid"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoodboardGenerateRequest"
+      responses:
+        "200":
+          description: Existing deterministic moodboard reused
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoodboardResponse" }
+        "201":
+          description: Moodboard generated and persisted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoodboardResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /ai/interior-design/projects/{projectUuid}/moodboard:
+    get:
+      tags: [interior-design-admin]
+      operationId: getInteriorDesignMoodboard
+      summary: Get a persisted moodboard
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectUuid"
+      responses:
+        "200":
+          description: Moodboard or empty state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoodboardResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+  parameters:
+    ProjectUuid:
+      name: projectUuid
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/StructuredError" }
+    Unauthorized:
+      description: Unauthorized
+    NotFound:
+      description: Project not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/StructuredError" }
+  schemas:
+    MoodboardGenerateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        force: { type: boolean, default: false }
+    MoodboardResponse:
+      type: object
+      required: [moodboard, available]
+      properties:
+        moodboard:
+          oneOf:
+            - $ref: "#/components/schemas/MoodboardResult"
+            - type: "null"
+        available: { type: boolean }
+        reused: { type: boolean }
+    MoodboardResult:
+      type: object
+      required: [schemaVersion, projectUuid, title, roomType, palette, materials, furniture, images, sections, warnings, metadata]
+      properties:
+        schemaVersion: { type: string, const: wp08.v1 }
+        projectUuid: { type: string, format: uuid }
+        title: { type: string }
+        roomType: { type: string }
+        palette: { $ref: "#/components/schemas/MoodboardPalette" }
+        materials:
+          type: array
+          maxItems: 24
+          items: { $ref: "#/components/schemas/MoodboardMaterialItem" }
+        furniture:
+          type: array
+          maxItems: 24
+          items: { $ref: "#/components/schemas/MoodboardFurnitureItem" }
+        images:
+          type: array
+          maxItems: 24
+          items: { $ref: "#/components/schemas/MoodboardImageItem" }
+        sections:
+          type: array
+          maxItems: 12
+          items: { $ref: "#/components/schemas/MoodboardSection" }
+        warnings:
+          type: array
+          items: { type: string }
+        metadata: { $ref: "#/components/schemas/MoodboardGenerationMetadata" }
+    MoodboardPalette:
+      type: object
+      required: [colors, moodWords, style, source]
+      properties:
+        colors: { type: array, maxItems: 8, items: { type: string } }
+        moodWords: { type: array, maxItems: 8, items: { type: string } }
+        style: { type: string }
+        source: { type: string, enum: [brief, concept_draft, style_default] }
+    MoodboardMaterialItem:
+      type: object
+      required: [id, name, category, color, finish, texture, thumbnailUrl, source]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        category: { type: [string, "null"] }
+        color: { type: [string, "null"] }
+        finish: { type: [string, "null"] }
+        texture: { type: [string, "null"] }
+        thumbnailUrl: { type: [string, "null"], format: uri }
+        source: { type: string, enum: [material_library, concept_draft] }
+    MoodboardFurnitureItem:
+      type: object
+      required: [id, name, type, style, materials, colors, thumbnailUrl, source]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: [string, "null"] }
+        style: { type: [string, "null"] }
+        materials: { type: array, items: { type: string } }
+        colors: { type: array, items: { type: string } }
+        thumbnailUrl: { type: [string, "null"], format: uri }
+        source: { type: string, enum: [furniture_library, concept_draft] }
+    MoodboardImageItem:
+      type: object
+      required: [id, role, url, thumbnailUrl, alt, source, sourceItemId]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [material, furniture, lighting, space_plan, concept] }
+        url: { type: string, format: uri }
+        thumbnailUrl: { type: [string, "null"], format: uri }
+        alt: { type: string }
+        source: { type: string }
+        sourceItemId: { type: [string, "null"] }
+    MoodboardSection:
+      type: object
+      required: [id, title, description, itemIds, imageIds]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        itemIds: { type: array, items: { type: string } }
+        imageIds: { type: array, items: { type: string } }
+    MoodboardGenerationMetadata:
+      type: object
+      required: [algorithmVersion, sourceFingerprint, resourceCounts, truncated]
+      properties:
+        algorithmVersion: { type: string }
+        sourceFingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+        resourceCounts:
+          type: object
+          required: [materials, furniture, images, sections]
+          properties:
+            materials: { type: integer }
+            furniture: { type: integer }
+            images: { type: integer }
+            sections: { type: integer }
+        truncated: { type: boolean }
+    StructuredError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
