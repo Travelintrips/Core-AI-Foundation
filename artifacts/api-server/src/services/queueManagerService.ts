@@ -22,6 +22,8 @@ import { logAudit } from "./aiAuditService.js";
 export interface EnqueueJobInput {
   jobType: string;
   payloadJson?: Record<string, unknown>;
+  /** Canonical worker capability persisted on ai_jobs.required_capability. */
+  requiredCapability?: string;
   priority?: number;
   executionPlanId?: number | null;
   departmentId?: number | null;
@@ -101,6 +103,7 @@ export async function enqueue(input: EnqueueJobInput) {
   const insert: InsertAiJob = {
     jobCode,
     jobType:           input.jobType,
+    requiredCapability: input.requiredCapability ?? null,
     payloadJson,
     priority:          input.priority ?? 50,
     priorityScore:     String(score),

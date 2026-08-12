@@ -6046,6 +6046,58 @@ export interface CreativeMarketplaceAnalytics {
   byType: CreativeMarketplaceByTypeItem[];
 }
 
+export interface InteriorRenderStartInput {
+  /**
+     * @minimum 1
+     * @maximum 4
+     */
+  variantCount?: number;
+}
+
+export interface InteriorRenderAsset {
+  id: number;
+  /** @nullable */
+  variantIndex: number | null;
+  status: string;
+  /** @nullable */
+  imageUrl: string | null;
+  /** @nullable */
+  storagePath: string | null;
+  /** @nullable */
+  qcScore: number | null;
+}
+
+export interface InteriorRenderJob {
+  id: number;
+  status: string;
+  retryCount: number;
+  /** @nullable */
+  errorMessage: string | null;
+}
+
+export interface InteriorRenderStatus {
+  sessionId: number;
+  status: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  progress: number;
+  variantCount: number;
+  /** @nullable */
+  approvedSnapshotHash: string | null;
+  sourceImmutable: boolean;
+  /** @nullable */
+  error: string | null;
+  assets: InteriorRenderAsset[];
+  jobs: InteriorRenderJob[];
+}
+
+export interface InteriorRenderStartResponse {
+  session: InteriorRenderStatus;
+  idempotent: boolean;
+}
+
 export type NotFoundResponse = {
   error: string;
 };

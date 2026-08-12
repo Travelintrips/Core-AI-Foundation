@@ -53,6 +53,12 @@ import {
   Upload,
   ImageOff,
   RefreshCw,
+  Wand2,
+  Clock3,
+  ImageIcon,
+  Server,
+  DollarSign,
+  RotateCw,
 } from "lucide-react";
 import {
   MaterialSelectorDialog,
@@ -221,6 +227,89 @@ function zonesToRaw(zones: SpaceZone[], original: unknown): unknown {
 
 function itemsToRaw(items: unknown[]): unknown {
   return { items };
+}
+
+type RenderObject = Record<string, unknown>;
+
+interface RenderOutput {
+  id: string;
+  url: string;
+  thumbnailUrl: string | null;
+  variant: string;
+  view: string;
+  label: string;
+  width: number | null;
+  height: number | null;
+}
+
+function asRecord(value: unknown): RenderObject | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as RenderObject
+    : null;
+}
+
+function readValue(record: RenderObject | null, ...keys: string[]): unknown {
+  if (!record) return undefined;
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) return record[key];
+  }
+  return undefined;
+}
+
+function readText(record: RenderObject | null, ...keys: string[]): string {
+  const value = readValue(record, ...keys);
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+function readNumber(record: RenderObject | null, ...keys: string[]): number | null {
+  const value = readValue(record, ...keys);
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+function normalizeRenderOutputs(raw: unknown): RenderOutput[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item, index) => {
+    if (typeof item === "string") {
+      return [{ id: `output-${index}`, url: item, thumbnailUrl: null, variant: "", view: "", label: `View ${index + 1}`, width: null, height: null }];
+    }
+    const record = asRecord(item);
+    if (!record) return [];
+    const url = readText(record, "imageUrl", "url", "outputUrl", "assetUrl", "fileUrl");
+    if (!url) return [];
+    return [{
+      id: readText(record, "id", "uuid", "key") || `output-${index}`,
+      url,
+      thumbnailUrl: readText(record, "thumbnailUrl", "previewUrl") || null,
+      variant: readText(record, "variant", "variantName", "style"),
+      view: readText(record, "view", "viewName", "camera"),
+      label: readText(record, "label", "name", "title") || `View ${index + 1}`,
+      width: readNumber(record, "width"),
+      height: readNumber(record, "height"),
+    }];
+  });
+}
+
+async function fetchRenderApi<T>(
+  url: string,
+  adminKey: string | undefined,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+      ...(init?.headers ?? {}),
+    },
+  });
+  const body = await response.json().catch(() => ({})) as unknown;
+  if (!response.ok) {
+    const message = readText(asRecord(body), "error", "message") || `Request failed (${response.status})`;
+    throw new Error(message);
+  }
+  return body as T;
 }
 
 // ── Review state badge ────────────────────────────────────────────────────────
@@ -787,6 +876,294 @@ function LightingEditor({ items, onChange }: { items: LightingItem[]; onChange: 
   );
 }
 
+// ── Render panel ─────────────────────────────────────────────────────────────
+
+interface RenderPanelProps {
+  projectUuid: string;
+  adminKey?: string;
+  approved: boolean;
+  hasUnsavedEdits: boolean;
+  draft: ConceptDraft;
+}
+
+function renderStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    queued: "Queued",
+    pending: "Queued",
+    processing: "Rendering",
+    running: "Rendering",
+    in_progress: "Rendering",
+    completed: "Complete",
+    complete: "Complete",
+    succeeded: "Complete",
+    failed: "Failed",
+    error: "Failed",
+  };
+  return labels[status.toLowerCase()] ?? (status ? status.replace(/_/g, " ") : "Not started");
+}
+
+function renderStatusTone(status: string): string {
+  const normalized = status.toLowerCase();
+  if (["completed", "complete", "succeeded"].includes(normalized)) return "text-emerald-300 border-emerald-400/30 bg-emerald-400/10";
+  if (["failed", "error"].includes(normalized)) return "text-rose-300 border-rose-400/30 bg-rose-400/10";
+  if (["queued", "pending", "processing", "running", "in_progress"].includes(normalized)) return "text-amber-200 border-amber-400/30 bg-amber-400/10";
+  return "text-muted-foreground border-border/50 bg-muted/10";
+}
+
+function RenderPanel({ projectUuid, adminKey, approved, hasUnsavedEdits, draft }: RenderPanelProps) {
+  const { toast } = useToast();
+  const [render, setRender] = useState<RenderObject | null>(null);
+  const [job, setJob] = useState<RenderObject | null>(null);
+  const [outputs, setOutputs] = useState<RenderOutput[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [variantFilter, setVariantFilter] = useState("all");
+  const [viewFilter, setViewFilter] = useState("all");
+
+  const renderStatus = readText(render, "status", "state") || readText(job, "status", "state");
+  const progress = Math.max(0, Math.min(100, readNumber(render, "progress", "progressPercent", "progressPct")
+    ?? readNumber(job, "progress", "progressPercent", "progressPct") ?? 0));
+  const isActive = ["queued", "pending", "processing", "running", "in_progress"].includes(renderStatus.toLowerCase());
+  const sourceLabel = approved ? "Approved concept snapshot" : "Approval required";
+  const variants = Array.from(new Set(outputs.map((item) => item.variant).filter(Boolean)));
+  const views = Array.from(new Set(outputs.map((item) => item.view).filter(Boolean)));
+  const visibleOutputs = outputs.filter((item) =>
+    (variantFilter === "all" || item.variant === variantFilter)
+    && (viewFilter === "all" || item.view === viewFilter),
+  );
+
+  const loadRender = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const statusResponse = await fetchRenderApi<{ render?: unknown; job?: unknown }>(
+        `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}/status`,
+        adminKey,
+      );
+      setRender(asRecord(statusResponse.render));
+      setJob(asRecord(statusResponse.job));
+      const outputsResponse = await fetchRenderApi<{ items?: unknown }>(
+        `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}/outputs`,
+        adminKey,
+      );
+      setOutputs(normalizeRenderOutputs(outputsResponse.items));
+      setError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Render status unavailable";
+      if (!message.includes("(404)")) setError(message);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, [adminKey, projectUuid]);
+
+  useEffect(() => {
+    if (!approved) {
+      setLoading(false);
+      return;
+    }
+    void loadRender(true);
+  }, [approved, loadRender]);
+
+  useEffect(() => {
+    if (!approved || !isActive) return;
+    const timer = window.setInterval(() => void loadRender(), 4500);
+    return () => window.clearInterval(timer);
+  }, [approved, isActive, loadRender]);
+
+  const startRender = async (retry: boolean) => {
+    if (!approved || hasUnsavedEdits) return;
+    setWorking(true);
+    setError(null);
+    try {
+      const response = await fetchRenderApi<{ render?: unknown }>(
+        retry
+          ? `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}/retry`
+          : `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}`,
+        adminKey,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setRender(asRecord(response.render));
+      setJob(null);
+      toast({ title: retry ? "Render retry started" : "Render started", description: "The approved concept is being rendered." });
+      await loadRender();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to start render";
+      setError(message);
+      toast({ title: "Render request failed", description: message, variant: "destructive" });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const provider = readText(render, "provider", "providerName") || readText(job, "provider", "providerName");
+  const model = readText(render, "model", "modelName") || readText(job, "model", "modelName");
+  const cost = readValue(render, "cost", "costUsd", "estimatedCost");
+  const createdAt = readText(render, "createdAt", "startedAt", "updatedAt");
+  const failureReason = readText(render, "error", "errorMessage", "failureReason") || readText(job, "error", "errorMessage");
+  const isFailed = ["failed", "error"].includes(renderStatus.toLowerCase());
+  const isComplete = ["completed", "complete", "succeeded"].includes(renderStatus.toLowerCase()) || outputs.length > 0;
+
+  return (
+    <section className="rounded-lg border border-cyan-400/20 bg-cyan-400/[0.035] p-3.5" data-testid="render-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-cyan-300/20 bg-cyan-300/10">
+            <Wand2 className="size-3.5 text-cyan-200" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-mono text-sm font-semibold">Render studio</p>
+              {renderStatus && (
+                <Badge variant="outline" className={cn("h-4 px-1.5 text-[9px] font-mono uppercase", renderStatusTone(renderStatus))} data-testid="status-render">
+                  {renderStatusLabel(renderStatus)}
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              Final images from the immutable, approved source.
+            </p>
+          </div>
+        </div>
+        {!renderStatus && (
+          <Button
+            size="sm"
+            className="h-7 gap-1.5 bg-cyan-300 px-2.5 text-[10px] font-mono text-slate-950 hover:bg-cyan-200"
+            onClick={() => void startRender(false)}
+            disabled={!approved || hasUnsavedEdits || working}
+            data-testid="button-start-render"
+          >
+            {working ? <Loader2 className="size-3 animate-spin" /> : <Wand2 className="size-3" />}
+            Start Render
+          </Button>
+        )}
+        {isFailed && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 border-rose-400/30 px-2.5 text-[10px] font-mono text-rose-200 hover:bg-rose-400/10"
+            onClick={() => void startRender(true)}
+            disabled={!approved || hasUnsavedEdits || working}
+            data-testid="button-retry-render"
+          >
+            {working ? <Loader2 className="size-3 animate-spin" /> : <RotateCw className="size-3" />}
+            Retry
+          </Button>
+        )}
+      </div>
+
+      {!approved && (
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/[0.06] px-2.5 py-2 text-[10px] text-amber-100/80" data-testid="text-render-approval-required">
+          <AlertTriangle className="size-3.5 shrink-0 text-amber-300" />
+          Approve the concept before starting a render.
+        </div>
+      )}
+      {approved && hasUnsavedEdits && (
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/[0.06] px-2.5 py-2 text-[10px] text-amber-100/80" data-testid="text-render-unsaved">
+          <AlertTriangle className="size-3.5 shrink-0 text-amber-300" />
+          Save the draft first. Rendering always uses the approved snapshot.
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1.1fr_1fr_1fr]">
+        <div className="rounded-md border border-border/30 bg-background/20 px-2.5 py-2">
+          <p className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">Source</p>
+          <p className="mt-1 truncate text-[11px] font-medium text-cyan-50" data-testid="text-render-source">{sourceLabel}</p>
+        </div>
+        <div className="rounded-md border border-border/30 bg-background/20 px-2.5 py-2">
+          <p className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">Version</p>
+          <p className="mt-1 truncate text-[11px] font-medium" data-testid="text-render-version">{readText(render, "sourceVersion", "version", "sourceFingerprint") || "Locked at approval"}</p>
+        </div>
+        <div className="rounded-md border border-border/30 bg-background/20 px-2.5 py-2">
+          <p className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">Views</p>
+          <p className="mt-1 text-[11px] font-medium" data-testid="text-render-output-count">{outputs.length ? `${outputs.length} final image${outputs.length === 1 ? "" : "s"}` : "Awaiting output"}</p>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="mt-3 space-y-2" data-testid="render-loading">
+          <div className="skeleton h-2.5 w-1/3 rounded" />
+          <div className="skeleton h-20 w-full rounded-md" />
+        </div>
+      )}
+
+      {!loading && (isActive || working) && (
+        <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-300/[0.035] p-2.5" data-testid="render-progress">
+          <div className="flex items-center justify-between text-[10px] font-mono">
+            <span className="flex items-center gap-1.5 text-amber-100/80"><Loader2 className="size-3 animate-spin" /> {renderStatusLabel(renderStatus)}</span>
+            <span className="text-amber-200">{Math.round(progress)}%</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/60">
+            <div className="h-full rounded-full bg-amber-300 transition-[width] duration-500" style={{ width: `${Math.max(progress, 4)}%` }} />
+          </div>
+          <p className="mt-2 text-[9px] text-muted-foreground">Status refreshes automatically every few seconds.</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-rose-400/20 bg-rose-400/[0.05] p-2.5 text-[10px]" data-testid="text-render-error">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-rose-300" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-rose-100">{isFailed ? "Render failed" : "Could not load render status"}</p>
+            <p className="mt-0.5 break-words text-rose-100/60">{failureReason || error}</p>
+          </div>
+          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-[10px]" onClick={() => void loadRender(true)} data-testid="button-refresh-render">
+            <RefreshCw className="size-3" />
+          </Button>
+        </div>
+      )}
+
+      {!loading && outputs.length > 0 && (
+        <div className="mt-3" data-testid="render-outputs">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              <ImageIcon className="size-3" /> Final images
+            </div>
+            <div className="flex items-center gap-1.5">
+              {variants.length > 0 && (
+                <select value={variantFilter} onChange={(event) => setVariantFilter(event.target.value)} className="h-6 rounded border border-border/50 bg-background/50 px-1.5 text-[10px] text-foreground" data-testid="select-render-variant">
+                  <option value="all">All variants</option>
+                  {variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+                </select>
+              )}
+              {views.length > 0 && (
+                <select value={viewFilter} onChange={(event) => setViewFilter(event.target.value)} className="h-6 rounded border border-border/50 bg-background/50 px-1.5 text-[10px] text-foreground" data-testid="select-render-view">
+                  <option value="all">All views</option>
+                  {views.map((view) => <option key={view} value={view}>{view}</option>)}
+                </select>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+            {visibleOutputs.map((output) => (
+              <a key={output.id} href={output.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-md border border-border/40 bg-background/30" data-testid={`link-render-output-${output.id}`}>
+                <div className="aspect-[4/3] overflow-hidden bg-muted/20">
+                  <img src={output.thumbnailUrl ?? output.url} alt={output.label} className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                </div>
+                <div className="p-2">
+                  <p className="truncate text-[10px] font-medium">{output.label}</p>
+                  {(output.variant || output.view) && <p className="mt-0.5 truncate text-[9px] text-muted-foreground">{[output.variant, output.view].filter(Boolean).join(" · ")}</p>}
+                </div>
+              </a>
+            ))}
+          </div>
+          {visibleOutputs.length === 0 && <p className="py-3 text-center text-[10px] text-muted-foreground">No images match these filters.</p>}
+        </div>
+      )}
+
+      {(provider || model || cost !== undefined || createdAt) && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/30 pt-2 text-[9px] text-muted-foreground" data-testid="render-metadata">
+          {provider && <span className="inline-flex items-center gap-1"><Server className="size-3" /> {provider}{model ? ` · ${model}` : ""}</span>}
+          {cost !== undefined && <span className="inline-flex items-center gap-1"><DollarSign className="size-3" /> {String(cost)}</span>}
+          {createdAt && <span className="inline-flex items-center gap-1"><Clock3 className="size-3" /> {new Date(createdAt).toLocaleString()}</span>}
+        </div>
+      )}
+      {isComplete && outputs.length === 0 && !error && (
+        <p className="mt-3 text-[10px] text-muted-foreground">Render complete. Outputs are still being indexed.</p>
+      )}
+    </section>
+  );
+}
+
 // ── Main Editor ───────────────────────────────────────────────────────────────
 
 interface InteriorDesignEditorProps {
@@ -1069,6 +1446,15 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
       )}
 
       {!editMode && <MoodboardPanel projectUuid={projectUuid} approved={isApproved} />}
+      {!editMode && (
+        <RenderPanel
+          projectUuid={projectUuid}
+          adminKey={adminKey}
+          approved={isApproved}
+          hasUnsavedEdits={draft.hasUnsavedEdits}
+          draft={draft}
+        />
+      )}
 
       {/* Section tabs */}
       <div className="flex gap-1 flex-wrap">

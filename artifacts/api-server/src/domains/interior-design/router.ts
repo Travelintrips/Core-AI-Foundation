@@ -43,6 +43,11 @@ import {
   enrichItem,
   type EnrichItemInput,
 } from "./interiorImageService.js";
+import {
+  getInteriorRenderStatus,
+  retryInteriorRender,
+  startInteriorRender,
+} from "../../services/interiorRenderService.js";
 import { resolveAuthenticatedTenantContext } from "../../security/tenantResolution.js";
 import {
   moodboardGenerateRequestSchema,
@@ -601,6 +606,74 @@ router.delete("/ai/interior-design/asset-images/:projectUuid/:itemType/:itemId",
     res.json({ deleted });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+// ── WP-09: approved-snapshot rendering pipeline ─────────────────────────────
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function renderErrorStatus(error: unknown): number {
+  const status = error && typeof error === "object" && "status" in error
+    ? Number((error as { status?: unknown }).status)
+    : 500;
+  return [400, 404, 409, 422].includes(status) ? status : 500;
+}
+
+router.post("/ai/interior-design/projects/:projectUuid/render", async (req, res): Promise<void> => {
+  const projectUuid = String(req.params.projectUuid ?? "");
+  if (!isUuid(projectUuid)) {
+    res.status(400).json({ error: "projectUuid must be a valid UUID" });
+    return;
+  }
+  try {
+    const tenant = resolveAuthenticatedTenantContext(req);
+    const rawCount = req.body?.variantCount;
+    const variantCount = rawCount === undefined ? undefined : Number(rawCount);
+    const result = await startInteriorRender({
+      projectUuid,
+      tenantId: tenant.tenantId,
+      variantCount,
+    });
+    res.status(result.idempotent ? 200 : 202).json(result);
+  } catch (error) {
+    res.status(renderErrorStatus(error)).json({ error: error instanceof Error ? error.message : "Unable to start render" });
+  }
+});
+
+router.get("/ai/interior-design/projects/:projectUuid/render", async (req, res): Promise<void> => {
+  const projectUuid = String(req.params.projectUuid ?? "");
+  if (!isUuid(projectUuid)) {
+    res.status(400).json({ error: "projectUuid must be a valid UUID" });
+    return;
+  }
+  try {
+    resolveAuthenticatedTenantContext(req);
+    const result = await getInteriorRenderStatus(projectUuid);
+    if (!result) {
+      res.status(404).json({ error: "Render session not found" });
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(renderErrorStatus(error)).json({ error: error instanceof Error ? error.message : "Unable to read render" });
+  }
+});
+
+router.post("/ai/interior-design/projects/:projectUuid/render/retry", async (req, res): Promise<void> => {
+  const projectUuid = String(req.params.projectUuid ?? "");
+  if (!isUuid(projectUuid)) {
+    res.status(400).json({ error: "projectUuid must be a valid UUID" });
+    return;
+  }
+  try {
+    const tenant = resolveAuthenticatedTenantContext(req);
+    const result = await retryInteriorRender({ projectUuid, tenantId: tenant.tenantId });
+    res.status(result.idempotent ? 200 : 202).json(result);
+  } catch (error) {
+    res.status(renderErrorStatus(error)).json({ error: error instanceof Error ? error.message : "Unable to retry render" });
   }
 });
 

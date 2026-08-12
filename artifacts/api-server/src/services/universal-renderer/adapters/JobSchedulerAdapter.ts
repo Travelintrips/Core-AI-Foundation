@@ -17,10 +17,10 @@ export class JobSchedulerAdapter implements JobSchedulerPort {
 
     const job = await enqueue({
       jobType:  input.jobType,
+      requiredCapability: input.requiredCapability,
       payloadJson: {
         ...input.payload,
         _tenantId:          tenantId,          // WP-06 tenant stamp
-        requiredCapability: input.requiredCapability, // carried in payload for dispatcher
       },
       priority:      input.priority ?? 50,
       maxRetry:      input.maxRetry ?? 3,

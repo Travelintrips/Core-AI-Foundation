@@ -8139,6 +8139,83 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { description: Layout exceeds configured evaluation bounds }
 
+  # ── WP-09: Interior Design approved-snapshot rendering ─────────────────────
+  /ai/interior-design/projects/{projectUuid}/render:
+    post:
+      operationId: startInteriorRender
+      tags: [interior-design]
+      summary: Start an idempotent render from the immutable approved snapshot
+      parameters:
+        - name: projectUuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InteriorRenderStartInput" }
+      responses:
+        "200":
+          description: Existing render session returned for an idempotent request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InteriorRenderStartResponse" }
+        "202":
+          description: Render jobs queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InteriorRenderStartResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: Authentication required }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: The concept is not approved for rendering }
+        "422": { description: Render request exceeds resource limits }
+    get:
+      operationId: getInteriorRenderStatus
+      tags: [interior-design]
+      summary: Get render progress, variants, jobs, and immutable source hash
+      parameters:
+        - name: projectUuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Render status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InteriorRenderStatus" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: Authentication required }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/interior-design/projects/{projectUuid}/render/retry:
+    post:
+      operationId: retryInteriorRender
+      tags: [interior-design]
+      summary: Retry a failed approved-snapshot render
+      parameters:
+        - name: projectUuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Existing non-failed render returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InteriorRenderStartResponse" }
+        "202":
+          description: Retry jobs queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InteriorRenderStartResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: Authentication required }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: The approved snapshot changed or is unavailable }
+
 components:
   responses:
     NotFound:
@@ -16133,3 +16210,57 @@ components:
         byType:
           type: array
           items: { $ref: "#/components/schemas/CreativeMarketplaceByTypeItem" }
+
+    InteriorRenderStartInput:
+      type: object
+      properties:
+        variantCount:
+          type: integer
+          minimum: 1
+          maximum: 4
+          default: 2
+
+    InteriorRenderAsset:
+      type: object
+      required: [id, variantIndex, status, imageUrl, storagePath, qcScore]
+      properties:
+        id: { type: integer }
+        variantIndex: { type: ["integer", "null"] }
+        status: { type: string }
+        imageUrl: { type: ["string", "null"] }
+        storagePath: { type: ["string", "null"] }
+        qcScore: { type: ["integer", "null"] }
+
+    InteriorRenderJob:
+      type: object
+      required: [id, status, retryCount, errorMessage]
+      properties:
+        id: { type: integer }
+        status: { type: string }
+        retryCount: { type: integer }
+        errorMessage: { type: ["string", "null"] }
+
+    InteriorRenderStatus:
+      type: object
+      required: [sessionId, status, progress, variantCount, approvedSnapshotHash, sourceImmutable, error, assets, jobs]
+      properties:
+        sessionId: { type: integer }
+        status: { type: string }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        variantCount: { type: integer }
+        approvedSnapshotHash: { type: ["string", "null"] }
+        sourceImmutable: { type: boolean }
+        error: { type: ["string", "null"] }
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/InteriorRenderAsset" }
+        jobs:
+          type: array
+          items: { $ref: "#/components/schemas/InteriorRenderJob" }
+
+    InteriorRenderStartResponse:
+      type: object
+      required: [session, idempotent]
+      properties:
+        session: { $ref: "#/components/schemas/InteriorRenderStatus" }
+        idempotent: { type: boolean }
