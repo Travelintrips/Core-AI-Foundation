@@ -257,6 +257,9 @@ import type {
   ImpersonateCustomerResult,
   IndustryShowcase,
   InsightList,
+  InteriorRenderStartInput,
+  InteriorRenderStartResponse,
+  InteriorRenderStatus,
   JobPage,
   JobStats,
   KnowledgeBase,
@@ -30944,5 +30947,223 @@ export const useEvaluateLayoutSessionConstraints = <TError = ErrorType<BadReques
         TContext
       > => {
       return useMutation(getEvaluateLayoutSessionConstraintsMutationOptions(options));
+    }
+
+export const getStartInteriorRenderUrl = (projectUuid: string,) => {
+
+
+
+
+  return `/api/ai/interior-design/projects/${projectUuid}/render`
+}
+
+/**
+ * @summary Start an idempotent render from the immutable approved snapshot
+ */
+export const startInteriorRender = async (projectUuid: string,
+    interiorRenderStartInput?: InteriorRenderStartInput, options?: RequestInit): Promise<InteriorRenderStartResponse> => {
+
+  return customFetch<InteriorRenderStartResponse>(getStartInteriorRenderUrl(projectUuid),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(interiorRenderStartInput)
+  }
+);}
+
+
+
+
+export const getStartInteriorRenderMutationOptions = <TError = ErrorType<BadRequestResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startInteriorRender>>, TError,{projectUuid: string;data?: BodyType<InteriorRenderStartInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startInteriorRender>>, TError,{projectUuid: string;data?: BodyType<InteriorRenderStartInput>}, TContext> => {
+
+const mutationKey = ['startInteriorRender'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startInteriorRender>>, {projectUuid: string;data?: BodyType<InteriorRenderStartInput>}> = (props) => {
+          const {projectUuid,data} = props ?? {};
+
+          return  startInteriorRender(projectUuid,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartInteriorRenderMutationResult = NonNullable<Awaited<ReturnType<typeof startInteriorRender>>>
+    export type StartInteriorRenderMutationBody = BodyType<InteriorRenderStartInput> | undefined
+    export type StartInteriorRenderMutationError = ErrorType<BadRequestResponse | void | NotFoundResponse>
+
+    /**
+ * @summary Start an idempotent render from the immutable approved snapshot
+ */
+export const useStartInteriorRender = <TError = ErrorType<BadRequestResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startInteriorRender>>, TError,{projectUuid: string;data?: BodyType<InteriorRenderStartInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startInteriorRender>>,
+        TError,
+        {projectUuid: string;data?: BodyType<InteriorRenderStartInput>},
+        TContext
+      > => {
+      return useMutation(getStartInteriorRenderMutationOptions(options));
+    }
+
+export const getGetInteriorRenderStatusUrl = (projectUuid: string,) => {
+
+
+
+
+  return `/api/ai/interior-design/projects/${projectUuid}/render`
+}
+
+/**
+ * @summary Get render progress, variants, jobs, and immutable source hash
+ */
+export const getInteriorRenderStatus = async (projectUuid: string, options?: RequestInit): Promise<InteriorRenderStatus> => {
+
+  return customFetch<InteriorRenderStatus>(getGetInteriorRenderStatusUrl(projectUuid),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInteriorRenderStatusQueryKey = (projectUuid: string,) => {
+    return [
+    `/api/ai/interior-design/projects/${projectUuid}/render`
+    ] as const;
+    }
+
+
+export const getGetInteriorRenderStatusQueryOptions = <TData = Awaited<ReturnType<typeof getInteriorRenderStatus>>, TError = ErrorType<BadRequestResponse | void | NotFoundResponse>>(projectUuid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInteriorRenderStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInteriorRenderStatusQueryKey(projectUuid);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInteriorRenderStatus>>> = ({ signal }) => getInteriorRenderStatus(projectUuid, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectUuid !== null && projectUuid !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInteriorRenderStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInteriorRenderStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getInteriorRenderStatus>>>
+export type GetInteriorRenderStatusQueryError = ErrorType<BadRequestResponse | void | NotFoundResponse>
+
+
+/**
+ * @summary Get render progress, variants, jobs, and immutable source hash
+ */
+
+export function useGetInteriorRenderStatus<TData = Awaited<ReturnType<typeof getInteriorRenderStatus>>, TError = ErrorType<BadRequestResponse | void | NotFoundResponse>>(
+ projectUuid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInteriorRenderStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInteriorRenderStatusQueryOptions(projectUuid,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRetryInteriorRenderUrl = (projectUuid: string,) => {
+
+
+
+
+  return `/api/ai/interior-design/projects/${projectUuid}/render/retry`
+}
+
+/**
+ * @summary Retry a failed approved-snapshot render
+ */
+export const retryInteriorRender = async (projectUuid: string, options?: RequestInit): Promise<InteriorRenderStartResponse> => {
+
+  return customFetch<InteriorRenderStartResponse>(getRetryInteriorRenderUrl(projectUuid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryInteriorRenderMutationOptions = <TError = ErrorType<BadRequestResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryInteriorRender>>, TError,{projectUuid: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryInteriorRender>>, TError,{projectUuid: string}, TContext> => {
+
+const mutationKey = ['retryInteriorRender'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryInteriorRender>>, {projectUuid: string}> = (props) => {
+          const {projectUuid} = props ?? {};
+
+          return  retryInteriorRender(projectUuid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryInteriorRenderMutationResult = NonNullable<Awaited<ReturnType<typeof retryInteriorRender>>>
+
+    export type RetryInteriorRenderMutationError = ErrorType<BadRequestResponse | void | NotFoundResponse>
+
+    /**
+ * @summary Retry a failed approved-snapshot render
+ */
+export const useRetryInteriorRender = <TError = ErrorType<BadRequestResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryInteriorRender>>, TError,{projectUuid: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryInteriorRender>>,
+        TError,
+        {projectUuid: string},
+        TContext
+      > => {
+      return useMutation(getRetryInteriorRenderMutationOptions(options));
     }
 

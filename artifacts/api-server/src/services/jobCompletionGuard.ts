@@ -82,6 +82,7 @@ export const JOB_COMPLETION_REQUIREMENTS: Readonly<Record<string, JobRequirement
 
   // ── File-producing jobs — must have asset reference in result ─────────────
   image_generation:    { requiresAsset: true, requiredResultFields: ["imageUrl"] },
+  interior_render_variant: { requiresAsset: true, requiredResultFields: ["imageUrl", "storagePath"] },
   pdf_export:          { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
   pptx_export:         { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
   archive_asset:       { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },

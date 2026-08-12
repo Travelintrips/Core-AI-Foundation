@@ -530,6 +530,11 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     case "image_generation":
       return executeImageJob(job);
 
+    case "interior_render_variant": {
+      const { executeInteriorRenderVariant } = await import("./interiorRenderService.js");
+      return executeInteriorRenderVariant(job);
+    }
+
     case "image_qc":
       throw new WorkerNotImplementedError("image_qc");
 
