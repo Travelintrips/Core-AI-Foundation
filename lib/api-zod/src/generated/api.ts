@@ -12987,3 +12987,129 @@ export const EvaluateLayoutSessionConstraintsResponse = zod.object({
 })
 
 
+/**
+ * @summary Start an idempotent render from the immutable approved snapshot
+ */
+export const StartInteriorRenderParams = zod.object({
+  "projectUuid": zod.coerce.string().uuid()
+})
+
+export const startInteriorRenderBodyVariantCountDefault = 2;
+export const startInteriorRenderBodyVariantCountMax = 4;
+
+
+
+export const StartInteriorRenderBody = zod.object({
+  "variantCount": zod.number().min(1).max(startInteriorRenderBodyVariantCountMax).default(startInteriorRenderBodyVariantCountDefault)
+})
+
+export const startInteriorRenderResponseSessionProgressMin = 0;
+export const startInteriorRenderResponseSessionProgressMax = 100;
+
+
+
+export const StartInteriorRenderResponse = zod.object({
+  "session": zod.object({
+  "sessionId": zod.number(),
+  "status": zod.string(),
+  "progress": zod.number().min(startInteriorRenderResponseSessionProgressMin).max(startInteriorRenderResponseSessionProgressMax),
+  "variantCount": zod.number(),
+  "approvedSnapshotHash": zod.string().nullable(),
+  "sourceImmutable": zod.boolean(),
+  "error": zod.string().nullable(),
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "variantIndex": zod.number().nullable(),
+  "status": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "storagePath": zod.string().nullable(),
+  "qcScore": zod.number().nullable()
+})),
+  "jobs": zod.array(zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "retryCount": zod.number(),
+  "errorMessage": zod.string().nullable()
+}))
+}),
+  "idempotent": zod.boolean()
+})
+
+
+/**
+ * @summary Get render progress, variants, jobs, and immutable source hash
+ */
+export const GetInteriorRenderStatusParams = zod.object({
+  "projectUuid": zod.coerce.string().uuid()
+})
+
+export const getInteriorRenderStatusResponseProgressMin = 0;
+export const getInteriorRenderStatusResponseProgressMax = 100;
+
+
+
+export const GetInteriorRenderStatusResponse = zod.object({
+  "sessionId": zod.number(),
+  "status": zod.string(),
+  "progress": zod.number().min(getInteriorRenderStatusResponseProgressMin).max(getInteriorRenderStatusResponseProgressMax),
+  "variantCount": zod.number(),
+  "approvedSnapshotHash": zod.string().nullable(),
+  "sourceImmutable": zod.boolean(),
+  "error": zod.string().nullable(),
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "variantIndex": zod.number().nullable(),
+  "status": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "storagePath": zod.string().nullable(),
+  "qcScore": zod.number().nullable()
+})),
+  "jobs": zod.array(zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "retryCount": zod.number(),
+  "errorMessage": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Retry a failed approved-snapshot render
+ */
+export const RetryInteriorRenderParams = zod.object({
+  "projectUuid": zod.coerce.string().uuid()
+})
+
+export const retryInteriorRenderResponseSessionProgressMin = 0;
+export const retryInteriorRenderResponseSessionProgressMax = 100;
+
+
+
+export const RetryInteriorRenderResponse = zod.object({
+  "session": zod.object({
+  "sessionId": zod.number(),
+  "status": zod.string(),
+  "progress": zod.number().min(retryInteriorRenderResponseSessionProgressMin).max(retryInteriorRenderResponseSessionProgressMax),
+  "variantCount": zod.number(),
+  "approvedSnapshotHash": zod.string().nullable(),
+  "sourceImmutable": zod.boolean(),
+  "error": zod.string().nullable(),
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "variantIndex": zod.number().nullable(),
+  "status": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "storagePath": zod.string().nullable(),
+  "qcScore": zod.number().nullable()
+})),
+  "jobs": zod.array(zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "retryCount": zod.number(),
+  "errorMessage": zod.string().nullable()
+}))
+}),
+  "idempotent": zod.boolean()
+})
+
+

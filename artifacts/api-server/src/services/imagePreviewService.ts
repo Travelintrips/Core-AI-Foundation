@@ -279,6 +279,54 @@ async function persistImage(
   }
 }
 
+/**
+ * Provider-backed final render primitive used by the Interior Design
+ * rendering pipeline. It deliberately keeps the Replicate client and storage
+ * persistence in this existing service instead of introducing a second
+ * provider or storage abstraction.
+ */
+export async function generatePhotorealisticInteriorImage(input: {
+  projectUuid: string;
+  sessionId: number;
+  variantIndex: number;
+  prompt: string;
+  negativePrompt?: string;
+  aspectRatio?: string;
+  model?: string;
+  timeoutMs?: number;
+}): Promise<{ imageUrl: string; storagePath: string; model: string; latencyMs: number }> {
+  const apiKey = getProviderApiKey("replicate");
+  if (!apiKey) throw new Error("Replicate provider is not configured");
+
+  const model = input.model ?? FLUX_DEV;
+  const result = await generateReplicateImage(
+    model,
+    {
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt,
+      aspectRatio: input.aspectRatio ?? "16:9",
+      outputQuality: 90,
+    },
+    apiKey,
+    input.timeoutMs ?? 120_000,
+  );
+
+  const storagePath =
+    `interior-renders/${input.projectUuid}/${input.sessionId}/` +
+    `variant-${input.variantIndex}-${Date.now()}.webp`;
+  const storedUrl = await persistImage(result.imageUrl, storagePath);
+  if (!storedUrl) {
+    throw new Error("Generated image could not be persisted to object storage");
+  }
+
+  return {
+    imageUrl: storedUrl,
+    storagePath,
+    model,
+    latencyMs: result.latencyMs,
+  };
+}
+
 // ── Step: Generate preview prompts (LLM) ──────────────────────────────────────
 
 interface PreviewPromptResult {
