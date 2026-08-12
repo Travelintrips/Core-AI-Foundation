@@ -1,0 +1,127 @@
+19. Jika post-merge validation green:
+    MARK:
+    WP-09 COMPLETE — MERGED AND VERIFIED
+
+20. Setelah WP-09 selesai:
+    - discover ONLY next canonical Interior Design / Layout WP
+    - gunakan tracked roadmap / architecture / implementation docs sebagai authority
+    - abaikan attached_assets, prompt/session logs, dan roadmap lain yang memakai nomor WP sama
+    - buat NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+    - jika scope next WP jelas, buat branch dari verified main
+    - JANGAN implement next WP dalam task ini
+
+EXECUTION RULES:
+
+- Continue from CURRENT WP-09 working tree.
+- Do not restart implementation.
+- Do not repeat discovery.
+- Do not reopen owner decisions.
+- Do not return to WP-08.
+- Do not clean the 127 legacy API TypeScript errors.
+- Fix only genuine WP-09 regressions.
+- Do not stop merely to give a progress report.
+- Automatically continue:
+  implementation
+  → tests
+  → regression
+  → typecheck/build
+  → runtime smoke
+  → RC audit
+  → git hygiene
+  → commit
+  → push
+  → PR
+  → remote PR audit
+  → merge
+  → sync main
+  → post-merge validation
+  → next WP discovery
+
+RELEASE GATES:
+
+Required before merge:
+- WP-09 new TypeScript errors = 0
+- targeted tests = PASS
+- Interior Design regression = PASS
+- API regression = PASS
+- AI Platform regression = PASS
+- API build = PASS
+- AI Platform build = PASS
+- runtime smoke = PASS
+- P0 = 0
+- P1 = 0
+- no attached_assets
+- no prompts/session files
+- no screenshots
+- no .replit
+- no memory artifacts
+- no secrets
+- no unrelated technical debt
+
+GitHub:
+- use PR workflow
+- do not direct-push to main
+- use --force-with-lease only if a verified remote divergence requires it
+- never use plain --force
+
+STOP only if:
+1. GitHub authentication/write access genuinely fails
+2. provider/runtime dependency genuinely blocks validation
+3. a new architecture/security/data decision cannot be resolved from the already-approved WP-09 design
+4. validation failure cannot be safely repaired within WP-09 scope
+
+FINAL REPORT ONLY:
+
+WP-09
+1. Base SHA
+2. Branch
+3. Final feature SHA
+4. Changed files
+5. Approved snapshot integration
+6. Deterministic scene specification
+7. Universal Renderer reuse
+8. AI provider reuse
+9. Queue/worker integration
+10. requiredCapability verification
+11. Idempotency
+12. Retry/failure handling
+13. Storage/assets
+14. Cost tracking
+15. API
+16. InteriorDesignEditor Render panel
+17. Targeted tests
+18. Interior Design regression
+19. API regression
+20. AI Platform regression
+21. Typecheck delta
+22. API/AI Platform builds
+23. Runtime smoke
+24. P0
+25. P1
+26. PR number
+27. PR URL
+28. Merge SHA
+29. Final main SHA
+30. Post-merge validation
+31. WP-09 final status
+
+NEXT WP
+32. Canonical next WP title
+33. Objective
+34. Scope classification
+35. Owner decisions
+36. Plan path
+37. Branch created
+38. Implementation started = NO
+
+USE EXACTLY ONE VERDICT:
+
+A. WP-09 MERGED AND VERIFIED — NEXT WP READY
+B. WP-09 IMPLEMENTED AND VERIFIED — READY FOR PR
+C. WP-09 VALIDATION FAILED
+D. WP-09 ARCHITECTURE BLOCKED
+E. GITHUB/PROVIDER EXTERNAL BLOCKER
+
+IMPORTANT:
+Do not start over.
+Continue the CURRENT WP-09 implementation until the release lifecycle is complete.
