@@ -65,6 +65,10 @@ import {
   type LibraryMaterial,
 } from "@/components/material-library/MaterialSelectorDialog";
 import { MoodboardPanel } from "./MoodboardPanel";
+import {
+  ReviewVersionsPanel,
+  type InteriorVersionSnapshot,
+} from "./ReviewVersionsPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1338,6 +1342,61 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     setSaving(false);
   };
 
+  const applyVersionSnapshot = async (snapshot: InteriorVersionSnapshot) => {
+    if (!draft) return;
+    setSaving(true);
+    try {
+      let currentDraft = draft;
+
+      // The approved working draft is immutable. Re-open it through the
+      // canonical revision transition before applying a historical snapshot.
+      if (currentDraft.reviewState === "approved_for_rendering") {
+        const revisionResponse = await fetch(`/api/ai/interior-design/drafts/${projectUuid}/request-revision`, {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({
+            requestedBy: "admin",
+            reason: `Restore ${snapshot.metadata?.source ?? "historical interior version"}`,
+          }),
+        });
+        if (!revisionResponse.ok) {
+          const error = await revisionResponse.json() as { error?: string };
+          throw new Error(error.error ?? "Unable to reopen approved concept");
+        }
+        const revisionData = await revisionResponse.json() as { draft: ConceptDraft };
+        currentDraft = revisionData.draft;
+      }
+
+      const response = await fetch(`/api/ai/interior-design/drafts/${projectUuid}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({
+          spacePlan: snapshot.spacePlan,
+          materials: snapshot.materials,
+          furniture: snapshot.furniture,
+          lighting: snapshot.lighting,
+          visualConcept: snapshot.concept,
+          updatedAt: currentDraft.updatedAt,
+          editorId: "admin",
+        }),
+      });
+      const body = await response.json().catch(() => ({})) as { draft?: ConceptDraft; error?: string };
+      if (!response.ok || !body.draft) {
+        throw new Error(body.error ?? "Unable to apply historical version");
+      }
+
+      setDraft(body.draft);
+      setEditMode(false);
+      onReadyStateChange?.(false, false);
+      toast({
+        title: "Historical version applied",
+        description: "The restore was saved as a new editable version; previous history was preserved.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const resetSection = async (section: string) => {
     if (!draft) return;
     setSaving(true);
@@ -1443,6 +1502,20 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           <AlertTriangle className="size-3.5 shrink-0 text-yellow-500" />
           Approve concept before generating images to ensure the render uses the latest draft.
         </div>
+      )}
+
+      {!editMode && (
+        <ReviewVersionsPanel
+          projectUuid={projectUuid}
+          draft={draft}
+          assetImages={assetImages}
+          adminKey={adminKey}
+          onSetReviewState={setReviewState}
+          onApplySnapshot={applyVersionSnapshot}
+          onToast={(title, description, destructive = false) =>
+            toast({ title, description, variant: destructive ? "destructive" : undefined })
+          }
+        />
       )}
 
       {!editMode && <MoodboardPanel projectUuid={projectUuid} approved={isApproved} />}
