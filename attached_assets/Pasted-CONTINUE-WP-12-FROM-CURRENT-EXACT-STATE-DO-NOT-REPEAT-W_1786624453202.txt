@@ -1,0 +1,362 @@
+CONTINUE WP-12 FROM CURRENT EXACT STATE — DO NOT REPEAT WP-11.
+
+AUTHORITATIVE STATE:
+
+WP-11:
+- COMPLETE — MERGED AND VERIFIED
+- merge ancestry verified on main
+- API build PASS
+- AI Platform production build PASS
+- shared typecheck PASS
+- AI Platform typecheck PASS
+- runtime smoke:
+  - API = 200
+  - Admin = 200
+  - unauthenticated export = 401
+- WP-11 new TS errors = 0
+- P0 = 0
+- P1 = 0
+- legacy API TS debt remains OUT OF SCOPE
+
+WP-12:
+- Canonical WP = WP-12 — QA & Release
+- Classification = A — CLEARLY DEFINED
+- Branch already created locally:
+  feature/wp12-qa-release
+- NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md already completed
+- discovery document already committed
+- WP-12 implementation has NOT started
+- current blocker is ONLY GitHub push/authentication
+
+MISSION:
+
+1. Verify GitHub WRITE access FIRST.
+
+If write access still fails:
+STOP immediately and report only:
+`WP-12 BRANCH READY — GITHUB WRITE BLOCKER`
+
+Do NOT:
+- rerun WP-11
+- rediscover WP-12
+- rewrite the WP-12 plan
+- recreate branch
+- run expensive regression suites
+- change product code
+
+2. If GitHub write access works:
+   - fetch origin
+   - verify local branch is:
+     feature/wp12-qa-release
+   - verify branch originates from verified post-WP-11 main
+   - verify only the intended WP-12 discovery/plan commit exists
+   - ensure ZERO contamination:
+     attached_assets
+     prompt/session files
+     screenshots
+     .replit
+     memory artifacts
+     secrets
+
+3. Push:
+   feature/wp12-qa-release
+
+4. Fetch again and prove local SHA = remote SHA.
+
+5. WP-12 is already classification A.
+   Therefore immediately continue into WP-12 IMPLEMENTATION.
+
+IMPORTANT:
+Previous instruction said "DO NOT IMPLEMENT WP-12" only for the discovery phase.
+That discovery phase is now complete.
+WP-12 implementation is NOW AUTHORIZED.
+
+==================================================
+WP-12 — QA & RELEASE
+==================================================
+
+Use NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md as the canonical execution plan.
+
+Do NOT repeat discovery.
+
+Audit only what is necessary to execute the existing plan.
+
+MISSION:
+Implement WP-12 QA & Release end-to-end for the completed Interior Design/Layout roadmap.
+
+REUSE all existing foundations from WP-01 through WP-11.
+
+DO NOT create parallel:
+- test infrastructure
+- CI architecture
+- deployment architecture
+- auth
+- tenant resolver
+- audit system
+- storage
+- job queue
+- monitoring
+- release/version architecture
+
+WP-12 must validate the integrated Interior Design system as a whole.
+
+Execute all scope already defined in the WP-12 plan, including as applicable:
+
+- end-to-end Interior Design workflow QA
+- integration QA across WP-01 → WP-11
+- authentication/authorization
+- tenant isolation
+- ownership/IDOR
+- approval immutability
+- version/review integrity
+- placement/collision/constraint integrity
+- moodboard integrity
+- rendering pipeline
+- export pipeline
+- storage/download safety
+- job retry/idempotency
+- resource limits
+- error handling
+- frontend loading/error/empty/success states
+- production build readiness
+- release checklist
+- operational/runbook documentation
+- regression protection
+
+Test the canonical workflow end-to-end:
+
+project/design input
+→ concept/draft
+→ space plan
+→ placement
+→ constraint evaluation
+→ moodboard
+→ rendering
+→ review/versioning
+→ export
+→ final release artifacts
+
+Add only missing QA/release tests and tooling required by the canonical WP-12 plan.
+
+Do not rewrite already-covered tests merely to increase test count.
+
+==================================================
+SECURITY / RELEASE GATES
+==================================================
+
+Verify:
+
+- unauthorized access
+- cross-tenant access
+- IDOR
+- invalid UUID
+- immutable approved state
+- historical version integrity
+- signed asset/download access
+- safe MIME
+- safe filenames
+- no secret leakage
+- no sensitive provider payload leakage
+- bounded request sizes
+- bounded item counts
+- bounded render/export variants
+- retry safety
+- idempotency
+- concurrency/race behavior where relevant
+- deterministic operations where required
+
+==================================================
+VALIDATION
+==================================================
+
+Run the complete release validation required by the WP-12 plan.
+
+At minimum:
+
+- WP-12 targeted tests
+- Interior Design full regression
+- API regression
+- AI Platform regression
+- shared library typecheck
+- AI Platform typecheck
+- API build
+- AI Platform production build
+- runtime smoke
+- integrated workflow smoke/UAT
+
+Compare API TypeScript errors against the documented legacy baseline.
+
+DO NOT clean unrelated legacy technical debt.
+
+Required:
+WP-12 new TS errors = 0.
+
+==================================================
+RC AUDIT
+==================================================
+
+Perform final release-candidate audit.
+
+Required:
+
+P0 = 0
+P1 = 0
+
+Audit:
+- correctness
+- architecture reuse
+- security
+- tenant isolation
+- IDOR
+- data integrity
+- version integrity
+- approval immutability
+- rendering
+- export
+- storage
+- jobs
+- cost/provider metadata safety
+- UI
+- accessibility where covered by roadmap
+- performance/resource limits
+- test coverage
+- release documentation
+- git hygiene
+
+Fix genuine WP-12 P0/P1 findings automatically and rerun affected gates.
+
+Do not stop for ordinary engineering issues.
+
+==================================================
+GIT HYGIENE
+==================================================
+
+ZERO:
+- attached_assets
+- Pasted prompt files
+- screenshots
+- .replit contamination
+- agent memory
+- session logs
+- secrets
+- temporary render/export artifacts
+- unrelated technical debt
+
+Run:
+git diff --check
+
+Commit WP-12 cleanly.
+
+Push:
+feature/wp12-qa-release
+
+Create/reuse ONE PR to main.
+
+Suggested title:
+feat(interior-design): complete WP-12 QA and release
+
+Audit ACTUAL REMOTE PR.
+
+If:
+- scope clean
+- mergeable
+- validation green
+- WP-12 new TS errors = 0
+- P0 = 0
+- P1 = 0
+
+MERGE through GitHub PR workflow.
+
+NEVER direct-push main.
+
+==================================================
+POST-MERGE
+==================================================
+
+After merge:
+
+- fetch origin
+- sync local main exactly to origin/main
+- verify WP-12 ancestry
+- run final post-merge release validation ONCE
+- verify runtime health
+- verify integrated Interior Design workflow
+- verify no WP-12 regression
+
+If green mark exactly:
+
+WP-12 COMPLETE — MERGED AND VERIFIED
+
+Then determine from the canonical Interior Design/Layout roadmap whether:
+
+A. WP-12 is the FINAL work package for this roadmap
+or
+B. there is a canonical WP-13 successor.
+
+Do not invent WP-13.
+
+If WP-12 is final:
+mark:
+
+INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED
+
+If canonical WP-13 exists:
+discover it and create:
+NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+Do NOT implement WP-13 yet.
+
+==================================================
+AUTONOMOUS EXECUTION
+==================================================
+
+Do not stop after:
+- branch push
+- implementation
+- tests
+- RC audit
+- commit
+- PR
+- merge
+
+Continue automatically until post-merge verification.
+
+STOP only for:
+- genuine external/GitHub blocker
+- destructive production operation requiring owner approval
+- unresolved business/architecture decision not answerable from repository evidence
+- unrecoverable validation failure
+
+FINAL REPORT ONLY.
+
+Include:
+
+WP-12:
+- base main SHA
+- feature SHA
+- files changed
+- QA/release implementation
+- integrated workflow coverage
+- targeted tests
+- Interior Design regression
+- API regression
+- AI Platform regression
+- typecheck delta
+- builds
+- runtime/UAT
+- P0/P1
+- PR number/URL
+- merge SHA
+- final main SHA
+- post-merge result
+
+ROADMAP:
+- WP-12 final status
+- roadmap completion status
+- canonical next WP if any
+- next branch if applicable
+
+TARGET:
+
+WP-12 COMPLETE — MERGED AND VERIFIED
+INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED
