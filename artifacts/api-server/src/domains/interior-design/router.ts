@@ -54,6 +54,19 @@ import {
   moodboardProjectUuidSchema,
 } from "./moodboardSchemas.js";
 import { generateMoodboard, getMoodboard } from "./moodboardService.js";
+import {
+  EXPORT_FORMATS,
+  EXPORT_SECTIONS,
+  createInteriorExport,
+  cancelInteriorExport,
+  executeInteriorExportJob,
+  getExportPackageView,
+  listExportPackages,
+  retryInteriorExport,
+  resolveDownloadRedirect,
+  type InteriorExportFormat,
+  type InteriorExportSection,
+} from "./exportService.js";
 
 const router = Router();
 
@@ -674,6 +687,148 @@ router.post("/ai/interior-design/projects/:projectUuid/render/retry", async (req
     res.status(result.idempotent ? 200 : 202).json(result);
   } catch (error) {
     res.status(renderErrorStatus(error)).json({ error: error instanceof Error ? error.message : "Unable to retry render" });
+  }
+});
+
+// ── WP-11: approved Interior Design exports ────────────────────────────────────
+
+function exportErrorStatus(error: unknown): number {
+  const status = error && typeof error === "object" && "status" in error
+    ? Number((error as { status?: unknown }).status)
+    : 500;
+  return [400, 404, 409, 422].includes(status) ? status : 500;
+}
+
+router.post("/ai/interior-design/projects/:projectUuid/exports", async (req, res): Promise<void> => {
+  const projectUuid = String(req.params.projectUuid ?? "");
+  if (!isUuid(projectUuid)) {
+    res.status(400).json(structuredError("INVALID_PROJECT_UUID", "projectUuid must be a valid UUID"));
+    return;
+  }
+  try {
+    const tenant = resolveAuthenticatedTenantContext(req);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const format = body.format === undefined ? "zip" : String(body.format);
+    if (!(EXPORT_FORMATS as readonly string[]).includes(format)) {
+      res.status(400).json(structuredError("INVALID_FORMAT", "Unsupported Interior Design export format"));
+      return;
+    }
+    const rawSections = Array.isArray(body.includedSections) ? body.includedSections : undefined;
+    const includedSections = rawSections?.filter((value): value is InteriorExportSection =>
+      typeof value === "string" && (EXPORT_SECTIONS as readonly string[]).includes(value),
+    );
+    if (rawSections && (!includedSections || includedSections.length !== rawSections.length || includedSections.length === 0)) {
+      res.status(400).json(structuredError("INVALID_SECTIONS", "includedSections must contain valid non-empty section names"));
+      return;
+    }
+    const result = await createInteriorExport({
+      projectUuid,
+      tenantId: tenant.tenantId,
+      format: format as InteriorExportFormat,
+      includedSections,
+      sourceVersionId: typeof body.sourceVersionId === "string" ? body.sourceVersionId : undefined,
+      idempotencyKey: typeof body.idempotencyKey === "string" ? body.idempotencyKey : undefined,
+    });
+    res.status(result.created ? 202 : 200).json(result);
+  } catch (error) {
+    res.status(exportErrorStatus(error)).json(structuredError(
+      error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "EXPORT_REQUEST_FAILED",
+      error instanceof Error ? error.message : "Unable to request export",
+    ));
+  }
+});
+
+router.get("/ai/interior-design/projects/:projectUuid/exports", async (req, res): Promise<void> => {
+  const projectUuid = String(req.params.projectUuid ?? "");
+  if (!isUuid(projectUuid)) {
+    res.status(400).json(structuredError("INVALID_PROJECT_UUID", "projectUuid must be a valid UUID"));
+    return;
+  }
+  try {
+    const tenant = resolveAuthenticatedTenantContext(req);
+    res.json({ exports: await listExportPackages(projectUuid, tenant.tenantId) });
+  } catch (error) {
+    res.status(exportErrorStatus(error)).json(structuredError("EXPORT_LIST_FAILED", error instanceof Error ? error.message : "Unable to list exports"));
+  }
+});
+
+router.get("/ai/interior-design/exports/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json(structuredError("INVALID_EXPORT_ID", "Export id must be a positive integer"));
+    return;
+  }
+  try {
+    const tenant = resolveAuthenticatedTenantContext(req);
+    const result = await getExportPackageView(id, tenant.tenantId, true);
+    if (!result) {
+      res.status(404).json(structuredError("EXPORT_NOT_FOUND", "Export package not found"));
+      return;
+    }
+    res.json({ export: result });
+  } catch (error) {
+    res.status(exportErrorStatus(error)).json(structuredError("EXPORT_READ_FAILED", error instanceof Error ? error.message : "Unable to read export"));
+  }
+});
+
+router.post("/ai/interior-design/exports/:id/cancel", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json(structuredError("INVALID_EXPORT_ID", "Export id must be a positive integer"));
+    return;
+  }
+  try {
+    const tenant = resolveAuthenticatedTenantContext(req);
+    const result = await cancelInteriorExport(id, tenant.tenantId);
+    if (!result) {
+      res.status(404).json(structuredError("EXPORT_NOT_CANCELLABLE", "Export package not found or already terminal"));
+      return;
+    }
+    res.json({ export: result });
+  } catch (error) {
+    res.status(exportErrorStatus(error)).json(structuredError("EXPORT_CANCEL_FAILED", error instanceof Error ? error.message : "Unable to cancel export"));
+  }
+});
+
+router.post("/ai/interior-design/exports/:id/retry", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json(structuredError("INVALID_EXPORT_ID", "Export id must be a positive integer"));
+    return;
+  }
+  try {
+    const tenant = resolveAuthenticatedTenantContext(req);
+    const result = await retryInteriorExport(id, tenant.tenantId);
+    res.status(result.created ? 202 : 200).json(result);
+  } catch (error) {
+    res.status(exportErrorStatus(error)).json(structuredError(
+      error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "EXPORT_RETRY_FAILED",
+      error instanceof Error ? error.message : "Unable to retry export",
+    ));
+  }
+});
+
+/**
+ * Public signed download. The token contains the canonical storage URL and
+ * project id; this route verifies both against the package before redirecting.
+ */
+router.get("/public/interior-design/exports/:id/download", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!Number.isInteger(id) || id <= 0 || !token) {
+    res.status(400).json({ error: "A valid export id and download token are required" });
+    return;
+  }
+  try {
+    const url = await resolveDownloadRedirect(id, token);
+    if (!url) {
+      res.status(401).json({ error: "Download token is invalid, expired, or does not match this export" });
+      return;
+    }
+    res.setHeader("Cache-Control", "private, no-store");
+    res.redirect(302, url);
+  } catch {
+    res.status(503).json({ error: "Export storage is temporarily unavailable" });
   }
 });
 
