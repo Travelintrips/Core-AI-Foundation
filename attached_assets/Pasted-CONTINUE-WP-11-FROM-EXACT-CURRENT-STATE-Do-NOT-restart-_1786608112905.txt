@@ -1,0 +1,232 @@
+CONTINUE WP-11 FROM EXACT CURRENT STATE.
+
+Do NOT restart.
+Do NOT checkout main again.
+Do NOT repeat discovery.
+Do NOT re-audit foundations already confirmed.
+Do NOT recreate feature/wp11-export-engine.
+Do NOT provide intermediate report unless genuinely blocked.
+
+You are already on:
+feature/wp11-export-engine
+
+Continue exactly from your last statement:
+
+"menerapkan jalur export Interior Design di atas fondasi yang ada:
+paket persisten, compiler PDF/CSV/ZIP, worker queue,
+route tenant-scoped, lalu panel editor."
+
+EXECUTE NOW:
+
+1. Complete canonical `export_packages` persistence.
+   - additive migration only if already required by WP-11 plan
+   - tenant/project/version linkage
+   - immutable source/version identity
+   - deterministic/idempotent export identity
+   - lifecycle status
+   - artifact metadata
+   - sanitized failure metadata
+
+2. Complete ExportService/compiler:
+   - canonical server-side approved/versioned source
+   - deterministic manifest
+   - PDF
+   - CSV
+   - ZIP
+   - no mutation of WP-08/WP-09/WP-10 state
+   - no duplicate PDF/ZIP/storage architecture
+
+3. Complete existing job/worker integration:
+   - queued
+   - processing
+   - completed
+   - failed
+   - retry-safe
+   - idempotent
+   - bounded concurrency/resource caps
+   - tenant scoped
+
+4. Complete canonical storage integration:
+   - safe path
+   - safe filename
+   - MIME validation
+   - artifact metadata
+   - signed download URL
+   - expiration according to existing storage convention
+   - no public permanent URL if canonical architecture requires signed access
+
+5. Complete WP-11 API using the route conventions already audited.
+   Implement the planned E8/E9 contract rather than inventing parallel routes.
+
+   Enforce:
+   - auth
+   - tenant isolation
+   - ownership
+   - IDOR protection
+   - UUID/schema validation
+   - bounded request
+   - structured errors
+
+6. Complete InteriorDesignEditor integration.
+   NO standalone frontend.
+
+   Include:
+   - Export section
+   - source/version information
+   - format/options
+   - Start Export
+   - queued/processing status
+   - progress where supported
+   - completed artifacts
+   - PDF/CSV/ZIP actions
+   - error
+   - retry
+   - download through canonical signed URL
+
+7. Preserve WP-10 version semantics:
+   exported historical/approved version must remain immutable.
+   Export must record exactly which version produced the artifact.
+
+8. Add/finalize comprehensive WP-11 tests.
+
+Must cover at minimum:
+- PDF
+- CSV
+- ZIP
+- deterministic manifest
+- approved source
+- historical version
+- missing optional sections
+- idempotency
+- duplicate request
+- retry
+- worker failure
+- tenant isolation
+- IDOR
+- unauthorized
+- invalid UUID
+- ownership
+- storage path
+- safe filename
+- MIME
+- signed URL
+- resource limits
+- no secret leakage
+- no unnecessary PII leakage
+- immutable source
+- version linkage
+- UI loading/success/error/retry/download
+
+No `.skip`, `.todo`, `.only`.
+
+9. Run release validation:
+- WP-11 targeted tests
+- Interior Design regression
+- API regression
+- AI Platform regression
+- shared library typecheck
+- WP-11 TypeScript delta
+- API build
+- AI Platform typecheck
+- AI Platform production build
+- runtime smoke
+
+Historical API TypeScript debt remains OUT OF SCOPE.
+
+Required:
+WP-11 NEW TS errors = 0.
+
+10. Perform RC audit.
+
+Required:
+P0 = 0
+P1 = 0
+
+Fix genuine WP-11 P0/P1 automatically and rerun affected gates.
+
+11. Git hygiene before commit.
+
+ZERO:
+- attached_assets
+- Pasted files
+- prompt/session files
+- screenshots
+- .replit contamination
+- agent memory
+- secrets
+- generated temporary PDF/CSV/ZIP files
+- unrelated changes
+
+Run:
+git diff --check
+
+12. Commit legitimate WP-11 implementation cleanly.
+
+13. Push:
+feature/wp11-export-engine
+
+14. Create/reuse ONE PR to main.
+
+Title:
+feat(interior-design): implement WP-11 export engine
+
+15. Audit ACTUAL REMOTE PR.
+
+If clean + mergeable + validation green + P0=0 + P1=0:
+MERGE through GitHub PR workflow.
+
+Never direct-push main.
+
+16. After merge:
+- fetch origin
+- sync local main = origin/main
+- verify WP-11 ancestry
+- run post-merge validation
+
+If green mark exactly:
+
+WP-11 COMPLETE — MERGED AND VERIFIED
+
+17. THEN immediately discover canonical WP-12 from the SAME
+Interior Design/Layout roadmap.
+
+Create/update:
+NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+
+Determine:
+- canonical WP-12 title
+- objective
+- predecessor/successor
+- evidence
+- reusable foundations
+- implementation gaps
+- security requirements
+- migrations
+- tests
+- owner decisions
+- classification
+
+If WP-12 = A — CLEARLY DEFINED:
+create and push its feature branch from verified main.
+
+DO NOT IMPLEMENT WP-12 YET.
+
+IMPORTANT:
+Do not stop after implementation.
+Do not stop after tests.
+Do not stop after commit.
+Do not stop after push.
+Do not stop after PR creation.
+
+Continue automatically through:
+IMPLEMENT → TEST → RC AUDIT → CLEAN → COMMIT → PUSH → PR →
+REMOTE AUDIT → MERGE → POST-MERGE VERIFY → WP-12 DISCOVERY.
+
+STOP ONLY for:
+- genuine GitHub/external blocker
+- destructive migration requiring owner approval
+- unresolved architecture/data/security decision
+- canonical roadmap conflict
+- unrecoverable validation failure
+
+Return ONE FINAL REPORT only.
