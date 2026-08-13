@@ -59,6 +59,8 @@ import {
   Server,
   DollarSign,
   RotateCw,
+  Download,
+  Package,
 } from "lucide-react";
 import {
   MaterialSelectorDialog,
@@ -310,7 +312,9 @@ async function fetchRenderApi<T>(
   });
   const body = await response.json().catch(() => ({})) as unknown;
   if (!response.ok) {
-    const message = readText(asRecord(body), "error", "message") || `Request failed (${response.status})`;
+    const envelope = asRecord(body);
+    const nestedError = asRecord(readValue(envelope, "error"));
+    const message = readText(nestedError, "message") || readText(envelope, "message", "error") || `Request failed (${response.status})`;
     throw new Error(message);
   }
   return body as T;
@@ -1168,6 +1172,270 @@ function RenderPanel({ projectUuid, adminKey, approved, hasUnsavedEdits, draft }
   );
 }
 
+// ── Export panel ──────────────────────────────────────────────────────────────
+
+interface ExportPackageView {
+  id: number;
+  format: string;
+  status: string;
+  fileName: string | null;
+  fileSizeBytes: number | null;
+  retryCount: number;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string | null;
+  downloadUrl?: string;
+  downloadExpiresAt?: string;
+}
+
+function normalizeExportPackage(value: unknown): ExportPackageView | null {
+  const record = asRecord(value);
+  const id = readNumber(record, "id");
+  if (!id) return null;
+  return {
+    id,
+    format: readText(record, "format") || "zip",
+    status: readText(record, "status") || "queued",
+    fileName: readText(record, "fileName") || null,
+    fileSizeBytes: readNumber(record, "fileSizeBytes"),
+    retryCount: readNumber(record, "retryCount") ?? 0,
+    errorMessage: readText(record, "errorMessage") || null,
+    createdAt: readText(record, "createdAt"),
+    updatedAt: readText(record, "updatedAt"),
+    expiresAt: readText(record, "expiresAt") || null,
+    downloadUrl: readText(record, "downloadUrl") || undefined,
+    downloadExpiresAt: readText(record, "downloadExpiresAt") || undefined,
+  };
+}
+
+function exportStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    queued: "Queued",
+    generating: "Generating",
+    completed: "Ready",
+    failed: "Failed",
+    cancelled: "Cancelled",
+  };
+  return labels[status.toLowerCase()] ?? status.replace(/_/g, " ");
+}
+
+function exportStatusTone(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === "completed") return "text-emerald-300 border-emerald-400/30 bg-emerald-400/10";
+  if (normalized === "failed") return "text-rose-300 border-rose-400/30 bg-rose-400/10";
+  if (normalized === "cancelled") return "text-muted-foreground border-border/50 bg-muted/10";
+  return "text-amber-200 border-amber-400/30 bg-amber-400/10";
+}
+
+function formatBytes(bytes: number | null): string {
+  if (!bytes || bytes < 1024) return bytes ? `${bytes} B` : "—";
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface ExportPanelProps {
+  projectUuid: string;
+  adminKey?: string;
+  approved: boolean;
+  hasUnsavedEdits: boolean;
+}
+
+function ExportPanel({ projectUuid, adminKey, approved, hasUnsavedEdits }: ExportPanelProps) {
+  const { toast } = useToast();
+  const [packages, setPackages] = useState<ExportPackageView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadExports = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const response = await fetchRenderApi<{ exports?: unknown[] }>(
+        `/api/ai/interior-design/projects/${encodeURIComponent(projectUuid)}/exports`,
+        adminKey,
+      );
+      setPackages((response.exports ?? []).flatMap((item) => {
+        const normalized = normalizeExportPackage(item);
+        return normalized ? [normalized] : [];
+      }));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export status unavailable");
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, [adminKey, projectUuid]);
+
+  useEffect(() => {
+    if (!approved) {
+      setPackages([]);
+      setLoading(false);
+      return;
+    }
+    void loadExports(true);
+  }, [approved, loadExports]);
+
+  const latest = packages[0] ?? null;
+  const latestActive = latest && ["queued", "generating"].includes(latest.status.toLowerCase());
+
+  useEffect(() => {
+    if (!approved || !latestActive) return;
+    const timer = window.setInterval(() => void loadExports(), 4000);
+    return () => window.clearInterval(timer);
+  }, [approved, latestActive, loadExports]);
+
+  const requestExport = async (retry = false) => {
+    if (!approved || hasUnsavedEdits || working) return;
+    setWorking(true);
+    setError(null);
+    try {
+      const response = await fetchRenderApi<{ package?: unknown }>(
+        retry
+          ? `/api/ai/interior-design/exports/${latest?.id ?? ""}/retry`
+          : `/api/ai/interior-design/projects/${encodeURIComponent(projectUuid)}/exports`,
+        adminKey,
+        {
+          method: "POST",
+          body: retry ? undefined : JSON.stringify({ format: "zip" }),
+        },
+      );
+      const created = normalizeExportPackage(response.package);
+      if (created) setPackages((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      toast({
+        title: retry ? "Export retry started" : "Export requested",
+        description: "Your approved design package is being prepared.",
+      });
+      await loadExports();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to request export";
+      setError(message);
+      toast({ title: retry ? "Export retry failed" : "Export request failed", description: message, variant: "destructive" });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const cancelExport = async () => {
+    if (!latest || working) return;
+    setWorking(true);
+    try {
+      await fetchRenderApi(
+        `/api/ai/interior-design/exports/${latest.id}/cancel`,
+        adminKey,
+        { method: "POST" },
+      );
+      await loadExports();
+      toast({ title: "Export cancelled" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to cancel export";
+      setError(message);
+      toast({ title: "Unable to cancel export", description: message, variant: "destructive" });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const isFailed = latest?.status.toLowerCase() === "failed";
+  const isCancelled = latest?.status.toLowerCase() === "cancelled";
+  const isReady = latest?.status.toLowerCase() === "completed" && Boolean(latest.downloadUrl);
+
+  return (
+    <section className="rounded-lg border border-violet-400/20 bg-violet-400/[0.035] p-3.5" data-testid="export-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-violet-300/20 bg-violet-300/10">
+            <Package className="size-3.5 text-violet-200" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-mono text-sm font-semibold">Export package</p>
+              {latest && (
+                <Badge className={cn("text-[10px] border font-mono px-1.5 h-4", exportStatusTone(latest.status))}>
+                  {exportStatusLabel(latest.status)}
+                </Badge>
+              )}
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Download a deterministic ZIP of the approved specification, materials, furniture, and moodboard documents.
+            </p>
+          </div>
+        </div>
+        {!approved && (
+          <span className="text-[10px] font-mono text-amber-300">Approval required</span>
+        )}
+      </div>
+
+      {hasUnsavedEdits && approved && (
+        <div className="mt-3 flex items-center gap-2 rounded border border-yellow-500/20 bg-yellow-500/10 px-3 py-1.5 text-[10px] text-yellow-300">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          Save the current edits before creating an export.
+        </div>
+      )}
+
+      {loading ? (
+        <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" /> Loading export history…
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {!latest || isFailed || isCancelled ? (
+            <Button
+              size="sm"
+              className="h-7 gap-1.5 text-[10px] font-mono"
+              onClick={() => void requestExport(Boolean(latest && (isFailed || isCancelled)))}
+              disabled={!approved || hasUnsavedEdits || working}
+            >
+              {working ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}
+              {latest && (isFailed || isCancelled) ? "Retry export" : "Create ZIP export"}
+            </Button>
+          ) : latestActive ? (
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-[10px] font-mono" onClick={() => void cancelExport()} disabled={working}>
+              {working ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+              Cancel export
+            </Button>
+          ) : null}
+          {isReady && latest?.downloadUrl && (
+            <a
+              href={latest.downloadUrl}
+              className="inline-flex h-7 items-center gap-1.5 rounded-md bg-emerald-500 px-2.5 text-[10px] font-mono font-medium text-emerald-950 transition-colors hover:bg-emerald-400"
+              download={latest.fileName ?? undefined}
+            >
+              <Download className="size-3" /> Download ZIP
+            </a>
+          )}
+          {latest && (
+            <span className="text-[10px] text-muted-foreground">
+              {latest.fileName ?? `Package #${latest.id}`}
+              {latest.fileSizeBytes ? ` · ${formatBytes(latest.fileSizeBytes)}` : ""}
+            </span>
+          )}
+        </div>
+      )}
+
+      {latest?.status.toLowerCase() === "generating" && (
+        <p className="mt-2 text-[10px] text-muted-foreground">Compiling approved data and uploading the package. This panel updates automatically.</p>
+      )}
+      {latest?.errorMessage && (
+        <p className="mt-2 text-[10px] text-rose-300">{latest.errorMessage}</p>
+      )}
+      {error && !latest?.errorMessage && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-rose-300">
+          <span>{error}</span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={() => void loadExports(true)}>
+            <RefreshCw className="mr-1 size-3" /> Refresh
+          </Button>
+        </div>
+      )}
+      {latest?.downloadExpiresAt && isReady && (
+        <p className="mt-2 text-[9px] text-muted-foreground">
+          Download link expires {new Date(latest.downloadExpiresAt).toLocaleString()}.
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ── Main Editor ───────────────────────────────────────────────────────────────
 
 interface InteriorDesignEditorProps {
@@ -1526,6 +1794,14 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           approved={isApproved}
           hasUnsavedEdits={draft.hasUnsavedEdits}
           draft={draft}
+        />
+      )}
+      {!editMode && (
+        <ExportPanel
+          projectUuid={projectUuid}
+          adminKey={adminKey}
+          approved={isApproved}
+          hasUnsavedEdits={draft.hasUnsavedEdits}
         />
       )}
 

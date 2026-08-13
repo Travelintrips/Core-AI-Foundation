@@ -2,7 +2,7 @@
   "team": "17",
   "domain": "Interior Design Planning",
   "branch": "feature/17-interior-design",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "remediationVersion": "P0+P1 compliant",
 
   "ownership": {
@@ -83,14 +83,20 @@
     "public": [
       "POST /api/public/interior-design/projects                  (returns accessToken)",
       "POST /api/public/interior-design/projects/:token/brief",
-      "GET  /api/public/interior-design/projects/:token/outputs"
+      "GET  /api/public/interior-design/projects/:token/outputs",
+      "GET  /api/public/interior-design/exports/:id/download?token=:signedToken"
     ],
     "admin": [
       "GET    /api/ai/interior-design/projects",
       "GET    /api/ai/interior-design/projects/:id",
       "PATCH  /api/ai/interior-design/projects/:id",
       "POST   /api/ai/interior-design/projects/:id/generate",
-      "GET    /api/ai/interior-design/projects/:id/outputs"
+      "GET    /api/ai/interior-design/projects/:id/outputs",
+      "POST   /api/ai/interior-design/projects/:projectUuid/exports",
+      "GET    /api/ai/interior-design/projects/:projectUuid/exports",
+      "GET    /api/ai/interior-design/exports/:id",
+      "POST   /api/ai/interior-design/exports/:id/cancel",
+      "POST   /api/ai/interior-design/exports/:id/retry"
     ]
   }
 }

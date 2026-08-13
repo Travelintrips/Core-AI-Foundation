@@ -1,0 +1,155 @@
+CONTINUE WP-11 FROM EXISTING REMOTE BRANCH — DO NOT RECREATE WORK.
+
+Current fact:
+
+* Local checkout is still on `main`
+* Remote branch already exists:
+  `origin/feature/wp11-export-engine`
+* WP-11 must continue from that remote branch
+* Do NOT rebuild WP-11 from scratch
+* Do NOT repeat WP-10
+* Do NOT repeat WP-11 discovery
+
+EXECUTE:
+
+1. Fetch:
+   `git fetch origin --prune`
+
+2. Inspect remote WP-11 branch:
+   `git log --oneline --decorate origin/main..origin/feature/wp11-export-engine`
+   `git diff --name-status origin/main...origin/feature/wp11-export-engine`
+
+3. Confirm whether remote branch contains legitimate WP-11 implementation.
+
+4. If legitimate:
+   create/switch local tracking branch directly from remote:
+   `feature/wp11-export-engine`
+
+5. Use REMOTE WP-11 branch as source of truth.
+
+6. Do NOT cherry-pick prompt/session/upload commits.
+   If remote branch contains contamination:
+   preserve legitimate WP-11 implementation,
+   remove only contamination safely.
+
+7. Continue ONLY the missing WP-11 gaps:
+
+   * `export_packages`
+   * ExportService
+   * deterministic manifest
+   * PDF
+   * CSV
+   * ZIP
+   * signed download URL
+   * job lifecycle
+   * tenant/project scoped API
+   * E8/E9 contract
+   * InteriorDesignEditor Export panel
+   * version linkage to WP-10
+   * idempotency/retry
+   * resource caps
+   * storage safety
+
+8. Do not create duplicate:
+
+   * export infrastructure
+   * PDF engine
+   * ZIP engine
+   * queue
+   * storage
+   * versioning service
+
+9. Finish tests:
+
+   * PDF/CSV/ZIP
+   * manifest
+   * approved/historical version
+   * tenant isolation
+   * IDOR
+   * unauthorized
+   * invalid UUID
+   * storage/signed URL
+   * MIME/filename safety
+   * idempotency
+   * retry/job failure
+   * version linkage
+   * no secret/PII leakage
+   * UI loading/success/error/retry/download
+
+10. Run:
+
+    * WP-11 targeted tests
+    * Interior Design regression
+    * API regression
+    * AI Platform regression
+    * shared typecheck
+    * WP-11 TS delta
+    * API build
+    * AI Platform typecheck/build
+    * runtime smoke
+
+Required:
+
+* WP-11 new TS errors = 0
+* P0 = 0
+* P1 = 0
+* legacy TS debt remains OUT OF SCOPE
+
+11. RC audit.
+
+12. Fix only real WP-11 blockers.
+
+13. Git hygiene ZERO:
+
+    * attached_assets
+    * prompt/session
+    * screenshots
+    * .replit
+    * memory
+    * secrets
+    * temp export files
+    * unrelated changes
+
+14. Commit cleanly.
+
+15. Push `feature/wp11-export-engine`.
+
+16. Create/update one PR to `main`.
+
+17. Audit REMOTE PR.
+
+18. If clean + mergeable + green + P0/P1 zero:
+    MERGE through GitHub PR workflow.
+
+19. Sync main.
+
+20. Run post-merge validation.
+
+21. Mark:
+    `WP-11 COMPLETE — MERGED AND VERIFIED`
+
+22. Then discover canonical WP-12 in the same Interior Design/Layout roadmap.
+
+23. Create/update `NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md`.
+
+24. If WP-12 is clearly defined, create its branch.
+
+25. DO NOT implement WP-12.
+
+Do not stop for progress reports.
+Continue automatically until final gate or genuine external blocker.
+
+FINAL REPORT ONLY:
+
+* remote WP-11 SHA
+* final WP-11 SHA
+* changed files
+* implementation summary
+* tests/regressions
+* typecheck delta
+* P0/P1
+* PR
+* merge SHA
+* final main SHA
+* post-merge status
+* WP-12 title/scope

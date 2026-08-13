@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Team 17 — Interior Design Planning API
-  version: "1.0.0"
+  version: "1.1.0"
   description: |
     API for the Interior Design Planning domain.
     Supports 9 room types (living_room, bedroom, kitchen, office, cafe, restaurant, hotel, lobby, booth).
@@ -252,6 +252,156 @@ paths:
         "500":
           $ref: '#/components/responses/ServerError'
 
+  # ── WP-11: approved export packages ─────────────────────────────────────────
+
+  /api/ai/interior-design/projects/{projectUuid}/exports:
+    post:
+      tags: [interior-design-admin]
+      operationId: requestInteriorDesignExport
+      summary: Queue an export package from the approved project snapshot
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectUuid'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InteriorExportRequest'
+      responses:
+        "202":
+          description: Export queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteriorExportMutationResponse'
+        "200":
+          description: Existing idempotent export returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteriorExportMutationResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    get:
+      tags: [interior-design-admin]
+      operationId: listInteriorDesignExports
+      summary: List recent export packages for an Interior Design project
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectUuid'
+      responses:
+        "200":
+          description: Recent export packages
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exports]
+                properties:
+                  exports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InteriorExportPackage'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+  /api/ai/interior-design/exports/{id}:
+    get:
+      tags: [interior-design-admin]
+      operationId: getInteriorDesignExport
+      summary: Get export package status and a safe signed download URL
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        "200":
+          description: Export package status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [export]
+                properties:
+                  export:
+                    $ref: '#/components/schemas/InteriorExportPackage'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/ai/interior-design/exports/{id}/cancel:
+    post:
+      tags: [interior-design-admin]
+      operationId: cancelInteriorDesignExport
+      summary: Cancel a queued or generating export package
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        "200":
+          description: Cancelled export package
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [export]
+                properties:
+                  export:
+                    $ref: '#/components/schemas/InteriorExportPackage'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/ai/interior-design/exports/{id}/retry:
+    post:
+      tags: [interior-design-admin]
+      operationId: retryInteriorDesignExport
+      summary: Queue a new attempt for a failed or cancelled export
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        "202":
+          description: Retry queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteriorExportMutationResponse'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/public/interior-design/exports/{id}/download:
+    get:
+      tags: [interior-design-public]
+      operationId: downloadInteriorDesignExport
+      summary: Redirect to a completed export after validating its signed token
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the object storage URL
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     adminApiKey:
@@ -266,8 +416,120 @@ components:
       required: true
       schema:
         type: integer
+    ProjectUuid:
+      name: projectUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExportId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
 
   schemas:
+    InteriorExportFormat:
+      type: string
+      enum: [zip, specification_pdf, materials_csv, materials_pdf, furniture_csv, furniture_pdf, moodboard_pdf]
+
+    InteriorExportSection:
+      type: string
+      enum: [specification, materials, furniture, moodboard]
+
+    InteriorExportRequest:
+      type: object
+      properties:
+        format:
+          $ref: '#/components/schemas/InteriorExportFormat'
+        includedSections:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InteriorExportSection'
+        sourceVersionId:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          description: Optional approved WP-10 design_spec version id.
+        idempotencyKey:
+          type: string
+          maxLength: 200
+
+    InteriorExportPackage:
+      type: object
+      required: [id, projectUuid, sourceVersionHash, format, includedSections, status, retryCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        projectUuid:
+          type: string
+          format: uuid
+        sourceVersionId:
+          type: string
+          nullable: true
+        sourceVersionNumber:
+          type: integer
+          nullable: true
+        sourceVersionHash:
+          type: string
+        format:
+          $ref: '#/components/schemas/InteriorExportFormat'
+        includedSections:
+          type: array
+          items:
+            $ref: '#/components/schemas/InteriorExportSection'
+        status:
+          type: string
+          enum: [queued, generating, completed, failed, cancelled]
+        fileName:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+          nullable: true
+        fileSizeBytes:
+          type: integer
+          nullable: true
+        checksum:
+          type: string
+          nullable: true
+        retryCount:
+          type: integer
+        errorCode:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        downloadUrl:
+          type: string
+          format: uri
+        downloadExpiresAt:
+          type: string
+          format: date-time
+
+    InteriorExportMutationResponse:
+      type: object
+      required: [package, created]
+      properties:
+        package:
+          $ref: '#/components/schemas/InteriorExportPackage'
+        created:
+          type: boolean
+
     RoomType:
       type: string
       enum:
@@ -677,6 +939,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Request conflicts with the current resource state
       content:
         application/json:
           schema:

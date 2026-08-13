@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import PDFDocument from "pdfkit";
 import JSZip from "jszip";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   aiEntityVersionsTable,
   aiJobsTable,
@@ -107,6 +107,17 @@ export class ExportRequestError extends Error {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function parseSourceVersionId(value: string): number {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new ExportRequestError("INVALID_SOURCE_VERSION", "sourceVersionId must be a positive integer.");
+  }
+  const id = Number(value);
+  if (!Number.isSafeInteger(id)) {
+    throw new ExportRequestError("INVALID_SOURCE_VERSION", "sourceVersionId is outside the supported range.");
+  }
+  return id;
 }
 
 function stableStringify(value: unknown): string {
@@ -244,15 +255,17 @@ async function getApprovedSource(
   let resolvedVersionId: string | null = null;
   let resolvedVersionNumber: number | null = null;
   if (sourceVersionId) {
+    const versionId = parseSourceVersionId(sourceVersionId);
     const [version] = await db
       .select()
       .from(aiEntityVersionsTable)
       .where(and(
-        eq(aiEntityVersionsTable.id, Number(sourceVersionId)),
+        eq(aiEntityVersionsTable.id, versionId),
         eq(aiEntityVersionsTable.entityType, "design_spec"),
         eq(aiEntityVersionsTable.entityId, projectUuid),
         eq(aiEntityVersionsTable.tenantId, tenantId),
         eq(aiEntityVersionsTable.isApproved, true),
+        isNull(aiEntityVersionsTable.deletedAt),
       ))
       .limit(1);
     if (!version) throw new ExportRequestError("VERSION_NOT_APPROVED", "The requested version is not an approved version owned by this project.", 409);
@@ -279,19 +292,24 @@ async function getApprovedSource(
       metadata: { approvedAt: draft.approvedAt.toISOString(), draftId: draft.id },
     };
     const [version] = await db
-      .select({ id: aiEntityVersionsTable.id, versionNumber: aiEntityVersionsTable.versionNumber, contentHash: aiEntityVersionsTable.contentHash })
+      .select()
       .from(aiEntityVersionsTable)
       .where(and(
         eq(aiEntityVersionsTable.entityType, "design_spec"),
         eq(aiEntityVersionsTable.entityId, projectUuid),
         eq(aiEntityVersionsTable.tenantId, tenantId),
         eq(aiEntityVersionsTable.isApproved, true),
+        isNull(aiEntityVersionsTable.deletedAt),
       ))
       .orderBy(desc(aiEntityVersionsTable.versionNumber))
       .limit(1);
     if (version) {
-      resolvedVersionId = String(version.id);
-      resolvedVersionNumber = version.versionNumber;
+      const versionSnapshot = asRecord(version.contentSnapshot);
+      if (Object.keys(versionSnapshot).length > 0) {
+        snapshot = versionSnapshot;
+        resolvedVersionId = String(version.id);
+        resolvedVersionNumber = version.versionNumber;
+      }
     }
   }
 
@@ -352,6 +370,7 @@ export async function getExportPackageView(id: number, tenantId: string, include
   if (!row) return null;
   const view = packageView(row);
   if (includeDownload && row.status === "completed" && row.storagePath) {
+    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return view;
     const [project] = await db.select({ id: creativeProjectsTable.id }).from(creativeProjectsTable)
       .where(eq(creativeProjectsTable.projectId, row.projectUuid)).limit(1);
     if (project) {
@@ -463,7 +482,7 @@ export async function retryInteriorExport(id: number, tenantId: string): Promise
   });
 }
 
-async function buildArtifacts(source: ExportSource, format: InteriorExportFormat, sections: string[]): Promise<{ buffer: Buffer; fileName: string; mimeType: string; manifest: Record<string, unknown> }> {
+export async function buildArtifacts(source: ExportSource, format: InteriorExportFormat, sections: string[]): Promise<{ buffer: Buffer; fileName: string; mimeType: string; manifest: Record<string, unknown> }> {
   const projectTitle = `Interior Design ${source.projectUuid.slice(0, 8)}`;
   const materials = asItems(source.snapshot.materials);
   const furniture = asItems(source.snapshot.furniture);
@@ -525,7 +544,12 @@ async function buildArtifacts(source: ExportSource, format: InteriorExportFormat
   return { buffer, fileName: "interior-design-package.zip", mimeType: "application/zip", manifest };
 }
 
-export async function executeInteriorExportJob(job: { id: number; payloadJson: unknown }): Promise<Record<string, unknown>> {
+export async function executeInteriorExportJob(job: {
+  id: number;
+  payloadJson: unknown;
+  retryCount?: number;
+  maxRetry?: number;
+}): Promise<Record<string, unknown>> {
   const payload = asRecord(job.payloadJson);
   const packageId = Number(payload["packageId"]);
   const tenantId = typeof payload["_tenantId"] === "string" ? payload["_tenantId"] : "";
@@ -550,11 +574,16 @@ export async function executeInteriorExportJob(job: { id: number; payloadJson: u
     await uploadToSupabase(storagePath, artifact.buffer, artifact.mimeType);
     const checksum = createHash("sha256").update(artifact.buffer).digest("hex");
     const expiresAt = new Date(Date.now() + EXPORT_DOWNLOAD_TTL_SECONDS * 1000);
-    await db.update(exportPackagesTable).set({
+    const [completed] = await db.update(exportPackagesTable).set({
       status: "completed", storagePath, fileName: artifact.fileName, mimeType: artifact.mimeType,
       fileSizeBytes: artifact.buffer.byteLength, checksum, manifestJson: artifact.manifest,
       expiresAt, errorCode: null, errorMessage: null, updatedAt: new Date(),
-    }).where(and(eq(exportPackagesTable.id, packageId), eq(exportPackagesTable.tenantId, tenantId), eq(exportPackagesTable.status, "generating")));
+    }).where(and(eq(exportPackagesTable.id, packageId), eq(exportPackagesTable.tenantId, tenantId), eq(exportPackagesTable.status, "generating"))).returning();
+    if (!completed) {
+      const raced = await getExportPackage(packageId, tenantId);
+      if (raced?.status === "cancelled") return { packageId, status: "cancelled" };
+      throw new Error("Export package changed while finalizing.");
+    }
     await logAudit("interior-design-export", "export_completed", String(packageId), "export_package", "success", {
       tenantId, projectUuid: claimed.projectUuid, fileSizeBytes: artifact.buffer.byteLength,
     });
@@ -562,8 +591,10 @@ export async function executeInteriorExportJob(job: { id: number; payloadJson: u
   } catch (error) {
     const message = error instanceof ExportRequestError ? error.message : "Export generation failed.";
     const code = error instanceof ExportRequestError ? error.code : "GENERATION_FAILED";
+    const shouldRetry = typeof job.retryCount === "number" && typeof job.maxRetry === "number" && job.retryCount < job.maxRetry;
     await db.update(exportPackagesTable).set({
-      status: "failed", errorCode: code, errorMessage: message.slice(0, 500), retryCount: sql`${exportPackagesTable.retryCount} + 1`, updatedAt: new Date(),
+      status: shouldRetry ? "queued" : "failed",
+      errorCode: code, errorMessage: message.slice(0, 500), retryCount: sql`${exportPackagesTable.retryCount} + 1`, updatedAt: new Date(),
     }).where(and(eq(exportPackagesTable.id, packageId), eq(exportPackagesTable.tenantId, tenantId), sql`${exportPackagesTable.status} = 'generating'`));
     await logAudit("interior-design-export", "export_failed", String(packageId), "export_package", "failure", { tenantId, projectUuid: claimed.projectUuid, errorCode: code });
     throw error;
@@ -574,6 +605,7 @@ export async function resolveDownloadRedirect(id: number, token: string): Promis
   const row = await db.select().from(exportPackagesTable).where(eq(exportPackagesTable.id, id)).limit(1);
   const packageRow = row[0];
   if (!packageRow || packageRow.status !== "completed" || !packageRow.storagePath) return null;
+  if (packageRow.expiresAt && packageRow.expiresAt.getTime() <= Date.now()) return null;
   const project = await db.select({ id: creativeProjectsTable.id }).from(creativeProjectsTable).where(eq(creativeProjectsTable.projectId, packageRow.projectUuid)).limit(1);
   if (!project[0]) return null;
   const expected = getSupabasePublicUrl(packageRow.storagePath);
