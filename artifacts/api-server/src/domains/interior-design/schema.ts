@@ -20,6 +20,9 @@ import {
   boolean,
   integer,
   timestamp,
+  bigint,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // Use the shared app schema — matches the rest of the platform
@@ -216,6 +219,49 @@ export const idInteriorAssetImagesTable = appSchema.table("id_interior_asset_ima
 
 export type InsertIdInteriorAssetImage = typeof idInteriorAssetImagesTable.$inferInsert;
 export type IdInteriorAssetImage       = typeof idInteriorAssetImagesTable.$inferSelect;
+
+// ── export_packages (WP-11) ────────────────────────────────────────────────────
+// Metadata only. Binary exports live in the canonical ai-assets object bucket.
+// The source snapshot is identified by its immutable hash and, when available,
+// the generic WP-10 design_spec version id.
+export const exportPackagesTable = appSchema.table("export_packages", {
+  id:                 bigserial("id", { mode: "number" }).primaryKey(),
+  tenantId:           text("tenant_id").notNull().default("default"),
+  projectUuid:        text("project_uuid").notNull(),
+  sourceVersionId:    text("source_version_id"),
+  sourceVersionNumber: integer("source_version_number"),
+  sourceVersionHash:  text("source_version_hash").notNull(),
+  format:             text("format").notNull().default("zip"),
+  includedSections:   jsonb("included_sections").notNull().default(["specification", "materials", "furniture", "moodboard"]),
+  status:             text("status").notNull().default("queued"),
+  jobId:              bigint("job_id", { mode: "number" }),
+  idempotencyKey:     text("idempotency_key").notNull(),
+  manifestJson:       jsonb("manifest_json"),
+  storagePath:        text("storage_path"),
+  fileName:           text("file_name"),
+  mimeType:           text("mime_type"),
+  fileSizeBytes:      integer("file_size_bytes"),
+  checksum:           text("checksum"),
+  errorCode:          text("error_code"),
+  errorMessage:       text("error_message"),
+  retryCount:         integer("retry_count").notNull().default(0),
+  expiresAt:           timestamp("expires_at", { withTimezone: true }),
+  createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  tenantProjectIdx: index("export_packages_tenant_project_idx").on(table.tenantId, table.projectUuid),
+  activeIdx: index("export_packages_active_idx").on(table.tenantId, table.projectUuid, table.status),
+  idempotencyIdx: uniqueIndex("export_packages_idempotency_uidx").on(
+    table.tenantId,
+    table.projectUuid,
+    table.sourceVersionHash,
+    table.format,
+    table.idempotencyKey,
+  ),
+}));
+
+export type InsertExportPackage = typeof exportPackagesTable.$inferInsert;
+export type ExportPackage = typeof exportPackagesTable.$inferSelect;
 
 export const CONCEPT_DRAFT_REVIEW_STATES = [
   "ai_generated",

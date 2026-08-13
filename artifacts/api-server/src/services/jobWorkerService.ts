@@ -640,6 +640,11 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       return executeExportWorkspaceJob(job);
     }
 
+    case "interior_design_export": {
+      const { executeInteriorExportJob } = await import("../domains/interior-design/exportService.js");
+      return executeInteriorExportJob(job);
+    }
+
     default:
       return { message: `Job type '${job.jobType}' dispatched`, jobId: job.id };
   }
