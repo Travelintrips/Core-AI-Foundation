@@ -1,0 +1,165 @@
+CONTINUE WP-12 FROM CURRENT STATE — FINAL RELEASE ONLY.
+
+CURRENT VERIFIED STATE:
+
+* WP-12 hardening implemented
+* targeted tests: 10/10 PASS
+* development DB collision preflight: 0
+* additive migration applied successfully
+* fingerprint column verified
+* canonical unique index verified
+* existing rows changed: 0
+* API regression: 6156/6156 PASS
+* AI Platform regression: 495/495 PASS
+* Customer Portal typecheck: PASS
+* API build: PASS
+* AI Platform typecheck/build: PASS
+* WP-12 new TS errors: 0
+* shared/full typecheck failures are legacy/out of scope
+* API is being restarted for runtime smoke
+
+DO NOT:
+
+* repeat discovery
+* redesign idempotency
+* touch unrelated legacy TS debt
+* rerun migration unless verification requires it
+* modify existing data
+* commit prompt/session/attached_assets/screenshots/.replit/memory/secrets
+* start WP-13 implementation
+
+CONTINUE DIRECTLY:
+
+1. Finish runtime smoke:
+
+   * API health = 200
+   * Admin = 200/login expected
+   * unauthorized export/download routes = expected 401
+   * valid non-expired download works
+   * expired package rejected
+   * same idempotency key + same request reuses canonical package
+   * same key + different format/sections returns 409
+   * no duplicate package/job/artifact created
+
+2. Final RC audit:
+   verify
+
+   * expiry safety
+   * fingerprint correctness
+   * canonical unique scope
+   * race/concurrency safety
+   * idempotency semantics
+   * tenant isolation
+   * IDOR
+   * approved/version immutability
+   * signed download safety
+   * storage path/MIME/filename safety
+   * retry/job lifecycle
+   * secret/PII leakage
+   * resource caps
+   * UI/release states
+
+Required:
+
+* P0 = 0
+* P1 = 0
+* WP-12 new errors = 0
+
+3. Git hygiene:
+   ZERO:
+
+   * attached_assets
+   * prompt/Pasted files
+   * screenshots
+   * .replit
+   * memory/session artifacts
+   * secrets
+   * temporary export files
+   * unrelated technical debt
+
+Run:
+`git diff --check`
+
+4. Commit only legitimate WP-12 release-hardening changes.
+
+5. Push:
+   `feature/wp12-qa-release`
+
+6. Create/update ONE PR to `main`.
+
+Suggested title:
+`feat(interior-design): complete WP-12 QA and release`
+
+7. Audit the ACTUAL REMOTE PR:
+
+   * correct base/head
+   * clean scope
+   * migration additive
+   * no contamination
+   * mergeable
+   * validation green
+   * P0 = 0
+   * P1 = 0
+
+8. If clean:
+   MERGE through GitHub PR workflow.
+   NEVER direct-push main.
+
+9. Sync local `main = origin/main`.
+
+10. Verify WP-12 merge ancestry.
+
+11. Run post-merge validation ONCE:
+
+* WP-12 targeted tests
+* Interior Design/export regression
+* API regression
+* AI Platform regression
+* relevant typecheck delta
+* API build
+* AI Platform build
+* runtime smoke
+
+12. If green:
+    mark exactly:
+    `WP-12 COMPLETE — MERGED AND VERIFIED`
+
+13. Then inspect canonical Interior Design/Layout roadmap.
+
+If WP-12 is final:
+mark exactly:
+`INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED`
+
+If canonical WP-13 exists:
+
+* create/update `NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md`
+* determine title/objective/classification
+* create branch only if clearly defined
+* DO NOT implement WP-13
+
+Do not stop for progress reports.
+Continue until merge/post-merge final verdict or a genuine external blocker.
+
+FINAL REPORT ONLY:
+
+* WP-12 final feature SHA
+* changed files
+* migration/index verification
+* fingerprint/idempotency behavior
+* concurrency result
+* runtime smoke
+* targeted tests
+* regression totals
+* TS delta
+* P0/P1
+* PR number/URL
+* merge SHA
+* final main SHA
+* post-merge result
+* roadmap completion status
+* WP-13 title if any
+* WP-13 implementation started = NO
+
+TARGET:
+`WP-12 COMPLETE — MERGED AND VERIFIED`
+`INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED`
