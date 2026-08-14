@@ -1,0 +1,419 @@
+WP-12 P1 HOTFIX ONLY — FIX, RELEASE, VERIFY, AND CLOSE.
+
+DO NOT RESTART WP-12.
+DO NOT REPEAT DISCOVERY OR ALREADY-PASSED VALIDATION BEFORE THE FIX.
+DO NOT START WP-13.
+
+AUTHORITATIVE STATE:
+
+- PR #18 already MERGED
+- merge SHA:
+  ceefdf697c5e8d9153b4bef342e289cb26a13689
+- main == origin/main
+- WP-12 implementation is merged
+- canonical unique index verified:
+  (tenant_id, project_uuid, source_version_hash, idempotency_key)
+- export_packages rows after cleanup = 0
+- API regression = 6150/6150 PASS
+- AI Platform = 495/495 PASS
+- WP-12 idempotency tests = 4/4 PASS
+- shared typecheck = PASS
+- AI Platform typecheck/build = PASS
+- API build = PASS
+- WP-12 TS delta = 0
+- 127 legacy API TS errors = OUT OF SCOPE
+- P0 = 0
+- P1 = 1
+
+CONFIRMED P1:
+
+An export package with:
+
+expires_at < current time
+
+can still be downloaded when its signed download token remains valid.
+
+Actual:
+HTTP 302 redirect to storage
+
+Expected:
+request MUST be rejected before storage redirect.
+
+This violates:
+- expiry enforcement
+- signed download safety
+
+MISSION:
+Fix this P1 end-to-end and close WP-12.
+
+==================================================
+1. CREATE HOTFIX BRANCH
+==================================================
+
+Start from verified origin/main:
+
+fix/wp12-expired-export-download
+
+Do not modify main directly.
+
+==================================================
+2. TRACE THE CANONICAL DOWNLOAD PATH
+==================================================
+
+Audit ONLY the actual download path used by WP-11/WP-12.
+
+Determine where:
+
+signed token
+→ export package lookup
+→ authorization/tenant/ownership where applicable
+→ expiry validation
+→ storage URL generation/redirect
+
+currently occurs.
+
+Find exactly why a still-valid signed token bypasses package `expires_at`.
+
+Do NOT create another download architecture.
+
+==================================================
+3. FIX EXPIRY ENFORCEMENT
+==================================================
+
+The server MUST enforce package expiry independently of token expiry.
+
+Required invariant:
+
+PACKAGE DOWNLOAD ALLOWED only when:
+
+- package exists
+- package is eligible/ready
+- token is valid
+- token belongs to the intended package
+- package itself has NOT expired
+
+At request time:
+
+if:
+expires_at <= current server time
+
+then:
+- reject request
+- DO NOT generate storage signed URL
+- DO NOT redirect to storage
+- DO NOT expose storage path/object details
+
+Use repository-consistent HTTP semantics.
+
+401/403/404/410 may be used only according to existing API conventions.
+Do not invent inconsistent behavior merely to satisfy the smoke script.
+
+Security invariant is more important:
+expired package MUST NEVER produce 302/storage access.
+
+Also verify boundary:
+expires_at == current time
+must be treated as expired.
+
+==================================================
+4. CHECK ALL DOWNLOAD ENTRY POINTS
+==================================================
+
+Ensure the guard cannot be bypassed through another WP-11 export endpoint/helper.
+
+Search for all paths that can:
+
+- generate export download URLs
+- redirect to storage
+- create signed storage URLs
+- resolve export package tokens
+
+Reuse ONE canonical eligibility/expiry guard where appropriate.
+
+Do not duplicate security logic unnecessarily.
+
+==================================================
+5. TEST THE P1 FIX
+==================================================
+
+Add focused regression tests covering at minimum:
+
+A. valid token + active package
+=> download allowed
+
+B. valid token + expired package
+=> rejected
+=> NO storage redirect
+
+C. expired package + token still cryptographically valid
+=> rejected
+
+D. expires_at exactly at boundary/current time
+=> rejected
+
+E. invalid token
+=> rejected
+
+F. package not ready/ineligible
+=> rejected according to canonical lifecycle
+
+G. expired package
+=> storage signing helper NOT invoked
+
+H. valid active package
+=> existing download behavior remains unchanged
+
+Use deterministic/fake clock where existing test architecture supports it.
+Avoid flaky real-time sleeps.
+
+==================================================
+6. INVESTIGATE THE PREVIOUS HTTP 500 FIXTURE
+==================================================
+
+Previous post-merge smoke also reported:
+
+duplicate/reuse/conflict fixture POST => HTTP 500
+
+Investigate ONLY enough to determine cause.
+
+If caused by:
+- WP-12 schema
+- migration
+- idempotency implementation
+- fixture incompatibility with canonical request contract
+
+then fix it in this hotfix and add regression coverage.
+
+If it is purely a bad smoke fixture:
+fix the smoke/UAT fixture, NOT production behavior.
+
+If unrelated external/environment issue:
+document evidence and do not expand scope.
+
+Required final E2E proof:
+
+same key + same canonical request
+=> reuse existing package
+
+same key + materially different canonical request
+=> 409 conflict
+
+and:
+no duplicate package/job/artifact.
+
+==================================================
+7. VALIDATE HOTFIX
+==================================================
+
+First run focused tests.
+
+Then run only required release regression:
+
+- WP-12 targeted tests
+- Interior Design/export tests
+- API regression
+- AI Platform regression
+- shared typecheck
+- WP-12/hotfix TS delta
+- API build
+- AI Platform typecheck/build
+
+Required:
+
+WP-12 new TS errors = 0
+P0 = 0
+P1 = 0
+
+127 legacy API TS errors remain OUT OF SCOPE.
+
+==================================================
+8. RUNTIME SMOKE
+==================================================
+
+Restart affected runtime from hotfix code.
+
+Verify:
+
+- API health = 200
+- Admin = 200
+- unauthenticated export = 401
+- invalid token rejected
+- valid token + non-expired package behaves normally
+- VALID TOKEN + EXPIRED PACKAGE IS REJECTED
+- expired package produces NO 302
+- expired package produces NO storage signed URL
+- idempotent identical request reuses package
+- conflicting canonical request returns 409
+- no duplicate package/job/artifact
+
+Clean all test fixtures afterward.
+
+Verify development DB returns to expected clean state.
+
+==================================================
+9. RC AUDIT
+==================================================
+
+Audit ONLY release-critical delta:
+
+- expiry enforcement
+- signed download safety
+- tenant/ownership/IDOR
+- idempotency
+- concurrency
+- storage redirect/signing
+- secrets/PII
+- regression risk
+
+Required:
+
+P0 = 0
+P1 = 0
+
+==================================================
+10. GIT HYGIENE
+==================================================
+
+ZERO:
+
+- attached_assets
+- Pasted/prompt files
+- screenshots
+- .replit
+- memory/session artifacts
+- secrets
+- temporary exports
+- unrelated technical debt
+
+Run:
+git diff --check
+
+Commit only the legitimate hotfix.
+
+Suggested commit:
+
+fix(export): enforce package expiry before download
+
+==================================================
+11. RELEASE HOTFIX
+==================================================
+
+Push:
+
+fix/wp12-expired-export-download
+
+Create ONE PR to main.
+
+Title:
+
+fix(interior-design): enforce WP-12 export expiry
+
+Audit ACTUAL REMOTE PR.
+
+Required:
+
+- correct base/head
+- only legitimate hotfix files
+- no contamination
+- mergeable
+- validation green
+- P0 = 0
+- P1 = 0
+
+If all green:
+
+MERGE THROUGH GITHUB PR WORKFLOW.
+
+NEVER direct-push main.
+
+==================================================
+12. POST-MERGE VERIFICATION
+==================================================
+
+Sync:
+
+local main == origin/main
+
+Verify hotfix ancestry.
+
+Run post-merge validation ONCE.
+
+Most important acceptance proof:
+
+VALID SIGNED TOKEN
++
+EXPIRED export_packages.expires_at
+=
+REJECTED
+
+There MUST NOT be HTTP 302/storage redirect.
+
+Also prove:
+
+same idempotency key + same request
+=> reuse
+
+same idempotency key + different canonical request
+=> 409
+
+==================================================
+13. CLOSE WP-12
+==================================================
+
+If and ONLY if all gates are green and:
+
+P0 = 0
+P1 = 0
+
+mark EXACTLY:
+
+WP-12 COMPLETE — MERGED AND VERIFIED
+
+Canonical roadmap already established:
+WP-13 does not exist.
+
+Therefore, after successful closure mark EXACTLY:
+
+INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED
+
+Do NOT invent or implement WP-13.
+
+Do not stop after:
+- fixing code
+- tests
+- push
+- PR
+- merge
+
+Continue through POST-MERGE verification.
+
+STOP only for:
+- genuine unresolved P0/P1
+- database safety blocker
+- real external infrastructure blocker
+
+FINAL REPORT ONLY:
+
+- root cause of expiry bypass
+- hotfix files
+- focused tests
+- expired-package HTTP result
+- proof no storage redirect/signing
+- idempotency E2E result
+- API regression
+- AI Platform regression
+- TS delta
+- P0/P1
+- hotfix SHA
+- PR number/URL
+- merge SHA
+- final main SHA
+- post-merge validation
+- WP-12 final status
+- roadmap final status
+
+TARGET:
+
+WP-12 COMPLETE — MERGED AND VERIFIED
+
+INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED
