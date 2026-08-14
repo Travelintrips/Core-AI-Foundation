@@ -1,0 +1,139 @@
+CONTINUE FROM CURRENT STATE — WP-12 POST-MERGE CLOSURE ONLY.
+
+DO NOT REIMPLEMENT, REDISCOVER, OR RE-AUDIT COMPLETED WORK.
+
+AUTHORITATIVE STATE:
+- WP-12 = QA & Release
+- PR #18 = MERGED
+- merge commit = ceefdf69
+- canonical idempotency hardening is merged
+- canonical unique scope:
+  tenant + project + approved source hash + idempotency key
+- incorrect previous development index was safely replaced
+- development export_packages rows remained 0
+- migration applied successfully
+- remote feature branch was cleaned before PR
+- PR #18 contained only legitimate WP-12 hardening
+- pre-merge gates were green
+- API health = 200
+- Admin = 200
+- unauthorized export = 401
+- invalid download token = 401
+- legacy TypeScript debt remains OUT OF SCOPE
+
+MISSION:
+FINISH POST-MERGE VALIDATION AND CLOSE THE ROADMAP.
+
+1. Verify:
+   local main == origin/main
+   and merge commit ceefdf69 is in main ancestry.
+
+2. Verify migration state read-only:
+   - canonical fingerprint/source hash column exists
+   - canonical unique index exists
+   - index columns are exactly the intended canonical scope
+   - no unexpected row mutation/data loss
+
+Do NOT reapply migration unless genuinely missing.
+
+3. Run post-merge validation ONCE:
+   - WP-12 targeted tests
+   - Interior Design/export regression
+   - API regression
+   - AI Platform regression
+   - shared/relevant typecheck
+   - compare WP-12 TS delta against legacy baseline
+   - API production build
+   - AI Platform typecheck
+   - AI Platform production build
+   - runtime smoke
+
+Required:
+- WP-12 new TS errors = 0
+- P0 = 0
+- P1 = 0
+- legacy TS debt = OUT OF SCOPE
+
+4. Runtime smoke must verify at minimum:
+   - API health 200
+   - Admin 200/login expected
+   - unauthenticated protected export route 401
+   - invalid download token rejected
+   - expired package cannot be downloaded
+   - same idempotency key + same canonical request => reuse
+   - same key + materially different canonical request => 409
+   - no duplicate package/job/artifact on conflict
+
+Use safe development/test data only.
+
+5. Perform final RC audit ONLY for release-critical invariants:
+   - tenant isolation / IDOR
+   - approved/version immutability
+   - expiry enforcement
+   - signed download safety
+   - canonical idempotency
+   - concurrency/race safety
+   - job retry safety
+   - storage safety
+   - resource caps
+   - secret/PII leakage
+   - git/release hygiene
+
+Do not reopen architecture decisions.
+
+6. If all green, mark EXACTLY:
+
+WP-12 COMPLETE — MERGED AND VERIFIED
+
+7. THEN inspect the authoritative Interior Design/Layout roadmap only.
+
+Determine whether WP-12 is the final canonical WP.
+
+IF WP-12 IS FINAL:
+mark EXACTLY:
+
+INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED
+
+Do not invent WP-13.
+
+IF an authoritative canonical WP-13 genuinely exists:
+- identify title/objective
+- update NEXT_WP_DISCOVERY_AND_IMPLEMENTATION_PLAN.md
+- classify A/B/C/D
+- create/push branch only if classification A
+- DO NOT IMPLEMENT WP-13
+
+8. Do not stop for intermediate progress reports.
+Only stop for:
+- genuine post-merge P0/P1 regression
+- database safety blocker
+- external infrastructure blocker
+
+FINAL REPORT ONLY:
+- PR #18
+- merge SHA
+- final local main SHA
+- final origin/main SHA
+- migration/index verification
+- WP-12 targeted tests
+- Interior Design/export regression
+- API regression total
+- AI Platform regression total
+- typecheck result and WP-12 delta
+- builds
+- runtime smoke
+- idempotency/reuse/conflict result
+- expiry result
+- P0/P1
+- WP-12 final status
+- roadmap final status
+- WP-13 title/classification if genuinely present
+- WP-13 implementation started = NO
+
+TARGET:
+
+WP-12 COMPLETE — MERGED AND VERIFIED
+
+and, if supported by the authoritative roadmap:
+
+INTERIOR DESIGN / LAYOUT ROADMAP COMPLETE — RELEASE CANDIDATE VERIFIED
