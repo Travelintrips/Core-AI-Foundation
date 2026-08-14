@@ -29,6 +29,7 @@ import {
   canonicalizeExportSections,
   isSameExportRequest,
 } from "./exportIdempotency.js";
+import { isExportPackageDownloadable } from "./exportDownloadPolicy.js";
 
 export const INTERIOR_EXPORT_JOB_TYPE = "interior_design_export";
 export const EXPORT_DOWNLOAD_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -359,12 +360,14 @@ export async function getExportPackageView(id: number, tenantId: string, include
   const row = await getExportPackage(id, tenantId);
   if (!row) return null;
   const view = packageView(row);
-  if (includeDownload && row.status === "completed" && row.storagePath) {
+  if (includeDownload && isExportPackageDownloadable(row)) {
+    const storagePath = row.storagePath;
+    if (!storagePath) return view;
     const [project] = await db.select({ id: creativeProjectsTable.id }).from(creativeProjectsTable)
       .where(eq(creativeProjectsTable.projectId, row.projectUuid)).limit(1);
     if (project) {
       const ttl = EXPORT_DOWNLOAD_TTL_SECONDS;
-      const rawUrl = getSupabasePublicUrl(row.storagePath);
+      const rawUrl = getSupabasePublicUrl(storagePath);
       const token = generateDownloadToken(project.id, rawUrl, ttl);
       view.downloadUrl = `/api/public/interior-design/exports/${row.id}/download?token=${encodeURIComponent(token)}`;
       view.downloadExpiresAt = new Date(Date.now() + ttl * 1000).toISOString();
@@ -595,12 +598,15 @@ export async function executeInteriorExportJob(job: { id: number; payloadJson: u
 export async function resolveDownloadRedirect(id: number, token: string): Promise<string | null> {
   const row = await db.select().from(exportPackagesTable).where(eq(exportPackagesTable.id, id)).limit(1);
   const packageRow = row[0];
-  if (!packageRow || packageRow.status !== "completed" || !packageRow.storagePath) return null;
-  const project = await db.select({ id: creativeProjectsTable.id }).from(creativeProjectsTable).where(eq(creativeProjectsTable.projectId, packageRow.projectUuid)).limit(1);
-  if (!project[0]) return null;
-  const expected = getSupabasePublicUrl(packageRow.storagePath);
+  if (!packageRow || !isExportPackageDownloadable(packageRow)) return null;
+  const storagePath = packageRow.storagePath;
+  if (!storagePath) return null;
   const { verifyDownloadToken } = await import("../../services/signedUrlService.js");
   const verified = verifyDownloadToken(token);
-  if (!verified.valid || verified.payload?.pid !== project[0].id || verified.payload.url !== expected) return null;
+  if (!verified.valid || !verified.payload) return null;
+  const project = await db.select({ id: creativeProjectsTable.id }).from(creativeProjectsTable).where(eq(creativeProjectsTable.projectId, packageRow.projectUuid)).limit(1);
+  if (!project[0]) return null;
+  const expected = getSupabasePublicUrl(storagePath);
+  if (verified.payload.pid !== project[0].id || verified.payload.url !== expected) return null;
   return expected;
 }
