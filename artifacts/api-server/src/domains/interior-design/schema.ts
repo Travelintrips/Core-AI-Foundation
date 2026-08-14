@@ -251,11 +251,10 @@ export const exportPackagesTable = appSchema.table("export_packages", {
 }, (table) => ({
   tenantProjectIdx: index("export_packages_tenant_project_idx").on(table.tenantId, table.projectUuid),
   activeIdx: index("export_packages_active_idx").on(table.tenantId, table.projectUuid, table.status),
-  idempotencyIdx: uniqueIndex("export_packages_idempotency_uidx").on(
+  idempotencyIdx: uniqueIndex("export_packages_idempotency_scope_uidx").on(
     table.tenantId,
     table.projectUuid,
     table.sourceVersionHash,
-    table.format,
     table.idempotencyKey,
   ),
 }));
