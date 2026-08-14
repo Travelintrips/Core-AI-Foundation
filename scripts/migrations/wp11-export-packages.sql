@@ -39,6 +39,6 @@ CREATE INDEX IF NOT EXISTS export_packages_active_idx
   ON ai_platform.export_packages (tenant_id, project_uuid, status);
 CREATE UNIQUE INDEX IF NOT EXISTS export_packages_idempotency_uidx
   ON ai_platform.export_packages
-    (tenant_id, project_uuid, source_version_hash, format, idempotency_key);
+    (tenant_id, project_uuid, source_version_hash, idempotency_key);
 CREATE INDEX IF NOT EXISTS export_packages_source_version_idx
   ON ai_platform.export_packages (tenant_id, project_uuid, source_version_id);

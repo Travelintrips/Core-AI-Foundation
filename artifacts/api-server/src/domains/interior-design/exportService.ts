@@ -24,6 +24,11 @@ import {
 import { uploadToSupabase, getSupabasePublicUrl } from "../../lib/supabaseStorage.js";
 import { generateDownloadToken } from "../../services/signedUrlService.js";
 import { logAudit } from "../../services/aiAuditService.js";
+import {
+  CANONICAL_EXPORT_SECTIONS,
+  canonicalizeExportSections,
+  isSameExportRequest,
+} from "./exportIdempotency.js";
 
 export const INTERIOR_EXPORT_JOB_TYPE = "interior_design_export";
 export const EXPORT_DOWNLOAD_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -42,7 +47,7 @@ export const EXPORT_FORMATS = [
 ] as const;
 export type InteriorExportFormat = (typeof EXPORT_FORMATS)[number];
 
-export const EXPORT_SECTIONS = ["specification", "materials", "furniture", "moodboard"] as const;
+export const EXPORT_SECTIONS = CANONICAL_EXPORT_SECTIONS;
 export type InteriorExportSection = (typeof EXPORT_SECTIONS)[number];
 
 export interface ExportSource {
@@ -217,13 +222,16 @@ function mimeFor(format: InteriorExportFormat): string {
 }
 
 function sectionList(format: InteriorExportFormat, requested?: InteriorExportSection[]): InteriorExportSection[] {
-  const selected = requested?.length ? Array.from(new Set(requested)) : [...EXPORT_SECTIONS];
+  const selected = requested?.length
+    ? canonicalizeExportSections(requested)
+    : [...EXPORT_SECTIONS];
   const required: InteriorExportSection | undefined =
     format.startsWith("materials") ? "materials" :
     format.startsWith("furniture") ? "furniture" :
     format === "specification_pdf" ? "specification" :
     format === "moodboard_pdf" ? "moodboard" : undefined;
-  return required && !selected.includes(required) ? [...selected, required] : selected;
+  const withRequired = required && !selected.includes(required) ? [...selected, required] : selected;
+  return canonicalizeExportSections(withRequired) as InteriorExportSection[];
 }
 
 async function getApprovedSource(
@@ -383,10 +391,16 @@ export async function createInteriorExport(input: CreateInteriorExportInput): Pr
     eq(exportPackagesTable.tenantId, input.tenantId),
     eq(exportPackagesTable.projectUuid, input.projectUuid),
     eq(exportPackagesTable.sourceVersionHash, source.sourceVersionHash),
-    eq(exportPackagesTable.format, format),
     eq(exportPackagesTable.idempotencyKey, idempotencyKey),
   )).limit(1);
   if (existing[0]) {
+    if (!isSameExportRequest(existing[0], { format, includedSections: sections })) {
+      throw new ExportRequestError(
+        "IDEMPOTENCY_CONFLICT",
+        "The idempotency key was already used for a different export request.",
+        409,
+      );
+    }
     return { package: (await getExportPackageView(existing[0].id, input.tenantId, true))!, created: false };
   }
 
@@ -405,11 +419,19 @@ export async function createInteriorExport(input: CreateInteriorExportInput): Pr
     eq(exportPackagesTable.tenantId, input.tenantId),
     eq(exportPackagesTable.projectUuid, input.projectUuid),
     eq(exportPackagesTable.sourceVersionHash, source.sourceVersionHash),
-    eq(exportPackagesTable.format, format),
     eq(exportPackagesTable.idempotencyKey, idempotencyKey),
   )).limit(1))[0];
   if (!row) throw new Error("Unable to create export package.");
-  if (!inserted[0]) return { package: (await getExportPackageView(row.id, input.tenantId, true))!, created: false };
+  if (!inserted[0]) {
+    if (!isSameExportRequest(row, { format, includedSections: sections })) {
+      throw new ExportRequestError(
+        "IDEMPOTENCY_CONFLICT",
+        "The idempotency key was already used for a different export request.",
+        409,
+      );
+    }
+    return { package: (await getExportPackageView(row.id, input.tenantId, true))!, created: false };
+  }
 
   try {
     const [job] = await db.insert(aiJobsTable).values({
