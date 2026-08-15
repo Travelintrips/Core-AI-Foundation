@@ -280,6 +280,13 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
     onError: (e: Error) => toast({ title: "Gagal", description: e.message, variant: "destructive" }),
   });
 
+  useEffect(() => {
+    if (!canvasSession) {
+      setCandidateList([]);
+      setConstraintEvaluation(null);
+    }
+  }, [canvasSession]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -312,13 +319,6 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const canGenerate = !!brief && !["completed"].includes(project.status) && !generateMutation.isPending;
   const canvasPlacements = placementData?.data ?? [];
   const canvasReadOnly = canvasSession?.metadata?.["approvedForRendering"] === true;
-
-  useEffect(() => {
-    if (!canvasSession) {
-      setCandidateList([]);
-      setConstraintEvaluation(null);
-    }
-  }, [canvasSession]);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
