@@ -900,6 +900,8 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
     : asset.qcScore >= 80 ? "text-green-400"
     : asset.qcScore >= 60 ? "text-yellow-400"
     : "text-red-400";
+  const pipelineStage = (asset.metadata as Record<string, unknown> | null | undefined)?.pipelineStage;
+  const isPromptGenerating = pipelineStage === "prompt_generation";
 
   return (
     <div className="border border-border/50 rounded-lg bg-card/40 overflow-hidden">
@@ -915,7 +917,9 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
         ) : asset.status === "generating" ? (
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
             <Loader2 className="size-8 animate-spin text-primary" />
-            <span className="text-[10px] font-mono">Generating…</span>
+            <span className="text-[10px] font-mono">
+              {isPromptGenerating ? "Preparing prompt…" : "Generating…"}
+            </span>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -1824,6 +1828,10 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const imageGenerationActive =
     generationTriggered ||
     assets.some((a) => a.status === "generating" || a.status === "pending");
+  const promptGenerationActive = assets.some((asset) =>
+    (asset.status === "generating" || asset.status === "pending") &&
+    (asset.metadata as Record<string, unknown> | null | undefined)?.pipelineStage === "prompt_generation",
+  );
 
   const { data: imageAnalytics } = useGetCreativeImageAnalytics();
 
@@ -2227,7 +2235,9 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               {imageGenerationActive && assets.length === 0 && (
                 <div className="flex items-center gap-2 text-xs text-blue-400 font-mono bg-blue-500/10 border border-blue-500/20 rounded px-3 py-2">
                   <Loader2 className="size-3.5 animate-spin" />
-                  Image Prompt Generator running… FLUX.1 image generation will start shortly.
+                  {promptGenerationActive
+                    ? "Image Prompt Generator running…"
+                    : "FLUX.1 sedang membuat konsep gambar…"}
                 </div>
               )}
 

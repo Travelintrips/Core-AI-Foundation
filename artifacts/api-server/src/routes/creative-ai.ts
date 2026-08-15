@@ -38,6 +38,7 @@ import {
 import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
 
 const router = Router();
+const activeImagePipelines = new Set<string>();
 
 /** POST /creative-ai/brief — create project.
  * P0-3 rate limited: 10 req / 10 min per IP.
@@ -233,6 +234,11 @@ router.post("/creative-ai/projects/:id/generate-image", async (req, res): Promis
     return;
   }
 
+  if (activeImagePipelines.has(project.projectId)) {
+    res.status(409).json({ error: "Image generation already in progress for this project" });
+    return;
+  }
+
   // ── Interior Design approval guard ────────────────────────────────────────
   // Interior Design projects MUST have an approved concept snapshot before
   // image generation begins. Generating from an unapproved (mutable) draft is
@@ -277,17 +283,22 @@ router.post("/creative-ai/projects/:id/generate-image", async (req, res): Promis
   }
 
   // Fire off in background — never await
-  runImageDesignerPipeline(project.id, project.projectId, variations).catch(async (err) => {
-    console.error(`[image-designer] Pipeline failed for project ${project.projectId}:`, err);
-    await logAudit(
-      "creative-ai",
-      "image_pipeline_error",
-      project.projectId,
-      "creative_project",
-      "failure",
-      { error: String(err) },
-    ).catch(() => {});
-  });
+  activeImagePipelines.add(project.projectId);
+  runImageDesignerPipeline(project.id, project.projectId, variations)
+    .catch(async (err) => {
+      console.error(`[image-designer] Pipeline failed for project ${project.projectId}:`, err);
+      await logAudit(
+        "creative-ai",
+        "image_pipeline_error",
+        project.projectId,
+        "creative_project",
+        "failure",
+        { error: String(err) },
+      ).catch(() => {});
+    })
+    .finally(() => {
+      activeImagePipelines.delete(project.projectId);
+    });
 
   res.status(202).json(
     GenerateImageConceptsResponse.parse({

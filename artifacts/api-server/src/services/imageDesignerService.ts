@@ -188,6 +188,27 @@ async function finalizeInteriorConceptMetadata(
 // fire-and-forget process is killed (or a provider never returns), that row
 // must not block every later retry forever.
 export const STALE_IMAGE_GENERATION_MS = 15 * 60 * 1000;
+export const PROMPT_GENERATION_TIMEOUT_MS = 90 * 1000;
+
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export async function recoverStaleImageGenerations(projectUuid?: string): Promise<number> {
   const conditions = [eq(creativeAiAssetsTable.status, "generating")];
@@ -1310,15 +1331,67 @@ export async function runImageDesignerPipeline(
     variations: maxVariations,
   });
 
+  const replicateKey = getProviderApiKey("replicate");
+  const imageDesignerAgent = await getAgentBySlug("image-designer");
+
+  // Reserve visible asset rows before the first external AI call. Previously
+  // these rows were inserted only after prompt generation completed, which
+  // made a slow or stuck prompt call look like an empty, infinitely-loading UI.
+  // The rows also give stale recovery and the duplicate-run guard something
+  // durable to work with.
+  const assetIds: number[] = [];
+  for (let i = 0; i < maxVariations; i++) {
+    const visualRole = isInteriorProject ? interiorVisualRoleForIndex(i) : null;
+    const placeholderPrompt = "Image prompt generation in progress…";
+    const metadata = isInteriorProject
+      ? interiorAssetMetadata(
+        visualRole!,
+        conceptVersion!,
+        "generating_visual",
+        null,
+        null,
+        placeholderPrompt,
+        null,
+        { style: "photographic", variationIndex: i + 1, pipelineStage: "prompt_generation" },
+      )
+      : {
+        style: "photographic",
+        variationIndex: i + 1,
+        pipelineStage: "prompt_generation",
+      };
+    const [row] = await db.insert(creativeAiAssetsTable).values({
+      projectId: projectUuid,
+      agentId: imageDesignerAgent?.id ?? null,
+      provider: "replicate",
+      model: FLUX_SCHNELL,
+      assetType: "image",
+      prompt: placeholderPrompt,
+      negativePrompt: null,
+      aspectRatio: isInteriorProject ? "16:9" : "1:1",
+      imageUrl: null,
+      status: "generating",
+      qcScore: null,
+      qcNotes: null,
+      cost: "0",
+      latencyMs: 0,
+      metadata,
+    }).returning({ id: creativeAiAssetsTable.id });
+    assetIds.push(row.id);
+  }
+
   // ── Step 1: Generate image prompts ────────────────────────────────────────
   let imagePrompts: ImagePromptResult[];
   let promptGenLatency: number;
   let promptGenTokens: number;
 
   try {
-    const result = isInteriorProject
-      ? await generateInteriorImagePrompts(projectUuid, steps, brief, maxVariations)
-      : await generateImagePrompts(brief, brandStrategy, creativeDirection, maxVariations);
+    const result = await withTimeout(
+      isInteriorProject
+        ? generateInteriorImagePrompts(projectUuid, steps, brief, maxVariations)
+        : generateImagePrompts(brief, brandStrategy, creativeDirection, maxVariations),
+      PROMPT_GENERATION_TIMEOUT_MS,
+      "Image prompt generation",
+    );
     imagePrompts = result.prompts;
     promptGenLatency = result.latencyMs;
     promptGenTokens = result.tokensUsed;
@@ -1337,58 +1410,138 @@ export async function runImageDesignerPipeline(
     await logAudit("creative-ai", "image_prompts_generated", projectUuid, "creative_project", "success", {
       count: imagePrompts.length,
     });
+
+    // Replace placeholders with the real prompts and expose the next stage
+    // before the first Replicate request starts.
+    for (let i = 0; i < imagePrompts.length; i++) {
+      const p = imagePrompts[i];
+      const visualRole = isInteriorProject ? (p.visualRole ?? interiorVisualRoleForIndex(i)) : null;
+      await db
+        .update(creativeAiAssetsTable)
+        .set({
+          prompt: p.prompt,
+          negativePrompt: p.negativePrompt,
+          aspectRatio: p.aspectRatio,
+          metadata: isInteriorProject
+            ? interiorAssetMetadata(
+              visualRole!,
+              conceptVersion!,
+              "generating_visual",
+              "replicate",
+              FLUX_SCHNELL,
+              p.prompt,
+              null,
+              {
+                style: p.style,
+                variationIndex: i + 1,
+                pipelineStage: replicateKey ? "image_generation" : "prompt_complete",
+              },
+            )
+            : {
+              style: p.style,
+              variationIndex: i + 1,
+              pipelineStage: replicateKey ? "image_generation" : "prompt_complete",
+            },
+        })
+        .where(eq(creativeAiAssetsTable.id, assetIds[i]));
+    }
+
+    // A valid JSON response can still contain fewer variations than requested.
+    // Do not leave the unused reservations in "generating" forever.
+    for (let i = imagePrompts.length; i < assetIds.length; i++) {
+      const visualRole = isInteriorProject ? interiorVisualRoleForIndex(i) : null;
+      const errorMessage = "Prompt generator returned fewer variations than requested.";
+      await db
+        .update(creativeAiAssetsTable)
+        .set({
+          status: "failed",
+          qcNotes: errorMessage,
+          metadata: isInteriorProject
+            ? interiorAssetMetadata(
+              visualRole!,
+              conceptVersion!,
+              "visual_failed",
+              "openai",
+              null,
+              "Image prompt was not returned",
+              errorMessage,
+              { style: "photographic", variationIndex: i + 1, pipelineStage: "prompt_failed" },
+            )
+            : {
+              style: "photographic",
+              variationIndex: i + 1,
+              pipelineStage: "prompt_failed",
+              generationError: errorMessage,
+            },
+        })
+        .where(eq(creativeAiAssetsTable.id, assetIds[i]));
+    }
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    for (let i = 0; i < assetIds.length; i++) {
+      const visualRole = isInteriorProject ? interiorVisualRoleForIndex(i) : null;
+      await db
+        .update(creativeAiAssetsTable)
+        .set({
+          status: "failed",
+          qcNotes: `Prompt generation failed: ${errorMessage}`,
+          metadata: isInteriorProject
+            ? interiorAssetMetadata(
+              visualRole!,
+              conceptVersion!,
+              "visual_failed",
+              null,
+              null,
+              "Image prompt generation failed",
+              errorMessage,
+              { style: "photographic", variationIndex: i + 1, pipelineStage: "prompt_failed" },
+            )
+            : {
+              style: "photographic",
+              variationIndex: i + 1,
+              pipelineStage: "prompt_failed",
+              generationError: errorMessage,
+            },
+        })
+        .where(eq(creativeAiAssetsTable.id, assetIds[i]));
+    }
     await logAudit("creative-ai", "image_prompt_generation_failed", projectUuid, "creative_project", "failure", {
-      error: String(err),
+      error: errorMessage,
     });
     throw err;
   }
 
   // ── Step 2+3: Generate images and QC each one ─────────────────────────────
-  const replicateKey = getProviderApiKey("replicate");
-  const imageDesignerAgent = await getAgentBySlug("image-designer");
-
-  // Insert all asset rows upfront as "generating" so:
-  //   (a) the UI can poll and show progress immediately
-  //   (b) the concurrency guard in the route sees these rows and blocks duplicate runs
-  const assetIds: number[] = [];
-  for (let i = 0; i < imagePrompts.length; i++) {
-    const p = imagePrompts[i];
-    const visualRole = isInteriorProject ? (p.visualRole ?? interiorVisualRoleForIndex(i)) : null;
-    const [row] = await db.insert(creativeAiAssetsTable).values({
-      projectId: projectUuid,
-      agentId: imageDesignerAgent?.id ?? null,
-      provider: "replicate",
-      model: FLUX_SCHNELL,
-      assetType: "image",
-      prompt: p.prompt,
-      negativePrompt: p.negativePrompt,
-      aspectRatio: p.aspectRatio,
-      imageUrl: null,
-      status: replicateKey ? "generating" : "failed",
-      qcScore: null,
-      qcNotes: replicateKey
-        ? null
-        : "Image generation requires REPLICATE_API_TOKEN. Set this environment variable in Replit Secrets to enable actual image generation.",
-      cost: "0",
-      latencyMs: 0,
-      metadata: isInteriorProject
-        ? interiorAssetMetadata(
-          visualRole!,
-          conceptVersion!,
-          replicateKey ? "generating_visual" : "visual_failed",
-          "replicate",
-          FLUX_SCHNELL,
-          p.prompt,
-          replicateKey ? null : "REPLICATE_API_TOKEN not configured",
-          { style: p.style, variationIndex: i + 1 },
-        )
-        : { style: p.style, variationIndex: i + 1 },
-    }).returning({ id: creativeAiAssetsTable.id });
-    assetIds.push(row.id);
-  }
-
   if (!replicateKey) {
+    const errorMessage = "Image generation requires REPLICATE_API_TOKEN. Set this environment variable in Replit Secrets to enable actual image generation.";
+    for (let i = 0; i < imagePrompts.length; i++) {
+      const p = imagePrompts[i];
+      const visualRole = isInteriorProject ? (p.visualRole ?? interiorVisualRoleForIndex(i)) : null;
+      await db
+        .update(creativeAiAssetsTable)
+        .set({
+          status: "failed",
+          qcNotes: errorMessage,
+          metadata: isInteriorProject
+            ? interiorAssetMetadata(
+              visualRole!,
+              conceptVersion!,
+              "visual_failed",
+              "replicate",
+              FLUX_SCHNELL,
+              p.prompt,
+              "REPLICATE_API_TOKEN not configured",
+              { style: p.style, variationIndex: i + 1, pipelineStage: "provider_missing" },
+            )
+            : {
+              style: p.style,
+              variationIndex: i + 1,
+              pipelineStage: "provider_missing",
+              generationError: "REPLICATE_API_TOKEN not configured",
+            },
+        })
+        .where(eq(creativeAiAssetsTable.id, assetIds[i]));
+    }
     await logAudit("creative-ai", "image_generation_skipped", projectUuid, "creative_project", "failure", {
       reason: "REPLICATE_API_TOKEN not set",
     });
