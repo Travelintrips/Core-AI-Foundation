@@ -179,7 +179,13 @@ function extractExistingMoodboard(result: unknown, projectUuid: string): Moodboa
 
 async function readProject(projectUuid: string): Promise<ProjectRow | null> {
   const result = await pool.query<ProjectRow>(
-    `SELECT project_id, title, style_preference, color_preference, notes, result
+    `SELECT project_id,
+            COALESCE(
+              NULLIF(BTRIM(brand_name), ''),
+              NULLIF(BTRIM(product_or_service), ''),
+              project_id
+            ) AS title,
+            style_preference, color_preference, notes, result
        FROM ai_platform.creative_projects
       WHERE project_id = $1 AND deleted_at IS NULL
       LIMIT 1`,
