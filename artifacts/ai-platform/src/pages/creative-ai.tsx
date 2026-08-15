@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { InteriorDesignEditor } from "@/components/interior-design/InteriorDesignEditor";
 import { InteriorConceptOutput } from "@/components/interior-design/InteriorConceptOutput";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1786,6 +1786,9 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
+  // Tracks whether the user just triggered image generation so we keep
+  // polling even while the asset list is still empty.
+  const [generationTriggered, setGenerationTriggered] = useState(false);
 
   const { data: project, isLoading } = useGetCreativeProject(projectId, {
     query: {
@@ -1808,7 +1811,9 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       refetchInterval: (query) => {
         const list = query.state.data ?? [];
         const hasGenerating = list.some((a) => a.status === "generating" || a.status === "pending");
-        return hasGenerating ? 3000 : false;
+        // Keep polling if assets are actively generating OR if we just
+        // triggered generation and the list hasn't populated yet.
+        return hasGenerating || generationTriggered ? 3000 : false;
       },
     },
   });
@@ -1819,6 +1824,9 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     mutation: {
       onSuccess: (data) => {
         toast({ title: `Image generation started — ${data.variations} variation${data.variations > 1 ? "s" : ""} in progress` });
+        // Mark triggered so refetchInterval keeps polling even while the
+        // list is still empty (images may not exist in DB yet at t=0).
+        setGenerationTriggered(true);
         setTimeout(() => refetchAssets(), 1500);
       },
       onError: (err: unknown) => {
@@ -1827,6 +1835,18 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       },
     },
   });
+
+  // Once assets appear (generation populated the DB), stop the forced-poll flag.
+  // Keep it true while any asset is still generating/pending.
+  useEffect(() => {
+    if (
+      generationTriggered &&
+      assets.length > 0 &&
+      !assets.some((a) => a.status === "generating" || a.status === "pending")
+    ) {
+      setGenerationTriggered(false);
+    }
+  }, [generationTriggered, assets]);
 
   const updateAssetStatus = useUpdateAssetStatus({
     mutation: {
