@@ -22,7 +22,6 @@ timeoutMs = 180000
 [userenv]
 
 [userenv.shared]
-OPENAI_API_KEY = "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"
 ANTHROPIC_API_KEY = "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"
 COHERE_API_KEY = "P0y8GuyPnhJcp780szHaZGgtz80rLiyZHOWeWQMW"
 GEMINI_API_KEY = "AIzaSyCQb_9MaKUgjpNqfpgBZJbezh6yXQD-crQ"
