@@ -1,5 +1,16 @@
-import app from "./app";
 import { logger } from "./lib/logger";
+import { loadApplicationSecrets } from "./lib/gcpSecretManager.js";
+
+try {
+  await loadApplicationSecrets();
+} catch (error) {
+  logger.fatal({ err: error }, "[startup] Failed to load application secrets");
+  process.exit(1);
+}
+
+// Import the application only after Google Cloud secrets have been loaded so
+// database clients and route modules see the canonical runtime configuration.
+const { default: app } = await import("./app.js");
 
 // ── Production database safety guard — must run before any DB operation ───────
 // If NODE_ENV=production but SUPABASE_PROD_DATABASE_URL is not set, the app
@@ -26,16 +37,20 @@ if (process.env["NODE_ENV"] === "production") {
     );
   }
 }
-import * as jobDispatcher from "./services/jobDispatcherService.js";
-import * as scheduler from "./services/aiSchedulerService.js";
-import * as sseManager from "./services/sseManager.js";
-import * as healthAlerts from "./services/providerHealthAlertService.js";
-import { ensureObservabilityTables } from "./services/observabilityService.js";
-import { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } from "./domains/material-library/seed.js";
-import { ensureStorageBucket } from "./lib/supabaseStorage.js";
-import { resumeIncompleteDesignRenderBatches } from "./services/design-recovery/startupResume.js";
-import { ensureSubmitIdempotencyTable } from "./services/submitIdempotencyService.js";
-import { verifyMaterialImportTables } from "./services/materialImportService.js";
+const jobDispatcher = await import("./services/jobDispatcherService.js");
+const scheduler = await import("./services/aiSchedulerService.js");
+const sseManager = await import("./services/sseManager.js");
+const healthAlerts = await import("./services/providerHealthAlertService.js");
+const { ensureObservabilityTables } = await import("./services/observabilityService.js");
+const { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } =
+  await import("./domains/material-library/seed.js");
+const { ensureStorageBucket } = await import("./lib/supabaseStorage.js");
+const { resumeIncompleteDesignRenderBatches } =
+  await import("./services/design-recovery/startupResume.js");
+const { ensureSubmitIdempotencyTable } =
+  await import("./services/submitIdempotencyService.js");
+const { verifyMaterialImportTables } =
+  await import("./services/materialImportService.js");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 // Prevents the recovery from running twice if the API server and job worker
