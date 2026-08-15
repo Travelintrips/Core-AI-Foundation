@@ -1818,6 +1818,13 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     },
   });
 
+  // Image generation runs in the API as a background job. There is a short
+  // window where the prompt generator is still running and no asset rows have
+  // been inserted yet, so the asset list alone cannot describe the state.
+  const imageGenerationActive =
+    generationTriggered ||
+    assets.some((a) => a.status === "generating" || a.status === "pending");
+
   const { data: imageAnalytics } = useGetCreativeImageAnalytics();
 
   const generateImages = useGenerateImageConcepts({
@@ -1831,7 +1838,16 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       },
       onError: (err: unknown) => {
         const msg = (err as { message?: string })?.message ?? "Image generation failed";
-        toast({ title: msg.includes("409") ? "Generation already in progress" : msg, variant: "destructive" });
+        if (msg.includes("409") || /already in progress/i.test(msg)) {
+          // A refresh or a second click can hit the server while the
+          // fire-and-forget pipeline is still running. Keep the UI in its
+          // generating state and let the asset query continue polling.
+          setGenerationTriggered(true);
+          void refetchAssets();
+          toast({ title: "Konsep gambar masih sedang dibuat", description: "Tunggu sampai proses selesai sebelum membuat ulang." });
+          return;
+        }
+        toast({ title: msg, variant: "destructive" });
       },
     },
   });
@@ -1981,7 +1997,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const canGenerateImages =
     (isCompleted || conceptWorkflowComplete) &&
     (!isInteriorDesign || isCompleted || conceptApproved) &&
-    !generateImages.isPending;
+    !generateImages.isPending &&
+    !imageGenerationActive;
 
   // Step count for the "Step X of Y" counter in StepCard
   const totalSteps = dbSteps.length > 0 ? dbSteps.length : PIPELINE_STEPS.length;
@@ -2184,7 +2201,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                 </div>
               </div>
 
-              {assets.length === 0 && (isCompleted || conceptWorkflowComplete) && !generateImages.isPending && (
+              {assets.length === 0 && (isCompleted || conceptWorkflowComplete) && !generateImages.isPending && !imageGenerationActive && (
                 <div className="border border-dashed border-border/40 rounded-lg p-8 flex flex-col items-center gap-3 text-center">
                   <div className="size-10 rounded-lg border border-border/40 bg-muted/20 flex items-center justify-center">
                     <Wand2 className="size-5 text-muted-foreground" />
@@ -2207,7 +2224,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                 </div>
               )}
 
-              {generateImages.isPending && assets.length === 0 && (
+              {imageGenerationActive && assets.length === 0 && (
                 <div className="flex items-center gap-2 text-xs text-blue-400 font-mono bg-blue-500/10 border border-blue-500/20 rounded px-3 py-2">
                   <Loader2 className="size-3.5 animate-spin" />
                   Image Prompt Generator running… FLUX.1 image generation will start shortly.
