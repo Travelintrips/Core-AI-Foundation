@@ -1,50 +1,53 @@
-import { logger } from "./lib/logger";
-import { loadApplicationSecrets } from "./lib/gcpSecretManager.js";
+/**
+ * Server entry point.
+ *
+ * IMPORTANT: GCP Secret Manager bootstrap MUST run before any module that
+ * reads process.env at import time (DB pool, auth middleware, etc.).
+ * We achieve this by:
+ *   1. Statically importing only the bootstrap (it is env-neutral at init time).
+ *   2. Awaiting the bootstrap (top-level await in ESM).
+ *   3. Dynamically importing everything else so their module-level code runs
+ *      after the env vars have been injected.
+ */
 
-try {
-  await loadApplicationSecrets();
-} catch (error) {
-  logger.fatal({ err: error }, "[startup] Failed to load application secrets");
-  process.exit(1);
-}
+import { bootstrapGcpSecrets } from "./lib/gcpSecretsBootstrap.js";
 
-// Import the application only after Google Cloud secrets have been loaded so
-// database clients and route modules see the canonical runtime configuration.
-const { default: app } = await import("./app.js");
+// ── Step 1: Inject secrets from GCP Secret Manager (no-op in dev) ─────────────
+await bootstrapGcpSecrets();
 
-// ── Production database safety guard — must run before any DB operation ───────
-// If NODE_ENV=production but SUPABASE_PROD_DATABASE_URL is not set, the app
-// would silently fall back to the SUPABASE_DATABASE_URL alias or throw an
-// opaque error at query time. We fail closed here instead.
+// ── Step 2: Production database safety guard ──────────────────────────────────
+// Must run after bootstrap so SUPABASE_PROD_DATABASE_URL is available.
 if (process.env["NODE_ENV"] === "production") {
   const prodUrl = process.env["SUPABASE_PROD_DATABASE_URL"];
-  const legacyAlias = process.env["SUPABASE_DATABASE_URL"]; // alias used by some envs
+  const legacyAlias = process.env["SUPABASE_DATABASE_URL"];
   if (!prodUrl && !legacyAlias) {
-    // eslint-disable-next-line no-console
     console.error(
       "[startup] FATAL: NODE_ENV=production but SUPABASE_PROD_DATABASE_URL is not set. " +
       "The application refuses to start in production without an explicit production " +
-      "database URL. Set SUPABASE_PROD_DATABASE_URL before deploying.",
+      "database URL. Set SUPABASE_PROD_DATABASE_URL (or store it in GCP Secret Manager) " +
+      "before deploying.",
     );
     process.exit(1);
   }
   if (!prodUrl && legacyAlias) {
-    // Allow the legacy alias but warn loudly so operators notice
-    // eslint-disable-next-line no-console
     console.warn(
       "[startup] WARNING: SUPABASE_PROD_DATABASE_URL is not set; falling back to " +
       "SUPABASE_DATABASE_URL. Set the canonical production variable to silence this warning.",
     );
   }
 }
-const jobDispatcher = await import("./services/jobDispatcherService.js");
-const scheduler = await import("./services/aiSchedulerService.js");
-const sseManager = await import("./services/sseManager.js");
-const healthAlerts = await import("./services/providerHealthAlertService.js");
+
+// ── Step 3: Dynamic imports — all env-dependent modules load here ─────────────
+const { default: app }              = await import("./app.js");
+const { logger }                    = await import("./lib/logger.js");
+const jobDispatcher                 = await import("./services/jobDispatcherService.js");
+const scheduler                     = await import("./services/aiSchedulerService.js");
+const sseManager                    = await import("./services/sseManager.js");
+const healthAlerts                  = await import("./services/providerHealthAlertService.js");
 const { ensureObservabilityTables } = await import("./services/observabilityService.js");
 const { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } =
   await import("./domains/material-library/seed.js");
-const { ensureStorageBucket } = await import("./lib/supabaseStorage.js");
+const { ensureStorageBucket }       = await import("./lib/supabaseStorage.js");
 const { resumeIncompleteDesignRenderBatches } =
   await import("./services/design-recovery/startupResume.js");
 const { ensureSubmitIdempotencyTable } =
@@ -53,16 +56,12 @@ const { verifyMaterialImportTables } =
   await import("./services/materialImportService.js");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
-// Prevents the recovery from running twice if the API server and job worker
-// share the same process (e.g. in development single-process mode).
 let _designBatchRecoveryStarted = false;
 
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
+  throw new Error("PORT environment variable is required but was not provided.");
 }
 
 const port = Number(rawPort);
@@ -84,14 +83,12 @@ app.listen(port, (err) => {
     logger.warn({ err }, "[observability] Table init failed (non-blocking)"),
   );
 
-  // ── Submit idempotency table (DEF-001: DB-backed dedup guarantee) ─────────
+  // ── Submit idempotency table ───────────────────────────────────────────────
   ensureSubmitIdempotencyTable().catch((err) =>
     logger.warn({ err }, "[submit-idempotency] Table init failed (non-blocking)"),
   );
 
-  // ── Material Library tables + conditional seed (Phase 1) ─────────────────
-  // Only seeds when catalog is empty / below baseline — avoids 500+ upserts
-  // on every boot. Use POST /api/material-library/seed (admin) for a full sync.
+  // ── Material Library tables + conditional seed ────────────────────────────
   ensureMaterialLibraryTables()
     .then(() => seedMaterialLibraryIfEmpty())
     .catch((err) =>
@@ -102,15 +99,13 @@ app.listen(port, (err) => {
     logger.warn({ err }, "[material-import] Phase 5 table verification failed (non-blocking)"),
   );
 
-  // ── Supabase Storage bucket (create ai-assets if missing) ────────────────
+  // ── Supabase Storage bucket ───────────────────────────────────────────────
   ensureStorageBucket().catch((err) =>
     logger.warn({ err }, "[supabaseStorage] Bucket init failed (non-blocking)"),
   );
 
-  // ── Dispatcher auto-start (Phase 5.1) ───────────────────────────────────
-  // Dev: always auto-start
-  // Prod: only when AI_DISPATCHER_ENABLED=true
-  const isProduction     = process.env["NODE_ENV"] === "production";
+  // ── Dispatcher auto-start ────────────────────────────────────────────────
+  const isProduction      = process.env["NODE_ENV"] === "production";
   const dispatcherEnabled = isProduction
     ? process.env["AI_DISPATCHER_ENABLED"] === "true"
     : true;
@@ -120,12 +115,6 @@ app.listen(port, (err) => {
       logger.error({ err: startErr }, "[dispatcher] Failed to auto-start"),
     );
 
-    // ── Design batch startup recovery (Phase 3A) ────────────────────────────
-    // Re-enqueues interrupted design render batches left in non-terminal states
-    // after a process crash. Runs only when the dispatcher is active (recovery
-    // re-enqueues jobs, so a running dispatcher is required). The idempotency
-    // guard prevents a double-run if the API server and job worker share the
-    // same Node.js process.
     if (!_designBatchRecoveryStarted) {
       _designBatchRecoveryStarted = true;
       resumeIncompleteDesignRenderBatches()
@@ -142,9 +131,7 @@ app.listen(port, (err) => {
     logger.info("[dispatcher] Auto-start disabled (set AI_DISPATCHER_ENABLED=true to enable in production)");
   }
 
-  // ── Scheduler auto-start (Phase 6) ──────────────────────────────────────
-  // Dev: always auto-start
-  // Prod: only when AI_SCHEDULER_ENABLED=true
+  // ── Scheduler auto-start ─────────────────────────────────────────────────
   const schedulerEnabled = isProduction
     ? process.env["AI_SCHEDULER_ENABLED"] === "true"
     : true;
@@ -165,9 +152,7 @@ app.listen(port, (err) => {
     logger.info("[scheduler] Auto-start disabled (set AI_SCHEDULER_ENABLED=true to enable in production)");
   }
 
-  // ── Provider health alert poller (Task #9) ───────────────────────────────
-  // Seeds default alert settings and starts the background poll loop.
-  // Non-fatal: failure here must not block server startup.
+  // ── Provider health alert poller ─────────────────────────────────────────
   healthAlerts.start().catch((startErr) =>
     logger.error({ err: startErr }, "[health-alerts] Failed to auto-start"),
   );
@@ -176,7 +161,7 @@ app.listen(port, (err) => {
 // ── Graceful shutdown ──────────────────────────────────────────────────────
 function shutdown(signal: string): void {
   logger.info(`${signal} received — shutting down dispatcher, scheduler, health alerts, and SSE`);
-  sseManager.shutdown(); // close SSE connections first (fast, synchronous)
+  sseManager.shutdown();
   healthAlerts.shutdown();
   Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
