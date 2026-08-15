@@ -42,3 +42,10 @@ id = "PO5bBsYzulGFOLLg7eMKw"
 uri = "file://FINAL_RELEASE_REPORT.md"
 type = "text"
 title = "Final Release Report"
+
+[[outputs]]
+id = "Q59qWrlXZQlHTNnrL8VYf"
+uri = "file://INTERIOR_DESIGN_CROSS_WP_CONFLICT_AUDIT.md"
+type = "text"
+title = "Interior Design Cross-WP Conflict Audit"
+description = "Laporan audit read-only lintas WP-01 sampai WP-12, termasuk conflict matrix, hasil verifikasi, blocker P1, dan verdict final."

@@ -1,0 +1,792 @@
+ULTIMATE FINAL CROSS-WP AUDIT — INTERIOR DESIGN / LAYOUT
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+CURRENT VERIFIED FINAL STATE:
+
+* Interior Design / Layout roadmap sudah COMPLETE
+* WP-01 sampai WP-12 sudah diimplementasikan
+* WP-12 sudah merged dan post-merge verified
+* Final main SHA:
+  `d695236e4436e1ea6ce6c374349e99825679e5f6`
+* WP-12:
+  P0 = 0
+  P1 = 0
+* WP-13 tidak ada pada roadmap canonical
+* Jangan membuat WP baru
+* Jangan implement fitur baru dalam audit ini
+
+MISSION:
+
+Lakukan AUDIT MENYELURUH lintas seluruh WP Interior Design / Layout untuk memastikan tidak ada konflik, duplikasi, contract drift, state mismatch, schema collision, route collision, tenant leak, idempotency conflict, versioning inconsistency, storage mismatch, queue mismatch, atau regression tersembunyi antar-WP.
+
+AUDIT INI READ-ONLY.
+
+JANGAN:
+
+* mengubah kode
+* membuat migration
+* push
+* PR
+* merge
+* deploy
+* publish
+* menghapus data
+* memperbaiki technical debt lama
+* membuat WP-13
+* mengulang implementasi WP yang sudah selesai
+
+Gunakan current verified `main` sebagai source of truth.
+
+==================================================
+PHASE 1 — REPOSITORY / GIT BASELINE
+===================================
+
+Verifikasi:
+
+* branch = main
+* local main SHA = origin/main SHA
+* SHA harus sama dengan:
+  `d695236e4436e1ea6ce6c374349e99825679e5f6`
+  atau descendant legitimate jika main sudah maju karena hotfix lain yang sah
+* working tree clean
+* tidak ada pending merge/rebase
+* tidak ada untracked prompt yang dianggap product source
+* tidak ada branch fitur lama yang perlu di-merge ulang
+
+Catat seluruh merge lineage WP terkait Interior Design/Layout.
+
+Buat matrix:
+
+WP
+branch
+PR
+merge SHA
+status in main
+
+==================================================
+PHASE 2 — CANONICAL ROADMAP CONSISTENCY
+=======================================
+
+Audit seluruh tracked roadmap / implementation docs.
+
+Verifikasi:
+
+* numbering WP tidak bentrok di dalam roadmap Interior Design/Layout
+* predecessor/successor chain konsisten
+* WP-01 → WP-12 lengkap
+* WP-13 memang tidak ada
+* definisi lama dari roadmap lain tidak ikut mempengaruhi domain ini
+* tidak ada stale docs yang menyebut WP belum selesai padahal sudah merged
+
+Jangan memperbaiki docs dalam audit ini.
+
+Laporkan stale/conflicting docs sebagai finding.
+
+==================================================
+PHASE 3 — ARCHITECTURE OWNERSHIP MATRIX
+=======================================
+
+Buat matriks canonical ownership untuk semua foundation utama:
+
+* creative_projects
+* id_concept_drafts
+* layout_sessions
+* placement engine
+* collision engine
+* OBB/SAT adapter
+* constraint engine
+* material recommendation
+* moodboard
+* rendering pipeline
+* ai_entity_versions
+* creative_render_sessions
+* creative_ai_assets
+* ai_jobs
+* ai_cost_records
+* export_packages
+* Supabase Storage
+* InteriorDesignEditor
+* API routes
+* OpenAPI contracts
+* generated clients
+* auth/tenant resolver
+* audit/event bus
+
+Untuk tiap foundation tentukan:
+
+* canonical owner
+* WP yang memperkenalkan/mengembangkan
+* siapa yang membaca
+* siapa yang menulis
+* apakah ada duplicate implementation
+* apakah ada fallback/legacy path paralel
+
+Finding P0/P1 jika ada dua source of truth aktif yang bisa menghasilkan state berbeda.
+
+==================================================
+PHASE 4 — DATABASE / SCHEMA CROSS-WP AUDIT
+==========================================
+
+Audit schema dan migration seluruh WP.
+
+Verifikasi:
+
+* tidak ada tabel duplikat untuk domain yang sama
+* tidak ada kolom semantik ganda
+* tidak ada migration saling menimpa
+* semua unique constraint konsisten dengan service logic
+* tenant keys konsisten
+* project UUID linkage konsisten
+* version linkage konsisten
+* approved snapshot linkage konsisten
+* render/export linkage konsisten
+* foreign key / logical relation tidak kontradiktif
+* nullable/non-null assumptions cocok dengan runtime
+* deleted/archived rows tidak tetap dianggap active
+* idempotency indexes sesuai canonical request scope
+
+Khusus audit:
+
+`export_packages`
+
+* source_version_hash
+* idempotency_key
+* canonical unique scope
+* expiry
+* completed status
+* storage path
+
+`ai_entity_versions`
+
+* immutable snapshot
+* lineage
+* restore-as-new-version
+
+`creative_render_sessions`
+
+* source version/snapshot
+* job linkage
+* asset linkage
+
+Jangan menerapkan migration.
+
+==================================================
+PHASE 5 — STATE MACHINE / LIFECYCLE CONSISTENCY
+===============================================
+
+Petakan lifecycle end-to-end:
+
+project
+→ concept draft
+→ review
+→ approved snapshot
+→ layout
+→ placement
+→ constraints
+→ moodboard
+→ render
+→ review/version
+→ export
+→ download
+
+Verifikasi tidak ada state transition yang bertentangan antar-WP.
+
+Audit khusus:
+
+* draft vs approved behavior
+* approved snapshot immutable
+* request revision
+* restore version
+* re-render from version
+* re-export from version
+* historical version read-only
+* deleted/expired export behavior
+* retry behavior
+* failed job recovery
+* approved layout cannot be silently mutated
+
+Buat transition matrix.
+
+Finding P0 jika satu endpoint dapat melewati approval/version boundary canonical.
+
+==================================================
+PHASE 6 — API ROUTE COLLISION AUDIT
+===================================
+
+Inventory seluruh Interior Design routes.
+
+Periksa:
+
+* duplicate method + path
+* overlapping dynamic params
+* route shadowing
+* inconsistent auth
+* inconsistent UUID validation
+* inconsistent tenant scoping
+* same semantic operation exposed through two active endpoints
+* deprecated routes still writable
+* public/admin route confusion
+* generated client mismatch
+
+Khusus cek:
+
+* moodboard
+* render
+* review/version
+* export
+* signed download
+* layout constraints
+* placement suggest/apply
+
+Buat table:
+method
+path
+auth
+tenant source
+service
+writes data?
+canonical/legacy
+
+==================================================
+PHASE 7 — CONTRACT / ZOD / OPENAPI DRIFT
+========================================
+
+Compare:
+
+runtime route input/output
+vs
+Zod schemas
+vs
+OpenAPI
+vs
+generated client
+vs
+frontend usage
+
+Audit seluruh WP-related contract.
+
+Finding jika:
+
+* field required di frontend tapi optional di server secara salah
+* enum berbeda
+* response shape drift
+* nullable mismatch
+* legacy name masih digunakan
+* generated client stale
+* raw `Record<string, unknown>` masih menerima payload penting tanpa validation
+* idempotency/expiry fields tidak tercermin dalam contracts
+
+Klasifikasikan drift:
+breaking
+latent
+documentation-only
+
+==================================================
+PHASE 8 — TENANT / AUTH / IDOR CROSS-WP AUDIT
+=============================================
+
+Audit seluruh call path.
+
+Canonical rule:
+tenant harus berasal dari authenticated server-side resolver.
+
+Pastikan tidak ada endpoint yang mempercayai:
+
+* x-tenant-id
+* request body tenantId
+* query tenantId
+* default fallback tenant
+* client-controlled project ownership
+
+Audit:
+
+project
+draft
+layout
+moodboard
+render
+version
+export
+asset
+download
+
+Cross-tenant access harus non-disclosure sesuai policy.
+
+Uji secara read-only/test environment jika tersedia.
+
+Finding P0 jika ada active cross-tenant write/read leak.
+
+==================================================
+PHASE 9 — SNAPSHOT / IMMUTABILITY AUDIT
+=======================================
+
+Verifikasi immutable boundaries lintas WP:
+
+* approved concept snapshot
+* approved space_plan
+* historical version snapshot
+* render source snapshot
+* export source version
+
+Audit apakah ada service yang:
+
+* membaca live mutable data setelah approval ketika seharusnya snapshot
+* menulis ulang approved snapshot
+* restore dengan overwrite
+* export historical version dari current mutable state
+* render historical version dari current mutable state
+
+Pastikan binary/base64, token, credentials, provider responses, unnecessary PII tidak masuk snapshot.
+
+==================================================
+PHASE 10 — IDEMPOTENCY / CONCURRENCY AUDIT
+==========================================
+
+Buat matrix idempotency untuk:
+
+* placement apply
+* render start
+* render retry
+* version restore
+* reviewer notes/actions
+* export create
+* export retry
+
+Untuk tiap operasi:
+
+* idempotency key
+* canonical fingerprint
+* unique DB scope
+* race handling
+* retry handling
+* duplicate job prevention
+* duplicate asset prevention
+
+Audit code vs database constraint.
+
+Finding P1 jika service mengandalkan application check tanpa DB-level protection pada concurrent path penting.
+
+==================================================
+PHASE 11 — QUEUE / WORKER / CAPABILITY AUDIT
+============================================
+
+Audit seluruh AI/job flow.
+
+Verifikasi:
+
+* job type canonical
+* requiredCapability canonical column
+* worker advertises matching capability
+* payload tidak menjadi satu-satunya source of truth
+* tenant stamp konsisten
+* retry count konsisten
+* timeout
+* dead/failure state
+* duplicate job prevention
+* orphan job/session detection
+* job completion updates correct session
+* cost record belongs to correct project/session/version
+
+Khusus rendering:
+Universal Renderer
+→ AI provider
+→ asset
+→ cost record
+
+Khusus export:
+export package
+→ job
+→ artifact
+→ signed download
+
+==================================================
+PHASE 12 — STORAGE / ASSET CONSISTENCY
+======================================
+
+Inventory all Interior Design storage usage.
+
+Verifikasi:
+
+* canonical bucket/path convention
+* project/tenant namespace
+* asset IDs
+* content type
+* signed/private access policy
+* public/private mismatch
+* duplicate upload paths
+* stale storage references
+* deleted DB row with live public object
+* live DB row with missing object
+* manual upload protection
+* expiry/download policy
+
+Do NOT scan/delete massive bucket objects unless safe tooling already exists.
+Use metadata/read-only probes.
+
+Khusus verify:
+expired export package tidak menghasilkan storage URL.
+
+==================================================
+PHASE 13 — PROVIDER / AI PIPELINE CONSISTENCY
+=============================================
+
+Audit provider usage:
+
+* no duplicate provider abstraction
+* no direct provider call bypassing canonical wrapper
+* consistent model/provider selection
+* timeout/retry policy
+* safe provider response handling
+* no secret leakage
+* cost/token tracking present
+* project/order correlation correct
+
+Moodboard / Render / any AI image path harus jelas siapa canonical provider layer-nya.
+
+==================================================
+PHASE 14 — COST TRACKING CONSISTENCY
+====================================
+
+Audit `ai_cost_records`.
+
+Verify:
+
+* render jobs recorded
+* retries not double counted incorrectly
+* failed calls handled consistently
+* provider
+* model
+* tokens/units
+* cost
+* tenant/project linkage
+* session/job linkage
+* version linkage where applicable
+
+Check no parallel cost ledger exists for same calls.
+
+==================================================
+PHASE 15 — FRONTEND CROSS-WP STATE AUDIT
+========================================
+
+Audit `InteriorDesignEditor`.
+
+Verify panels:
+
+* Concept
+* Placement
+* Constraints
+* Moodboard
+* Render
+* Review & Versions
+* Export
+
+Check:
+
+* data source canonical
+* reload persistence
+* approved read-only
+* historical read-only
+* loading/error/empty states
+* stale local state after action
+* duplicate API calls
+* race when switching project/version
+* polling cleanup
+* dirty-state handling
+* route/client contract match
+* no unsafe HTML injection
+* no hidden mutation via UI
+
+Finding jika UI menunjukkan state yang berbeda dari backend canonical state.
+
+==================================================
+PHASE 16 — FULL E2E FLOW AUDIT
+==============================
+
+Run end-to-end test/UAT in development/test environment only:
+
+Create/open project
+→ draft
+→ review
+→ approval
+→ layout
+→ placement
+→ constraint evaluation
+→ moodboard
+→ render
+→ version/review
+→ export
+→ download
+
+Verify at each step:
+
+* canonical ID linkage
+* tenant
+* state
+* version
+* asset
+* job
+* persistence after reload
+* audit log
+* error recovery
+
+Also test negative flow:
+
+* unauthorized
+* wrong tenant
+* unapproved render/export
+* expired download
+* duplicate idempotency key conflict
+* retry
+* restored historical version
+* invalid UUID
+* missing asset
+* failed provider/job
+
+Do NOT use production customer data.
+
+==================================================
+PHASE 17 — TEST SUITE CONFLICT AUDIT
+====================================
+
+Inventory all WP tests.
+
+Check:
+
+* duplicated contradictory fixtures
+* tests mocking outdated contracts
+* hidden `.skip`
+* `.todo`
+* `.only`
+* stale baselines
+* unit test passes while integration contract differs
+* tests relying on mutable global order
+* fake tenant behavior inconsistent with production resolver
+
+Report coverage gaps by WP.
+
+==================================================
+PHASE 18 — PERFORMANCE / RESOURCE AUDIT
+=======================================
+
+Audit:
+
+* N+1 queries
+* unbounded loops
+* pairwise limits
+* render variants cap
+* export asset count
+* archive size
+* image counts
+* queue concurrency
+* polling interval
+* retry limits
+* DB index usage
+* large JSON snapshot size
+
+Do not use flaky strict timing assertions.
+
+Classify high-risk paths.
+
+==================================================
+PHASE 19 — SECURITY STATIC AUDIT
+================================
+
+Search relevant files for:
+
+TODO
+FIXME
+HACK
+console.log
+console.error
+debugger
+@ts-ignore
+@ts-expect-error
+dangerouslySetInnerHTML
+innerHTML
+eval
+new Function
+Math.random
+hardcoded tenant
+hardcoded project
+secret
+token
+api key
+raw provider response
+unbounded retry
+unsafe URL
+path traversal
+sql.raw
+dynamic SQL
+
+Review matches manually.
+Do not classify string occurrence alone as vulnerability.
+
+==================================================
+PHASE 20 — GIT / RELEASE HYGIENE
+================================
+
+Audit current `main`.
+
+Verify no production history pollution from:
+
+* attached_assets
+* prompt/session documents
+* screenshots
+* .replit accidental changes
+* agent memory
+* temporary generated PDF/ZIP
+* secrets
+
+Also identify obsolete feature branches/PRs that must NEVER be merged again.
+
+Do NOT delete branches in this audit.
+Just report them.
+
+==================================================
+PHASE 21 — CONFLICT MATRIX
+==========================
+
+Create:
+
+`INTERIOR_DESIGN_CROSS_WP_CONFLICT_AUDIT.md`
+
+Required matrix:
+
+Conflict ID
+Area
+WP A
+WP B
+Canonical source
+Observed behavior
+Expected behavior
+Severity
+Evidence
+Fix recommendation
+Release blocker?
+
+Conflict categories:
+
+* schema
+* API
+* state machine
+* auth
+* tenant
+* snapshot
+* versioning
+* job
+* storage
+* provider
+* cost
+* idempotency
+* frontend
+* tests
+* docs
+* git/release
+
+==================================================
+PHASE 22 — SEVERITY
+===================
+
+Use:
+
+P0 — Critical
+security/data corruption/cross-tenant/irreversible inconsistency
+
+P1 — High
+release-blocking functional conflict/race/idempotency/state mismatch
+
+P2 — Medium
+non-blocking drift/performance/maintainability risk
+
+P3 — Low
+documentation/cleanup/minor consistency
+
+DO NOT modify code in this audit.
+
+==================================================
+PHASE 23 — FINAL GO/NO-GO
+=========================
+
+Only declare:
+
+PRODUCTION READY
+
+if:
+
+* P0 = 0
+* P1 = 0
+* no unresolved cross-WP conflict
+* all canonical lifecycle boundaries consistent
+* E2E UAT passes
+* build/regression green
+* tenant/IDOR audit green
+* release hygiene green
+
+Otherwise:
+return exact blockers.
+
+==================================================
+FINAL REPORT
+============
+
+Return ONE final report only.
+
+Include:
+
+1. Main SHA audited
+2. WP coverage matrix
+3. Architecture ownership matrix
+4. DB/schema verdict
+5. API/contract verdict
+6. Lifecycle/state-machine verdict
+7. Auth/tenant/IDOR verdict
+8. Snapshot/immutability verdict
+9. Idempotency/concurrency verdict
+10. Queue/worker verdict
+11. Storage/assets verdict
+12. Provider verdict
+13. AI cost tracking verdict
+14. Frontend state verdict
+15. E2E UAT result
+16. Regression/build/typecheck result
+17. Performance verdict
+18. Security static verdict
+19. Git/release hygiene
+20. P0 findings
+21. P1 findings
+22. P2 findings
+23. P3 findings
+24. Conflict matrix path
+25. Release blockers
+26. Final recommendation
+
+Use exactly one verdict:
+
+A.
+INTERIOR DESIGN / LAYOUT — PRODUCTION READY
+
+B.
+INTERIOR DESIGN / LAYOUT — READY WITH P2/P3 FOLLOW-UP
+
+C.
+INTERIOR DESIGN / LAYOUT — NOT READY, P1 REMEDIATION REQUIRED
+
+D.
+INTERIOR DESIGN / LAYOUT — NOT READY, P0 BLOCKER
+
+E.
+AUDIT INCONCLUSIVE — EXTERNAL BLOCKER
+
+IMPORTANT:
+
+AUDIT ONLY.
+NO SOURCE MODIFICATION.
+NO MIGRATION.
+NO PUSH.
+NO PR.
+NO MERGE.
+NO DEPLOY.
+
+The objective is to prove that WP-01 through WP-12 work as ONE canonical system and do not conflict with each other.
