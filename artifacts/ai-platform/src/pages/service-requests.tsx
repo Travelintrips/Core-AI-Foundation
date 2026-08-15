@@ -100,6 +100,10 @@ type ServiceRequest = {
   completionLinks: Array<{ label: string; url: string }> | null;
   createdAt: string;
   updatedAt: string;
+  /** UUID of the linked creative project, if one was created for this request */
+  createdProjectId: string | null;
+  /** Current status of the linked creative project (null when no project linked) */
+  productionStatus: string | null;
 };
 
 // Next status actions for each current status
@@ -251,6 +255,11 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
   const marginNeeded = req.marginApprovalRequired && !req.marginApprovedBy;
   const marginApproved = !!req.marginApprovedBy;
   const gateBlocking = req.status === "waiting_commercial_gate" && !!gate && gate.status === "pending";
+  // Guard: cannot complete a service request until its linked creative project is also completed.
+  const projectNotCompleted =
+    req.status === "waiting_review" &&
+    !!req.createdProjectId &&
+    req.productionStatus !== "completed";
 
   const stage = STAGES.find((s) => s.statuses.includes(req.status));
 
@@ -626,7 +635,8 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
                 disabled={
                   changeStatus.isPending ||
                   (marginNeeded && action.status === "quotation_ready") ||
-                  (gateBlocking && action.status === "ready_to_build")
+                  (gateBlocking && action.status === "ready_to_build") ||
+                  (projectNotCompleted && action.status === "completed")
                 }
                 className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 ${
                   action.variant === "primary"
@@ -648,8 +658,29 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
                 {gateBlocking && action.status === "ready_to_build" && (
                   <span className="ml-1 text-[10px] opacity-70">(verify/waive gate dulu)</span>
                 )}
+                {projectNotCompleted && action.status === "completed" && (
+                  <span className="ml-1 text-[10px] opacity-70">(selesaikan proyek produksi dulu)</span>
+                )}
               </button>
             ))}
+            {projectNotCompleted && (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Proyek produksi saat ini berstatus{" "}
+                  <strong>{req.productionStatus ?? "tidak ditemukan"}</strong>. Tandai sebagai{" "}
+                  <strong>completed</strong> di halaman{" "}
+                  <a
+                    href="/admin/creative-ai"
+                    className="underline underline-offset-2 hover:text-amber-500"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Creative AI
+                  </a>{" "}
+                  terlebih dahulu.
+                </span>
+              </div>
+            )}
           </div>
         )}
 
