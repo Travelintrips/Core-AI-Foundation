@@ -93,7 +93,7 @@ export type CustomerDashboard = {
 
 export type PublicAsset = {
   id: number;
-  imageUrl: string;
+  imageUrl: string | null;
   thumbnailUrl?: string;
   aspectRatio: string;
   status: string;

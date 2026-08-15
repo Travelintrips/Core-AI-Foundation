@@ -33,6 +33,7 @@ import {
   regenerateSingleAsset,
   isInteriorDesignProject,
   getInteriorConceptVersion,
+  recoverStaleImageGenerations,
 } from "../services/imageDesignerService.js";
 import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
 
@@ -212,6 +213,8 @@ router.post("/creative-ai/projects/:id/generate-image", async (req, res): Promis
     return;
   }
 
+  await recoverStaleImageGenerations(project.projectId);
+
   // Check if there's already a generation in progress
   const { count: pendingCount } = (
     await db
@@ -257,7 +260,8 @@ router.post("/creative-ai/projects/:id/generate-image", async (req, res): Promis
       .from(creativeAiAssetsTable)
       .where(eq(creativeAiAssetsTable.projectId, project.projectId));
     const sameVersionAssets = existingVersionAssets.filter((asset) =>
-      (asset.metadata as Record<string, unknown> | null)?.conceptVersion === conceptVersion,
+      (asset.metadata as Record<string, unknown> | null)?.conceptVersion === conceptVersion
+      && !["failed", "needs_revision", "rejected"].includes(asset.status),
     );
     if (sameVersionAssets.length > 0) {
       const isStillRunning = sameVersionAssets.some((asset) =>
@@ -301,6 +305,8 @@ router.get("/creative-ai/projects/:id/assets", async (req, res): Promise<void> =
     return;
   }
 
+  await recoverStaleImageGenerations(params.data.id);
+
   const assets = await db
     .select()
     .from(creativeAiAssetsTable)
@@ -335,6 +341,8 @@ router.post("/creative-ai/assets/:assetId/regenerate", async (req, res): Promise
     res.status(404).json({ error: "Asset not found" });
     return;
   }
+
+  await recoverStaleImageGenerations(asset.projectId);
 
   // Block if another generation is already in progress for this project
   const [{ pendingCount }] = await db

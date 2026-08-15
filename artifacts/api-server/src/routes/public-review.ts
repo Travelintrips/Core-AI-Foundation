@@ -17,6 +17,7 @@ import {
 import { hashToken } from "../services/clientReviewService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
+import { recoverStaleImageGenerations } from "../services/imageDesignerService.js";
 
 const router = Router();
 
@@ -119,14 +120,19 @@ router.get("/public/creative-review/:token", async (req, res): Promise<void> => 
     return;
   }
 
-  // Fetch assets (only completed ones with an imageUrl)
+  await recoverStaleImageGenerations(review.projectId);
+
+  // Fetch completed assets plus active/failed rows so the client can distinguish
+  // "still generating" from "there are no assets". This matters when the
+  // creative workflow has already completed but the separately-triggered image
+  // pipeline is still running.
   const assets = await db
     .select()
     .from(creativeAiAssetsTable)
     .where(
       and(
         eq(creativeAiAssetsTable.projectId, review.projectId),
-        eq(creativeAiAssetsTable.status, "completed")
+        inArray(creativeAiAssetsTable.status, ["pending", "generating", "completed", "approved", "failed"])
       )
     );
 

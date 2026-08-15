@@ -14,7 +14,7 @@
  * and a clear error note — the main workflow is never crashed.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   db,
   creativeProjectsTable,
@@ -182,6 +182,77 @@ async function finalizeInteriorConceptMetadata(
       },
     })
     .where(eq(creativeProjectsTable.projectId, projectUuid));
+}
+
+// A generation row is created before the provider call starts. If the
+// fire-and-forget process is killed (or a provider never returns), that row
+// must not block every later retry forever.
+export const STALE_IMAGE_GENERATION_MS = 15 * 60 * 1000;
+
+export async function recoverStaleImageGenerations(projectUuid?: string): Promise<number> {
+  const conditions = [eq(creativeAiAssetsTable.status, "generating")];
+  if (projectUuid) {
+    conditions.push(eq(creativeAiAssetsTable.projectId, projectUuid));
+  }
+
+  const assets = await db
+    .select({
+      id: creativeAiAssetsTable.id,
+      projectId: creativeAiAssetsTable.projectId,
+      createdAt: creativeAiAssetsTable.createdAt,
+      metadata: creativeAiAssetsTable.metadata,
+    })
+    .from(creativeAiAssetsTable)
+    .where(and(...conditions));
+
+  const cutoff = Date.now() - STALE_IMAGE_GENERATION_MS;
+  const staleAssets = assets.filter((asset) => asset.createdAt.getTime() < cutoff);
+  if (staleAssets.length === 0) return 0;
+
+  const recoveredAt = new Date();
+  const errorMessage = "Image generation timed out before completion. Please retry.";
+  const conceptVersionsByProject = new Map<string, Set<string>>();
+
+  for (const asset of staleAssets) {
+    const metadata = (asset.metadata ?? {}) as Record<string, unknown>;
+    const conceptVersion = typeof metadata.conceptVersion === "string"
+      ? metadata.conceptVersion
+      : null;
+    if (conceptVersion) {
+      const versions = conceptVersionsByProject.get(asset.projectId) ?? new Set<string>();
+      versions.add(conceptVersion);
+      conceptVersionsByProject.set(asset.projectId, versions);
+    }
+
+    // CAS on status so a worker that completed at the same time wins over
+    // stale recovery and keeps its completed image.
+    await db
+      .update(creativeAiAssetsTable)
+      .set({
+        status: "failed",
+        qcNotes: errorMessage,
+        metadata: {
+          ...metadata,
+          generationStatus: "visual_failed",
+          generationError: errorMessage,
+          generatedAt: recoveredAt.toISOString(),
+        },
+      })
+      .where(and(
+        eq(creativeAiAssetsTable.id, asset.id),
+        eq(creativeAiAssetsTable.status, "generating"),
+      ));
+  }
+
+  for (const [projectId, versions] of conceptVersionsByProject) {
+    for (const version of versions) {
+      await finalizeInteriorConceptMetadata(projectId, version).catch((error) => {
+        console.warn(`[image-designer] Could not refresh stale concept metadata for ${projectId}:`, error);
+      });
+    }
+  }
+
+  return staleAssets.length;
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────

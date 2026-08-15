@@ -60,8 +60,11 @@ export default function ProjectPage({
     );
   }
 
+  const assetsInProgress = (review.assets ?? []).some(
+    (asset) => asset.status === "pending" || asset.status === "generating",
+  );
   const isGenerating =
-    review.status === "pending" || review.status === "running";
+    review.status === "pending" || review.status === "running" || assetsInProgress;
   const stepperStep = stepForProject(review.status, review.reviewStatus);
 
   return (
@@ -116,7 +119,7 @@ export default function ProjectPage({
         )}
 
         {/* Assets grid */}
-        {!isGenerating && review.assets && review.assets.length > 0 && (
+        {review.assets && review.assets.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-6">
               <ImageIcon className="w-5 h-5 text-primary" />
@@ -125,26 +128,41 @@ export default function ProjectPage({
               </h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {review.assets.map((asset) => (
+                {review.assets.map((asset) => (
                 <div
                   key={asset.id}
                   className="group relative rounded-2xl overflow-hidden border border-border bg-card shadow-sm aspect-square"
                 >
-                  <img
-                    src={asset.imageUrl}
-                    alt="Generated asset"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                    <a
-                      href={asset.imageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors"
-                    >
-                      View Full Size
-                    </a>
-                  </div>
+                  {asset.imageUrl ? (
+                    <>
+                      <img
+                        src={asset.imageUrl}
+                        alt="Generated asset"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+                        <a
+                          href={asset.imageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors"
+                        >
+                          View Full Size
+                        </a>
+                      </div>
+                    </>
+                  ) : asset.status === "pending" || asset.status === "generating" ? (
+                    <div className="h-full flex flex-col items-center justify-center gap-3 bg-accent/10 text-center p-6">
+                      <Loader2 className="w-9 h-9 text-primary animate-spin" />
+                      <p className="text-sm font-medium">Generating visual…</p>
+                      <p className="text-xs text-muted-foreground">This image will appear automatically when ready.</p>
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center gap-2 bg-destructive/5 text-center p-6">
+                      <XCircle className="w-9 h-9 text-destructive/70" />
+                      <p className="text-sm font-medium">Generation failed</p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
