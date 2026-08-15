@@ -47,8 +47,13 @@ export async function pingProvider(
     const ok = resp.status >= 200 && resp.status < 300;
     let error: string | undefined;
     if (!ok) {
-      const body = await resp.text().catch(() => "");
-      error = `HTTP ${resp.status}: ${body.slice(0, 200)}`;
+      if (resp.status === 401 || resp.status === 403) {
+        error = "Provider authentication failed. Check the configured API key.";
+      } else if (resp.status === 429) {
+        error = "Provider rate limit or quota exceeded.";
+      } else {
+        error = `Provider request failed (HTTP ${resp.status}).`;
+      }
     }
     return { ok, httpStatus: resp.status, error };
   } catch (err) {

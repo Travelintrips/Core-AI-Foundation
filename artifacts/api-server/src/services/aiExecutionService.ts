@@ -33,6 +33,16 @@ export interface ExecutionOutput {
   latencyMs: number;
 }
 
+function providerRequestError(provider: string, status: number): Error {
+  if (status === 401 || status === 403) {
+    return new Error(`${provider} authentication failed. Check the API key configured in Replit Secrets.`);
+  }
+  if (status === 429) {
+    return new Error(`${provider} rate limit or quota exceeded. Check the provider account.`);
+  }
+  return new Error(`${provider} API request failed (HTTP ${status}).`);
+}
+
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
 
 async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<ExecutionOutput> {
@@ -78,8 +88,7 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${errText}`);
+    throw providerRequestError("OpenAI", response.status);
   }
 
   const data = (await response.json()) as {
@@ -127,8 +136,7 @@ async function executeAnthropic(input: ExecutionInput, apiKey: string): Promise<
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Anthropic API error ${response.status}: ${errText}`);
+    throw providerRequestError("Anthropic", response.status);
   }
 
   const data = (await response.json()) as {
@@ -178,8 +186,7 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${errText}`);
+    throw providerRequestError("Gemini", response.status);
   }
 
   const data = (await response.json()) as {
@@ -227,8 +234,7 @@ async function executeMistral(input: ExecutionInput, apiKey: string): Promise<Ex
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Mistral API error ${response.status}: ${errText}`);
+    throw providerRequestError("Mistral", response.status);
   }
 
   const data = (await response.json()) as {
@@ -263,8 +269,7 @@ async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<
   );
 
   if (!createResponse.ok) {
-    const errText = await createResponse.text();
-    throw new Error(`Replicate API error ${createResponse.status}: ${errText}`);
+    throw providerRequestError("Replicate", createResponse.status);
   }
 
   const prediction = (await createResponse.json()) as {
