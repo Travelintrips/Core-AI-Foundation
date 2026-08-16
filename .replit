@@ -22,23 +22,14 @@ timeoutMs = 180000
 [userenv]
 
 [userenv.shared]
-OPENAI_API_KEY = "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"
-ANTHROPIC_API_KEY = "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"
-COHERE_API_KEY = "P0y8GuyPnhJcp780szHaZGgtz80rLiyZHOWeWQMW"
-GEMINI_API_KEY = "AIzaSyCQb_9MaKUgjpNqfpgBZJbezh6yXQD-crQ"
-MISTRAL_API_KEY = "bDsdCOTE5H0BMsAZ7OIccWw0lPgpajyk"
-REPLICATE_API_TOKEN = "r8_bcqzMXfcX9BqlBFiuqxs17hKgjxo3RU1Lgq2w"
 SMTP_HOST = "smtp.hostinger.com"
 SMTP_PASS = "#Admin12345@$"
 SMTP_USER = "info@cstlogistic.co.id"
 SMTP_PORT = "465"
 SMTP_FROM = "info@cstlogistic.co.id"
 FONNTE_TOKEN = "XnEnfXdKb6DrWPrmVSSZ"
-ADMIN_API_KEY = "6ea91a548c1f7620bc9bf53afda744fd49a3976b1efb8468"
-VITE_ADMIN_API_KEY = "6ea91a548c1f7620bc9bf53afda744fd49a3976b1efb8468"
 ALLOWED_ORIGINS = "https://aicore.cstlogistic.co.id,https://core-ai-foundation-1.replit.app"
 DESIGN_AI_MULTI_AGENT_ENABLED = "true"
-PEXELS_API_KEY = "8FNm5y10ewb6fr5RfNGeW8kN0WOazWOdnodxzmrOqcPw0FcRChlTYC1z"
 
 [userenv.development]
 SUPABASE_ANON_KEY_DEV = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzc3Jmc2hkcnRkZnVwZ3F3ZmR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTY3MjgsImV4cCI6MjA5NDQ3MjcyOH0.czKzR9GjEL6UK8AhPAX6OYyF74fz1YtImYQSXiiG69U"
@@ -60,7 +51,6 @@ SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56ZHdlaXB6Y2tmc3pjenpxdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDI4NDQsImV4cCI6MjA5Mzk3ODg0NH0.p9k3-qyRjPuXsHLizUrSRMyS-0yJAatUyjQU9NIIu1U"
 SUPABASE_PROD_DATABASE_URL = "postgresql://postgres.nzdweipzckfszczzqtuw:AnTXXOl0t1ArQOEU@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
 PUBLIC_APP_URL = "https://aicore.cstlogistic.co.id"
-ADMIN_API_KEY = "6ea91a548c1f7620bc9bf53afda744fd49a3976b1efb8468"
 VITE_ADMIN_API_KEY = "6ea91a548c1f7620bc9bf53afda744fd49a3976b1efb8468"
 
 [nix]
