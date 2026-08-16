@@ -1851,8 +1851,18 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         setTimeout(() => refetchAssets(), 1500);
       },
       onError: (err: unknown) => {
-        const msg = (err as { message?: string })?.message ?? "Image generation failed";
-        if (msg.includes("409") || /already in progress/i.test(msg)) {
+        const apiError = err as {
+          message?: string;
+          status?: number;
+          data?: { error?: string };
+        };
+        const msg = apiError.message ?? "Image generation failed";
+        const serverMessage = apiError.data?.error ?? "";
+        const isGenerationInProgress =
+          /already in progress/i.test(serverMessage) ||
+          /already in progress/i.test(msg);
+
+        if (apiError.status === 409 && isGenerationInProgress) {
           // A refresh or a second click can hit the server while the
           // fire-and-forget pipeline is still running. Keep the UI in its
           // generating state and let the asset query continue polling.
@@ -1861,6 +1871,23 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           toast({ title: "Konsep gambar masih sedang dibuat", description: "Tunggu sampai proses selesai sebelum membuat ulang." });
           return;
         }
+
+        // A 409 can also be a workflow guard (for example, an Interior Design
+        // concept that has not been approved). That is not an active
+        // generation, so never turn on the polling flag for this response.
+        if (
+          apiError.status === 409 &&
+          /approved for rendering/i.test(serverMessage || msg)
+        ) {
+          setGenerationTriggered(false);
+          toast({
+            title: "Konsep Interior Design belum disetujui",
+            description: "Approve the concept for rendering before generating images.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         toast({ title: msg, variant: "destructive" });
       },
     },
@@ -2223,18 +2250,22 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                   <div className="space-y-1">
                     <p className="text-sm font-mono font-medium">No image concepts yet</p>
                     <p className="text-[11px] text-muted-foreground font-mono">
-                      Click "Generate Images" to run the Image Prompt Generator → FLUX.1 → QC pipeline.
+                      {canGenerateImages
+                        ? 'Click "Generate Images" to run the Image Prompt Generator → FLUX.1 → QC pipeline.'
+                        : "Approve the Interior Design concept before generating images."}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateImages}
-                    disabled={generateImages.isPending}
-                    className="gap-1.5 font-mono text-xs"
-                  >
-                    <Wand2 className="size-3.5" />
-                    Generate Image Concepts
-                  </Button>
+                  {canGenerateImages && (
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateImages}
+                      disabled={generateImages.isPending}
+                      className="gap-1.5 font-mono text-xs"
+                    >
+                      <Wand2 className="size-3.5" />
+                      Generate Image Concepts
+                    </Button>
+                  )}
                 </div>
               )}
 

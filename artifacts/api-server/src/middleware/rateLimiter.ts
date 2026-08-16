@@ -27,6 +27,10 @@ function jsonHandler(message: string) {
  */
 function isAdminRequest(req: Request): boolean {
   if (req.method === "OPTIONS") return true;
+  // Session-authenticated admin portal requests are hydrated by
+  // optionalSessionAuth before the global limiter runs. They should receive
+  // the same trusted treatment as requests carrying the admin API key.
+  if ((req as unknown as Record<string, unknown>).internalUser) return true;
   const configuredKey = process.env["ADMIN_API_KEY"];
   if (!configuredKey) {
     // Dev fallback: no key configured → allow everything (same as adminAuth behaviour)

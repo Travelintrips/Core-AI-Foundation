@@ -115,18 +115,21 @@ app.use(addSecurityContext);
 app.use(suspiciousRequestLogger);
 app.use(requestCounterMiddleware);
 
-// ── Global rate limiting (P0-3) ───────────────────────────────────────────────
-// 200 requests per IP per 15 minutes on all /api routes.
-// Individual sensitive routes apply stricter per-route limits on top of this.
-app.use("/api", globalLimiter);
-
-// ── Auth + routing ────────────────────────────────────────────────────────────
 // optionalSessionAuth runs first: hydrates req.internalUser from the session
 // cookie without blocking.  This ensures that public routes (PUBLIC_ROUTE_RULES
 // exemptions) receive an authenticated internalUser when a valid session exists,
 // allowing route handlers to do their own admin-branching (e.g. status=inactive).
-// adminAuthWithExceptions then enforces the key/session guard for non-public routes,
+app.use("/api", optionalSessionAuth);
+
+// ── Global rate limiting (P0-3) ───────────────────────────────────────────────
+// 200 requests per IP per 15 minutes on all /api routes.
+// Individual sensitive routes apply stricter per-route limits on top of this.
+// Session-authenticated admin requests are skipped by isAdminRequest above.
+app.use("/api", globalLimiter);
+
+// ── Auth + routing ────────────────────────────────────────────────────────────
+// adminAuthWithExceptions enforces the key/session guard for non-public routes,
 // short-circuiting the DB lookup because req.internalUser is already set.
-app.use("/api", optionalSessionAuth, adminAuthWithExceptions, router);
+app.use("/api", adminAuthWithExceptions, router);
 
 export default app;
