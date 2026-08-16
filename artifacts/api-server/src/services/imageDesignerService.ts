@@ -740,7 +740,8 @@ async function generateReplicateImage(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        // Replicate uses the "Token" auth scheme, not Bearer.
+        Authorization: `Token ${apiKey}`,
         "Content-Type": "application/json",
         Prefer: "wait", // use sync mode if supported (waits up to 60s)
       },
@@ -789,7 +790,7 @@ async function generateReplicateImage(
     await new Promise((r) => setTimeout(r, 2500));
 
     const pollRes = await fetch(pollUrl, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Token ${apiKey}` },
     });
     if (!pollRes.ok) continue;
 

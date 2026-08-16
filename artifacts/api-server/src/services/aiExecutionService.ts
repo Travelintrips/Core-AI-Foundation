@@ -260,7 +260,8 @@ async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        // Replicate uses the "Token" auth scheme (unlike OpenAI/Mistral).
+        Authorization: `Token ${apiKey}`,
         "content-type": "application/json",
         Prefer: "wait=60",
       },
@@ -288,7 +289,7 @@ async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<
     while (result.status !== "succeeded" && result.status !== "failed" && attempts < 90) {
       await new Promise<void>((r) => setTimeout(r, 1000));
       const pollRes = await fetch(pollUrl, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: { Authorization: `Token ${apiKey}` },
       });
       result = (await pollRes.json()) as typeof result;
       attempts++;
