@@ -1,35 +1,21 @@
 /**
  * GCP Secret Manager bootstrap.
  *
- * Reads GCP_SECRET_MANAGER_BOOTSTRAP_JSON (a service-account JSON blob) and,
- * for each secret in GCP_SECRET_NAMES, fetches the latest version from
- * Google Cloud Secret Manager and injects it into process.env — but only
- * when the environment variable is not already set.
+ * Reads GCP_SECRET_MANAGER_BOOTSTRAP_JSON (a service-account JSON blob) and
+ * fetches the consolidated secret `aicore-app-secrets` (latest version) from
+ * Google Cloud Secret Manager. The secret payload must be a JSON object whose
+ * keys are env-var names. Each key is injected into process.env only when the
+ * variable is not already set (Replit-injected values take precedence).
  *
  * This runs as the very first thing at startup so that downstream modules
  * (DB connection, auth middleware, etc.) always see the resolved values.
+ *
+ * Service account requires: roles/secretmanager.secretAccessor (read-only).
  */
 
 import { GoogleAuth } from "google-auth-library";
 
-/**
- * Secrets to pull from GCP Secret Manager.
- * The GCP secret name must match the env-var name exactly.
- * Secrets that are already present in process.env are skipped.
- */
-const GCP_SECRET_NAMES: string[] = [
-  "SUPABASE_PROD_DATABASE_URL",
-  "ADMIN_API_KEY",
-  "VITE_ADMIN_API_KEY",
-  "SESSION_SECRET",
-  "SMTP_PASSWORD",
-  "OPENAI_API_KEY",
-  "ANTHROPIC_API_KEY",
-  "GEMINI_API_KEY",
-  "MISTRAL_API_KEY",
-  "REPLICATE_API_TOKEN",
-  "COHERE_API_KEY",
-];
+const CONSOLIDATED_SECRET_NAME = "aicore-app-secrets";
 
 interface SecretAccessResponse {
   payload?: { data?: string };
@@ -39,7 +25,7 @@ export async function bootstrapGcpSecrets(): Promise<void> {
   const bootstrapJson = process.env["GCP_SECRET_MANAGER_BOOTSTRAP_JSON"];
 
   if (!bootstrapJson) {
-    // Not configured — normal in development.
+    // Not configured — normal in pure-local development.
     return;
   }
 
@@ -80,44 +66,45 @@ export async function bootstrapGcpSecrets(): Promise<void> {
     return;
   }
 
+  const url =
+    `https://secretmanager.googleapis.com/v1/projects/${projectId}` +
+    `/secrets/${CONSOLIDATED_SECRET_NAME}/versions/latest:access`;
+
+  let secretJson: Record<string, string>;
+  try {
+    const response = await client.request<SecretAccessResponse>({ url });
+    const b64 = response.data?.payload?.data;
+    if (!b64) {
+      console.error(`[gcp-bootstrap] Secret "${CONSOLIDATED_SECRET_NAME}" returned empty payload — skipping.`);
+      return;
+    }
+    const raw = Buffer.from(b64, "base64").toString("utf8");
+    secretJson = JSON.parse(raw) as Record<string, string>;
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status === 404) {
+      console.warn(`[gcp-bootstrap] Secret "${CONSOLIDATED_SECRET_NAME}" not found in project ${projectId} — skipping.`);
+    } else {
+      console.error(`[gcp-bootstrap] Could not fetch secret "${CONSOLIDATED_SECRET_NAME}" (HTTP ${status ?? "?"})`, err);
+    }
+    return;
+  }
+
   let loaded = 0;
   let skipped = 0;
-  let missing = 0;
 
-  for (const secretName of GCP_SECRET_NAMES) {
-    // If already set (e.g. injected by Replit Secrets), respect that value.
-    if (process.env[secretName]) {
+  for (const [key, value] of Object.entries(secretJson)) {
+    if (typeof value !== "string") continue;
+    if (process.env[key]) {
+      // Already set (e.g. injected by Replit Secrets or --env-file) — respect that value.
       skipped++;
       continue;
     }
-
-    const url =
-      `https://secretmanager.googleapis.com/v1/projects/${projectId}` +
-      `/secrets/${secretName}/versions/latest:access`;
-
-    try {
-      const response = await client.request<SecretAccessResponse>({ url });
-      const b64 = response.data?.payload?.data;
-      if (b64) {
-        process.env[secretName] = Buffer.from(b64, "base64").toString("utf8");
-        loaded++;
-      } else {
-        console.warn(`[gcp-bootstrap] Secret "${secretName}" returned empty payload.`);
-        missing++;
-      }
-    } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 404) {
-        // Secret doesn't exist in GCP — not necessarily an error.
-        missing++;
-      } else {
-        console.warn(`[gcp-bootstrap] Could not fetch secret "${secretName}" (HTTP ${status ?? "?"})`, err);
-        missing++;
-      }
-    }
+    process.env[key] = value;
+    loaded++;
   }
 
   console.log(
-    `[gcp-bootstrap] Done — loaded=${loaded} skipped(already-set)=${skipped} not-found=${missing} project=${projectId}`,
+    `[gcp-bootstrap] Done — loaded=${loaded} skipped(already-set)=${skipped} source=${CONSOLIDATED_SECRET_NAME} project=${projectId}`,
   );
 }
