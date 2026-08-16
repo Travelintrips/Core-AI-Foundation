@@ -1050,6 +1050,19 @@ function RenderPanel({ projectUuid, adminKey, approved, hasUnsavedEdits, draft }
             Start Render
           </Button>
         )}
+        {isComplete && !isActive && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 border-cyan-300/30 px-2.5 text-[10px] font-mono text-cyan-200 hover:bg-cyan-300/10"
+            onClick={() => void startRender(false)}
+            disabled={!approved || hasUnsavedEdits || working}
+            data-testid="button-render-new-version"
+          >
+            {working ? <Loader2 className="size-3 animate-spin" /> : <RotateCw className="size-3" />}
+            Render New Version
+          </Button>
+        )}
         {isFailed && (
           <Button
             variant="outline"
