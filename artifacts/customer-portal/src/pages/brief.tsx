@@ -966,6 +966,11 @@ export default function BriefPage() {
                         onChange={(v) => handleChange("idRoomTypes", serializeChoices(v, INTERIOR_ROOM_OPTIONS, ""))}
                         max={8}
                       />
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        Beberapa ruangan akan diproses sebagai satu kesatuan properti.
+                        Sistem akan menyelaraskan alur ruang, material, warna, plafon,
+                        dan pencahayaan agar hasilnya terasa seperti satu rumah.
+                      </p>
                     </FieldItem>
                     <FieldItem id="idBudgetRange" label="Estimasi budget total proyek" optional>
                       <ChoiceChip

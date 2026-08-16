@@ -278,11 +278,14 @@ async function runInteriorDesignWorkflow(
 ): Promise<{ stepOutputs: Record<string, StepOutput>; anyFailed: boolean }> {
   const interiorBrief: InteriorDesignBriefInput = {
     projectName:      project.brandName,
-    spaceType:        briefJson["intSpaceType"] || "residential",
-    roomTypes:        briefJson["intRoomTypes"] || briefJson["outputFormats"] || "",
+    spaceType:        briefJson["intSpaceType"] || briefJson["idProjectType"] || "residential",
+    // The customer portal stores the room selector in the `id*` namespace.
+    // Keep the newer `int*` fields preferred, but do not silently discard the
+    // selected rooms when a brief came from the specialist UI.
+    roomTypes:        briefJson["intRoomTypes"] || briefJson["idRoomTypes"] || briefJson["outputFormats"] || "",
     totalArea:        briefJson["intTotalArea"] || "",
-    designStyle:      briefJson["intDesignStyle"] || briefJson["stylePreference"] || "minimalist",
-    budgetTier:       briefJson["intBudgetTier"] || "standard",
+    designStyle:      briefJson["intDesignStyle"] || briefJson["idInteriorStyle"] || briefJson["stylePreference"] || "minimalist",
+    budgetTier:       briefJson["intBudgetTier"] || briefJson["idBudgetRange"] || "standard",
     targetUser:       project.targetMarket,
     moodGoal:         briefJson["intMoodGoal"] || project.goal,
     existingElements: briefJson["intExistingElements"] || "",

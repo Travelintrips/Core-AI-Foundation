@@ -197,6 +197,7 @@ import type {
   CustomerHealthScore,
   CustomerProjectSubmission,
   CustomerSubmissionResult,
+  DeleteCreativeProjectStepResult,
   DesignCanvasResponse,
   DesignProject,
   DesignProjectList,
@@ -373,6 +374,7 @@ import type {
   ReprioritizeJobBody,
   RequestCpReviewRevision200,
   ResumeQueue200,
+  RetryCreativeProjectResult,
   RetryPipelineStageInput,
   RetryPipelineStageResult,
   RevokeFileDownloadTokenBody,
@@ -5068,6 +5070,150 @@ export function useGetCreativeProject<TData = Awaited<ReturnType<typeof getCreat
 
 
 
+
+export const getRetryCreativeProjectUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/retry`
+}
+
+/**
+ * Clears the previous step snapshot and starts the creative workflow again from the beginning.
+ * @summary Retry a failed creative AI project
+ */
+export const retryCreativeProject = async (id: string, options?: RequestInit): Promise<RetryCreativeProjectResult> => {
+
+  return customFetch<RetryCreativeProjectResult>(getRetryCreativeProjectUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryCreativeProjectMutationOptions = <TError = ErrorType<NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryCreativeProject>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryCreativeProject>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['retryCreativeProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryCreativeProject>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  retryCreativeProject(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryCreativeProjectMutationResult = NonNullable<Awaited<ReturnType<typeof retryCreativeProject>>>
+
+    export type RetryCreativeProjectMutationError = ErrorType<NotFoundResponse | void>
+
+    /**
+ * @summary Retry a failed creative AI project
+ */
+export const useRetryCreativeProject = <TError = ErrorType<NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryCreativeProject>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryCreativeProject>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRetryCreativeProjectMutationOptions(options));
+    }
+
+export const getDeleteCreativeProjectStepUrl = (id: string,
+    stepId: number,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/steps/${stepId}`
+}
+
+/**
+ * Removes a failed or budget-blocked step from the project history.
+ * @summary Delete a failed creative project step
+ */
+export const deleteCreativeProjectStep = async (id: string,
+    stepId: number, options?: RequestInit): Promise<DeleteCreativeProjectStepResult> => {
+
+  return customFetch<DeleteCreativeProjectStepResult>(getDeleteCreativeProjectStepUrl(id,stepId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCreativeProjectStepMutationOptions = <TError = ErrorType<NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCreativeProjectStep>>, TError,{id: string;stepId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCreativeProjectStep>>, TError,{id: string;stepId: number}, TContext> => {
+
+const mutationKey = ['deleteCreativeProjectStep'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCreativeProjectStep>>, {id: string;stepId: number}> = (props) => {
+          const {id,stepId} = props ?? {};
+
+          return  deleteCreativeProjectStep(id,stepId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCreativeProjectStepMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCreativeProjectStep>>>
+
+    export type DeleteCreativeProjectStepMutationError = ErrorType<NotFoundResponse | void>
+
+    /**
+ * @summary Delete a failed creative project step
+ */
+export const useDeleteCreativeProjectStep = <TError = ErrorType<NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCreativeProjectStep>>, TError,{id: string;stepId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCreativeProjectStep>>,
+        TError,
+        {id: string;stepId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCreativeProjectStepMutationOptions(options));
+    }
 
 export const getUpdateCreativeProjectStatusUrl = (id: string,) => {
 

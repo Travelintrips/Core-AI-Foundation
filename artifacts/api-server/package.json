@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export NODE_ENV=development && pnpm run build && node --env-file=../../.env.development --enable-source-maps ./dist/index.mjs",
+    "dev": "export NODE_ENV=development && pnpm run build && if [ -f ../../.env.development ]; then node --env-file=../../.env.development --enable-source-maps ./dist/index.mjs; else node --enable-source-maps ./dist/index.mjs; fi",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

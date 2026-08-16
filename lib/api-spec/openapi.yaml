@@ -1277,6 +1277,62 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreativeProjectDetail"
+  /creative-ai/projects/{id}/retry:
+    post:
+      operationId: retryCreativeProject
+      tags:
+        - creative-ai
+      summary: Retry a failed creative AI project
+      description: Clears the previous step snapshot and starts the creative workflow again from the beginning.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project UUID
+      responses:
+        "202":
+          description: Creative workflow retry started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetryCreativeProjectResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Creative workflow is already running
+  /creative-ai/projects/{id}/steps/{stepId}:
+    delete:
+      operationId: deleteCreativeProjectStep
+      tags:
+        - creative-ai
+      summary: Delete a failed creative project step
+      description: Removes a failed or budget-blocked step from the project history.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project UUID
+        - name: stepId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Database step ID
+      responses:
+        "200":
+          description: Step deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteCreativeProjectStepResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Only failed or budget-blocked steps can be deleted
   /creative-ai/projects/{id}/status:
     patch:
       operationId: updateCreativeProjectStatus
@@ -10110,6 +10166,32 @@ components:
             - running
             - completed
             - failed
+    RetryCreativeProjectResult:
+      type: object
+      required:
+        - projectId
+        - retried
+        - message
+      properties:
+        projectId:
+          type: string
+        retried:
+          type: boolean
+        message:
+          type: string
+    DeleteCreativeProjectStepResult:
+      type: object
+      required:
+        - projectId
+        - stepId
+        - deleted
+      properties:
+        projectId:
+          type: string
+        stepId:
+          type: integer
+        deleted:
+          type: boolean
     AiCapability:
       type: object
       required:
