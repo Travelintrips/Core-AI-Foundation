@@ -1555,6 +1555,37 @@ export const GetCreativeProjectResponse = zod.object({
 
 
 /**
+ * Clears the previous step snapshot and starts the creative workflow again from the beginning.
+ * @summary Retry a failed creative AI project
+ */
+export const RetryCreativeProjectParams = zod.object({
+  "id": zod.coerce.string().describe('Project UUID')
+})
+
+export const RetryCreativeProjectResponse = zod.object({
+  "projectId": zod.string(),
+  "retried": zod.boolean(),
+  "message": zod.string()
+})
+
+
+/**
+ * Removes a failed or budget-blocked step from the project history.
+ * @summary Delete a failed creative project step
+ */
+export const DeleteCreativeProjectStepParams = zod.object({
+  "id": zod.coerce.string().describe('Project UUID'),
+  "stepId": zod.coerce.number().describe('Database step ID')
+})
+
+export const DeleteCreativeProjectStepResponse = zod.object({
+  "projectId": zod.string(),
+  "stepId": zod.number(),
+  "deleted": zod.boolean()
+})
+
+
+/**
  * @summary Update project status
  */
 export const UpdateCreativeProjectStatusParams = zod.object({

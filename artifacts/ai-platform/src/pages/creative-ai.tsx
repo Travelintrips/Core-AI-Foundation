@@ -6,6 +6,8 @@ import {
   useCreateCreativeBrief,
   useListCreativeProjects,
   useGetCreativeProject,
+  useRetryCreativeProject,
+  useDeleteCreativeProjectStep,
   useListProjectFeedback,
   useSubmitProjectFeedback,
   useGenerateImageConcepts,
@@ -512,13 +514,15 @@ interface StepCardProps {
   projectId: string;
   stepFeedback: FeedbackEntry[];
   onFeedback: (data: Parameters<FeedbackBarProps["onSubmit"]>[0]) => Promise<void>;
+  onDeleteStep?: (stepId: number) => void;
 }
 
-function StepCard({ stepDef, step, projectStatus, index, totalSteps, projectId: _projectId, stepFeedback, onFeedback }: StepCardProps) {
+function StepCard({ stepDef, step, projectStatus, index, totalSteps, projectId: _projectId, stepFeedback, onFeedback, onDeleteStep }: StepCardProps) {
   const Icon = stepDef.icon;
   const effectiveStatus = step?.status ?? "pending";
   const isRunning = effectiveStatus === "running" || (projectStatus === "running" && !step);
   const isBudgetBlocked = effectiveStatus === "blocked_by_budget";
+  const canDelete = (effectiveStatus === "failed" || isBudgetBlocked) && step?.id != null;
   const outputStr = step?.output ? JSON.stringify(step.output, null, 2) : "";
   const showFeedback = effectiveStatus === "completed";
 
@@ -580,6 +584,18 @@ function StepCard({ stepDef, step, projectStatus, index, totalSteps, projectId: 
               stepFeedback[0].action === "reject"  ? "bg-red-500" :
               "bg-yellow-500"
             )} title={`Reviewed: ${stepFeedback[0].action}`} />
+          )}
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+              onClick={() => onDeleteStep?.(step.id!)}
+              title="Hapus error step ini"
+              aria-label={`Hapus ${stepDef.label}`}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
           )}
           <StatusIcon status={isRunning ? "running" : effectiveStatus} />
         </div>
@@ -1799,6 +1815,37 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   // Tracks whether the user just triggered image generation so we keep
   // polling even while the asset list is still empty.
   const [generationTriggered, setGenerationTriggered] = useState(false);
+  const retryCreativeProject = useRetryCreativeProject({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCreativeProjectQueryKey(projectId) });
+        queryClient.invalidateQueries({ queryKey: getListCreativeProjectsQueryKey() });
+        toast({ title: "Retry dimulai", description: "Error lama dibersihkan dan workflow dijalankan ulang dari awal." });
+      },
+      onError: (err: unknown) => {
+        toast({
+          title: "Retry gagal",
+          description: err instanceof Error ? err.message : "Workflow sedang berjalan atau tidak dapat diulang.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+  const deleteCreativeProjectStep = useDeleteCreativeProjectStep({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCreativeProjectQueryKey(projectId) });
+        toast({ title: "Error step dihapus" });
+      },
+      onError: (err: unknown) => {
+        toast({
+          title: "Gagal menghapus error step",
+          description: err instanceof Error ? err.message : "Step tidak dapat dihapus.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
 
   const { data: project, isLoading } = useGetCreativeProject(projectId, {
     query: {
@@ -1928,6 +1975,16 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     generateImages.mutate({ id: projectId, data: { variations: 2 } });
   };
 
+  const handleRetryCreativeProject = () => {
+    if (retryCreativeProject.isPending) return;
+    retryCreativeProject.mutate({ id: projectId });
+  };
+
+  const handleDeleteStep = (stepId: number) => {
+    if (!window.confirm("Hapus step yang gagal ini dari riwayat project?")) return;
+    deleteCreativeProjectStep.mutate({ id: projectId, stepId });
+  };
+
   const handleAssetApprove = (assetId: number) => {
     updateAssetStatus.mutate({ assetId, data: { status: "approved" } });
   };
@@ -2026,6 +2083,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 
   const isCompleted = project.status === "completed";
   const hasBudgetBlocked = dbSteps.some((s) => (s.status as string) === "blocked_by_budget");
+  const hasFailedSteps = dbSteps.some((s) => s.status === "failed" || (s.status as string) === "blocked_by_budget");
+  const canRetryCreativeProject =
+    (project.status === "failed" || hasFailedSteps) &&
+    !retryCreativeProject.isPending &&
+    project.status !== "running" &&
+    project.status !== "pending";
 
   // Detect workflow type from stored step names — no backend schema change needed
   const isInteriorDesign = dbSteps.some((s) => INTERIOR_STEP_NAMES.has(s.stepName));
@@ -2065,6 +2128,18 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
+              {canRetryCreativeProject && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetryCreativeProject}
+                  className="h-7 gap-1.5 text-[10px] font-mono border-yellow-500/30 text-yellow-300 hover:bg-yellow-500/10"
+                  title="Hapus error lama dan jalankan ulang seluruh workflow"
+                >
+                  <RotateCcw className="size-3" />
+                  Retry Workflow
+                </Button>
+              )}
             {canGenerateImages && (
               <Button
                 variant="outline"
@@ -2138,6 +2213,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                   projectId={projectId}
                   stepFeedback={feedbackByStep[s.stepName] ?? []}
                   onFeedback={handleFeedback}
+                  onDeleteStep={handleDeleteStep}
                 />
               );
             })
@@ -2157,6 +2233,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                   projectId={projectId}
                   stepFeedback={feedbackByStep[dbName] ?? []}
                   onFeedback={handleFeedback}
+                  onDeleteStep={handleDeleteStep}
                 />
               );
             })

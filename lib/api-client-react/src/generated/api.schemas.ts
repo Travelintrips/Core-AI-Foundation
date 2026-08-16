@@ -1351,6 +1351,18 @@ export interface CreativeProjectStatusUpdate {
   status: CreativeProjectStatusUpdateStatus;
 }
 
+export interface RetryCreativeProjectResult {
+  projectId: string;
+  retried: boolean;
+  message: string;
+}
+
+export interface DeleteCreativeProjectStepResult {
+  projectId: string;
+  stepId: number;
+  deleted: boolean;
+}
+
 export type AiCapabilityStatus = typeof AiCapabilityStatus[keyof typeof AiCapabilityStatus];
 
 

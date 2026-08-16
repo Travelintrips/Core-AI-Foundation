@@ -9,6 +9,10 @@ import {
   ListCreativeProjectsResponse,
   GetCreativeProjectParams,
   GetCreativeProjectResponse,
+  RetryCreativeProjectParams,
+  RetryCreativeProjectResponse,
+  DeleteCreativeProjectStepParams,
+  DeleteCreativeProjectStepResponse,
   UpdateCreativeProjectStatusParams,
   UpdateCreativeProjectStatusBody,
   UpdateCreativeProjectStatusResponse,
@@ -28,6 +32,7 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
+import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 import {
   runImageDesignerPipeline,
   regenerateSingleAsset,
@@ -39,6 +44,7 @@ import { getConceptDraftForImagePipeline } from "../domains/interior-design/serv
 
 const router = Router();
 const activeImagePipelines = new Set<string>();
+const activeCreativeRetries = new Set<number>();
 
 /** POST /creative-ai/brief — create project.
  * P0-3 rate limited: 10 req / 10 min per IP.
@@ -145,6 +151,132 @@ router.get("/creative-ai/projects/:id", async (req, res): Promise<void> => {
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt?.toISOString(),
       })),
+    }),
+  );
+});
+
+/** POST /creative-ai/projects/:id/retry — clear the old step snapshot and rerun */
+router.post("/creative-ai/projects/:id/retry", async (req, res): Promise<void> => {
+  const params = RetryCreativeProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [project] = await db
+    .select()
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, params.data.id));
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  if (activeCreativeRetries.has(project.id) || project.status === "pending" || project.status === "running") {
+    res.status(409).json({ error: "Creative workflow is already running" });
+    return;
+  }
+
+  // A retry is a fresh workflow execution. Removing the old step snapshot
+  // prevents failed rows from being rendered alongside the new attempt.
+  await db
+    .delete(creativeProjectStepsTable)
+    .where(eq(creativeProjectStepsTable.projectId, project.id));
+  await db
+    .update(creativeProjectsTable)
+    .set({ status: "pending", result: null })
+    .where(eq(creativeProjectsTable.id, project.id));
+
+  activeCreativeRetries.add(project.id);
+  void runCreativeBriefWorkflow(project.id)
+    .catch(async (err) => {
+      await logAudit(
+        "creative-ai",
+        "workflow_retry_error",
+        project.projectId,
+        "creative_project",
+        "failure",
+        { error: String(err) },
+      ).catch(() => {});
+    })
+    .finally(() => {
+      activeCreativeRetries.delete(project.id);
+    });
+
+  await logAudit(
+    "creative-ai",
+    "workflow_retry_started",
+    project.projectId,
+    "creative_project",
+    "success",
+  );
+
+  res.status(202).json(
+    RetryCreativeProjectResponse.parse({
+      projectId: project.projectId,
+      retried: true,
+      message: "Creative workflow retry started",
+    }),
+  );
+});
+
+/** DELETE /creative-ai/projects/:id/steps/:stepId — remove a failed step row */
+router.delete("/creative-ai/projects/:id/steps/:stepId", async (req, res): Promise<void> => {
+  const params = DeleteCreativeProjectStepParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [project] = await db
+    .select({ id: creativeProjectsTable.id, projectId: creativeProjectsTable.projectId })
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, params.data.id));
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const [step] = await db
+    .select()
+    .from(creativeProjectStepsTable)
+    .where(
+      and(
+        eq(creativeProjectStepsTable.id, params.data.stepId),
+        eq(creativeProjectStepsTable.projectId, project.id),
+      ),
+    );
+
+  if (!step) {
+    res.status(404).json({ error: "Step not found" });
+    return;
+  }
+
+  if (!["failed", "blocked_by_budget"].includes(step.status)) {
+    res.status(409).json({ error: "Only failed or budget-blocked steps can be deleted" });
+    return;
+  }
+
+  await db
+    .delete(creativeProjectStepsTable)
+    .where(eq(creativeProjectStepsTable.id, step.id));
+
+  await logAudit(
+    "creative-ai",
+    "step_deleted",
+    project.projectId,
+    "creative_project",
+    "success",
+    { stepId: step.id, stepName: step.stepName, previousStatus: step.status },
+  );
+
+  res.json(
+    DeleteCreativeProjectStepResponse.parse({
+      projectId: project.projectId,
+      stepId: step.id,
+      deleted: true,
     }),
   );
 });
