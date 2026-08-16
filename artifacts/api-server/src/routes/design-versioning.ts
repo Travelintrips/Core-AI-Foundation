@@ -135,6 +135,24 @@ router.post("/ai/design-versioning/versions", async (req: Request, res: Response
 });
 
 /**
+ * GET /ai/design-versioning/versions/v/:id
+ * Get a single version by id.
+ * NOTE: must be registered BEFORE /:entityType/:entityId to avoid Express
+ * matching the literal segment "v" as the entityType parameter.
+ */
+router.get("/ai/design-versioning/versions/v/:id", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "id must be an integer" }); return; }
+    const ctx     = buildRepoCtx(req);
+    const version = await getVersion(id, ctx);
+    res.json({ version });
+  } catch (err) {
+    handleError(err, res);
+  }
+});
+
+/**
  * GET /ai/design-versioning/versions/:entityType/:entityId
  * List all active versions for an entity, newest first.
  */
@@ -151,22 +169,6 @@ router.get(
     }
   },
 );
-
-/**
- * GET /ai/design-versioning/versions/v/:id
- * Get a single version by id.
- */
-router.get("/ai/design-versioning/versions/v/:id", async (req: Request, res: Response): Promise<void> => {
-  try {
-    const id = parseInt(req.params.id as string, 10);
-    if (isNaN(id)) { res.status(400).json({ error: "id must be an integer" }); return; }
-    const ctx     = buildRepoCtx(req);
-    const version = await getVersion(id, ctx);
-    res.json({ version });
-  } catch (err) {
-    handleError(err, res);
-  }
-});
 
 /**
  * POST /ai/design-versioning/versions/:id/approve
