@@ -900,8 +900,12 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
     : asset.qcScore >= 80 ? "text-green-400"
     : asset.qcScore >= 60 ? "text-yellow-400"
     : "text-red-400";
-  const pipelineStage = (asset.metadata as Record<string, unknown> | null | undefined)?.pipelineStage;
+  const assetMetadata = asset.metadata as Record<string, unknown> | null | undefined;
+  const pipelineStage = assetMetadata?.pipelineStage;
   const isPromptGenerating = pipelineStage === "prompt_generation";
+  const generationError = typeof assetMetadata?.generationError === "string"
+    ? assetMetadata.generationError.replace(/^Error:\s*/i, "")
+    : null;
 
   return (
     <div className="border border-border/50 rounded-lg bg-card/40 overflow-hidden">
@@ -925,7 +929,9 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
             <ImageOff className="size-8 opacity-40" />
             <span className="text-[10px] font-mono text-center px-3 leading-relaxed">
-              {asset.qcNotes?.includes("REPLICATE_API_TOKEN")
+              {generationError
+                ? `Generation failed: ${generationError}`
+                : asset.qcNotes?.includes("REPLICATE_API_TOKEN")
                 ? "Set REPLICATE_API_TOKEN to generate images"
                 : "Generation failed"}
             </span>

@@ -1676,26 +1676,35 @@ export async function runImageDesignerPipeline(
       generationError = "Permanent Supabase Storage persistence failed";
     }
 
-    // QC review (runs even if image failed — scores the prompt quality)
-    try {
-      const qc = await reviewImage(brief, p.prompt, finalImageUrl ?? "not generated");
-      qcScore = qc.score;
-      qcNotes = qc.notes;
+    // QC only applies to a real generated image. Running vision QC against
+    // "not generated" used to produce a misleading score of 70 and overwrite
+    // the useful provider error (for example, Replicate 401) in qcNotes.
+    if (imageStatus === "completed" && finalImageUrl) {
+      try {
+        const qc = await reviewImage(brief, p.prompt, finalImageUrl);
+        qcScore = qc.score;
+        qcNotes = qc.notes;
 
-      if (qc.tokensUsed > 0) {
-        await recordCost({
-          projectId: projectUuid,
-          agentSlug: "image-qc",
-          provider: "openai",
-          model: "gpt-4o",
-          inputTokens: Math.floor(qc.tokensUsed * 0.65),
-          outputTokens: Math.floor(qc.tokensUsed * 0.35),
-          latencyMs: qc.latencyMs,
-          status: "success",
-        });
+        if (qc.tokensUsed > 0) {
+          await recordCost({
+            projectId: projectUuid,
+            agentSlug: "image-qc",
+            provider: "openai",
+            model: "gpt-4o",
+            inputTokens: Math.floor(qc.tokensUsed * 0.65),
+            outputTokens: Math.floor(qc.tokensUsed * 0.35),
+            latencyMs: qc.latencyMs,
+            status: "success",
+          });
+        }
+      } catch (err) {
+        qcNotes = `QC review error: ${String(err)}`;
       }
-    } catch (err) {
-      qcNotes = `QC review error: ${String(err)}`;
+    } else {
+      qcScore = null;
+      qcNotes = generationError
+        ? `Image generation failed: ${generationError}`
+        : "Image generation did not produce an image.";
     }
 
     // Update the placeholder row with final state
