@@ -36,6 +36,7 @@ import {
   recoverStaleImageGenerations,
 } from "../services/imageDesignerService.js";
 import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
+import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 
 const router = Router();
 const activeImagePipelines = new Set<string>();
@@ -496,6 +497,57 @@ router.post("/creative-ai/assets/:assetId/feedback", async (req, res): Promise<v
       createdAt: asset.createdAt.toISOString(),
     }),
   );
+});
+
+// ── Retry Failed Project ──────────────────────────────────────────────────────
+
+/** POST /creative-ai/projects/:id/retry
+ * Admin-only. Re-runs the AI workflow for a project that is in "failed" status.
+ * Appends new step rows (runtimeRosterService de-duplicates by latest row per role)
+ * and resets the project status to "running" before firing the workflow.
+ */
+router.post("/creative-ai/projects/:id/retry", async (req, res): Promise<void> => {
+  const params = GetCreativeProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [project] = await db
+    .select()
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, params.data.id))
+    .limit(1);
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  if (project.status !== "failed") {
+    res.status(409).json({ error: `Cannot retry project with status "${project.status}". Only failed projects can be retried.` });
+    return;
+  }
+
+  // Reset to pending so the workflow runner transitions it to running
+  await db
+    .update(creativeProjectsTable)
+    .set({ status: "pending", updatedAt: new Date() })
+    .where(eq(creativeProjectsTable.id, project.id));
+
+  // Fire-and-forget — same pattern as paymentScheduleService
+  runCreativeBriefWorkflow(project.id).catch(async (err: unknown) => {
+    console.error(`[creative-ai] Retry workflow failed for project ${project.projectId}:`, err);
+    await db
+      .update(creativeProjectsTable)
+      .set({ status: "failed", updatedAt: new Date() })
+      .where(eq(creativeProjectsTable.id, project.id))
+      .catch(() => undefined);
+  });
+
+  await logAudit("creative-ai", "retry_workflow", project.projectId, "creative_project", "success", { previousStatus: "failed" });
+
+  res.status(202).json({ message: "Workflow restarted", projectId: project.projectId });
 });
 
 // ── Image Analytics ───────────────────────────────────────────────────────────

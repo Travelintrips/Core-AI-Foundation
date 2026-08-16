@@ -1796,6 +1796,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
+  const [retryingWorkflow, setRetryingWorkflow] = useState(false);
   // Tracks whether the user just triggered image generation so we keep
   // polling even while the asset list is still empty.
   const [generationTriggered, setGenerationTriggered] = useState(false);
@@ -1985,6 +1986,34 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     setConceptApproved(approved);
   }, []);
 
+  const handleRetryWorkflow = async () => {
+    if (!project || retryingWorkflow) return;
+    setRetryingWorkflow(true);
+    const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
+    try {
+      const res = await fetch(`/api/creative-ai/projects/${projectId}/retry`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+        },
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Retry failed");
+      }
+      toast({ title: "Workflow dimulai ulang — agen AI sedang bekerja kembali" });
+      queryClient.invalidateQueries({ queryKey: getGetCreativeProjectQueryKey(projectId) });
+    } catch (err: unknown) {
+      toast({
+        title: "Gagal memulai ulang workflow",
+        description: err instanceof Error ? err.message : "Coba lagi",
+        variant: "destructive",
+      });
+      setRetryingWorkflow(false);
+    }
+  };
+
   const handleExportMarkdown = async () => {
     if (!project) return;
     setExporting(true);
@@ -2065,6 +2094,20 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
+            {project.status === "failed" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleRetryWorkflow()}
+                disabled={retryingWorkflow}
+                className="h-7 gap-1.5 text-[10px] font-mono border-red-500/30 text-red-400 hover:bg-red-500/10"
+              >
+                {retryingWorkflow
+                  ? <Loader2 className="size-3 animate-spin" />
+                  : <RotateCcw className="size-3" />}
+                Retry Workflow
+              </Button>
+            )}
             {canGenerateImages && (
               <Button
                 variant="outline"
@@ -2114,6 +2157,24 @@ function ProjectDetail({ projectId }: { projectId: string }) {
             <div className="flex items-center gap-2 mb-4 text-xs text-blue-400 font-mono bg-blue-500/10 border border-blue-500/20 rounded px-3 py-2">
               <Loader2 className="size-3.5 animate-spin" />
               {project.status === "pending" ? "Workflow queued — agents will start shortly…" : "Agents are generating your creative assets…"}
+            </div>
+          )}
+          {project.status === "failed" && (
+            <div className="flex items-center justify-between gap-2 mb-4 text-xs text-red-400 font-mono bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
+              <div className="flex items-center gap-2">
+                <XCircle className="size-3.5 shrink-0" />
+                Workflow gagal — kemungkinan karena API key tidak valid saat proses berlangsung. Klik Retry untuk menjalankan ulang.
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleRetryWorkflow()}
+                disabled={retryingWorkflow}
+                className="h-6 gap-1 text-[10px] font-mono text-red-400 hover:bg-red-500/15 shrink-0"
+              >
+                {retryingWorkflow ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />}
+                Retry
+              </Button>
             </div>
           )}
           {hasBudgetBlocked && (
