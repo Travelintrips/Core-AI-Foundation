@@ -69,6 +69,7 @@ import {
   ReviewVersionsPanel,
   type InteriorVersionSnapshot,
 } from "./ReviewVersionsPanel";
+import { RoomArrangementEditor, type ArrangementPlacement } from "./RoomArrangementEditor";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ interface SpaceZone {
   notes: string;
 }
 
-interface MaterialItem {
+export interface MaterialItem {
   id: string;
   area: string;
   component: string;
@@ -149,9 +150,10 @@ interface MaterialItem {
   thumbnailUrl?: string;
   previewImages?: string[];
   technicalData?: Record<string, unknown>;
+  placement?: ArrangementPlacement;
 }
 
-interface FurnitureItem {
+export interface FurnitureItem {
   id: string;
   item: string;
   zone: string;
@@ -159,9 +161,10 @@ interface FurnitureItem {
   dimensions: string;
   notes: string;
   thumbnailUrl?: string;
+  placement?: ArrangementPlacement;
 }
 
-interface LightingItem {
+export interface LightingItem {
   id: string;
   zone: string;
   lightingType: string;
@@ -171,6 +174,7 @@ interface LightingItem {
   quantity: string;
   notes: string;
   thumbnailUrl?: string;
+  placement?: ArrangementPlacement;
 }
 
 // ── Material category options ─────────────────────────────────────────────────
@@ -1525,6 +1529,17 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
           <AlertTriangle className="size-3.5 shrink-0 text-yellow-500" />
           Approve concept before generating images to ensure the render uses the latest draft.
         </div>
+      )}
+
+      {editMode && (
+        <RoomArrangementEditor
+          materials={localMaterials}
+          furniture={localFurniture}
+          lighting={localLighting}
+          onMaterialsChange={setLocalMaterials}
+          onFurnitureChange={setLocalFurniture}
+          onLightingChange={setLocalLighting}
+        />
       )}
 
       {!editMode && (
