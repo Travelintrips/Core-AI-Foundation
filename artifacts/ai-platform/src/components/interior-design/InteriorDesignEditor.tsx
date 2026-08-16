@@ -311,7 +311,9 @@ async function fetchRenderApi<T>(
   const body = await response.json().catch(() => ({})) as unknown;
   if (!response.ok) {
     const message = readText(asRecord(body), "error", "message") || `Request failed (${response.status})`;
-    throw new Error(message);
+    const error = new Error(message) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
   return body as T;
 }
@@ -940,21 +942,29 @@ function RenderPanel({ projectUuid, adminKey, approved, hasUnsavedEdits, draft }
   const loadRender = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const statusResponse = await fetchRenderApi<{ render?: unknown; job?: unknown }>(
-        `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}/status`,
+      const statusResponse = await fetchRenderApi<RenderObject>(
+        `/api/ai/interior-design/projects/${encodeURIComponent(projectUuid)}/render`,
         adminKey,
       );
-      setRender(asRecord(statusResponse.render));
-      setJob(asRecord(statusResponse.job));
-      const outputsResponse = await fetchRenderApi<{ items?: unknown }>(
-        `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}/outputs`,
-        adminKey,
-      );
-      setOutputs(normalizeRenderOutputs(outputsResponse.items));
+      setRender(statusResponse);
+      const jobs = Array.isArray(statusResponse.jobs) ? statusResponse.jobs : [];
+      setJob(asRecord(jobs[0]));
+      setOutputs(normalizeRenderOutputs(statusResponse.assets));
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Render status unavailable";
-      if (!message.includes("(404)")) setError(message);
+      const status = err && typeof err === "object" && "status" in err
+        ? Number((err as { status?: unknown }).status)
+        : undefined;
+      if (status === 404) {
+        // A project without a render session is the normal pre-render state.
+        setRender(null);
+        setJob(null);
+        setOutputs([]);
+        setError(null);
+      } else {
+        setError(message);
+      }
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -979,14 +989,14 @@ function RenderPanel({ projectUuid, adminKey, approved, hasUnsavedEdits, draft }
     setWorking(true);
     setError(null);
     try {
-      const response = await fetchRenderApi<{ render?: unknown }>(
+      const response = await fetchRenderApi<{ session?: unknown }>(
         retry
-          ? `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}/retry`
-          : `/api/ai/interior-design/renders/${encodeURIComponent(projectUuid)}`,
+          ? `/api/ai/interior-design/projects/${encodeURIComponent(projectUuid)}/render/retry`
+          : `/api/ai/interior-design/projects/${encodeURIComponent(projectUuid)}/render`,
         adminKey,
         { method: "POST", body: JSON.stringify({}) },
       );
-      setRender(asRecord(response.render));
+      setRender(asRecord(response.session));
       setJob(null);
       toast({ title: retry ? "Render retry started" : "Render started", description: "The approved concept is being rendered." });
       await loadRender();
