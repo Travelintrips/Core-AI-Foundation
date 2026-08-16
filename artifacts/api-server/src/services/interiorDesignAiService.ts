@@ -50,6 +50,16 @@ EXISTING ELEMENTS: ${brief.existingElements}
 COLOR PREFERENCE: ${brief.colorPreference}
 MUST HAVE: ${brief.mustHaveFeatures}
 AVOID: ${brief.avoidElements}
+
+PROJECT COHERENCE RULE:
+Treat all listed room types as rooms inside ONE connected property and one
+interior design project, not as unrelated standalone jobs. Build one shared
+architectural language across the property: consistent flooring and ceiling
+logic, a connected material and color palette, coordinated lighting, repeated
+joinery/details, and believable sightlines or transitions between rooms.
+When multiple rooms are selected, explain how the spaces flow from public to
+private areas and how the same house identity is maintained. Never invent a
+separate visual identity for each room.
 ${brief.notes ? `NOTES: ${brief.notes}` : ""}
 
 Return a JSON object:
@@ -105,6 +115,11 @@ ROOMS: ${brief.roomTypes} | AREA: ${brief.totalArea} sqm
 BUDGET: ${brief.budgetTier} | STYLE: ${brief.designStyle}
 MUST HAVE: ${brief.mustHaveFeatures}
 AVOID: ${brief.avoidElements}
+
+Treat the selected rooms as one connected property. Plan adjacency, sightlines,
+transitions, circulation, shared materials, and a consistent design language
+across every selected room. Do not return a collection of disconnected room
+concepts.
 
 DESIGN CONCEPT:
 ${JSON.stringify(concept, null, 2)}

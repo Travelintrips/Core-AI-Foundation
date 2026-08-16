@@ -79,6 +79,32 @@ function interiorVisualRoleHint(role: InteriorVisualRole): string {
   }
 }
 
+function buildInteriorRoomScopeInstruction(brief: Record<string, unknown>): string {
+  const raw = String(
+    brief["intRoomTypes"]
+      ?? brief["idRoomTypes"]
+      ?? brief["roomTypes"]
+      ?? "",
+  ).trim();
+  const rooms = raw
+    .split(/\s*;\s*|\r?\n+/)
+    .map((room) => room.trim())
+    .filter(Boolean);
+  const hasMultipleRooms = rooms.length > 1 || /full_unit|satu unit penuh|whole house|entire home/i.test(raw);
+
+  if (!hasMultipleRooms) {
+    return "Show one complete, coherent interior space. Keep the architecture, material palette, furniture scale, and lighting consistent rather than fragmenting the room.";
+  }
+
+  return `The selected rooms are part of ONE connected home/property: ${rooms.join(", ")}.
+Create one unified architectural story, not separate unrelated room designs.
+Keep the same house identity across rooms through continuous flooring where
+appropriate, coordinated ceiling and lighting logic, a shared material and
+color palette, repeated details, believable adjacency, and clear sightlines
+or transitions. The hero must be a single coherent architectural view, never a
+split-screen, grid, or collage of unrelated rooms.`;
+}
+
 export function isPermanentSupabaseImageUrl(url: string | null | undefined): boolean {
   return typeof url === "string"
     && url.startsWith("https://")
@@ -477,6 +503,7 @@ async function generateInteriorImagePrompts(
 
   const ctx = buildInteriorImagePromptContext(draft, byName);
   const { visualConcept, spacePlan, materials, furniture, lighting } = ctx;
+  const roomScopeInstruction = buildInteriorRoomScopeInstruction(brief);
 
   // Summarise space zones
   const zones: string[] = (() => {
@@ -537,6 +564,9 @@ DATA SOURCE: ${ctx.renderSource === "approved_snapshot" ? "APPROVED SNAPSHOT (ad
 ROOM BRIEF:
 ${JSON.stringify(brief, null, 2)}
 
+ROOM CONTINUITY DIRECTIVE:
+${roomScopeInstruction}
+
 VISUAL CONCEPT:
 ${visualConcept}
 
@@ -565,8 +595,12 @@ Valid aspectRatio: "16:9", "1:1", "3:2"
 Valid style: "photographic", "3d", "illustration"
 
 Use these visual roles in order: ${Array.from({ length: numVariations }, (_, i) => interiorVisualRoleForIndex(i)).join(", ")}.
-The hero must be a complete room render. The moodboard and references must be editorial visual boards, not random rooms.
-Make each variation use the same approved concept, palette, room function, materials, furniture, and lighting. Add the role-specific direction:
+The hero must be a complete, coherent architectural render of the selected
+property scope. The moodboard and references must be editorial visual boards,
+not random rooms or unrelated style samples. Never use a split-screen or
+separate-room collage for the hero.
+Make each variation use the same approved concept, property identity, palette,
+room relationships, materials, furniture, and lighting. Add the role-specific direction:
 ${Array.from({ length: numVariations }, (_, i) => `${i + 1}. ${interiorVisualRoleForIndex(i)} — ${interiorVisualRoleHint(interiorVisualRoleForIndex(i))}`).join("\n")}
 
 CRITICAL: Respond with ONLY the JSON array. No markdown. No explanation.`;
@@ -605,7 +639,7 @@ CRITICAL: Respond with ONLY the JSON array. No markdown. No explanation.`;
       });
   } catch {
     prompts = Array.from({ length: numVariations }, (_, i) => ({
-      prompt: `Photorealistic interior visualization of a ${String(brief["businessType"] ?? "room")}, variation ${i + 1}, ${String(visualConcept).slice(0, 120)}, natural light, professional interior photography`,
+      prompt: `Photorealistic interior visualization of ${String(brief["businessType"] ?? "the selected home")}, variation ${i + 1}. ${roomScopeInstruction} ${String(visualConcept).slice(0, 120)}, natural light, professional interior photography`,
       negativePrompt: "text, watermark, people, low quality, blurry, distorted, cartoon, unrealistic",
       aspectRatio: "16:9",
       style: "photographic",
@@ -1260,14 +1294,28 @@ export async function runImageDesignerPipeline(
   // creativeProjectsTable.serviceRequestId). creativeProjectsTable has no
   // briefJson column — the brief payload lives on the service request row.
   let serviceCode = "";
+  let serviceBriefJson: Record<string, unknown> = {};
   if (project.serviceRequestId != null) {
     const [svcReq] = await db
       .select({ briefJson: aiServiceRequestsTable.briefJson })
       .from(aiServiceRequestsTable)
       .where(eq(aiServiceRequestsTable.id, project.serviceRequestId));
-    serviceCode = String(svcReq?.briefJson?.["serviceCode"] ?? "");
+    serviceBriefJson = (svcReq?.briefJson as Record<string, unknown>) ?? {};
+    serviceCode = String(serviceBriefJson["serviceCode"] ?? "");
   }
   const isLogoService = ["logo-design", "GD-LOGO"].includes(serviceCode);
+  const imageBrief = isInteriorProject
+    ? {
+      ...brief,
+      // The room selector can be persisted under either namespace depending
+      // on which brief surface created the request. Preserve it for rendering.
+      intRoomTypes: serviceBriefJson["intRoomTypes"] ?? serviceBriefJson["idRoomTypes"] ?? serviceBriefJson["outputFormats"] ?? "",
+      idRoomTypes: serviceBriefJson["idRoomTypes"] ?? "",
+      idProjectType: serviceBriefJson["idProjectType"] ?? "",
+      idInteriorStyle: serviceBriefJson["idInteriorStyle"] ?? "",
+      idBudgetRange: serviceBriefJson["idBudgetRange"] ?? "",
+    }
+    : brief;
 
   if (isLogoService) {
     try {
@@ -1388,7 +1436,7 @@ export async function runImageDesignerPipeline(
   try {
     const result = await withTimeout(
       isInteriorProject
-        ? generateInteriorImagePrompts(projectUuid, steps, brief, maxVariations)
+        ? generateInteriorImagePrompts(projectUuid, steps, imageBrief, maxVariations)
         : generateImagePrompts(brief, brandStrategy, creativeDirection, maxVariations),
       PROMPT_GENERATION_TIMEOUT_MS,
       "Image prompt generation",
