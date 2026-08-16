@@ -49,8 +49,9 @@ Thumbs.db
 .local/
 .replit
 
-# Environment files — only .env.development is tracked (dev credentials, private repo)
+# Environment files — secrets loaded at runtime via GCP Secret Manager
 .env
+.env.development
 .env.local
 .env.production
 .env.production.local
