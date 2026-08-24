@@ -262,7 +262,7 @@ export function PlacementCanvas({
             variant="outline"
             size="sm"
             onClick={onEvaluate}
-            disabled={isEvaluating}
+            disabled={isEvaluating || isDirty}
           >
             {isEvaluating ? "Validating..." : "Evaluate Layout"}
           </Button>

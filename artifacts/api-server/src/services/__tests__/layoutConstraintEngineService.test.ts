@@ -183,6 +183,27 @@ describe("WP-07 layout constraint engine", () => {
     expect(result.ruleResults.find((rule) => rule.ruleId === "HC-07")?.status).toBe("pass");
   });
 
+  it("enforces configured furniture spacing independently of stored clearance", () => {
+    const result = evaluateLayoutConstraints(session([
+      item(1, { xCm: 100, yCm: 100 }),
+      item(2, { xCm: 190, yCm: 100 }),
+    ], { minFurnitureClearanceCm: 20 }));
+    expect(result.ruleResults.find((rule) => rule.ruleId === "HC-07")).toMatchObject({
+      status: "fail",
+      itemIds: [ids[1], ids[2]],
+    });
+  });
+
+  it("fails closed when known session metadata is malformed", () => {
+    expect(() => evaluateLayoutConstraints(session(
+      [item(1)],
+      {
+        doors: [{ id: "door", xCm: 100, yCm: 100, widthCm: 100, depthCm: 50 }],
+        styleTags: "not-an-array",
+      },
+    ))).toThrow();
+  });
+
   it("recognizes approved layouts as read-only evaluations", () => {
     const input = session([item(1)], { approvedForRendering: true });
     const before = structuredClone(input);

@@ -20,6 +20,7 @@ import { checkGeometryCollision } from "./collisionEngineService.js";
 import { checkPair } from "./collision-engine/collisionEngine.js";
 import { PlacementEngineError } from "./placementEngineService.js";
 import type { PlacementGeometry, RoomBounds } from "./collision-engine/types.js";
+import { COLLISION_EPSILON } from "./collision-engine/types.js";
 
 type RuleId =
   | "HC-01" | "HC-02" | "HC-03" | "HC-04" | "HC-05" | "HC-06" | "HC-07" | "HC-08" | "HC-09" | "HC-10" | "HC-11"
@@ -88,9 +89,8 @@ const SOFT_WEIGHTS: Record<Extract<RuleId, `SC-${string}`>, number> = {
   "SC-06": 15, "SC-07": 10, "SC-08": 5, "SC-09": 10,
 };
 
-function metadata<T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, raw: unknown): T {
-  const result = schema.safeParse(raw ?? {});
-  return result.success && result.data ? result.data : {} as T;
+function metadata<T>(schema: { parse(value: unknown): T }, raw: unknown): T {
+  return schema.parse(raw ?? {});
 }
 
 function placementMetadata(item: LayoutConstraintPlacement): Wp07PlacementMetadata {
@@ -328,7 +328,17 @@ export function evaluateLayoutConstraints(input: LayoutConstraintSession): Wp07C
 
   const clearanceThreshold = sessionMeta.minFurnitureClearanceCm ?? 0;
   const clearanceHits = clearanceThreshold > 0
-    ? collisionResult.clearanceWarnings.filter((warning) => warning.overlapDepth > clearanceThreshold).map((warning) => warning.placementId)
+    ? checkGeometryCollision(
+        validItems.map((item) => ({
+          ...item,
+          clearanceFrontCm: Math.max(item.clearanceFrontCm, clearanceThreshold),
+          clearanceSideCm: Math.max(item.clearanceSideCm, clearanceThreshold),
+          clearanceBackCm: Math.max(item.clearanceBackCm, clearanceThreshold),
+        })),
+        room,
+      ).clearanceWarnings
+        .filter((warning) => warning.otherPlacementId && warning.overlapDepth > COLLISION_EPSILON)
+        .flatMap((warning) => [warning.placementId, warning.otherPlacementId!])
     : [];
   const uniqueClearanceHits = [...new Set(clearanceHits)].sort();
   if (uniqueClearanceHits.length) {
