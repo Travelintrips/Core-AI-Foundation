@@ -32,6 +32,8 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
       - name: Test
+        env:
+          SUPABASE_DEV_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ci_test
         run: pnpm run ci:test
       - name: Build
         run: pnpm run build
