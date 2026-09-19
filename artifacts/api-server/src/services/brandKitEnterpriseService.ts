@@ -272,12 +272,12 @@ export async function upsertBrandKitSlot(input: UpsertBrandKitSlotInput): Promis
   const [inserted] = await db.insert(aiBrandKitAssetsTable).values(row).returning();
 
   // Publish analytics event
-  await publishSafe("brand_kit_slot_updated", {
+  publishSafe({ eventType: "brand_kit_slot_updated", sourceModule: "brand-kit", payload: {
     projectId: input.projectId,
     slot: input.slot,
     version: inserted.version,
     uploadedBy: input.uploadedBy,
-  });
+  } });
 
   await logAudit("brand-kit", "slot_upserted", String(inserted.id), "ai_brand_kit_asset", "success", {
     projectId: input.projectId,
