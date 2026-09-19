@@ -414,7 +414,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     const { stepOutputs, anyFailed } = await runFashionDesignWorkflow(
       { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes },
       srBriefJson,
-      { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
+      { maxCostPerWorkflow: guardrails.maxCostPerWorkflow },
     );
     const aggregatedResult = {
       fashionBrandStrategy:    stepOutputs["fashion-brand-strategist"] ?? null,
@@ -441,7 +441,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     const { stepOutputs, anyFailed } = await runInteriorDesignWorkflow(
       { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes },
       srBriefJson,
-      { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
+      { maxCostPerWorkflow: guardrails.maxCostPerWorkflow },
     );
     const aggregatedResult = {
       interiorConceptArchitect:   stepOutputs["interior-concept-architect"] ?? null,
