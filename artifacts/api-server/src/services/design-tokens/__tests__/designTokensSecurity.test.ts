@@ -233,7 +233,7 @@ describe("P0 — authenticated font-pair mutations succeed", () => {
       bodyFont: "Lato",
       category: "sans-serif",
       mood: ["modern"],
-      industries: ["tech"],
+      industries: ["technology"],
     });
     expect(res.status).toBe(201);
   });
@@ -257,7 +257,7 @@ describe("P1 — invalid hex color formats rejected at route layer", () => {
       name: "Bad Colors",
       style: "custom",
       mood: ["modern"],
-      industries: ["tech"],
+      industries: ["technology"],
       colors: ["not-a-color", "#ZZZZZZ"],
     });
     expect(res.status).toBe(400);
@@ -283,7 +283,7 @@ describe("P1 — invalid hex color formats rejected at route layer", () => {
       name: "Single Color",
       style: "monochromatic",
       mood: ["modern"],
-      industries: ["tech"],
+      industries: ["technology"],
       colors: ["#ff0000"],
     });
     expect(res.status).toBe(400);
@@ -341,7 +341,7 @@ describe("P1 — font pair input validation", () => {
       bodyFont: "Lato",
       category: "sans-serif",
       mood: ["modern"],
-      industries: ["tech"],
+      industries: ["technology"],
     });
     expect(res.status).toBe(400);
   });
@@ -354,7 +354,7 @@ describe("P1 — font pair input validation", () => {
       bodyFont: "Lato",
       category: "cursive", // not in allowed list
       mood: ["modern"],
-      industries: ["tech"],
+      industries: ["technology"],
     });
     expect(res.status).toBe(400);
   });
