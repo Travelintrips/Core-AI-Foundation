@@ -31,7 +31,7 @@ export const DEFAULT_TENANT_ID = "default";
 export const DEFAULT_PLACEMENT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
 export function resolvePlacementTenantId(req: Request): string {
-  const candidate = req.internalUser?.tenantId;
+  const candidate = (req.internalUser as (typeof req.internalUser & { tenantId?: string }) | undefined)?.tenantId;
   return typeof candidate === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate)
     ? candidate
