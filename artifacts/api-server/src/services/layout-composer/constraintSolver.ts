@@ -47,7 +47,7 @@ import { checkTextFit, shrinkFontToFit, expandHeightToFit } from "./textFitting.
 import { findZoneById, clampElementsToZones } from "./zoneLayouts.js";
 
 import { LAYOUT_LIMITS } from "./constants.js";
-import { resolveRotationAwareCollisions } from "./rotationAwareResolver.js";
+import { resolveRotationAwareCollisions, resolveRotationAwarePair } from "./rotationAwareResolver.js";
 
 const MAX_ITERATIONS = LAYOUT_LIMITS.MAX_ITERATIONS;
 const PRIORITY_ORDER: ConstraintPriority[] = ["hard", "soft", "hint"];
@@ -623,15 +623,25 @@ function checkViolations(
         break;
       }
       case "no_collision": {
-        const pairs = findAllCollisions(elements);
-        for (const pair of pairs) {
-          violations.push({
-            constraintId: c.id, constraintType: c.type,
-            elementIds: [pair.elementA, pair.elementB],
-            message: `Elements "${pair.elementA}" and "${pair.elementB}" overlap by ${pair.overlapArea.toFixed(1)}px²`,
-            severity: c.priority === "hard" ? "error" : "warning",
-            detail: pair as unknown as Record<string, unknown>,
-          });
+        // Use the same rotation-aware narrow phase as resolution. An empty
+        // adjustment can also mean both colliding elements are locked, so
+        // detect that case explicitly with the SAT/AABB resolver contract.
+        for (let i = 0; i < elements.length; i++) {
+          for (let j = i + 1; j < elements.length; j++) {
+            const a = elements[i];
+            const b = elements[j];
+            const adjustment = resolveRotationAwarePair(
+              a.locked && b.locked ? { ...a, locked: false } : a,
+              a.locked && b.locked ? { ...b, locked: false } : b,
+            );
+            if (Object.keys(adjustment).length === 0) continue;
+            violations.push({
+              constraintId: c.id, constraintType: c.type,
+              elementIds: [a.id, b.id],
+              message: `Elements "${a.id}" and "${b.id}" overlap`,
+              severity: c.priority === "hard" ? "error" : "warning",
+            });
+          }
         }
         break;
       }
