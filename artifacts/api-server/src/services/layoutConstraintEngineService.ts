@@ -90,7 +90,14 @@ const SOFT_WEIGHTS: Record<Extract<RuleId, `SC-${string}`>, number> = {
 
 function metadata<T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, raw: unknown): T {
   const result = schema.safeParse(raw ?? {});
-  return result.success && result.data ? result.data : {} as T;
+  if (!result.success || !result.data) {
+    throw new PlacementEngineError(
+      "Layout constraint metadata is malformed and cannot be evaluated safely.",
+      "INVALID_CONSTRAINT_METADATA",
+      422,
+    );
+  }
+  return result.data;
 }
 
 function placementMetadata(item: LayoutConstraintPlacement): Wp07PlacementMetadata {
