@@ -357,7 +357,7 @@ router.get("/ai/composer/sessions/:key", (req: Request, res: Response) => {
     return;
   }
 
-  const session = getSession(tenantId, idempotencyKey);
+  const session = getSession(tenantId, String(idempotencyKey));
   if (!session) {
     // Return 404 for both "not found" and "wrong tenant" — don't leak existence
     res.status(404).json({ error: "Session not found" });
