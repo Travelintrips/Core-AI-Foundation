@@ -528,7 +528,8 @@ router.delete(
     try {
       const session = await resolveSession(String(req.params.token));
       if (!session) { res.status(404).json({ error: "workspace not found" }); return; }
-      const itemType = String(req.params.itemType);\n      const id = parseInt(String(req.params.itemId), 10);
+      const itemType = String(req.params.itemType);
+      const id = parseInt(String(req.params.itemId), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid itemId" }); return; }
       await svc.removeFavorite(session.clientEmail, itemType, id);
       res.json({ ok: true });
