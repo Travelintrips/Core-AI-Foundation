@@ -458,7 +458,7 @@ router.post("/ai/interior-design/drafts/:projectUuid/request-revision", async (r
     if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
 
     const body = req.body as Record<string, unknown>;
-    const requestedBy = typeof body["requestedBy"] === "string" ? body["requestedBy"] : "admin";
+    const requestedBy = resolveAuthenticatedTenantContext(req).actorId;
     const reason      = typeof body["reason"]      === "string" ? body["reason"]      : undefined;
 
     const draft = await requestRevision(projectUuid, requestedBy, reason);
@@ -472,7 +472,7 @@ router.post("/ai/interior-design/drafts/:projectUuid/request-revision", async (r
 /**
  * POST /ai/interior-design/drafts/:projectUuid/reset
  * Restore one or more sections to the original AI-generated values.
- * Body: { sections: string[], editorId?: string }
+ * Body: { sections: string[] }
  */
 router.post("/ai/interior-design/drafts/:projectUuid/reset", async (req, res): Promise<void> => {
   try {
@@ -489,7 +489,7 @@ router.post("/ai/interior-design/drafts/:projectUuid/reset", async (req, res): P
       res.status(400).json({ error: `sections must be a non-empty array of: ${validSections.join(", ")}` }); return;
     }
 
-    const editorId = typeof body["editorId"] === "string" ? body["editorId"] : "admin";
+    const editorId = resolveAuthenticatedTenantContext(req).actorId;
     const draft = await resetDraftToOriginal(projectUuid, sections, editorId);
     res.json({ draft });
   } catch (err) {
