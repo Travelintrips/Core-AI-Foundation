@@ -212,7 +212,7 @@ const { default: request } = await import("supertest");
 const { default: app } = await import("../app.js");
 
 // Helper: bypass admin auth
-const AUTH = { "x-admin-api-key": process.env["ADMIN_API_KEY"] ?? "test-key" };
+const AUTH = { "x-admin-api-key": process.env["ADMIN_API_KEY"] ?? process.env["INTERNAL_API_KEY"] ?? "test-key" };
 
 describe("GET /api/material-library", () => {
   it("returns 200 with items array", async () => {
