@@ -50,7 +50,7 @@ export async function bootstrapGcpSecrets(): Promise<void> {
   let auth: GoogleAuth;
   try {
     auth = new GoogleAuth({
-      credentials: credentials as Parameters<typeof GoogleAuth>[0]["credentials"],
+      credentials: credentials as ConstructorParameters<typeof GoogleAuth>[0]["credentials"],
       scopes: ["https://www.googleapis.com/auth/cloud-platform"],
     });
   } catch (err) {
