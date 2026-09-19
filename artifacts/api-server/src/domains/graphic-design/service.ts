@@ -66,6 +66,7 @@ export async function makeDefaultAdapter(): Promise<CanonicalJobAdapter> {
   return {
     async createProject(input) {
       const project = await createDesignProject({
+        tenantId:     "default",
         name:         input.name,
         description:  input.description,
         canvasWidth:  input.canvasWidthPx,
