@@ -194,7 +194,7 @@ describe("WP-07 layout constraint engine", () => {
       styleTags: "not-an-array",
     }))).toMatchObject({
       code: "INVALID_CONSTRAINT_METADATA",
-      statusCode: 422,
+      status: 422,
     });
   });
 
