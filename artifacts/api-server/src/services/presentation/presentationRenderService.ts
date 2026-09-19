@@ -11,8 +11,10 @@
  */
 
 import PptxGenJSImport from "pptxgenjs";
-import type { Slide, TableRow, IChartMulti } from "pptxgenjs";
 type Presentation = InstanceType<typeof PptxGenJSImport>;
+type Slide = ReturnType<Presentation["addSlide"]>;
+type TableRows = Parameters<Slide["addTable"]>[0];
+type ChartData = Array<{ name: string; labels: string[]; values: number[] }>;
 
 // pptxgenjs ships a CJS build; under ESM (tsx / ts-node / some bundlers) the
 // default export can arrive wrapped as `{ default: PptxGenJS }` instead of the
@@ -236,7 +238,7 @@ export function renderComparisonSlide(pres: Presentation, theme: PresentationThe
   const slide = pres.addSlide();
   addTitle(slide, theme, title);
   const capped = rows.slice(0, 8);
-  const tableRows: TableRow[] = [
+  const tableRows: TableRows = [
     [
       { text: "", options: { fill: { color: hex(theme.backgroundColor) } } },
       { text: "Us", options: { fill: { color: hex(theme.primaryColor) }, color: hex(theme.backgroundColor), bold: true, align: "center" } },
@@ -287,11 +289,11 @@ export function renderFinancialSlide(
   addTitle(slide, theme, title);
 
   if (chart && chart.categories.length > 0 && chart.series.length > 0) {
-    const chartData: IChartMulti[] = chart.series.map((s) => ({
+    const chartData: ChartData = chart.series.map((s) => ({
       name: s.name,
       labels: chart.categories,
       values: s.values,
-    })) as unknown as IChartMulti[];
+    }));
     const chartType =
       chart.chartType === "line" ? pres.ChartType.line :
       chart.chartType === "pie" ? pres.ChartType.pie :
