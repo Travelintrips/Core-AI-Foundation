@@ -233,7 +233,7 @@ export async function convertServiceRequestToProject(
       "schedule_generation_failed",
       String(project.id),
       "creative_project",
-      "error",
+      "failure",
       {
         error: err instanceof Error ? err.message : String(err),
         projectId: project.id,
