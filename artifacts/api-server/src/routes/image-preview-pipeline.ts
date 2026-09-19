@@ -209,7 +209,7 @@ router.post("/creative-ai/sessions/:sessionId/select-concept", async (req, res):
   }
 
   // Guard: only allow selection when preview is ready or more previews requested
-  const allowedStatuses = ["preview_ready", "waiting_customer", "preview_generating"];
+  const allowedStatuses = ["preview_ready", "waiting_customer", "preview_generating", "recompose_required"];
   if (!allowedStatuses.includes(session.sessionStatus)) {
     res.status(409).json({
       error: `Cannot select concept in status "${session.sessionStatus}". Previews must be ready first.`,
@@ -254,7 +254,7 @@ router.post("/creative-ai/sessions/:sessionId/generate-final", async (req, res):
     return;
   }
 
-  if (session.sessionStatus !== "concept_selected") {
+  if (!["concept_selected", "recompose_required"].includes(session.sessionStatus)) {
     res.status(409).json({
       error: `Cannot start final generation in status "${session.sessionStatus}". Select a concept first.`,
     });
@@ -317,7 +317,7 @@ router.post("/creative-ai/sessions/:sessionId/more-previews", async (req, res): 
   }
 
   // Guard: can only request more previews before concept selection or from preview_ready state
-  if (!["preview_ready", "waiting_customer"].includes(session.sessionStatus)) {
+  if (!["preview_ready", "waiting_customer", "recompose_required"].includes(session.sessionStatus)) {
     res.status(409).json({
       error: `Cannot generate more previews in status "${session.sessionStatus}"`,
     });
