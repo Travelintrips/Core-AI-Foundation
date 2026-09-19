@@ -11,6 +11,8 @@
  */
 
 import PptxGenJSImport from "pptxgenjs";
+import type { Slide, TableRow, IChartMulti } from "pptxgenjs";
+type Presentation = InstanceType<typeof PptxGenJSImport>;
 
 // pptxgenjs ships a CJS build; under ESM (tsx / ts-node / some bundlers) the
 // default export can arrive wrapped as `{ default: PptxGenJS }` instead of the
@@ -56,7 +58,7 @@ function footerText(spec: CreativePresentationSpec): string {
   return spec.companyName ? `${spec.companyName} — ${spec.title}` : spec.title;
 }
 
-function addFooter(slide: PptxGenJS.Slide, theme: PresentationTheme, footer: string, pageNumber: number) {
+function addFooter(slide: Slide, theme: PresentationTheme, footer: string, pageNumber: number) {
   slide.addText(footer, {
     x: MARGIN, y: SLIDE_H - 0.4, w: SLIDE_W - MARGIN * 2 - 0.8, h: 0.3,
     fontSize: 8, color: theme.mutedTextColor.replace("#", ""), align: "left",
@@ -71,7 +73,7 @@ function hex(color: string): string {
   return color.replace("#", "");
 }
 
-function addTitle(slide: PptxGenJS.Slide, theme: PresentationTheme, rawTitle: string, y = 0.5) {
+function addTitle(slide: Slide, theme: PresentationTheme, rawTitle: string, y = 0.5) {
   const { final } = fitTextToBox(rawTitle);
   slide.addText(final, {
     x: MARGIN, y, w: SLIDE_W - MARGIN * 2, h: 0.9,
@@ -79,7 +81,7 @@ function addTitle(slide: PptxGenJS.Slide, theme: PresentationTheme, rawTitle: st
   });
 }
 
-function addSubtitle(slide: PptxGenJS.Slide, theme: PresentationTheme, subtitle: string | undefined, y = 1.35) {
+function addSubtitle(slide: Slide, theme: PresentationTheme, subtitle: string | undefined, y = 1.35) {
   if (!subtitle) return;
   slide.addText(subtitle, {
     x: MARGIN, y, w: SLIDE_W - MARGIN * 2, h: 0.5,
@@ -88,7 +90,7 @@ function addSubtitle(slide: PptxGenJS.Slide, theme: PresentationTheme, subtitle:
 }
 
 function addBulletsBlock(
-  slide: PptxGenJS.Slide,
+  slide: Slide,
   theme: PresentationTheme,
   bullets: string[],
   x: number, y: number, w: number, h: number,
@@ -101,7 +103,7 @@ function addBulletsBlock(
 }
 
 function addImageIfPresent(
-  slide: PptxGenJS.Slide,
+  slide: Slide,
   image: { buffer: Buffer | null; fit?: "contain" | "cover" } | undefined,
   x: number, y: number, w: number, h: number,
 ): boolean {
@@ -121,7 +123,7 @@ function addImageIfPresent(
 
 // ── Reusable slide layouts ───────────────────────────────────────────────────
 
-export function renderCoverSlide(pres: PptxGenJS, theme: PresentationTheme, spec: PresentationSlideSpec & { kind: "cover" }, companyName?: string) {
+export function renderCoverSlide(pres: Presentation, theme: PresentationTheme, spec: PresentationSlideSpec & { kind: "cover" }, companyName?: string) {
   const slide = pres.addSlide();
   slide.background = { color: hex(theme.primaryColor) };
   const { final: title } = fitTextToBox(spec.title, 80);
@@ -145,7 +147,7 @@ export function renderCoverSlide(pres: PptxGenJS, theme: PresentationTheme, spec
   return slide;
 }
 
-export function renderSectionSlide(pres: PptxGenJS, theme: PresentationTheme, spec: PresentationSlideSpec & { kind: "section" }) {
+export function renderSectionSlide(pres: Presentation, theme: PresentationTheme, spec: PresentationSlideSpec & { kind: "section" }) {
   const slide = pres.addSlide();
   slide.background = { color: hex(theme.secondaryColor) };
   const { final: title } = fitTextToBox(spec.title, 80);
@@ -157,7 +159,7 @@ export function renderSectionSlide(pres: PptxGenJS, theme: PresentationTheme, sp
 }
 
 export function renderContentSlide(
-  pres: PptxGenJS, theme: PresentationTheme,
+  pres: Presentation, theme: PresentationTheme,
   title: string, body?: string, bullets?: string[],
   image?: { buffer: Buffer | null; caption?: string },
 ) {
@@ -184,13 +186,13 @@ export function renderContentSlide(
 }
 
 export function renderProblemSolutionSlide(
-  pres: PptxGenJS, theme: PresentationTheme,
+  pres: Presentation, theme: PresentationTheme,
   title: string, body: string | undefined, bullets: string[] | undefined,
 ) {
   return renderContentSlide(pres, theme, title, body, bullets);
 }
 
-export function renderMetricsSlide(pres: PptxGenJS, theme: PresentationTheme, title: string, metrics: SlideMetric[]) {
+export function renderMetricsSlide(pres: Presentation, theme: PresentationTheme, title: string, metrics: SlideMetric[]) {
   const slide = pres.addSlide();
   addTitle(slide, theme, title);
   const cols = Math.min(metrics.length, 4) || 1;
@@ -208,7 +210,7 @@ export function renderMetricsSlide(pres: PptxGenJS, theme: PresentationTheme, ti
   return slide;
 }
 
-export function renderTimelineSlide(pres: PptxGenJS, theme: PresentationTheme, title: string, items: SlideTimelineItem[]) {
+export function renderTimelineSlide(pres: Presentation, theme: PresentationTheme, title: string, items: SlideTimelineItem[]) {
   const slide = pres.addSlide();
   addTitle(slide, theme, title);
   const capped = items.slice(0, 6);
@@ -230,11 +232,11 @@ export function renderTimelineSlide(pres: PptxGenJS, theme: PresentationTheme, t
   return slide;
 }
 
-export function renderComparisonSlide(pres: PptxGenJS, theme: PresentationTheme, title: string, rows: SlideComparisonRow[]) {
+export function renderComparisonSlide(pres: Presentation, theme: PresentationTheme, title: string, rows: SlideComparisonRow[]) {
   const slide = pres.addSlide();
   addTitle(slide, theme, title);
   const capped = rows.slice(0, 8);
-  const tableRows: PptxGenJS.TableRow[] = [
+  const tableRows: TableRow[] = [
     [
       { text: "", options: { fill: { color: hex(theme.backgroundColor) } } },
       { text: "Us", options: { fill: { color: hex(theme.primaryColor) }, color: hex(theme.backgroundColor), bold: true, align: "center" } },
@@ -254,11 +256,11 @@ export function renderComparisonSlide(pres: PptxGenJS, theme: PresentationTheme,
   return slide;
 }
 
-export function renderMarketSlide(pres: PptxGenJS, theme: PresentationTheme, title: string, body: string | undefined, bullets: string[] | undefined) {
+export function renderMarketSlide(pres: Presentation, theme: PresentationTheme, title: string, body: string | undefined, bullets: string[] | undefined) {
   return renderContentSlide(pres, theme, title, body, bullets);
 }
 
-export function renderTeamSlide(pres: PptxGenJS, theme: PresentationTheme, title: string, members: Array<{ name: string; role: string; bio?: string }>) {
+export function renderTeamSlide(pres: Presentation, theme: PresentationTheme, title: string, members: Array<{ name: string; role: string; bio?: string }>) {
   const slide = pres.addSlide();
   addTitle(slide, theme, title);
   const capped = members.slice(0, 5);
@@ -278,18 +280,18 @@ export function renderTeamSlide(pres: PptxGenJS, theme: PresentationTheme, title
 }
 
 export function renderFinancialSlide(
-  pres: PptxGenJS, theme: PresentationTheme, title: string,
+  pres: Presentation, theme: PresentationTheme, title: string,
   metrics: SlideMetric[] | undefined, chart: import("./presentationTypes.js").SlideChartSpec | undefined,
 ) {
   const slide = pres.addSlide();
   addTitle(slide, theme, title);
 
   if (chart && chart.categories.length > 0 && chart.series.length > 0) {
-    const chartData: PptxGenJS.IChartMulti[] = chart.series.map((s) => ({
+    const chartData: IChartMulti[] = chart.series.map((s) => ({
       name: s.name,
       labels: chart.categories,
       values: s.values,
-    })) as unknown as PptxGenJS.IChartMulti[];
+    })) as unknown as IChartMulti[];
     const chartType =
       chart.chartType === "line" ? pres.ChartType.line :
       chart.chartType === "pie" ? pres.ChartType.pie :
@@ -319,7 +321,7 @@ export function renderFinancialSlide(
   return slide;
 }
 
-export function renderAskSlide(pres: PptxGenJS, theme: PresentationTheme, title: string, body?: string, bullets?: string[]) {
+export function renderAskSlide(pres: Presentation, theme: PresentationTheme, title: string, body?: string, bullets?: string[]) {
   const slide = pres.addSlide();
   slide.background = { color: hex(theme.primaryColor) };
   slide.addText(fitTextToBox(title, 80).final, {
@@ -340,7 +342,7 @@ export function renderAskSlide(pres: PptxGenJS, theme: PresentationTheme, title:
   return slide;
 }
 
-export function renderClosingSlide(pres: PptxGenJS, theme: PresentationTheme, spec: PresentationSlideSpec & { kind: "closing" }, companyName?: string) {
+export function renderClosingSlide(pres: Presentation, theme: PresentationTheme, spec: PresentationSlideSpec & { kind: "closing" }, companyName?: string) {
   const slide = pres.addSlide();
   slide.background = { color: hex(theme.secondaryColor) };
   slide.addText(fitTextToBox(spec.title, 80).final, {
@@ -375,7 +377,7 @@ export async function renderPresentation(spec: CreativePresentationSpec): Promis
   let continuationSlidesCreated = 0;
   let slideIndex = 0;
 
-  function attachNotesAndFooter(slide: PptxGenJS.Slide, notes?: string) {
+  function attachNotesAndFooter(slide: Slide, notes?: string) {
     slideIndex += 1;
     if (notes && notes.trim()) {
       slide.addNotes(notes.trim().slice(0, 2000));
