@@ -66,7 +66,7 @@ const createTemplateSchema = z.object({
   thumbnailUrl:    z.string().url().nullable().optional(),
   tags:            z.array(z.string()).optional(),
   tenantId:        z.string().uuid().nullable().optional(),
-  metadata:        z.record(z.unknown()).optional(),
+  metadata:        z.record(z.string(), z.unknown()).optional(),
 });
 
 const updateTemplateSchema = z.object({
@@ -78,7 +78,7 @@ const updateTemplateSchema = z.object({
   previewImageUrl: z.string().url().nullable().optional(),
   thumbnailUrl:    z.string().url().nullable().optional(),
   tags:            z.array(z.string()).optional(),
-  metadata:        z.record(z.unknown()).optional(),
+  metadata:        z.record(z.string(), z.unknown()).optional(),
 });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
