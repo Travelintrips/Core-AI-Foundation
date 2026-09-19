@@ -106,7 +106,7 @@ async function loadAssetRecord(assetId: number, assetSource: string): Promise<{
     if (!rows[0]) return null;
     const r = rows[0]!;
     return {
-      fileName: r.fileName, mimeType: r.mimeType, fileSizeBytes: r.fileSizeBytes ?? null,
+      fileName: r.fileName ?? "", mimeType: r.mimeType, fileSizeBytes: r.fileSizeBytes ?? null,
       checksum: r.checksum ?? null, title: r.slot, tags: [],
       previewUrl: r.previewUrl ?? null, uploadedBy: null,
       category: null, slot: r.slot,
