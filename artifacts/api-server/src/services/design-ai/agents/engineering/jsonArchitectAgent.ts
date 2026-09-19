@@ -19,6 +19,8 @@ import { getProviderApiKey } from "../../../aiSecretService.js";
 import { recordCost } from "../../../costService.js";
 import { logger } from "../../../../lib/logger.js";
 import { DESIGN_TEMPLATE_SCHEMA_VERSION, DESIGN_LIMITS } from "../../../../types/designTemplate.js";
+import { designElementSchema } from "../../../../validators/designTemplateAiSchema.js";
+import { z } from "zod";
 import type { DesignTemplate, DesignElement, TemplateVariable } from "../../../../types/designTemplate.js";
 import type {
   AgentOutput,
@@ -31,6 +33,17 @@ const AGENT_ID      = "json-architect-ai";
 const AGENT_NAME    = "JSON Architect AI";
 const AGENT_VERSION = "1.0.0";
 const MAX_RETRIES   = 3;
+
+const aiRepairSchema = z.object({
+  elements: z.array(designElementSchema).max(DESIGN_LIMITS.MAX_ELEMENT_COUNT),
+  variables: z.array(z.object({
+    key: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/),
+    label: z.string().min(1).max(100),
+    type: z.enum(["text","number","currency","image","color","url","date","boolean"]),
+    required: z.boolean().optional(),
+    defaultValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  })).max(DESIGN_LIMITS.MAX_VARIABLE_COUNT).optional(),
+});
 
 // ── Size presets (mirrors templateAiService) ──────────────────────────────────
 const SIZE_PRESETS: Record<string, { width: number; height: number }> = {
@@ -438,12 +451,18 @@ Generate elements and variables arrays only.`;
         continue;
       }
 
-      const p = parsed as any;
-      if (Array.isArray(p.elements)) {
-        template = { ...template, elements: p.elements, variables: p.variables ?? template.variables };
-        break;
+      const repaired = aiRepairSchema.safeParse(parsed);
+      if (!repaired.success) {
+        lastError = `AI response failed canonical schema validation: ${repaired.error.issues.map((issue) => issue.message).join("; ")}`;
+        continue;
       }
-      lastError = "AI response missing 'elements' array";
+      template = {
+        ...template,
+        elements: repaired.data.elements as DesignElement[],
+        variables: (repaired.data.variables ?? template.variables) as TemplateVariable[],
+      };
+      lastError = undefined;
+      break;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       logger.warn({ attempt, err }, `[${AGENT_ID}] AI call failed`);
