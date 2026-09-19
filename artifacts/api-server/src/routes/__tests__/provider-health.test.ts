@@ -350,7 +350,7 @@ describe("runHealthCheck — unit", () => {
     if (!("notFound" in result)) {
       expect(result.pingOk).toBe(false);
       expect(result.httpStatus).toBe(401);
-      expect(result.error).toContain("401");
+      expect(result.error).toContain("authentication failed");
     }
   });
 
