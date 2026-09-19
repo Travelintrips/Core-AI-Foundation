@@ -387,7 +387,7 @@ router.get("/ai/interior-design/drafts/:projectUuid", async (req, res): Promise<
  * Update one or more sections of the editable draft.
  * Supports optimistic concurrency via optional X-Expected-Updated-At header or body.updatedAt.
  *
- * Body: { spacePlan?, materials?, furniture?, lighting?, visualConcept?, updatedAt?, editorId? }
+ * Body: { spacePlan?, materials?, furniture?, lighting?, visualConcept?, updatedAt? }
  */
 router.patch("/ai/interior-design/drafts/:projectUuid", async (req, res): Promise<void> => {
   try {
@@ -395,7 +395,7 @@ router.patch("/ai/interior-design/drafts/:projectUuid", async (req, res): Promis
     if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
 
     const body = req.body as Record<string, unknown>;
-    const editorId = typeof body["editorId"] === "string" ? body["editorId"] : "admin";
+    const editorId = resolveAuthenticatedTenantContext(req).actorId;
     const expectedUpdatedAt = typeof body["updatedAt"] === "string" ? body["updatedAt"] : undefined;
 
     const sections: Record<string, unknown> = {};
@@ -421,7 +421,7 @@ router.patch("/ai/interior-design/drafts/:projectUuid", async (req, res): Promis
 /**
  * PATCH /ai/interior-design/drafts/:projectUuid/review-state
  * Transition the draft to a new review state.
- * Body: { state: string, editorId?: string }
+ * Body: { state: string }
  */
 router.patch("/ai/interior-design/drafts/:projectUuid/review-state", async (req, res): Promise<void> => {
   try {
@@ -433,7 +433,7 @@ router.patch("/ai/interior-design/drafts/:projectUuid/review-state", async (req,
       res.status(400).json({ error: "state is required" }); return;
     }
 
-    const editorId = typeof body["editorId"] === "string" ? body["editorId"] : "admin";
+    const editorId = resolveAuthenticatedTenantContext(req).actorId;
     const draft = await updateDraftReviewState(projectUuid, body["state"], editorId);
     res.json({ draft });
   } catch (err) {
@@ -449,7 +449,7 @@ router.patch("/ai/interior-design/drafts/:projectUuid/review-state", async (req,
  * This is the ONLY valid way to leave approved_for_rendering state.
  * Transitions: approved_for_rendering → revision_requested.
  *
- * Body: { requestedBy?: string, reason?: string }
+ * Body: { reason?: string }
  * Protected by global adminAuth middleware — unauthorized requests receive 401.
  */
 router.post("/ai/interior-design/drafts/:projectUuid/request-revision", async (req, res): Promise<void> => {
