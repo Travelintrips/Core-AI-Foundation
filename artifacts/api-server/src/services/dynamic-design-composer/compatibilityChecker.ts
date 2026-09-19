@@ -75,7 +75,7 @@ const LAYOUT_COMPONENT_CONFLICTS: Array<{
   },
   {
     strategy: ["full-bleed"],
-    componentType: ["sidebar", "breadcrumb", "accordion"],
+    componentType: ["breadcrumb", "accordion"],
     reason: "Full-bleed layouts have no sidebars or nested structures — these components have no place",
     severity: "error",
   },
