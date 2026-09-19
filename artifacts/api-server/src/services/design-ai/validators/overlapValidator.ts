@@ -41,7 +41,7 @@ function rectFullyCovers(cover: DesignElement, target: DesignElement): boolean {
 function isSolidElement(el: DesignElement): boolean {
   const opacity = el.opacity ?? 1;
   if (opacity < 0.1) return false; // effectively invisible
-  if (el.type === "shape" && typeof el.fill === "string" && el.fill) return true;
+  if (el.type === "shape" && el.fill != null && (typeof el.fill === "string" ? el.fill.length > 0 : typeof el.fill === "object")) return true;
   if (el.type === "image") return true;
   return false;
 }
