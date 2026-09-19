@@ -228,16 +228,16 @@ export async function createAssetLibraryItem(input: CreateAssetInput): Promise<A
 
   const [inserted] = await db.insert(aiAssetLibraryTable).values(row).returning();
 
-  await publishSafe("asset_library_upload", {
+  publishSafe({ eventType: "asset_library_upload", sourceModule: "asset-library", payload: {
     emailHash: input.emailHash,
     assetId: inserted.id,
     category: input.category,
     uploadedBy: input.uploadedBy,
-  });
+  } });
 
   await logAudit("asset-library", "asset_created", String(inserted.id), "ai_asset_library", "success", {
     category: input.category, fileName: input.fileName,
-  });
+  } });
 
   return toView(inserted);
 }
@@ -284,12 +284,12 @@ export async function replaceAssetLibraryItem(input: ReplaceAssetInput): Promise
     tags: input.tags ?? (Array.isArray(existing.tags) ? (existing.tags as string[]) : []),
   }).returning();
 
-  await publishSafe("asset_library_replaced", {
+  publishSafe({ eventType: "asset_library_replaced", sourceModule: "asset-library", payload: {
     emailHash: input.emailHash,
     newAssetId: inserted.id,
     parentId: input.parentId,
     version: inserted.version,
-  });
+  } });
 
   return toView(inserted);
 }
@@ -302,7 +302,7 @@ export async function renameAssetLibraryItem(emailHash: string, id: number, newT
     .returning();
   if (!updated) return null;
 
-  await publishSafe("asset_library_renamed", { emailHash, assetId: id, newTitle });
+  publishSafe({ eventType: "asset_library_renamed", sourceModule: "asset-library", payload: { emailHash, assetId: id, newTitle });
   return toView(updated);
 }
 
@@ -319,7 +319,7 @@ export async function toggleFavorite(emailHash: string, id: number): Promise<Ass
     .where(eq(aiAssetLibraryTable.id, id))
     .returning();
 
-  await publishSafe("asset_library_favorited", { emailHash, assetId: id, favorited: !row.favorited });
+  publishSafe({ eventType: "asset_library_favorited", sourceModule: "asset-library", payload: { emailHash, assetId: id, favorited: !row.favorited });
   return toView(updated);
 }
 
@@ -331,7 +331,7 @@ export async function archiveAssetLibraryItem(emailHash: string, id: number): Pr
     .returning();
   if (!updated) return null;
 
-  await publishSafe("asset_library_archived", { emailHash, assetId: id });
+  publishSafe({ eventType: "asset_library_archived", sourceModule: "asset-library", payload: { emailHash, assetId: id });
   return toView(updated);
 }
 
@@ -370,11 +370,11 @@ export async function signAssetLibraryDownload(
   const token = generateDownloadToken(pseudoProjectId, row.storagePath, Math.min(ttlSeconds, 86400));
   const expiresAt = new Date(Date.now() + Math.min(ttlSeconds, 86400) * 1000).toISOString();
 
-  await publishSafe("asset_library_download", {
+  publishSafe({ eventType: "asset_library_download", sourceModule: "asset-library", payload: {
     emailHash,
     assetId: id,
     category: row.category,
-  });
+  } });
 
   await logAudit("asset-library", "download_signed", String(id), "ai_asset_library", "success", { emailHash });
 
