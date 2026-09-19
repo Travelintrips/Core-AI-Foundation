@@ -128,11 +128,12 @@ export function resolveRotationAwareCollisions(
   elements: LayoutElement[],
   opts: ResolverOptions,
 ): RotationAwareResult {
-  const pairCap        = opts.pairCap        ?? DEFAULT_PAIR_CAP;
+  const pairCap = opts.pairCap ?? DEFAULT_PAIR_CAP;
   const translationCap = opts.translationCapPx ?? DEFAULT_TRANSLATION_CAP_PX;
-  const deadlineAbs    = opts.deadlineAbsolute ?? Infinity;
+  const deadlineAbs = opts.deadlineAbsolute ?? Infinity;
   const cType: ConstraintType = "no_collision";
 
+  const working = elements.map((element) => ({ ...element }));
   const adjustments: Record<string, { dx: number; dy: number }> = {};
   const totalTranslation: Record<string, number> = {};
   const warnings: ConstraintViolation[] = [];
@@ -143,84 +144,82 @@ export function resolveRotationAwareCollisions(
   let cappedByPairLimit = false;
   let timedOut = false;
 
-  outer:
-  for (let i = 0; i < elements.length; i++) {
-    for (let j = i + 1; j < elements.length; j++) {
-      if (pairsChecked >= pairCap) {
-        cappedByPairLimit = true;
-        break outer;
-      }
-      if (Date.now() > deadlineAbs) {
-        timedOut = true;
-        break outer;
-      }
-
-      pairsChecked++;
-
-      const a = elements[i];
-      const b = elements[j];
-      const pairAdj = resolveRotationAwarePair(a, b);
-      if (Object.keys(pairAdj).length === 0) continue;
-
-      pairsResolved++;
-
-      for (const [id, { dx, dy }] of Object.entries(pairAdj)) {
-        const dist = Math.hypot(dx, dy);
-        const runningTotal = (totalTranslation[id] ?? 0) + dist;
-
-        if (runningTotal > translationCap) {
-          // Translation cap hit — warn once per element
-          if (!warnedElements.has(id)) {
-            warnedElements.add(id);
-            warnings.push({
-              constraintId: opts.constraintId,
-              constraintType: cType,
-              elementIds: [id],
-              message: `Element "${id}" hit translation cap (${translationCap}px) during rotation-aware collision resolution`,
-              severity: "warning",
-              detail: {
-                translationCapPx: translationCap,
-                accumulated: runningTotal,
-                iteration: opts.iteration,
-              },
-            });
-          }
-          continue;
+  // Resolve against current positions, not the original snapshot. Restart the
+  // scan after every movement so each subsequent MTV is computed from the
+  // geometry produced by the preceding movement.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    outer:
+    for (let i = 0; i < working.length; i++) {
+      for (let j = i + 1; j < working.length; j++) {
+        if (pairsChecked >= pairCap) {
+          cappedByPairLimit = true;
+          break outer;
+        }
+        if (Date.now() > deadlineAbs) {
+          timedOut = true;
+          break outer;
         }
 
-        const curr = adjustments[id] ?? { dx: 0, dy: 0 };
-        adjustments[id] = { dx: curr.dx + dx, dy: curr.dy + dy };
-        totalTranslation[id] = runningTotal;
+        pairsChecked++;
+        const pairAdj = resolveRotationAwarePair(working[i], working[j]);
+        if (Object.keys(pairAdj).length === 0) continue;
+
+        let applied = false;
+        for (const [id, { dx, dy }] of Object.entries(pairAdj)) {
+          const dist = Math.hypot(dx, dy);
+          const runningTotal = (totalTranslation[id] ?? 0) + dist;
+          if (runningTotal > translationCap) {
+            if (!warnedElements.has(id)) {
+              warnedElements.add(id);
+              warnings.push({
+                constraintId: opts.constraintId,
+                constraintType: cType,
+                elementIds: [id],
+                message: `Element "${id}" hit translation cap (${translationCap}px) during rotation-aware collision resolution`,
+                severity: "warning",
+                detail: { translationCapPx: translationCap, accumulated: runningTotal, iteration: opts.iteration },
+              });
+            }
+            continue;
+          }
+
+          const target = working.find((element) => element.id === id);
+          if (!target) continue;
+          target.x += dx;
+          target.y += dy;
+          const curr = adjustments[id] ?? { dx: 0, dy: 0 };
+          adjustments[id] = { dx: curr.dx + dx, dy: curr.dy + dy };
+          totalTranslation[id] = runningTotal;
+          applied = true;
+        }
+
+        if (applied) {
+          pairsResolved++;
+          changed = true;
+          break outer;
+        }
       }
     }
+    if (cappedByPairLimit || timedOut) break;
   }
 
   if (cappedByPairLimit) {
     warnings.push({
-      constraintId: opts.constraintId,
-      constraintType: cType,
+      constraintId: opts.constraintId, constraintType: cType,
       elementIds: elements.map((e) => e.id),
       message: `Collision resolution stopped at pair cap (${pairCap}) on iteration ${opts.iteration}`,
       severity: "warning",
-      detail: {
-        pairCap,
-        pairsChecked,
-        pairsResolved,
-        iteration: opts.iteration,
-      },
+      detail: { pairCap, pairsChecked, pairsResolved, iteration: opts.iteration },
     });
   } else if (timedOut) {
     warnings.push({
-      constraintId: opts.constraintId,
-      constraintType: cType,
+      constraintId: opts.constraintId, constraintType: cType,
       elementIds: elements.map((e) => e.id),
       message: `Collision resolution timed out after ${pairsChecked} pairs on iteration ${opts.iteration}`,
       severity: "warning",
-      detail: {
-        pairsChecked,
-        pairsResolved,
-        iteration: opts.iteration,
-      },
+      detail: { pairsChecked, pairsResolved, iteration: opts.iteration },
     });
   }
 
