@@ -849,7 +849,6 @@ export async function getDesignEvents(
         actorType: aiAuditLogsTable.actorType,
         resourceType: aiAuditLogsTable.resourceType,
         resourceId: aiAuditLogsTable.resourceId,
-        correlationId: aiAuditLogsTable.correlationId,
         createdAt: aiAuditLogsTable.createdAt,
       })
       .from(aiAuditLogsTable)
@@ -867,7 +866,7 @@ export async function getDesignEvents(
       resourceType: r.resourceType ?? null,
       resourceId: r.resourceId ?? null,
       summary: `${r.actorType ?? "system"} performed ${r.action ?? "action"} on ${r.resourceType ?? "resource"} ${r.resourceId ?? ""}`.trim(),
-      correlationId: r.correlationId ?? null,
+      correlationId: null,
       occurredAt: iso(r.createdAt) ?? new Date().toISOString(),
     })),
     total: countRow?.count ?? 0,
