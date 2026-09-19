@@ -13,7 +13,7 @@ import type { ValidationIssue } from "../types/engineering.types.js";
 import { getElementBindingKey } from "./templateValidator.js";
 
 const VALID_VARIABLE_TYPES = new Set(["text","number","currency","image","color","url","date","boolean"]);
-const SAFE_ID = /^[a-zA-Z0-9_\-]+$/;
+const SAFE_ID = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 export function runBindingValidator(template: DesignTemplate): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -60,8 +60,8 @@ export function runBindingValidator(template: DesignTemplate): ValidationIssue[]
         code: "INVALID_VARIABLE_KEY",
         severity: "error",
         field: `variables[${v.key}].key`,
-        message: `Variable key "${v.key}" contains invalid characters. Only [a-zA-Z0-9_-] allowed.`,
-        suggestedFix: "Use only alphanumeric characters, hyphens, and underscores.",
+        message: `Variable key "${v.key}" is invalid. Use a letter or underscore first, followed only by letters, numbers, or underscores.`,
+        suggestedFix: "Use the canonical variable-key format: ^[a-zA-Z_][a-zA-Z0-9_]*$.",
       });
     }
     if (!VALID_VARIABLE_TYPES.has(v.type)) {
