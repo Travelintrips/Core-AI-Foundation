@@ -49,7 +49,7 @@ const CreatePaletteSchema = z.object({
   description: z.string().max(500).optional(),
   style: z.enum(["monochromatic", "complementary", "triadic", "analogous", "split-complementary", "tetradic", "custom"]),
   mood: z.array(z.enum(["professional", "playful", "elegant", "modern", "traditional", "bold", "minimal", "friendly"])).min(1),
-  industries: z.array(z.string()).min(1),
+  industries: z.array(z.enum(["technology", "finance", "healthcare", "retail", "education", "real-estate", "food-beverage", "travel", "automotive", "fashion", "beauty", "entertainment", "sports", "nonprofit", "government", "professional-services", "manufacturing", "general"])).min(1),
   colors: z.array(HexColorSchema).min(2).max(12),
   tags: z.array(z.string()).optional(),
 });
@@ -102,7 +102,7 @@ router.get("/", async (req, res): Promise<void> => {
 
 router.get("/:id", async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
     const palette = await getColorPaletteWithRoles(id);
     if (!palette) { res.status(404).json({ error: "Color palette not found" }); return; }
@@ -130,7 +130,7 @@ router.post("/", adminAuth, async (req, res): Promise<void> => {
 // ── PATCH /color-palettes/:id ─────────────────────────────────────────────────
 
 router.patch("/:id", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = CreatePaletteSchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
@@ -148,7 +148,7 @@ router.patch("/:id", adminAuth, async (req, res): Promise<void> => {
 // ── DELETE /color-palettes/:id ────────────────────────────────────────────────
 
 router.delete("/:id", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     await deactivateColorPalette(id);
@@ -163,7 +163,7 @@ router.delete("/:id", adminAuth, async (req, res): Promise<void> => {
 // ── GET /color-palettes/:id/semantic-roles ────────────────────────────────────
 
 router.get("/:id/semantic-roles", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const roles = await getSemanticRoles(id);
@@ -176,7 +176,7 @@ router.get("/:id/semantic-roles", async (req, res): Promise<void> => {
 // ── PUT /color-palettes/:id/semantic-roles ────────────────────────────────────
 
 router.put("/:id/semantic-roles", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = z.array(SemanticRoleSchema).min(1).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
