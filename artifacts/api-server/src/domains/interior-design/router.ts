@@ -395,7 +395,7 @@ router.patch("/ai/interior-design/drafts/:projectUuid", async (req, res): Promis
     if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
 
     const body = req.body as Record<string, unknown>;
-    const editorId = resolveAuthenticatedTenantContext(req).actorId;
+    const editorId = resolveAuthenticatedTenantContext(req).actorId ?? "system";
     const expectedUpdatedAt = typeof body["updatedAt"] === "string" ? body["updatedAt"] : undefined;
 
     const sections: Record<string, unknown> = {};
@@ -433,7 +433,7 @@ router.patch("/ai/interior-design/drafts/:projectUuid/review-state", async (req,
       res.status(400).json({ error: "state is required" }); return;
     }
 
-    const editorId = resolveAuthenticatedTenantContext(req).actorId;
+    const editorId = resolveAuthenticatedTenantContext(req).actorId ?? "system";
     const draft = await updateDraftReviewState(projectUuid, body["state"], editorId);
     res.json({ draft });
   } catch (err) {
@@ -458,7 +458,7 @@ router.post("/ai/interior-design/drafts/:projectUuid/request-revision", async (r
     if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
 
     const body = req.body as Record<string, unknown>;
-    const requestedBy = resolveAuthenticatedTenantContext(req).actorId;
+    const requestedBy = resolveAuthenticatedTenantContext(req).actorId ?? "system";
     const reason      = typeof body["reason"]      === "string" ? body["reason"]      : undefined;
 
     const draft = await requestRevision(projectUuid, requestedBy, reason);
@@ -489,7 +489,7 @@ router.post("/ai/interior-design/drafts/:projectUuid/reset", async (req, res): P
       res.status(400).json({ error: `sections must be a non-empty array of: ${validSections.join(", ")}` }); return;
     }
 
-    const editorId = resolveAuthenticatedTenantContext(req).actorId;
+    const editorId = resolveAuthenticatedTenantContext(req).actorId ?? "system";
     const draft = await resetDraftToOriginal(projectUuid, sections, editorId);
     res.json({ draft });
   } catch (err) {
