@@ -82,7 +82,7 @@ async function withSession(req: import("express").Request, res: import("express"
 
 // ── POST /ai/asset-intelligence/v2/analyze/:assetId ──────────────────────────
 router.post("/ai/asset-intelligence/v2/analyze/:assetId", adminAuth, async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
   const { assetSource, clientId, reanalyze, skipSafety, skipLicensing } = req.body as {
@@ -163,7 +163,7 @@ router.get("/ai/asset-intelligence/v2/duplicates/:clientId", async (req, res): P
 
 // ── GET /ai/asset-intelligence/v2/similar/:assetId — paginated ───────────────
 router.get("/ai/asset-intelligence/v2/similar/:assetId", async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
   const q = req.query as Record<string, string | undefined>;
@@ -180,7 +180,7 @@ router.get("/ai/asset-intelligence/v2/similar/:assetId", async (req, res): Promi
 
 // ── GET /ai/asset-intelligence/v2/:assetId ───────────────────────────────────
 router.get("/ai/asset-intelligence/v2/:assetId", async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
   const q = req.query as Record<string, string | undefined>;
@@ -208,7 +208,7 @@ router.get("/ai/asset-intelligence/v2/version-chains/:clientId", async (req, res
 
 // GET /ai/asset-intelligence/v2/version-chain/:chainId
 router.get("/ai/asset-intelligence/v2/version-chain/:chainId", async (req, res): Promise<void> => {
-  const chainId = parseAssetId(req.params["chainId"]);
+  const chainId = parseAssetId(String(req.params["chainId"]));
   if (!chainId) { res.status(400).json({ error: "Invalid chainId" }); return; }
   const chain = await getVersionChain(chainId);
   if (!chain) { res.status(404).json({ error: "Version chain not found" }); return; }
@@ -233,7 +233,7 @@ router.post("/ai/asset-intelligence/v2/version-chains", adminAuth, async (req, r
 
 // POST /ai/asset-intelligence/v2/version-chains/:chainId/members
 router.post("/ai/asset-intelligence/v2/version-chains/:chainId/members", adminAuth, async (req, res): Promise<void> => {
-  const chainId = parseAssetId(req.params["chainId"]);
+  const chainId = parseAssetId(String(req.params["chainId"]));
   if (!chainId) { res.status(400).json({ error: "Invalid chainId" }); return; }
 
   const { assetId, assetSource, versionType, versionLabel, role } = req.body as {
@@ -258,7 +258,7 @@ router.post("/ai/asset-intelligence/v2/version-chains/:chainId/members", adminAu
 
 // GET /ai/asset-intelligence/v2/licensing/:assetId
 router.get("/ai/asset-intelligence/v2/licensing/:assetId", async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const assetSource = (req.query["source"] as string) ?? "library";
   const result = await getLicensing(assetId, assetSource);
@@ -268,7 +268,7 @@ router.get("/ai/asset-intelligence/v2/licensing/:assetId", async (req, res): Pro
 
 // PUT /ai/asset-intelligence/v2/licensing/:assetId
 router.put("/ai/asset-intelligence/v2/licensing/:assetId", adminAuth, async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
   const { assetSource, clientId, licenseType, licenseOwner, attribution, usageRights, restrictions, expiresAt, notes } =
@@ -299,7 +299,7 @@ router.put("/ai/asset-intelligence/v2/licensing/:assetId", adminAuth, async (req
 
 // GET /ai/asset-intelligence/v2/safety/:assetId
 router.get("/ai/asset-intelligence/v2/safety/:assetId", async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const assetSource = (req.query["source"] as string) ?? "library";
   const result = await getAssetSafety(assetId, assetSource);
@@ -388,7 +388,7 @@ router.get("/public/customer/workspace/:token/asset-intelligence/v2/:assetId", a
   const session = await withSession(req, res);
   if (!session) return;
 
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const assetSource = (req.query["source"] as string) ?? "library";
 
@@ -416,7 +416,7 @@ router.get("/public/customer/workspace/:token/asset-intelligence/v2/:assetId/sim
   const session = await withSession(req, res);
   if (!session) return;
 
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const assetSource = (req.query["source"] as string) ?? "library";
   const limit = Math.min(parseInt((req.query["limit"] as string) ?? "10", 10), SIMILAR_ASSET_MAX_LIMIT);
@@ -430,7 +430,7 @@ router.get("/public/customer/workspace/:token/asset-intelligence/v2/:assetId/sim
 router.get("/public/customer/workspace/:token/asset-intelligence/v2/:assetId/licensing", async (req, res): Promise<void> => {
   const session = await withSession(req, res);
   if (!session) return;
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(String(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const assetSource = (req.query["source"] as string) ?? "library";
   // Always redacted for public
