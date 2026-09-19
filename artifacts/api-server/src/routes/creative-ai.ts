@@ -41,7 +41,6 @@ import {
   recoverStaleImageGenerations,
 } from "../services/imageDesignerService.js";
 import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
-import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 
 const router = Router();
 const activeImagePipelines = new Set<string>();
