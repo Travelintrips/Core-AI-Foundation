@@ -633,13 +633,29 @@ export async function updateConceptDraft(
   if ("lighting"      in sections) updates.lightingDraft      = sections.lighting      as never;
   if ("visualConcept" in sections) updates.visualConceptDraft = sections.visualConcept ?? null;
 
+  // Claim/update atomically. The write is conditional on the same row state we
+  // inspected, so two first editors cannot both claim an unowned draft and a
+  // concurrent write cannot silently overwrite the winner.
   const [updated] = await db
     .update(idConceptDraftsTable)
     .set(updates)
-    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .where(and(
+      eq(idConceptDraftsTable.projectUuid, projectUuid),
+      eq(idConceptDraftsTable.updatedAt, existing.updatedAt),
+      existing.lastEditedBy === null
+        ? sql`${idConceptDraftsTable.lastEditedBy} IS NULL`
+        : eq(idConceptDraftsTable.lastEditedBy, existing.lastEditedBy),
+    ))
     .returning();
 
-  return updated!;
+  if (!updated) {
+    throw Object.assign(
+      new Error("Concurrent edit conflict: draft ownership or content changed. Refresh and try again."),
+      { status: 409 },
+    );
+  }
+
+  return updated;
 }
 
 /**
