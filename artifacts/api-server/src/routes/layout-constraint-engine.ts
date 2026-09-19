@@ -26,7 +26,7 @@ router.post("/ai/layout-sessions/:sessionId/constraints/evaluate", async (req: R
     res.status(400).json({ error: { code: "INVALID_UUID", message: "sessionId must be a valid UUID." } });
     return;
   }
-  const parsedBody = wp07ConstraintRequestSchema.safeParse(req.body);
+  const parsedBody = wp07ConstraintRequestSchema.safeParse(req.body ?? {});
   if (!parsedBody.success) {
     res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid constraint evaluation request.", details: parsedBody.error.issues } });
     return;
