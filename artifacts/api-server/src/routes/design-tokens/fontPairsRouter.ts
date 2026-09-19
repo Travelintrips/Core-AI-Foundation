@@ -43,7 +43,7 @@ const CreateFontPairSchema = z.object({
   accentFont: z.string().max(100).optional(),
   category: z.enum(["serif", "sans-serif", "display", "monospace", "handwriting"]),
   mood: z.array(z.enum(["professional", "playful", "elegant", "modern", "traditional", "bold", "minimal", "friendly"])).min(1),
-  industries: z.array(z.string()).min(1),
+  industries: z.array(z.enum(["technology", "finance", "healthcare", "retail", "education", "real-estate", "food-beverage", "travel", "automotive", "fashion", "beauty", "entertainment", "sports", "nonprofit", "government", "professional-services", "manufacturing", "general"])).min(1),
   displayFontWeight: z.string().optional(),
   bodyFontWeight: z.string().optional(),
   license: z.enum(["open", "commercial", "custom"]).optional(),
@@ -95,7 +95,7 @@ router.get("/", async (req, res): Promise<void> => {
 
 router.get("/:id", async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
     const pair = await getFontPairWithRoles(id);
     if (!pair) { res.status(404).json({ error: "Font pair not found" }); return; }
@@ -126,7 +126,7 @@ router.post("/", adminAuth, async (req, res): Promise<void> => {
 // ── PATCH /font-pairs/:id ─────────────────────────────────────────────────────
 
 router.patch("/:id", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = CreateFontPairSchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
@@ -144,7 +144,7 @@ router.patch("/:id", adminAuth, async (req, res): Promise<void> => {
 // ── DELETE /font-pairs/:id ────────────────────────────────────────────────────
 
 router.delete("/:id", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     await deactivateFontPair(id);
@@ -159,7 +159,7 @@ router.delete("/:id", adminAuth, async (req, res): Promise<void> => {
 // ── GET /font-pairs/:id/roles ─────────────────────────────────────────────────
 
 router.get("/:id/roles", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const roles = await getTypographyRoles(id);
@@ -172,7 +172,7 @@ router.get("/:id/roles", async (req, res): Promise<void> => {
 // ── PUT /font-pairs/:id/roles ─────────────────────────────────────────────────
 
 router.put("/:id/roles", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = z.array(TypographyRoleSchema).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
@@ -192,10 +192,10 @@ router.put("/:id/roles", adminAuth, async (req, res): Promise<void> => {
 // ── DELETE /font-pairs/:id/roles/:role ───────────────────────────────────────
 
 router.delete("/:id/roles/:role", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
-    await deleteTypographyRole(id, req.params.role);
+    await deleteTypographyRole(id, String(req.params.role));
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: "Failed to delete typography role" });
