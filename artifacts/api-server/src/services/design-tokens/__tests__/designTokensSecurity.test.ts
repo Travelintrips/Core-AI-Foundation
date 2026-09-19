@@ -170,7 +170,7 @@ describe("P0 — font-pairs: unauthenticated mutations return 401", () => {
     const app = await buildFontApp(false);
     expect((await request(app).post("/font-pairs").send({
       name: "Inter + Lato", displayFont: "Inter", bodyFont: "Lato",
-      category: "sans-serif", mood: ["modern"], industries: ["tech"],
+      category: "sans-serif", mood: ["modern"], industries: ["technology"],
     })).status).toBe(401);
   });
 
