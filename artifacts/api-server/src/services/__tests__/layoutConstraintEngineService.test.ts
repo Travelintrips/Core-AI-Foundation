@@ -187,12 +187,18 @@ describe("WP-07 layout constraint engine", () => {
   });
 
   it("rejects malformed known session metadata instead of silently dropping valid constraints", () => {
-    expect(() => evaluateLayoutConstraints(session([
-      item(1, { xCm: 100, yCm: 100 }),
-    ], {
-      doors: [{ id: "door", xCm: 100, yCm: 100, widthCm: 100, depthCm: 50, clearanceCm: 20 }],
-      styleTags: "not-an-array",
-    }))).toMatchObject({
+    let thrown: unknown;
+    try {
+      evaluateLayoutConstraints(session([
+        item(1, { xCm: 100, yCm: 100 }),
+      ], {
+        doors: [{ id: "door", xCm: 100, yCm: 100, widthCm: 100, depthCm: 50, clearanceCm: 20 }],
+        styleTags: "not-an-array",
+      }));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
       code: "INVALID_CONSTRAINT_METADATA",
       status: 422,
     });
