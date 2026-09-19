@@ -38,7 +38,7 @@ router.post("/ai/asset-intelligence/analyze", adminAuth, async (req, res): Promi
 
 // ── Admin: POST /ai/asset-intelligence/analyze/:assetId ─────────────────────
 router.post("/ai/asset-intelligence/analyze/:assetId", adminAuth, async (req, res): Promise<void> => {
-  const assetId = parseInt(req.params["assetId"] ?? "0", 10);
+  const assetId = parseInt(String(req.params["assetId"] ?? "0"), 10);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const { assetSource, clientId } = req.body as { assetSource?: string; clientId?: string };
   if (!assetSource || !clientId) {
@@ -51,7 +51,7 @@ router.post("/ai/asset-intelligence/analyze/:assetId", adminAuth, async (req, re
 
 // ── Admin: GET /ai/asset-intelligence/:assetId ───────────────────────────────
 router.get("/ai/asset-intelligence/:assetId", async (req, res): Promise<void> => {
-  const assetId = parseInt(req.params["assetId"] ?? "0", 10);
+  const assetId = parseInt(String(req.params["assetId"] ?? "0"), 10);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const assetSource = (req.query["source"] as string) ?? "library";
   const result = await getAssetIntelligence(assetId, assetSource);
@@ -93,7 +93,7 @@ router.get("/public/customer/workspace/:token/asset-intelligence", async (req, r
 // ── Public: POST /public/customer/workspace/:token/asset-intelligence/analyze/:assetId ─
 router.post("/public/customer/workspace/:token/asset-intelligence/analyze/:assetId", async (req, res): Promise<void> => {
   const { token } = req.params as { token: string };
-  const assetId = parseInt(req.params["assetId"] ?? "0", 10);
+  const assetId = parseInt(String(req.params["assetId"] ?? "0"), 10);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const result = await resolveWorkspaceSession(token);
   if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
