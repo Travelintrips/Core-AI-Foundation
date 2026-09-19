@@ -334,9 +334,29 @@ export function evaluateLayoutConstraints(input: LayoutConstraintSession): Wp07C
   rules.set("HC-06", makeRule("HC-06", "hard", sessionMeta.walkwayZones?.length ? (walkwayHits.length ? "fail" : "pass") : "not_applicable", sessionMeta.walkwayZones?.length ? (walkwayHits.length ? "Walkway clearance is violated." : "Configured walkway zones remain clear.") : "No canonical walkway zones are available.", walkwayHits));
 
   const clearanceThreshold = sessionMeta.minFurnitureClearanceCm ?? 0;
-  const clearanceHits = clearanceThreshold > 0
-    ? collisionResult.clearanceWarnings.filter((warning) => warning.overlapDepth > clearanceThreshold).map((warning) => warning.placementId)
-    : [];
+  const clearanceHits: string[] = [];
+  if (clearanceThreshold > 0) {
+    const expansion = clearanceThreshold / 2;
+    for (let i = 0; i < validItems.length; i += 1) {
+      for (let j = i + 1; j < validItems.length; j += 1) {
+        const a = validItems[i]!;
+        const b = validItems[j]!;
+        const expand = (item: LayoutConstraintPlacement): PlacementGeometry => ({
+          ...item,
+          xCm: item.xCm - expansion,
+          yCm: item.yCm - expansion,
+          widthCm: item.widthCm + clearanceThreshold,
+          depthCm: item.depthCm + clearanceThreshold,
+          clearanceFrontCm: 0,
+          clearanceSideCm: 0,
+          clearanceBackCm: 0,
+        });
+        if (checkPair(expand(a), expand(b)).overlaps) {
+          clearanceHits.push(a.id, b.id);
+        }
+      }
+    }
+  }
   const uniqueClearanceHits = [...new Set(clearanceHits)].sort();
   if (uniqueClearanceHits.length) {
     const message = "Configured minimum furniture spacing is not respected.";
