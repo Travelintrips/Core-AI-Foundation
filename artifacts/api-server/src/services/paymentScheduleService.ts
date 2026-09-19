@@ -416,7 +416,7 @@ export async function verifyPayment(
     productionStarted = true;
     runCreativeBriefWorkflow(project.id).catch(async (err) => {
       console.error(`[payments] Workflow failed for project ${project.id}:`, err);
-      await logAudit("payments", "workflow_dispatch_failed", String(project.id), "creative_project", "error", {
+      await logAudit("payments", "workflow_dispatch_failed", String(project.id), "creative_project", "failure", {
         error: err instanceof Error ? err.message : String(err),
       });
       // Payment stays paid — do NOT revert. Admin can retry via admin panel.
