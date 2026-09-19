@@ -43,7 +43,7 @@ const CreateFontPairSchema = z.object({
   accentFont: z.string().max(100).optional(),
   category: z.enum(["serif", "sans-serif", "display", "monospace", "handwriting"]),
   mood: z.array(z.enum(["professional", "playful", "elegant", "modern", "traditional", "bold", "minimal", "friendly"])).min(1),
-  industries: z.array(z.enum(["technology", "finance", "healthcare", "retail", "education", "real-estate", "food-beverage", "travel", "automotive", "fashion", "beauty", "entertainment", "sports", "nonprofit", "government", "professional-services", "manufacturing", "general"])).min(1),
+  industries: z.array(z.enum(["technology", "finance", "healthcare", "education", "creative", "retail", "hospitality", "legal", "nonprofit", "media", "logistics", "manufacturing", "real_estate", "food_beverage", "fashion", "automotive", "general"])).min(1),
   displayFontWeight: z.string().optional(),
   bodyFontWeight: z.string().optional(),
   license: z.enum(["open", "commercial", "custom"]).optional(),
