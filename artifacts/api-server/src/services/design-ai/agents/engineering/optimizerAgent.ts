@@ -31,6 +31,7 @@ import type {
 import { optimizeSpacing }   from "../../optimizers/spacingOptimizer.js";
 import { optimizeLayers }    from "../../optimizers/layerOptimizer.js";
 import { optimizeAlignment } from "../../optimizers/alignmentOptimizer.js";
+import { runBoundsValidator } from "../../validators/boundsValidator.js";
 
 const AGENT_ID      = "optimizer-ai";
 const AGENT_NAME    = "Optimizer AI";
@@ -88,9 +89,17 @@ export async function runOptimizerAgent(
       ...validationReport.errors,
       ...validationReport.warnings,
     ];
-    const unresolvedIssues: ValidationIssue[] = allIssues.filter(
-      (issue) => !AUTO_FIXABLE_CODES.has(issue.code),
+    const remainingBounds = runBoundsValidator(current);
+    const remainingBoundsKeys = new Set(
+      remainingBounds.map((issue) => `${issue.code}:${issue.nodeId ?? ""}`),
     );
+    const unresolvedIssues: ValidationIssue[] = allIssues.filter((issue) => {
+      if (!AUTO_FIXABLE_CODES.has(issue.code)) return true;
+      if (issue.code === "ELEMENT_OUT_OF_BOUNDS" || issue.code === "CANVAS_OVERFLOW") {
+        return remainingBoundsKeys.has(`${issue.code}:${issue.nodeId ?? ""}`);
+      }
+      return false;
+    });
 
     if (allChanges.length > 0) {
       agentWarnings.push(`Applied ${allChanges.length} optimization(s). Review changes before saving.`);
