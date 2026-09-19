@@ -306,7 +306,7 @@ export async function analyzeBrand(clientId: string): Promise<BrandDnaView> {
     riskProfile,
     completenessScore,
     consistencyScore,
-    confidenceScore: confidenceScore.toString() as unknown as number,
+    confidenceScore: confidenceScore.toString(),
     dataSourcesSummary: {
       brandKitSlots: activeSlots.size,
       assetCount,
