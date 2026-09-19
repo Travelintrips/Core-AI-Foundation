@@ -175,6 +175,29 @@ describe("WP-07 layout constraint engine", () => {
     expect(result.ruleResults.find((rule) => rule.ruleId === "HC-07")?.status).toBe("not_applicable");
   });
 
+  it("fails HC-07 when furniture is closer than the configured minimum even with zero stored clearance", () => {
+    const result = evaluateLayoutConstraints(session([
+      item(1, { xCm: 100, yCm: 100, widthCm: 80, depthCm: 60, clearanceFrontCm: 0, clearanceSideCm: 0, clearanceBackCm: 0 }),
+      item(2, { xCm: 190, yCm: 100, widthCm: 80, depthCm: 60, clearanceFrontCm: 0, clearanceSideCm: 0, clearanceBackCm: 0 }),
+    ], { minFurnitureClearanceCm: 20 }));
+    expect(result.ruleResults.find((rule) => rule.ruleId === "HC-07")?.status).toBe("fail");
+    expect(result.hardViolations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ruleId: "HC-07", itemIds: [ids[1], ids[2]] }),
+    ]));
+  });
+
+  it("rejects malformed known session metadata instead of silently dropping valid constraints", () => {
+    expect(() => evaluateLayoutConstraints(session([
+      item(1, { xCm: 100, yCm: 100 }),
+    ], {
+      doors: [{ id: "door", xCm: 100, yCm: 100, widthCm: 100, depthCm: 50, clearanceCm: 20 }],
+      styleTags: "not-an-array",
+    }))).toMatchObject({
+      code: "INVALID_CONSTRAINT_METADATA",
+      statusCode: 422,
+    });
+  });
+
   it("passes configured furniture spacing when the layout is separated", () => {
     const result = evaluateLayoutConstraints(session([
       item(1, { xCm: 100, yCm: 100, clearanceFrontCm: 10 }),
