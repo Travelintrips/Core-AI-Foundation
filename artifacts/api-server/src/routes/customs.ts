@@ -190,7 +190,7 @@ router.get("/customs/hs-search", async (req, res) => {
       ),
     ]);
 
-    res.json({
+    return res.json({
       results: dataRes.rows,
       total:   countRes.rows[0]?.total ?? 0,
       page,
@@ -198,7 +198,7 @@ router.get("/customs/hs-search", async (req, res) => {
     });
   } catch (err) {
     console.error("[customs/hs-search]", err);
-    res.status(500).json({ error: "Search failed" });
+    return res.status(500).json({ error: "Search failed" });
   }
 });
 
@@ -226,7 +226,7 @@ router.get("/customs/hs/:code", async (req, res) => {
       return res.status(404).json({ error: `HS code ${sanitized} not found` });
     }
 
-    res.json(result.rows[0]);
+    return res.json(result.rows[0]);
   } catch (err) {
     console.error("[customs/hs/:code]", err);
     res.status(500).json({ error: "Lookup failed" });
