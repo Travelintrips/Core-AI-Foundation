@@ -13,7 +13,7 @@
  * Service account requires: roles/secretmanager.secretAccessor (read-only).
  */
 
-import { GoogleAuth } from "google-auth-library";
+import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
 
 const CONSOLIDATED_SECRET_NAME = "aicore-app-secrets";
 
@@ -50,7 +50,7 @@ export async function bootstrapGcpSecrets(): Promise<void> {
   let auth: GoogleAuth;
   try {
     auth = new GoogleAuth({
-      credentials: credentials as ConstructorParameters<typeof GoogleAuth>[0]["credentials"],
+      credentials: credentials as NonNullable<GoogleAuthOptions["credentials"]>,
       scopes: ["https://www.googleapis.com/auth/cloud-platform"],
     });
   } catch (err) {
