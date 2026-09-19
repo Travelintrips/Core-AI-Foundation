@@ -229,7 +229,7 @@ router.get("/customs/hs/:code", async (req, res) => {
     return res.json(result.rows[0]);
   } catch (err) {
     console.error("[customs/hs/:code]", err);
-    res.status(500).json({ error: "Lookup failed" });
+    return res.status(500).json({ error: "Lookup failed" });
   }
 });
 
