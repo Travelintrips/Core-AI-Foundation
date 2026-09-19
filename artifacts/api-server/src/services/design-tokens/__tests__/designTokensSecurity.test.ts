@@ -137,7 +137,7 @@ describe("P0 — color-palettes: unauthenticated mutations return 401", () => {
   it("POST /color-palettes without auth → 401", async () => {
     const app = await buildColorApp(false);
     const res = await request(app).post("/color-palettes")
-      .send({ name: "Test", style: "monochromatic", mood: ["bold"], industries: ["tech"], colors: ["#ff0000", "#000000"] });
+      .send({ name: "Test", style: "monochromatic", mood: ["bold"], industries: ["technology"], colors: ["#ff0000", "#000000"] });
     expect(res.status).toBe(401);
   });
 
