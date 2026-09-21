@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type DetailedHTMLProps, type HTMLAttributes } from "react";
 import { Box, Rotate3D, ZoomIn, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { DesignScene } from "@/lib/ai-design-core";
@@ -6,7 +6,20 @@ import { hasReal3DAsset } from "@/lib/ai-design-core";
 
 interface Props { scene: DesignScene; onSelectObject?: (id: string) => void; }
 type ModelViewerElement = HTMLElement & { cameraOrbit?: string; jumpCameraToGoal?: () => void; };
-declare global { namespace JSX { interface IntrinsicElements { "model-viewer": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & { src?: string; "camera-controls"?: boolean; "touch-action"?: string; "auto-rotate"?: boolean; "shadow-intensity"?: string; }; } } }
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "model-viewer": DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement> & {
+        src?: string;
+        "camera-controls"?: boolean;
+        "touch-action"?: string;
+        "auto-rotate"?: boolean;
+        "shadow-intensity"?: string;
+        "data-ai-design-model"?: string;
+      };
+    }
+  }
+}
 
 const CAMERA_ORBITS = { front: "0deg 75deg auto", side: "90deg 75deg auto", back: "180deg 75deg auto" } as const;
 
