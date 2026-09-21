@@ -12,14 +12,14 @@ import { eq } from "drizzle-orm";
 import { db, internalUsersTable, toSafeInternalUser } from "@workspace/db";
 import { hashPassword, verifyPassword, isPasswordStrongEnough } from "../services/passwordService.js";
 import {
-  issueSessionToken,
+  issueSessionToken,\n  issuePasswordResetToken,\n  verifyPasswordResetToken,
   getInternalUserByEmail,
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_MS,
 } from "../services/internalAuthService.js";
 import { requireAuth } from "../middleware/internalAuth.js";
 import { loginLimiter } from "../middleware/rateLimiter.js";
-import { logAudit } from "../services/aiAuditService.js";
+import { logAudit } from "../services/aiAuditService.js";\nimport { sendEmail } from "../services/emailService.js";
 
 const router = Router();
 
@@ -77,6 +77,58 @@ router.post("/internal/auth/login", loginLimiter, async (req, res): Promise<void
   await logAudit("internal_auth", "login", String(user.id), "internal_user", "success", { ip });
 
   res.json({ user: toSafeInternalUser(user) });
+});
+
+router.post("/internal/auth/request-password-reset", loginLimiter, async (req, res): Promise<void> => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const generic = { ok: true, message: "Jika akun terdaftar, tautan reset akan dikirim ke email tersebut." };
+  if (!email) {
+    res.status(400).json({ error: "Email wajib diisi." });
+    return;
+  }
+
+  const user = await getInternalUserByEmail(email);
+  if (!user || user.status !== "active") {
+    await logAudit("internal_auth", "password_reset_request", email, "internal_user", "failure", { reason: "not_found_or_inactive", ip: clientIp(req) });
+    res.json(generic);
+    return;
+  }
+
+  const token = issuePasswordResetToken(user);
+  const baseUrl = (process.env["PUBLIC_APP_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  const sent = await sendEmail({
+    to: user.email,
+    subject: "Reset kata sandi Portal AI Internal",
+    html: `<p>Permintaan reset kata sandi diterima.</p><p><a href="${resetUrl}">Reset kata sandi</a></p><p>Tautan berlaku 15 menit dan hanya dapat digunakan sampai kata sandi berhasil diubah.</p>`,
+    module: "internal_auth",
+    action: "password_reset_email",
+    resourceId: String(user.id),
+  });
+  await logAudit("internal_auth", "password_reset_request", String(user.id), "internal_user", sent.ok ? "success" : "failure", { ip: clientIp(req), emailSent: sent.ok });
+  res.json(generic);
+});
+
+router.post("/internal/auth/reset-password", loginLimiter, async (req, res): Promise<void> => {
+  const token = typeof req.body?.token === "string" ? req.body.token : "";
+  const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+  if (!token || !isPasswordStrongEnough(newPassword)) {
+    res.status(400).json({ error: "Tautan tidak valid atau password baru minimal 10 karakter." });
+    return;
+  }
+
+  const user = await verifyPasswordResetToken(token);
+  if (!user) {
+    res.status(400).json({ error: "Tautan reset tidak valid atau sudah kedaluwarsa." });
+    return;
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await db.update(internalUsersTable)
+    .set({ passwordHash: newHash, mustChangePassword: false, passwordChangedAt: new Date(), status: "active" })
+    .where(eq(internalUsersTable.id, user.id));
+  await logAudit("internal_auth", "password_reset", String(user.id), "internal_user", "success", { ip: clientIp(req) });
+  res.json({ ok: true });
 });
 
 router.post("/internal/auth/logout", requireAuth, async (req, res): Promise<void> => {
