@@ -44,12 +44,19 @@ app.use(
 // Allow origins from environment variable (comma-separated list), or fall back
 // to the Replit dev domain and localhost for development.
 const rawAllowedOrigins = process.env["ALLOWED_ORIGINS"] ?? "";
+const publicAppUrl = process.env["PUBLIC_APP_URL"] ?? "";
+const productionDefaultOrigins =
+  process.env["NODE_ENV"] === "production"
+    ? ["https://aicore.cstlogistic.co.id"]
+    : [];
 const replitDomain = process.env["REPLIT_DEV_DOMAIN"]
   ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
   : null;
 
 const allowedOrigins: string[] = [
   ...rawAllowedOrigins.split(",").map((s) => s.trim()).filter(Boolean),
+  ...(publicAppUrl ? [publicAppUrl] : []),
+  ...productionDefaultOrigins,
   ...(replitDomain ? [replitDomain] : []),
   "http://localhost:3000",
   "http://localhost:5173",
@@ -61,7 +68,7 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (server-to-server, curl, Postman)
       if (!origin) { callback(null, true); return; }
-      if (allowedOrigins.some((o) => origin.startsWith(o))) {
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else if (process.env["NODE_ENV"] === "development") {
         // In development, be permissive to allow Vite HMR and previews
