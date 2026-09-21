@@ -1,4 +1,6 @@
 import express, { type Express } from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
@@ -131,5 +133,12 @@ app.use("/api", globalLimiter);
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,
 // short-circuiting the DB lookup because req.internalUser is already set.
 app.use("/api", adminAuthWithExceptions, router);
+
+// Serve the production AI Platform UI from the same Hostinger Node deployment.
+if (process.env["NODE_ENV"] === "production") {
+  const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "public");
+  app.use(express.static(publicDir));
+  app.get("*", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+}
 
 export default app;
