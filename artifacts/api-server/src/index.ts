@@ -58,10 +58,11 @@ const { verifyMaterialImportTables } =
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 let _designBatchRecoveryStarted = false;
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error("PORT environment variable is required but was not provided.");
+// Hostinger may not expose PORT to the Node process even though its reverse proxy
+// expects the application on the platform's conventional application port.
+const rawPort = process.env["PORT"] ?? "3000";
+if (!process.env["PORT"]) {
+  console.warn("[startup] PORT was not provided; defaulting to 3000.");
 }
 
 const port = Number(rawPort);
