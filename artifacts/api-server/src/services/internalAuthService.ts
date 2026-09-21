@@ -87,3 +87,5 @@ export async function verifyPasswordResetToken(token: string): Promise<InternalU
     return null;
   }
 }
+
+export function issueMagicLoginToken(userId: number): string {\n  return jwt.sign({ sub: userId, purpose: "magic_login" } satisfies MagicLoginPayload, getSecret(), { expiresIn: "10m" });\n}\n\nexport function verifyMagicLoginToken(token: string): MagicLoginPayload | null {\n  try {\n    const decoded = jwt.verify(token, getSecret()) as Partial<MagicLoginPayload>;\n    if (decoded.purpose !== "magic_login" || typeof decoded.sub !== "number") return null;\n    return { sub: decoded.sub, purpose: "magic_login" };\n  } catch {\n    return null;\n  }\n}\n
