@@ -138,7 +138,7 @@ app.use("/api", adminAuthWithExceptions, router);
 if (process.env["NODE_ENV"] === "production") {
   const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "public");
   app.use(express.static(publicDir));
-  app.get("*", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+  app.use((req, res, next) => {\n    if (req.method !== "GET") return next();\n    return res.sendFile(path.join(publicDir, "index.html"));\n  });
 }
 
 export default app;
