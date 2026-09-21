@@ -14,6 +14,7 @@ import { db, internalUsersTable, type InternalUser } from "@workspace/db";
 
 const COOKIE_NAME = "internal_session";
 const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12h
+const PASSWORD_RESET_TTL_SECONDS = 15 * 60; // 15 minutes
 
 function getSecret(): string {
   const secret = process.env["SESSION_SECRET"];
@@ -23,7 +24,7 @@ function getSecret(): string {
   return secret;
 }
 
-export interface SessionPayload {
+export interface PasswordResetPayload {\n  sub: number;\n  purpose: "password_reset";\n  passwordChangedAt: string | null;\n}\n\nexport interface SessionPayload {
   sub: number; // internal_users.id
 }
 
@@ -58,4 +59,31 @@ export async function getInternalUserByEmail(email: string): Promise<InternalUse
   const normalized = email.trim().toLowerCase();
   const [row] = await db.select().from(internalUsersTable).where(eq(internalUsersTable.email, normalized)).limit(1);
   return row ?? null;
+}
+
+
+export function issuePasswordResetToken(user: InternalUser): string {
+  return jwt.sign(
+    {
+      sub: user.id,
+      purpose: "password_reset",
+      passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
+    } satisfies PasswordResetPayload,
+    getSecret(),
+    { expiresIn: PASSWORD_RESET_TTL_SECONDS },
+  );
+}
+
+export async function verifyPasswordResetToken(token: string): Promise<InternalUser | null> {
+  try {
+    const decoded = jwt.verify(token, getSecret()) as Partial<PasswordResetPayload>;
+    if (decoded.purpose !== "password_reset" || typeof decoded.sub !== "number") return null;
+    const user = await getInternalUserById(decoded.sub);
+    if (!user || user.status !== "active") return null;
+    const currentChangedAt = user.passwordChangedAt?.toISOString() ?? null;
+    if (decoded.passwordChangedAt !== currentChangedAt) return null;
+    return user;
+  } catch {
+    return null;
+  }
 }
