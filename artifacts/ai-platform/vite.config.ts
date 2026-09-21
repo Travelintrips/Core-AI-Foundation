@@ -4,7 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
+const isProductionBuild = process.env.NODE_ENV === "production";
+const rawPort = process.env.PORT ?? (isProductionBuild ? "5173" : undefined);
 
 if (!rawPort) {
   throw new Error(
@@ -18,7 +19,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
+const basePath = process.env.BASE_PATH ?? (isProductionBuild ? "/" : undefined);
 
 if (!basePath) {
   throw new Error(
