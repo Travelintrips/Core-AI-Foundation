@@ -14,7 +14,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);\n  const [showResetHelp, setShowResetHelp] = useState(false);
 
   if (user && !user.mustChangePassword) {
     navigate("/");
@@ -68,6 +68,20 @@ export default function Login() {
               />
             </div>
             {error && <p className="text-sm text-destructive" data-testid="text-login-error">{error}</p>}
+            <button
+              type="button"
+              className="text-sm text-primary hover:underline"
+              onClick={() => setShowResetHelp((v) => !v)}
+              data-testid="button-reset-password"
+            >
+              Lupa / Reset kata sandi
+            </button>
+            {showResetHelp && (
+              <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                Reset mandiri belum diaktifkan untuk alasan keamanan. Hubungi owner/admin untuk mereset
+                kata sandi akun internal. Password lama tidak dapat ditampilkan karena disimpan dalam bentuk hash.
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={submitting} data-testid="button-login">
               {submitting ? t("pages.login.submitting") : t("pages.login.submit")}
             </Button>
