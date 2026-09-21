@@ -20,6 +20,14 @@ path = "scripts/post-merge.sh"
 timeoutMs = 180000
 
 [userenv]
+<<<<<<< HEAD
+=======
+
+# Runtime secrets are intentionally not committed.
+# Load application secrets from GCP Secret Manager; use hosting environment
+# variables only for bootstrap/runtime configuration.
+
+>>>>>>> fabf4bba00de1f4df36c0c90f64a0cbb4da7f936
 [nix]
 channel = "stable-25_05"
 
