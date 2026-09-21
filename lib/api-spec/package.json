@@ -6,7 +6,7 @@
     "codegen": "node ./generate.mjs && pnpm -w run typecheck:libs"
   },
   "devDependencies": {
-    "orval": "^8.18.0"
+    "orval": "^8.35.0"
   },
   "dependencies": {
     "yaml": "^2.9.0"
