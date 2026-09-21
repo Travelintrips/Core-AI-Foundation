@@ -4,6 +4,7 @@
  */
 import { db } from "@workspace/db";
 import { aiDesignProjects, aiDesignVersions } from "@workspace/db/schema";
+import type { AiDesignProject } from "@workspace/db/schema";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import OpenAI from "openai";
 
@@ -167,199 +168,65 @@ export async function listDesignProjects(opts: ListProjectsOptions) {
     return { items: [], total: countResult[0]?.count ?? 0, page, pageSize };
   }
 
-  // Batch-fetch version counts and current-version element counts in 2 queries
-  // instead of 2*N per-project queries (N+1 elimination).
   const projectIds = rows.map((r: (typeof rows)[number]) => r.id);
   const currentVersionIds = rows
     .map((r: (typeof rows)[number]) => r.currentVersionId)
     .filter((v: number | null | undefined): v is number => v != null);
 
   const [versionCountRows, currentVersionRows] = await Promise.all([
-    db
-      .select({
-        projectId: aiDesignVersions.projectId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(aiDesignVersions)
-      .where(inArray(aiDesignVersions.projectId, projectIds))
-      .groupBy(aiDesignVersions.projectId),
+    db.select({ projectId: aiDesignVersions.projectId, count: sql<number>`count(*)::int` }).from(aiDesignVersions).where(inArray(aiDesignVersions.projectId, projectIds)).groupBy(aiDesignVersions.projectId),
     currentVersionIds.length > 0
-      ? db
-          .select({ id: aiDesignVersions.id, elementCount: aiDesignVersions.elementCount })
-          .from(aiDesignVersions)
-          .where(inArray(aiDesignVersions.id, currentVersionIds))
+      ? db.select({ id: aiDesignVersions.id, elementCount: aiDesignVersions.elementCount }).from(aiDesignVersions).where(inArray(aiDesignVersions.id, currentVersionIds))
       : Promise.resolve([] as { id: number; elementCount: number | null }[]),
   ]);
 
-  const versionCountMap = new Map(
-    versionCountRows.map((r: { projectId: number; count: number }) => [r.projectId, r.count]),
-  );
-  const elementCountMap = new Map(
-    currentVersionRows.map((r: { id: number; elementCount: number | null }) => [r.id, r.elementCount]),
-  );
-
-  const enriched = rows.map((p: (typeof rows)[number]) => ({
-    ...p,
-    versionCount: versionCountMap.get(p.id) ?? 0,
-    elementCount: p.currentVersionId != null ? (elementCountMap.get(p.currentVersionId) ?? 0) : 0,
-  }));
-
-  return {
-    items: enriched,
-    total: countResult[0]?.count ?? 0,
-    page,
-    pageSize,
-  };
+  const versionCountMap = new Map(versionCountRows.map((r: { projectId: number; count: number }) => [r.projectId, r.count]));
+  const elementCountMap = new Map(currentVersionRows.map((r: { id: number; elementCount: number | null }) => [r.id, r.elementCount]));
+  const enriched = rows.map((p: (typeof rows)[number]) => ({ ...p, versionCount: versionCountMap.get(p.id) ?? 0, elementCount: p.currentVersionId != null ? (elementCountMap.get(p.currentVersionId) ?? 0) : 0 }));
+  return { items: enriched, total: countResult[0]?.count ?? 0, page, pageSize };
 }
 
 export async function getDesignProject(id: number, tenantId: string) {
-  const [project] = await db
-    .select()
-    .from(aiDesignProjects)
-    .where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId)))
-    .limit(1);
-
+  const [project] = await db.select().from(aiDesignProjects).where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId))).limit(1);
   if (!project) return null;
-
   const [versionResult, currentVersion] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(aiDesignVersions)
-      .where(eq(aiDesignVersions.projectId, id)),
-    project.currentVersionId
-      ? db
-          .select({ elementCount: aiDesignVersions.elementCount })
-          .from(aiDesignVersions)
-          .where(eq(aiDesignVersions.id, project.currentVersionId))
-          .limit(1)
-      : Promise.resolve([{ elementCount: 0 }]),
+    db.select({ count: sql<number>`count(*)::int` }).from(aiDesignVersions).where(eq(aiDesignVersions.projectId, id)),
+    project.currentVersionId ? db.select({ elementCount: aiDesignVersions.elementCount }).from(aiDesignVersions).where(eq(aiDesignVersions.id, project.currentVersionId)).limit(1) : Promise.resolve([{ elementCount: 0 }]),
   ]);
-
-  return {
-    ...project,
-    versionCount: versionResult[0]?.count ?? 0,
-    elementCount: currentVersion[0]?.elementCount ?? 0,
-  };
+  return { ...project, versionCount: versionResult[0]?.count ?? 0, elementCount: currentVersion[0]?.elementCount ?? 0 };
 }
-
 
 export type DesignProjectSourceType = "interior" | "fashion";
 
-export async function getOrCreateDesignProjectForSource(
-  sourceType: DesignProjectSourceType,
-  sourceId: string | number,
-  tenantId: string,
-  name: string,
-): Promise<AiDesignProject> {
+export async function getOrCreateDesignProjectForSource(sourceType: DesignProjectSourceType, sourceId: string | number, tenantId: string, name: string): Promise<AiDesignProject> {
   const normalizedSourceId = String(sourceId);
-  const [existing] = await db
-    .select()
-    .from(aiDesignProjects)
-    .where(and(
-      eq(aiDesignProjects.tenantId, tenantId),
-      eq(aiDesignProjects.sourceType, sourceType),
-      eq(aiDesignProjects.sourceId, normalizedSourceId),
-    ))
-    .limit(1);
+  const [existing] = await db.select().from(aiDesignProjects).where(and(eq(aiDesignProjects.tenantId, tenantId), eq(aiDesignProjects.sourceType, sourceType), eq(aiDesignProjects.sourceId, normalizedSourceId))).limit(1);
   if (existing) return existing;
-
-  const [created] = await db
-    .insert(aiDesignProjects)
-    .values({
-      tenantId,
-      name,
-      sourceType,
-      sourceId: normalizedSourceId,
-      status: "active",
-    })
-    .returning();
+  const [created] = await db.insert(aiDesignProjects).values({ tenantId, name, sourceType, sourceId: normalizedSourceId, status: "active" }).returning();
   if (!created) throw new Error("DESIGN_PROJECT_CREATE_FAILED");
   return created;
 }
 
-export async function createDesignProject(input: {
-  tenantId: string;
-  name: string;
-  description?: string;
-  canvasWidth?: number;
-  canvasHeight?: number;
-  templateId?: number;
-  brandDnaId?: number;
-  tags?: string[];
-  initialState?: CanvasState;
-}) {
+export async function createDesignProject(input: { tenantId: string; name: string; description?: string; canvasWidth?: number; canvasHeight?: number; templateId?: number; brandDnaId?: number; tags?: string[]; initialState?: CanvasState; }) {
   const w = input.canvasWidth ?? 1920;
   const h = input.canvasHeight ?? 1080;
-
-  const [project] = await db
-    .insert(aiDesignProjects)
-    .values({
-      tenantId: input.tenantId,
-      name: input.name,
-      description: input.description,
-      canvasWidth: w,
-      canvasHeight: h,
-      templateId: input.templateId,
-      brandDnaId: input.brandDnaId,
-      tags: input.tags ?? [],
-      status: "draft",
-    })
-    .returning();
-
+  const [project] = await db.insert(aiDesignProjects).values({ tenantId: input.tenantId, name: input.name, description: input.description, canvasWidth: w, canvasHeight: h, templateId: input.templateId, brandDnaId: input.brandDnaId, tags: input.tags ?? [], status: "draft" }).returning();
   if (!project) throw new Error("Failed to create design project");
-
-  // Create initial version
   const initState = input.initialState ?? defaultCanvas(w, h);
-  const [version] = await db
-    .insert(aiDesignVersions)
-    .values({
-      projectId: project.id,
-      versionNumber: 1,
-      label: "Initial",
-      canvasState: initState,
-      elementCount: initState.elements.length,
-    })
-    .returning();
-
+  const [version] = await db.insert(aiDesignVersions).values({ projectId: project.id, versionNumber: 1, label: "Initial", canvasState: initState, elementCount: initState.elements.length }).returning();
   if (!version) throw new Error("Failed to create initial version");
-
-  // Link current version
-  const [updated] = await db
-    .update(aiDesignProjects)
-    .set({ currentVersionId: version.id, updatedAt: new Date() })
-    .where(eq(aiDesignProjects.id, project.id))
-    .returning();
-
+  const [updated] = await db.update(aiDesignProjects).set({ currentVersionId: version.id, updatedAt: new Date() }).where(eq(aiDesignProjects.id, project.id)).returning();
   return { ...(updated ?? project), versionCount: 1, elementCount: initState.elements.length };
 }
 
-export async function updateDesignProject(
-  id: number,
-  tenantId: string,
-  input: {
-    name?: string;
-    description?: string;
-    status?: string;
-    tags?: string[];
-    thumbnailUrl?: string;
-  },
-) {
-  const [updated] = await db
-    .update(aiDesignProjects)
-    .set({ ...input, updatedAt: new Date() })
-    .where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId)))
-    .returning();
-
+export async function updateDesignProject(id: number, tenantId: string, input: { name?: string; description?: string; status?: string; tags?: string[]; thumbnailUrl?: string; }) {
+  const [updated] = await db.update(aiDesignProjects).set({ ...input, updatedAt: new Date() }).where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId))).returning();
   if (!updated) return null;
   return { ...updated, versionCount: 0, elementCount: 0 };
 }
 
 export async function archiveDesignProject(id: number, tenantId: string) {
-  const [updated] = await db
-    .update(aiDesignProjects)
-    .set({ status: "archived", updatedAt: new Date() })
-    .where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId)))
-    .returning();
+  const [updated] = await db.update(aiDesignProjects).set({ status: "archived", updatedAt: new Date() }).where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId))).returning();
   if (!updated) return null;
   return { ok: true };
 }
@@ -369,376 +236,89 @@ export async function archiveDesignProject(id: number, tenantId: string) {
 export async function getDesignCanvas(projectId: number, tenantId: string) {
   const project = await getDesignProject(projectId, tenantId);
   if (!project) return null;
-
-  if (!project.currentVersionId) {
-    // No versions yet — return empty default
-    const state = defaultCanvas(project.canvasWidth, project.canvasHeight);
-    return {
-      projectId,
-      versionId: 0,
-      versionNumber: 0,
-      canvasState: state,
-      savedAt: project.updatedAt,
-    };
-  }
-
-  const [version] = await db
-    .select()
-    .from(aiDesignVersions)
-    .where(eq(aiDesignVersions.id, project.currentVersionId))
-    .limit(1);
-
+  if (!project.currentVersionId) return { projectId, versionId: 0, versionNumber: 0, canvasState: defaultCanvas(project.canvasWidth, project.canvasHeight), savedAt: project.updatedAt };
+  const [version] = await db.select().from(aiDesignVersions).where(eq(aiDesignVersions.id, project.currentVersionId)).limit(1);
   if (!version) return null;
-
-  return {
-    projectId,
-    versionId: version.id,
-    versionNumber: version.versionNumber,
-    canvasState: version.canvasState as CanvasState,
-    savedAt: version.createdAt,
-  };
+  return { projectId, versionId: version.id, versionNumber: version.versionNumber, canvasState: version.canvasState as CanvasState, savedAt: version.createdAt };
 }
 
-export async function saveDesignCanvas(
-  projectId: number,
-  canvasState: CanvasState,
-  tenantId: string,
-  label?: string,
-) {
+export async function saveDesignCanvas(projectId: number, canvasState: CanvasState, tenantId: string, label?: string) {
   const project = await getDesignProject(projectId, tenantId);
   if (!project) return null;
   if (canvasState.designScene) validateDesignScene(canvasState.designScene);
-
-  // Next version number
-  const [lastVersion] = await db
-    .select({ versionNumber: aiDesignVersions.versionNumber })
-    .from(aiDesignVersions)
-    .where(eq(aiDesignVersions.projectId, projectId))
-    .orderBy(desc(aiDesignVersions.versionNumber))
-    .limit(1);
-
+  const [lastVersion] = await db.select({ versionNumber: aiDesignVersions.versionNumber }).from(aiDesignVersions).where(eq(aiDesignVersions.projectId, projectId)).orderBy(desc(aiDesignVersions.versionNumber)).limit(1);
   const nextVersionNumber = (lastVersion?.versionNumber ?? 0) + 1;
-
-  const [version] = await db
-    .insert(aiDesignVersions)
-    .values({
-      projectId,
-      versionNumber: nextVersionNumber,
-      label: label ?? undefined,
-      canvasState,
-      elementCount: canvasState.elements.length,
-    })
-    .returning();
-
-  if (!version) throw new Error("Failed to save canvas version");
-
-  await db
-    .update(aiDesignProjects)
-    .set({
-      currentVersionId: version.id,
-      updatedAt: new Date(),
-    })
-    .where(eq(aiDesignProjects.id, projectId));
-
-  return {
-    projectId,
-    versionId: version.id,
-    versionNumber: version.versionNumber,
-    canvasState,
-    savedAt: version.createdAt,
-  };
+  const [version] = await db.insert(aiDesignVersions).values({ projectId, versionNumber: nextVersionNumber, label: label ?? null, canvasState, elementCount: canvasState.elements.length }).returning();
+  if (!version) throw new Error("Failed to save version");
+  await db.update(aiDesignProjects).set({ currentVersionId: version.id, updatedAt: new Date() }).where(and(eq(aiDesignProjects.id, projectId), eq(aiDesignProjects.tenantId, tenantId)));
+  return { versionId: version.id, versionNumber: nextVersionNumber, savedAt: version.createdAt };
 }
 
-export interface ListVersionsOptions {
-  page?: number;
-  pageSize?: number;
-}
-
-export async function listDesignVersions(
-  projectId: number,
-  tenantId: string,
-  opts: ListVersionsOptions = {},
-) {
-  // Lightweight ownership check — confirms the project exists for this tenant
-  // without the full enrichment queries that getDesignProject performs.
-  const [ownerCheck] = await db
-    .select({ id: aiDesignProjects.id })
-    .from(aiDesignProjects)
-    .where(and(eq(aiDesignProjects.id, projectId), eq(aiDesignProjects.tenantId, tenantId)))
-    .limit(1);
-  if (!ownerCheck) return null;
-
-  const { page = 1, pageSize = 30 } = opts;
-  const offset = (page - 1) * pageSize;
-
-  const [rows, countResult] = await Promise.all([
-    db
-      .select({
-        id: aiDesignVersions.id,
-        projectId: aiDesignVersions.projectId,
-        versionNumber: aiDesignVersions.versionNumber,
-        label: aiDesignVersions.label,
-        elementCount: aiDesignVersions.elementCount,
-        createdAt: aiDesignVersions.createdAt,
-      })
-      .from(aiDesignVersions)
-      .where(eq(aiDesignVersions.projectId, projectId))
-      .orderBy(desc(aiDesignVersions.versionNumber))
-      .limit(pageSize)
-      .offset(offset),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(aiDesignVersions)
-      .where(eq(aiDesignVersions.projectId, projectId)),
-  ]);
-
-  return {
-    items: rows,
-    total: countResult[0]?.count ?? 0,
-    page,
-    pageSize,
-  };
+export async function listDesignVersions(projectId: number, tenantId: string) {
+  const project = await getDesignProject(projectId, tenantId);
+  if (!project) return null;
+  const versions = await db.select({ id: aiDesignVersions.id, versionNumber: aiDesignVersions.versionNumber, label: aiDesignVersions.label, elementCount: aiDesignVersions.elementCount, createdAt: aiDesignVersions.createdAt }).from(aiDesignVersions).where(eq(aiDesignVersions.projectId, projectId)).orderBy(desc(aiDesignVersions.versionNumber));
+  return { versions };
 }
 
 export async function getDesignVersion(projectId: number, versionId: number, tenantId: string) {
-  // Verify project ownership before fetching the version.
   const project = await getDesignProject(projectId, tenantId);
   if (!project) return null;
-
-  const [version] = await db
-    .select()
-    .from(aiDesignVersions)
-    .where(
-      and(
-        eq(aiDesignVersions.id, versionId),
-        eq(aiDesignVersions.projectId, projectId),
-      ),
-    )
-    .limit(1);
-
-  if (!version) return null;
-  return version;
+  const [version] = await db.select().from(aiDesignVersions).where(and(eq(aiDesignVersions.id, versionId), eq(aiDesignVersions.projectId, projectId))).limit(1);
+  return version ?? null;
 }
 
-export async function restoreDesignVersion(
-  projectId: number,
-  versionId: number,
-  tenantId: string,
-) {
+export async function restoreDesignVersion(projectId: number, versionId: number, tenantId: string) {
+  const project = await getDesignProject(projectId, tenantId);
+  if (!project) return null;
   const version = await getDesignVersion(projectId, versionId, tenantId);
   if (!version) return null;
-
-  const state = version.canvasState as CanvasState;
-  return saveDesignCanvas(projectId, state, tenantId, `Restored v${version.versionNumber}`);
+  await db.update(aiDesignProjects).set({ currentVersionId: versionId, updatedAt: new Date() }).where(and(eq(aiDesignProjects.id, projectId), eq(aiDesignProjects.tenantId, tenantId)));
+  return { ok: true, versionId, versionNumber: version.versionNumber };
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
-export async function exportDesign(
-  projectId: number,
-  tenantId: string,
-  format: "png" | "pdf" | "svg" | "json",
-  _scale = 1,
-) {
+export async function exportDesign(projectId: number, tenantId: string, format: string, scale: number) {
   const canvas = await getDesignCanvas(projectId, tenantId);
   if (!canvas) return null;
-
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-  if (format === "json") {
-    // Return inline JSON data URL
-    const json = JSON.stringify(canvas.canvasState, null, 2);
-    const dataUrl = `data:application/json;base64,${Buffer.from(json).toString("base64")}`;
-    return { format, url: dataUrl, dataUrl, expiresAt: expiresAt.toISOString() };
-  }
-
-  if (format === "svg") {
-    const svgContent = canvasStateToSvg(canvas.canvasState);
-    const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svgContent).toString("base64")}`;
-    return { format, url: dataUrl, dataUrl, expiresAt: expiresAt.toISOString() };
-  }
-
-  // PNG / PDF: return SVG-based data URL as placeholder
-  // Full raster export requires a headless browser — tracked as TODO
-  const svgContent = canvasStateToSvg(canvas.canvasState);
-  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svgContent).toString("base64")}`;
-  return { format, url: dataUrl, dataUrl: null, expiresAt: expiresAt.toISOString() };
+  const state = canvas.canvasState;
+  if (format === "json") return { format: "json", data: state, filename: `design-${projectId}-v${canvas.versionNumber}.json` };
+  const w = state.width * scale;
+  const h = state.height * scale;
+  const elementsSvg = state.elements.filter((el) => el.visible).sort((a, b) => a.zIndex - b.zIndex).map((el) => {
+    const x = safeNum(el.x) * scale, y = safeNum(el.y) * scale, ew = safeNum(el.width) * scale, eh = safeNum(el.height) * scale;
+    const transform = `rotate(${safeNum(el.rotation)} ${x + ew / 2} ${y + eh / 2})`;
+    const opacity = Math.max(0, Math.min(1, safeNum(el.opacity, 1)));
+    if (el.type === "text") return `<text x="${x}" y="${y + safeNum(el.fontSize, 16) * scale}" font-size="${safeNum(el.fontSize, 16) * scale}" font-family="${xmlEscape(safeFontFamily(el.fontFamily, "Arial"))}" font-weight="${xmlEscape(String(el.fontWeight ?? "normal"))}" fill="${safeCssColor(el.color, "#000000")}" opacity="${opacity}" transform="${transform}">${xmlEscape(el.text ?? "")}</text>`;
+    if (el.type === "image") { const href = safeHttpsUrl(el.src); if (!href) return ""; return `<image x="${x}" y="${y}" width="${ew}" height="${eh}" href="${xmlEscape(href)}" opacity="${opacity}" transform="${transform}" preserveAspectRatio="xMidYMid meet"/>`; }
+    if (el.type === "circle") return `<ellipse cx="${x + ew / 2}" cy="${y + eh / 2}" rx="${ew / 2}" ry="${eh / 2}" fill="${safeCssColor(el.fill, "#cccccc")}" stroke="${safeCssColor(el.stroke, "none")}" stroke-width="${safeNum(el.strokeWidth) * scale}" opacity="${opacity}" transform="${transform}"/>`;
+    return `<rect x="${x}" y="${y}" width="${ew}" height="${eh}" rx="${safeNum(el.borderRadius) * scale}" fill="${safeCssColor(el.fill, "#cccccc")}" stroke="${safeCssColor(el.stroke, "none")}" stroke-width="${safeNum(el.strokeWidth) * scale}" opacity="${opacity}" transform="${transform}"/>`;
+  }).join("\n");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="${safeCssColor(state.background, "#ffffff")}"/>${elementsSvg}</svg>`;
+  return { format: "svg", data: svg, filename: `design-${projectId}-v${canvas.versionNumber}.svg`, width: w, height: h };
 }
 
-/**
- * Converts a CanvasState to a sanitized SVG string.
- *
- * Security hardening (Team 36):
- *   - CSS color attributes (fill, stroke, color, background) are validated
- *     against an allowlist regex. Invalid values fall back to a safe default.
- *     This prevents CSS url() SSRF and other injection via color values.
- *   - font-family is validated against an allowlist of safe characters.
- *   - image href is restricted to https:// URLs only to prevent
- *     data: URI injection and non-https fetches by SVG renderers.
- *   - All string values placed in text content or attribute positions are
- *     XML-escaped to prevent XSS.
- *   - Numeric values are checked for finiteness before being serialized.
- */
-export function canvasStateToSvg(state: CanvasState): string {
-  const width = safeNum(state.width, 1920);
-  const height = safeNum(state.height, 1080);
-  const background = safeCssColor(state.background, "#ffffff");
+// ── AI Regeneration ───────────────────────────────────────────────────────────
 
-  const sorted = Array.isArray(state.elements)
-    ? [...state.elements]
-        .filter((e) => e.visible)
-        .sort((a, b) => safeNum(a.zIndex) - safeNum(b.zIndex))
-    : [];
-
-  const elementsSvg = sorted
-    .map((el) => {
-      const x = safeNum(el.x);
-      const y = safeNum(el.y);
-      const w = safeNum(el.width, 10);
-      const h = safeNum(el.height, 10);
-      const rotation = safeNum(el.rotation);
-      const opacity = safeNum(el.opacity, 1);
-
-      const transform = rotation
-        ? ` transform="rotate(${rotation} ${x + w / 2} ${y + h / 2})"`
-        : "";
-      const opacityAttr = opacity !== 1 ? ` opacity="${opacity}"` : "";
-
-      if (el.type === "rect" || el.type === "frame") {
-        const fill = safeCssColor(el.fill, "#e5e7eb");
-        const stroke = safeCssColor(el.stroke, "none");
-        const strokeWidth = safeNum(el.strokeWidth);
-        const rx = safeNum(el.borderRadius);
-        return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" rx="${rx}"${transform}${opacityAttr}/>`;
-      }
-
-      if (el.type === "circle") {
-        const cx = x + w / 2;
-        const cy = y + h / 2;
-        const fill = safeCssColor(el.fill, "#e5e7eb");
-        const stroke = safeCssColor(el.stroke, "none");
-        const strokeWidth = safeNum(el.strokeWidth);
-        return `<ellipse cx="${cx}" cy="${cy}" rx="${w / 2}" ry="${h / 2}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${transform}${opacityAttr}/>`;
-      }
-
-      if (el.type === "line") {
-        const stroke = safeCssColor(el.stroke, "#000000");
-        const strokeWidth = safeNum(el.strokeWidth, 2);
-        return `<line x1="${x}" y1="${y}" x2="${x + w}" y2="${y + h}" stroke="${stroke}" stroke-width="${strokeWidth}"${transform}${opacityAttr}/>`;
-      }
-
-      if (el.type === "text") {
-        const fontSize = safeNum(el.fontSize, 16);
-        const fontFamily = xmlEscape(safeFontFamily(el.fontFamily, "sans-serif"));
-        const color = safeCssColor(el.color, "#000000");
-        const textContent = xmlEscape(el.text ?? "");
-        return `<text x="${x}" y="${y + fontSize}" font-size="${fontSize}" font-family="${fontFamily}" fill="${color}"${transform}${opacityAttr}>${textContent}</text>`;
-      }
-
-      if (el.type === "image") {
-        const href = safeHttpsUrl(el.src);
-        if (!href) return ""; // skip images with non-https or missing src
-        return `<image href="${xmlEscape(href)}" x="${x}" y="${y}" width="${w}" height="${h}"${transform}${opacityAttr}/>`;
-      }
-
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n  ");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="${width}" height="${height}" fill="${background}"/>
-  ${elementsSvg}
-</svg>`;
-}
-
-// ── AI Regenerate ─────────────────────────────────────────────────────────────
-
-export async function aiRegenerateElement(
-  projectId: number,
-  tenantId: string,
-  input: {
-    elementId: string;
-    elementType: "text" | "image" | "style";
-    prompt: string;
-    currentContent?: string;
-    style?: string;
-    tone?: string;
-  },
-) {
-  // Verify the caller owns this project before invoking AI.
-  const project = await getDesignProject(projectId, tenantId);
-  if (!project) return null;
-
-  const openaiKey = process.env["OPENAI_API_KEY"];
-
-  if (!openaiKey) {
-    // Return mock suggestions when no key available
-    return {
-      elementId: input.elementId,
-      elementType: input.elementType,
-      suggestions: [
-        {
-          id: "sug-1",
-          content: `AI suggestion for: ${input.prompt}`,
-          reasoning: "Generated based on your brand tone",
-          preview: null,
-        },
-        {
-          id: "sug-2",
-          content: `Alternative: ${input.prompt} (variation)`,
-          reasoning: "Shorter variant for compact layouts",
-          preview: null,
-        },
-        {
-          id: "sug-3",
-          content: `Creative: ${input.prompt} — reimagined`,
-          reasoning: "Bold creative direction",
-          preview: null,
-        },
-      ],
-      brandAligned: true,
-      confidence: 0.75,
-    };
-  }
-
-  const openai = new OpenAI({ apiKey: openaiKey });
-
-  const systemPrompt =
-    input.elementType === "text"
-      ? `You are a professional copywriter and brand strategist. Generate 3 concise text variations for a design element. Each should be compelling, on-brand, and suitable for visual design. Current content: "${input.currentContent ?? ""}". Style: ${input.style ?? "professional"}. Tone: ${input.tone ?? "confident"}. Write ALL content and reasoning values in Bahasa Indonesia. Respond with a JSON array of exactly 3 objects: [{id, content, reasoning}]`
-      : `You are a visual designer. Suggest 3 creative improvements for a ${input.elementType} design element. Prompt: ${input.prompt}. Write ALL reasoning values in Bahasa Indonesia. Respond with JSON: [{id, content, reasoning}]`;
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: input.prompt },
-    ],
-    response_format: { type: "json_object" },
-    max_tokens: 600,
-  });
-
-  let suggestions: Array<{ id: string; content: string; reasoning: string | null; preview: string | null }> = [];
-  try {
-    const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
-    const arr = Array.isArray(raw) ? raw : (raw.suggestions ?? raw.items ?? []);
-    suggestions = arr.slice(0, 3).map((s: { id?: string; content?: string; reasoning?: string }, i: number) => ({
-      id: s.id ?? `sug-${i + 1}`,
-      content: s.content ?? "",
-      reasoning: s.reasoning ?? null,
-      preview: null,
-    }));
-  } catch {
-    suggestions = [];
-  }
-
-  return {
-    elementId: input.elementId,
-    elementType: input.elementType,
-    suggestions,
-    brandAligned: true,
-    confidence: 0.85,
-  };
+export async function aiRegenerateElement(projectId: number, tenantId: string, input: { elementId: string; prompt: string; preserve?: string[]; }) {
+  const canvas = await getDesignCanvas(projectId, tenantId);
+  if (!canvas) return null;
+  const idx = canvas.canvasState.elements.findIndex((e) => e.id === input.elementId);
+  if (idx === -1) throw new Error("Element not found");
+  const element = canvas.canvasState.elements[idx]!;
+  const apiKey = process.env["OPENAI_API_KEY"];
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+  const client = new OpenAI({ apiKey });
+  const response = await client.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "system", content: "You are a design assistant. Given a design element and user instruction, return a JSON object with only the properties to change. Allowed properties: name, x, y, width, height, rotation, opacity, fill, stroke, strokeWidth, borderRadius, text, fontSize, fontFamily, fontWeight, textAlign, color. Never include id, type, zIndex, locked, visible, or src." }, { role: "user", content: `Element: ${JSON.stringify(element)}\nInstruction: ${input.prompt}\nPreserve: ${(input.preserve ?? []).join(", ")}\nReturn only valid JSON.` }], response_format: { type: "json_object" }, temperature: 0.4, max_tokens: 1000 });
+  let changes: Record<string, unknown>;
+  try { changes = JSON.parse(response.choices[0]?.message?.content ?? "{}"); } catch { changes = {}; }
+  const forbidden = new Set(["id", "type", "zIndex", "locked", "visible", "src"]);
+  for (const key of forbidden) delete changes[key];
+  for (const key of input.preserve ?? []) delete changes[key];
+  const updatedElement = { ...element, ...changes } as DesignElement;
+  const newElements = [...canvas.canvasState.elements]; newElements[idx] = updatedElement;
+  const newState: CanvasState = { ...canvas.canvasState, elements: newElements };
+  const saveResult = await saveDesignCanvas(projectId, newState, tenantId, `AI: ${input.prompt.slice(0, 60)}`);
+  return { element: updatedElement, versionId: saveResult?.versionId, versionNumber: saveResult?.versionNumber, changes };
 }
