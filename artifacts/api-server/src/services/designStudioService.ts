@@ -36,11 +36,28 @@ export interface DesignElement {
   objectFit?: string;
 }
 
+export interface DesignSceneState {
+  id: string;
+  domain: "interior" | "architecture" | "fashion";
+  version: number;
+  objects: Array<Record<string, unknown> & { id: string; kind: string; name: string }>;
+  embellishments?: Array<Record<string, unknown> & { id: string; targetPartId: string }>;
+  asset?: {
+    mode: "2d-preview" | "real-3d";
+    glbUrl?: string;
+    gltfUrl?: string;
+    previewUrl?: string;
+    provider?: string;
+  };
+}
+
 export interface CanvasState {
   width: number;
   height: number;
   background: string;
   elements: DesignElement[];
+  /** Canonical editable 3D state. 2D canvas remains a derived/legacy projection. */
+  designScene?: DesignSceneState;
 }
 
 // ── SVG Sanitization Helpers ──────────────────────────────────────────────────
@@ -94,6 +111,21 @@ function safeNum(value: unknown, fallback = 0): number {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function validateDesignScene(scene: DesignSceneState): void {
+  if (!scene.id || !["interior", "architecture", "fashion"].includes(scene.domain)) throw new Error("INVALID_DESIGN_SCENE");
+  if (!Number.isInteger(scene.version) || scene.version < 1) throw new Error("INVALID_DESIGN_SCENE_VERSION");
+  if (!Array.isArray(scene.objects)) throw new Error("INVALID_DESIGN_SCENE_OBJECTS");
+  const ids = new Set<string>();
+  for (const object of scene.objects) {
+    if (!object?.id || !object.kind || !object.name || ids.has(object.id)) throw new Error("INVALID_DESIGN_SCENE_OBJECT");
+    ids.add(object.id);
+  }
+  if (scene.asset?.mode === "real-3d" && !scene.asset.glbUrl && !scene.asset.gltfUrl) throw new Error("REAL_3D_ASSET_URL_REQUIRED");
+  for (const item of scene.embellishments ?? []) {
+    if (!item?.id || !item.targetPartId || !ids.has(item.targetPartId)) throw new Error("INVALID_EMBELLISHMENT_TARGET");
+  }
+}
 
 function defaultCanvas(w = 1920, h = 1080): CanvasState {
   return { width: w, height: h, background: "#ffffff", elements: [] };
@@ -340,6 +372,7 @@ export async function saveDesignCanvas(
 ) {
   const project = await getDesignProject(projectId, tenantId);
   if (!project) return null;
+  if (canvasState.designScene) validateDesignScene(canvasState.designScene);
 
   // Next version number
   const [lastVersion] = await db
