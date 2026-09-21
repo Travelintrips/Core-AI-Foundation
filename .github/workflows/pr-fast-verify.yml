@@ -17,7 +17,7 @@ jobs:
   ai-platform:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +36,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Build workspace project references before checking the AI Platform.
+      # Running the leaf package directly on a clean runner causes TS6305
+      # because referenced declaration outputs do not exist yet.
+      - name: Build workspace type references
+        run: pnpm run typecheck:libs
 
       - name: AI Platform typecheck
         run: pnpm --filter @workspace/ai-platform typecheck
