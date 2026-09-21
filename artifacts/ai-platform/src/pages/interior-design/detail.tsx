@@ -17,6 +17,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { PlacementCanvas, type CanvasPlacement, type ConstraintEvaluation, type PlacementCandidate } from "@/components/interior-design/PlacementCanvas";
+import { Design3DViewer } from "@/components/design-studio/Design3DViewer";
+import { interiorOutputToDesignScene } from "@/lib/ai-design-scene-adapters";
 
 const API_BASE = "";
 
@@ -319,6 +321,12 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const canGenerate = !!brief && !["completed"].includes(project.status) && !generateMutation.isPending;
   const canvasPlacements = placementData?.data ?? [];
   const canvasReadOnly = canvasSession?.metadata?.["approvedForRendering"] === true;
+  const designScene = output ? interiorOutputToDesignScene({
+    projectId,
+    furniturePlacement: output.furniturePlacement,
+    materialRecommendations: output.materialRecommendations,
+    output: output as unknown as Record<string, unknown>,
+  }) : null;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -521,6 +529,8 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
               </ul>
             </div>
           )}
+
+          {designScene && <Design3DViewer scene={designScene} />}
 
           {/* Moodboard */}
           {output.moodboard && (
