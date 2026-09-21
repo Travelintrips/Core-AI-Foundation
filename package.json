@@ -10,7 +10,7 @@
     "build:generated": "pnpm --filter @workspace/api-spec run codegen",
     "build:libs": "pnpm run typecheck:libs",
     "build:api": "pnpm --filter @workspace/api-server run build",
-    "build:workspace": "pnpm run build:generated && pnpm run build:libs && pnpm run build:api && pnpm --filter @workspace/ai-platform run build",
+    "build:workspace": "pnpm run build:generated && pnpm run build:libs && pnpm --filter @workspace/ai-platform run build && pnpm run build:api && node ./scripts/hostinger-stage-frontend.cjs",
     "verify:openapi": "pnpm --filter @workspace/scripts run workspace-check",
     "verify:generated": "pnpm --filter @workspace/scripts run workspace-check",
     "verify:types": "pnpm run typecheck",
