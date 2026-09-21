@@ -12,7 +12,10 @@ import { eq } from "drizzle-orm";
 import { db, internalUsersTable, toSafeInternalUser } from "@workspace/db";
 import { hashPassword, verifyPassword, isPasswordStrongEnough } from "../services/passwordService.js";
 import {
-  issueSessionToken,\n  issueMagicLoginToken,\n  verifyMagicLoginToken,\n  getInternalUserById,
+  issueSessionToken,
+  issueMagicLoginToken,
+  verifyMagicLoginToken,
+  getInternalUserById,
   issuePasswordResetToken,
   verifyPasswordResetToken,
   getInternalUserByEmail,
