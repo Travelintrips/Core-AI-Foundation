@@ -14,7 +14,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);\n  const [showResetHelp, setShowResetHelp] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showResetHelp, setShowResetHelp] = useState(false);
 
   if (user && !user.mustChangePassword) {
     navigate("/");
