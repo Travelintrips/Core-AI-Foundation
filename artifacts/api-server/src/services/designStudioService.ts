@@ -242,6 +242,41 @@ export async function getDesignProject(id: number, tenantId: string) {
   };
 }
 
+
+export type DesignProjectSourceType = "interior" | "fashion";
+
+export async function getOrCreateDesignProjectForSource(
+  sourceType: DesignProjectSourceType,
+  sourceId: string | number,
+  tenantId: string,
+  name: string,
+): Promise<AiDesignProject> {
+  const normalizedSourceId = String(sourceId);
+  const [existing] = await db
+    .select()
+    .from(aiDesignProjects)
+    .where(and(
+      eq(aiDesignProjects.tenantId, tenantId),
+      eq(aiDesignProjects.sourceType, sourceType),
+      eq(aiDesignProjects.sourceId, normalizedSourceId),
+    ))
+    .limit(1);
+  if (existing) return existing;
+
+  const [created] = await db
+    .insert(aiDesignProjects)
+    .values({
+      tenantId,
+      name,
+      sourceType,
+      sourceId: normalizedSourceId,
+      status: "active",
+    })
+    .returning();
+  if (!created) throw new Error("DESIGN_PROJECT_CREATE_FAILED");
+  return created;
+}
+
 export async function createDesignProject(input: {
   tenantId: string;
   name: string;
