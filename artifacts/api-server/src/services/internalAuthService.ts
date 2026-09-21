@@ -24,7 +24,7 @@ function getSecret(): string {
   return secret;
 }
 
-export interface PasswordResetPayload {\n  sub: number;\n  purpose: "password_reset";\n  passwordChangedAt: string | null;\n}\n\nexport interface SessionPayload {
+export interface PasswordResetPayload {\n  sub: number;\n  purpose: "password_reset";\n  passwordChangedAt: string | null;\n}\n\nexport interface MagicLoginPayload {\n  sub: number;\n  purpose: "magic_login";\n}\n\nexport interface SessionPayload {
   sub: number; // internal_users.id
 }
 
