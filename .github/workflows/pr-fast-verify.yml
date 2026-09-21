@@ -1,4 +1,5 @@
 name: PR Fast Verify
+# workflow trigger refresh: codegen compatibility verification
 
 on:
   pull_request:
