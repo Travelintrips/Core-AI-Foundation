@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 import { db, internalUsersTable, toSafeInternalUser } from "@workspace/db";
 import { hashPassword, verifyPassword, isPasswordStrongEnough } from "../services/passwordService.js";
 import {
-  issueSessionToken,
+  issueSessionToken,\n  issueMagicLoginToken,\n  verifyMagicLoginToken,\n  getInternalUserById,
   issuePasswordResetToken,
   verifyPasswordResetToken,
   getInternalUserByEmail,
@@ -80,6 +80,35 @@ router.post("/internal/auth/login", loginLimiter, async (req, res): Promise<void
   await logAudit("internal_auth", "login", String(user.id), "internal_user", "success", { ip });
 
   res.json({ user: toSafeInternalUser(user) });
+});
+
+router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res): Promise<void> => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const generic = { ok: true, message: "Jika akun aktif terdaftar, link login akan dikirim ke email." };
+  if (!email) { res.status(400).json({ error: "Email wajib diisi." }); return; }
+  const user = await getInternalUserByEmail(email);
+  if (!user || user.status !== "active") { res.json(generic); return; }
+  const token = issueMagicLoginToken(user.id);
+  const baseUrl = (process.env["PUBLIC_APP_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
+  const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
+  await sendEmail({
+    to: user.email,
+    subject: "Link login Portal AI Internal",
+    html: `<p>Klik link berikut untuk login tanpa password:</p><p><a href="${magicUrl}">Login ke Portal AI</a></p><p>Link berlaku 10 menit.</p>`,
+    module: "internal_auth", action: "magic_login_email", resourceId: String(user.id),
+  });
+  res.json(generic);
+});
+
+router.get("/internal/auth/magic-login", loginLimiter, async (req, res): Promise<void> => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const payload = token ? verifyMagicLoginToken(token) : null;
+  const user = payload ? await getInternalUserById(payload.sub) : null;
+  if (!user || user.status !== "active") { res.status(401).send("Link login tidak valid atau sudah kedaluwarsa."); return; }
+  await db.update(internalUsersTable).set({ lastLoginAt: new Date() }).where(eq(internalUsersTable.id, user.id));
+  setSessionCookie(res, issueSessionToken(user.id));
+  await logAudit("internal_auth", "magic_login", String(user.id), "internal_user", "success", { ip: clientIp(req) });
+  res.redirect("/");
 });
 
 router.post("/internal/auth/request-password-reset", loginLimiter, async (req, res): Promise<void> => {
