@@ -144,6 +144,49 @@ router.put("/ai/design/projects/:id/canvas", async (req, res) => {
   }
 });
 
+// ── Canonical 3D scene ────────────────────────────────────────────────────────
+
+/** GET /api/ai/design/projects/:id/scene — canonical editable 3D state */
+router.get("/ai/design/projects/:id/scene", async (req, res) => {
+  try {
+    const ctx = resolveAuthenticatedTenantContext(req);
+    const id = parseInt(req.params["id"] ?? "", 10);
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const current = await getDesignCanvas(id, ctx.tenantId);
+    if (!current) { res.status(404).json({ error: "Not found" }); return; }
+    const scene = current.canvasState.designScene;
+    if (!scene) { res.status(404).json({ error: "3D scene not initialized" }); return; }
+    res.json({ projectId: id, versionId: current.versionId, versionNumber: current.versionNumber, scene });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+/** PUT /api/ai/design/projects/:id/scene — versioned canonical 3D save */
+router.put("/ai/design/projects/:id/scene", async (req, res) => {
+  try {
+    const ctx = resolveAuthenticatedTenantContext(req);
+    const id = parseInt(req.params["id"] ?? "", 10);
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const scene = req.body?.scene;
+    if (!scene || typeof scene !== "object") { res.status(400).json({ error: "scene required" }); return; }
+    const current = await getDesignCanvas(id, ctx.tenantId);
+    if (!current) { res.status(404).json({ error: "Not found" }); return; }
+    const saved = await saveDesignCanvas(
+      id,
+      { ...current.canvasState, designScene: scene },
+      ctx.tenantId,
+      typeof req.body?.label === "string" ? req.body.label : "3D scene update",
+    );
+    res.json(saved);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const badRequest = msg.startsWith("INVALID_") || msg === "REAL_3D_ASSET_URL_REQUIRED";
+    res.status(badRequest ? 400 : 500).json({ error: msg });
+  }
+});
+
 // ── Versions ──────────────────────────────────────────────────────────────────
 
 /** GET /api/ai/design/projects/:id/versions?page=1&pageSize=30 */
