@@ -12,14 +12,17 @@ import { eq } from "drizzle-orm";
 import { db, internalUsersTable, toSafeInternalUser } from "@workspace/db";
 import { hashPassword, verifyPassword, isPasswordStrongEnough } from "../services/passwordService.js";
 import {
-  issueSessionToken,\n  issuePasswordResetToken,\n  verifyPasswordResetToken,
+  issueSessionToken,
+  issuePasswordResetToken,
+  verifyPasswordResetToken,
   getInternalUserByEmail,
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_MS,
 } from "../services/internalAuthService.js";
 import { requireAuth } from "../middleware/internalAuth.js";
 import { loginLimiter } from "../middleware/rateLimiter.js";
-import { logAudit } from "../services/aiAuditService.js";\nimport { sendEmail } from "../services/emailService.js";
+import { logAudit } from "../services/aiAuditService.js";
+import { sendEmail } from "../services/emailService.js";
 
 const router = Router();
 
