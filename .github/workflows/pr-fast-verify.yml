@@ -1,0 +1,102 @@
+name: PR Fast Verify
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-fast-verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai-platform:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace type references
+        run: pnpm run typecheck:libs
+
+      - name: AI Platform typecheck
+        run: pnpm --filter @workspace/ai-platform typecheck
+
+      - name: AI Platform tests
+        run: pnpm --filter @workspace/ai-platform test
+
+      - name: AI Platform build
+        env:
+          PORT: 4173
+          BASE_PATH: /
+        run: pnpm --filter @workspace/ai-platform build
+
+      - name: Self diagnostic summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## AI Core PR Self Diagnostic"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Workflow: \`${GITHUB_WORKFLOW}\`"
+            echo "- Run: #${GITHUB_RUN_NUMBER}"
+            echo "- Repository: \`${GITHUB_REPOSITORY}\`"
+            echo
+            echo "### Verification contract"
+            echo "- Workspace references must build before leaf typecheck."
+            echo "- AI Platform must pass typecheck, tests, and build."
+            echo "- Build requires PORT=4173 and BASE_PATH=/."
+            echo
+            echo "### Failure triage"
+            echo "Open the first failed step above. Treat its first compiler/test/build error as the primary blocker; later errors may be cascading."
+            echo
+            echo "Run URL: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture diagnostic context
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p .ci-diagnostics
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "workflow=${GITHUB_WORKFLOW}"
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "node=$(node --version)"
+            echo "pnpm=$(pnpm --version)"
+            echo "timestamp=$(date -u +%FT%TZ)"
+          } > .ci-diagnostics/context.txt
+          git status --short > .ci-diagnostics/git-status.txt || true
+          pnpm list --depth 0 > .ci-diagnostics/workspace-packages.txt 2>&1 || true
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-core-pr-diagnostics-${{ github.run_id }}
+          path: .ci-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
