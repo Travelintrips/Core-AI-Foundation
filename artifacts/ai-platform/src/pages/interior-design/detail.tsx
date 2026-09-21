@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PlacementCanvas, type CanvasPlacement, type ConstraintEvaluation, type PlacementCandidate } from "@/components/interior-design/PlacementCanvas";
 import { Design3DViewer } from "@/components/design-studio/Design3DViewer";
 import { interiorOutputToDesignScene } from "@/lib/ai-design-scene-adapters";
+import type { DesignScene } from "@/lib/ai-design-core";
 
 const API_BASE = "";
 
@@ -153,6 +154,7 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [canvasDirty, setCanvasDirty] = useState(false);
   const [constraintEvaluation, setConstraintEvaluation] = useState<ConstraintEvaluation | null>(null);
+  const [canonicalScene, setCanonicalScene] = useState<DesignScene | null>(null);
 
   const projectId = params.id;
 
@@ -283,6 +285,37 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   });
 
   useEffect(() => {
+    if (!data?.output || !data.project) { setCanonicalScene(null); return; }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const workspace = await apiFetch<{ id: number }>("/api/ai/design/workspaces/resolve", {
+          method: "POST",
+          body: JSON.stringify({ sourceType: "interior", sourceId: projectId, name: data.project.title }),
+        });
+        try {
+          const persisted = await apiFetch<{ scene: DesignScene }>(`/api/ai/design/projects/${workspace.id}/scene`);
+          if (!cancelled) setCanonicalScene(persisted.scene);
+        } catch {
+          const initial = interiorOutputToDesignScene({
+            projectId,
+            furniturePlacement: data.output.furniturePlacement,
+            materialRecommendations: data.output.materialRecommendations,
+            output: data.output as unknown as Record<string, unknown>,
+          });
+          await apiFetch(`/api/ai/design/projects/${workspace.id}/scene`, {
+            method: "PUT", body: JSON.stringify({ scene: initial, label: "Initialize interior 3D scene" }),
+          });
+          if (!cancelled) setCanonicalScene(initial);
+        }
+      } catch (err) {
+        if (!cancelled) toast({ title: "3D workspace gagal dimuat", description: (err as Error).message, variant: "destructive" });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [data?.output, data?.project, projectId, toast]);
+
+  useEffect(() => {
     if (!canvasSession) {
       setCandidateList([]);
       setConstraintEvaluation(null);
@@ -321,12 +354,12 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const canGenerate = !!brief && !["completed"].includes(project.status) && !generateMutation.isPending;
   const canvasPlacements = placementData?.data ?? [];
   const canvasReadOnly = canvasSession?.metadata?.["approvedForRendering"] === true;
-  const designScene = output ? interiorOutputToDesignScene({
+  const designScene = canonicalScene ?? (output ? interiorOutputToDesignScene({
     projectId,
     furniturePlacement: output.furniturePlacement,
     materialRecommendations: output.materialRecommendations,
     output: output as unknown as Record<string, unknown>,
-  }) : null;
+  }) : null);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
