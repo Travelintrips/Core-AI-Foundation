@@ -8,6 +8,15 @@ function record(value: unknown): UnknownRecord | undefined {
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
+function assetFromValue(value: unknown): string | undefined {
+  const source = record(value);
+  if (!source) return undefined;
+  for (const key of ["url", "previewUrl", "preview_url", "imageUrl", "image_url", "frontUrl", "front_url"]) {
+    const found = stringValue(source[key]);
+    if (found) return found;
+  }
+  return undefined;
+}
 function assetFrom(records: Array<UnknownRecord | undefined>) {
   const values = records.filter(Boolean) as UnknownRecord[];
   const find = (keys: string[]) => {
@@ -19,7 +28,17 @@ function assetFrom(records: Array<UnknownRecord | undefined>) {
   };
   const glbUrl = find(["glbUrl", "glb_url", "modelGlbUrl", "model_glb_url"]);
   const gltfUrl = find(["gltfUrl", "gltf_url", "modelGltfUrl", "model_gltf_url"]);
-  const previewUrl = find(["previewUrl", "preview_url", "renderUrl", "render_url", "imageUrl", "image_url"]);
+  let previewUrl = find(["previewUrl", "preview_url", "renderUrl", "render_url", "imageUrl", "image_url", "url"]);
+  if (!previewUrl) {
+    for (const source of values) {
+      for (const key of ["flat-design", "front-back-preview"]) {
+        const value = source[key];
+        previewUrl = stringValue(value) ?? assetFromValue(value);
+        if (previewUrl) break;
+      }
+      if (previewUrl) break;
+    }
+  }
   return { mode: glbUrl || gltfUrl ? "real-3d" as const : "2d-preview" as const, glbUrl, gltfUrl, previewUrl };
 }
 function uniqueObjects(objects: DesignObject[]) {
@@ -58,7 +77,9 @@ export function fashionOrderToDesignScene(input: {
   compositionJson?: UnknownRecord | null;
   outputs?: UnknownRecord | null;
 }): DesignScene {
-  const panels = Object.keys(input.blueprintPanels ?? {});
+  const panels = Object.entries(input.blueprintPanels ?? {})
+    .filter(([, value]) => record(value)?.enabled !== false)
+    .map(([name]) => name);
   const names = panels.length ? panels : ["garment"];
   const objects = names.map((name, index): DesignObject => ({
     id: `part-${name}`, kind: "garment-part", name, visible: true, quantity: 1,
