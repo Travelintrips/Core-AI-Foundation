@@ -11,7 +11,7 @@
  * - View full revision history
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Shirt, Search, Filter, RefreshCw, Loader2,
@@ -37,6 +37,10 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { Design3DViewer } from "@/components/design-studio/Design3DViewer";
+import { FashionEmbellishmentEditor } from "@/components/design-studio/FashionEmbellishmentEditor";
+import { fashionOrderToDesignScene } from "@/lib/ai-design-scene-adapters";
+import type { DesignScene } from "@/lib/ai-design-core";
 
 // ── API helper ────────────────────────────────────────────────────────────────
 
@@ -171,6 +175,7 @@ export default function FashionDesignAdminPage() {
   const [page, setPage] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<FashionOrder | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [fashionScene, setFashionScene] = useState<DesignScene | null>(null);
 
   // Designer assignment form state
   const [assignForm, setAssignForm] = useState({ designerName: "", designerEmail: "", notes: "" });
@@ -205,7 +210,20 @@ export default function FashionDesignAdminPage() {
     enabled: !!selectedOrder && detailOpen,
   });
 
-  // ── Mutations ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const current = detailData ?? selectedOrder;
+    if (!detailOpen || !current) { setFashionScene(null); return; }
+    setFashionScene(fashionOrderToDesignScene({
+      orderId: current.id,
+      serviceType: current.serviceType,
+      colorways: current.colorways,
+      blueprintPanels: current.blueprint?.panels,
+      compositionJson: current.compositionJson,
+      outputs: current.outputs,
+    }));
+  }, [detailData, selectedOrder, detailOpen]);
+
+    // ── Mutations ────────────────────────────────────────────────────────────
 
   const trademarkMutation = useMutation({
     mutationFn: (id: number) =>
@@ -599,7 +617,20 @@ export default function FashionDesignAdminPage() {
                   </div>
                 )}
 
-                {/* Actions */}
+                {fashionScene && (
+                  <div className="space-y-4">
+                    <Design3DViewer scene={fashionScene} />
+                    <FashionEmbellishmentEditor
+                      scene={fashionScene}
+                      onChange={(embellishments) => setFashionScene(current => current ? { ...current, version: current.version + 1, embellishments } : current)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Edit manik/sequin/bordir pada tahap ini adalah preview lokal dan belum diklaim tersimpan ke order sampai kontrak persistence tersedia.
+                    </p>
+                  </div>
+                )}
+
+                                {/* Actions */}
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                   <Button
                     size="sm" variant="outline"
