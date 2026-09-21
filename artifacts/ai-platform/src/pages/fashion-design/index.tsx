@@ -213,14 +213,19 @@ export default function FashionDesignAdminPage() {
   useEffect(() => {
     const current = detailData ?? selectedOrder;
     if (!detailOpen || !current) { setFashionScene(null); return; }
-    setFashionScene(fashionOrderToDesignScene({
+    const nextScene = fashionOrderToDesignScene({
       orderId: current.id,
       serviceType: current.serviceType,
       colorways: current.colorways,
       blueprintPanels: current.blueprint?.panels,
       compositionJson: current.compositionJson,
       outputs: current.outputs,
-    }));
+    });
+    setFashionScene(previous =>
+      previous?.id === nextScene.id
+        ? { ...nextScene, version: previous.version, embellishments: previous.embellishments }
+        : nextScene
+    );
   }, [detailData, selectedOrder, detailOpen]);
 
     // ── Mutations ────────────────────────────────────────────────────────────
