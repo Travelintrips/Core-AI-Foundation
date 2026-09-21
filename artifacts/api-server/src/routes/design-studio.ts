@@ -26,6 +26,7 @@ import {
   restoreDesignVersion,
   exportDesign,
   aiRegenerateElement,
+  getOrCreateDesignProjectForSource,
 } from "../services/designStudioService.js";
 import {
   listBuiltinTemplates,
@@ -104,6 +105,32 @@ router.post("/ai/design/projects/:id/archive", async (req, res) => {
     const result = await archiveDesignProject(id, ctx.tenantId);
     if (!result) { res.status(404).json({ error: "Not found" }); return; }
     res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+// ── Source-bound canonical workspace ─────────────────────────────────────────
+
+/** POST /api/ai/design/workspaces/resolve — resolve/create Interior/Fashion 3D workspace */
+router.post("/ai/design/workspaces/resolve", async (req, res) => {
+  try {
+    const ctx = resolveAuthenticatedTenantContext(req);
+    const sourceType = req.body?.sourceType;
+    const sourceId = req.body?.sourceId;
+    const name = req.body?.name;
+    if (!["interior", "fashion"].includes(sourceType) || !["string", "number"].includes(typeof sourceId)) {
+      res.status(400).json({ error: "Valid sourceType and sourceId required" });
+      return;
+    }
+    const project = await getOrCreateDesignProjectForSource(
+      sourceType,
+      sourceId,
+      ctx.tenantId,
+      typeof name === "string" && name.trim() ? name.trim() : `${sourceType} ${sourceId}`,
+    );
+    res.json(project);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: msg });
