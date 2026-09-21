@@ -35,6 +35,7 @@
     "security:scan-secrets": "pnpm --filter @workspace/scripts run security:scan-secrets"
   },
   "private": true,
+  "packageManager": "pnpm@10.28.1",
   "dependencies": {
     "@replit/connectors-sdk": "^0.4.1"
   },
