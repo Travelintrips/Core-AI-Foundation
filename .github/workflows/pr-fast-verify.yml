@@ -50,4 +50,7 @@ jobs:
         run: pnpm --filter @workspace/ai-platform test
 
       - name: AI Platform build
+        env:
+          PORT: 4173
+          BASE_PATH: /
         run: pnpm --filter @workspace/ai-platform build
