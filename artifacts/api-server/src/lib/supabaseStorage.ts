@@ -22,17 +22,24 @@ interface SupabaseCredentials {
 
 function deriveSupabaseUrlFromDatabaseUrl(databaseUrl: string | undefined): string | undefined {
   if (!databaseUrl) return undefined;
+
+  // Pooler URLs contain the project ref in the username. Extract it directly
+  // first so passwords containing URL-sensitive characters cannot break the
+  // derivation.
+  const poolerRef = databaseUrl.match(/postgres\.([a-z0-9]+)(?=[:@])/i)?.[1];
+  if (poolerRef) return `https://${poolerRef}.supabase.co`;
+
+  const directRef = databaseUrl.match(/db\.([a-z0-9]+)\.supabase\.co/i)?.[1];
+  if (directRef) return `https://${directRef}.supabase.co`;
+
   try {
     const parsed = new URL(databaseUrl);
     const directHost = parsed.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/i);
     if (directHost?.[1]) return `https://${directHost[1]}.supabase.co`;
-
-    const username = decodeURIComponent(parsed.username || "");
-    const poolerUser = username.match(/^postgres\.([a-z0-9]+)$/i);
-    if (poolerUser?.[1]) return `https://${poolerUser[1]}.supabase.co`;
   } catch {
     return undefined;
   }
+
   return undefined;
 }
 
@@ -47,7 +54,10 @@ function getCredentials(): SupabaseCredentials {
     ? process.env["SUPABASE_URL_DEV"] || process.env["SUPABASE_DEV_URL"]
     : process.env["SUPABASE_URL"] || process.env["SUPABASE_PROD_URL"];
 
-  const url = (explicitUrl || deriveSupabaseUrlFromDatabaseUrl(databaseUrl))?.replace(/\/$/, "");
+  const derivedUrl = deriveSupabaseUrlFromDatabaseUrl(databaseUrl);
+  // In production prefer the URL derived from the production DB connection so
+  // Storage can never accidentally point at a different Supabase project.
+  const url = (isDev ? (explicitUrl || derivedUrl) : (derivedUrl || explicitUrl))?.replace(/\/$/, "");
 
   const serviceKey = isDev
     ? process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] || process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"]

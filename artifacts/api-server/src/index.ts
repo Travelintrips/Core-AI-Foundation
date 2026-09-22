@@ -71,41 +71,30 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
+async function runStartupStep(
+  label: string,
+  task: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await task();
+  } catch (err) {
+    logger.warn({ err }, `${label} failed (non-blocking)`);
   }
+}
 
-  logger.info({ port }, "Server listening");
+async function initializeRuntimeServices(): Promise<void> {
+  // Run startup DB work sequentially. Hostinger performs rolling deploys and
+  // can overlap processes briefly; firing every initializer concurrently caused
+  // Supabase session-pool exhaustion during deploys.
+  await runStartupStep("[observability] Table init", () => ensureObservabilityTables());
+  await runStartupStep("[submit-idempotency] Table init", () => ensureSubmitIdempotencyTable());
+  await runStartupStep("[material-library] Table/seed init", async () => {
+    await ensureMaterialLibraryTables();
+    await seedMaterialLibraryIfEmpty();
+  });
+  await runStartupStep("[material-import] Phase 5 table verification", () => verifyMaterialImportTables());
+  await runStartupStep("[supabaseStorage] Bucket init", () => ensureStorageBucket());
 
-  // ── Observability tables (additive DDL, idempotent) ──────────────────────
-  ensureObservabilityTables().catch((err) =>
-    logger.warn({ err }, "[observability] Table init failed (non-blocking)"),
-  );
-
-  // ── Submit idempotency table ───────────────────────────────────────────────
-  ensureSubmitIdempotencyTable().catch((err) =>
-    logger.warn({ err }, "[submit-idempotency] Table init failed (non-blocking)"),
-  );
-
-  // ── Material Library tables + conditional seed ────────────────────────────
-  ensureMaterialLibraryTables()
-    .then(() => seedMaterialLibraryIfEmpty())
-    .catch((err) =>
-      logger.warn({ err }, "[material-library] Table/seed init failed (non-blocking)"),
-    );
-
-  verifyMaterialImportTables().catch((err) =>
-    logger.warn({ err }, "[material-import] Phase 5 table verification failed (non-blocking)"),
-  );
-
-  // ── Supabase Storage bucket ───────────────────────────────────────────────
-  ensureStorageBucket().catch((err) =>
-    logger.warn({ err }, "[supabaseStorage] Bucket init failed (non-blocking)"),
-  );
-
-  // ── Dispatcher auto-start ────────────────────────────────────────────────
   const isProduction = process.env["NODE_ENV"] === "production";
   const isAifrontProduction =
     isProduction &&
@@ -115,36 +104,31 @@ app.listen(port, (err) => {
         .includes("https://aifront.cstlogistic.co.id")
     );
 
-  // AI Front is now the production runtime on Hostinger. If no explicit
-  // override exists, enable its worker runtime there. An explicit "false"
-  // still wins, which keeps rollback/maintenance controllable from env.
   const dispatcherFlag = process.env["AI_DISPATCHER_ENABLED"];
   const dispatcherEnabled = isProduction
     ? dispatcherFlag === "true" || (dispatcherFlag == null && isAifrontProduction)
     : true;
 
   if (dispatcherEnabled) {
-    jobDispatcher.start().catch((startErr) =>
-      logger.error({ err: startErr }, "[dispatcher] Failed to auto-start"),
-    );
+    try {
+      await jobDispatcher.start();
+    } catch (err) {
+      logger.error({ err }, "[dispatcher] Failed to auto-start");
+    }
 
     if (!_designBatchRecoveryStarted) {
       _designBatchRecoveryStarted = true;
-      resumeIncompleteDesignRenderBatches()
-        .then((result) => {
-          if (result.batchesResumed > 0 || result.batchesCancelled > 0 || result.staleRecovery.scannedCount > 0) {
-            logger.info(result, "[design-batch-recovery] Startup recovery complete");
-          }
-        })
-        .catch((err) =>
-          logger.warn({ err }, "[design-batch-recovery] Startup recovery failed (non-blocking)"),
-        );
+      await runStartupStep("[design-batch-recovery] Startup recovery", async () => {
+        const result = await resumeIncompleteDesignRenderBatches();
+        if (result.batchesResumed > 0 || result.batchesCancelled > 0 || result.staleRecovery.scannedCount > 0) {
+          logger.info(result, "[design-batch-recovery] Startup recovery complete");
+        }
+      });
     }
   } else {
     logger.info("[dispatcher] Auto-start disabled (set AI_DISPATCHER_ENABLED=true to enable in production)");
   }
 
-  // ── Scheduler auto-start ─────────────────────────────────────────────────
   const schedulerFlag = process.env["AI_SCHEDULER_ENABLED"];
   const schedulerEnabled = isProduction
     ? schedulerFlag === "true" || (schedulerFlag == null && isAifrontProduction)
@@ -159,17 +143,30 @@ app.listen(port, (err) => {
   });
 
   if (schedulerEnabled) {
-    scheduler.start().catch((startErr) =>
-      logger.error({ err: startErr }, "[scheduler] Failed to auto-start"),
-    );
+    try {
+      await scheduler.start();
+    } catch (err) {
+      logger.error({ err }, "[scheduler] Failed to auto-start");
+    }
   } else {
     logger.info("[scheduler] Auto-start disabled (set AI_SCHEDULER_ENABLED=true to enable in production)");
   }
 
-  // ── Provider health alert poller ─────────────────────────────────────────
-  healthAlerts.start().catch((startErr) =>
-    logger.error({ err: startErr }, "[health-alerts] Failed to auto-start"),
-  );
+  try {
+    await healthAlerts.start();
+  } catch (err) {
+    logger.error({ err }, "[health-alerts] Failed to auto-start");
+  }
+}
+
+app.listen(port, (err) => {
+  if (err) {
+    logger.error({ err }, "Error listening on port");
+    process.exit(1);
+  }
+
+  logger.info({ port }, "Server listening");
+  void initializeRuntimeServices();
 });
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────
