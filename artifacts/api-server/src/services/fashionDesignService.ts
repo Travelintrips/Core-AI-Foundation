@@ -458,6 +458,27 @@ export async function runTrademarkCheck(
 
 // ── Output generation (mock — production requires AI pipeline integration) ────
 
+export interface Generated3DAsset {
+  glbUrl?: string;
+  gltfUrl?: string;
+  previewUrl?: string;
+  provider?: string;
+}
+
+function normalize3DAsset(value: unknown): Generated3DAsset | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const read = (key: string) => typeof source[key] === "string" && (source[key] as string).trim()
+    ? (source[key] as string).trim() : undefined;
+  const asset = {
+    glbUrl: read("glbUrl") ?? read("glb_url"),
+    gltfUrl: read("gltfUrl") ?? read("gltf_url"),
+    previewUrl: read("previewUrl") ?? read("preview_url"),
+    provider: read("provider"),
+  };
+  return asset.glbUrl || asset.gltfUrl ? asset : undefined;
+}
+
 export interface GenerationOptions {
   /** Caller identifier (admin key suffix or IP) for domain rate limiting */
   callerId?: string;
@@ -467,6 +488,11 @@ export interface GenerationOptions {
   estimatedInputTokens?: number;
   /** Optional project ID for budget preflight */
   projectId?: string;
+  /**
+   * Canonical real-3D asset returned by the generation/provider pipeline.
+   * A 2D preview alone never promotes an output to real-3d.
+   */
+  asset3d?: Generated3DAsset;
 }
 
 export async function generateOutputs(
@@ -542,6 +568,7 @@ export async function generateOutputs(
       "motif-variants": { config: order.motifConfig, status: "pending" },
       "placement-spec": bp.placementSpec ?? {},
       "composition-json": "self",
+      ...(opts.asset3d ? { asset: normalize3DAsset(opts.asset3d) } : {}),
     },
     generatedAt: new Date().toISOString(),
     warnings: [
@@ -550,7 +577,14 @@ export async function generateOutputs(
     ],
   };
 
+  const asset3d = normalize3DAsset(opts.asset3d);
+  const canonicalAsset = asset3d ? {
+    mode: "real-3d",
+    ...asset3d,
+  } : undefined;
+
   const outputs = {
+    ...(canonicalAsset ? { asset: canonicalAsset } : {}),
     "flat-design": null, // requires AI pipeline
     "front-back-preview": null, // requires rendering
     "colorways": order.colorways,
