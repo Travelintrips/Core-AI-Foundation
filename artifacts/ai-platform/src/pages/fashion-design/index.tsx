@@ -11,7 +11,7 @@
  * - View full revision history
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Shirt, Search, Filter, RefreshCw, Loader2,
@@ -47,6 +47,13 @@ import type { DesignScene } from "@/lib/ai-design-core";
 const API_BASE = "";
 const API_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
 
+class HttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
@@ -59,7 +66,7 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { const b = await res.json(); if (b?.error) msg = b.error; } catch { /* ignore */ }
-    throw new Error(msg);
+    throw new HttpError(res.status, msg);
   }
   return res.json() as Promise<T>;
 }
@@ -176,6 +183,8 @@ export default function FashionDesignAdminPage() {
   const [selectedOrder, setSelectedOrder] = useState<FashionOrder | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fashionScene, setFashionScene] = useState<DesignScene | null>(null);
+  const [designWorkspaceId, setDesignWorkspaceId] = useState<number | null>(null);
+  const fashionSceneSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // Designer assignment form state
   const [assignForm, setAssignForm] = useState({ designerName: "", designerEmail: "", notes: "" });
@@ -212,21 +221,56 @@ export default function FashionDesignAdminPage() {
 
   useEffect(() => {
     const current = detailData ?? selectedOrder;
-    if (!detailOpen || !current) { setFashionScene(null); return; }
-    const nextScene = fashionOrderToDesignScene({
-      orderId: current.id,
-      serviceType: current.serviceType,
-      colorways: current.colorways,
-      blueprintPanels: current.blueprint?.panels,
-      compositionJson: current.compositionJson,
-      outputs: current.outputs,
-    });
-    setFashionScene(previous =>
-      previous?.id === nextScene.id
-        ? { ...nextScene, version: previous.version, embellishments: previous.embellishments }
-        : nextScene
-    );
-  }, [detailData, selectedOrder, detailOpen]);
+    if (!detailOpen || !current) { setFashionScene(null); setDesignWorkspaceId(null); return; }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const workspace = await apiFetch<{ id: number }>("/api/ai/design/workspaces/resolve", {
+          method: "POST",
+          body: JSON.stringify({ sourceType: "fashion", sourceId: current.id, name: current.orderName }),
+        });
+        if (cancelled) return;
+        setDesignWorkspaceId(workspace.id);
+        try {
+          const persisted = await apiFetch<{ scene: DesignScene }>(`/api/ai/design/projects/${workspace.id}/scene`);
+          if (!cancelled) setFashionScene(persisted.scene);
+        } catch (err) {
+          if (!(err instanceof HttpError) || err.status !== 404) throw err;
+          const initial = fashionOrderToDesignScene({
+            orderId: current.id,
+            serviceType: current.serviceType,
+            colorways: current.colorways,
+            blueprintPanels: current.blueprint?.panels,
+            compositionJson: current.compositionJson,
+            outputs: current.outputs,
+          });
+          await apiFetch(`/api/ai/design/projects/${workspace.id}/scene`, {
+            method: "PUT", body: JSON.stringify({ scene: initial, label: "Initialize fashion 3D scene" }),
+          });
+          if (!cancelled) setFashionScene(initial);
+        }
+      } catch (err) {
+        if (!cancelled) toast({ title: "3D workspace gagal dimuat", description: (err as Error).message, variant: "destructive" });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [detailData, selectedOrder, detailOpen, toast]);
+
+  const saveFashionSceneMutation = useMutation({
+    mutationFn: async (scene: DesignScene) => {
+      if (!designWorkspaceId) throw new Error("3D workspace belum siap");
+      const workspaceId = designWorkspaceId;
+      const save = fashionSceneSaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => apiFetch(`/api/ai/design/projects/${workspaceId}/scene`, {
+          method: "PUT", body: JSON.stringify({ scene, label: "Fashion 3D edit" }),
+        }));
+      fashionSceneSaveQueueRef.current = save.then(() => undefined, () => undefined);
+      return save;
+    },
+    onSuccess: () => toast({ title: "Perubahan 3D tersimpan" }),
+    onError: (err: Error) => toast({ title: "Gagal menyimpan 3D", description: err.message, variant: "destructive" }),
+  });
 
     // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -627,10 +671,15 @@ export default function FashionDesignAdminPage() {
                     <Design3DViewer scene={fashionScene} />
                     <FashionEmbellishmentEditor
                       scene={fashionScene}
-                      onChange={(embellishments) => setFashionScene(current => current ? { ...current, version: current.version + 1, embellishments } : current)}
+                      onChange={(embellishments) => setFashionScene(current => {
+                        if (!current) return current;
+                        const next = { ...current, version: current.version + 1, embellishments };
+                        saveFashionSceneMutation.mutate(next);
+                        return next;
+                      })}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Edit manik/sequin/bordir pada tahap ini adalah preview lokal dan belum diklaim tersimpan ke order sampai kontrak persistence tersedia.
+                      Perubahan manik/sequin/bordir disimpan ke canonical 3D scene dan version history.
                     </p>
                   </div>
                 )}
