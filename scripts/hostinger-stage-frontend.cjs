@@ -5,7 +5,13 @@ const root = path.resolve(__dirname, "..");
 // AI Front is the public customer-facing site. Keep the internal ai-platform
 // opt-in only so a missing Hostinger env var can never expose the staff login
 // as the production landing page.
-const frontend = (process.env.HOSTINGER_FRONTEND || "customer-portal").trim();
+const rawFrontend = process.env.HOSTINGER_FRONTEND?.trim();
+if (!rawFrontend) {
+  throw new Error(
+    'HOSTINGER_FRONTEND is required on Hostinger. Set "ai-platform" for aicore.cstlogistic.co.id and "customer-portal" for aifront.cstlogistic.co.id.',
+  );
+}
+const frontend = rawFrontend;
 const allowed = new Set(["customer-portal", "ai-platform"]);
 if (!allowed.has(frontend)) {
   throw new Error(`Invalid HOSTINGER_FRONTEND "${frontend}". Expected customer-portal or ai-platform.`);
