@@ -47,7 +47,12 @@ const rawAllowedOrigins = process.env["ALLOWED_ORIGINS"] ?? "";
 const publicAppUrl = process.env["PUBLIC_APP_URL"] ?? "";
 const productionDefaultOrigins =
   process.env["NODE_ENV"] === "production"
-    ? ["https://aicore.cstlogistic.co.id", "https://aifront.cstlogistic.co.id", "https://lightsalmon-cheetah-642414.hostingersite.com"]
+    ? [
+        "https://aicore.cstlogistic.co.id",
+        "https://aifront.cstlogistic.co.id",
+        "https://lightsalmon-cheetah-642414.hostingersite.com",
+        "https://grey-crocodile-883871.hostingersite.com",
+      ]
     : [];
 const replitDomain = process.env["REPLIT_DEV_DOMAIN"]
   ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
