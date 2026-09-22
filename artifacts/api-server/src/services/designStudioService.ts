@@ -202,9 +202,28 @@ export async function getOrCreateDesignProjectForSource(sourceType: DesignProjec
   const normalizedSourceId = String(sourceId);
   const [existing] = await db.select().from(aiDesignProjects).where(and(eq(aiDesignProjects.tenantId, tenantId), eq(aiDesignProjects.sourceType, sourceType), eq(aiDesignProjects.sourceId, normalizedSourceId))).limit(1);
   if (existing) return existing;
-  const [created] = await db.insert(aiDesignProjects).values({ tenantId, name, sourceType, sourceId: normalizedSourceId, status: "active" }).returning();
-  if (!created) throw new Error("DESIGN_PROJECT_CREATE_FAILED");
-  return created;
+  const [created] = await db
+    .insert(aiDesignProjects)
+    .values({ tenantId, name, sourceType, sourceId: normalizedSourceId, status: "active" })
+    .onConflictDoNothing({
+      target: [aiDesignProjects.tenantId, aiDesignProjects.sourceType, aiDesignProjects.sourceId],
+    })
+    .returning();
+  if (created) return created;
+
+  // A concurrent resolver may have inserted the same source binding first.
+  // Re-read the unique tenant/source row instead of surfacing a false 500.
+  const [winner] = await db
+    .select()
+    .from(aiDesignProjects)
+    .where(and(
+      eq(aiDesignProjects.tenantId, tenantId),
+      eq(aiDesignProjects.sourceType, sourceType),
+      eq(aiDesignProjects.sourceId, normalizedSourceId),
+    ))
+    .limit(1);
+  if (!winner) throw new Error("DESIGN_PROJECT_CREATE_FAILED");
+  return winner;
 }
 
 export async function createDesignProject(input: { tenantId: string; name: string; description?: string; canvasWidth?: number; canvasHeight?: number; templateId?: number; brandDnaId?: number; tags?: string[]; initialState?: CanvasState; }) {
