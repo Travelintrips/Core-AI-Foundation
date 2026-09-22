@@ -2,7 +2,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const frontend = (process.env.HOSTINGER_FRONTEND || "ai-platform").trim();
+// AI Front is the public customer-facing site. Keep the internal ai-platform
+// opt-in only so a missing Hostinger env var can never expose the staff login
+// as the production landing page.
+const frontend = (process.env.HOSTINGER_FRONTEND || "customer-portal").trim();
 const allowed = new Set(["customer-portal", "ai-platform"]);
 if (!allowed.has(frontend)) {
   throw new Error(`Invalid HOSTINGER_FRONTEND "${frontend}". Expected customer-portal or ai-platform.`);
