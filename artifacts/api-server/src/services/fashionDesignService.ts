@@ -26,6 +26,7 @@ import {
 import { validateBlueprintUrls } from "../domains/fashion-design/fileSafety.js";
 import { eq, desc, and, like, SQL } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { uploadToSupabase } from "../lib/supabaseStorage.js";
 
 // ── Trademark keyword blocklist ────────────────────────────────────────────────
 // Prevents copying well-known brand marks. Add more as needed.
@@ -463,6 +464,35 @@ export interface Generated3DAsset {
   gltfUrl?: string;
   previewUrl?: string;
   provider?: string;
+}
+
+const REAL_3D_MIME = new Map([
+  ["model/gltf-binary", "glb"],
+  ["model/gltf+json", "gltf"],
+  ["application/octet-stream", "glb"],
+]);
+
+export async function persistGenerated3DAsset(input: {
+  orderId: number;
+  buffer: Buffer;
+  contentType: string;
+  provider?: string;
+  previewUrl?: string;
+}): Promise<Generated3DAsset> {
+  const normalizedMime = input.contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  const extension = REAL_3D_MIME.get(normalizedMime);
+  if (!extension) throw new Error("INVALID_3D_ASSET_TYPE");
+  if (!input.buffer.length) throw new Error("EMPTY_3D_ASSET");
+  const maxBytes = 50 * 1024 * 1024;
+  if (input.buffer.length > maxBytes) throw new Error("3D_ASSET_TOO_LARGE");
+
+  const path = `fashion-design/3d/${input.orderId}/model.${extension}`;
+  const publicUrl = await uploadToSupabase(path, input.buffer, normalizedMime);
+  return {
+    ...(extension === "glb" ? { glbUrl: publicUrl } : { gltfUrl: publicUrl }),
+    ...(input.previewUrl ? { previewUrl: input.previewUrl } : {}),
+    ...(input.provider ? { provider: input.provider } : {}),
+  };
 }
 
 function normalize3DAsset(value: unknown): Generated3DAsset | undefined {
