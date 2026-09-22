@@ -7,16 +7,28 @@ const { Pool } = pg;
 
 // Raw SQL in the app (outside Drizzle's schema-qualified query builder) uses
 // unqualified table names, so every new connection must default its search
-// path to our dedicated schema instead of "public". Setting it via the libpq
-// startup "options" parameter (rather than a query in a "connect" listener)
-// guarantees it is applied atomically before the connection is handed back
-// to the pool for use — a `client.query(...)` in a "connect" handler is not
-// awaited by the pool and can race with the first real query on that
-// connection, intermittently causing "relation ... does not exist" errors.
-export const pool = new Pool({
+// path to our dedicated schema instead of "public".
+//
+// Do not pass search_path through libpq's startup "options" parameter here.
+// Supabase's transaction/session pooler rejects that startup parameter with
+// "unsupported startup parameter in options: search_path". pg-pool's
+// verify hook is awaited before a new client is handed to a caller, so this
+// keeps the schema setup race-free while working with both direct Postgres and
+// Supabase pooler connections.
+const poolConfig = {
   connectionString: resolveDatabaseUrl(),
-  options: "-c search_path=ai_platform,public",
-});
+  verify: (
+    client: { query: (sql: string) => Promise<unknown> },
+    done: (err?: Error) => void,
+  ) => {
+    client
+      .query("SET search_path TO ai_platform, public")
+      .then(() => done())
+      .catch((err: unknown) => done(err instanceof Error ? err : new Error(String(err))));
+  },
+};
+
+export const pool = new Pool(poolConfig);
 
 export const db = drizzle(pool, { schema });
 

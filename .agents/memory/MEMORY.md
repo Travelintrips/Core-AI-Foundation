@@ -92,3 +92,4 @@
 - [GCP provider secret precedence](gcp-provider-secret-precedence.md) — runtime provider keys come from the loaded GCP payload, which overwrites same-name environment values
 - [API development environment file](api-dev-env-file.md) — development startup must tolerate a missing local env file and use injected environment variables
 - [pnpm bootstrap recursion](pnpm-bootstrap-recursion.md) — keep packageManager aligned with Replit's installed pnpm or workflows can recursively self-install until thread exhaustion
+- [Supabase pooler search_path](supabase-pooler-search-path.md) — initialize schema after checkout; pooler rejects libpq startup search_path options
