@@ -235,7 +235,13 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <InternalAuthProvider>
           <TooltipProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <WouterRouter
+              base={
+                import.meta.env.BASE_URL === "/"
+                  ? undefined
+                  : import.meta.env.BASE_URL.replace(/\/$/, "")
+              }
+            >
               <Switch>
                 {/* Public client review page — no admin Layout, no internal login required */}
                 <Route path="/review/creative/:token" component={ClientReviewPage} />
