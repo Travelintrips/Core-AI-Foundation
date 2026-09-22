@@ -47,7 +47,7 @@ const rawAllowedOrigins = process.env["ALLOWED_ORIGINS"] ?? "";
 const publicAppUrl = process.env["PUBLIC_APP_URL"] ?? "";
 const productionDefaultOrigins =
   process.env["NODE_ENV"] === "production"
-    ? ["https://aicore.cstlogistic.co.id"]
+    ? ["https://aicore.cstlogistic.co.id", "https://aifront.cstlogistic.co.id"]
     : [];
 const replitDomain = process.env["REPLIT_DEV_DOMAIN"]
   ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
