@@ -314,6 +314,13 @@ CREATE INDEX IF NOT EXISTS idx_ai_pipeline_stages_stage_name
     sql: () => readSql("v4.5-design-studio.sql"),
   },
 
+  // ── AI Design 3D Source Binding (SQL file) ────────────────────────────────
+  {
+    id: "ai-design-3d-source-binding",
+    description: "AI Design 3D — source binding columns + tenant/source uniqueness guard",
+    sql: () => readSql("ai-design-3d-source-binding.sql"),
+  },
+
   // ── Seed AI Sales Manager (SQL file) ──────────────────────────────────────
   {
     id: "seed-ai-sales-manager",
