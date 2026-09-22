@@ -8,7 +8,7 @@
  * - Interior Design stores only: preference snapshot, sourceBrandProfileId/Version, overrides
  * - No RAB / pricing calculations
  */
-import { db, creativeProjectsTable, creativeProjectStepsTable } from "@workspace/db";
+import { db, creativeProjectsTable, creativeProjectStepsTable, aiProvidersTable } from "@workspace/db";
 import {
   idProjectsTable,
   idBriefsTable,
@@ -29,6 +29,52 @@ import {
   type ColumnSpec,
 } from "./validation.js";
 import { readBrandStyleSnapshot } from "./brandIntelligenceAdapter.js";
+import { uploadToSupabase } from "../../lib/supabaseStorage.js";
+
+type Interior3DAsset = { glbUrl: string; provider: string };
+
+async function generateInterior3DAsset(projectId: number, prompt: string): Promise<Interior3DAsset | undefined> {
+  const [provider] = await db.select().from(aiProvidersTable)
+    .where(and(eq(aiProvidersTable.slug, "replicate"), eq(aiProvidersTable.isActive, true)))
+    .limit(1);
+  if (!provider) return undefined;
+  const envVar = provider.apiKeyEnvVar ?? "";
+  const apiKey = envVar ? process.env[envVar] : undefined;
+  const metadata = (provider.metadata ?? {}) as Record<string, unknown>;
+  const model = typeof metadata["interior3dModel"] === "string" ? metadata["interior3dModel"] : undefined;
+  if (!apiKey || !model) return undefined;
+
+  const create = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/models/${model}/predictions`, {
+    method: "POST",
+    headers: { Authorization: `Token ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: { prompt: `${prompt}\nGenerate an original GLB 3D room model for interactive web preview.` } }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!create.ok) throw new Error(`3D_PROVIDER_CREATE_FAILED_${create.status}`);
+  let prediction = await create.json() as Record<string, unknown>;
+  const urls = prediction["urls"] as Record<string, unknown> | undefined;
+  const getUrl = urls?.["get"];
+  for (let attempt = 0; attempt < 60 && prediction["status"] !== "succeeded"; attempt++) {
+    if (prediction["status"] === "failed" || prediction["status"] === "canceled") throw new Error("3D_PROVIDER_GENERATION_FAILED");
+    if (typeof getUrl !== "string") throw new Error("3D_PROVIDER_STATUS_URL_MISSING");
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const poll = await fetch(getUrl, { headers: { Authorization: `Token ${apiKey}` }, signal: AbortSignal.timeout(15_000) });
+    if (!poll.ok) throw new Error(`3D_PROVIDER_POLL_FAILED_${poll.status}`);
+    prediction = await poll.json() as Record<string, unknown>;
+  }
+  if (prediction["status"] !== "succeeded") throw new Error("3D_PROVIDER_TIMEOUT");
+  const output = prediction["output"];
+  const url = typeof output === "string" ? output :
+    Array.isArray(output) ? output.find(v => typeof v === "string" && /\.glb(?:\?|$)/i.test(v)) :
+    output && typeof output === "object" ? Object.values(output as Record<string, unknown>).find(v => typeof v === "string" && /\.glb(?:\?|$)/i.test(v)) : undefined;
+  if (typeof url !== "string") throw new Error("3D_PROVIDER_GLB_MISSING");
+  const download = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+  if (!download.ok) throw new Error(`3D_PROVIDER_DOWNLOAD_FAILED_${download.status}`);
+  const buffer = Buffer.from(await download.arrayBuffer());
+  if (!buffer.length || buffer.length > 50 * 1024 * 1024) throw new Error("INVALID_3D_ASSET_SIZE");
+  const glbUrl = await uploadToSupabase(`interior-design/3d/${projectId}/model.glb`, buffer, "model/gltf-binary");
+  return { glbUrl, provider: provider.slug };
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -411,6 +457,18 @@ Return ONLY a JSON object (no markdown) with exactly this structure:
   } catch {
     aiData = buildFallbackOutput(geo, brief.style, project.roomType, brief, effectivePalette, brandSnapshot);
     modelUsed = "rule-based-fallback";
+  }
+
+  // Real 3D is optional: only persist and advertise it when a configured provider
+  // actually returns a GLB. Structural/2D output remains the safe fallback.
+  let asset3d: Interior3DAsset | undefined;
+  try {
+    asset3d = await generateInterior3DAsset(projectId, prompt);
+  } catch (err) {
+    console.warn("[interior-design] 3D generation unavailable; keeping structural fallback", err);
+  }
+  if (asset3d) {
+    aiData["asset"] = { mode: "real-3d", ...asset3d };
   }
 
   const durationMs = Date.now() - t0;
