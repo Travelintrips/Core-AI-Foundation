@@ -632,6 +632,10 @@ export async function generateOutputs(
   const bp = await getBlueprint(orderId);
   if (!bp) throw new Error("No blueprint found. Save a blueprint before generating.");
 
+  // Generate a real 3D asset when an active Replicate provider is configured.
+  // Absence of provider configuration keeps the existing safe 2D/structural fallback.
+  const generated3d = opts.asset3d ?? await generateFashion3DAsset(orderId);
+
   // Validate motif before generation
   const motifResult = validateMotifRepeat(order.motifConfig as Record<string, unknown> | null);
   const warnings: string[] = [];
@@ -661,7 +665,7 @@ export async function generateOutputs(
       "motif-variants": { config: order.motifConfig, status: "pending" },
       "placement-spec": bp.placementSpec ?? {},
       "composition-json": "self",
-      ...(opts.asset3d ? { asset: normalize3DAsset(opts.asset3d) } : {}),
+      ...(generated3d ? { asset: normalize3DAsset(generated3d) } : {}),
     },
     generatedAt: new Date().toISOString(),
     warnings: [
@@ -670,7 +674,7 @@ export async function generateOutputs(
     ],
   };
 
-  const asset3d = normalize3DAsset(opts.asset3d);
+  const asset3d = normalize3DAsset(generated3d);
   const canonicalAsset = asset3d ? {
     mode: "real-3d",
     ...asset3d,
