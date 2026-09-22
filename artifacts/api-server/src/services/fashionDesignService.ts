@@ -522,7 +522,15 @@ export async function generateFashion3DAsset(orderId: number): Promise<Generated
   const create = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/models/${model}/predictions`, {
     method: "POST",
     headers: { Authorization: `Token ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ input: { prompt } }),
+    body: JSON.stringify({ input: {
+      prompt,
+      tier: "Gen-2",
+      quality: "medium",
+      material: "PBR",
+      mesh_mode: "Quad",
+      preview_render: false,
+      geometry_file_format: "glb",
+    } }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!create.ok) throw new Error(`3D_PROVIDER_CREATE_FAILED_${create.status}`);
@@ -543,9 +551,11 @@ export async function generateFashion3DAsset(orderId: number): Promise<Generated
   if (prediction["status"] !== "succeeded") throw new Error("3D_PROVIDER_TIMEOUT");
 
   const output = prediction["output"];
+  const outputValues = output && typeof output === "object" && !Array.isArray(output)
+    ? Object.values(output as Record<string, unknown>) : [];
   const modelUrl = typeof output === "string" ? output :
     Array.isArray(output) ? output.find(v => typeof v === "string" && /\.glb(?:\?|$)/i.test(v)) :
-    output && typeof output === "object" ? Object.values(output as Record<string, unknown>).find(v => typeof v === "string" && /\.glb(?:\?|$)/i.test(v)) : undefined;
+    outputValues.find(v => typeof v === "string" && /\.glb(?:\?|$)/i.test(v));
   if (typeof modelUrl !== "string") throw new Error("3D_PROVIDER_GLB_MISSING");
 
   const download = await fetch(modelUrl, { signal: AbortSignal.timeout(60_000) });
