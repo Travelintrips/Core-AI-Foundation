@@ -41,7 +41,8 @@ const SUSPICIOUS_PATHS = [
 ];
 
 const SUSPICIOUS_HEADERS = [
-  "x-forwarded-host",
+  // x-forwarded-host is expected from Hostinger/reverse proxies and must not be
+  // treated as suspicious on its own. Flag rewrite-style headers instead.
   "x-original-url",
   "x-rewrite-url",
 ];

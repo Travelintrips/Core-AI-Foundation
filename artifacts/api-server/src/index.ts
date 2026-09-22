@@ -71,6 +71,10 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+function isProductionRuntime(): boolean {
+  return process.env["NODE_ENV"] === "production";
+}
+
 async function runStartupStep(
   label: string,
   task: () => Promise<unknown>,
@@ -93,7 +97,12 @@ async function initializeRuntimeServices(): Promise<void> {
     await seedMaterialLibraryIfEmpty();
   });
   await runStartupStep("[material-import] Phase 5 table verification", () => verifyMaterialImportTables());
-  await runStartupStep("[supabaseStorage] Bucket init", () => ensureStorageBucket());
+  // Production storage buckets are infrastructure and already provisioned.
+  // Do not consume a privileged Storage API call on every rolling deployment.
+  // Development still self-provisions for convenience.
+  if (!isProductionRuntime()) {
+    await runStartupStep("[supabaseStorage] Bucket init", () => ensureStorageBucket());
+  }
 
   const isProduction = process.env["NODE_ENV"] === "production";
   const isAifrontProduction =

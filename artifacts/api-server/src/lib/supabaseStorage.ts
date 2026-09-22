@@ -60,8 +60,14 @@ function getCredentials(): SupabaseCredentials {
   const url = (isDev ? (explicitUrl || derivedUrl) : (derivedUrl || explicitUrl))?.replace(/\/$/, "");
 
   const serviceKey = isDev
-    ? process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] || process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"]
-    : process.env["SUPABASE_SERVICE_ROLE_KEY"] || process.env["SUPABASE_PROD_SERVICE_ROLE_KEY"];
+    ? process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] ||
+      process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"] ||
+      process.env["SUPABASE_SECRET_KEY_DEV"] ||
+      process.env["SUPABASE_DEV_SECRET_KEY"]
+    : process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
+      process.env["SUPABASE_PROD_SERVICE_ROLE_KEY"] ||
+      process.env["SUPABASE_SECRET_KEY"] ||
+      process.env["SUPABASE_PROD_SECRET_KEY"];
 
   if (!url || !serviceKey) {
     const missing = [
