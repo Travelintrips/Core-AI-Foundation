@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -235,14 +235,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <InternalAuthProvider>
           <TooltipProvider>
-            <WouterRouter
-              base={
-                import.meta.env.BASE_URL === "/"
-                  ? undefined
-                  : import.meta.env.BASE_URL.replace(/\/$/, "")
-              }
-            >
-              <Switch>
+            <Switch>
                 {/* Public client review page — no admin Layout, no internal login required */}
                 <Route path="/review/creative/:token" component={ClientReviewPage} />
                 {/* Internal staff auth — reachable without a session */}
@@ -254,8 +247,7 @@ function App() {
                     <AdminRouter />
                   </RequireAuth>
                 </Route>
-              </Switch>
-            </WouterRouter>
+            </Switch>
             <Toaster />
           </TooltipProvider>
         </InternalAuthProvider>
