@@ -1,4 +1,12 @@
-modules = ["nodejs-20", "web", "bash", "python-base-3.13"]
+modules = ["nodejs-20", "web", "bash"]
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
 
 [workflows]
 runButton = "Project"
@@ -11,7 +19,6 @@ expertMode = true
 path = "scripts/post-merge.sh"
 timeoutMs = 180000
 
-<<<<<<< HEAD
 [userenv]
 
 [userenv.shared]
@@ -45,20 +52,14 @@ INITIAL_INTERNAL_ADMIN_EMAIL = "abing2267@gmail.com"
 INITIAL_INTERNAL_ADMIN_PASSWORD = "admin12345"
 
 [userenv.production]
-SUPABASE_DATABASE_URL = "postgresql://postgres:9WzfJzyNQxOn5Owu@db.nzdweipzckfszczzqtuw.supabase.co:6543/postgres"
+SUPABASE_DATABASE_URL = "postgresql://postgres.nzdweipzckfszczzqtuw:AnTXXOl0t1ArQOEU@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
 SUPABASE_STORAGE_BUCKET = "https://nzdweipzckfszczzqtuw.storage.supabase.co/storage/v1/s3"
 SUPABASE_URL = "https://nzdweipzckfszczzqtuw.supabase.co"
 VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56ZHdlaXB6Y2tmc3pjenpxdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDI4NDQsImV4cCI6MjA5Mzk3ODg0NH0.p9k3-qyRjPuXsHLizUrSRMyS-0yJAatUyjQU9NIIu1U"
 SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56ZHdlaXB6Y2tmc3pjenpxdHV3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQwMjg0NCwiZXhwIjoyMDkzOTc4ODQ0fQ.W0uM_UzGfF8Zy4PFQKhz6dKpEVDHS6_k9FtqoM9iGms"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56ZHdlaXB6Y2tmc3pjenpxdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDI4NDQsImV4cCI6MjA5Mzk3ODg0NH0.p9k3-qyRjPuXsHLizUrSRMyS-0yJAatUyjQU9NIIu1U"
-SUPABASE_PROD_DATABASE_URL = "postgresql://postgres:9WzfJzyNQxOn5Owu@db.nzdweipzckfszczzqtuw.supabase.co:6543/postgres"
+SUPABASE_PROD_DATABASE_URL = "postgresql://postgres.nzdweipzckfszczzqtuw:AnTXXOl0t1ArQOEU@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
 PUBLIC_APP_URL = "https://aicore.cstlogistic.co.id"
-=======
-# Replit is DEVELOPMENT ONLY.
-# Runtime secrets must be configured in Replit Secrets, never committed here.
-# Production runs on Hostinger from GitHub main and uses Hostinger environment variables.
-# Do not configure Replit deployment for production.
->>>>>>> a953ab91ef7025091472c44187906c57f6e476df
 
 [nix]
 channel = "stable-25_05"
@@ -70,10 +71,6 @@ externalPort = 8080
 [[ports]]
 localPort = 8081
 externalPort = 8081
-
-[[ports]]
-localPort = 8082
-externalPort = 3002
 
 [[ports]]
 localPort = 20404
