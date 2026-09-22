@@ -273,11 +273,45 @@ export async function saveDesignCanvas(projectId: number, canvasState: CanvasSta
   return { versionId: version.id, versionNumber: nextVersionNumber, savedAt: version.createdAt };
 }
 
-export async function listDesignVersions(projectId: number, tenantId: string) {
-  const project = await getDesignProject(projectId, tenantId);
+export async function listDesignVersions(
+  projectId: number,
+  tenantId: string,
+  opts: { page?: number; pageSize?: number } = {},
+) {
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 30));
+  const offset = (page - 1) * pageSize;
+
+  // Keep the ownership check lightweight: pagination must stay O(pageSize),
+  // independent of the number of versions on the project.
+  const [project] = await db
+    .select({ id: aiDesignProjects.id })
+    .from(aiDesignProjects)
+    .where(and(eq(aiDesignProjects.id, projectId), eq(aiDesignProjects.tenantId, tenantId)))
+    .limit(1);
   if (!project) return null;
-  const versions = await db.select({ id: aiDesignVersions.id, versionNumber: aiDesignVersions.versionNumber, label: aiDesignVersions.label, elementCount: aiDesignVersions.elementCount, createdAt: aiDesignVersions.createdAt }).from(aiDesignVersions).where(eq(aiDesignVersions.projectId, projectId)).orderBy(desc(aiDesignVersions.versionNumber));
-  return { versions };
+
+  const [items, countResult] = await Promise.all([
+    db
+      .select({
+        id: aiDesignVersions.id,
+        versionNumber: aiDesignVersions.versionNumber,
+        label: aiDesignVersions.label,
+        elementCount: aiDesignVersions.elementCount,
+        createdAt: aiDesignVersions.createdAt,
+      })
+      .from(aiDesignVersions)
+      .where(eq(aiDesignVersions.projectId, projectId))
+      .orderBy(desc(aiDesignVersions.versionNumber))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(aiDesignVersions)
+      .where(eq(aiDesignVersions.projectId, projectId)),
+  ]);
+
+  return { items, versions: items, total: countResult[0]?.count ?? 0, page, pageSize };
 }
 
 export async function getDesignVersion(projectId: number, versionId: number, tenantId: string) {
