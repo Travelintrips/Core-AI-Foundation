@@ -106,9 +106,21 @@ app.listen(port, (err) => {
   );
 
   // ── Dispatcher auto-start ────────────────────────────────────────────────
-  const isProduction      = process.env["NODE_ENV"] === "production";
+  const isProduction = process.env["NODE_ENV"] === "production";
+  const isAifrontProduction =
+    isProduction &&
+    (
+      process.env["PUBLIC_APP_URL"] === "https://aifront.cstlogistic.co.id" ||
+      (process.env["ALLOWED_ORIGINS"] ?? "").split(",").map((value) => value.trim())
+        .includes("https://aifront.cstlogistic.co.id")
+    );
+
+  // AI Front is now the production runtime on Hostinger. If no explicit
+  // override exists, enable its worker runtime there. An explicit "false"
+  // still wins, which keeps rollback/maintenance controllable from env.
+  const dispatcherFlag = process.env["AI_DISPATCHER_ENABLED"];
   const dispatcherEnabled = isProduction
-    ? process.env["AI_DISPATCHER_ENABLED"] === "true"
+    ? dispatcherFlag === "true" || (dispatcherFlag == null && isAifrontProduction)
     : true;
 
   if (dispatcherEnabled) {
@@ -133,8 +145,9 @@ app.listen(port, (err) => {
   }
 
   // ── Scheduler auto-start ─────────────────────────────────────────────────
+  const schedulerFlag = process.env["AI_SCHEDULER_ENABLED"];
   const schedulerEnabled = isProduction
-    ? process.env["AI_SCHEDULER_ENABLED"] === "true"
+    ? schedulerFlag === "true" || (schedulerFlag == null && isAifrontProduction)
     : true;
 
   const pollIntervalMs = Number(process.env["AI_SCHEDULER_POLL_INTERVAL_MS"]);

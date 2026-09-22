@@ -125,7 +125,7 @@ export async function runHealthCheck(id: number): Promise<HealthCheckResult> {
       providerId: id,
       isActive: false,
       httpStatus: null,
-      error: `Environment variable "${envVar}" is not set in Replit Secrets.`,
+      error: `Environment variable "${envVar}" is not available in the runtime environment / Secret Manager.`,
       checkedAt: now,
     });
     pruneOldLogs(id).catch(() => {/* fire-and-forget */});
@@ -141,7 +141,7 @@ export async function runHealthCheck(id: number): Promise<HealthCheckResult> {
       consecutiveFailures: newFailures,
       lastCheckedAt: now,
       lastSuccessAt: provider.lastSuccessAt ?? null,
-      error: `Environment variable "${envVar}" is not set in Replit Secrets.`,
+      error: `Environment variable "${envVar}" is not available in the runtime environment / Secret Manager.`,
     };
   }
 

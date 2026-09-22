@@ -31,6 +31,9 @@ export const aiDesignProjects = appSchema.table("ai_design_projects", {
   status: text("status").notNull().default("draft"),
   tags: text("tags").array(),
   thumbnailUrl: text("thumbnail_url"),
+  /** Canonical source binding. Prevents Interior/Fashion numeric IDs from being treated as Design Studio IDs. */
+  sourceType: text("source_type"),
+  sourceId: text("source_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

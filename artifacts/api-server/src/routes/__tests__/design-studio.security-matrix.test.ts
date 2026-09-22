@@ -61,6 +61,9 @@ vi.mock("../../services/designStudioService.js", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../services/designStudioService.js")>();
   return {
     ...real,
+    // Vitest requires exports consumed by this file to be present explicitly on
+    // the partial mock. Keep the real SVG sanitizer under test.
+    canvasStateToSvg: real.canvasStateToSvg,
     createDesignProject: vi.fn(async (input: { tenantId: string; name: string }) => ({
       id: 99, tenantId: input.tenantId, name: input.name, status: "draft",
       canvasWidth: 1920, canvasHeight: 1080, tags: [], currentVersionId: 1,

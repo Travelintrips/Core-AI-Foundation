@@ -1,13 +1,5 @@
 modules = ["nodejs-20", "web", "bash", "python-base-3.13"]
 
-[deployment]
-router = "application"
-deploymentTarget = "autoscale"
-
-[deployment.postBuild]
-args = ["pnpm", "store", "prune"]
-env = { "CI" = "true" }
-
 [workflows]
 runButton = "Project"
 
@@ -19,6 +11,7 @@ expertMode = true
 path = "scripts/post-merge.sh"
 timeoutMs = 180000
 
+<<<<<<< HEAD
 [userenv]
 
 [userenv.shared]
@@ -60,6 +53,12 @@ SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56ZHdlaXB6Y2tmc3pjenpxdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDI4NDQsImV4cCI6MjA5Mzk3ODg0NH0.p9k3-qyRjPuXsHLizUrSRMyS-0yJAatUyjQU9NIIu1U"
 SUPABASE_PROD_DATABASE_URL = "postgresql://postgres:9WzfJzyNQxOn5Owu@db.nzdweipzckfszczzqtuw.supabase.co:6543/postgres"
 PUBLIC_APP_URL = "https://aicore.cstlogistic.co.id"
+=======
+# Replit is DEVELOPMENT ONLY.
+# Runtime secrets must be configured in Replit Secrets, never committed here.
+# Production runs on Hostinger from GitHub main and uses Hostinger environment variables.
+# Do not configure Replit deployment for production.
+>>>>>>> a953ab91ef7025091472c44187906c57f6e476df
 
 [nix]
 channel = "stable-25_05"
