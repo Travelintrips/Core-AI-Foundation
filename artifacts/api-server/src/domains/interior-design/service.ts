@@ -47,7 +47,12 @@ async function generateInterior3DAsset(projectId: number, prompt: string): Promi
   const create = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/models/${model}/predictions`, {
     method: "POST",
     headers: { Authorization: `Token ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ input: { prompt: `${prompt}\nGenerate an original GLB 3D room model for interactive web preview.` } }),
+    body: JSON.stringify({ input: {
+      prompt: `${prompt}\nGenerate an original GLB 3D room visualization for interactive web preview.`,
+      enable_pbr: true,
+      face_count: 500000,
+      generate_type: "Normal",
+    } }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!create.ok) throw new Error(`3D_PROVIDER_CREATE_FAILED_${create.status}`);
