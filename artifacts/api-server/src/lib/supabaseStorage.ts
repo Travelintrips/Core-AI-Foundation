@@ -20,19 +20,50 @@ interface SupabaseCredentials {
   serviceKey: string;
 }
 
+function deriveSupabaseUrlFromDatabaseUrl(databaseUrl: string | undefined): string | undefined {
+  if (!databaseUrl) return undefined;
+  try {
+    const parsed = new URL(databaseUrl);
+    const directHost = parsed.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/i);
+    if (directHost?.[1]) return `https://${directHost[1]}.supabase.co`;
+
+    const username = decodeURIComponent(parsed.username || "");
+    const poolerUser = username.match(/^postgres\.([a-z0-9]+)$/i);
+    if (poolerUser?.[1]) return `https://${poolerUser[1]}.supabase.co`;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 function getCredentials(): SupabaseCredentials {
   const isDev = process.env["NODE_ENV"] !== "production";
-  const url = isDev
-    ? process.env["SUPABASE_URL_DEV"]
-    : process.env["SUPABASE_URL"];
+
+  const databaseUrl = isDev
+    ? process.env["SUPABASE_DEV_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL_DEV"]
+    : process.env["SUPABASE_PROD_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL"];
+
+  const explicitUrl = isDev
+    ? process.env["SUPABASE_URL_DEV"] || process.env["SUPABASE_DEV_URL"]
+    : process.env["SUPABASE_URL"] || process.env["SUPABASE_PROD_URL"];
+
+  const url = (explicitUrl || deriveSupabaseUrlFromDatabaseUrl(databaseUrl))?.replace(/\/$/, "");
+
   const serviceKey = isDev
-    ? process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"]
-    : process.env["SUPABASE_SERVICE_ROLE_KEY"];
+    ? process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] || process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"]
+    : process.env["SUPABASE_SERVICE_ROLE_KEY"] || process.env["SUPABASE_PROD_SERVICE_ROLE_KEY"];
 
   if (!url || !serviceKey) {
-    const env = isDev ? "SUPABASE_URL_DEV + SUPABASE_SERVICE_ROLE_KEY_DEV" : "SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY";
-    throw new Error(`Supabase Storage credentials not configured. Expected: ${env}`);
+    const missing = [
+      !url ? "Supabase project URL" : null,
+      !serviceKey ? "service-role key" : null,
+    ].filter(Boolean).join(" and ");
+    throw new Error(
+      `Supabase Storage credentials incomplete: missing ${missing}. ` +
+      "The project URL may be set explicitly or derived from the database connection string.",
+    );
   }
+
   return { url, serviceKey };
 }
 
@@ -180,12 +211,12 @@ export function getSupabasePublicUrl(path: string): string {
  * True if Supabase Storage credentials are configured in this environment.
  */
 export function isSupabaseStorageAvailable(): boolean {
-  const isDev = process.env["NODE_ENV"] !== "production";
-  const url = isDev ? process.env["SUPABASE_URL_DEV"] : process.env["SUPABASE_URL"];
-  const key = isDev
-    ? process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"]
-    : process.env["SUPABASE_SERVICE_ROLE_KEY"];
-  return Boolean(url && key);
+  try {
+    getCredentials();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
