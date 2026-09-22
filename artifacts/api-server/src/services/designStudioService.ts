@@ -84,7 +84,7 @@ function safeCssColor(value: string | undefined, fallback: string): string {
   return SAFE_CSS_COLOR_RE.test(trimmed) ? trimmed : fallback;
 }
 
-function safeFontFamily(value: string | undefined, fallback: string): string {
+function safeFontFamily(value: string | undefined, fallback = "sans-serif"): string {
   if (value === undefined || value === null) return fallback;
   return SAFE_FONT_FAMILY_RE.test(String(value)) ? String(value) : fallback;
 }
@@ -339,7 +339,7 @@ export function canvasStateToSvg(state: CanvasState, scale = 1): string {
     const x = safeNum(el.x) * scale, y = safeNum(el.y) * scale, ew = safeNum(el.width) * scale, eh = safeNum(el.height) * scale;
     const transform = `rotate(${safeNum(el.rotation)} ${x + ew / 2} ${y + eh / 2})`;
     const opacity = Math.max(0, Math.min(1, safeNum(el.opacity, 1)));
-    if (el.type === "text") return `<text x="${x}" y="${y + safeNum(el.fontSize, 16) * scale}" font-size="${safeNum(el.fontSize, 16) * scale}" font-family="${xmlEscape(safeFontFamily(el.fontFamily, "Arial"))}" font-weight="${xmlEscape(String(el.fontWeight ?? "normal"))}" fill="${safeCssColor(el.color, "#000000")}" opacity="${opacity}" transform="${transform}">${xmlEscape(el.text ?? "")}</text>`;
+    if (el.type === "text") return `<text x="${x}" y="${y + safeNum(el.fontSize, 16) * scale}" font-size="${safeNum(el.fontSize, 16) * scale}" font-family="${xmlEscape(safeFontFamily(el.fontFamily, "sans-serif"))}" font-weight="${xmlEscape(String(el.fontWeight ?? "normal"))}" fill="${safeCssColor(el.color, "#000000")}" opacity="${opacity}" transform="${transform}">${xmlEscape(el.text ?? "")}</text>`;
     if (el.type === "image") { const href = safeHttpsUrl(el.src); if (!href) return ""; return `<image x="${x}" y="${y}" width="${ew}" height="${eh}" href="${xmlEscape(href)}" opacity="${opacity}" transform="${transform}" preserveAspectRatio="xMidYMid meet"/>`; }
     if (el.type === "circle") return `<ellipse cx="${x + ew / 2}" cy="${y + eh / 2}" rx="${ew / 2}" ry="${eh / 2}" fill="${safeCssColor(el.fill, "#cccccc")}" stroke="${safeCssColor(el.stroke, "none")}" stroke-width="${safeNum(el.strokeWidth) * scale}" opacity="${opacity}" transform="${transform}"/>`;
     return `<rect x="${x}" y="${y}" width="${ew}" height="${eh}" rx="${safeNum(el.borderRadius) * scale}" fill="${safeCssColor(el.fill, "#cccccc")}" stroke="${safeCssColor(el.stroke, "none")}" stroke-width="${safeNum(el.strokeWidth) * scale}" opacity="${opacity}" transform="${transform}"/>`;
