@@ -11,7 +11,7 @@
  * - View full revision history
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Shirt, Search, Filter, RefreshCw, Loader2,
@@ -47,6 +47,13 @@ import type { DesignScene } from "@/lib/ai-design-core";
 const API_BASE = "";
 const API_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
 
+class HttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
@@ -59,7 +66,7 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { const b = await res.json(); if (b?.error) msg = b.error; } catch { /* ignore */ }
-    throw new Error(msg);
+    throw new HttpError(res.status, msg);
   }
   return res.json() as Promise<T>;
 }
@@ -177,6 +184,7 @@ export default function FashionDesignAdminPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [fashionScene, setFashionScene] = useState<DesignScene | null>(null);
   const [designWorkspaceId, setDesignWorkspaceId] = useState<number | null>(null);
+  const fashionSceneSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // Designer assignment form state
   const [assignForm, setAssignForm] = useState({ designerName: "", designerEmail: "", notes: "" });
@@ -226,7 +234,8 @@ export default function FashionDesignAdminPage() {
         try {
           const persisted = await apiFetch<{ scene: DesignScene }>(`/api/ai/design/projects/${workspace.id}/scene`);
           if (!cancelled) setFashionScene(persisted.scene);
-        } catch {
+        } catch (err) {
+          if (!(err instanceof HttpError) || err.status !== 404) throw err;
           const initial = fashionOrderToDesignScene({
             orderId: current.id,
             serviceType: current.serviceType,
@@ -250,9 +259,14 @@ export default function FashionDesignAdminPage() {
   const saveFashionSceneMutation = useMutation({
     mutationFn: async (scene: DesignScene) => {
       if (!designWorkspaceId) throw new Error("3D workspace belum siap");
-      return apiFetch(`/api/ai/design/projects/${designWorkspaceId}/scene`, {
-        method: "PUT", body: JSON.stringify({ scene, label: "Fashion 3D edit" }),
-      });
+      const workspaceId = designWorkspaceId;
+      const save = fashionSceneSaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => apiFetch(`/api/ai/design/projects/${workspaceId}/scene`, {
+          method: "PUT", body: JSON.stringify({ scene, label: "Fashion 3D edit" }),
+        }));
+      fashionSceneSaveQueueRef.current = save.then(() => undefined, () => undefined);
+      return save;
     },
     onSuccess: () => toast({ title: "Perubahan 3D tersimpan" }),
     onError: (err: Error) => toast({ title: "Gagal menyimpan 3D", description: err.message, variant: "destructive" }),
