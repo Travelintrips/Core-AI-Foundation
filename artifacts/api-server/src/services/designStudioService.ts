@@ -332,13 +332,9 @@ export async function restoreDesignVersion(projectId: number, versionId: number,
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
-export async function exportDesign(projectId: number, tenantId: string, format: string, scale: number) {
-  const canvas = await getDesignCanvas(projectId, tenantId);
-  if (!canvas) return null;
-  const state = canvas.canvasState;
-  if (format === "json") return { format: "json", data: state, filename: `design-${projectId}-v${canvas.versionNumber}.json` };
-  const w = state.width * scale;
-  const h = state.height * scale;
+export function canvasStateToSvg(state: CanvasState, scale = 1): string {
+  const w = safeNum(state.width) * scale;
+  const h = safeNum(state.height) * scale;
   const elementsSvg = state.elements.filter((el) => el.visible).sort((a, b) => a.zIndex - b.zIndex).map((el) => {
     const x = safeNum(el.x) * scale, y = safeNum(el.y) * scale, ew = safeNum(el.width) * scale, eh = safeNum(el.height) * scale;
     const transform = `rotate(${safeNum(el.rotation)} ${x + ew / 2} ${y + eh / 2})`;
@@ -348,8 +344,16 @@ export async function exportDesign(projectId: number, tenantId: string, format: 
     if (el.type === "circle") return `<ellipse cx="${x + ew / 2}" cy="${y + eh / 2}" rx="${ew / 2}" ry="${eh / 2}" fill="${safeCssColor(el.fill, "#cccccc")}" stroke="${safeCssColor(el.stroke, "none")}" stroke-width="${safeNum(el.strokeWidth) * scale}" opacity="${opacity}" transform="${transform}"/>`;
     return `<rect x="${x}" y="${y}" width="${ew}" height="${eh}" rx="${safeNum(el.borderRadius) * scale}" fill="${safeCssColor(el.fill, "#cccccc")}" stroke="${safeCssColor(el.stroke, "none")}" stroke-width="${safeNum(el.strokeWidth) * scale}" opacity="${opacity}" transform="${transform}"/>`;
   }).join("\n");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="${safeCssColor(state.background, "#ffffff")}"/>${elementsSvg}</svg>`;
-  return { format: "svg", data: svg, filename: `design-${projectId}-v${canvas.versionNumber}.svg`, width: w, height: h };
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="${safeCssColor(state.background, "#ffffff")}"/>${elementsSvg}</svg>`;
+}
+
+export async function exportDesign(projectId: number, tenantId: string, format: string, scale: number) {
+  const canvas = await getDesignCanvas(projectId, tenantId);
+  if (!canvas) return null;
+  const state = canvas.canvasState;
+  if (format === "json") return { format: "json", data: state, filename: `design-${projectId}-v${canvas.versionNumber}.json` };
+  const svg = canvasStateToSvg(state, scale);
+  return { format: "svg", data: svg, filename: `design-${projectId}-v${canvas.versionNumber}.svg`, width: safeNum(state.width) * scale, height: safeNum(state.height) * scale };
 }
 
 // ── AI Regeneration ───────────────────────────────────────────────────────────
