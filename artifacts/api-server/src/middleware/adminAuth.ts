@@ -80,7 +80,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/storage/uploads/request-url", // public brief file uploads (customer portal — logo/photos/docs/video)
   "/storage/objects", // serves back the same public brief uploads for preview/generation
   "/ai/catalog/public", // customer-facing catalog — must never require the admin key
-  "/internal/auth/login", // internal staff login — must be reachable before a session exists
+  "/internal/auth/login", // internal staff login — must be reachable before a session exists\n  "/internal/auth/request-magic-link", // passwordless login request — email ownership verified by magic link\n  "/internal/auth/magic-login", // signed short-lived magic link callback\n  "/internal/auth/request-password-reset", // password recovery request\n  "/internal/auth/reset-password", // signed password reset callback
   "/customs", // BTKI tariff search — public reference data, no auth needed
   "/cargo",   // Cargo Rate Finder proxy — public rate lookup, no admin key needed
   // NOTE: /ai/solution-collections was intentionally NOT added here.
