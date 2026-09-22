@@ -24,9 +24,11 @@ import {
   cacheIdempotencyResult,
 } from "../domains/fashion-design/generationGuard.js";
 import { validateBlueprintUrls } from "../domains/fashion-design/fileSafety.js";
-import { eq, desc, and, like, SQL } from "drizzle-orm";
+import { desc, and, like, SQL } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { uploadToSupabase } from "../lib/supabaseStorage.js";
+import { aiProvidersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 // ── Trademark keyword blocklist ────────────────────────────────────────────────
 // Prevents copying well-known brand marks. Add more as needed.
@@ -493,6 +495,67 @@ export async function persistGenerated3DAsset(input: {
     ...(input.previewUrl ? { previewUrl: input.previewUrl } : {}),
     ...(input.provider ? { provider: input.provider } : {}),
   };
+}
+
+export async function generateFashion3DAsset(orderId: number): Promise<Generated3DAsset | undefined> {
+  const [provider] = await db.select().from(aiProvidersTable)
+    .where(and(eq(aiProvidersTable.slug, "replicate"), eq(aiProvidersTable.isActive, true)))
+    .limit(1);
+  if (!provider) return undefined;
+
+  const envVar = provider.apiKeyEnvVar ?? "";
+  const apiKey = envVar ? process.env[envVar] : undefined;
+  const metadata = (provider.metadata ?? {}) as Record<string, unknown>;
+  const model = typeof metadata["fashion3dModel"] === "string" ? metadata["fashion3dModel"] : undefined;
+  if (!apiKey || !model) return undefined;
+
+  const order = await getOrder(orderId);
+  if (!order) throw new Error("Order not found");
+  const prompt = [
+    "Create an original production visualization of a garment as a clean 3D model.",
+    `Garment type: ${order.serviceType}.`,
+    `Design brief: ${order.description ?? order.orderName}.`,
+    `Colorways: ${(order.colorways as string[]).join(", ") || "unspecified"}.`,
+    "No logos or trademarked brand elements. Output a GLB model suitable for interactive web preview.",
+  ].join(" ");
+
+  const create = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/models/${model}/predictions`, {
+    method: "POST",
+    headers: { Authorization: `Token ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: { prompt } }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!create.ok) throw new Error(`3D_PROVIDER_CREATE_FAILED_${create.status}`);
+  let prediction = await create.json() as Record<string, unknown>;
+  const getUrl = typeof prediction["urls"] === "object" && prediction["urls"]
+    ? (prediction["urls"] as Record<string, unknown>)["get"] : undefined;
+
+  for (let attempt = 0; attempt < 60 && prediction["status"] !== "succeeded"; attempt++) {
+    if (prediction["status"] === "failed" || prediction["status"] === "canceled") {
+      throw new Error("3D_PROVIDER_GENERATION_FAILED");
+    }
+    if (typeof getUrl !== "string") throw new Error("3D_PROVIDER_STATUS_URL_MISSING");
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const poll = await fetch(getUrl, { headers: { Authorization: `Token ${apiKey}` }, signal: AbortSignal.timeout(15_000) });
+    if (!poll.ok) throw new Error(`3D_PROVIDER_POLL_FAILED_${poll.status}`);
+    prediction = await poll.json() as Record<string, unknown>;
+  }
+  if (prediction["status"] !== "succeeded") throw new Error("3D_PROVIDER_TIMEOUT");
+
+  const output = prediction["output"];
+  const modelUrl = typeof output === "string" ? output :
+    Array.isArray(output) ? output.find(v => typeof v === "string" && /\.glb(?:\?|$)/i.test(v)) :
+    output && typeof output === "object" ? Object.values(output as Record<string, unknown>).find(v => typeof v === "string" && /\.glb(?:\?|$)/i.test(v)) : undefined;
+  if (typeof modelUrl !== "string") throw new Error("3D_PROVIDER_GLB_MISSING");
+
+  const download = await fetch(modelUrl, { signal: AbortSignal.timeout(60_000) });
+  if (!download.ok) throw new Error(`3D_PROVIDER_DOWNLOAD_FAILED_${download.status}`);
+  return persistGenerated3DAsset({
+    orderId,
+    buffer: Buffer.from(await download.arrayBuffer()),
+    contentType: "model/gltf-binary",
+    provider: provider.slug,
+  });
 }
 
 function normalize3DAsset(value: unknown): Generated3DAsset | undefined {
