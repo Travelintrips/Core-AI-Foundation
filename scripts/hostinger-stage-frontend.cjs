@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const frontend = (process.env.HOSTINGER_FRONTEND || "customer-portal").trim();
+const frontend = (process.env.HOSTINGER_FRONTEND || "ai-platform").trim();
 const allowed = new Set(["customer-portal", "ai-platform"]);
 if (!allowed.has(frontend)) {
   throw new Error(`Invalid HOSTINGER_FRONTEND "${frontend}". Expected customer-portal or ai-platform.`);
