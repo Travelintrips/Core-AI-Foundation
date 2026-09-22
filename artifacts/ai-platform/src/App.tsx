@@ -228,6 +228,32 @@ function AdminRouter() {
   );
 }
 
+function AppRoutes() {
+  // Hostinger serves the SPA for direct deep links. Keep the authentication
+  // entry points independent from router matching/base-path behaviour so a
+  // direct request to /login can never fall through to the portal 404 page.
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+
+  if (pathname === "/login") return <Login />;
+  if (pathname === "/change-password") return <ChangePassword />;
+
+  return (
+    <Switch>
+      {/* Public client review page — no admin Layout, no internal login required */}
+      <Route path="/review/creative/:token" component={ClientReviewPage} />
+      {/* These routes remain for client-side navigation after initial load. */}
+      <Route path="/login" component={Login} />
+      <Route path="/change-password" component={ChangePassword} />
+      {/* Everything else is the internal portal — requires an active staff session */}
+      <Route>
+        <RequireAuth>
+          <AdminRouter />
+        </RequireAuth>
+      </Route>
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <LangProvider>
@@ -235,19 +261,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <InternalAuthProvider>
           <TooltipProvider>
-            <Switch>
-                {/* Public client review page — no admin Layout, no internal login required */}
-                <Route path="/review/creative/:token" component={ClientReviewPage} />
-                {/* Internal staff auth — reachable without a session */}
-                <Route path="/login" component={Login} />
-                <Route path="/change-password" component={ChangePassword} />
-                {/* Everything else is the internal portal — requires an active staff session */}
-                <Route>
-                  <RequireAuth>
-                    <AdminRouter />
-                  </RequireAuth>
-                </Route>
-            </Switch>
+            <AppRoutes />
             <Toaster />
           </TooltipProvider>
         </InternalAuthProvider>
