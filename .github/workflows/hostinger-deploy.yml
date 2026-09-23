@@ -65,10 +65,11 @@ jobs:
       - name: SFTP deploy
         if: inputs.method == 'sftp'
         run: |
-          echo "SFTP engine enabled"
+          echo "SFTP upload stage enabled"
           echo "Target: ${{ inputs.target }}"
-          echo "Ready for artifact upload"
-          echo "Paths are supplied through protected secrets"
+          echo "AI path configured: ${{ secrets.HOSTINGER_AI_PATH != '' }}"
+          echo "Customer path configured: ${{ secrets.HOSTINGER_CUSTOMER_PATH != '' }}"
+          echo "API path configured: ${{ secrets.HOSTINGER_API_PATH != '' }}"
 
       - name: Git deploy placeholder
         if: inputs.method == 'git'
