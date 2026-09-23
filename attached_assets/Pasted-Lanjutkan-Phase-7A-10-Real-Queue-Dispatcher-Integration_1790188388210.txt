@@ -1,0 +1,331 @@
+Lanjutkan Phase 7A-10 — Real Queue/Dispatcher Integration Test.
+
+JANGAN deploy.
+JANGAN redesign Phase 7A-8 atau 7A-9.
+JANGAN hanya audit.
+
+TARGET:
+Buktikan Repository Analyzer benar-benar bergerak melalui pipeline nyata:
+
+POST /api/ai/coding/tasks/:id/run
+        ↓
+ai_coding_runs = RUNNING
+        ↓
+ai_jobs = queued
+        ↓
+dispatcher
+        ↓
+text_worker
+        ↓
+coding_repository_analyzer
+        ↓
+Repository Analyzer
+        ↓
+ai_jobs terminal
+        ↓
+ai_coding_runs COMPLETED/FAILED
+        ↓
+task READY_REVIEW/FAILED
+
+
+==================================================
+1. CHECK RUNTIME CONFIGURATION
+==================================================
+
+Audit configuration nyata untuk:
+
+AI_DISPATCHER_ENABLED
+AI_SCHEDULER_ENABLED
+worker startup
+text_worker
+ai_jobs polling
+job claiming
+job lease/locking
+retry
+timeout
+
+Perhatikan log sebelumnya:
+
+[dispatcher] Auto-start disabled
+(set AI_DISPATCHER_ENABLED=true to enable in production)
+
+Pastikan integration environment mempunyai dispatcher/worker yang benar-benar
+memproses ai_jobs.
+
+Jangan mengaktifkan production.
+
+
+==================================================
+2. CREATE CONTROLLED TEST TASK
+==================================================
+
+Buat satu coding task integration-test dengan repository target yang aman.
+
+Gunakan repository local/test fixture jika tersedia.
+
+Jangan gunakan repository production untuk melakukan perubahan.
+
+Analyzer harus READ ONLY.
+
+Catat:
+
+codingTaskId
+
+
+==================================================
+3. CALL REAL /run
+==================================================
+
+Gunakan route sebenarnya:
+
+POST /api/ai/coding/tasks/{codingTaskId}/run
+
+Jangan memanggil Repository Analyzer function langsung.
+
+Catat:
+
+codingRunId
+aiJobId
+
+
+==================================================
+4. VERIFY DATABASE LIFECYCLE
+==================================================
+
+Buktikan secara berurutan:
+
+A.
+ai_coding_runs
+status = RUNNING
+
+B.
+ai_jobs
+job_type = coding_repository_analyzer
+
+payload mempunyai:
+codingTaskId
+codingRunId
+
+C.
+dispatcher claim job tersebut.
+
+D.
+text_worker mengeksekusi job.
+
+E.
+job mencapai terminal state.
+
+F.
+coding run mencapai:
+
+COMPLETED
+
+atau jika test failure disengaja:
+
+FAILED
+
+
+==================================================
+5. VERIFY SUCCESS OUTPUT
+==================================================
+
+Untuk success test pastikan:
+
+ai_coding_runs.status = COMPLETED
+finishedAt != null
+logs/output != null
+
+Output harus mengandung structured result:
+
+summary
+relevantFiles
+findings
+recommendations
+taskContext
+
+Task:
+
+status = READY_REVIEW
+
+commitSha tetap tidak berubah.
+
+
+==================================================
+6. FAILURE TEST
+==================================================
+
+Buat controlled failure, misalnya repository test target invalid.
+
+Expected:
+
+ai_jobs → FAILED/terminal sesuai lifecycle existing
+ai_coding_runs → FAILED
+finishedAt != null
+errorMessage != null
+coding task → FAILED
+
+Tidak boleh tertinggal:
+
+RUNNING
+
+
+==================================================
+7. DUPLICATE TEST
+==================================================
+
+Ketika run pertama masih RUNNING, panggil:
+
+POST /run
+
+sekali lagi.
+
+Expected:
+
+HTTP 409
+
+Pastikan:
+
+hanya 1 active ai_coding_runs
+hanya 1 execution job aktif
+
+Tidak boleh ada duplicate analyzer execution.
+
+
+==================================================
+8. RESTART / STUCK SAFETY
+==================================================
+
+Audit behavior jika worker berhenti setelah job di-claim.
+
+Gunakan mekanisme lease/retry existing.
+
+Pastikan job tidak dapat tertinggal RUNNING selamanya.
+
+Jika sudah ada recovery mechanism:
+test dan pertahankan.
+
+Jika belum ada:
+tambahkan minimal stale-job recovery menggunakan architecture ai_jobs existing.
+
+Jangan membuat queue kedua.
+
+
+==================================================
+9. FRONTEND POLLING INTEGRATION
+==================================================
+
+Verifikasi query sequence:
+
+RUNNING
+→ polling
+→ COMPLETED/FAILED
+→ final refetch
+→ polling STOP
+
+Pastikan UI menampilkan:
+
+Repository Analyzer
+status terminal
+hasil analyzer
+
+Tidak perlu browser login jika integration test dapat membuktikan query behavior
+secara automated.
+
+
+==================================================
+10. REGRESSION
+==================================================
+
+Jalankan kembali:
+
+coding workspace tests
+Repository Analyzer tests
+queue/dispatcher tests
+AI Platform tests
+API server tests
+root typecheck
+API build
+AI Platform build
+OpenAPI validation
+
+
+==================================================
+11. READ-ONLY TRANSACTION WARNING
+==================================================
+
+Jangan abaikan warning ini:
+
+read-only transaction
+
+Identifikasi tepat:
+
+- query/function mana yang gagal
+- database connection mana
+- apakah hanya audit/event write
+- apakah dapat mempengaruhi ai_jobs,
+  ai_coding_runs atau task lifecycle
+
+Jika benar-benar unrelated:
+buktikan dari log/test.
+
+Jika dapat menyebabkan lifecycle write gagal:
+perbaiki sebelum Phase 7A-10 dinyatakan PASS.
+
+
+==================================================
+12. STOP BEFORE DEPLOYMENT
+==================================================
+
+Laporkan hasil AKTUAL:
+
+REAL /run:
+PASS/FAIL
+
+RUN CREATED:
+<id>
+
+JOB CREATED:
+<id>
+
+DISPATCHER CLAIM:
+PASS/FAIL
+
+TEXT WORKER EXECUTION:
+PASS/FAIL
+
+ANALYZER RESULT:
+PASS/FAIL
+
+RUNNING → COMPLETED:
+PASS/FAIL
+
+CONTROLLED FAILURE:
+PASS/FAIL
+
+DUPLICATE 409:
+PASS/FAIL
+
+STUCK JOB RECOVERY:
+PASS/FAIL
+
+FRONTEND POLLING:
+PASS/FAIL
+
+READ-ONLY TRANSACTION IMPACT:
+SAFE / NOT SAFE + evidence
+
+TEST:
+<actual counts>
+
+TYPECHECK:
+PASS/FAIL
+
+BUILD:
+PASS/FAIL
+
+DEPLOY:
+NOT PERFORMED
+
+Jangan menyatakan PASS berdasarkan unit test saja.
+Untuk Phase 7A-10, PASS hanya jika job benar-benar melewati queue/dispatcher/worker
+integration path.
