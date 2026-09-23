@@ -40,3 +40,11 @@ jobs:
           BASE_PATH: /
           HOSTINGER_FRONTEND: customer-portal
         run: pnpm run build
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-ai-foundation-build
+          path: |
+            artifacts/ai-platform/dist
+            artifacts/customer-portal/dist
+            artifacts/api-server/dist
