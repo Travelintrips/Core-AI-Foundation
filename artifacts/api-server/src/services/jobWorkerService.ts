@@ -52,6 +52,28 @@ import {
   failRepositoryAnalyzerRun,
 } from "./repositoryAnalyzerService.js";
 
+export const WORKER_CLAIM_PAYLOAD_KEY = "_claimedByWorkerId";
+
+export class JobOwnershipLostError extends Error {
+  constructor(jobId: number, workerId: number) {
+    super(`Worker ${workerId} no longer owns running job ${jobId}`);
+    this.name = "JobOwnershipLostError";
+  }
+}
+
+function workerOwnsRunningJob(jobId: number, workerId: number) {
+  return sql`(
+    ai_jobs.payload_json->>${WORKER_CLAIM_PAYLOAD_KEY} = ${String(workerId)}
+    OR EXISTS (
+      SELECT 1
+      FROM ai_platform.ai_workers
+      WHERE ai_platform.ai_workers.id = ${workerId}
+        AND ai_platform.ai_workers.current_job = ${jobId}
+        AND ai_platform.ai_workers.status NOT IN ('stale', 'offline')
+    )
+  )`;
+}
+
 // Register all document type definitions at module load time.
 initDocumentRegistry();
 initPresentationRegistry();
@@ -490,6 +512,23 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
       return null;
     }
 
+    // `current_job` is a legacy single-slot summary. Keep an ownership marker
+    // on every claimed job so recovery remains correct when a worker has more
+    // than one concurrent slot.
+    const [claimedWithOwner] = await tx
+      .update(aiJobsTable)
+      .set({
+        payloadJson: sql`jsonb_set(
+          COALESCE(payload_json, '{}'::jsonb),
+          '{_claimedByWorkerId}',
+          to_jsonb(${workerId}::int),
+          true
+        )`,
+        updatedAt: new Date(),
+      })
+      .where(eq(aiJobsTable.id, claimed.id))
+      .returning();
+
     // Update worker occupancy
     await tx
       .update(aiWorkersTable)
@@ -502,7 +541,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
       })
       .where(eq(aiWorkersTable.id, workerId));
 
-    return claimed;
+    return claimedWithOwner ?? claimed;
   });
 }
 
@@ -677,10 +716,6 @@ export async function completeJob(
     ? now.getTime() - job.startedAt.getTime()
     : null;
 
-  if (job?.jobType === "coding_repository_analyzer") {
-    await completeRepositoryAnalyzerRun(result);
-  }
-
   const [completed] = await db
     .update(aiJobsTable)
     .set({
@@ -689,10 +724,25 @@ export async function completeJob(
       resultJson:      result,
       actualCost:      actualCost != null ? String(actualCost) : null,
       actualDuration:  actualDuration,
+      payloadJson:     sql`COALESCE(payload_json, '{}'::jsonb) - ${WORKER_CLAIM_PAYLOAD_KEY}`,
       updatedAt:       now,
     })
-    .where(eq(aiJobsTable.id, jobId))
+    .where(
+      and(
+        eq(aiJobsTable.id, jobId),
+        eq(aiJobsTable.status, "running"),
+        workerOwnsRunningJob(jobId, workerId),
+      ),
+    )
     .returning();
+
+  if (!completed) {
+    throw new JobOwnershipLostError(jobId, workerId);
+  }
+
+  if (job?.jobType === "coding_repository_analyzer") {
+    await completeRepositoryAnalyzerRun(result);
+  }
 
   // Update worker — rolling latency average
   const [worker] = await db
@@ -815,9 +865,30 @@ export async function retryJob(
 
   const [updated] = await db
     .update(aiJobsTable)
-    .set(update as Parameters<typeof db.update>[0] extends infer T ? object : object)
-    .where(eq(aiJobsTable.id, jobId))
+    .set({
+      ...(update as Record<string, unknown>),
+      payloadJson: sql`COALESCE(payload_json, '{}'::jsonb) - ${WORKER_CLAIM_PAYLOAD_KEY}`,
+    })
+    .where(
+      and(
+        eq(aiJobsTable.id, jobId),
+        eq(aiJobsTable.status, "running"),
+        workerOwnsRunningJob(jobId, workerId),
+      ),
+    )
     .returning();
+
+  // Recovery may have won the race while this worker was handling the
+  // failure. Do not overwrite the recovered state or release another worker's
+  // slot in that case.
+  if (!updated) {
+    const [current] = await db
+      .select()
+      .from(aiJobsTable)
+      .where(eq(aiJobsTable.id, jobId));
+    if (!current) throw new Error(`Job ${jobId} not found after retry race`);
+    return current;
+  }
 
   if (exhausted && job.jobType === "coding_repository_analyzer") {
     await failRepositoryAnalyzerRun(

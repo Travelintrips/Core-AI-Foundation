@@ -19,7 +19,13 @@
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
-import { claimJob, executeJob, completeJob, retryJob } from "./jobWorkerService.js";
+import {
+  claimJob,
+  executeJob,
+  completeJob,
+  retryJob,
+  JobOwnershipLostError,
+} from "./jobWorkerService.js";
 import { validateJobCompletion } from "./jobCompletionGuard.js";
 import {
   registerWorker,
@@ -367,6 +373,10 @@ export async function dispatch(workerId: number): Promise<"completed" | "failed"
       return "completed";
     } catch (execErr) {
       const errMsg = execErr instanceof Error ? execErr.message : String(execErr);
+      if (execErr instanceof JobOwnershipLostError) {
+        logger.warn({ jobId: job.id, workerId }, "[dispatcher] Job ownership lost — recovery won the race");
+        return "failed";
+      }
       await retryJob(job.id, workerId, errMsg);
       _failedToday++;
       logger.warn({ jobId: job.id, jobType: job.jobType, err: errMsg }, "[dispatcher] Job failed — retried");

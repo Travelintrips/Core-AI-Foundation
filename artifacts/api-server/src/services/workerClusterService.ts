@@ -11,17 +11,19 @@
  * getWorkerCapacity() — per-worker capacity breakdown
  */
 
-import { eq, and, lt, inArray, sql, isNotNull, ne } from "drizzle-orm";
+import { eq, and, inArray, sql, ne } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db, aiWorkersTable, aiJobsTable } from "@workspace/db";
 import type { AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
+import { failRepositoryAnalyzerRun } from "./repositoryAnalyzerService.js";
 import { logger } from "../lib/logger.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const DEFAULT_LEASE_TTL_MS  = 60_000;  // 60 s
 export const STALE_HEARTBEAT_MS    = 90_000;  // 90 s without heartbeat → stale
+const WORKER_CLAIM_PAYLOAD_KEY = "_claimedByWorkerId";
 
 // ── Capability map ────────────────────────────────────────────────────────────
 
@@ -274,81 +276,93 @@ export async function markStaleWorkers(): Promise<number[]> {
  * Returns count of recovered jobs.
  */
 export async function rebalanceJobs(): Promise<number> {
-  // Find stale workers with running jobs
-  const staleWorkers = await db
-    .select({ id: aiWorkersTable.id })
-    .from(aiWorkersTable)
-    .where(eq(aiWorkersTable.status, "stale"));
+  const recovery = await db.transaction(async (tx) => {
+    const staleWorkers = await tx
+      .select({ id: aiWorkersTable.id, currentJob: aiWorkersTable.currentJob })
+      .from(aiWorkersTable)
+      .where(eq(aiWorkersTable.status, "stale"));
 
-  if (staleWorkers.length === 0) return 0;
+    if (staleWorkers.length === 0) {
+      return { staleIds: [], recovered: [] as Record<string, unknown>[] };
+    }
 
-  const staleIds = staleWorkers.map((w) => w.id);
-  const now = new Date();
+    const staleIds = staleWorkers.map((worker) => worker.id);
+    const currentJobIds = staleWorkers
+      .map((worker) => worker.currentJob)
+      .filter((jobId): jobId is number => jobId != null);
+    const ownershipClauses = [
+      ...(currentJobIds.length > 0
+        ? [sql`j.id IN (${sql.join(currentJobIds.map((id) => sql`${id}`), sql`, `)})`]
+        : []),
+      sql`j.payload_json->>${WORKER_CLAIM_PAYLOAD_KEY} IN (${sql.join(
+        staleIds.map((id) => sql`${String(id)}`),
+        sql`, `,
+      )})`,
+    ];
+    const now = new Date();
+    const ownership = sql.join(ownershipClauses, sql` OR `);
 
-  // Return their running jobs to queued
-  const recovered = await db
-    .update(aiJobsTable)
-    .set({
-      status:    "queued",
-      startedAt: null,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(aiJobsTable.status, "running"),
-        sql`employee_id IN (${sql.join(staleIds.map((id) => sql`${id}`), sql`, `)})`,
-      ),
-    )
-    .returning({ id: aiJobsTable.id });
+    const rawRecovered = await tx.execute(sql`
+      UPDATE ai_platform.ai_jobs AS j
+      SET
+        status = CASE WHEN j.retry_count + 1 > j.max_retry THEN 'failed' ELSE 'retrying' END,
+        retry_count = j.retry_count + 1,
+        next_retry_at = CASE WHEN j.retry_count + 1 > j.max_retry THEN NULL ELSE ${now}::timestamptz END,
+        started_at = NULL,
+        completed_at = CASE WHEN j.retry_count + 1 > j.max_retry THEN ${now}::timestamptz ELSE j.completed_at END,
+        error_message = 'Worker lease expired before completion',
+        payload_json = COALESCE(j.payload_json, '{}'::jsonb) - ${WORKER_CLAIM_PAYLOAD_KEY},
+        updated_at = ${now}::timestamptz
+      WHERE j.status = 'running'
+        AND (${ownership})
+      RETURNING j.id, j.status, j.job_type, j.payload_json
+    `);
+    const recovered =
+      (rawRecovered as unknown as { rows: Record<string, unknown>[] }).rows ?? [];
 
-  // Also recover jobs where the stale worker's current_job field matches
-  // (these may have no employee_id reference — find via running jobs without worker)
-  const recoveredGeneral = await db
-    .update(aiJobsTable)
-    .set({ status: "queued", startedAt: null, updatedAt: now })
-    .where(
-      and(
-        eq(aiJobsTable.status, "running"),
-        sql`NOT EXISTS (
-          SELECT 1 FROM ai_platform.ai_workers
-          WHERE ai_platform.ai_workers.current_job = ai_platform.ai_jobs.id
-          AND ai_platform.ai_workers.status NOT IN ('stale', 'offline')
-        )`,
-      ),
-    )
-    .returning({ id: aiJobsTable.id });
+    await tx
+      .update(aiWorkersTable)
+      .set({
+        status: "offline",
+        currentJob: null,
+        runningJobs: 0,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        heartbeatToken: null,
+        updatedAt: now,
+      })
+      .where(inArray(aiWorkersTable.id, staleIds));
 
-  // Reset stale workers
-  await db
-    .update(aiWorkersTable)
-    .set({
-      status:     "offline",
-      currentJob: null,
-      runningJobs: 0,
-      leaseOwner:     null,
-      leaseExpiresAt: null,
-      heartbeatToken: null,
-      updatedAt:  now,
-    })
-    .where(inArray(aiWorkersTable.id, staleIds));
+    return { staleIds, recovered };
+  });
 
-  const total = recovered.length + recoveredGeneral.length;
+  for (const row of recovery.recovered) {
+    if (row["status"] === "failed" && row["job_type"] === "coding_repository_analyzer") {
+      await failRepositoryAnalyzerRun(
+        (row["payload_json"] ?? {}) as Record<string, unknown>,
+        "Worker lease expired before completion",
+      );
+    }
+  }
 
-  if (total > 0) {
+  if (recovery.recovered.length > 0) {
     await logAudit("worker-cluster", "job_rebalanced", "cluster", "ai_cluster", "success", {
-      recoveredJobs: total,
-      staleWorkers: staleIds,
+      recoveredJobs: recovery.recovered.length,
+      staleWorkers: recovery.staleIds,
     });
-    logger.info({ recoveredJobs: total, staleWorkers: staleIds }, "[cluster] Jobs rebalanced");
+    logger.info(
+      { recoveredJobs: recovery.recovered.length, staleWorkers: recovery.staleIds },
+      "[cluster] Jobs rebalanced",
+    );
   }
 
-  // Log each recovered job
-  const allRecovered = [...recovered, ...recoveredGeneral];
-  for (const j of allRecovered) {
-    await logAudit("worker-cluster", "stale_job_recovered", String(j.id), "ai_job", "success", {});
+  for (const row of recovery.recovered) {
+    await logAudit("worker-cluster", "stale_job_recovered", String(row["id"]), "ai_job", "success", {
+      terminal: row["status"] === "failed",
+    });
   }
 
-  return total;
+  return recovery.recovered.length;
 }
 
 /**
