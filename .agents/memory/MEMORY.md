@@ -93,3 +93,4 @@
 - [API development environment file](api-dev-env-file.md) — development startup must tolerate a missing local env file and use injected environment variables
 - [pnpm bootstrap recursion](pnpm-bootstrap-recursion.md) — keep packageManager aligned with Replit's installed pnpm or workflows can recursively self-install until thread exhaustion
 - [Supabase pooler search_path](supabase-pooler-search-path.md) — initialize schema after checkout; pooler rejects libpq startup search_path options
+- [Phase 7A-9 Repository Analyzer](phase7a9-repository-analyzer.md) — coding analysis runs through ai_jobs and persists terminal run/task state without commitSha

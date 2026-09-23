@@ -26,7 +26,7 @@ export const STALE_HEARTBEAT_MS    = 90_000;  // 90 s without heartbeat → stal
 // ── Capability map ────────────────────────────────────────────────────────────
 
 export const WORKER_TYPE_CAPABILITIES: Record<string, string[]> = {
-  text_worker:   ["llm_inference", "creative_text", "qc_review", "creative_brief"],
+  text_worker:   ["llm_inference", "creative_text", "qc_review", "creative_brief", "coding_repository_analyzer"],
   image_worker:  ["image_generation", "image_qc", "image_upscale", "universal_render"],
   export_worker: ["pdf_export", "pptx_export", "csv_export", "report_generation", "image_batch_export"],
   system_worker: ["analytics", "cleanup", "custom", "scoring", "notification"],

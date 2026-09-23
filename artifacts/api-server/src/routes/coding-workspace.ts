@@ -17,6 +17,8 @@ import {
   UpdateCodingTaskParams,
   UpdateCodingTaskResponse,
 } from "@workspace/api-zod";
+import { enqueue } from "../services/queueManagerService.js";
+import { failRepositoryAnalyzerRun } from "../services/repositoryAnalyzerService.js";
 
 const router = Router();
 
@@ -100,7 +102,7 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
   }
 
   try {
-    const run = await db.transaction(async (tx) => {
+    const { run, task } = await db.transaction(async (tx) => {
       const [task] = await tx
         .select()
         .from(aiCodingTasksTable)
@@ -136,8 +138,34 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
         .set({ status: "ANALYZING" })
         .where(eq(aiCodingTasksTable.id, task.id));
 
-      return createdRun;
+      return { run: createdRun, task };
     });
+
+    try {
+      await enqueue({
+        jobType: "coding_repository_analyzer",
+        requiredCapability: "coding_repository_analyzer",
+        priority: task.priority,
+        maxRetry: 0,
+        retryStrategy: "manual",
+        payloadJson: {
+          codingTaskId: task.id,
+          codingRunId: run.id,
+          repository: task.repository,
+          branch: task.branch,
+          title: task.projectName,
+          description: task.instruction,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await failRepositoryAnalyzerRun(
+        { codingTaskId: task.id, codingRunId: run.id },
+        `Could not enqueue Repository Analyzer: ${message}`,
+      );
+      res.status(503).json({ error: "Repository Analyzer could not be queued" });
+      return;
+    }
 
     res.status(201).json(StartCodingRunResponse.parse(run));
   } catch (error) {

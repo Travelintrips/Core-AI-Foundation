@@ -46,6 +46,11 @@ import { executeGenericImageBatchExportJob } from "./image-batch/creativeImageBa
 import { resolveProjectImageBatchType } from "./creativeProjectImageBatchType.js";
 import { executeZipDeliveryJob } from "./zipDeliveryService.js";
 import { initExportFormatRegistry } from "./export-workspace/exportFormatRegistry.js";
+import {
+  completeRepositoryAnalyzerRun,
+  executeRepositoryAnalyzerJob,
+  failRepositoryAnalyzerRun,
+} from "./repositoryAnalyzerService.js";
 
 // Register all document type definitions at module load time.
 initDocumentRegistry();
@@ -527,6 +532,9 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     case "qc_review":
       return executeTextJob(job, "QC review");
 
+    case "coding_repository_analyzer":
+      return executeRepositoryAnalyzerJob(job);
+
     case "image_generation":
       return executeImageJob(job);
 
@@ -670,6 +678,10 @@ export async function completeJob(
     ? now.getTime() - job.startedAt.getTime()
     : null;
 
+  if (job?.jobType === "coding_repository_analyzer") {
+    await completeRepositoryAnalyzerRun(result);
+  }
+
   const [completed] = await db
     .update(aiJobsTable)
     .set({
@@ -807,6 +819,13 @@ export async function retryJob(
     .set(update as Parameters<typeof db.update>[0] extends infer T ? object : object)
     .where(eq(aiJobsTable.id, jobId))
     .returning();
+
+  if (exhausted && job.jobType === "coding_repository_analyzer") {
+    await failRepositoryAnalyzerRun(
+      (job.payloadJson ?? {}) as Record<string, unknown>,
+      errorMessage,
+    );
+  }
 
   // Release worker
   await db

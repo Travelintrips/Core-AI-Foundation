@@ -3207,6 +3207,8 @@ paths:
           description: Coding task not found
         "409":
           description: Coding task already has an active run
+        "503":
+          description: Repository Analyzer could not be queued
   /ai/coding/tasks/{id}:
     get:
       operationId: getCodingTask

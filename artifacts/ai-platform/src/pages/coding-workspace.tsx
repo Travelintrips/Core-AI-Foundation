@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -45,6 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useCodingTaskPolling } from "./codingWorkspacePolling";
 
 const taskSchema = z.object({
   projectName: z.string().trim().min(1, "Project is required").max(200),
@@ -271,9 +272,16 @@ export default function CodingWorkspace() {
   }, [tasks, search]);
   const selectedId = activeFromRoute ?? visibleTasks[0]?.id;
   const detailQuery = useGetCodingTask(selectedId ?? "", { query: { enabled: Boolean(selectedId), queryKey: getGetCodingTaskQueryKey(selectedId ?? "") } });
+  const hasActiveRun = detailQuery.data?.runs.some((run) => run.status === "RUNNING") ?? false;
   const activeCount = (tasks ?? []).filter((task) => ACTIVE_STATUSES.has(task.status)).length;
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
   const completedCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.COMPLETED).length;
+
+  const pollCodingTask = useCallback(() => {
+    void detailQuery.refetch();
+    void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+  }, [detailQuery.refetch, queryClient]);
+  useCodingTaskPolling(Boolean(selectedId) && hasActiveRun, pollCodingTask);
 
   const selectTask = (task: CodingTask) => setLocation(`/coding-workspace/${task.id}`);
   const openFreshTask = (task: CodingTask) => setLocation(`/coding-workspace/${task.id}`);

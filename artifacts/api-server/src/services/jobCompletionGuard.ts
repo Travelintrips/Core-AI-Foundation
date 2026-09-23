@@ -78,6 +78,7 @@ export const JOB_COMPLETION_REQUIREMENTS: Readonly<Record<string, JobRequirement
   creative_brief:   { requiresAsset: false },
   creative_text:    { requiresAsset: false },
   qc_review:        { requiresAsset: false },
+  coding_repository_analyzer: { requiresAsset: false },
   noop:             { requiresAsset: false },
 
   // ── File-producing jobs — must have asset reference in result ─────────────
