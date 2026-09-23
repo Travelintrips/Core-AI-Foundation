@@ -1,0 +1,43 @@
+name: Hostinger Release Manifest
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release-manifest:
+    name: Record deployment release
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Prepare release manifest
+        run: |
+          mkdir -p .release
+          cat > .release/release.json <<EOF
+          {
+            "commit_sha": "${{ github.sha }}",
+            "deploy_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run_id": "${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Upload release manifest
+        if: ${{ secrets.HOSTINGER_RELEASES_PATH != '' }}
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
+          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
+          source: .release/release.json
+          target: ${{ secrets.HOSTINGER_RELEASES_PATH }}/${{ github.sha }}
+
+      - name: Release summary
+        run: |
+          echo "Release: ${{ github.sha }}"
+          echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
