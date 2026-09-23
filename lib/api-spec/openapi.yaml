@@ -46,6 +46,8 @@ tags:
     description: AI Event Subscriptions — route events to handler functions
   - name: human-tasks
     description: Human Task Center — AI-to-human handoff, review, approval, and escalation
+  - name: coding-workspace
+    description: AI Coding Workspace — task intake and execution tracking
   - name: service-portfolio
   - name: portfolio-gallery
     description: V4.3 Portfolio Gallery & Live Preview (Team 1) — public search, industry showcase, compare, favorites, and analytics on top of the existing Portfolio Generator
@@ -3153,6 +3155,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HumanTask"
+  /ai/coding/tasks:
+    get:
+      operationId: listCodingTasks
+      tags:
+        - coding-workspace
+      summary: List AI coding tasks
+      responses:
+        "200":
+          description: Coding tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CodingTask"
+    post:
+      operationId: createCodingTask
+      tags:
+        - coding-workspace
+      summary: Create an AI coding task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCodingTaskBody"
+      responses:
+        "201":
+          description: Created coding task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodingTask"
+  /ai/coding/tasks/{id}:
+    get:
+      operationId: getCodingTask
+      tags:
+        - coding-workspace
+      summary: Get a coding task with runs and code changes
+      parameters:
+        - $ref: "#/components/parameters/CodingTaskId"
+      responses:
+        "200":
+          description: Coding task detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodingTaskDetail"
+        "404":
+          description: Coding task not found
+    patch:
+      operationId: updateCodingTask
+      tags:
+        - coding-workspace
+      summary: Update an AI coding task status
+      parameters:
+        - $ref: "#/components/parameters/CodingTaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCodingTaskBody"
+      responses:
+        "200":
+          description: Updated coding task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodingTask"
+        "404":
+          description: Coding task not found
   /ai/human-tasks/stats:
     get:
       operationId: getHumanTaskStats
@@ -8273,6 +8347,14 @@ paths:
         "409": { description: The approved snapshot changed or is unavailable }
 
 components:
+  parameters:
+    CodingTaskId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     NotFound:
       description: Resource not found
@@ -16346,3 +16428,86 @@ components:
       properties:
         session: { $ref: "#/components/schemas/InteriorRenderStatus" }
         idempotent: { type: boolean }
+
+    CodingTaskStatus:
+      type: string
+      enum: [PENDING, ANALYZING, CODING, TESTING, COMMITTING, PR_CREATED, READY_REVIEW, COMPLETED, FAILED]
+
+    CodingRunStatus:
+      type: string
+      enum: [PENDING, RUNNING, COMPLETED, FAILED]
+
+    CodingChangeType:
+      type: string
+      enum: [ADDED, MODIFIED, DELETED, RENAMED]
+
+    CodingTask:
+      type: object
+      required: [id, taskNumber, projectName, repository, branch, instruction, status, priority, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        taskNumber: { type: string }
+        projectName: { type: string }
+        repository: { type: string }
+        branch: { type: string }
+        instruction: { type: string }
+        status: { $ref: "#/components/schemas/CodingTaskStatus" }
+        priority: { type: integer, minimum: 0, maximum: 100 }
+        resultSummary: { type: ["string", "null"] }
+        commitSha: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CodingRun:
+      type: object
+      required: [id, taskId, agentName, status]
+      properties:
+        id: { type: string, format: uuid }
+        taskId: { type: string, format: uuid }
+        agentName: { type: string }
+        status: { $ref: "#/components/schemas/CodingRunStatus" }
+        startedAt: { type: ["string", "null"], format: date-time }
+        finishedAt: { type: ["string", "null"], format: date-time }
+        logs: { type: ["string", "null"] }
+        errorMessage: { type: ["string", "null"] }
+
+    CodeChange:
+      type: object
+      required: [id, taskId, filePath, changeType, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        taskId: { type: string, format: uuid }
+        filePath: { type: string }
+        changeType: { $ref: "#/components/schemas/CodingChangeType" }
+        commitSha: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    CodingTaskDetail:
+      type: object
+      required: [task, runs, changes]
+      properties:
+        task: { $ref: "#/components/schemas/CodingTask" }
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/CodingRun" }
+        changes:
+          type: array
+          items: { $ref: "#/components/schemas/CodeChange" }
+
+    CreateCodingTaskBody:
+      type: object
+      required: [projectName, repository, branch, instruction]
+      properties:
+        projectName: { type: string, minLength: 1, maxLength: 200 }
+        repository: { type: string, minLength: 1, maxLength: 500 }
+        branch: { type: string, minLength: 1, maxLength: 200 }
+        instruction: { type: string, minLength: 1, maxLength: 20000 }
+        priority: { type: integer, minimum: 0, maximum: 100, default: 50 }
+
+    UpdateCodingTaskBody:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/CodingTaskStatus" }
+        resultSummary: { type: ["string", "null"], maxLength: 20000 }
+        commitSha: { type: ["string", "null"], maxLength: 200 }

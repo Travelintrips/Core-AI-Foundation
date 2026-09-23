@@ -68,9 +68,10 @@
 
 /* ─── APEX INTELLIGENCE — LIGHT FALLBACK ─── */
 :root {
-  --app-font-sans:    'Inter', sans-serif;
-  --app-font-display: 'Plus Jakarta Sans', sans-serif;
+  --app-font-sans:    'DM Sans', sans-serif;
+  --app-font-display: 'Sora', 'DM Sans', sans-serif;
   --app-font-mono:    'JetBrains Mono', monospace;
+  --coding-accent: 172 66% 48%;
   --radius: 0.5rem;
 
   --background: 224 47% 98%;
@@ -179,6 +180,7 @@
   --sidebar-accent-foreground: 224 100% 96%;
   --sidebar-accent-border: rgba(124, 110, 250, 0.08);
   --sidebar-ring: 248 92% 70%;
+  --coding-accent: 172 66% 48%;
 }
 
 /* ─── KEYFRAMES ─── */
