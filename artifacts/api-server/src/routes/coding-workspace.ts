@@ -88,6 +88,35 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   res.json(GetCodingTaskResponse.parse({ task, runs, changes }));
 });
 
+router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
+  const [task] = await db
+    .select()
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, req.params.id));
+
+  if (!task) {
+    res.status(404).json({ error: "Coding task not found" });
+    return;
+  }
+
+  const [run] = await db
+    .insert(aiCodingRunsTable)
+    .values({
+      taskId: task.id,
+      agentName: "Repository Analyzer",
+      status: "RUNNING",
+      startedAt: new Date(),
+    })
+    .returning();
+
+  await db
+    .update(aiCodingTasksTable)
+    .set({ status: "ANALYZING" })
+    .where(eq(aiCodingTasksTable.id, task.id));
+
+  res.status(201).json(run);
+});
+
 router.patch("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   const params = UpdateCodingTaskParams.safeParse(req.params);
   if (!params.success) {
