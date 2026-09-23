@@ -1,0 +1,347 @@
+Phase 7A-10B — Fix Supabase DEV Read-Only Connection
+
+JANGAN deploy production.
+JANGAN gunakan database production.
+JANGAN mengubah data production.
+JANGAN mengubah Repository Analyzer dulu.
+
+MASALAH TERBUKTI:
+
+SQLSTATE 25006
+cannot execute INSERT in a read-only transaction
+
+Terjadi pada:
+- INSERT ai_coding_tasks
+- worker registration
+- worker lease update
+- SELECT ... FOR UPDATE SKIP LOCKED ai_jobs
+- audit log insert
+- ai_schedules writes
+
+Target:
+Pulihkan runtime DEVELOPMENT agar menggunakan Supabase DEV PRIMARY WRITABLE connection.
+
+
+==================================================
+1. IDENTIFIKASI DATABASE YANG BENAR-BENAR DIPAKAI
+==================================================
+
+Audit seluruh source/config/env resolution untuk:
+
+DATABASE_URL
+DIRECT_URL
+SUPABASE_URL
+SUPABASE_DB_URL
+POSTGRES_URL
+PGHOST
+PGPORT
+PGDATABASE
+PGUSER
+PGSSLMODE
+
+dan semua variable custom database lainnya.
+
+Cari:
+- artifacts/api-server
+- lib/db
+- root config
+- workflow configuration
+- development runtime configuration
+
+Jangan tampilkan password/token penuh.
+
+Laporkan:
+variable mana yang benar-benar dipakai oleh API server
+dan precedence/fallback-nya.
+
+
+==================================================
+2. IDENTIFIKASI ENDPOINT DATABASE
+==================================================
+
+Untuk connection runtime DEVELOPMENT, tampilkan secara aman:
+
+host
+port
+database
+username prefix/role tanpa credential
+pooler/direct classification
+
+Jangan tampilkan password.
+
+Pastikan runtime tidak menggunakan:
+- read replica
+- read-only endpoint
+- connection string production
+- endpoint yang salah
+
+
+==================================================
+3. DATABASE SESSION DIAGNOSTIC
+==================================================
+
+Dari connection yang SAMA dengan API runtime jalankan:
+
+SELECT current_database();
+
+SELECT current_user;
+
+SHOW transaction_read_only;
+
+SHOW default_transaction_read_only;
+
+SELECT pg_is_in_recovery();
+
+SELECT inet_server_addr(), inet_server_port();
+
+SELECT
+  current_setting('transaction_read_only') AS transaction_read_only,
+  current_setting('default_transaction_read_only') AS default_transaction_read_only;
+
+Catat hasil aktual.
+
+
+==================================================
+4. BEDAKAN 3 KEMUNGKINAN
+==================================================
+
+Tentukan berdasarkan evidence apakah penyebabnya:
+
+A. API terhubung ke read replica/read-only endpoint
+
+B. role/session mempunyai:
+   default_transaction_read_only = on
+
+C. application code membuka transaction sebagai READ ONLY
+
+Jangan menebak.
+
+
+==================================================
+5. AUDIT SOURCE TRANSACTION
+==================================================
+
+Cari seluruh source:
+
+SET TRANSACTION READ ONLY
+SET SESSION CHARACTERISTICS
+default_transaction_read_only
+transaction_read_only
+BEGIN READ ONLY
+readOnly
+read_only
+
+Pastikan wrapper transaction di lib/db tidak secara global membuat
+transaction read-only.
+
+Jika source menyebabkan read-only:
+perbaiki source.
+
+Jika connection/env salah:
+perbaiki DEVELOPMENT configuration saja.
+
+
+==================================================
+6. WRITABILITY PROBE
+==================================================
+
+Setelah root cause diperbaiki, jangan langsung menjalankan analyzer.
+
+Lakukan probe transaction yang aman pada DEV.
+
+Gunakan tabel temporary jika PostgreSQL/Supabase mengizinkan:
+
+BEGIN;
+
+CREATE TEMP TABLE dev_write_probe (
+  id integer
+);
+
+INSERT INTO dev_write_probe VALUES (1);
+
+SELECT * FROM dev_write_probe;
+
+ROLLBACK;
+
+Expected:
+semua berhasil.
+
+Jika TEMP TABLE tidak dapat digunakan karena policy environment,
+gunakan mekanisme DEV-only yang tidak meninggalkan data permanen.
+
+Jangan melakukan probe pada production.
+
+
+==================================================
+7. API WRITE PROBE
+==================================================
+
+Setelah database probe PASS:
+
+jalankan POST /api/ai/coding/tasks dengan controlled DEV test task.
+
+Expected:
+HTTP 2xx
+row berhasil dibuat.
+
+Catat codingTaskId.
+
+Jangan lanjut jika masih 25006.
+
+
+==================================================
+8. DISPATCHER PROBE
+==================================================
+
+Restart development API/worker menggunakan konfigurasi yang sudah diperbaiki.
+
+Verifikasi:
+
+dispatcher:
+enabled = true
+running = true
+
+workerCount >= 1
+
+Pastikan:
+- worker registration berhasil
+- lease update berhasil
+- SELECT FOR UPDATE SKIP LOCKED berhasil
+- tidak ada SQLSTATE 25006 baru
+
+
+==================================================
+9. BARU LANJUTKAN PHASE 7A-10
+==================================================
+
+Jika seluruh write probe PASS, gunakan codingTaskId tadi dan jalankan:
+
+POST /api/ai/coding/tasks/{id}/run
+
+Buktikan:
+
+RUNNING
+→ ai_jobs queued
+→ dispatcher claim
+→ text_worker
+→ coding_repository_analyzer
+→ terminal job
+→ ai_coding_runs COMPLETED
+→ coding task READY_REVIEW
+
+Kemudian jalankan:
+- controlled failure
+- duplicate 409
+- stuck/retry recovery
+- frontend polling verification
+
+
+==================================================
+10. REGRESSION
+==================================================
+
+Setelah E2E berhasil jalankan kembali:
+
+coding workspace tests
+Repository Analyzer tests
+dispatcher/queue tests
+AI Platform tests
+API server tests
+root typecheck
+API build
+AI Platform build
+OpenAPI validation
+
+
+==================================================
+11. STOP
+==================================================
+
+JANGAN DEPLOY.
+
+Laporkan hanya evidence aktual:
+
+DEV DATABASE TARGET:
+<safe host/db/role information>
+
+ROOT CAUSE:
+<exact cause>
+
+transaction_read_only:
+...
+
+default_transaction_read_only:
+...
+
+pg_is_in_recovery:
+...
+
+SOURCE READ-ONLY CONFIG:
+FOUND / NOT FOUND
+
+DB WRITE PROBE:
+PASS/FAIL
+
+API CREATE TASK:
+PASS/FAIL
+HTTP:
+codingTaskId:
+
+DISPATCHER:
+running:
+workerCount:
+
+SQLSTATE 25006 AFTER FIX:
+YES/NO
+
+REAL /run:
+PASS/FAIL
+
+codingRunId:
+aiJobId:
+
+QUEUE CLAIM:
+PASS/FAIL
+
+TEXT WORKER:
+PASS/FAIL
+
+ANALYZER:
+PASS/FAIL
+
+RUNNING → COMPLETED:
+PASS/FAIL
+
+TASK → READY_REVIEW:
+PASS/FAIL
+
+CONTROLLED FAILURE:
+PASS/FAIL
+
+DUPLICATE 409:
+PASS/FAIL
+
+STUCK RECOVERY:
+PASS/FAIL
+
+FRONTEND POLLING:
+PASS/FAIL
+
+TEST:
+<actual results>
+
+TYPECHECK:
+PASS/FAIL
+
+BUILD:
+PASS/FAIL
+
+DEPLOY:
+NOT PERFORMED
+
+PENTING:
+Jangan menyelesaikan SQLSTATE 25006 dengan mengarahkan development ke
+database production.
+
+Jika Supabase DEV endpoint/credential memang salah atau tidak tersedia,
+STOP dan laporkan exact configuration yang perlu diganti tanpa menampilkan secret.
