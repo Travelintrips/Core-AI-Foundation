@@ -1,0 +1,40 @@
+name: Hostinger Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ai-platform
+          - customer-portal
+          - api
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Prepare Hostinger deployment
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: core-ai-foundation-build
+
+      - name: Show deployment package
+        run: |
+          echo "Deployment package ready"
+          find . -maxdepth 4 -type d | sort
+
+      - name: Deployment placeholder
+        run: |
+          echo "Hostinger transport is not configured yet."
+          echo "Configure Hostinger Git/FTP/SFTP/Node credentials before enabling upload."
