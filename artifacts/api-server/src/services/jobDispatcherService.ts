@@ -172,11 +172,11 @@ export async function getStatus(): Promise<DispatcherStatus> {
   }
 
   const queueRow = await db.execute(sql`
-    SELECT COUNT(*)::int AS count FROM ai_jobs WHERE status IN ('queued', 'retrying')
+    SELECT COUNT(*)::int AS count FROM ai_platform.ai_jobs WHERE status IN ('queued', 'retrying')
   `).then((r) => (r as unknown as { rows: { count: number }[] }).rows[0]);
 
   const runningRow = await db.execute(sql`
-    SELECT COUNT(*)::int AS count FROM ai_jobs WHERE status = 'running'
+    SELECT COUNT(*)::int AS count FROM ai_platform.ai_jobs WHERE status = 'running'
   `).then((r) => (r as unknown as { rows: { count: number }[] }).rows[0]);
 
   return {
@@ -402,7 +402,7 @@ export async function recover(): Promise<void> {
     const jobCutoff = new Date(now.getTime() - _settings.jobTimeoutMs).toISOString();
 
     const rawStuck = await db.execute(sql`
-      SELECT * FROM ai_jobs
+      SELECT * FROM ai_platform.ai_jobs
       WHERE status = 'running'
         AND started_at < ${jobCutoff}::timestamptz
     `);

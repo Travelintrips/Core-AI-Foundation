@@ -310,9 +310,9 @@ export async function rebalanceJobs(): Promise<number> {
       and(
         eq(aiJobsTable.status, "running"),
         sql`NOT EXISTS (
-          SELECT 1 FROM ai_workers
-          WHERE ai_workers.current_job = ai_jobs.id
-          AND ai_workers.status NOT IN ('stale', 'offline')
+          SELECT 1 FROM ai_platform.ai_workers
+          WHERE ai_platform.ai_workers.current_job = ai_platform.ai_jobs.id
+          AND ai_platform.ai_workers.status NOT IN ('stale', 'offline')
         )`,
       ),
     )

@@ -451,7 +451,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
     //   (required_capability IS NULL)                          → any worker can claim
     //   OR ($capJson::jsonb ? required_capability)             → worker has the capability
     const rawResult = await tx.execute(sql`
-      SELECT * FROM ai_jobs
+      SELECT * FROM ai_platform.ai_jobs
       WHERE (
         (status = 'queued' AND (scheduled_at IS NULL OR scheduled_at <= NOW()))
         OR
@@ -514,7 +514,6 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
   // WP-06 — Build a RequestContext for this job so downstream handlers have
   // a structured, tenant-scoped identity without DB round-trips.
   const workerCtx = buildWorkerContext(job);
-  process.stdout.write(`###EXECJOB### jobId=${job.id} jobType=${JSON.stringify(job.jobType)} typeof=${typeof job.jobType}\n`);
   logger.info(
     { jobId: job.id, jobType: job.jobType, tenantId: workerCtx.tenantId, actorType: workerCtx.actorType },
     "[executeJob] dispatching",

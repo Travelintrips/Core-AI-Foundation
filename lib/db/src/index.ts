@@ -36,8 +36,18 @@ const poolConfig = {
     client: { query: (sql: string) => Promise<unknown> },
     done: (err?: Error) => void,
   ) => {
-    client
-      .query("SET search_path TO ai_platform, public")
+    const initializeSession = async (): Promise<void> => {
+      // The DEV Supabase role currently advertises default_transaction_read_only
+      // = on even though the server is not in recovery. Queue lifecycle writes
+      // and SELECT ... FOR UPDATE SKIP LOCKED require an explicit read-write
+      // session. Production keeps its existing transaction-pooler behavior.
+      if (!isProduction) {
+        await client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE");
+      }
+      await client.query("SET search_path TO ai_platform, public");
+    };
+
+    initializeSession()
       .then(() => done())
       .catch((err: unknown) => done(err instanceof Error ? err : new Error(String(err))));
   },
