@@ -89,5 +89,11 @@ jobs:
         if: inputs.method == 'git'
         run: echo "Git transport selected"
 
-      - name: Health check placeholder
-        run: echo "Health check after deployment"
+      - name: Health check after deployment
+        if: inputs.method == 'sftp'
+        run: |
+          echo "Running deployment health checks"
+          if [ -n "${{ secrets.HOSTINGER_AI_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_AI_URL }}" > /dev/null; fi
+          if [ -n "${{ secrets.HOSTINGER_CUSTOMER_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_CUSTOMER_URL }}" > /dev/null; fi
+          if [ -n "${{ secrets.HOSTINGER_API_HEALTH_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_API_HEALTH_URL }}" > /dev/null; fi
+          echo "Health checks completed"
