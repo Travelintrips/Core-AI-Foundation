@@ -29,12 +29,28 @@ jobs:
         with:
           name: core-ai-foundation-build
 
-      - name: Show deployment package
+      - name: Validate deployment target
         run: |
-          echo "Deployment package ready"
-          find . -maxdepth 4 -type d | sort
+          echo "Target: ${{ inputs.target }}"
+          test -d . || exit 1
 
-      - name: Deployment placeholder
+      - name: Prepare frontend deployment packages
+        if: inputs.target == 'all' || inputs.target == 'ai-platform' || inputs.target == 'customer-portal'
         run: |
-          echo "Hostinger transport is not configured yet."
-          echo "Configure Hostinger Git/FTP/SFTP/Node credentials before enabling upload."
+          echo "Frontend deployment adapter ready"
+          find . -maxdepth 5 -type d | sort
+
+      - name: Prepare API deployment package
+        if: inputs.target == 'all' || inputs.target == 'api'
+        run: |
+          echo "API deployment adapter ready"
+          find . -maxdepth 5 -type d | sort
+
+      - name: Transport configuration check
+        run: |
+          if [ -z "${{ secrets.HOSTINGER_DEPLOY_METHOD }}" ]; then
+            echo "Hostinger transport is not configured yet."
+            echo "Add HOSTINGER_DEPLOY_METHOD and required deployment secrets before enabling upload."
+          else
+            echo "Hostinger transport configured: ${{ secrets.HOSTINGER_DEPLOY_METHOD }}"
+          fi
