@@ -134,6 +134,7 @@ import type {
   ClientReviewLinkInput,
   ClientReviewWithToken,
   ClusterStatus,
+  CodingRun,
   CodingTask,
   CodingTaskDetail,
   CommercialAnalytics,
@@ -12308,6 +12309,80 @@ export const useCreateCodingTask = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateCodingTaskMutationOptions(options));
+    }
+
+export const getStartCodingRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/ai/coding/tasks/${id}/run`
+}
+
+/**
+ * @summary Start the repository analyzer for an AI coding task
+ */
+export const startCodingRun = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<CodingRun> => {
+
+  return customFetch<CodingRun>(getStartCodingRunUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getStartCodingRunMutationKey = () => ['startCodingRun'] as const;
+
+export const getStartCodingRunMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startCodingRun>>, TError,StartCodingRunMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startCodingRun>>, TError,StartCodingRunMutationVariables, TContext> => {
+
+const mutationKey = getStartCodingRunMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startCodingRun>>, StartCodingRunMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  startCodingRun(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartCodingRunMutationResult = NonNullable<Awaited<ReturnType<typeof startCodingRun>>>
+
+    export type StartCodingRunMutationError = ErrorType<void>
+    export type StartCodingRunMutationVariables = {id: string}
+
+    /**
+ * @summary Start the repository analyzer for an AI coding task
+ */
+export const useStartCodingRun = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startCodingRun>>, TError,StartCodingRunMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startCodingRun>>,
+        TError,
+        StartCodingRunMutationVariables,
+        TContext
+      > => {
+      return useMutation(getStartCodingRunMutationOptions(options));
     }
 
 export const getGetCodingTaskUrl = (id: string,) => {

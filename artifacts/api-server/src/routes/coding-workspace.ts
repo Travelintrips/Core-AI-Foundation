@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   db,
   aiCodeChangesTable,
@@ -12,6 +12,7 @@ import {
   GetCodingTaskParams,
   GetCodingTaskResponse,
   ListCodingTasksResponse,
+  StartCodingRunResponse,
   UpdateCodingTaskBody,
   UpdateCodingTaskParams,
   UpdateCodingTaskResponse,
@@ -88,33 +89,68 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   res.json(GetCodingTaskResponse.parse({ task, runs, changes }));
 });
 
-router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, req.params.id));
+class CodingTaskNotFoundError extends Error {}
+class CodingRunAlreadyActiveError extends Error {}
 
-  if (!task) {
-    res.status(404).json({ error: "Coding task not found" });
+router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
     return;
   }
 
-  const [run] = await db
-    .insert(aiCodingRunsTable)
-    .values({
-      taskId: task.id,
-      agentName: "Repository Analyzer",
-      status: "RUNNING",
-      startedAt: new Date(),
-    })
-    .returning();
+  try {
+    const run = await db.transaction(async (tx) => {
+      const [task] = await tx
+        .select()
+        .from(aiCodingTasksTable)
+        .where(eq(aiCodingTasksTable.id, params.data.id))
+        .for("update");
 
-  await db
-    .update(aiCodingTasksTable)
-    .set({ status: "ANALYZING" })
-    .where(eq(aiCodingTasksTable.id, task.id));
+      if (!task) {
+        throw new CodingTaskNotFoundError("Coding task not found");
+      }
 
-  res.status(201).json(run);
+      const [activeRun] = await tx
+        .select({ id: aiCodingRunsTable.id })
+        .from(aiCodingRunsTable)
+        .where(and(eq(aiCodingRunsTable.taskId, task.id), eq(aiCodingRunsTable.status, "RUNNING")))
+        .limit(1);
+
+      if (activeRun) {
+        throw new CodingRunAlreadyActiveError("Coding task already has an active run");
+      }
+
+      const [createdRun] = await tx
+        .insert(aiCodingRunsTable)
+        .values({
+          taskId: task.id,
+          agentName: "Repository Analyzer",
+          status: "RUNNING",
+          startedAt: new Date(),
+        })
+        .returning();
+
+      await tx
+        .update(aiCodingTasksTable)
+        .set({ status: "ANALYZING" })
+        .where(eq(aiCodingTasksTable.id, task.id));
+
+      return createdRun;
+    });
+
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof CodingTaskNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof CodingRunAlreadyActiveError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
 });
 
 router.patch("/ai/coding/tasks/:id", async (req, res): Promise<void> => {

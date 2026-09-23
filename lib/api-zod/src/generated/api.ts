@@ -4011,6 +4011,25 @@ export const CreateCodingTaskResponse = zod.object({
 
 
 /**
+ * @summary Start the repository analyzer for an AI coding task
+ */
+export const StartCodingRunParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+export const StartCodingRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "taskId": zod.string().uuid(),
+  "agentName": zod.string(),
+  "status": zod.enum(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED']),
+  "startedAt": zod.coerce.date().nullish(),
+  "finishedAt": zod.coerce.date().nullish(),
+  "logs": zod.string().nullish(),
+  "errorMessage": zod.string().nullish()
+})
+
+
+/**
  * @summary Get a coding task with runs and code changes
  */
 export const GetCodingTaskParams = zod.object({

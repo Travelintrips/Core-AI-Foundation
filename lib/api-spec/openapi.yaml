@@ -3188,6 +3188,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CodingTask"
+  /ai/coding/tasks/{id}/run:
+    post:
+      operationId: startCodingRun
+      tags:
+        - coding-workspace
+      summary: Start the repository analyzer for an AI coding task
+      parameters:
+        - $ref: "#/components/parameters/CodingTaskId"
+      responses:
+        "201":
+          description: Repository analyzer run started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodingRun"
+        "404":
+          description: Coding task not found
+        "409":
+          description: Coding task already has an active run
   /ai/coding/tasks/{id}:
     get:
       operationId: getCodingTask
