@@ -112,6 +112,7 @@ import DesignObservabilityPage from "@/pages/design-observability";
 import CustomsTariff from "@/pages/customs-tariff";
 import TarifKalkulator from "@/pages/tarif-kalkulator";
 import PricingCalculator from "@/pages/pricing-calculator";
+import CodingWorkspace from "@/pages/coding-workspace";
 
 const queryClient = new QueryClient();
 
@@ -217,6 +218,8 @@ function AdminRouter() {
         <Route path="/customs-tariff" component={CustomsTariff} />
         <Route path="/tarif-kalkulator" component={TarifKalkulator} />
         <Route path="/pricing-calculator" component={PricingCalculator} />
+        <Route path="/coding-workspace/:id" component={CodingWorkspace} />
+        <Route path="/coding-workspace" component={CodingWorkspace} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />

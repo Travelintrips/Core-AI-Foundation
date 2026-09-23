@@ -169,12 +169,14 @@ import customsRouter from "./customs.js";
 // ── DEV-ONLY: Payment test adapter (never active in production) ───────────
 import devPaymentTestRouter from "./dev-payment-test.js";
 import materialImportRouter from "./material-import.js";
+import codingWorkspaceRouter from "./coding-workspace.js";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(storageRouter);
 router.use('/ai/material-import', materialImportRouter);
+router.use(codingWorkspaceRouter);
 router.use(internalAuthRouter);
 router.use(internalCatalogRouter);
 router.use(agentsRouter);
