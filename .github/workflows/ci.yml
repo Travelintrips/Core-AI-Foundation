@@ -38,4 +38,5 @@ jobs:
         env:
           PORT: 4173
           BASE_PATH: /
+          HOSTINGER_FRONTEND: customer-portal
         run: pnpm run build
