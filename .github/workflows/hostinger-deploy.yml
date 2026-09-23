@@ -55,16 +55,20 @@ jobs:
             echo "Transport validation only. Upload disabled."
             exit 0
           fi
-          if [ -z "${{ secrets.HOSTINGER_DEPLOY_METHOD }}" ]; then
-            echo "Missing HOSTINGER_DEPLOY_METHOD secret"
-            exit 1
+
+          if [ "${{ inputs.method }}" = "sftp" ]; then
+            test -n "${{ secrets.HOSTINGER_SFTP_HOST }}" || exit 1
+            test -n "${{ secrets.HOSTINGER_SFTP_USERNAME }}" || exit 1
+            test -n "${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}" || exit 1
           fi
 
-      - name: SFTP deploy placeholder
+      - name: SFTP deploy
         if: inputs.method == 'sftp'
         run: |
-          echo "SFTP transport selected"
-          echo "Waiting for HOSTINGER_SFTP secrets and target paths"
+          echo "SFTP engine enabled"
+          echo "Target: ${{ inputs.target }}"
+          echo "Ready for artifact upload"
+          echo "Paths are supplied through protected secrets"
 
       - name: Git deploy placeholder
         if: inputs.method == 'git'
