@@ -16,7 +16,7 @@ on:
       method:
         description: Hostinger transport method
         required: true
-        default: check
+        default: sftp
         type: choice
         options:
           - check
@@ -34,7 +34,6 @@ jobs:
     name: Hostinger deployment
     runs-on: ubuntu-latest
     environment: production
-
     steps:
       - name: Download build artifact
         uses: actions/download-artifact@v4
@@ -55,19 +54,50 @@ jobs:
 
       - name: Transport guard
         run: |
-          if [ "${{ inputs.method || 'sftp' }}" = "check" ]; then
-            echo "Validation only"
-            exit 0
-          fi
-          if [ "${{ inputs.method || 'sftp' }}" = "sftp" ]; then
-            test -n "${{ secrets.HOSTINGER_SFTP_HOST }}"
-            test -n "${{ secrets.HOSTINGER_SFTP_USERNAME }}"
-            test -n "${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}"
-          fi
+          if [ "${{ inputs.method || 'sftp' }}" = "check" ]; then exit 0; fi
+          test -n "${{ secrets.HOSTINGER_SFTP_HOST }}"
+          test -n "${{ secrets.HOSTINGER_SFTP_USERNAME }}"
+          test -n "${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}"
+
+      - name: Upload AI Platform
+        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'ai-platform')
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
+          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
+          source: ai-platform/dist/*
+          target: ${{ secrets.HOSTINGER_AI_PATH }}
+
+      - name: Upload Customer Portal
+        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'customer-portal')
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
+          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
+          source: customer-portal/dist/*
+          target: ${{ secrets.HOSTINGER_CUSTOMER_PATH }}
+
+      - name: Upload API
+        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'api')
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
+          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
+          source: api-server/dist/*
+          target: ${{ secrets.HOSTINGER_API_PATH }}
+
+      - name: Health check
+        if: inputs.method == 'sftp'
+        run: |
+          if [ -n "${{ secrets.HOSTINGER_AI_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_AI_URL }}" >/dev/null; fi
+          if [ -n "${{ secrets.HOSTINGER_CUSTOMER_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_CUSTOMER_URL }}" >/dev/null; fi
+          if [ -n "${{ secrets.HOSTINGER_API_HEALTH_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_API_HEALTH_URL }}" >/dev/null; fi
 
       - name: Release summary
         run: |
-          echo "Deployment release"
           echo "Commit: ${{ steps.release.outputs.commit_sha }}"
           echo "Target: ${{ steps.release.outputs.target }}"
           echo "Time: ${{ steps.release.outputs.deploy_time }}"
