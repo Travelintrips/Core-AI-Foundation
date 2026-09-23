@@ -13,6 +13,15 @@ on:
           - ai-platform
           - customer-portal
           - api
+      method:
+        description: Hostinger transport method
+        required: true
+        default: check
+        type: choice
+        options:
+          - check
+          - sftp
+          - git
 
 permissions:
   contents: read
@@ -46,11 +55,15 @@ jobs:
           echo "API deployment adapter ready"
           find . -maxdepth 5 -type d | sort
 
-      - name: Transport configuration check
+      - name: Transport configuration guard
         run: |
-          if [ -z "${{ secrets.HOSTINGER_DEPLOY_METHOD }}" ]; then
-            echo "Hostinger transport is not configured yet."
-            echo "Add HOSTINGER_DEPLOY_METHOD and required deployment secrets before enabling upload."
-          else
-            echo "Hostinger transport configured: ${{ secrets.HOSTINGER_DEPLOY_METHOD }}"
+          echo "Selected method: ${{ inputs.method }}"
+          if [ "${{ inputs.method }}" = "check" ]; then
+            echo "Transport only validated. Upload is disabled."
+            exit 0
           fi
+          if [ -z "${{ secrets.HOSTINGER_DEPLOY_METHOD }}" ]; then
+            echo "Missing HOSTINGER_DEPLOY_METHOD secret"
+            exit 1
+          fi
+          echo "Transport configured: ${{ secrets.HOSTINGER_DEPLOY_METHOD }}"
