@@ -55,21 +55,21 @@ jobs:
             echo "Transport validation only. Upload disabled."
             exit 0
           fi
-
           if [ "${{ inputs.method }}" = "sftp" ]; then
             test -n "${{ secrets.HOSTINGER_SFTP_HOST }}" || exit 1
             test -n "${{ secrets.HOSTINGER_SFTP_USERNAME }}" || exit 1
             test -n "${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}" || exit 1
           fi
 
-      - name: SFTP deploy
+      - name: SFTP deploy artifact upload
         if: inputs.method == 'sftp'
-        run: |
-          echo "SFTP upload stage enabled"
-          echo "Target: ${{ inputs.target }}"
-          echo "AI path configured: ${{ secrets.HOSTINGER_AI_PATH != '' }}"
-          echo "Customer path configured: ${{ secrets.HOSTINGER_CUSTOMER_PATH != '' }}"
-          echo "API path configured: ${{ secrets.HOSTINGER_API_PATH != '' }}"
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
+          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
+          source: "./"
+          target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
 
       - name: Git deploy placeholder
         if: inputs.method == 'git'
