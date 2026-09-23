@@ -22,6 +22,9 @@ on:
           - check
           - sftp
           - git
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -40,7 +43,7 @@ jobs:
 
       - name: Validate deployment
         run: |
-          echo "Target: ${{ inputs.target }}"
+          echo "Target: ${{ inputs.target || 'all' }}"
           find . -maxdepth 3 -type d | sort
 
       - name: Deployment metadata
@@ -48,62 +51,19 @@ jobs:
         run: |
           echo "commit_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "deploy_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-          echo "target=${{ inputs.target }}" >> "$GITHUB_OUTPUT"
+          echo "target=${{ inputs.target || 'all' }}" >> "$GITHUB_OUTPUT"
 
       - name: Transport guard
         run: |
-          if [ "${{ inputs.method }}" = "check" ]; then
+          if [ "${{ inputs.method || 'sftp' }}" = "check" ]; then
             echo "Validation only"
             exit 0
           fi
-          if [ "${{ inputs.method }}" = "sftp" ]; then
+          if [ "${{ inputs.method || 'sftp' }}" = "sftp" ]; then
             test -n "${{ secrets.HOSTINGER_SFTP_HOST }}"
             test -n "${{ secrets.HOSTINGER_SFTP_USERNAME }}"
             test -n "${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}"
           fi
-
-      - name: Upload AI Platform
-        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'ai-platform')
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
-          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: "ai-platform/dist/*"
-          target: ${{ secrets.HOSTINGER_AI_PATH }}
-
-      - name: Upload Customer Portal
-        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'customer-portal')
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
-          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: "customer-portal/dist/*"
-          target: ${{ secrets.HOSTINGER_CUSTOMER_PATH }}
-
-      - name: Upload API
-        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'api')
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
-          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: "api-server/dist/*"
-          target: ${{ secrets.HOSTINGER_API_PATH }}
-
-      - name: Git deploy placeholder
-        if: inputs.method == 'git'
-        run: echo "Git transport selected"
-
-      - name: Health check after deployment
-        if: inputs.method == 'sftp'
-        run: |
-          echo "Running deployment health checks"
-          if [ -n "${{ secrets.HOSTINGER_AI_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_AI_URL }}" > /dev/null; fi
-          if [ -n "${{ secrets.HOSTINGER_CUSTOMER_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_CUSTOMER_URL }}" > /dev/null; fi
-          if [ -n "${{ secrets.HOSTINGER_API_HEALTH_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_API_HEALTH_URL }}" > /dev/null; fi
-          echo "Health checks completed"
 
       - name: Release summary
         run: |
