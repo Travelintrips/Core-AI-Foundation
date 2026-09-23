@@ -1,0 +1,259 @@
+Lanjutkan implementasi Phase 7A-8 berdasarkan hasil audit tadi.
+
+KERJAKAN PERUBAHAN SOURCE SEKARANG. Jangan hanya audit.
+
+TARGET FLOW:
+
+Coding Task Detail
+    ↓
+RUN AGENT
+    ↓
+POST /api/ai/coding/tasks/:id/run
+    ↓
+backend INSERT ai_coding_runs
+    ↓
+task menjadi ANALYZING
+    ↓
+refresh task detail
+    ↓
+Agent runs menampilkan Repository Analyzer / RUNNING
+
+
+==================================================
+1. OPENAPI
+==================================================
+
+File:
+
+lib/api-spec/openapi.yaml
+
+Tambahkan endpoint:
+
+POST /ai/coding/tasks/{id}/run
+
+Gunakan path parameter `id` yang konsisten dengan endpoint coding task lain.
+
+Response harus mengikuti response backend aktual dari:
+
+artifacts/api-server/src/routes/coding-workspace.ts
+
+JANGAN mengubah route backend yang sudah bekerja hanya untuk menyesuaikan frontend.
+
+Pastikan schema OpenAPI menggambarkan response aktual.
+
+
+==================================================
+2. GENERATED API CLIENT
+==================================================
+
+Setelah OpenAPI diperbarui, regenerate API client menggunakan mekanisme generator project yang SUDAH ADA.
+
+JANGAN edit generated file secara manual jika generator tersedia.
+
+Target:
+
+lib/api-client-react/src/generated/api.ts
+
+Harus tersedia API function/hook untuk:
+
+POST /api/ai/coding/tasks/:id/run
+
+Nama yang disarankan:
+
+startCodingRun
+useStartCodingRun
+
+Jika generator menghasilkan nama lain, gunakan nama generated yang sebenarnya.
+
+
+==================================================
+3. FRONTEND
+==================================================
+
+File:
+
+artifacts/ai-platform/src/pages/coding-workspace.tsx
+
+Component:
+
+TaskDetailPanel
+
+Tambahkan mutation untuk endpoint `/run`.
+
+Tambahkan tombol:
+
+RUN AGENT
+
+atau gunakan locale:
+
+Run Agent
+
+Tombol ini TERPISAH dari:
+
+Save update
+
+Jangan mengganti fungsi update task yang sudah ada.
+
+
+==================================================
+4. BUTTON BEHAVIOR
+==================================================
+
+Saat user klik Run Agent:
+
+POST /api/ai/coding/tasks/{task.id}/run
+
+Saat request berjalan:
+
+- disable tombol
+- tampilkan state loading
+- cegah double click
+
+Saat sukses:
+
+- invalidate/refetch coding task detail
+- invalidate/refetch Agent Runs jika query terpisah
+- UI harus langsung menampilkan run baru
+
+Expected run:
+
+Agent:
+Repository Analyzer
+
+Status:
+RUNNING
+
+
+==================================================
+5. ERROR HANDLING
+==================================================
+
+Jika POST gagal:
+
+- jangan mengubah task secara manual menjadi ANALYZING
+- tampilkan error/toast
+- tombol kembali aktif
+
+Status ANALYZING harus berasal dari backend `/run`, bukan PATCH frontend.
+
+
+==================================================
+6. IDEMPOTENCY / DOUBLE CLICK
+==================================================
+
+Audit route:
+
+artifacts/api-server/src/routes/coding-workspace.ts
+
+Pastikan double click / repeated POST tidak membuat dua active run untuk task yang sama.
+
+Jika backend SUDAH mempunyai proteksi tersebut:
+jangan ubah.
+
+Jika belum:
+tambahkan guard minimal agar task yang sudah memiliki active run RUNNING tidak membuat duplicate active run.
+
+Jangan merusak historical completed/failed runs.
+
+
+==================================================
+7. LOCALE
+==================================================
+
+Tambahkan locale EN dan ID jika project menggunakan locale untuk button.
+
+EN:
+Run Agent
+Running Agent...
+
+ID:
+Jalankan Agen
+Menjalankan Agen...
+
+Ikuti struktur locale yang sudah ada.
+
+
+==================================================
+8. TEST
+==================================================
+
+Tambahkan/ubah test yang relevan.
+
+Wajib verifikasi:
+
+A.
+Klik Run Agent memanggil:
+
+POST /api/ai/coding/tasks/:id/run
+
+B.
+Tidak menggunakan PATCH untuk memulai agent.
+
+C.
+Response sukses menyebabkan detail/refetch diperbarui.
+
+D.
+Agent Runs menampilkan run baru.
+
+E.
+Double click tidak menghasilkan duplicate active run.
+
+F.
+Save update tetap berfungsi seperti sebelumnya.
+
+
+==================================================
+9. BUILD
+==================================================
+
+Jalankan:
+
+- typecheck
+- test terkait coding workspace
+- build
+
+Gunakan command yang memang didefinisikan project/package.json.
+
+Jangan mengarang command jika script project berbeda.
+
+
+==================================================
+10. JANGAN DEPLOY DULU
+==================================================
+
+Setelah semuanya PASS, berhenti sebelum deployment.
+
+Laporkan hanya hasil aktual:
+
+FILES CHANGED:
+...
+
+OPENAPI:
+PASS/FAIL
+
+GENERATED CLIENT:
+PASS/FAIL
+
+FRONTEND RUN AGENT:
+PASS/FAIL
+
+DUPLICATE-RUN PROTECTION:
+PASS/FAIL
+
+TEST:
+jumlah PASS/FAIL
+
+TYPECHECK:
+PASS/FAIL
+
+BUILD:
+PASS/FAIL
+
+GIT DIFF SUMMARY:
+...
+
+Jika ada error, perbaiki sampai PASS jika memungkinkan.
+
+Jangan hanya memberikan rencana.
+Jangan melakukan deployment.
+Jangan menyatakan PASS tanpa menjalankan command.
