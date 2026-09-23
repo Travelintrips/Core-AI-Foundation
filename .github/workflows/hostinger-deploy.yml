@@ -43,6 +43,13 @@ jobs:
           echo "Target: ${{ inputs.target }}"
           find . -maxdepth 3 -type d | sort
 
+      - name: Deployment metadata
+        id: release
+        run: |
+          echo "commit_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "deploy_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "target=${{ inputs.target }}" >> "$GITHUB_OUTPUT"
+
       - name: Transport guard
         run: |
           if [ "${{ inputs.method }}" = "check" ]; then
@@ -97,3 +104,10 @@ jobs:
           if [ -n "${{ secrets.HOSTINGER_CUSTOMER_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_CUSTOMER_URL }}" > /dev/null; fi
           if [ -n "${{ secrets.HOSTINGER_API_HEALTH_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_API_HEALTH_URL }}" > /dev/null; fi
           echo "Health checks completed"
+
+      - name: Release summary
+        run: |
+          echo "Deployment release"
+          echo "Commit: ${{ steps.release.outputs.commit_sha }}"
+          echo "Target: ${{ steps.release.outputs.target }}"
+          echo "Time: ${{ steps.release.outputs.deploy_time }}"
