@@ -1,0 +1,170 @@
+Project:
+Travelintrips/Core-AI-Foundation
+
+Task:
+Implement AI Coding Workspace Foundation (Phase 1)
+
+Objective:
+Create the first foundation layer for AI Core to manage coding tasks, agent execution tracking, and future GitHub automation.
+
+Do not redesign existing architecture.
+Follow existing project patterns and conventions.
+
+Scope:
+
+1. Database Schema
+
+Create new database tables:
+
+A. ai_coding_tasks
+
+Fields:
+- id (uuid primary key)
+- task_number (unique)
+- project_name
+- repository
+- branch
+- instruction (text)
+- status
+- priority
+- result_summary
+- commit_sha
+- created_at
+- updated_at
+
+
+Status enum:
+
+PENDING
+ANALYZING
+CODING
+TESTING
+COMMITTING
+PR_CREATED
+READY_REVIEW
+COMPLETED
+FAILED
+
+
+B. ai_coding_runs
+
+Fields:
+- id
+- task_id
+- agent_name
+- status
+- started_at
+- finished_at
+- logs
+- error_message
+
+
+C. ai_code_changes
+
+Fields:
+- id
+- task_id
+- file_path
+- change_type
+- commit_sha
+- created_at
+
+
+2. Backend API
+
+Create coding task module following existing API structure.
+
+Endpoints:
+
+POST /api/ai/coding/tasks
+
+Create new coding task.
+
+
+GET /api/ai/coding/tasks
+
+List coding tasks.
+
+
+GET /api/ai/coding/tasks/:id
+
+Get task detail including runs and changes.
+
+
+PATCH /api/ai/coding/tasks/:id
+
+Update task status.
+
+
+3. Frontend AI Platform
+
+Add new menu:
+
+AI Coding Workspace
+
+
+Create pages:
+
+/coding-workspace
+
+
+Features:
+
+- Show task list
+- Show task status badge
+- Show project
+- Show repository
+- Show branch
+- Show created date
+
+
+Create task form:
+
+Fields:
+- Project
+- Repository
+- Branch
+- Instruction
+- Priority
+
+
+4. Security
+
+Important:
+
+This phase is ONLY task management.
+
+Do NOT:
+- modify production data
+- create GitHub commit automation
+- deploy anything
+- modify existing AI agents
+- change authentication flow
+
+
+5. Testing
+
+Run:
+
+pnpm typecheck
+pnpm test
+pnpm build
+
+
+Fix all errors before commit.
+
+
+6. Git
+
+Create commit:
+
+feat: add ai coding workspace foundation
+
+
+Commit to develop branch.
+
+Return:
+
+- commit SHA
+- changed files
+- test result
