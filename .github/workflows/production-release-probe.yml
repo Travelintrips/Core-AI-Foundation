@@ -39,6 +39,10 @@ jobs:
           root_rc=$?
           echo "root_rc=$root_rc root_code=$root_code"
           echo "expected_asset=$EXPECTED_ASSET"
+          echo "production_js_assets:"
+          grep -oE '(/[^"[:space:]]*assets/[^"[:space:]]+\.js)' /tmp/root 2>/dev/null | sort -u || true
+          echo "production_css_assets:"
+          grep -oE '(/[^"[:space:]]*assets/[^"[:space:]]+\.css)' /tmp/root 2>/dev/null | sort -u || true
           if grep -q "$EXPECTED_ASSET" /tmp/root 2>/dev/null; then
             echo "release_fingerprint=match"
           else
