@@ -51,10 +51,27 @@ const runtimeHome =
   path.join(os.homedir(), ".cache", "core-ai", "zerollm");
 const venvDir = path.join(runtimeHome, "venv");
 const marker = path.join(runtimeHome, "requirements.sha256");
+const statusFile = path.join(runtimeHome, "status.json");
 const venvPython = path.join(
   venvDir,
   process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
 );
+
+function writeStatus(status) {
+  fs.mkdirSync(runtimeHome, { recursive: true });
+  fs.writeFileSync(
+    statusFile,
+    JSON.stringify(
+      {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        ...status,
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+}
 
 if (!fs.existsSync(requirements)) {
   throw new Error("ZeroLLM requirements file not found: " + requirements);
@@ -66,6 +83,16 @@ const requirementHash = crypto
   .digest("hex");
 
 if (!installEnabled) {
+  writeStatus({
+    state: "SKIPPED",
+    installEnabled: false,
+    installed: false,
+    pythonAvailable: false,
+    importOk: false,
+    requirementsHash: requirementHash,
+    requirementsHashShort: requirementHash.slice(0, 12),
+    modelPreloaded: false,
+  });
   console.log(
     "[zerollm-bootstrap] install skipped (ZEROLLM_INSTALL_ENABLED=false, requirements=" +
       requirementHash.slice(0, 12) +
@@ -80,6 +107,16 @@ if (!python) {
     String(process.env.ZEROLLM_REQUIRED || "").toLowerCase() === "true" ||
     String(process.env.AI_CODING_PROVIDER || "").toLowerCase() === "zerollm";
   const message = "Python >=3.10 is required for ZeroLLM but was not found on PATH.";
+  writeStatus({
+    state: "PYTHON_UNAVAILABLE",
+    installEnabled: true,
+    installed: false,
+    pythonAvailable: false,
+    importOk: false,
+    requirementsHash: requirementHash,
+    requirementsHashShort: requirementHash.slice(0, 12),
+    modelPreloaded: false,
+  });
   if (required) throw new Error(message);
   console.warn("[zerollm-bootstrap] WARNING: " + message + " Skipping optional local runtime.");
   process.exit(0);
@@ -99,6 +136,18 @@ if (markerMatches) {
     { stdio: "ignore" },
   );
   if ((importCheck.status ?? 1) === 0) {
+    writeStatus({
+      state: "INSTALLED",
+      installEnabled: true,
+      installed: true,
+      pythonAvailable: true,
+      pythonVersion: python.version,
+      importOk: true,
+      requirementsHash: requirementHash,
+      requirementsHashShort: requirementHash.slice(0, 12),
+      cached: true,
+      modelPreloaded: null,
+    });
     console.log(
       "[zerollm-bootstrap] dependency cache valid (" +
         requirementHash.slice(0, 12) +
@@ -123,7 +172,39 @@ run(venvPython, [
   requirements,
 ]);
 
+const finalImportCheck = spawnSync(
+  venvPython,
+  ["-c", "import zerollm; print('zerollm-ok')"],
+  { stdio: "ignore" },
+);
+if ((finalImportCheck.status ?? 1) !== 0) {
+  writeStatus({
+    state: "IMPORT_FAILED",
+    installEnabled: true,
+    installed: false,
+    pythonAvailable: true,
+    pythonVersion: python.version,
+    importOk: false,
+    requirementsHash: requirementHash,
+    requirementsHashShort: requirementHash.slice(0, 12),
+    modelPreloaded: false,
+  });
+  throw new Error("zerollm import check failed after installation");
+}
+
 fs.writeFileSync(marker, requirementHash + "\n");
+writeStatus({
+  state: "INSTALLED",
+  installEnabled: true,
+  installed: true,
+  pythonAvailable: true,
+  pythonVersion: python.version,
+  importOk: true,
+  requirementsHash: requirementHash,
+  requirementsHashShort: requirementHash.slice(0, 12),
+  cached: false,
+  modelPreloaded: false,
+});
 console.log("[zerollm-bootstrap] installed zerollm-kit into " + venvDir);
 
 const explicitProvider =
@@ -143,5 +224,18 @@ if (enabled && preload) {
   console.log("[zerollm-bootstrap] pre-downloading model " + model);
   run(venvPython, ["-m", "zerollm", "download", model], {
     env: { ...process.env, HF_HUB_DISABLE_TELEMETRY: "1" },
+  });
+  writeStatus({
+    state: "INSTALLED",
+    installEnabled: true,
+    installed: true,
+    pythonAvailable: true,
+    pythonVersion: python.version,
+    importOk: true,
+    requirementsHash: requirementHash,
+    requirementsHashShort: requirementHash.slice(0, 12),
+    cached: false,
+    modelPreloaded: true,
+    model: model,
   });
 }

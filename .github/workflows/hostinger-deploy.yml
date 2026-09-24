@@ -81,6 +81,19 @@ jobs:
           test "$code" = "200"
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/tasks-auth","utf8")); if(!Array.isArray(v)) throw new Error("Expected coding tasks array"); console.log("coding_tasks_authenticated_payload=array");'
 
+      - name: Inspect ZeroLLM host readiness
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          curl --fail --silent --show-error \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/coding/zerollm/readiness" > /tmp/zerollm-readiness
+          cat /tmp/zerollm-readiness
+          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/zerollm-readiness","utf8")); if(v.provider!=="zerollm"||v.loopbackOnly!==true) throw new Error("Invalid ZeroLLM readiness payload");'
+
       - name: Verify public sitemap for Googlebot
         shell: bash
         run: |
