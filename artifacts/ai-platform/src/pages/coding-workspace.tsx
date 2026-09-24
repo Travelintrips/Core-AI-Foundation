@@ -142,6 +142,105 @@ type CodingAgentUiResult = {
   };
 };
 
+type TestAgentUiResult = {
+  testOutcome?: string;
+  nextAction?: string;
+  report?: {
+    checks: Array<{
+      name?: string;
+      status?: string;
+      detail?: string;
+    }>;
+    commandsRun: string[];
+    proposedCommands: string[];
+  };
+};
+
+type ReviewAgentUiResult = {
+  decision?: string;
+  summary?: string;
+  issues: string[];
+  recommendations: string[];
+  testOutcome?: string;
+  nextAction?: string;
+  commitCreated?: boolean;
+  pushed?: boolean;
+  model?: {
+    provider?: string;
+    modelUsed?: string;
+    totalTokens?: number;
+  };
+};
+
+function parseTestAgentResult(logs?: string | null): TestAgentUiResult | null {
+  if (!logs) return null;
+  try {
+    const value = JSON.parse(logs) as Record<string, unknown>;
+    const reportValue =
+      value.report && typeof value.report === "object" && !Array.isArray(value.report)
+        ? value.report as Record<string, unknown>
+        : null;
+    const checks = reportValue && Array.isArray(reportValue.checks)
+      ? reportValue.checks.filter(
+          (item): item is { name?: string; status?: string; detail?: string } =>
+            Boolean(item) && typeof item === "object",
+        )
+      : [];
+    const stringList = (input: unknown) =>
+      Array.isArray(input)
+        ? input.filter((item): item is string => typeof item === "string")
+        : [];
+    return {
+      testOutcome: typeof value.testOutcome === "string" ? value.testOutcome : undefined,
+      nextAction: typeof value.nextAction === "string" ? value.nextAction : undefined,
+      report: reportValue
+        ? {
+            checks,
+            commandsRun: stringList(reportValue.commandsRun),
+            proposedCommands: stringList(reportValue.proposedCommands),
+          }
+        : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseReviewAgentResult(logs?: string | null): ReviewAgentUiResult | null {
+  if (!logs) return null;
+  try {
+    const value = JSON.parse(logs) as Record<string, unknown>;
+    const modelValue =
+      value.model && typeof value.model === "object" && !Array.isArray(value.model)
+        ? value.model as Record<string, unknown>
+        : null;
+    const stringList = (input: unknown) =>
+      Array.isArray(input)
+        ? input.filter((item): item is string => typeof item === "string")
+        : [];
+    return {
+      decision: typeof value.decision === "string" ? value.decision : undefined,
+      summary: typeof value.summary === "string" ? value.summary : undefined,
+      issues: stringList(value.issues),
+      recommendations: stringList(value.recommendations),
+      testOutcome: typeof value.testOutcome === "string" ? value.testOutcome : undefined,
+      nextAction: typeof value.nextAction === "string" ? value.nextAction : undefined,
+      commitCreated: value.commitCreated === true,
+      pushed: value.pushed === true,
+      model: modelValue
+        ? {
+            provider: typeof modelValue.provider === "string" ? modelValue.provider : undefined,
+            modelUsed: typeof modelValue.modelUsed === "string" ? modelValue.modelUsed : undefined,
+            totalTokens: typeof modelValue.totalTokens === "number" ? modelValue.totalTokens : undefined,
+          }
+        : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 function parseCodingAgentResult(logs?: string | null): CodingAgentUiResult | null {
   if (!logs) return null;
   try {
@@ -409,6 +508,14 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     (run) => run.agentName === "Coding Agent" && Boolean(run.logs),
   );
   const codingResult = parseCodingAgentResult(latestCodingAgentRun?.logs);
+  const latestTestAgentRun = detail.runs.find(
+    (run) => run.agentName === "Test Agent" && Boolean(run.logs),
+  );
+  const testResult = parseTestAgentResult(latestTestAgentRun?.logs);
+  const latestReviewAgentRun = detail.runs.find(
+    (run) => run.agentName === "Review Agent" && Boolean(run.logs),
+  );
+  const reviewResult = parseReviewAgentResult(latestReviewAgentRun?.logs);
   const displayedResultSummary = analyzerResult?.summary ?? task.resultSummary;
   const canApprovePlan =
     task.status === CodingTaskStatus.READY_REVIEW &&
@@ -705,6 +812,111 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                 )}
               </div>
             )}
+          </section>
+        )}
+        {(latestTestAgentRun || testResult || latestReviewAgentRun || reviewResult) && (
+          <section className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.025] p-4" data-testid="panel-coding-test-review">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Test & Review
+              </div>
+              {reviewResult?.nextAction && (
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
+                  Next: {reviewResult.nextAction}
+                </span>
+              )}
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid="panel-coding-test-agent">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-slate-200">Test Agent</div>
+                  <span className={cn(
+                    "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                    testResult?.testOutcome === "PASSED"
+                      ? "bg-emerald-300/10 text-emerald-300"
+                      : testResult?.testOutcome === "FAILED"
+                        ? "bg-rose-300/10 text-rose-300"
+                        : "bg-amber-300/10 text-amber-300",
+                  )}>
+                    {testResult?.testOutcome ?? latestTestAgentRun?.status ?? "PENDING"}
+                  </span>
+                </div>
+                {testResult?.report?.checks && testResult.report.checks.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {testResult.report.checks.map((check, index) => (
+                      <div key={`${check.name ?? "check"}-${index}`} className="rounded border border-white/[0.05] px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-mono text-[10px] text-slate-400">{check.name ?? "verification"}</span>
+                          <span className={cn(
+                            "text-[9px] font-semibold uppercase tracking-wider",
+                            check.status === "PASSED" ? "text-emerald-300" : "text-rose-300",
+                          )}>
+                            {check.status ?? "UNKNOWN"}
+                          </span>
+                        </div>
+                        {check.detail && <p className="mt-1 text-[10px] leading-4 text-slate-600">{check.detail}</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-600">Deterministic verification is pending.</p>
+                )}
+                {testResult?.report?.proposedCommands && testResult.report.proposedCommands.length > 0 && (
+                  <div className="mt-3 border-t border-white/[0.05] pt-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-slate-600">Agent-suggested commands (not blindly executed)</div>
+                    {testResult.report.proposedCommands.map((command, index) => (
+                      <div key={`${command}-${index}`} className="font-mono text-[10px] text-slate-500">{command}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid="panel-coding-review-agent">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-slate-200">Review Agent</div>
+                  <span className={cn(
+                    "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                    reviewResult?.decision === "APPROVE_FOR_COMMIT"
+                      ? "bg-emerald-300/10 text-emerald-300"
+                      : reviewResult?.decision === "REVISE_CHANGES"
+                        ? "bg-amber-300/10 text-amber-300"
+                        : "bg-slate-300/10 text-slate-400",
+                  )}>
+                    {reviewResult?.decision ?? latestReviewAgentRun?.status ?? "PENDING"}
+                  </span>
+                </div>
+                {reviewResult?.summary && <p className="text-[11px] leading-5 text-slate-400">{reviewResult.summary}</p>}
+                {reviewResult?.issues && reviewResult.issues.length > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-rose-300">Issues</div>
+                    <ul className="space-y-1 text-[10px] leading-4 text-slate-500">
+                      {reviewResult.issues.map((issue, index) => <li key={`${issue}-${index}`}>• {issue}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {reviewResult?.recommendations && reviewResult.recommendations.length > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-cyan-300">Recommendations</div>
+                    <ul className="space-y-1 text-[10px] leading-4 text-slate-500">
+                      {reviewResult.recommendations.map((item, index) => <li key={`${item}-${index}`}>• {item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {reviewResult && (
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.05] pt-2 text-[9px] uppercase tracking-wider text-slate-600">
+                    <span>Commit: {reviewResult.commitCreated ? "yes" : "no"}</span>
+                    <span>·</span>
+                    <span>Push: {reviewResult.pushed ? "yes" : "no"}</span>
+                    {reviewResult.model?.modelUsed && (
+                      <>
+                        <span>·</span>
+                        <span>{reviewResult.model.provider ?? "provider"} / {reviewResult.model.modelUsed}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         )}
         <div className="grid gap-5 xl:grid-cols-2">
