@@ -43,6 +43,7 @@ import {
 import {
   approveAiHandoff,
   LocalAiHandoffError,
+  revokeAiHandoff,
   startAiHandoffPreparation,
 } from "../services/localCodingAiHandoffService.js";
 
@@ -349,6 +350,38 @@ router.post("/ai/coding/tasks/:id/approve-ai-handoff", async (req, res): Promise
         return;
       }
       if (error.kind === "NOT_READY" || error.kind === "STALE_HEAD") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      res.status(422).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/revoke-ai-handoff", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await revokeAiHandoff(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof LocalAiHandoffError) {
+      if (error.kind === "NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (
+        error.kind === "NOT_READY" ||
+        error.kind === "STALE_HEAD" ||
+        error.kind === "EXPIRED" ||
+        error.kind === "REVOKED"
+      ) {
         res.status(409).json({ error: error.message });
         return;
       }

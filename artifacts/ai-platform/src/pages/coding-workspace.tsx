@@ -214,6 +214,8 @@ type RepositoryAnalyzerUiResult = {
     packageHash?: string;
     preparedAt?: string;
     approvedAt?: string | null;
+    expiresAt?: string | null;
+    revokedAt?: string | null;
     modelInvoked?: boolean;
     package?: {
       allowedFiles: string[];
@@ -846,6 +848,12 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
               approvedAt: typeof aiHandoffValue.approvedAt === "string" || aiHandoffValue.approvedAt === null
                 ? aiHandoffValue.approvedAt as string | null
                 : undefined,
+              expiresAt: typeof aiHandoffValue.expiresAt === "string" || aiHandoffValue.expiresAt === null
+                ? aiHandoffValue.expiresAt as string | null
+                : undefined,
+              revokedAt: typeof aiHandoffValue.revokedAt === "string" || aiHandoffValue.revokedAt === null
+                ? aiHandoffValue.revokedAt as string | null
+                : undefined,
               modelInvoked: aiHandoffValue.modelInvoked === true,
               package: packageValue
                 ? {
@@ -1153,6 +1161,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [recoveryPending, setRecoveryPending] = useState(false);
   const [handoffPreparePending, setHandoffPreparePending] = useState(false);
   const [handoffApprovePending, setHandoffApprovePending] = useState(false);
+  const [handoffRevokePending, setHandoffRevokePending] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
   const [prVerifyPending, setPrVerifyPending] = useState(false);
   const [mergePending, setMergePending] = useState(false);
@@ -1227,6 +1236,15 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     analyzerResult?.aiHandoff?.status === "PREPARED" &&
     analyzerResult.aiHandoff.gateStatus === "AWAITING_EXPLICIT_APPROVAL" &&
     analyzerResult.aiHandoff.modelInvoked !== true &&
+    !hasActiveRun;
+  const canRevokeAiHandoff =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    Boolean(analyzerResult?.aiHandoff) &&
+    ["PREPARED", "APPROVED"].includes(analyzerResult?.aiHandoff?.status ?? "") &&
+    ["APPROVE_AI_HANDOFF", "AI_HANDOFF_APPROVED"].includes(
+      analyzerResult?.orchestration?.nextAction ?? "",
+    ) &&
+    analyzerResult?.aiHandoff?.modelInvoked !== true &&
     !hasActiveRun;
   const canApproveCommit =
     task.status === CodingTaskStatus.READY_REVIEW &&
@@ -1444,6 +1462,36 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       });
     } finally {
       setHandoffApprovePending(false);
+    }
+  };
+
+  const revokeAiHandoff = async () => {
+    setHandoffRevokePending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/revoke-ai-handoff`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "AI handoff revoked",
+        description: "The approved/prepared package is locked again. No model was invoked.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not revoke AI handoff",
+        description: error instanceof Error ? error.message : "AI handoff revocation failed",
+        variant: "destructive",
+      });
+    } finally {
+      setHandoffRevokePending(false);
     }
   };
 
@@ -2024,6 +2072,22 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                       <div className="mt-1 break-all font-mono text-[9px] text-slate-400">{analyzerResult.aiHandoff.packageHash}</div>
                                     </div>
                                   )}
+                                  {analyzerResult.aiHandoff.expiresAt && (
+                                    <div className="mt-2">
+                                      <div className="text-[9px] uppercase text-slate-600">Approval lease expires</div>
+                                      <div className="mt-1 font-mono text-[10px] text-amber-300">
+                                        {new Date(analyzerResult.aiHandoff.expiresAt).toLocaleString()}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {analyzerResult.aiHandoff.revokedAt && (
+                                    <div className="mt-2">
+                                      <div className="text-[9px] uppercase text-slate-600">Revoked</div>
+                                      <div className="mt-1 font-mono text-[10px] text-rose-300">
+                                        {new Date(analyzerResult.aiHandoff.revokedAt).toLocaleString()}
+                                      </div>
+                                    </div>
+                                  )}
                                   {analyzerResult.aiHandoff.package?.allowedFiles.length ? (
                                     <div className="mt-2 flex flex-wrap gap-1.5">
                                       {analyzerResult.aiHandoff.package.allowedFiles.map((file) => (
@@ -2034,20 +2098,37 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                   <p className="mt-2 text-[10px] leading-4 text-slate-500">
                                     Read-only package · repository/network/shell/secrets/source writes disabled · explicit approval required before any future model execution.
                                   </p>
-                                  {canApproveAiHandoff && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={approveAiHandoff}
-                                      disabled={handoffApprovePending}
-                                      className="mt-3 h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
-                                      data-testid="button-approve-ai-handoff"
-                                    >
-                                      {handoffApprovePending
-                                        ? <><Loader2 className="size-3 animate-spin" />Approving handoff</>
-                                        : <><CheckCircle2 className="size-3" />Approve AI Handoff</>}
-                                    </Button>
-                                  )}
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {canApproveAiHandoff && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={approveAiHandoff}
+                                        disabled={handoffApprovePending}
+                                        className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
+                                        data-testid="button-approve-ai-handoff"
+                                      >
+                                        {handoffApprovePending
+                                          ? <><Loader2 className="size-3 animate-spin" />Approving handoff</>
+                                          : <><CheckCircle2 className="size-3" />Approve AI Handoff</>}
+                                      </Button>
+                                    )}
+                                    {canRevokeAiHandoff && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={revokeAiHandoff}
+                                        disabled={handoffRevokePending}
+                                        className="h-7 border-rose-300/20 bg-transparent px-2.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-300/10 hover:text-rose-200"
+                                        data-testid="button-revoke-ai-handoff"
+                                      >
+                                        {handoffRevokePending
+                                          ? <><Loader2 className="size-3 animate-spin" />Revoking</>
+                                          : <><RotateCcw className="size-3" />Revoke Handoff</>}
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                               {analyzerResult.failureRecoveryContext.warnings.length > 0 && (

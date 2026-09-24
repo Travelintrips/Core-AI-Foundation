@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAiHandoffPackage,
+  computeAiHandoffExpiresAt,
+  isAiHandoffLeaseFresh,
+  resolveAiHandoffTtlSeconds,
   type AiHandoffSnippet,
 } from "../localCodingAiHandoffService.js";
 import type { LocalFailureContext } from "../localCodingFailureDiagnosticService.js";
@@ -211,5 +214,36 @@ describe("Local Coding AI Handoff Package", () => {
 
     expect(pkg.diagnostics[0]?.file).toBeUndefined();
     expect(JSON.stringify(pkg)).not.toContain('".env"');
+  });
+});
+
+
+describe("Local Coding AI Handoff Lease", () => {
+  it("defaults to a short lease and clamps operator configuration", () => {
+    expect(resolveAiHandoffTtlSeconds("")).toBe(900);
+    expect(resolveAiHandoffTtlSeconds("10")).toBe(60);
+    expect(resolveAiHandoffTtlSeconds("120")).toBe(120);
+    expect(resolveAiHandoffTtlSeconds("99999")).toBe(3600);
+    expect(resolveAiHandoffTtlSeconds("not-a-number")).toBe(900);
+  });
+
+  it("computes deterministic expiry and rejects expired leases", () => {
+    const approvedAt = new Date("2026-09-24T12:00:00.000Z");
+    const expiresAt = computeAiHandoffExpiresAt(approvedAt, 120);
+
+    expect(expiresAt).toBe("2026-09-24T12:02:00.000Z");
+    expect(
+      isAiHandoffLeaseFresh(
+        expiresAt,
+        new Date("2026-09-24T12:01:59.999Z"),
+      ),
+    ).toBe(true);
+    expect(
+      isAiHandoffLeaseFresh(
+        expiresAt,
+        new Date("2026-09-24T12:02:00.000Z"),
+      ),
+    ).toBe(false);
+    expect(isAiHandoffLeaseFresh("invalid")).toBe(false);
   });
 });

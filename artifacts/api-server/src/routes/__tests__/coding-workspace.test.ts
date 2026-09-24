@@ -16,6 +16,7 @@ const mockStartSandboxVerification = vi.hoisted(() => vi.fn());
 const mockStartDeterministicLocalRecovery = vi.hoisted(() => vi.fn());
 const mockStartAiHandoffPreparation = vi.hoisted(() => vi.fn());
 const mockApproveAiHandoff = vi.hoisted(() => vi.fn());
+const mockRevokeAiHandoff = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
 const mockApproveAndMergePullRequest = vi.hoisted(() => vi.fn());
@@ -63,7 +64,9 @@ const MockLocalAiHandoffError = vi.hoisted(() => class extends Error {
       | "NOT_READY"
       | "STALE_HEAD"
       | "INVALID_CONTEXT"
-      | "APPROVAL_FAILED",
+      | "APPROVAL_FAILED"
+      | "EXPIRED"
+      | "REVOKED",
   ) {
     super(message);
   }
@@ -181,6 +184,7 @@ vi.mock("../../services/localCodingDeterministicRecoveryService.js", () => ({
 vi.mock("../../services/localCodingAiHandoffService.js", () => ({
   startAiHandoffPreparation: mockStartAiHandoffPreparation,
   approveAiHandoff: mockApproveAiHandoff,
+  revokeAiHandoff: mockRevokeAiHandoff,
   LocalAiHandoffError: MockLocalAiHandoffError,
 }));
 
@@ -598,6 +602,12 @@ describe("AI coding workspace AI handoff gates", () => {
       status: "COMPLETED",
       finishedAt: new Date("2026-01-01T00:03:00.000Z"),
     });
+    mockRevokeAiHandoff.mockResolvedValue({
+      ...run,
+      agentName: "AI Handoff Revocation",
+      status: "COMPLETED",
+      finishedAt: new Date("2026-01-01T00:04:00.000Z"),
+    });
   });
 
   it("prepares bounded AI handoff only from AI_REQUIRED", async () => {
@@ -655,6 +665,36 @@ describe("AI coding workspace AI handoff gates", () => {
 
     const response = await request(app).post(
       `/ai/coding/tasks/${taskId}/approve-ai-handoff`,
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  it("revokes a prepared or approved handoff explicitly", async () => {
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/revoke-ai-handoff`,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "AI Handoff Revocation",
+      status: "COMPLETED",
+    });
+    expect(mockRevokeAiHandoff).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when handoff revocation is not allowed", async () => {
+    mockRevokeAiHandoff.mockRejectedValueOnce(
+      new MockLocalAiHandoffError(
+        "AI handoff is not revocable in its current state",
+        "NOT_READY",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/revoke-ai-handoff`,
     );
 
     expect(response.status).toBe(409);
