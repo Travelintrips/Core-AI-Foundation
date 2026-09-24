@@ -191,7 +191,7 @@ describe("Coding Orchestrator", () => {
       }),
       expect.objectContaining({
         status: "READY_REVIEW",
-        resultSummary: expect.stringContaining("no AI/LLM was invoked"),
+        resultSummary: expect.stringContaining("No AI/LLM was invoked"),
       }),
     ]));
 
