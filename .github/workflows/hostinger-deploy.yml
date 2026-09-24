@@ -22,6 +22,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
@@ -61,8 +62,24 @@ jobs:
           echo "coding_tasks_unauthenticated_http=$code"
           test "$code" = "401"
 
+      - name: Verify authenticated Coding Workspace
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          code=$(curl -L -sS -o /tmp/tasks-auth -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/coding/tasks")
+          echo "coding_tasks_authenticated_http=$code"
+          test "$code" = "200"
+          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/tasks-auth","utf8")); if(!Array.isArray(v)) throw new Error("Expected coding tasks array"); console.log("coding_tasks_authenticated_payload=array");'
+
       - name: Verification summary
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
           echo "Health/readiness: PASS"
           echo "Admin auth guard: PASS"
+          echo "Authenticated Coding Workspace smoke: PASS"
