@@ -186,6 +186,28 @@ type RepositoryAnalyzerUiResult = {
     };
     warnings: string[];
   };
+  localRecovery?: {
+    status?: string;
+    reason?: string;
+    attempts: Array<{
+      attempt?: number;
+      planStatus?: string;
+      operations?: number;
+      strategies: string[];
+      sandboxStatus?: string;
+      changedFiles: string[];
+      reason?: string;
+    }>;
+    originalPatchSha256?: string;
+    recoveredPatchSha256?: string;
+    baseHeadSha?: string;
+    changedFiles: string[];
+    sandboxVerification?: string;
+    aiInvoked?: boolean;
+    commitCreated?: boolean;
+    pushed?: boolean;
+    completedAt?: string;
+  };
   localCommitApproval?: {
     status?: string;
     branch?: string;
@@ -502,6 +524,10 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.failureRecoveryContext && typeof value.failureRecoveryContext === "object" && !Array.isArray(value.failureRecoveryContext)
         ? (value.failureRecoveryContext as Record<string, unknown>)
         : null;
+    const localRecoveryValue =
+      value.localRecovery && typeof value.localRecovery === "object" && !Array.isArray(value.localRecovery)
+        ? (value.localRecovery as Record<string, unknown>)
+        : null;
     const localCommitApprovalValue =
       value.localCommitApproval && typeof value.localCommitApproval === "object" && !Array.isArray(value.localCommitApproval)
         ? (value.localCommitApproval as Record<string, unknown>)
@@ -723,6 +749,34 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
                   }
                 : undefined,
             warnings: stringList(failureRecoveryContextValue.warnings),
+          }
+        : undefined,
+      localRecovery: localRecoveryValue
+        ? {
+            status: typeof localRecoveryValue.status === "string" ? localRecoveryValue.status : undefined,
+            reason: typeof localRecoveryValue.reason === "string" ? localRecoveryValue.reason : undefined,
+            attempts: Array.isArray(localRecoveryValue.attempts)
+              ? localRecoveryValue.attempts
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    attempt: typeof item.attempt === "number" ? item.attempt : undefined,
+                    planStatus: typeof item.planStatus === "string" ? item.planStatus : undefined,
+                    operations: typeof item.operations === "number" ? item.operations : undefined,
+                    strategies: stringList(item.strategies),
+                    sandboxStatus: typeof item.sandboxStatus === "string" ? item.sandboxStatus : undefined,
+                    changedFiles: stringList(item.changedFiles),
+                    reason: typeof item.reason === "string" ? item.reason : undefined,
+                  }))
+              : [],
+            originalPatchSha256: typeof localRecoveryValue.originalPatchSha256 === "string" ? localRecoveryValue.originalPatchSha256 : undefined,
+            recoveredPatchSha256: typeof localRecoveryValue.recoveredPatchSha256 === "string" ? localRecoveryValue.recoveredPatchSha256 : undefined,
+            baseHeadSha: typeof localRecoveryValue.baseHeadSha === "string" ? localRecoveryValue.baseHeadSha : undefined,
+            changedFiles: stringList(localRecoveryValue.changedFiles),
+            sandboxVerification: typeof localRecoveryValue.sandboxVerification === "string" ? localRecoveryValue.sandboxVerification : undefined,
+            aiInvoked: localRecoveryValue.aiInvoked === true,
+            commitCreated: localRecoveryValue.commitCreated === true,
+            pushed: localRecoveryValue.pushed === true,
+            completedAt: typeof localRecoveryValue.completedAt === "string" ? localRecoveryValue.completedAt : undefined,
           }
         : undefined,
       localCommitApproval: localCommitApprovalValue
@@ -980,6 +1034,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [approvePending, setApprovePending] = useState(false);
   const [localPatchPending, setLocalPatchPending] = useState(false);
   const [sandboxPending, setSandboxPending] = useState(false);
+  const [recoveryPending, setRecoveryPending] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
   const [prVerifyPending, setPrVerifyPending] = useState(false);
   const [mergePending, setMergePending] = useState(false);
@@ -1035,6 +1090,12 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     analyzerResult?.localPatchApproval?.gateStatus === "PATCH_VALIDATED" &&
     analyzerResult.localPatchApproval.commitCreated !== true &&
     analyzerResult.localPatchApproval.pushed !== true &&
+    !hasActiveRun;
+  const canRunLocalRecovery =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    analyzerResult?.orchestration?.nextAction === "LOCAL_RECOVERY_REQUIRED" &&
+    analyzerResult?.failureRecoveryContext?.nextAction === "LOCAL_RECOVERY_REQUIRED" &&
+    analyzerResult?.sandboxVerification?.status === "FAILED" &&
     !hasActiveRun;
   const canApproveCommit =
     task.status === CodingTaskStatus.READY_REVIEW &&
@@ -1162,6 +1223,36 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       });
     } finally {
       setSandboxPending(false);
+    }
+  };
+
+  const runLocalRecovery = async () => {
+    setRecoveryPending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/run-local-recovery`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "Deterministic recovery started",
+        description: "Compiler-backed recovery is running in an isolated clone. It will return a new review-only patch or stop at AI_REQUIRED.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not start deterministic recovery",
+        description: error instanceof Error ? error.message : "Local recovery failed",
+        variant: "destructive",
+      });
+    } finally {
+      setRecoveryPending(false);
     }
   };
 
@@ -1472,17 +1563,8 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-300">Local Patch Approved & Revalidated</div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
-                            Next: {analyzerResult.localMergeApproval?.status === "MERGED"
-                              ? "DONE"
-                              : analyzerResult.failureRecoveryContext?.nextAction === "LOCAL_RECOVERY_REQUIRED"
-                                ? "LOCAL_RECOVERY_REQUIRED"
-                                : analyzerResult.localCommitApproval?.status === "PUBLISHED"
-                                ? analyzerResult.prVerification?.status === "PASSED"
-                                  ? "APPROVE_MERGE"
-                                  : "REVIEW_PR"
-                                : analyzerResult.sandboxVerification?.status === "PASSED"
-                                  ? "APPROVE_COMMIT"
-                                  : "RUN_SANDBOX_VERIFICATION"}
+                            Next: {analyzerResult.orchestration?.nextAction
+                              ?? (analyzerResult.localMergeApproval?.status === "MERGED" ? "DONE" : "REVIEW")}
                           </span>
                           {canRunSandboxVerification && (
                             <Button
@@ -1636,6 +1718,68 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                       <span className="text-cyan-300">{symbol.name ?? symbol.kind ?? "symbol"}</span>
                                     </div>
                                   ))}
+                                </div>
+                              )}
+                              {canRunLocalRecovery && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={runLocalRecovery}
+                                  disabled={recoveryPending}
+                                  className="mt-3 h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
+                                  data-testid="button-run-local-recovery"
+                                >
+                                  {recoveryPending
+                                    ? <><Loader2 className="size-3 animate-spin" />Recovering</>
+                                    : <><RotateCcw className="size-3" />Run Deterministic Recovery</>}
+                                </Button>
+                              )}
+                              {analyzerResult.localRecovery && (
+                                <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-local-recovery-result">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="text-[9px] uppercase tracking-wider text-slate-600">Local recovery executor</div>
+                                    <span className={cn(
+                                      "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                                      analyzerResult.localRecovery.status === "RECOVERY_PATCH_READY"
+                                        ? "bg-emerald-300/10 text-emerald-300"
+                                        : analyzerResult.localRecovery.status === "AI_REQUIRED"
+                                          ? "bg-amber-300/10 text-amber-300"
+                                          : "bg-slate-300/10 text-slate-400",
+                                    )}>
+                                      {analyzerResult.localRecovery.status ?? "PENDING"}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                                    <div>
+                                      <div className="text-[9px] uppercase text-slate-600">Attempts</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.localRecovery.attempts.length}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] uppercase text-slate-600">Sandbox</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.localRecovery.sandboxVerification ?? "—"}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] uppercase text-slate-600">AI invoked</div>
+                                      <div className="mt-1 font-mono text-[10px] text-emerald-300">{analyzerResult.localRecovery.aiInvoked ? "yes" : "no"}</div>
+                                    </div>
+                                  </div>
+                                  {analyzerResult.localRecovery.attempts.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                      {analyzerResult.localRecovery.attempts.map((attempt, index) => (
+                                        <div key={`${attempt.attempt ?? index}-${index}`} className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px]">
+                                          <span className="text-slate-400">
+                                            attempt {attempt.attempt ?? index + 1} · {attempt.operations ?? 0} op
+                                          </span>
+                                          <span className={attempt.sandboxStatus === "PASSED" ? "text-emerald-300" : "text-slate-500"}>
+                                            {attempt.sandboxStatus ?? attempt.planStatus ?? "planned"}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {analyzerResult.localRecovery.reason && (
+                                    <p className="mt-2 text-[10px] leading-4 text-slate-500">{analyzerResult.localRecovery.reason}</p>
+                                  )}
                                 </div>
                               )}
                               {analyzerResult.failureRecoveryContext.warnings.length > 0 && (
