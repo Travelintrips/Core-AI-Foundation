@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -249,6 +249,20 @@ export async function runSandboxedRepositoryVerification(
     };
   }
 
+  const resolvedRoot = await realpath(absoluteRoot).catch(() => null);
+  if (!resolvedRoot) {
+    return {
+      status: "BLOCKED",
+      runtime: "docker",
+      image,
+      network: "none",
+      dependencyBootstrap: null,
+      commands: [],
+      scriptsExecuted: false,
+      warnings: ["Repository sandbox root could not be resolved safely."],
+    };
+  }
+
   const uniqueCommands = [...new Set(commands)].slice(0, MAX_COMMANDS);
   for (const command of uniqueCommands) {
     if (!parseAllowlistedVerificationCommand(command)) {
@@ -280,10 +294,35 @@ export async function runSandboxedRepositoryVerification(
       return { stdout: output.stdout, stderr: output.stderr };
     });
 
+  try {
+    await executor(
+      "docker",
+      ["version", "--format", "{{.Server.Version}}"],
+      {
+        cwd: resolvedRoot,
+        timeout: Math.min(timeoutMs, 10_000),
+        maxBuffer: 256_000,
+        env: scrubbedHostEnvironment(),
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 500) : String(error);
+    return {
+      status: "BLOCKED",
+      runtime: "docker",
+      image,
+      network: "none",
+      dependencyBootstrap: null,
+      commands: [],
+      scriptsExecuted: false,
+      warnings: [`Docker sandbox runtime is unavailable: ${message}`],
+    };
+  }
+
   let dependencyBootstrap: VerificationCommandResult | null = null;
   if (options.bootstrapDependencies !== false && uniqueCommands.length > 0) {
     dependencyBootstrap = await executeInSandbox(
-      absoluteRoot,
+      resolvedRoot,
       image,
       "pnpm install --offline --frozen-lockfile --ignore-scripts",
       [
@@ -317,7 +356,7 @@ export async function runSandboxedRepositoryVerification(
   for (const command of uniqueCommands) {
     const parsed = parseAllowlistedVerificationCommand(command)!;
     const result = await executeInSandbox(
-      absoluteRoot,
+      resolvedRoot,
       image,
       command,
       parsed.args,
