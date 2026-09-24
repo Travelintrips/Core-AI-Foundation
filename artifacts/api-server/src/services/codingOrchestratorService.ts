@@ -80,27 +80,27 @@ function initStages(): CodingStage[] {
     { id: "repository_analyzer", label: "Repository Analyzer", status: "PENDING" },
     {
       id: "planner",
-      label: "Planning Agent",
-      status: "BLOCKED",
-      detail: "Deferred in this phase; Local Coding Engine runs without AI/LLM.",
+      label: "Local Deterministic Planner",
+      status: "PENDING",
+      detail: "Matches only explicit safe local edit recipes; no AI/LLM.",
     },
     {
       id: "coding",
-      label: "Coding Agent",
-      status: "BLOCKED",
-      detail: "Deferred until a later AI coding phase.",
+      label: "Local Coding Executor",
+      status: "PENDING",
+      detail: "Produces a review-only patch in an isolated temporary clone when a deterministic recipe matches.",
     },
     {
       id: "testing",
-      label: "Test Agent",
+      label: "Local Verification",
       status: "BLOCKED",
-      detail: "Starts after an approved Coding Agent change set exists.",
+      detail: "Repository scripts remain fail-closed until the workspace is explicitly trusted.",
     },
     {
       id: "review",
-      label: "Review Agent",
+      label: "Review",
       status: "BLOCKED",
-      detail: "Starts after tests pass.",
+      detail: "Review is required before a local patch can be applied to a repository branch.",
     },
   ];
 }
@@ -320,7 +320,27 @@ async function completeLocalAnalysis(
   const completedAt = new Date();
   const analysisSummary =
     typeof analysis.summary === "string" ? analysis.summary : "Local repository analysis completed.";
-  const summary = `${analysisSummary} Local context is ready for review; no AI/LLM was invoked.`;
+  const localPlan =
+    analysis.localExecutionPlan && typeof analysis.localExecutionPlan === "object"
+      ? (analysis.localExecutionPlan as Record<string, unknown>)
+      : null;
+  const localExecution =
+    analysis.localExecution && typeof analysis.localExecution === "object"
+      ? (analysis.localExecution as Record<string, unknown>)
+      : null;
+  const nextAction =
+    localExecution?.status === "APPLIED"
+      ? "REVIEW_LOCAL_PATCH"
+      : localPlan?.status === "AI_REQUIRED"
+        ? "AI_REQUIRED"
+        : "REVIEW_LOCAL_CONTEXT";
+  const summarySuffix =
+    nextAction === "REVIEW_LOCAL_PATCH"
+      ? " A deterministic local patch is ready for review; repository scripts were not executed."
+      : nextAction === "AI_REQUIRED"
+        ? " The deterministic executor declined to guess; AI reasoning is required for the remaining semantic work."
+        : " Local context is ready for review.";
+  const summary = `${analysisSummary}${summarySuffix} No AI/LLM was invoked.`;
 
   const result: Record<string, unknown> = {
     ...analysis,
@@ -330,7 +350,7 @@ async function completeLocalAnalysis(
       sessionId,
       status: "READY_REVIEW",
       stages,
-      nextAction: "REVIEW_LOCAL_CONTEXT",
+      nextAction,
     },
   };
 
@@ -365,7 +385,11 @@ async function completeLocalAnalysis(
 
   await logAudit(
     "coding-orchestrator",
-    "local_analysis_ready_review",
+    nextAction === "REVIEW_LOCAL_PATCH"
+      ? "local_patch_ready_review"
+      : nextAction === "AI_REQUIRED"
+        ? "local_execution_ai_required"
+        : "local_analysis_ready_review",
     input.task.id,
     "coding_task",
     "success",
@@ -373,6 +397,7 @@ async function completeLocalAnalysis(
       sessionId,
       codingRunId: input.run.id,
       aiInvoked: false,
+      nextAction,
     },
   );
 }
@@ -469,6 +494,58 @@ async function continueCodingOrchestration(
       "Local search, AST/symbols, dependency graph, git context, tests, and context packaging completed.",
     );
 
+    const localPlan =
+      analysis.localExecutionPlan && typeof analysis.localExecutionPlan === "object"
+        ? (analysis.localExecutionPlan as Record<string, unknown>)
+        : null;
+    const localExecution =
+      analysis.localExecution && typeof analysis.localExecution === "object"
+        ? (analysis.localExecution as Record<string, unknown>)
+        : null;
+
+    if (localPlan?.status === "EXECUTABLE") {
+      stages = updateStage(
+        stages,
+        "planner",
+        "COMPLETED",
+        typeof localPlan.reason === "string"
+          ? localPlan.reason
+          : "Deterministic local edit plan produced without AI/LLM.",
+      );
+      if (localExecution?.status === "APPLIED") {
+        stages = updateStage(
+          stages,
+          "coding",
+          "COMPLETED",
+          "Review-only patch produced in the isolated temporary clone; no repository script was executed.",
+        );
+      } else {
+        stages = updateStage(
+          stages,
+          "coding",
+          "BLOCKED",
+          typeof localExecution?.reason === "string"
+            ? localExecution.reason
+            : "Deterministic plan exists but no isolated local patch was produced.",
+        );
+      }
+    } else {
+      stages = updateStage(
+        stages,
+        "planner",
+        "BLOCKED",
+        typeof localPlan?.reason === "string"
+          ? localPlan.reason
+          : "No deterministic local edit recipe matched this semantic task.",
+      );
+      stages = updateStage(
+        stages,
+        "coding",
+        "BLOCKED",
+        "Local executor made no changes; semantic reasoning is required before file writes.",
+      );
+    }
+
     await completeLocalAnalysis(input, sessionId, stages, analysis);
 
     logger.info(
@@ -493,9 +570,10 @@ async function continueCodingOrchestration(
  * Starts a bounded Coding Orchestrator run.
  *
  * The production global dispatcher remains fail-closed. The orchestrator only
- * executes work created by this explicit Run Agent request. This phase stops
- * after deterministic local context packaging; Planner/Coding/Test/Review AI
- * stages remain blocked and no model provider is invoked.
+ * executes work created by this explicit Run Agent request. The local analyzer
+ * may also produce a deterministic review-only patch inside its isolated clone.
+ * Semantic tasks are marked AI_REQUIRED rather than guessed. No model provider
+ * is invoked in this phase and repository scripts remain fail-closed.
  */
 export async function startCodingOrchestration(
   input: CodingOrchestrationInput,

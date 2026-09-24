@@ -89,6 +89,23 @@ type RepositoryAnalyzerUiResult = {
     file?: string;
   }>;
   recommendedChanges: string[];
+  localExecutionPlan?: {
+    status?: string;
+    reason?: string;
+    targetFiles: string[];
+    verificationCommands: string[];
+    operations: Array<{ kind?: string; path?: string }>;
+    warnings: string[];
+  };
+  localExecution?: {
+    status?: string;
+    reason?: string;
+    changedFiles: string[];
+    patch?: string;
+    rolledBack?: boolean;
+    warnings: string[];
+    verification: Array<{ command?: string; status?: string }>;
+  };
   contextPackage?: {
     branch?: string;
     headSha?: string;
@@ -346,6 +363,14 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.contextPackage && typeof value.contextPackage === "object" && !Array.isArray(value.contextPackage)
         ? (value.contextPackage as Record<string, unknown>)
         : null;
+    const localExecutionPlanValue =
+      value.localExecutionPlan && typeof value.localExecutionPlan === "object" && !Array.isArray(value.localExecutionPlan)
+        ? (value.localExecutionPlan as Record<string, unknown>)
+        : null;
+    const localExecutionValue =
+      value.localExecution && typeof value.localExecution === "object" && !Array.isArray(value.localExecution)
+        ? (value.localExecution as Record<string, unknown>)
+        : null;
     const contextIndexValue =
       contextPackageValue?.index && typeof contextPackageValue.index === "object" && !Array.isArray(contextPackageValue.index)
         ? (contextPackageValue.index as Record<string, unknown>)
@@ -368,6 +393,41 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       recommendedChanges: Array.isArray(value.recommendedChanges)
         ? value.recommendedChanges.filter((item): item is string => typeof item === "string")
         : [],
+      localExecutionPlan: localExecutionPlanValue
+        ? {
+            status: typeof localExecutionPlanValue.status === "string" ? localExecutionPlanValue.status : undefined,
+            reason: typeof localExecutionPlanValue.reason === "string" ? localExecutionPlanValue.reason : undefined,
+            targetFiles: stringList(localExecutionPlanValue.targetFiles),
+            verificationCommands: stringList(localExecutionPlanValue.verificationCommands),
+            operations: Array.isArray(localExecutionPlanValue.operations)
+              ? localExecutionPlanValue.operations
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    kind: typeof item.kind === "string" ? item.kind : undefined,
+                    path: typeof item.path === "string" ? item.path : undefined,
+                  }))
+              : [],
+            warnings: stringList(localExecutionPlanValue.warnings),
+          }
+        : undefined,
+      localExecution: localExecutionValue
+        ? {
+            status: typeof localExecutionValue.status === "string" ? localExecutionValue.status : undefined,
+            reason: typeof localExecutionValue.reason === "string" ? localExecutionValue.reason : undefined,
+            changedFiles: stringList(localExecutionValue.changedFiles),
+            patch: typeof localExecutionValue.patch === "string" ? localExecutionValue.patch : undefined,
+            rolledBack: localExecutionValue.rolledBack === true,
+            warnings: stringList(localExecutionValue.warnings),
+            verification: Array.isArray(localExecutionValue.verification)
+              ? localExecutionValue.verification
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    command: typeof item.command === "string" ? item.command : undefined,
+                    status: typeof item.status === "string" ? item.status : undefined,
+                  }))
+              : [],
+          }
+        : undefined,
       contextPackage: contextPackageValue
         ? {
             branch: typeof contextPackageValue.branch === "string" ? contextPackageValue.branch : undefined,
@@ -609,7 +669,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
           void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
           toast({
             title: t("pages.codingWorkspace.runStarted"),
-            description: "Local Coding Engine: index → symbols → dependencies → tests → context",
+            description: "Local Coding Engine: index → context → deterministic executor → AI only if required",
           });
         },
         onError: () => {
@@ -758,6 +818,56 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                         ))}
                       </div>
                     </div>
+                  )}
+                </div>
+              )}
+              {analyzerResult?.localExecutionPlan && (
+                <div className="space-y-3 rounded-lg border border-emerald-300/15 bg-emerald-300/[0.025] p-3" data-testid="panel-local-coding-executor">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Local Coding Executor</div>
+                    <span className={cn(
+                      "rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wider",
+                      analyzerResult.localExecution?.status === "APPLIED"
+                        ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-300"
+                        : analyzerResult.localExecutionPlan.status === "AI_REQUIRED"
+                          ? "border-amber-300/20 bg-amber-300/10 text-amber-300"
+                          : "border-slate-300/20 bg-slate-300/10 text-slate-400",
+                    )}>
+                      {analyzerResult.localExecution?.status ?? analyzerResult.localExecutionPlan.status ?? "PENDING"}
+                    </span>
+                  </div>
+                  {(analyzerResult.localExecution?.reason ?? analyzerResult.localExecutionPlan.reason) && (
+                    <p className="text-xs leading-5 text-slate-400">
+                      {analyzerResult.localExecution?.reason ?? analyzerResult.localExecutionPlan.reason}
+                    </p>
+                  )}
+                  {(analyzerResult.localExecution?.changedFiles.length ?? analyzerResult.localExecutionPlan.targetFiles.length) > 0 && (
+                    <div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">
+                        {analyzerResult.localExecution?.changedFiles.length ? "Changed files" : "Target files"}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(analyzerResult.localExecution?.changedFiles.length
+                          ? analyzerResult.localExecution.changedFiles
+                          : analyzerResult.localExecutionPlan.targetFiles
+                        ).map((file) => (
+                          <code key={file} className="rounded border border-white/[0.06] px-2 py-1 text-[9px] text-slate-300">{file}</code>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {analyzerResult.localExecution?.patch && (
+                    <div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Review-only patch</div>
+                      <pre className="max-h-80 overflow-auto whitespace-pre rounded-md border border-white/[0.06] bg-[#07101d] p-3 font-mono text-[10px] leading-4 text-slate-300" data-testid="text-local-coding-patch">
+                        {analyzerResult.localExecution.patch}
+                      </pre>
+                    </div>
+                  )}
+                  {analyzerResult.localExecutionPlan.status === "AI_REQUIRED" && (
+                    <p className="rounded-md border border-amber-300/10 bg-amber-300/[0.035] p-2 text-[10px] leading-4 text-amber-200">
+                      Local executor made no code changes. The bounded context can be handed to AI reasoning only for the semantic work that remains.
+                    </p>
                   )}
                 </div>
               )}
