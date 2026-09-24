@@ -222,6 +222,7 @@ function handoff(
 
 describe("per-workstream AI handoff lifecycle", () => {
   beforeEach(() => {
+    vi.stubEnv("AI_CODING_WORKSTREAM_HANDOFF_TTL_SECONDS", "900");
     vi.clearAllMocks();
     mocks.selectResults.length = 0;
     mocks.insertResults.length = 0;
