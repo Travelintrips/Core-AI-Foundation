@@ -1,0 +1,97 @@
+name: Coding Approval Canary
+
+on:
+  push:
+    branches:
+      - ops/coding-approval-canary
+    paths:
+      - .github/workflows/coding-approval-canary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      TASK_ID: 022d5103-50a8-40b4-a697-3f08e4ddeb2d
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Approve plan and start Coding Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          code=$(curl -L -sS -o /tmp/approve -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -X POST \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/approve-plan")
+          echo "approve_http=$code"
+          cat /tmp/approve
+          echo
+          test "$code" = "201"
+          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("/tmp/approve","utf8")); if(r.agentName!=="Coding Agent") throw new Error("Expected Coding Agent run"); console.log("coding_run_id="+r.id); console.log("coding_agent_name="+r.agentName);'
+
+      - name: Wait for Coding Agent proposal
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            code=$(curl -L -sS -o /tmp/detail -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/tasks/$TASK_ID")
+            echo "attempt=$attempt detail_http=$code"
+            test "$code" = "200"
+            state=$(node <<'NODE'
+          const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync("/tmp/detail","utf8"));
+          const run=(p.runs||[]).find(r=>r.agentName==="Coding Agent");
+          if(!run){console.log("missing");process.exit(0);}
+          console.log(run.status);
+          NODE
+            )
+            echo "latest_coding_agent_status=$state"
+            if [ "$state" = "COMPLETED" ] || [ "$state" = "FAILED" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          node <<'NODE'
+          const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync("/tmp/detail","utf8"));
+          const run=(p.runs||[]).find(r=>r.agentName==="Coding Agent");
+          if(!run) throw new Error("Coding Agent run missing");
+          console.log("final_coding_run_status="+run.status);
+          if(run.status!=="COMPLETED") {
+            console.log("coding_error="+(run.errorMessage||""));
+            throw new Error("Coding Agent did not complete");
+          }
+          if(!run.logs) throw new Error("Coding Agent logs missing");
+          const result=JSON.parse(run.logs);
+          if(result.executionStatus!=="COMPLETED") throw new Error("Coding Agent executionStatus is not COMPLETED");
+          if(!result.proposal || !Array.isArray(result.proposal.changes) || result.proposal.changes.length===0) {
+            throw new Error("Coding Agent proposed changes missing");
+          }
+          if(result.commitCreated!==false) throw new Error("Coding Agent unexpectedly created a commit");
+          if(result.pushed!==false) throw new Error("Coding Agent unexpectedly pushed changes");
+          if(result.nextAction!=="RUN_TESTS") throw new Error("Expected RUN_TESTS next action");
+          console.log("task_status="+p.task.status);
+          console.log("result_summary_present="+Boolean(p.task.resultSummary));
+          console.log("proposal_change_count="+result.proposal.changes.length);
+          console.log("diff_present="+Boolean(result.diff));
+          console.log("next_action="+result.nextAction);
+          console.log("commit_created="+result.commitCreated);
+          console.log("pushed="+result.pushed);
+          console.log("coding_provider="+(result.model?.provider||""));
+          console.log("coding_model="+(result.model?.modelUsed||""));
+          console.log("coding_tokens="+(result.model?.totalTokens||0));
+          if(p.task.status!=="TESTING") throw new Error("Task should be TESTING after coding proposal");
+          NODE
