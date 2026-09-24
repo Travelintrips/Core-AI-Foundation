@@ -87,9 +87,15 @@ describe("Local Coding Sandbox", () => {
 
     expect(result.status).toBe("PASSED");
     expect(result.scriptsExecuted).toBe(true);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     expect(calls.every((call) => call.file === "docker")).toBe(true);
+    expect(calls[0]?.args).toEqual(["version", "--format", "{{.Server.Version}}"]);
     for (const call of calls) {
+      expect(call.env).not.toHaveProperty("AI_CODING_GITHUB_TOKEN");
+      expect(call.env).not.toHaveProperty("DATABASE_URL");
+      expect(call.env).not.toHaveProperty("OPENAI_API_KEY");
+    }
+    for (const call of calls.slice(1)) {
       expect(call.args).toEqual(expect.arrayContaining([
         "--network", "none",
         "--cap-drop", "ALL",
@@ -98,11 +104,8 @@ describe("Local Coding Sandbox", () => {
         "--workdir", "/workspace",
         image,
       ]));
-      expect(call.env).not.toHaveProperty("AI_CODING_GITHUB_TOKEN");
-      expect(call.env).not.toHaveProperty("DATABASE_URL");
-      expect(call.env).not.toHaveProperty("OPENAI_API_KEY");
     }
-    expect(calls[0]?.args.slice(-7)).toEqual([
+    expect(calls[1]?.args.slice(-7)).toEqual([
       "pnpm",
       "install",
       "--offline",
@@ -111,8 +114,8 @@ describe("Local Coding Sandbox", () => {
       "--store-dir",
       "/opt/pnpm-store",
     ]);
-    expect(calls[1]?.args.slice(-2)).toEqual(["pnpm", "test"]);
-    expect(calls[2]?.args.slice(-4)).toEqual([
+    expect(calls[2]?.args.slice(-2)).toEqual(["pnpm", "test"]);
+    expect(calls[3]?.args.slice(-4)).toEqual([
       "pnpm", "--filter", "@workspace/api-server", "typecheck",
     ]);
   });
@@ -123,8 +126,9 @@ describe("Local Coding Sandbox", () => {
     const result = await runSandboxedRepositoryVerification(root, ["pnpm test"], {
       enabled: true,
       image,
-      executor: async () => {
+      executor: async (_file, args) => {
         calls += 1;
+        if (args[0] === "version") return { stdout: "27.0.0" };
         throw Object.assign(new Error("offline store miss"), {
           code: 1,
           stderr: "ERR_PNPM_NO_OFFLINE_META",
@@ -136,7 +140,22 @@ describe("Local Coding Sandbox", () => {
     expect(result.dependencyBootstrap?.status).toBe("FAILED");
     expect(result.commands).toEqual([]);
     expect(result.scriptsExecuted).toBe(false);
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
+  });
+
+  it("fails closed when Docker runtime is unavailable", async () => {
+    const root = await workspace();
+    const result = await runSandboxedRepositoryVerification(root, ["pnpm test"], {
+      enabled: true,
+      image,
+      executor: async () => {
+        throw Object.assign(new Error("spawn docker ENOENT"), { code: "ENOENT" });
+      },
+    });
+
+    expect(result.status).toBe("BLOCKED");
+    expect(result.scriptsExecuted).toBe(false);
+    expect(result.warnings.join(" ")).toMatch(/runtime is unavailable/i);
   });
 
   it("reports timeout and stops the verification sequence", async () => {
@@ -149,8 +168,9 @@ describe("Local Coding Sandbox", () => {
         enabled: true,
         image,
         bootstrapDependencies: false,
-        executor: async () => {
+        executor: async (_file, args) => {
           calls += 1;
+          if (args[0] === "version") return { stdout: "27.0.0" };
           throw Object.assign(new Error("timed out"), {
             code: "ETIMEDOUT",
             killed: true,
@@ -163,6 +183,6 @@ describe("Local Coding Sandbox", () => {
     expect(result.status).toBe("FAILED");
     expect(result.commands[0]?.status).toBe("TIMEOUT");
     expect(result.commands).toHaveLength(1);
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
   });
 });
