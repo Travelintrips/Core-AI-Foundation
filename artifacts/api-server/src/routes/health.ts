@@ -18,10 +18,12 @@ const router: IRouter = Router();
 
 /** Process start time — used to compute uptime in /healthz/full */
 const startedAt = Date.now();
+const RELEASE_MARKER = "phase7a12-prod-ready-20260924";
 
 // ── GET /healthz — liveness (no I/O) ─────────────────────────────────────────
 router.get("/healthz", (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
+  res.setHeader("X-CST-Release-Marker", RELEASE_MARKER);
   res.json(data);
 });
 
@@ -114,6 +116,7 @@ router.get("/healthz/full", async (_req, res) => {
   };
 
   // HTTP status mirrors readiness: 200 = ok/degraded, 503 = fail
+  res.setHeader("X-CST-Release-Marker", RELEASE_MARKER);
   res.status(overallStatus === "fail" ? 503 : 200).json(payload);
 });
 
