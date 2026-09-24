@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import type { Dirent } from "node:fs";
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
@@ -327,7 +328,7 @@ async function listRepositoryFiles(root: string): Promise<{
       truncated = true;
       return;
     }
-    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    const entries: Dirent[] = await readdir(directory, { withFileTypes: true }).catch(() => [] as Dirent[]);
     entries.sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of entries) {
@@ -361,15 +362,17 @@ function hasExportModifier(node: ts.Node): boolean {
   return Boolean(ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
 }
 
-function declarationName(
-  node:
-    | ts.FunctionDeclaration
-    | ts.ClassDeclaration
-    | ts.InterfaceDeclaration
-    | ts.TypeAliasDeclaration
-    | ts.EnumDeclaration,
-): string | null {
-  return node.name?.text ?? null;
+function declarationName(node: ts.Statement): string | null {
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) ||
+    ts.isEnumDeclaration(node)
+  ) {
+    return node.name?.text ?? null;
+  }
+  return null;
 }
 
 function symbolLine(sourceFile: ts.SourceFile, node: ts.Node): number {
