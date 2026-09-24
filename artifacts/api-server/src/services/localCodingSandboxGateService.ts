@@ -415,9 +415,7 @@ async function executeSandboxGate(
         ).trim(),
         "VERIFICATION_FAILED",
         {
-          failureContexts: sandbox.failureContexts,
-          deterministicRetries: sandbox.deterministicRetries,
-          commands: compactCommands(sandbox.commands),
+          staticIssues: staticIssues.slice(0, 12),
         },
       );
     }
@@ -442,6 +440,11 @@ async function executeSandboxGate(
           ? `${failed.command} failed with ${failed.status}${failed.exitCode === null ? "" : ` (exit ${failed.exitCode})`}. Output was intentionally withheld from persistent logs.`
           : "Sandbox verification failed.",
         "VERIFICATION_FAILED",
+        {
+          failureContexts: sandbox.failureContexts,
+          deterministicRetries: sandbox.deterministicRetries,
+          commands: compactCommands(sandbox.commands),
+        },
       );
     }
 
