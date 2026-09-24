@@ -126,7 +126,7 @@ describe("Coding Orchestrator", () => {
     });
 
     mockRouteToModel.mockResolvedValue({
-      model: { id: 14, modelId: "codestral-latest" },
+      model: { id: 14, modelId: "codestral-latest", capabilities: ["text", "code"] },
       provider: { id: 5, slug: "mistral" },
     });
     mockGetFallbackModels.mockResolvedValue([]);
