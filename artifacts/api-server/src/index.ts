@@ -54,6 +54,8 @@ const { ensureSubmitIdempotencyTable } =
   await import("./services/submitIdempotencyService.js");
 const { verifyMaterialImportTables } =
   await import("./services/materialImportService.js");
+const { failStaleRepositoryAnalyzerRuns } =
+  await import("./services/repositoryAnalyzerService.js");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 let _designBatchRecoveryStarted = false;
@@ -97,6 +99,12 @@ async function initializeRuntimeServices(): Promise<void> {
     await seedMaterialLibraryIfEmpty();
   });
   await runStartupStep("[material-import] Phase 5 table verification", () => verifyMaterialImportTables());
+  await runStartupStep("[coding-analyzer] Stale run recovery", async () => {
+    const recovered = await failStaleRepositoryAnalyzerRuns();
+    if (recovered > 0) {
+      logger.warn({ recovered }, "[coding-analyzer] Recovered stale RUNNING analyzer rows");
+    }
+  });
   // Production storage buckets are infrastructure and already provisioned.
   // Do not consume a privileged Storage API call on every rolling deployment.
   // Development still self-provisions for convenience.

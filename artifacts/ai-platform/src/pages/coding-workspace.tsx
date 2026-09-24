@@ -77,6 +77,47 @@ function formatDate(value: string, lang: string, withTime = false) {
   }).format(date);
 }
 
+type RepositoryAnalyzerUiResult = {
+  summary?: string;
+  executionStatus?: string;
+  filesInspected: string[];
+  relevantFiles: string[];
+  findings: Array<{
+    severity?: string;
+    title?: string;
+    detail?: string;
+    file?: string;
+  }>;
+  recommendedChanges: string[];
+};
+
+function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzerUiResult | null {
+  if (!logs) return null;
+  try {
+    const value = JSON.parse(logs) as Record<string, unknown>;
+    const findings = Array.isArray(value.findings)
+      ? value.findings.filter((item): item is RepositoryAnalyzerUiResult["findings"][number] =>
+          Boolean(item) && typeof item === "object")
+      : [];
+    return {
+      summary: typeof value.summary === "string" ? value.summary : undefined,
+      executionStatus: typeof value.executionStatus === "string" ? value.executionStatus : undefined,
+      filesInspected: Array.isArray(value.filesInspected)
+        ? value.filesInspected.filter((item): item is string => typeof item === "string")
+        : [],
+      relevantFiles: Array.isArray(value.relevantFiles)
+        ? value.relevantFiles.filter((item): item is string => typeof item === "string")
+        : [],
+      findings,
+      recommendedChanges: Array.isArray(value.recommendedChanges)
+        ? value.recommendedChanges.filter((item): item is string => typeof item === "string")
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 function statusTone(status: CodingTaskStatus) {
   if (status === CodingTaskStatus.FAILED) return "rose";
   if (status === CodingTaskStatus.COMPLETED) return "emerald";
@@ -204,6 +245,11 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
 
   const task = detail.task;
   const hasActiveRun = detail.runs.some((run) => run.status === "RUNNING");
+  const latestCompletedRun = detail.runs.find(
+    (run) => run.agentName === "Repository Analyzer" && run.status === "COMPLETED" && Boolean(run.logs),
+  );
+  const analyzerResult = parseRepositoryAnalyzerResult(latestCompletedRun?.logs);
+  const displayedResultSummary = analyzerResult?.summary ?? task.resultSummary;
   const runAgent = () => {
     startCodingRun.mutate(
       { id: task.id },
@@ -245,6 +291,79 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       </CardHeader>
       <CardContent className="space-y-6 p-5">
         <section><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><TerminalSquare className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.instruction")}</div><p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-[#091222] p-3 text-sm leading-6 text-slate-300">{task.instruction}</p></section>
+        <section className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4" data-testid="panel-coding-analysis-result">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <Search className="size-3.5 text-cyan-300" />
+              Analysis Result
+            </div>
+            {analyzerResult?.executionStatus && (
+              <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+                {analyzerResult.executionStatus}
+              </span>
+            )}
+          </div>
+          {displayedResultSummary || analyzerResult ? (
+            <div className="space-y-4">
+              {displayedResultSummary && (
+                <p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-[#091222] p-3 text-sm leading-6 text-slate-200" data-testid="text-coding-analysis-summary">
+                  {displayedResultSummary}
+                </p>
+              )}
+              {analyzerResult && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-white/[0.06] bg-[#091222] p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-600">Files inspected</div>
+                    <div className="mt-1 font-mono text-lg text-cyan-300">{analyzerResult.filesInspected.length}</div>
+                  </div>
+                  <div className="rounded-lg border border-white/[0.06] bg-[#091222] p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-600">Findings</div>
+                    <div className="mt-1 font-mono text-lg text-cyan-300">{analyzerResult.findings.length}</div>
+                  </div>
+                </div>
+              )}
+              {analyzerResult && analyzerResult.findings.length > 0 && (
+                <div className="space-y-2" data-testid="list-coding-analysis-findings">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Findings</div>
+                  {analyzerResult.findings.map((finding, index) => (
+                    <div key={`${finding.title ?? "finding"}-${index}`} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn(
+                          "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                          finding.severity === "warning" ? "bg-amber-300/10 text-amber-300" : "bg-cyan-300/10 text-cyan-300",
+                        )}>
+                          {finding.severity ?? "info"}
+                        </span>
+                        <span className="text-xs font-medium text-slate-200">{finding.title ?? "Repository finding"}</span>
+                        {finding.file && <span className="font-mono text-[10px] text-slate-600">{finding.file}</span>}
+                      </div>
+                      {finding.detail && <p className="mt-2 text-xs leading-5 text-slate-400">{finding.detail}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analyzerResult && analyzerResult.recommendedChanges.length > 0 && (
+                <div data-testid="list-coding-analysis-recommendations">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Recommended changes</div>
+                  <ul className="space-y-1.5 text-xs leading-5 text-slate-400">
+                    {analyzerResult.recommendedChanges.map((item, index) => (
+                      <li key={`${item}-${index}`} className="flex gap-2">
+                        <span className="mt-2 size-1 shrink-0 rounded-full bg-cyan-300" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">
+              {hasActiveRun
+                ? "Repository Analyzer is running. The result will appear here automatically."
+                : "No Repository Analyzer result is available yet."}
+            </p>
+          )}
+        </section>
         <div className="grid gap-5 xl:grid-cols-2">
           <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><History className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.runs")}</div><span className="font-mono text-[10px] text-slate-600">{detail.runs.length.toString().padStart(2, "0")}</span></div>{detail.runs.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">{t("pages.codingWorkspace.noRuns")}</p> : <div className="space-y-2">{detail.runs.map((run) => <div key={run.id} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-run-${run.id}`}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm text-slate-300">{run.agentName}</span><span className={cn("text-[10px] font-semibold uppercase tracking-wider", run.status === "FAILED" ? "text-rose-300" : run.status === "COMPLETED" ? "text-emerald-300" : "text-amber-300")}>{t(`pages.codingWorkspace.runStatuses.${run.status.toLowerCase()}`)}</span></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-600">{run.startedAt ? formatDate(run.startedAt, lang, true) : "—"}{run.finishedAt && <><span>→</span>{formatDate(run.finishedAt, lang, true)}</>}</div>{run.errorMessage && <p className="mt-2 text-xs leading-5 text-rose-300">{run.errorMessage}</p>}{run.logs && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-cyan-300">{t("pages.codingWorkspace.runLogs")}</summary><pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 font-mono text-[10px] leading-5 text-slate-500">{run.logs}</pre></details>}</div>)}</div>}</section>
           <section className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium text-slate-200">{t("pages.codingWorkspace.runAgent")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{t("pages.codingWorkspace.runAgentHint")}</p></div><Button onClick={runAgent} disabled={startCodingRun.isPending || hasActiveRun} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.runningAgent")}</> : hasActiveRun ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.runningAgent")}</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>

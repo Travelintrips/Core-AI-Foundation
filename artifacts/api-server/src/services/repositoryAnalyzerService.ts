@@ -3,10 +3,12 @@ import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import { and, eq } from "drizzle-orm";
+import { logger } from "../lib/logger.js";
+import { and, eq, sql } from "drizzle-orm";
 import {
   aiCodingRunsTable,
   aiCodingTasksTable,
+  aiJobsTable,
   db,
   type AiJob,
 } from "@workspace/db";
@@ -346,6 +348,132 @@ export async function executeRepositoryAnalyzerJob(job: AiJob): Promise<Record<s
 
 function serializeResult(result: Record<string, unknown>): string {
   return JSON.stringify(result, null, 2);
+}
+
+/**
+ * Execute exactly one queued Repository Analyzer job inside the API process.
+ *
+ * Production's global dispatcher remains fail-closed. Coding Workspace runs are
+ * user-triggered and bounded, so this path claims only the job created by the
+ * current Run Agent request and never drains unrelated queue work.
+ */
+export async function executeRepositoryAnalyzerJobOnDemand(job: AiJob): Promise<void> {
+  if (job.jobType !== CODING_ANALYZER_JOB_TYPE) {
+    logger.warn({ jobId: job.id, jobType: job.jobType }, "[coding-analyzer] Ignoring non-analyzer on-demand job");
+    return;
+  }
+
+  const startedAt = new Date();
+  const [claimed] = await db
+    .update(aiJobsTable)
+    .set({
+      status: "running",
+      startedAt,
+      updatedAt: startedAt,
+    })
+    .where(and(eq(aiJobsTable.id, job.id), eq(aiJobsTable.status, "queued")))
+    .returning();
+
+  // A future explicitly-enabled dispatcher may win the claim first. In that
+  // case it owns completion; do not execute the same repository twice.
+  if (!claimed) {
+    logger.info({ jobId: job.id }, "[coding-analyzer] Job already claimed by another executor");
+    return;
+  }
+
+  try {
+    const result = await executeRepositoryAnalyzerJob(claimed);
+
+    // Persist the user-facing run/task result first. If bookkeeping of ai_jobs
+    // ever fails afterwards, the Coding Workspace still receives its result.
+    await completeRepositoryAnalyzerRun(result);
+
+    const completedAt = new Date();
+    await db
+      .update(aiJobsTable)
+      .set({
+        status: "completed",
+        resultJson: result,
+        completedAt,
+        actualDuration: completedAt.getTime() - startedAt.getTime(),
+        errorMessage: null,
+        updatedAt: completedAt,
+      })
+      .where(and(eq(aiJobsTable.id, claimed.id), eq(aiJobsTable.status, "running")));
+
+    logger.info(
+      { jobId: claimed.id, codingRunId: result.codingRunId },
+      "[coding-analyzer] On-demand analysis completed",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const completedAt = new Date();
+
+    await failRepositoryAnalyzerRun(
+      (claimed.payloadJson ?? {}) as Record<string, unknown>,
+      message,
+    ).catch((persistError) => {
+      logger.error(
+        { err: persistError, jobId: claimed.id },
+        "[coding-analyzer] Failed to persist analyzer failure",
+      );
+    });
+
+    await db
+      .update(aiJobsTable)
+      .set({
+        status: "failed",
+        completedAt,
+        actualDuration: completedAt.getTime() - startedAt.getTime(),
+        errorMessage: message.slice(0, 2000),
+        updatedAt: completedAt,
+      })
+      .where(and(eq(aiJobsTable.id, claimed.id), eq(aiJobsTable.status, "running")))
+      .catch((persistError) => {
+        logger.error(
+          { err: persistError, jobId: claimed.id },
+          "[coding-analyzer] Failed to persist failed job state",
+        );
+      });
+
+    logger.error(
+      { err: error, jobId: claimed.id },
+      "[coding-analyzer] On-demand analysis failed",
+    );
+  }
+}
+
+/**
+ * Fail abandoned RUNNING analyzer rows after a generous timeout. This repairs
+ * legacy/orphan runs left behind when queue execution was not active and also
+ * prevents a crashed process from disabling Run Agent forever.
+ */
+export async function failStaleRepositoryAnalyzerRuns(
+  staleAfterMs = 15 * 60 * 1000,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - staleAfterMs);
+  const staleRuns = await db
+    .select({
+      id: aiCodingRunsTable.id,
+      taskId: aiCodingRunsTable.taskId,
+    })
+    .from(aiCodingRunsTable)
+    .where(
+      and(
+        eq(aiCodingRunsTable.status, "RUNNING"),
+        sql`${aiCodingRunsTable.startedAt} IS NOT NULL`,
+        sql`${aiCodingRunsTable.startedAt} < ${cutoff}`,
+      ),
+    );
+
+  for (const run of staleRuns) {
+    await failRepositoryAnalyzerRun(
+      { codingTaskId: run.taskId, codingRunId: run.id },
+      "Repository Analyzer run was abandoned before completion and has been recovered.",
+    );
+  }
+
+  return staleRuns.length;
 }
 
 export async function completeRepositoryAnalyzerRun(

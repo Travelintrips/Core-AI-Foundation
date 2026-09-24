@@ -11,6 +11,7 @@ const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockEnqueue = vi.hoisted(() => vi.fn());
 const mockFailRepositoryAnalyzerRun = vi.hoisted(() => vi.fn());
+const mockExecuteRepositoryAnalyzerJobOnDemand = vi.hoisted(() => vi.fn());
 
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
@@ -67,6 +68,7 @@ vi.mock("../../services/queueManagerService.js", () => ({
 }));
 
 vi.mock("../../services/repositoryAnalyzerService.js", () => ({
+  executeRepositoryAnalyzerJobOnDemand: mockExecuteRepositoryAnalyzerJobOnDemand,
   failRepositoryAnalyzerRun: mockFailRepositoryAnalyzerRun,
 }));
 
@@ -116,6 +118,7 @@ describe("AI coding workspace run endpoint", () => {
     mockUpdateSet.mockReturnValue(updateBuilder);
     mockUpdateWhere.mockResolvedValue([]);
     mockEnqueue.mockResolvedValue({ id: 701, jobType: "coding_repository_analyzer" });
+    mockExecuteRepositoryAnalyzerJobOnDemand.mockResolvedValue(undefined);
   });
 
   it("creates one Repository Analyzer run and moves the task to ANALYZING atomically", async () => {
@@ -149,6 +152,9 @@ describe("AI coding workspace run endpoint", () => {
         description: task.instruction,
       }),
     }));
+    expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 701, jobType: "coding_repository_analyzer" }),
+    );
   });
 
   it("returns 404 without creating a run when the task does not exist", async () => {
@@ -186,5 +192,6 @@ describe("AI coding workspace run endpoint", () => {
       { codingTaskId: taskId, codingRunId: runId },
       "Could not enqueue Repository Analyzer: queue unavailable",
     );
+    expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
   });
 });
