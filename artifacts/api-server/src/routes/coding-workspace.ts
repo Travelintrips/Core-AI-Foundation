@@ -42,14 +42,12 @@ import {
 } from "../services/localCodingDeterministicRecoveryService.js";
 import {
   approveAiHandoff,
+  assertApprovedAiHandoffFresh,
   LocalAiHandoffError,
   revokeAiHandoff,
   startAiHandoffPreparation,
 } from "../services/localCodingAiHandoffService.js";
-import {
-  LocalCodingAiExecutionGateError,
-  startAiExecution,
-} from "../services/localCodingAiExecutionGateService.js";
+import { enqueueCodingAiExecution } from "../services/localCodingAiQueueRuntimeService.js";
 import {
   approveAndValidateAiPatch,
   LocalAiPatchApprovalError,
@@ -376,10 +374,20 @@ router.post("/ai/coding/tasks/:id/run-ai-execution", async (req, res): Promise<v
   }
 
   try {
-    const run = await startAiExecution(params.data.id);
-    res.status(201).json(StartCodingRunResponse.parse(run));
+    await assertApprovedAiHandoffFresh(params.data.id);
+    const job = await enqueueCodingAiExecution(params.data.id, {
+      requestedBy: "coding-workspace",
+    });
+    res.status(202).json({
+      taskId: params.data.id,
+      jobId: job.id,
+      jobCode: job.jobCode,
+      status: job.status,
+      jobType: job.jobType,
+      requiredCapability: job.requiredCapability,
+    });
   } catch (error) {
-    if (error instanceof LocalCodingAiExecutionGateError) {
+    if (error instanceof LocalAiHandoffError) {
       if (error.kind === "NOT_FOUND") {
         res.status(404).json({ error: error.message });
         return;
@@ -391,14 +399,6 @@ router.post("/ai/coding/tasks/:id/run-ai-execution", async (req, res): Promise<v
         error.kind === "STALE_HEAD"
       ) {
         res.status(409).json({ error: error.message });
-        return;
-      }
-      if (error.kind === "MODEL_UNAVAILABLE") {
-        res.status(503).json({ error: error.message });
-        return;
-      }
-      if (error.kind === "MODEL_FAILED") {
-        res.status(502).json({ error: error.message });
         return;
       }
       res.status(422).json({ error: error.message });
