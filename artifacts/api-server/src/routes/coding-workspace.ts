@@ -19,6 +19,10 @@ import {
 } from "@workspace/api-zod";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { approvePlanAndStartCoding } from "../services/codingAgentService.js";
+import {
+  approveAndValidateLocalPatch,
+  LocalPatchApprovalError,
+} from "../services/localCodingPatchApprovalService.js";
 
 const router = Router();
 
@@ -184,6 +188,33 @@ router.post("/ai/coding/tasks/:id/approve-plan", async (req, res): Promise<void>
       message.includes("approval")
     ) {
       res.status(409).json({ error: message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/approve-local-patch", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await approveAndValidateLocalPatch(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof LocalPatchApprovalError) {
+      if (error.kind === "NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "NOT_READY" || error.kind === "STALE_HEAD") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      res.status(422).json({ error: error.message });
       return;
     }
     throw error;
