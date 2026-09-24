@@ -42,6 +42,10 @@ vi.mock("@workspace/db", () => ({
   aiCodingTasksTable: {
     id: "codingTasks.id",
   },
+  aiJobsTable: {
+    id: "jobs.id",
+    status: "jobs.status",
+  },
 }));
 
 const {
