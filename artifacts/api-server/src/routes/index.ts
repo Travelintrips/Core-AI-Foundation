@@ -172,6 +172,7 @@ import materialImportRouter from "./material-import.js";
 import codingWorkspaceRouter from "./coding-workspace.js";
 import codingTaskGraphRouter from "./coding-task-graph.js";
 import codingObservabilityRouter from "./coding-observability.js";
+import codingMissionControlRouter from "./coding-mission-control.js";
 
 const router: IRouter = Router();
 
@@ -181,6 +182,7 @@ router.use('/ai/material-import', materialImportRouter);
 router.use(codingWorkspaceRouter);
 router.use(codingTaskGraphRouter);
 router.use(codingObservabilityRouter);
+router.use(codingMissionControlRouter);
 router.use(internalAuthRouter);
 router.use(internalCatalogRouter);
 router.use(agentsRouter);
