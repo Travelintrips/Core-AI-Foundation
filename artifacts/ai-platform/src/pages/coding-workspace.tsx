@@ -17,8 +17,13 @@ import {
   GitCommitHorizontal,
   History,
   Loader2,
+  LockKeyhole,
   Plus,
   RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  FileDiff,
+  Bot,
   RotateCcw,
   Search,
   TerminalSquare,
@@ -249,6 +254,50 @@ type RepositoryAnalyzerUiResult = {
         requiresExplicitApprovalBeforeModel?: boolean;
         allowedFilesOnly?: boolean;
       };
+    };
+  };
+  aiExecution?: {
+    status?: string;
+    gateStatus?: string;
+    startedAt?: string;
+    completedAt?: string;
+    proposal?: {
+      version?: number;
+      summary?: string;
+      rationale?: string;
+      operationCount?: number;
+      changedFiles: string[];
+    };
+    policyValidation?: {
+      ok?: boolean;
+      status?: string;
+      codes: string[];
+      errors: Array<{
+        code?: string;
+        message?: string;
+        path?: string;
+      }>;
+    };
+    patch?: {
+      status?: string;
+      reason?: string;
+      changedFiles: string[];
+      diff?: string;
+      patchSha256?: string;
+      rolledBack?: boolean;
+      scriptsExecuted?: boolean;
+      networkUsed?: boolean;
+    };
+    model?: {
+      provider?: string;
+      model?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      totalTokens?: number;
+      latencyMs?: number;
+      attempts?: number;
+      retries?: number;
+      fallbackUsed?: boolean;
     };
   };
   localCommitApproval?: {
@@ -575,6 +624,37 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.aiHandoff && typeof value.aiHandoff === "object" && !Array.isArray(value.aiHandoff)
         ? (value.aiHandoff as Record<string, unknown>)
         : null;
+    const recordOrNull = (input: unknown): Record<string, unknown> | null =>
+      input && typeof input === "object" && !Array.isArray(input)
+        ? input as Record<string, unknown>
+        : null;
+    const aiExecutionValue =
+      recordOrNull(value.aiExecution) ??
+      recordOrNull(value.constrainedAiExecution) ??
+      recordOrNull(value.aiProposalExecution) ??
+      recordOrNull(value.aiProposal);
+    const aiProposalValue =
+      recordOrNull(aiExecutionValue?.proposal) ??
+      recordOrNull(aiExecutionValue?.parsedProposal) ??
+      recordOrNull(value.aiProposal);
+    const aiProposalBodyValue =
+      recordOrNull(aiProposalValue?.proposal) ?? aiProposalValue;
+    const aiPolicyValue =
+      recordOrNull(aiExecutionValue?.policyValidation) ??
+      recordOrNull(aiExecutionValue?.policyResult) ??
+      recordOrNull(aiExecutionValue?.policy);
+    const aiPatchValue =
+      recordOrNull(aiExecutionValue?.patchApplication) ??
+      recordOrNull(aiExecutionValue?.candidatePatch) ??
+      recordOrNull(aiExecutionValue?.patchResult) ??
+      recordOrNull(aiExecutionValue?.patch) ??
+      (localExecutionValue?.source === "AI_PROPOSAL" ? localExecutionValue : null);
+    const aiModelValue =
+      recordOrNull(aiExecutionValue?.model) ??
+      recordOrNull(aiExecutionValue?.modelMetadata) ??
+      recordOrNull(aiExecutionValue?.invocationMetadata) ??
+      recordOrNull(aiExecutionValue?.metadata);
+    const aiModelUsageValue = recordOrNull(aiModelValue?.usage);
     const localCommitApprovalValue =
       value.localCommitApproval && typeof value.localCommitApproval === "object" && !Array.isArray(value.localCommitApproval)
         ? (value.localCommitApproval as Record<string, unknown>)
@@ -903,6 +983,189 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             };
           })()
         : undefined,
+      aiExecution:
+        aiExecutionValue || aiProposalValue || aiPolicyValue || aiPatchValue || aiModelValue
+          ? (() => {
+              const proposalOperations = Array.isArray(aiProposalBodyValue?.operations)
+                ? aiProposalBodyValue.operations.filter(
+                    (item): item is Record<string, unknown> =>
+                      Boolean(item) && typeof item === "object" && !Array.isArray(item),
+                  )
+                : [];
+              const proposalFiles = [
+                ...new Set(
+                  proposalOperations
+                    .map((item) =>
+                      typeof item.file === "string"
+                        ? item.file
+                        : typeof item.path === "string"
+                          ? item.path
+                          : null,
+                    )
+                    .filter((item): item is string => Boolean(item)),
+                ),
+              ];
+              const policyErrors = Array.isArray(aiPolicyValue?.errors)
+                ? aiPolicyValue.errors
+                    .filter(
+                      (item): item is Record<string, unknown> =>
+                        Boolean(item) && typeof item === "object" && !Array.isArray(item),
+                    )
+                    .map((item) => ({
+                      code: typeof item.code === "string" ? item.code : undefined,
+                      message: typeof item.message === "string" ? item.message : undefined,
+                      path: typeof item.path === "string" ? item.path : undefined,
+                    }))
+                : [];
+              const changedFiles = stringList(
+                aiPatchValue?.changedFiles ?? aiExecutionValue?.changedFiles,
+              );
+              const totalTokens =
+                typeof aiModelUsageValue?.totalTokens === "number"
+                  ? aiModelUsageValue.totalTokens
+                  : typeof aiModelValue?.totalTokens === "number"
+                    ? aiModelValue.totalTokens
+                    : undefined;
+              return {
+                status:
+                  typeof aiExecutionValue?.status === "string"
+                    ? aiExecutionValue.status
+                    : typeof aiExecutionValue?.executionStatus === "string"
+                      ? aiExecutionValue.executionStatus
+                      : undefined,
+                gateStatus:
+                  typeof aiExecutionValue?.gateStatus === "string"
+                    ? aiExecutionValue.gateStatus
+                    : undefined,
+                startedAt:
+                  typeof aiExecutionValue?.startedAt === "string"
+                    ? aiExecutionValue.startedAt
+                    : undefined,
+                completedAt:
+                  typeof aiExecutionValue?.completedAt === "string"
+                    ? aiExecutionValue.completedAt
+                    : undefined,
+                proposal:
+                  aiProposalBodyValue ||
+                  typeof aiExecutionValue?.proposalSummary === "string" ||
+                  typeof aiExecutionValue?.proposalRationale === "string"
+                    ? {
+                        version:
+                          typeof aiProposalValue?.version === "number"
+                            ? aiProposalValue.version
+                            : typeof aiExecutionValue?.proposalVersion === "number"
+                              ? aiExecutionValue.proposalVersion
+                              : undefined,
+                        summary:
+                          typeof aiProposalBodyValue?.summary === "string"
+                            ? aiProposalBodyValue.summary
+                            : typeof aiExecutionValue?.proposalSummary === "string"
+                              ? aiExecutionValue.proposalSummary
+                              : undefined,
+                        rationale:
+                          typeof aiProposalBodyValue?.rationale === "string"
+                            ? aiProposalBodyValue.rationale
+                            : typeof aiExecutionValue?.proposalRationale === "string"
+                              ? aiExecutionValue.proposalRationale
+                              : undefined,
+                        operationCount: proposalOperations.length,
+                        changedFiles: changedFiles.length > 0 ? changedFiles : proposalFiles,
+                      }
+                    : undefined,
+                policyValidation:
+                  aiPolicyValue || typeof aiExecutionValue?.policyStatus === "string"
+                    ? {
+                        ok:
+                          typeof aiPolicyValue?.ok === "boolean"
+                            ? aiPolicyValue.ok
+                            : typeof aiPolicyValue?.passed === "boolean"
+                              ? aiPolicyValue.passed
+                              : aiExecutionValue?.policyStatus === "PASSED"
+                                ? true
+                                : aiExecutionValue?.policyStatus === "FAILED"
+                                  ? false
+                                  : undefined,
+                        status:
+                          typeof aiPolicyValue?.status === "string"
+                            ? aiPolicyValue.status
+                            : typeof aiExecutionValue?.policyStatus === "string"
+                              ? aiExecutionValue.policyStatus
+                              : undefined,
+                        codes: policyErrors
+                          .map((item) => item.code)
+                          .filter((item): item is string => Boolean(item)),
+                        errors: policyErrors,
+                      }
+                    : undefined,
+                patch: aiPatchValue || typeof aiExecutionValue?.patch === "string"
+                  ? {
+                      status:
+                        typeof aiPatchValue?.status === "string"
+                          ? aiPatchValue.status
+                          : undefined,
+                      reason:
+                        typeof aiPatchValue?.reason === "string"
+                          ? aiPatchValue.reason
+                          : undefined,
+                      changedFiles,
+                      diff:
+                        typeof aiPatchValue?.patch === "string"
+                          ? aiPatchValue.patch
+                          : typeof aiPatchValue?.diff === "string"
+                            ? aiPatchValue.diff
+                            : typeof aiExecutionValue?.patch === "string"
+                              ? aiExecutionValue.patch
+                              : typeof aiExecutionValue?.diff === "string"
+                                ? aiExecutionValue.diff
+                                : undefined,
+                      patchSha256:
+                        typeof aiPatchValue?.patchSha256 === "string"
+                          ? aiPatchValue.patchSha256
+                          : undefined,
+                      rolledBack: aiPatchValue?.rolledBack === true,
+                      scriptsExecuted: aiPatchValue?.scriptsExecuted === true,
+                      networkUsed: aiPatchValue?.networkUsed === true,
+                    }
+                  : undefined,
+                model: aiModelValue
+                  ? {
+                      provider:
+                        typeof aiModelValue.provider === "string"
+                          ? aiModelValue.provider
+                          : undefined,
+                      model:
+                        typeof aiModelValue.model === "string"
+                          ? aiModelValue.model
+                          : typeof aiModelValue.modelUsed === "string"
+                            ? aiModelValue.modelUsed
+                            : undefined,
+                      inputTokens:
+                        typeof aiModelUsageValue?.inputTokens === "number"
+                          ? aiModelUsageValue.inputTokens
+                          : undefined,
+                      outputTokens:
+                        typeof aiModelUsageValue?.outputTokens === "number"
+                          ? aiModelUsageValue.outputTokens
+                          : undefined,
+                      totalTokens,
+                      latencyMs:
+                        typeof aiModelValue.latencyMs === "number"
+                          ? aiModelValue.latencyMs
+                          : undefined,
+                      attempts:
+                        typeof aiModelValue.attempts === "number"
+                          ? aiModelValue.attempts
+                          : undefined,
+                      retries:
+                        typeof aiModelValue.retries === "number"
+                          ? aiModelValue.retries
+                          : undefined,
+                      fallbackUsed: aiModelValue.fallbackUsed === true,
+                    }
+                  : undefined,
+              };
+            })()
+          : undefined,
       localCommitApproval: localCommitApprovalValue
         ? {
             status: typeof localCommitApprovalValue.status === "string" ? localCommitApprovalValue.status : undefined,
@@ -1162,6 +1425,8 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [handoffPreparePending, setHandoffPreparePending] = useState(false);
   const [handoffApprovePending, setHandoffApprovePending] = useState(false);
   const [handoffRevokePending, setHandoffRevokePending] = useState(false);
+  const [aiRunPending, setAiRunPending] = useState(false);
+  const [aiPatchReviewPending, setAiPatchReviewPending] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
   const [prVerifyPending, setPrVerifyPending] = useState(false);
   const [mergePending, setMergePending] = useState(false);
@@ -1246,6 +1511,85 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     ) &&
     analyzerResult?.aiHandoff?.modelInvoked !== true &&
     !hasActiveRun;
+  const currentNextAction = analyzerResult?.orchestration?.nextAction ?? "";
+  const handoffExpiryMs = analyzerResult?.aiHandoff?.expiresAt
+    ? Date.parse(analyzerResult.aiHandoff.expiresAt)
+    : Number.NaN;
+  const aiPolicyCodes = analyzerResult?.aiExecution?.policyValidation?.codes ?? [];
+  const handoffExpired =
+    (Number.isFinite(handoffExpiryMs) && handoffExpiryMs <= Date.now()) ||
+    aiPolicyCodes.includes("EXPIRED_HANDOFF");
+  const handoffStale =
+    /STALE/i.test(analyzerResult?.aiHandoff?.status ?? "") ||
+    /STALE/i.test(analyzerResult?.aiHandoff?.gateStatus ?? "") ||
+    aiPolicyCodes.some((code) =>
+      ["STALE_HANDOFF", "BASE_SHA_MISMATCH", "PATCH_SHA_MISMATCH", "PACKAGE_HASH_MISMATCH"].includes(code),
+    );
+  const handoffRevoked =
+    analyzerResult?.aiHandoff?.status === "REVOKED" ||
+    analyzerResult?.aiHandoff?.gateStatus === "REVOKED" ||
+    Boolean(analyzerResult?.aiHandoff?.revokedAt);
+  const canRunConstrainedAi =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    currentNextAction === "AI_HANDOFF_APPROVED" &&
+    analyzerResult?.aiHandoff?.status === "APPROVED" &&
+    analyzerResult.aiHandoff.gateStatus === "EXPLICITLY_APPROVED" &&
+    analyzerResult.aiHandoff.modelInvoked !== true &&
+    !handoffExpired &&
+    !handoffStale &&
+    !handoffRevoked &&
+    !hasActiveRun;
+  const canApproveAiPatch =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    currentNextAction === "REVIEW_AI_PATCH" &&
+    analyzerResult?.aiExecution?.policyValidation?.ok === true &&
+    analyzerResult?.aiExecution?.patch?.status === "APPLIED" &&
+    analyzerResult.aiExecution.patch.rolledBack !== true &&
+    analyzerResult.aiExecution.patch.scriptsExecuted !== true &&
+    analyzerResult.aiExecution.patch.networkUsed !== true &&
+    !hasActiveRun;
+  const explicitGateActions = [
+    "APPROVE_PLAN",
+    "REVIEW_LOCAL_PATCH",
+    "RUN_SANDBOX_VERIFICATION",
+    "LOCAL_RECOVERY_REQUIRED",
+    "AI_REQUIRED",
+    "APPROVE_AI_HANDOFF",
+    "AI_HANDOFF_APPROVED",
+    "REVIEW_AI_PATCH",
+    "APPROVE_COMMIT",
+    "REVIEW_PR",
+    "APPROVE_MERGE",
+  ];
+  const explicitGateLocked = explicitGateActions.includes(currentNextAction);
+  const canRunAgent =
+    !hasActiveRun &&
+    !explicitGateLocked &&
+    (task.status === CodingTaskStatus.PENDING || task.status === CodingTaskStatus.FAILED);
+  const aiPipelineVisible =
+    Boolean(analyzerResult?.aiHandoff) ||
+    Boolean(analyzerResult?.aiExecution) ||
+    ["AI_REQUIRED", "APPROVE_AI_HANDOFF", "AI_HANDOFF_APPROVED", "REVIEW_AI_PATCH"].includes(
+      currentNextAction,
+    );
+  const aiStageIndex =
+    currentNextAction === "AI_REQUIRED"
+      ? 0
+      : currentNextAction === "APPROVE_AI_HANDOFF"
+        ? 3
+        : currentNextAction === "AI_HANDOFF_APPROVED"
+          ? 5
+          : currentNextAction === "REVIEW_AI_PATCH"
+            ? 7
+            : currentNextAction === "RUN_SANDBOX_VERIFICATION" && Boolean(analyzerResult?.aiExecution)
+              ? 8
+              : analyzerResult?.aiExecution?.patch?.status === "APPLIED"
+                ? 7
+                : analyzerResult?.aiHandoff?.status === "APPROVED"
+                  ? 5
+                  : analyzerResult?.aiHandoff?.status === "PREPARED"
+                    ? 3
+                    : 0;
   const canApproveCommit =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "APPROVE_COMMIT" &&
@@ -1267,6 +1611,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     analyzerResult.prVerification.gateStatus === "PR_VERIFIED" &&
     !hasActiveRun;
   const runAgent = () => {
+    if (!canRunAgent) return;
     startCodingRun.mutate(
       { id: task.id },
       {
@@ -1495,6 +1840,68 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     }
   };
 
+  const runConstrainedAi = async () => {
+    if (!canRunConstrainedAi) return;
+    setAiRunPending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/run-ai-execution`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "Constrained AI started",
+        description: "The approved lease is revalidated before one bounded model call. Tools, shell, repository, network, filesystem, secrets, and Git actions remain disabled.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not run constrained AI",
+        description: error instanceof Error ? error.message : "Constrained AI execution failed",
+        variant: "destructive",
+      });
+    } finally {
+      setAiRunPending(false);
+    }
+  };
+
+  const approveAiPatch = async () => {
+    if (!canApproveAiPatch) return;
+    setAiPatchReviewPending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-ai-patch`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "AI patch explicitly approved",
+        description: "The candidate patch remains uncommitted and must pass sandbox verification before downstream commit/PR gates.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not approve AI patch",
+        description: error instanceof Error ? error.message : "AI patch approval failed",
+        variant: "destructive",
+      });
+    } finally {
+      setAiPatchReviewPending(false);
+    }
+  };
+
   const approveCommit = async () => {
     setCommitPending(true);
     try {
@@ -1586,7 +1993,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   };
 
   const update = () => {
-    updateTask.mutate({ id: task.id, data: { status, resultSummary: summary || null, commitSha: commitSha || null } }, {
+    const updateStatus = explicitGateLocked ? task.status : status;
+    const updateCommitSha = explicitGateLocked ? task.commitSha : commitSha || null;
+    updateTask.mutate({ id: task.id, data: { status: updateStatus, resultSummary: summary || null, commitSha: updateCommitSha } }, {
       onSuccess: (updated) => {
         queryClient.setQueryData(getGetCodingTaskQueryKey(task.id), (old: CodingTaskDetail | undefined) => old ? { ...old, task: updated } : old);
         queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
@@ -2035,17 +2444,74 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                     : <><ArrowUpRight className="size-3" />Prepare AI Handoff</>}
                                 </Button>
                               )}
+                              {aiPipelineVisible && (
+                                <div className="mt-3 rounded-lg border border-cyan-300/10 bg-[#07101d] p-3" data-testid="panel-ai-pipeline-stages">
+                                  <div className="mb-2 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-300">
+                                    <Bot className="size-3" />
+                                    Constrained AI pipeline
+                                  </div>
+                                  <div className="grid gap-1.5 sm:grid-cols-3">
+                                    {[
+                                      "AI Required",
+                                      "Prepare AI Context",
+                                      "AI Context Prepared",
+                                      "Approve AI Handoff",
+                                      "AI Handoff Approved",
+                                      "Run Constrained AI",
+                                      "AI Proposal Ready",
+                                      "Review AI Patch",
+                                      "Sandbox Verification",
+                                    ].map((label, index) => {
+                                      const completed = index < aiStageIndex;
+                                      const active = index === aiStageIndex;
+                                      return (
+                                        <div
+                                          key={label}
+                                          className={cn(
+                                            "flex items-center gap-2 rounded border px-2 py-1.5 text-[9px]",
+                                            completed
+                                              ? "border-emerald-300/15 bg-emerald-300/[0.04] text-emerald-300"
+                                              : active
+                                                ? "border-cyan-300/25 bg-cyan-300/[0.06] text-cyan-200"
+                                                : "border-white/[0.05] bg-white/[0.015] text-slate-600",
+                                          )}
+                                        >
+                                          <span className={cn(
+                                            "flex size-4 shrink-0 items-center justify-center rounded-full border font-mono text-[8px]",
+                                            completed
+                                              ? "border-emerald-300/30"
+                                              : active
+                                                ? "border-cyan-300/40"
+                                                : "border-white/10",
+                                          )}>
+                                            {completed ? "✓" : index + 1}
+                                          </span>
+                                          <span>{label}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                               {analyzerResult.aiHandoff && (
-                                <div className="mt-3 rounded border border-amber-300/15 bg-amber-300/[0.025] p-2" data-testid="panel-ai-handoff-gate">
+                                <div className="mt-3 rounded border border-amber-300/15 bg-amber-300/[0.025] p-3" data-testid="panel-ai-handoff-gate">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="text-[9px] uppercase tracking-wider text-amber-300">AI handoff gate</div>
                                     <span className={cn(
                                       "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
-                                      analyzerResult.aiHandoff.status === "APPROVED"
-                                        ? "bg-emerald-300/10 text-emerald-300"
-                                        : "bg-amber-300/10 text-amber-300",
+                                      handoffExpired || handoffStale || handoffRevoked
+                                        ? "bg-rose-300/10 text-rose-300"
+                                        : analyzerResult.aiHandoff.status === "APPROVED"
+                                          ? "bg-emerald-300/10 text-emerald-300"
+                                          : "bg-amber-300/10 text-amber-300",
                                     )}>
-                                      {analyzerResult.aiHandoff.status ?? "PREPARED"}
+                                      {handoffRevoked
+                                        ? "REVOKED"
+                                        : handoffExpired
+                                          ? "EXPIRED"
+                                          : handoffStale
+                                            ? "STALE"
+                                            : analyzerResult.aiHandoff.status ?? "PREPARED"}
                                     </span>
                                   </div>
                                   <div className="mt-2 grid gap-2 sm:grid-cols-4">
@@ -2069,14 +2535,24 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                   {analyzerResult.aiHandoff.packageHash && (
                                     <div className="mt-2">
                                       <div className="text-[9px] uppercase text-slate-600">Package hash</div>
-                                      <div className="mt-1 break-all font-mono text-[9px] text-slate-400">{analyzerResult.aiHandoff.packageHash}</div>
+                                      <div
+                                        className="mt-1 font-mono text-[10px] text-slate-300"
+                                        title={analyzerResult.aiHandoff.packageHash}
+                                        data-testid="text-ai-handoff-package-hash"
+                                      >
+                                        {analyzerResult.aiHandoff.packageHash.slice(0, 12)}
+                                      </div>
                                     </div>
                                   )}
                                   {analyzerResult.aiHandoff.expiresAt && (
                                     <div className="mt-2">
                                       <div className="text-[9px] uppercase text-slate-600">Approval lease expires</div>
-                                      <div className="mt-1 font-mono text-[10px] text-amber-300">
+                                      <div className={cn(
+                                        "mt-1 font-mono text-[10px]",
+                                        handoffExpired ? "text-rose-300" : "text-amber-300",
+                                      )}>
                                         {new Date(analyzerResult.aiHandoff.expiresAt).toLocaleString()}
+                                        {handoffExpired ? " · EXPIRED" : ""}
                                       </div>
                                     </div>
                                   )}
@@ -2095,9 +2571,31 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                       ))}
                                     </div>
                                   ) : null}
-                                  <p className="mt-2 text-[10px] leading-4 text-slate-500">
-                                    Read-only package · repository/network/shell/secrets/source writes disabled · explicit approval required before any future model execution.
-                                  </p>
+                                  {analyzerResult.aiHandoff.package?.diagnostics.length ? (
+                                    <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-ai-handoff-diagnostics">
+                                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-600">
+                                        Diagnostics
+                                      </div>
+                                      <div className="max-h-40 space-y-1 overflow-auto">
+                                        {analyzerResult.aiHandoff.package.diagnostics.slice(0, 12).map((diagnostic, index) => (
+                                          <div key={`${diagnostic.file ?? "diagnostic"}-${diagnostic.line ?? 0}-${index}`} className="rounded border border-white/[0.04] bg-black/10 px-2 py-1.5">
+                                            <div className="flex flex-wrap gap-x-2 font-mono text-[9px] text-cyan-300">
+                                              {diagnostic.file && <span>{diagnostic.file}{diagnostic.line ? `:${diagnostic.line}` : ""}{diagnostic.column ? `:${diagnostic.column}` : ""}</span>}
+                                              {diagnostic.code && <span>{diagnostic.code}</span>}
+                                              {diagnostic.kind && <span className="text-slate-500">{diagnostic.kind}</span>}
+                                            </div>
+                                            {diagnostic.message && <div className="mt-1 text-[9px] leading-4 text-slate-500">{diagnostic.message}</div>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-3 flex items-start gap-2 rounded border border-amber-300/15 bg-amber-300/[0.035] p-2.5 text-[10px] leading-4 text-amber-100">
+                                    <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+                                    <span>
+                                      Model access is non-agentic: no shell, repository connector, filesystem, browser/network, secrets/env, commit, push, or merge access. It may return structured proposal data only.
+                                    </span>
+                                  </div>
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {canApproveAiHandoff && (
                                       <Button
@@ -2111,6 +2609,20 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                         {handoffApprovePending
                                           ? <><Loader2 className="size-3 animate-spin" />Approving handoff</>
                                           : <><CheckCircle2 className="size-3" />Approve AI Handoff</>}
+                                      </Button>
+                                    )}
+                                    {canRunConstrainedAi && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={runConstrainedAi}
+                                        disabled={aiRunPending}
+                                        className="h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
+                                        data-testid="button-run-constrained-ai"
+                                      >
+                                        {aiRunPending
+                                          ? <><Loader2 className="size-3 animate-spin" />Running constrained AI</>
+                                          : <><Bot className="size-3" />Run Constrained AI</>}
                                       </Button>
                                     )}
                                     {canRevokeAiHandoff && (
@@ -2129,6 +2641,162 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                       </Button>
                                     )}
                                   </div>
+                                </div>
+                              )}
+                              {analyzerResult.aiExecution && (
+                                <div className="mt-3 space-y-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.025] p-3" data-testid="panel-ai-proposal-review">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-300">
+                                      <FileDiff className="size-3" />
+                                      AI Proposal Ready
+                                    </div>
+                                    <span className={cn(
+                                      "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                                      analyzerResult.aiExecution.policyValidation?.ok === false
+                                        ? "bg-rose-300/10 text-rose-300"
+                                        : analyzerResult.aiExecution.patch?.status === "APPLIED"
+                                          ? "bg-emerald-300/10 text-emerald-300"
+                                          : "bg-slate-300/10 text-slate-400",
+                                    )}>
+                                      {analyzerResult.aiExecution.status ?? analyzerResult.aiExecution.patch?.status ?? "PROPOSAL"}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid gap-2 sm:grid-cols-3">
+                                    <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                                      <div className="text-[9px] uppercase tracking-wider text-slate-600">Policy validation</div>
+                                      <div className={cn(
+                                        "mt-1 flex items-center gap-1.5 font-mono text-[10px]",
+                                        analyzerResult.aiExecution.policyValidation?.ok === true
+                                          ? "text-emerald-300"
+                                          : analyzerResult.aiExecution.policyValidation?.ok === false
+                                            ? "text-rose-300"
+                                            : "text-slate-400",
+                                      )}>
+                                        {analyzerResult.aiExecution.policyValidation?.ok === true
+                                          ? <ShieldCheck className="size-3" />
+                                          : <ShieldAlert className="size-3" />}
+                                        {analyzerResult.aiExecution.policyValidation?.ok === true
+                                          ? "PASS"
+                                          : analyzerResult.aiExecution.policyValidation?.ok === false
+                                            ? "BLOCKED"
+                                            : analyzerResult.aiExecution.policyValidation?.status ?? "PENDING"}
+                                      </div>
+                                    </div>
+                                    <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                                      <div className="text-[9px] uppercase tracking-wider text-slate-600">Operations</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiExecution.proposal?.operationCount ?? 0}</div>
+                                    </div>
+                                    <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                                      <div className="text-[9px] uppercase tracking-wider text-slate-600">Changed files</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-300">
+                                        {analyzerResult.aiExecution.patch?.changedFiles.length ?? analyzerResult.aiExecution.proposal?.changedFiles.length ?? 0}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {analyzerResult.aiExecution.proposal?.summary && (
+                                    <div>
+                                      <div className="mb-1 text-[9px] uppercase tracking-wider text-slate-600">Proposal summary</div>
+                                      <p className="text-[10px] leading-4 text-slate-300">{analyzerResult.aiExecution.proposal.summary}</p>
+                                      {analyzerResult.aiExecution.proposal.rationale && (
+                                        <p className="mt-1 text-[10px] leading-4 text-slate-500">{analyzerResult.aiExecution.proposal.rationale}</p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {(analyzerResult.aiExecution.patch?.changedFiles.length || analyzerResult.aiExecution.proposal?.changedFiles.length) ? (
+                                    <div>
+                                      <div className="mb-1.5 text-[9px] uppercase tracking-wider text-slate-600">Changed files</div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {(analyzerResult.aiExecution.patch?.changedFiles.length
+                                          ? analyzerResult.aiExecution.patch.changedFiles
+                                          : analyzerResult.aiExecution.proposal?.changedFiles ?? []
+                                        ).map((file) => (
+                                          <code key={file} className="rounded border border-white/[0.06] bg-[#07101d] px-2 py-1 text-[9px] text-slate-400">{file}</code>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {analyzerResult.aiExecution.policyValidation?.errors.length ? (
+                                    <div className="rounded border border-rose-300/15 bg-rose-300/[0.03] p-2">
+                                      <div className="mb-1 text-[9px] uppercase tracking-wider text-rose-300">Policy violations</div>
+                                      <div className="space-y-1">
+                                        {analyzerResult.aiExecution.policyValidation.errors.map((error, index) => (
+                                          <div key={`${error.code ?? "policy"}-${index}`} className="text-[9px] leading-4 text-rose-200">
+                                            <span className="font-mono text-rose-300">{error.code ?? "POLICY_BLOCK"}</span>
+                                            {error.path ? <span className="text-slate-500"> · {error.path}</span> : null}
+                                            {error.message ? <span className="text-slate-400"> · {error.message}</span> : null}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {analyzerResult.aiExecution.model && (
+                                    <div className="grid gap-2 sm:grid-cols-4" data-testid="panel-ai-model-metadata">
+                                      <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Provider / model</div>
+                                        <div className="mt-1 truncate font-mono text-[9px] text-cyan-300">
+                                          {analyzerResult.aiExecution.model.provider ?? "—"} / {analyzerResult.aiExecution.model.model ?? "—"}
+                                        </div>
+                                      </div>
+                                      <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Tokens in / out / total</div>
+                                        <div className="mt-1 font-mono text-[9px] text-slate-300">
+                                          {analyzerResult.aiExecution.model.inputTokens ?? "—"} / {analyzerResult.aiExecution.model.outputTokens ?? "—"} / {analyzerResult.aiExecution.model.totalTokens ?? "—"}
+                                        </div>
+                                      </div>
+                                      <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Latency</div>
+                                        <div className="mt-1 font-mono text-[10px] text-slate-300">
+                                          {typeof analyzerResult.aiExecution.model.latencyMs === "number"
+                                            ? `${analyzerResult.aiExecution.model.latencyMs} ms`
+                                            : "—"}
+                                        </div>
+                                      </div>
+                                      <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Invocation</div>
+                                        <div className="mt-1 font-mono text-[9px] text-slate-300">
+                                          {analyzerResult.aiExecution.model.attempts ?? 1} attempt · {analyzerResult.aiExecution.model.retries ?? 0} retry
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {analyzerResult.aiExecution.patch?.diff && (
+                                    <details className="rounded border border-white/[0.06] bg-[#07101d] p-2" open={currentNextAction === "REVIEW_AI_PATCH"}>
+                                      <summary className="cursor-pointer text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
+                                        Candidate patch / diff
+                                      </summary>
+                                      <pre className="mt-2 max-h-80 overflow-auto whitespace-pre font-mono text-[9px] leading-4 text-slate-400" data-testid="text-ai-candidate-patch">
+                                        {analyzerResult.aiExecution.patch.diff}
+                                      </pre>
+                                    </details>
+                                  )}
+
+                                  <div className="flex items-start gap-2 rounded border border-amber-300/15 bg-amber-300/[0.035] p-2 text-[10px] leading-4 text-amber-100">
+                                    <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+                                    <span>
+                                      This is a candidate patch only. The model cannot write the production repository, execute shell/tests, access network or secrets, commit, push, or merge.
+                                    </span>
+                                  </div>
+
+                                  {canApproveAiPatch && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={approveAiPatch}
+                                      disabled={aiPatchReviewPending}
+                                      className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
+                                      data-testid="button-approve-ai-patch"
+                                    >
+                                      {aiPatchReviewPending
+                                        ? <><Loader2 className="size-3 animate-spin" />Approving AI patch</>
+                                        : <><ShieldCheck className="size-3" />Approve AI Patch for Sandbox</>}
+                                    </Button>
+                                  )}
                                 </div>
                               )}
                               {analyzerResult.failureRecoveryContext.warnings.length > 0 && (
@@ -2549,10 +3217,10 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
         )}
         <div className="grid gap-5 xl:grid-cols-2">
           <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><History className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.runs")}</div><span className="font-mono text-[10px] text-slate-600">{detail.runs.length.toString().padStart(2, "0")}</span></div>{detail.runs.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">{t("pages.codingWorkspace.noRuns")}</p> : <div className="space-y-2">{detail.runs.map((run) => <div key={run.id} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-run-${run.id}`}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm text-slate-300">{run.agentName}</span><span className={cn("text-[10px] font-semibold uppercase tracking-wider", run.status === "FAILED" ? "text-rose-300" : run.status === "COMPLETED" ? "text-emerald-300" : "text-amber-300")}>{t(`pages.codingWorkspace.runStatuses.${run.status.toLowerCase()}`)}</span></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-600">{run.startedAt ? formatDate(run.startedAt, lang, true) : "—"}{run.finishedAt && <><span>→</span>{formatDate(run.finishedAt, lang, true)}</>}</div>{run.errorMessage && <p className="mt-2 text-xs leading-5 text-rose-300">{run.errorMessage}</p>}{run.logs && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-cyan-300">{t("pages.codingWorkspace.runLogs")}</summary><pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 font-mono text-[10px] leading-5 text-slate-500">{run.logs}</pre></details>}</div>)}</div>}</section>
-          <section className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium text-slate-200">{t("pages.codingWorkspace.runAgent")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{t("pages.codingWorkspace.runAgentHint")}</p></div><Button onClick={runAgent} disabled={startCodingRun.isPending || hasActiveRun} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.runningAgent")}</> : hasActiveRun ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.runningAgent")}</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
+          <section className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium text-slate-200">{t("pages.codingWorkspace.runAgent")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{t("pages.codingWorkspace.runAgentHint")}</p></div><Button onClick={runAgent} disabled={startCodingRun.isPending || !canRunAgent} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending || hasActiveRun ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.runningAgent")}</> : explicitGateLocked ? <><LockKeyhole />Explicit gate required</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
           <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><FileCode2 className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.changes")}</div><span className="font-mono text-[10px] text-slate-600">{detail.changes.length.toString().padStart(2, "0")}</span></div>{detail.changes.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">{t("pages.codingWorkspace.noChanges")}</p> : <div className="space-y-2">{detail.changes.map((change) => <div key={change.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-change-${change.id}`}><span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold", change.changeType === "ADDED" ? "bg-emerald-400/10 text-emerald-300" : change.changeType === "DELETED" ? "bg-rose-400/10 text-rose-300" : "bg-cyan-400/10 text-cyan-300")}>{change.changeType === "ADDED" ? "+" : change.changeType === "DELETED" ? "−" : "M"}</span><div className="min-w-0 flex-1"><div className="truncate font-mono text-xs text-slate-300">{change.filePath}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">{t(`pages.codingWorkspace.changeTypes.${change.changeType.toLowerCase()}`)} · {formatDate(change.createdAt, lang)}</div></div></div>)}</div>}</section>
         </div>
-         <section className="border-t border-white/[0.07] pt-5"><div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><GitCommitHorizontal className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.updateStatus")}</div><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.status")}</span><select value={status} onChange={(event) => setStatus(event.target.value as CodingTaskStatus)} className="h-9 w-full rounded-md border border-white/10 bg-[#091222] px-3 text-xs text-slate-200 outline-none focus:border-cyan-300/50" data-testid="select-coding-status">{STATUSES.map((item) => <option key={item} value={item}>{t(`pages.codingWorkspace.statuses.${item.toLowerCase()}`)}</option>)}</select></label><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.commitSha")}</span><div className="relative"><Copy className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={commitSha} onChange={(event) => setCommitSha(event.target.value)} className="h-9 border-white/10 bg-[#091222] pl-9 font-mono text-xs text-slate-200" placeholder="optional" data-testid="input-coding-commit-sha" /></div></label></div><label className="mt-3 block space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.resultSummary")}</span><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} className="resize-y border-white/10 bg-[#091222] text-xs leading-5 text-slate-200 placeholder:text-slate-600" placeholder="Add a concise outcome for reviewers." data-testid="input-coding-result-summary" /></label><Button onClick={update} disabled={updateTask.isPending} className="mt-3 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-update-coding-task">{updateTask.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.updating")}</> : <><CheckCircle2 />{t("pages.codingWorkspace.saveUpdate")}</>}</Button></section>
+         <section className="border-t border-white/[0.07] pt-5"><div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><GitCommitHorizontal className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.updateStatus")}</div><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.status")}</span><select value={status} onChange={(event) => setStatus(event.target.value as CodingTaskStatus)} disabled={explicitGateLocked} className="h-9 w-full rounded-md border border-white/10 bg-[#091222] px-3 text-xs text-slate-200 outline-none focus:border-cyan-300/50 disabled:cursor-not-allowed disabled:opacity-50" data-testid="select-coding-status">{STATUSES.map((item) => <option key={item} value={item}>{t(`pages.codingWorkspace.statuses.${item.toLowerCase()}`)}</option>)}</select></label><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.commitSha")}</span><div className="relative"><Copy className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={commitSha} onChange={(event) => setCommitSha(event.target.value)} disabled={explicitGateLocked} className="h-9 border-white/10 bg-[#091222] pl-9 font-mono text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50" placeholder="optional" data-testid="input-coding-commit-sha" /></div></label></div>{explicitGateLocked && <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-300"><LockKeyhole className="size-3" />Status and commit SHA are locked while <span className="font-mono">{currentNextAction}</span> requires its explicit gate action.</div>}<label className="mt-3 block space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.resultSummary")}</span><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} className="resize-y border-white/10 bg-[#091222] text-xs leading-5 text-slate-200 placeholder:text-slate-600" placeholder="Add a concise outcome for reviewers." data-testid="input-coding-result-summary" /></label><Button onClick={update} disabled={updateTask.isPending} className="mt-3 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-update-coding-task">{updateTask.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.updating")}</> : <><CheckCircle2 />{t("pages.codingWorkspace.saveUpdate")}</>}</Button></section>
       </CardContent>
     </Card>
   );
