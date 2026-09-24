@@ -180,8 +180,8 @@ function setOrchestratorNextAction(
             status: "COMPLETED",
             completedAt: now,
             detail: result.scriptsExecuted
-              ? "Approved local patch passed static and allowlisted repository verification."
-              : "Approved local patch passed static verification.",
+              ? "Approved local patch passed static and sandboxed repository verification."
+              : "Approved local patch passed static verification; repository scripts remain fail-closed until sandbox execution is available.",
           };
         }
         return {
@@ -271,7 +271,7 @@ async function executeApproval(
       trustedWorkspace: true,
       expectedHeadSha: context.contextPackage.headSha,
       runVerification: true,
-      trustedVerificationScripts: true,
+      trustedVerificationScripts: false,
       maxVerificationAttempts: 2,
       verificationTimeoutMs: 180_000,
     });
