@@ -155,15 +155,27 @@ function normalizeRepoPath(value: string): string | null {
 }
 
 function redactText(value: string): string {
-  return value
+  let redacted = value
     .replace(
       /((?:api[_-]?key|access[_-]?token|secret|password|private[_-]?key|authorization)\s*[:=]\s*)\S+/gi,
       "$1[REDACTED]",
     )
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
-    .replace(/(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s]+/gi, "[REDACTED_DATABASE_URL]")
-    .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@[^\s]+/gi, "[REDACTED_CREDENTIAL_URL]")
-    .replace(/[A-Za-z0-9_-]{32,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/g, "[REDACTED_TOKEN]");
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]");
+
+  if (redacted.includes("://")) {
+    redacted = redacted
+      .replace(/(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s]+/gi, "[REDACTED_DATABASE_URL]")
+      .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@[^\s]+/gi, "[REDACTED_CREDENTIAL_URL]");
+  }
+
+  if (redacted.includes(".")) {
+    redacted = redacted.replace(
+      /\b[A-Za-z0-9_-]{32,256}\.[A-Za-z0-9_-]{16,256}\.[A-Za-z0-9_-]{16,512}\b/g,
+      "[REDACTED_TOKEN]",
+    );
+  }
+
+  return redacted;
 }
 
 function patchExcerpt(value: string): { excerpt: string; truncated: boolean } {
