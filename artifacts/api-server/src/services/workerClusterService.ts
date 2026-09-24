@@ -17,6 +17,7 @@ import { db, aiWorkersTable, aiJobsTable } from "@workspace/db";
 import type { AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { failRepositoryAnalyzerRun } from "./repositoryAnalyzerService.js";
+import { failCodingWorkstreamExecution } from "./localCodingMultiWorkerOrchestratorService.js";
 import { logger } from "../lib/logger.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -29,7 +30,7 @@ const WORKER_CLAIM_PAYLOAD_KEY = "_claimedByWorkerId";
 
 export const WORKER_TYPE_CAPABILITIES: Record<string, string[]> = {
   text_worker:   ["llm_inference", "creative_text", "qc_review", "creative_brief", "coding_repository_analyzer"],
-  coding_worker: ["coding_ai_execution"],
+  coding_worker: ["coding_ai_execution", "coding_workstream"],
   image_worker:  ["image_generation", "image_qc", "image_upscale", "universal_render"],
   export_worker: ["pdf_export", "pptx_export", "csv_export", "report_generation", "image_batch_export"],
   system_worker: ["analytics", "cleanup", "custom", "scoring", "notification"],
@@ -338,8 +339,15 @@ export async function rebalanceJobs(): Promise<number> {
   });
 
   for (const row of recovery.recovered) {
-    if (row["status"] === "failed" && row["job_type"] === "coding_repository_analyzer") {
+    if (row["status"] !== "failed") continue;
+    if (row["job_type"] === "coding_repository_analyzer") {
       await failRepositoryAnalyzerRun(
+        (row["payload_json"] ?? {}) as Record<string, unknown>,
+        "Worker lease expired before completion",
+      );
+    }
+    if (row["job_type"] === "coding_workstream_execution") {
+      await failCodingWorkstreamExecution(
         (row["payload_json"] ?? {}) as Record<string, unknown>,
         "Worker lease expired before completion",
       );
