@@ -18,6 +18,7 @@ import {
   UpdateCodingTaskResponse,
 } from "@workspace/api-zod";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
+import { approvePlanAndStartCoding } from "../services/codingAgentService.js";
 
 const router = Router();
 
@@ -155,6 +156,34 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
     }
     if (error instanceof CodingRunAlreadyActiveError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/approve-plan", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await approvePlanAndStartCoding(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "Coding task not found") {
+      res.status(404).json({ error: message });
+      return;
+    }
+    if (
+      message.includes("not awaiting plan approval") ||
+      message.includes("APPROVE_PLAN") ||
+      message.includes("approval")
+    ) {
+      res.status(409).json({ error: message });
       return;
     }
     throw error;
