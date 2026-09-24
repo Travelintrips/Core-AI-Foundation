@@ -41,4 +41,4 @@ Disallow: /success
 Disallow: /dev-test
 Disallow: /creative-preview/
 
-Sitemap: https://aicore.cstlogistic.co.id/sitemap.xml
+Sitemap: https://aifront.cstlogistic.co.id/sitemap.xml
