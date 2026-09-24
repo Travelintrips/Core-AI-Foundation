@@ -17,7 +17,8 @@ const mockStartDeterministicLocalRecovery = vi.hoisted(() => vi.fn());
 const mockStartAiHandoffPreparation = vi.hoisted(() => vi.fn());
 const mockApproveAiHandoff = vi.hoisted(() => vi.fn());
 const mockRevokeAiHandoff = vi.hoisted(() => vi.fn());
-const mockStartAiExecution = vi.hoisted(() => vi.fn());
+const mockAssertApprovedAiHandoffFresh = vi.hoisted(() => vi.fn());
+const mockEnqueueCodingAiExecution = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateAiPatch = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
@@ -218,13 +219,13 @@ vi.mock("../../services/localCodingDeterministicRecoveryService.js", () => ({
 vi.mock("../../services/localCodingAiHandoffService.js", () => ({
   startAiHandoffPreparation: mockStartAiHandoffPreparation,
   approveAiHandoff: mockApproveAiHandoff,
+  assertApprovedAiHandoffFresh: mockAssertApprovedAiHandoffFresh,
   revokeAiHandoff: mockRevokeAiHandoff,
   LocalAiHandoffError: MockLocalAiHandoffError,
 }));
 
-vi.mock("../../services/localCodingAiExecutionGateService.js", () => ({
-  startAiExecution: mockStartAiExecution,
-  LocalCodingAiExecutionGateError: MockLocalCodingAiExecutionGateError,
+vi.mock("../../services/localCodingAiQueueRuntimeService.js", () => ({
+  enqueueCodingAiExecution: mockEnqueueCodingAiExecution,
 }));
 
 vi.mock("../../services/localCodingAiPatchApprovalService.js", () => ({
@@ -764,10 +765,17 @@ describe("AI coding workspace AI handoff gates", () => {
 describe("AI coding workspace constrained AI execution endpoints", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockStartAiExecution.mockResolvedValue({
-      ...run,
-      agentName: "AI Execution Gate",
-      status: "RUNNING",
+    mockAssertApprovedAiHandoffFresh.mockResolvedValue({
+      packageHash: "a".repeat(64),
+      approvedAt: "2026-01-01T00:00:00.000Z",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    mockEnqueueCodingAiExecution.mockResolvedValue({
+      id: 77,
+      jobCode: "JOB-AI123456",
+      jobType: "coding_ai_execution",
+      requiredCapability: "coding_ai_execution",
+      status: "queued",
     });
     mockApproveAndValidateAiPatch.mockResolvedValue({
       ...run,
@@ -777,25 +785,29 @@ describe("AI coding workspace constrained AI execution endpoints", () => {
     });
   });
 
-  it("starts model execution only through the approved AI execution gate", async () => {
+  it("validates the handoff and enqueues constrained AI instead of invoking the model in HTTP", async () => {
     const response = await request(app).post(
       `/ai/coding/tasks/${taskId}/run-ai-execution`,
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(202);
     expect(response.body).toMatchObject({
-      id: runId,
       taskId,
-      agentName: "AI Execution Gate",
-      status: "RUNNING",
+      jobId: 77,
+      jobCode: "JOB-AI123456",
+      jobType: "coding_ai_execution",
+      requiredCapability: "coding_ai_execution",
+      status: "queued",
     });
-    expect(mockStartAiExecution).toHaveBeenCalledTimes(1);
-    expect(mockStartAiExecution).toHaveBeenCalledWith(taskId);
+    expect(mockAssertApprovedAiHandoffFresh).toHaveBeenCalledWith(taskId);
+    expect(mockEnqueueCodingAiExecution).toHaveBeenCalledWith(taskId, {
+      requestedBy: "coding-workspace",
+    });
   });
 
-  it("returns 409 when the handoff lease is expired or stale", async () => {
-    mockStartAiExecution.mockRejectedValueOnce(
-      new MockLocalCodingAiExecutionGateError(
+  it("returns 409 and does not enqueue when the approved handoff is expired", async () => {
+    mockAssertApprovedAiHandoffFresh.mockRejectedValueOnce(
+      new MockLocalAiHandoffError(
         "AI handoff approval lease expired",
         "EXPIRED",
       ),
@@ -806,21 +818,7 @@ describe("AI coding workspace constrained AI execution endpoints", () => {
     );
 
     expect(response.status).toBe(409);
-  });
-
-  it("returns 503 when no constrained model is configured", async () => {
-    mockStartAiExecution.mockRejectedValueOnce(
-      new MockLocalCodingAiExecutionGateError(
-        "No active configured coding model is available",
-        "MODEL_UNAVAILABLE",
-      ),
-    );
-
-    const response = await request(app).post(
-      `/ai/coding/tasks/${taskId}/run-ai-execution`,
-    );
-
-    expect(response.status).toBe(503);
+    expect(mockEnqueueCodingAiExecution).not.toHaveBeenCalled();
   });
 
   it("records explicit human approval before existing sandbox verification", async () => {

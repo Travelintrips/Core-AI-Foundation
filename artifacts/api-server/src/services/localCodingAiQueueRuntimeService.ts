@@ -1,4 +1,5 @@
-import type { AiJob, AiCodingRun } from "@workspace/db";
+import { aiJobsTable, db, type AiJob, type AiCodingRun } from "@workspace/db";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { enqueue } from "./queueManagerService.js";
 import { runAiExecutionToCompletion } from "./localCodingAiExecutionGateService.js";
 
@@ -48,6 +49,25 @@ export function parseCodingAiExecutionJobPayload(
   };
 }
 
+async function findExistingCodingAiExecutionJob(
+  taskId: string,
+): Promise<AiJob | null> {
+  const [existing] = await db
+    .select()
+    .from(aiJobsTable)
+    .where(
+      and(
+        eq(aiJobsTable.jobType, CODING_AI_EXECUTION_JOB_TYPE),
+        inArray(aiJobsTable.status, ["queued", "waiting", "running", "retrying"]),
+        sql`${aiJobsTable.payloadJson}->>'taskId' = ${taskId}`,
+      ),
+    )
+    .orderBy(desc(aiJobsTable.id))
+    .limit(1);
+
+  return existing ?? null;
+}
+
 export async function enqueueCodingAiExecution(
   taskId: string,
   options: EnqueueCodingAiExecutionOptions = {},
@@ -56,6 +76,9 @@ export async function enqueueCodingAiExecution(
     taskId,
     requestedBy: options.requestedBy,
   });
+
+  const existing = await findExistingCodingAiExecutionJob(payload.taskId);
+  if (existing) return existing;
 
   return enqueue({
     jobType: CODING_AI_EXECUTION_JOB_TYPE,

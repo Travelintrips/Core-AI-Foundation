@@ -3,6 +3,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(),
   runToCompletion: vi.fn(),
+  existingLimit: vi.fn(),
+}));
+
+vi.mock("@workspace/db", () => {
+  const selectBuilder = {
+    from: vi.fn(() => selectBuilder),
+    where: vi.fn(() => selectBuilder),
+    orderBy: vi.fn(() => selectBuilder),
+    limit: mocks.existingLimit,
+  };
+  return {
+    aiJobsTable: {
+      id: "aiJobs.id",
+      jobType: "aiJobs.jobType",
+      status: "aiJobs.status",
+      payloadJson: "aiJobs.payloadJson",
+    },
+    db: {
+      select: vi.fn(() => selectBuilder),
+    },
+  };
+});
+
+vi.mock("drizzle-orm", () => ({
+  and: vi.fn((...args: unknown[]) => args),
+  desc: vi.fn((value: unknown) => value),
+  eq: vi.fn((...args: unknown[]) => args),
+  inArray: vi.fn((...args: unknown[]) => args),
+  sql: Object.assign(
+    vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })),
+    {},
+  ),
 }));
 
 vi.mock("../queueManagerService.js", () => ({
@@ -26,6 +58,7 @@ const TASK_ID = "11111111-1111-4111-8111-111111111111";
 describe("AI coding queue runtime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.existingLimit.mockResolvedValue([]);
     mocks.enqueue.mockResolvedValue({
       id: 42,
       jobType: CODING_AI_EXECUTION_JOB_TYPE,
@@ -52,6 +85,23 @@ describe("AI coding queue runtime", () => {
       maxRetry: 0,
       retryStrategy: "manual",
     });
+  });
+
+  it("returns an existing queued/running execution job instead of enqueueing a duplicate", async () => {
+    const existing = {
+      id: 99,
+      jobCode: "JOB-EXISTING",
+      jobType: CODING_AI_EXECUTION_JOB_TYPE,
+      status: "running",
+      payloadJson: { taskId: TASK_ID },
+    };
+    mocks.existingLimit.mockResolvedValueOnce([existing]);
+
+    await expect(
+      enqueueCodingAiExecution(TASK_ID, { requestedBy: "double-click" }),
+    ).resolves.toEqual(existing);
+
+    expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
   it("validates queue payloads fail closed", () => {
