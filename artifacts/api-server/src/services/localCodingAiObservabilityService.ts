@@ -134,6 +134,7 @@ export async function parseCodingAiExecutionTelemetry(
     stringValue(payload.errorKind);
   const errorMessage =
     stringValue(execution?.errorMessage) ??
+    stringValue(execution?.error) ??
     stringValue(payload.error) ??
     run.errorMessage ??
     null;
