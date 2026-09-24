@@ -220,7 +220,7 @@ describe("Local Coding AI Handoff Package", () => {
 
 describe("Local Coding AI Handoff Lease", () => {
   it("defaults to a short lease and clamps operator configuration", () => {
-    expect(resolveAiHandoffTtlSeconds(undefined)).toBe(900);
+    expect(resolveAiHandoffTtlSeconds("")).toBe(900);
     expect(resolveAiHandoffTtlSeconds("10")).toBe(60);
     expect(resolveAiHandoffTtlSeconds("120")).toBe(120);
     expect(resolveAiHandoffTtlSeconds("99999")).toBe(3600);
