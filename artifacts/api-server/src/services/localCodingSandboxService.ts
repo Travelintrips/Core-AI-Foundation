@@ -286,7 +286,14 @@ export async function runSandboxedRepositoryVerification(
       absoluteRoot,
       image,
       "pnpm install --offline --frozen-lockfile --ignore-scripts",
-      ["install", "--offline", "--frozen-lockfile", "--ignore-scripts"],
+      [
+        "install",
+        "--offline",
+        "--frozen-lockfile",
+        "--ignore-scripts",
+        "--store-dir",
+        "/opt/pnpm-store",
+      ],
       timeoutMs,
       executor,
     );
