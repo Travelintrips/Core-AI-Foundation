@@ -13,6 +13,7 @@ const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
 const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
 const mockStartSandboxVerification = vi.hoisted(() => vi.fn());
+const mockStartDeterministicLocalRecovery = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
 const mockApproveAndMergePullRequest = vi.hoisted(() => vi.fn());
@@ -34,6 +35,20 @@ const MockLocalCodingSandboxGateError = vi.hoisted(() => class extends Error {
       | "INVALID_PATCH"
       | "VERIFICATION_FAILED"
       | "SANDBOX_BLOCKED",
+  ) {
+    super(message);
+  }
+});
+const MockLocalDeterministicRecoveryError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind:
+      | "NOT_FOUND"
+      | "NOT_READY"
+      | "STALE_HEAD"
+      | "INVALID_CONTEXT"
+      | "SANDBOX_BLOCKED"
+      | "RECOVERY_FAILED",
   ) {
     super(message);
   }
@@ -141,6 +156,11 @@ vi.mock("../../services/localCodingCommitApprovalService.js", () => ({
 vi.mock("../../services/localCodingSandboxGateService.js", () => ({
   startSandboxVerification: mockStartSandboxVerification,
   LocalCodingSandboxGateError: MockLocalCodingSandboxGateError,
+}));
+
+vi.mock("../../services/localCodingDeterministicRecoveryService.js", () => ({
+  startDeterministicLocalRecovery: mockStartDeterministicLocalRecovery,
+  LocalDeterministicRecoveryError: MockLocalDeterministicRecoveryError,
 }));
 
 vi.mock("../../services/localCodingPullRequestGateService.js", () => ({
@@ -463,6 +483,79 @@ describe("AI coding workspace sandbox verification endpoint", () => {
 
     const response = await request(app).post(
       `/ai/coding/tasks/${taskId}/run-sandbox-verification`,
+    );
+
+    expect(response.status).toBe(422);
+  });
+});
+
+
+describe("AI coding workspace deterministic local recovery endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStartDeterministicLocalRecovery.mockResolvedValue({
+      ...run,
+      agentName: "Local Recovery Executor",
+      status: "RUNNING",
+    });
+  });
+
+  it("starts recovery only through the explicit LOCAL_RECOVERY_REQUIRED gate", async () => {
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-local-recovery`,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Local Recovery Executor",
+      status: "RUNNING",
+    });
+    expect(mockStartDeterministicLocalRecovery).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when the task is not at LOCAL_RECOVERY_REQUIRED", async () => {
+    mockStartDeterministicLocalRecovery.mockRejectedValueOnce(
+      new MockLocalDeterministicRecoveryError(
+        "Coding task is not at the LOCAL_RECOVERY_REQUIRED gate",
+        "NOT_READY",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-local-recovery`,
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/LOCAL_RECOVERY_REQUIRED/);
+  });
+
+  it("returns 503 when the recovery sandbox is unavailable", async () => {
+    mockStartDeterministicLocalRecovery.mockRejectedValueOnce(
+      new MockLocalDeterministicRecoveryError(
+        "Docker sandbox runtime is unavailable",
+        "SANDBOX_BLOCKED",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-local-recovery`,
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  it("returns 422 for inconsistent recovery context", async () => {
+    mockStartDeterministicLocalRecovery.mockRejectedValueOnce(
+      new MockLocalDeterministicRecoveryError(
+        "Validated failing patch digest no longer matches",
+        "INVALID_CONTEXT",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-local-recovery`,
     );
 
     expect(response.status).toBe(422);
