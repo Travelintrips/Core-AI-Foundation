@@ -89,6 +89,35 @@ type RepositoryAnalyzerUiResult = {
     file?: string;
   }>;
   recommendedChanges: string[];
+  contextPackage?: {
+    branch?: string;
+    headSha?: string;
+    keywords: string[];
+    relevantFiles: Array<{
+      path?: string;
+      score?: number;
+      reasons: string[];
+    }>;
+    affectedFiles: string[];
+    symbols: Array<{
+      name?: string;
+      kind?: string;
+      file?: string;
+      line?: number;
+      exported?: boolean;
+    }>;
+    relatedTests: string[];
+    verificationCommands: string[];
+    testFrameworks: string[];
+    warnings: string[];
+    index?: {
+      filesIndexed?: number;
+      sourceFilesParsed?: number;
+      sensitiveFilesExcluded?: number;
+      cacheHit?: boolean;
+      searchBackend?: string;
+    };
+  };
   orchestration?: {
     sessionId?: string;
     status?: string;
@@ -313,6 +342,14 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.planner && typeof value.planner === "object" && !Array.isArray(value.planner)
         ? (value.planner as Record<string, unknown>)
         : null;
+    const contextPackageValue =
+      value.contextPackage && typeof value.contextPackage === "object" && !Array.isArray(value.contextPackage)
+        ? (value.contextPackage as Record<string, unknown>)
+        : null;
+    const contextIndexValue =
+      contextPackageValue?.index && typeof contextPackageValue.index === "object" && !Array.isArray(contextPackageValue.index)
+        ? (contextPackageValue.index as Record<string, unknown>)
+        : null;
     const stringList = (input: unknown) =>
       Array.isArray(input)
         ? input.filter((item): item is string => typeof item === "string")
@@ -331,6 +368,47 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       recommendedChanges: Array.isArray(value.recommendedChanges)
         ? value.recommendedChanges.filter((item): item is string => typeof item === "string")
         : [],
+      contextPackage: contextPackageValue
+        ? {
+            branch: typeof contextPackageValue.branch === "string" ? contextPackageValue.branch : undefined,
+            headSha: typeof contextPackageValue.headSha === "string" ? contextPackageValue.headSha : undefined,
+            keywords: stringList(contextPackageValue.keywords),
+            relevantFiles: Array.isArray(contextPackageValue.relevantFiles)
+              ? contextPackageValue.relevantFiles
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    path: typeof item.path === "string" ? item.path : undefined,
+                    score: typeof item.score === "number" ? item.score : undefined,
+                    reasons: stringList(item.reasons),
+                  }))
+              : [],
+            affectedFiles: stringList(contextPackageValue.affectedFiles),
+            symbols: Array.isArray(contextPackageValue.symbols)
+              ? contextPackageValue.symbols
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    name: typeof item.name === "string" ? item.name : undefined,
+                    kind: typeof item.kind === "string" ? item.kind : undefined,
+                    file: typeof item.file === "string" ? item.file : undefined,
+                    line: typeof item.line === "number" ? item.line : undefined,
+                    exported: item.exported === true,
+                  }))
+              : [],
+            relatedTests: stringList(contextPackageValue.relatedTests),
+            verificationCommands: stringList(contextPackageValue.verificationCommands),
+            testFrameworks: stringList(contextPackageValue.testFrameworks),
+            warnings: stringList(contextPackageValue.warnings),
+            index: contextIndexValue
+              ? {
+                  filesIndexed: typeof contextIndexValue.filesIndexed === "number" ? contextIndexValue.filesIndexed : undefined,
+                  sourceFilesParsed: typeof contextIndexValue.sourceFilesParsed === "number" ? contextIndexValue.sourceFilesParsed : undefined,
+                  sensitiveFilesExcluded: typeof contextIndexValue.sensitiveFilesExcluded === "number" ? contextIndexValue.sensitiveFilesExcluded : undefined,
+                  cacheHit: contextIndexValue.cacheHit === true,
+                  searchBackend: typeof contextIndexValue.searchBackend === "string" ? contextIndexValue.searchBackend : undefined,
+                }
+              : undefined,
+          }
+        : undefined,
       orchestration: orchestrationValue
         ? {
             sessionId: typeof orchestrationValue.sessionId === "string" ? orchestrationValue.sessionId : undefined,
@@ -622,6 +700,65 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                     <div className="text-[10px] uppercase tracking-wider text-slate-600">Findings</div>
                     <div className="mt-1 font-mono text-lg text-cyan-300">{analyzerResult.findings.length}</div>
                   </div>
+                </div>
+              )}
+              {analyzerResult?.contextPackage && (
+                <div className="space-y-3 rounded-lg border border-cyan-300/10 bg-[#091222] p-3" data-testid="panel-local-coding-context">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-300">Local context package</div>
+                    <div className="flex flex-wrap items-center gap-2 font-mono text-[9px] text-slate-500">
+                      {analyzerResult.contextPackage.branch && <span>{analyzerResult.contextPackage.branch}</span>}
+                      {analyzerResult.contextPackage.headSha && <span>{analyzerResult.contextPackage.headSha.slice(0, 12)}</span>}
+                      {analyzerResult.contextPackage.index?.searchBackend && <span>{analyzerResult.contextPackage.index.searchBackend}</span>}
+                      {analyzerResult.contextPackage.index?.cacheHit && <span>cache hit</span>}
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    {[
+                      ["Indexed", analyzerResult.contextPackage.index?.filesIndexed ?? 0],
+                      ["Relevant", analyzerResult.contextPackage.relevantFiles.length],
+                      ["Symbols", analyzerResult.contextPackage.symbols.length],
+                      ["Tests", analyzerResult.contextPackage.relatedTests.length],
+                    ].map(([label, count]) => (
+                      <div key={String(label)} className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-600">{String(label)}</div>
+                        <div className="mt-1 font-mono text-sm text-cyan-300">{String(count)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {analyzerResult.contextPackage.keywords.length > 0 && (
+                    <div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Task keywords</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {analyzerResult.contextPackage.keywords.map((keyword) => (
+                          <span key={keyword} className="rounded border border-white/[0.06] px-1.5 py-0.5 font-mono text-[9px] text-slate-400">{keyword}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {analyzerResult.contextPackage.relevantFiles.length > 0 && (
+                    <div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Top relevant files</div>
+                      <div className="space-y-1">
+                        {analyzerResult.contextPackage.relevantFiles.slice(0, 8).map((file, index) => (
+                          <div key={`${file.path ?? "file"}-${index}`} className="flex items-center justify-between gap-3 text-[10px]">
+                            <span className="min-w-0 truncate font-mono text-slate-300">{file.path ?? "Unknown file"}</span>
+                            {typeof file.score === "number" && <span className="shrink-0 font-mono text-cyan-400">score {file.score}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {analyzerResult.contextPackage.verificationCommands.length > 0 && (
+                    <div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Safe verification commands</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {analyzerResult.contextPackage.verificationCommands.map((command) => (
+                          <code key={command} className="rounded border border-emerald-300/10 bg-emerald-300/[0.035] px-2 py-1 text-[9px] text-emerald-300">{command}</code>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {analyzerResult && analyzerResult.findings.length > 0 && (
