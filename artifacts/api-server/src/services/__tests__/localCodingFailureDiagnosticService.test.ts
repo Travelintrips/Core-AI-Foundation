@@ -1,9 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildFailureContexts,
   buildLocalFailureContext,
+  enrichFailureContextsWithSymbols,
 } from "../localCodingFailureDiagnosticService.js";
 import type { VerificationCommandResult } from "../localCodingEngineService.js";
+
+const roots: string[] = [];
 
 function result(
   command: string,
@@ -22,6 +28,9 @@ function result(
 }
 
 describe("Local Coding Failure Diagnostics", () => {
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
   it("extracts TypeScript file, line, column, code and message", () => {
     const context = buildLocalFailureContext(result(
       "pnpm typecheck",
@@ -113,6 +122,36 @@ describe("Local Coding Failure Diagnostics", () => {
     expect(escaping.primaryFiles).toEqual([]);
     expect(sensitive.diagnostics).toEqual([]);
     expect(escaping.diagnostics).toEqual([]);
+  });
+
+  it("maps a file-line diagnostic to the nearest local TypeScript symbol", async () => {
+    const root = await mkdtemp(join(tmpdir(), "failure-symbol-test-"));
+    roots.push(root);
+    await mkdir(join(root, "src"), { recursive: true });
+    await writeFile(
+      join(root, "src", "payment.ts"),
+      [
+        "export function calculatePayment() {",
+        "  const amount = 10;",
+        "  const tax = amount * 0.1;",
+        "  return amount + tax;",
+        "}",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const base = buildLocalFailureContext(result(
+      "pnpm typecheck",
+      "src/payment.ts(3,9): error TS2322: Type mismatch.",
+    ));
+    const [enriched] = await enrichFailureContextsWithSymbols(root, [base]);
+
+    expect(enriched?.diagnostics[0]).toMatchObject({
+      file: "src/payment.ts",
+      line: 3,
+      symbol: "calculatePayment",
+    });
   });
 
   it("never retains raw output when parsing is unknown", () => {
