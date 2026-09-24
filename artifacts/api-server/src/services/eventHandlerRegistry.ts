@@ -196,6 +196,15 @@ const callWebhookHandler: HandlerFn = async (event, _sub, config) => {
 // ── automation_trigger ────────────────────────────────────────────────────────
 // Evaluates all matching automation rules when an event fires.
 
+const codingCiGateHandler: HandlerFn = async (event, _sub, _config) => {
+  try {
+    const service = await import("./localCodingCiGateService.js");
+    return await service.handleCodingGithubCiEvent(event);
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+};
+
 const automationTriggerHandler: HandlerFn = async (event, _sub, _config) => {
   try {
     const { evaluateRulesForEvent } = await import("./commercialAutomationService.js");
@@ -279,6 +288,7 @@ const trackFunnelEventHandler: HandlerFn = async (event, _sub, _config) => {
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const eventHandlerRegistry: Record<string, HandlerFn> = {
+  coding_ci_gate:         codingCiGateHandler,
   create_job:             createJobHandler,
   audit_log:              auditLogHandler,
   notification_hook:      notificationHookHandler,
