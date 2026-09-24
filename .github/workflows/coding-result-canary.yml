@@ -1,0 +1,50 @@
+name: Coding Result Canary
+
+on:
+  push:
+    branches:
+      - fix/coding-analyzer-result
+    paths:
+      - .github/workflows/coding-result-canary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      TASK_ID: 022d5103-50a8-40b4-a697-3f08e4ddeb2d
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Verify Coding Workspace result detail
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          code=$(curl -L -sS -o /tmp/detail -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID")
+          echo "detail_http=$code"
+          test "$code" = "200"
+
+          node <<'NODE'
+          const fs = require("fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/detail", "utf8"));
+          if (!payload?.task?.resultSummary) throw new Error("resultSummary missing");
+          const completed = Array.isArray(payload.runs)
+            ? payload.runs.find((run) => run.status === "COMPLETED" && run.logs)
+            : null;
+          if (!completed) throw new Error("completed analyzer run with logs missing");
+          const parsed = JSON.parse(completed.logs);
+          if (parsed.executionStatus !== "COMPLETED") throw new Error("analyzer executionStatus is not COMPLETED");
+          if (!Array.isArray(parsed.findings)) throw new Error("analyzer findings missing");
+          console.log("result_summary_present=true");
+          console.log("completed_run_present=true");
+          console.log("execution_status=COMPLETED");
+          console.log("findings_count=" + parsed.findings.length);
+          NODE
