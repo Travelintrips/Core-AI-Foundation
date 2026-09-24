@@ -96,3 +96,4 @@
 - [Phase 7A-9 Repository Analyzer](phase7a9-repository-analyzer.md) — coding analysis runs through ai_jobs and persists terminal run/task state without commitSha
 - [Development Supabase read-only queue blocker](dev-supabase-readonly-queue-blocker.md) — real dispatcher integration needs a writable dev DB; SQLSTATE 25006 blocks lifecycle writes and row-locking claims
 - [Phase 7A-11 recovery evidence](phase7a11-recovery-evidence.md) — cast parameterized JSON/timestamp values and isolate the claimed worker when proving DEV recovery
+- [Phase 7A-12 release gate](phase7a12-release-gate.md) — external Supabase schema and production worker flags need explicit read-only verification before release

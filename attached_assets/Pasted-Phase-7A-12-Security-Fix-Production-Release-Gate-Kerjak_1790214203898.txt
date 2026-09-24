@@ -1,0 +1,185 @@
+Phase 7A-12 — Security Fix + Production Release Gate
+
+Kerjakan sampai selesai.
+JANGAN deploy production sebelum seluruh gate PASS.
+JANGAN upgrade dependency secara massal.
+
+==================================================
+1. FIX OPEN REDIRECT
+==================================================
+
+File:
+artifacts/api-server/src/routes/files.ts
+
+Temuan:
+open redirect dari user-controlled input sekitar line 123.
+
+Audit route aktual dan perbaiki di SOURCE.
+
+Requirement:
+- jangan redirect ke arbitrary external URL dari input user
+- gunakan allowlist / trusted-origin validation sesuai architecture existing
+- relative internal URL boleh jika memang diperlukan
+- reject malformed URL
+- reject protocol-relative URL seperti:
+  //evil.example
+- reject javascript:, data:, file:, dan scheme tidak diizinkan
+- jangan menggunakan substring/domain suffix check yang bisa dibypass
+- jangan hardcode production-only behavior yang merusak DEV
+
+Tambahkan regression tests untuk:
+- valid internal redirect
+- valid trusted destination jika memang dibutuhkan
+- https://evil.example ditolak
+- //evil.example ditolak
+- javascript: ditolak
+- encoded/bypass variant ditolak
+
+Jangan mengubah behavior file route lain yang tidak terkait.
+
+==================================================
+2. SECURITY RESCAN
+==================================================
+
+Jalankan kembali SAST yang sama.
+
+Expected:
+open redirect finding tersebut hilang.
+
+Dependency audit:
+jangan melakukan upgrade massal.
+
+Catat dependency vulnerabilities yang tersisa sebagai follow-up terpisah,
+terutama direct dependency vs transitive dependency.
+
+==================================================
+3. FINAL REGRESSION
+==================================================
+
+Jalankan kembali:
+
+- focused files route tests
+- coding workspace tests
+- Repository Analyzer tests
+- dispatcher/recovery tests
+- seluruh AI Platform tests
+- seluruh API server tests
+- typecheck libs
+- API typecheck
+- AI Platform typecheck
+- API build
+- AI Platform build
+- OpenAPI/workspace validation
+- git diff --check
+
+Semua harus menggunakan command project yang sebenarnya.
+
+==================================================
+4. PRODUCTION CONFIG PRE-FLIGHT
+==================================================
+
+READ ONLY CHECK SAJA.
+
+Jangan menjalankan migration.
+Jangan menulis database production.
+Jangan mengaktifkan dispatcher production.
+Jangan deploy.
+
+Verifikasi konfigurasi release:
+
+- migration yang diperlukan sudah teridentifikasi
+- ai_platform.ai_coding_tasks
+- ai_platform.ai_coding_runs
+- ai_platform.ai_jobs
+- ai_platform.ai_workers
+
+Pastikan migration coding workspace yang sebelumnya hanya diterapkan ke DEV
+tersedia sebagai migration source yang dapat dijalankan ke PROD saat deployment.
+
+Verifikasi env yang dibutuhkan:
+- database
+- dispatcher
+- worker
+- repository analyzer
+
+Jangan tampilkan secret.
+
+PENTING:
+DEV sebelumnya membutuhkan explicit READ WRITE.
+Jangan otomatis menyalin workaround DEV ke PROD.
+Audit konfigurasi PROD secara read-only dan gunakan konfigurasi PROD yang benar.
+
+==================================================
+5. RELEASE DIFF
+==================================================
+
+Tampilkan seluruh file yang berubah sejak Phase 7A-8 sampai sekarang.
+
+Pastikan tidak ada:
+- diagnostic route sementara
+- debug logging sensitif
+- test credential
+- hardcoded DEV database URL
+- production secret
+- temporary bypass
+- perubahan eksperimental yang seharusnya sudah direvert
+
+==================================================
+6. STOP BEFORE DEPLOY
+==================================================
+
+JANGAN DEPLOY.
+
+Laporkan:
+
+OPEN REDIRECT FIX:
+PASS/FAIL
+
+SAST:
+<actual findings>
+
+DEPENDENCY AUDIT:
+<actual counts>
+NO MASS UPGRADE: YES/NO
+
+AI PLATFORM TESTS:
+...
+
+API SERVER TESTS:
+...
+
+TYPECHECK:
+PASS/FAIL
+
+BUILD:
+PASS/FAIL
+
+OPENAPI:
+PASS/FAIL
+
+GIT DIFF CHECK:
+PASS/FAIL
+
+TEMP/DEBUG CODE:
+CLEAN / NOT CLEAN
+
+PROD MIGRATION READY:
+YES/NO
+
+PROD ENV PREFLIGHT:
+PASS/FAIL
+
+PRODUCTION WRITE:
+NOT PERFORMED
+
+DEPLOY:
+NOT PERFORMED
+
+RELEASE READY:
+YES/NO
+
+Jika RELEASE READY = NO:
+berikan blocker konkret.
+
+Jika RELEASE READY = YES:
+berhenti. Jangan deploy sampai perintah berikutnya.

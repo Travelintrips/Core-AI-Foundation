@@ -20,6 +20,10 @@ import {
   verifyDownloadToken,
   revokeToken,
 } from "../services/signedUrlService.js";
+import {
+  sendTrustedFileRedirect,
+  validateFileRedirectTarget,
+} from "../services/fileRedirectPolicy.js";
 import { uploadLimiter } from "../middleware/rateLimiter.js";
 
 const router = Router();
@@ -71,11 +75,24 @@ router.get("/public/files/access/:token", async (req, res): Promise<void> => {
     return;
   }
 
+  const redirectTarget = validateFileRedirectTarget(url);
+  if (!redirectTarget.valid) {
+    await logAudit("files", "access_denied_invalid_redirect", String(pid), "signed_url", "failure", {
+      reason: redirectTarget.reason,
+      ip,
+    });
+    res.status(400).json({
+      error: "File redirect target is not allowed.",
+      code: "INVALID_REDIRECT_TARGET",
+    });
+    return;
+  }
+
   // ── Phase 1B: verify the storage object actually exists before redirecting ──
   // Prevents serving a broken redirect when production was never completed
   // or the file was deleted. Returns structured errors instead of 302→404.
   try {
-    const headRes = await fetch(url, { method: "HEAD" });
+    const headRes = await fetch(redirectTarget.target, { method: "HEAD" });
     if (!headRes.ok) {
       const code = headRes.status;
       await logAudit("files", "access_denied_missing", String(pid), "signed_url", "failure", {
@@ -119,8 +136,7 @@ router.get("/public/files/access/:token", async (req, res): Promise<void> => {
     ip,
   });
 
-  // Redirect to the actual file URL
-  res.redirect(302, url);
+  sendTrustedFileRedirect(res, redirectTarget.target);
 });
 
 // ── POST /ai/files/generate-token ──────────────────────────────────────────────
@@ -138,6 +154,15 @@ router.post("/ai/files/generate-token", uploadLimiter, async (req, res): Promise
   }
   if (!fileUrl) {
     res.status(400).json({ error: "fileUrl is required" });
+    return;
+  }
+
+  const redirectTarget = validateFileRedirectTarget(fileUrl);
+  if (!redirectTarget.valid) {
+    res.status(400).json({
+      error: `Invalid fileUrl: ${redirectTarget.reason}`,
+      code: "INVALID_REDIRECT_TARGET",
+    });
     return;
   }
 
@@ -161,7 +186,7 @@ router.post("/ai/files/generate-token", uploadLimiter, async (req, res): Promise
     return;
   }
 
-  const token = generateDownloadToken(projectId, fileUrl, Math.min(ttlSeconds, 86400));
+  const token = generateDownloadToken(projectId, redirectTarget.target, Math.min(ttlSeconds, 86400));
   const expiresAt = new Date(Date.now() + Math.min(ttlSeconds, 86400) * 1000).toISOString();
 
   await logAudit("files", "token_generated", String(projectId), "signed_url", "success", {
