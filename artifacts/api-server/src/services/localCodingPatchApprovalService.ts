@@ -42,6 +42,7 @@ export class LocalPatchApprovalError extends Error {
 interface LocalPatchContext {
   task: AiCodingTask;
   orchestratorRun: AiCodingRun;
+  orchestratorPayload: Record<string, unknown>;
   patch: string;
   expectedHeadSha: string;
   changedFiles: string[];
@@ -134,6 +135,13 @@ async function latestLocalPatchContext(taskId: string): Promise<LocalPatchContex
     .from(aiCodingRunsTable)
     .where(eq(aiCodingRunsTable.taskId, taskId))
     .orderBy(desc(aiCodingRunsTable.startedAt));
+
+  if (runs.some((run) => run.status === "RUNNING")) {
+    throw new LocalPatchApprovalError(
+      "Coding task already has an active run",
+      "NOT_READY",
+    );
+  }
 
   const orchestratorRun = runs.find(
     (run) =>
@@ -237,6 +245,7 @@ async function latestLocalPatchContext(taskId: string): Promise<LocalPatchContex
   return {
     task,
     orchestratorRun,
+    orchestratorPayload: payload,
     patch,
     expectedHeadSha: expectedHeadSha.toLowerCase(),
     changedFiles: [...new Set(changedFiles)].sort(),
@@ -356,6 +365,36 @@ export async function approveAndValidateLocalPatch(taskId: string): Promise<AiCo
       .update(context.patch, "utf8")
       .digest("hex");
     const completedAt = new Date();
+    const currentOrchestration =
+      context.orchestratorPayload.orchestration &&
+      typeof context.orchestratorPayload.orchestration === "object" &&
+      !Array.isArray(context.orchestratorPayload.orchestration)
+        ? context.orchestratorPayload.orchestration as Record<string, unknown>
+        : {};
+    const approvedPayload = {
+      ...context.orchestratorPayload,
+      localPatchApproval: {
+        status: "APPLIED",
+        gateStatus: "PATCH_VALIDATED",
+        reason: "Deterministic local patch matched the analyzed HEAD and passed static verification.",
+        baseHeadSha: context.expectedHeadSha,
+        patchSha256,
+        changedFiles: context.changedFiles,
+        staticVerification: "PASSED",
+        scriptsExecuted: false,
+        warnings: [
+          "Repository-defined scripts remain fail-closed until sandboxed execution is available.",
+        ],
+        approvedAt: completedAt.toISOString(),
+        commitCreated: false,
+        pushed: false,
+      },
+      orchestration: {
+        ...currentOrchestration,
+        status: "READY_REVIEW",
+        nextAction: "APPROVE_COMMIT",
+      },
+    };
 
     const [completedRun] = await db.transaction(async (tx) => {
       const [updatedRun] = await tx
@@ -371,13 +410,20 @@ export async function approveAndValidateLocalPatch(taskId: string): Promise<AiCo
             patchSha256,
             changedFiles: context.changedFiles,
             staticVerification: "PASSED",
-            nextAction: "ENABLE_GIT_WRITE_OR_EXPORT_PATCH",
+            nextAction: "APPROVE_COMMIT",
             commitCreated: false,
             pushed: false,
           }, null, 2),
         })
         .where(eq(aiCodingRunsTable.id, run.id))
         .returning();
+
+      await tx
+        .update(aiCodingRunsTable)
+        .set({
+          logs: JSON.stringify(approvedPayload, null, 2),
+        })
+        .where(eq(aiCodingRunsTable.id, context.orchestratorRun.id));
 
       for (const filePath of context.changedFiles) {
         await tx.insert(aiCodeChangesTable).values({
@@ -394,7 +440,7 @@ export async function approveAndValidateLocalPatch(taskId: string): Promise<AiCo
           status: "READY_REVIEW",
           resultSummary:
             `Deterministic patch revalidated against remote HEAD ${context.expectedHeadSha.slice(0, 12)}. ` +
-            "Static verification passed; nothing was committed or pushed.",
+            "Static verification passed. Ready for explicit commit approval; nothing was committed or pushed.",
         })
         .where(eq(aiCodingTasksTable.id, taskId));
 
