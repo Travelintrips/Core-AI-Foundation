@@ -125,7 +125,7 @@ function strings(value: unknown): string[] {
 }
 
 function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) {
     return "[" + value.map((item) => stableStringify(item)).join(",") + "]";
   }
@@ -793,7 +793,7 @@ export async function enqueueWorkstreamAiExecution(
   return result;
 }
 
-function collectCandidatePaths(
+export function selectWorkstreamAiAllowedFiles(
   result: Record<string, unknown>,
   ownershipPaths: string[],
 ): string[] {
@@ -926,7 +926,7 @@ async function buildSyntheticContextLease(
   }
 
   const ownershipPaths = authorization.package.workstream.ownershipPaths;
-  const allowedFiles = collectCandidatePaths(analyzer, ownershipPaths);
+  const allowedFiles = selectWorkstreamAiAllowedFiles(analyzer, ownershipPaths);
   if (allowedFiles.length === 0) {
     throw new LocalCodingWorkstreamAiExecutionError(
       "No concrete non-sensitive files inside the workstream ownership boundary are available for AI.",
