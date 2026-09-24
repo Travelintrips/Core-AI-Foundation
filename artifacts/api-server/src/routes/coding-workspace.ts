@@ -18,7 +18,7 @@ import {
   UpdateCodingTaskResponse,
 } from "@workspace/api-zod";
 import { enqueue } from "../services/queueManagerService.js";
-import { executeRepositoryAnalyzerJobOnDemand, failRepositoryAnalyzerRun } from "../services/repositoryAnalyzerService.js";
+import { executeCodingOrchestratorJobOnDemand, failCodingOrchestratorRun } from "../services/codingOrchestratorService.js";
 
 const router = Router();
 
@@ -127,7 +127,7 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
         .insert(aiCodingRunsTable)
         .values({
           taskId: task.id,
-          agentName: "Repository Analyzer",
+          agentName: "Coding Orchestrator",
           status: "RUNNING",
           startedAt: new Date(),
         })
@@ -143,8 +143,8 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
 
     try {
       const queuedJob = await enqueue({
-        jobType: "coding_repository_analyzer",
-        requiredCapability: "coding_repository_analyzer",
+        jobType: "coding_orchestrator",
+        requiredCapability: "coding_orchestrator",
         priority: task.priority,
         maxRetry: 0,
         retryStrategy: "manual",
@@ -161,14 +161,14 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
       // Production keeps the global dispatcher fail-closed. Run Agent is an
       // explicit user action, so execute only this freshly-enqueued analyzer
       // job in a bounded background task.
-      void executeRepositoryAnalyzerJobOnDemand(queuedJob);
+      void executeCodingOrchestratorJobOnDemand(queuedJob);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await failRepositoryAnalyzerRun(
+      await failCodingOrchestratorRun(
         { codingTaskId: task.id, codingRunId: run.id },
-        `Could not enqueue Repository Analyzer: ${message}`,
+        `Could not enqueue Coding Orchestrator: ${message}`,
       );
-      res.status(503).json({ error: "Repository Analyzer could not be queued" });
+      res.status(503).json({ error: "Coding Orchestrator could not be queued" });
       return;
     }
 
