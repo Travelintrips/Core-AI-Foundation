@@ -18,7 +18,7 @@ const router: IRouter = Router();
 
 /** Process start time — used to compute uptime in /healthz/full */
 const startedAt = Date.now();
-const RELEASE_MARKER = "phase7a12-prod-ready-20260924";
+const RELEASE_MARKER = "phase7a12-workers-killswitch-20260924";
 
 // ── GET /healthz — liveness (no I/O) ─────────────────────────────────────────
 router.get("/healthz", (_req, res) => {
