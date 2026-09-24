@@ -361,12 +361,15 @@ function hasExportModifier(node: ts.Node): boolean {
   return Boolean(ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
 }
 
-function declarationName(node: ts.Node & { name?: ts.DeclarationName }): string | null {
-  if (!node.name) return null;
-  if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name) || ts.isNumericLiteral(node.name)) {
-    return node.name.text;
-  }
-  return node.name.getText();
+function declarationName(
+  node:
+    | ts.FunctionDeclaration
+    | ts.ClassDeclaration
+    | ts.InterfaceDeclaration
+    | ts.TypeAliasDeclaration
+    | ts.EnumDeclaration,
+): string | null {
+  return node.name?.text ?? null;
 }
 
 function symbolLine(sourceFile: ts.SourceFile, node: ts.Node): number {
