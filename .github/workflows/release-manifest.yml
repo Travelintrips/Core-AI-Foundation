@@ -2,42 +2,42 @@ name: Hostinger Release Manifest
 
 on:
   workflow_dispatch:
-
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Hostinger Production Verify
+    types:
+      - completed
 
 permissions:
   contents: read
 
 jobs:
   release-manifest:
-    name: Record deployment release
+    name: Record verified production release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Prepare release manifest
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
         run: |
           mkdir -p .release
           cat > .release/release.json <<EOF
           {
-            "commit_sha": "${{ github.sha }}",
-            "deploy_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "workflow_run_id": "${{ github.run_id }}"
+            "commit_sha": "$RELEASE_SHA",
+            "verified_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "verification_workflow_run_id": "${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || github.run_id }}",
+            "deployment_transport": "hostinger-native-git"
           }
           EOF
+          cat .release/release.json
 
-      - name: Upload release manifest
-        if: ${{ secrets.HOSTINGER_RELEASES_PATH != '' }}
-        uses: appleboy/scp-action@v0.1.7
+      - name: Upload release manifest artifact
+        uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
-          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: .release/release.json
-          target: ${{ secrets.HOSTINGER_RELEASES_PATH }}/${{ github.sha }}
-
-      - name: Release summary
-        run: |
-          echo "Release: ${{ github.sha }}"
-          echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          name: production-release-manifest-${{ github.run_id }}
+          path: .release/release.json
+          retention-days: 90
