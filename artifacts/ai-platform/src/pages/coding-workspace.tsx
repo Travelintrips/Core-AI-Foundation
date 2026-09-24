@@ -105,6 +105,14 @@ type RepositoryAnalyzerUiResult = {
     rolledBack?: boolean;
     warnings: string[];
     verification: Array<{ command?: string; status?: string }>;
+    verificationAttempts: Array<{
+      attempt?: number;
+      passed?: boolean;
+      staticIssues: Array<{ file?: string; kind?: string; detail?: string; line?: number }>;
+      commands: Array<{ command?: string; status?: string }>;
+    }>;
+    autoFixes: string[];
+    scriptsExecuted?: boolean;
   };
   contextPackage?: {
     branch?: string;
@@ -426,6 +434,34 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
                     status: typeof item.status === "string" ? item.status : undefined,
                   }))
               : [],
+            verificationAttempts: Array.isArray(localExecutionValue.verificationAttempts)
+              ? localExecutionValue.verificationAttempts
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    attempt: typeof item.attempt === "number" ? item.attempt : undefined,
+                    passed: item.passed === true,
+                    staticIssues: Array.isArray(item.staticIssues)
+                      ? item.staticIssues
+                          .filter((issue): issue is Record<string, unknown> => Boolean(issue) && typeof issue === "object" && !Array.isArray(issue))
+                          .map((issue) => ({
+                            file: typeof issue.file === "string" ? issue.file : undefined,
+                            kind: typeof issue.kind === "string" ? issue.kind : undefined,
+                            detail: typeof issue.detail === "string" ? issue.detail : undefined,
+                            line: typeof issue.line === "number" ? issue.line : undefined,
+                          }))
+                      : [],
+                    commands: Array.isArray(item.commands)
+                      ? item.commands
+                          .filter((command): command is Record<string, unknown> => Boolean(command) && typeof command === "object" && !Array.isArray(command))
+                          .map((command) => ({
+                            command: typeof command.command === "string" ? command.command : undefined,
+                            status: typeof command.status === "string" ? command.status : undefined,
+                          }))
+                      : [],
+                  }))
+              : [],
+            autoFixes: stringList(localExecutionValue.autoFixes),
+            scriptsExecuted: localExecutionValue.scriptsExecuted === true,
           }
         : undefined,
       contextPackage: contextPackageValue
@@ -854,6 +890,46 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                           <code key={file} className="rounded border border-white/[0.06] px-2 py-1 text-[9px] text-slate-300">{file}</code>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  {analyzerResult.localExecution && (
+                    <div className="grid gap-2 sm:grid-cols-3" data-testid="panel-local-verification-summary">
+                      <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Verification attempts</div>
+                        <div className="mt-1 font-mono text-sm text-emerald-300">{analyzerResult.localExecution.verificationAttempts.length}</div>
+                      </div>
+                      <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Auto-fixes</div>
+                        <div className="mt-1 font-mono text-sm text-emerald-300">{analyzerResult.localExecution.autoFixes.length}</div>
+                      </div>
+                      <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Repo scripts</div>
+                        <div className="mt-1 font-mono text-sm text-slate-300">{analyzerResult.localExecution.scriptsExecuted ? "executed" : "fail-closed"}</div>
+                      </div>
+                    </div>
+                  )}
+                  {analyzerResult.localExecution?.autoFixes.length ? (
+                    <div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Deterministic auto-fixes</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {analyzerResult.localExecution.autoFixes.map((fix) => (
+                          <code key={fix} className="rounded border border-emerald-300/10 bg-emerald-300/[0.035] px-2 py-1 text-[9px] text-emerald-300">{fix}</code>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {analyzerResult.localExecution?.verificationAttempts.some((attempt) => attempt.staticIssues.length > 0) && (
+                    <div className="space-y-1.5">
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Static verification issues</div>
+                      {analyzerResult.localExecution.verificationAttempts.flatMap((attempt) =>
+                        attempt.staticIssues.map((issue, index) => (
+                          <div key={`${attempt.attempt ?? 0}-${issue.file ?? "file"}-${index}`} className="rounded-md border border-rose-300/10 bg-rose-300/[0.03] p-2 text-[10px] leading-4 text-rose-200">
+                            <span className="font-mono">{issue.file ?? "unknown"}{issue.line ? `:${issue.line}` : ""}</span>
+                            {issue.kind ? <span className="ml-2 uppercase text-rose-300">{issue.kind}</span> : null}
+                            {issue.detail ? <span className="ml-2 text-slate-400">{issue.detail}</span> : null}
+                          </div>
+                        )),
+                      )}
                     </div>
                   )}
                   {analyzerResult.localExecution?.patch && (
