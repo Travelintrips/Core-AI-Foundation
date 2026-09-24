@@ -815,7 +815,7 @@ export async function enqueueWorkstreamAiExecution(
     {
       jobId: result.id,
       claimAttempt: workstream.attemptCount,
-      authorizationPackageHash,
+      authorizationPackageHash: payload.authorizationPackageHash,
       analyzerResultHash,
       maxRetry: 0,
     },
@@ -1082,8 +1082,8 @@ async function persistCandidate(input: {
   candidate: {
     applyResult: {
       patch: string;
-      patchSha256: string;
-      resultSha256: string;
+      patchSha256: string | null;
+      resultSha256: string | null;
       changedFiles: string[];
       warnings: string[];
     };
@@ -1091,6 +1091,15 @@ async function persistCandidate(input: {
   executionId: string;
 }): Promise<void> {
   const now = new Date();
+  const patchSha256 = input.candidate.applyResult.patchSha256;
+  const resultSha256 = input.candidate.applyResult.resultSha256;
+  if (!patchSha256 || !resultSha256) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Applied AI candidate is missing deterministic patch/result hashes.",
+      "POLICY_REJECTED",
+    );
+  }
+
   const execution = {
     version: 1,
     status: "CANDIDATE_READY",
@@ -1109,8 +1118,8 @@ async function persistCandidate(input: {
     policyStatus: "PASSED",
     changedFiles: input.candidate.applyResult.changedFiles,
     patch: input.candidate.applyResult.patch,
-    patchSha256: input.candidate.applyResult.patchSha256,
-    resultSha256: input.candidate.applyResult.resultSha256,
+    patchSha256,
+    resultSha256,
     warnings: input.candidate.applyResult.warnings,
     scriptsExecuted: false,
     networkUsed: false,
