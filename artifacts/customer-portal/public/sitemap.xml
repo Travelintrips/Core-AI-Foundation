@@ -5,33 +5,33 @@
   <!-- ── Core public pages ──────────────────────────────────────────── -->
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/</loc>
+    <loc>https://aifront.cstlogistic.co.id/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="id" href="https://aicore.cstlogistic.co.id/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://aicore.cstlogistic.co.id/"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://aifront.cstlogistic.co.id/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://aifront.cstlogistic.co.id/"/>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/services</loc>
+    <loc>https://aifront.cstlogistic.co.id/services</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/portfolio</loc>
+    <loc>https://aifront.cstlogistic.co.id/portfolio</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/portfolio-gallery</loc>
+    <loc>https://aifront.cstlogistic.co.id/portfolio-gallery</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/gallery</loc>
+    <loc>https://aifront.cstlogistic.co.id/gallery</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -39,7 +39,7 @@
   <!-- ── Vendor directory ───────────────────────────────────────────── -->
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/vendors</loc>
+    <loc>https://aifront.cstlogistic.co.id/vendors</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -47,25 +47,25 @@
   <!-- ── Design domains ────────────────────────────────────────────── -->
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/interior-design</loc>
+    <loc>https://aifront.cstlogistic.co.id/interior-design</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/fashion-design</loc>
+    <loc>https://aifront.cstlogistic.co.id/fashion-design</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/room-templates</loc>
+    <loc>https://aifront.cstlogistic.co.id/room-templates</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/furniture-catalog</loc>
+    <loc>https://aifront.cstlogistic.co.id/furniture-catalog</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -73,13 +73,13 @@
   <!-- ── Tools & calculators ───────────────────────────────────────── -->
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/tarif-kalkulator</loc>
+    <loc>https://aifront.cstlogistic.co.id/tarif-kalkulator</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/customs-tariff</loc>
+    <loc>https://aifront.cstlogistic.co.id/customs-tariff</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -87,31 +87,31 @@
   <!-- ── Discovery ──────────────────────────────────────────────────── -->
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/goals</loc>
+    <loc>https://aifront.cstlogistic.co.id/goals</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/collections</loc>
+    <loc>https://aifront.cstlogistic.co.id/collections</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/inspiration</loc>
+    <loc>https://aifront.cstlogistic.co.id/inspiration</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/portfolio-v2</loc>
+    <loc>https://aifront.cstlogistic.co.id/portfolio-v2</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/template-gallery</loc>
+    <loc>https://aifront.cstlogistic.co.id/template-gallery</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -121,13 +121,13 @@
   <!-- ── Marketplace & Compare ──────────────────────────────────────── -->
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/marketplace</loc>
+    <loc>https://aifront.cstlogistic.co.id/marketplace</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://aicore.cstlogistic.co.id/portfolio-compare</loc>
+    <loc>https://aifront.cstlogistic.co.id/portfolio-compare</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
