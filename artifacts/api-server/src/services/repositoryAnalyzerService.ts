@@ -357,10 +357,14 @@ function serializeResult(result: Record<string, unknown>): string {
  * user-triggered and bounded, so this path claims only the job created by the
  * current Run Agent request and never drains unrelated queue work.
  */
-export async function executeRepositoryAnalyzerJobOnDemand(job: AiJob): Promise<void> {
+export async function executeRepositoryAnalyzerJobOnDemand(
+  job: AiJob,
+  options: { finalizeCodingRun?: boolean } = {},
+): Promise<Record<string, unknown> | null> {
+  const finalizeCodingRun = options.finalizeCodingRun ?? true;
   if (job.jobType !== CODING_ANALYZER_JOB_TYPE) {
     logger.warn({ jobId: job.id, jobType: job.jobType }, "[coding-analyzer] Ignoring non-analyzer on-demand job");
-    return;
+    return null;
   }
 
   const startedAt = new Date();
@@ -378,15 +382,18 @@ export async function executeRepositoryAnalyzerJobOnDemand(job: AiJob): Promise<
   // case it owns completion; do not execute the same repository twice.
   if (!claimed) {
     logger.info({ jobId: job.id }, "[coding-analyzer] Job already claimed by another executor");
-    return;
+    return null;
   }
 
   try {
     const result = await executeRepositoryAnalyzerJob(claimed);
 
-    // Persist the user-facing run/task result first. If bookkeeping of ai_jobs
-    // ever fails afterwards, the Coding Workspace still receives its result.
-    await completeRepositoryAnalyzerRun(result);
+    // Legacy direct execution finalizes the Coding Workspace run here. The
+    // Coding Orchestrator disables this so it can continue into Planner before
+    // completing the user-facing run.
+    if (finalizeCodingRun) {
+      await completeRepositoryAnalyzerRun(result);
+    }
 
     const completedAt = new Date();
     await db
@@ -405,19 +412,22 @@ export async function executeRepositoryAnalyzerJobOnDemand(job: AiJob): Promise<
       { jobId: claimed.id, codingRunId: result.codingRunId },
       "[coding-analyzer] On-demand analysis completed",
     );
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const completedAt = new Date();
 
-    await failRepositoryAnalyzerRun(
-      (claimed.payloadJson ?? {}) as Record<string, unknown>,
-      message,
-    ).catch((persistError) => {
-      logger.error(
-        { err: persistError, jobId: claimed.id },
-        "[coding-analyzer] Failed to persist analyzer failure",
-      );
-    });
+    if (finalizeCodingRun) {
+      await failRepositoryAnalyzerRun(
+        (claimed.payloadJson ?? {}) as Record<string, unknown>,
+        message,
+      ).catch((persistError) => {
+        logger.error(
+          { err: persistError, jobId: claimed.id },
+          "[coding-analyzer] Failed to persist analyzer failure",
+        );
+      });
+    }
 
     await db
       .update(aiJobsTable)
@@ -440,6 +450,11 @@ export async function executeRepositoryAnalyzerJobOnDemand(job: AiJob): Promise<
       { err: error, jobId: claimed.id },
       "[coding-analyzer] On-demand analysis failed",
     );
+
+    if (!finalizeCodingRun) {
+      throw error;
+    }
+    return null;
   }
 }
 
