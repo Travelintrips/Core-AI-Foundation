@@ -354,7 +354,7 @@ async function persistOrchestratorPayload(
     orchestration: {
       ...orchestration,
       status,
-      ...(nextAction ? { nextAction } : {}),
+      nextAction: nextAction ?? null,
     },
   };
   await db
@@ -424,14 +424,38 @@ async function executeReviewAgent(
   const routed = await routeToModel(
     `code review ${context.task.repository}: ${context.task.instruction}`,
   );
-  if (!routed) throw new Error("Review Agent could not route to an active model");
+  if (!routed) {
+    return {
+      decision: "REVISE_CHANGES",
+      summary: "Review Agent model routing was unavailable; commit approval remains blocked.",
+      issues: ["No active review model was available."],
+      recommendations: ["Retry review after model routing is healthy."],
+      provider: "none",
+      modelUsed: "deterministic-fallback",
+      totalTokens: 0,
+      latencyMs: 0,
+      parsedAsJson: false,
+    };
+  }
 
   const candidates = [routed, ...(await getFallbackModels(routed.model.id))].filter((candidate) => {
     const capabilities = candidate.model.capabilities ?? [];
     return candidate.provider.slug !== "replicate" &&
       (capabilities.includes("code") || capabilities.includes("text"));
   });
-  if (candidates.length === 0) throw new Error("Review Agent found no text/code model");
+  if (candidates.length === 0) {
+    return {
+      decision: "REVISE_CHANGES",
+      summary: "Review Agent found no eligible text/code model; commit approval remains blocked.",
+      issues: ["No eligible text/code review model was available."],
+      recommendations: ["Restore a text/code model before approving commit."],
+      provider: "none",
+      modelUsed: "deterministic-fallback",
+      totalTokens: 0,
+      latencyMs: 0,
+      parsedAsJson: false,
+    };
+  }
 
   let output: ExecutionOutput | null = null;
   let provider = "";
@@ -460,9 +484,18 @@ async function executeReviewAgent(
     }
   }
   if (!output) {
-    throw new Error(
-      `Review Agent failed across available models: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-    );
+    const detail = lastError instanceof Error ? lastError.message : String(lastError);
+    return {
+      decision: "REVISE_CHANGES",
+      summary: "Review Agent model execution failed; commit approval remains blocked.",
+      issues: [`Review model execution failed: ${detail}`],
+      recommendations: ["Retry review after provider health is restored."],
+      provider: "none",
+      modelUsed: "deterministic-fallback",
+      totalTokens: 0,
+      latencyMs: 0,
+      parsedAsJson: false,
+    };
   }
 
   const parsed = parseJsonObject(output.content);
@@ -498,6 +531,7 @@ export async function continueCodingVerification(context: VerificationContext): 
   let orchestratorPayload = parseOrchestratorPayload(context.orchestratorRun);
   let testRun: AiCodingRun | null = null;
   let reviewRun: AiCodingRun | null = null;
+  let testCompleted = false;
 
   try {
     orchestratorPayload = updateStage(
@@ -516,6 +550,7 @@ export async function continueCodingVerification(context: VerificationContext): 
     testRun = await createRun(context.task.id, "Test Agent");
     const report = await runDeterministicTests(context.workspace, context.proposal);
     await completeTestRun(testRun, report);
+    testCompleted = true;
 
     orchestratorPayload = updateStage(
       orchestratorPayload,
@@ -603,13 +638,14 @@ export async function continueCodingVerification(context: VerificationContext): 
     const message = error instanceof Error ? error.message : String(error);
     const now = new Date();
 
-    if (testRun) {
+    if (testRun && !testCompleted) {
       await db
         .update(aiCodingRunsTable)
         .set({
-          status: testRun.status === "COMPLETED" ? "COMPLETED" : "FAILED",
+          status: "FAILED",
           finishedAt: now,
-          errorMessage: testRun.status === "COMPLETED" ? null : message.slice(0, 2000),
+          errorMessage: message.slice(0, 2000),
+          logs: stringify({ executionStatus: "FAILED", error: message }),
         })
         .where(eq(aiCodingRunsTable.id, testRun.id))
         .catch(() => undefined);
