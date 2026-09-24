@@ -51,6 +51,11 @@ import {
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
 } from "./repositoryAnalyzerService.js";
+import {
+  completeCodingOrchestratorRun,
+  executeCodingOrchestratorJob,
+  failCodingOrchestratorRun,
+} from "./codingOrchestratorService.js";
 
 export const WORKER_CLAIM_PAYLOAD_KEY = "_claimedByWorkerId";
 
@@ -570,6 +575,9 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     case "qc_review":
       return executeTextJob(job, "QC review");
 
+    case "coding_orchestrator":
+      return executeCodingOrchestratorJob(job);
+
     case "coding_repository_analyzer":
       return executeRepositoryAnalyzerJob(job);
 
@@ -740,7 +748,9 @@ export async function completeJob(
     throw new JobOwnershipLostError(jobId, workerId);
   }
 
-  if (job?.jobType === "coding_repository_analyzer") {
+  if (job?.jobType === "coding_orchestrator") {
+    await completeCodingOrchestratorRun(result);
+  } else if (job?.jobType === "coding_repository_analyzer") {
     await completeRepositoryAnalyzerRun(result);
   }
 
@@ -890,7 +900,12 @@ export async function retryJob(
     return current;
   }
 
-  if (exhausted && job.jobType === "coding_repository_analyzer") {
+  if (exhausted && job.jobType === "coding_orchestrator") {
+    await failCodingOrchestratorRun(
+      (job.payloadJson ?? {}) as Record<string, unknown>,
+      errorMessage,
+    );
+  } else if (exhausted && job.jobType === "coding_repository_analyzer") {
     await failRepositoryAnalyzerRun(
       (job.payloadJson ?? {}) as Record<string, unknown>,
       errorMessage,
