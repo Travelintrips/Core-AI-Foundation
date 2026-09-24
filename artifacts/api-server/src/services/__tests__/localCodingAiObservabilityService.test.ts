@@ -141,6 +141,44 @@ describe("AI coding observability telemetry", () => {
     });
   });
 
+  it("preserves the exact failure shape emitted by the execution gate", async () => {
+    const telemetry = await parseCodingAiExecutionTelemetry(
+      TASK_ID,
+      run({
+        aiHandoff: {
+          packageHash: "a".repeat(64),
+          status: "CONSUMED",
+          gateStatus: "PRIVILEGE_ENDED",
+          modelInvoked: true,
+        },
+        aiExecution: {
+          status: "FAILED",
+          executionId: "exec-gate-fail",
+          errorKind: "MODEL_FAILED",
+          error: "provider timed out after privilege consumption",
+          modelInvoked: true,
+          privilegeEnded: true,
+          completedAt: "2026-09-24T12:00:01.000Z",
+        },
+        orchestration: {
+          status: "READY_REVIEW",
+          nextAction: "AI_REQUIRED",
+        },
+      }),
+    );
+
+    expect(telemetry).toMatchObject({
+      executionId: "exec-gate-fail",
+      status: "FAILED",
+      nextAction: "AI_REQUIRED",
+      packageHash: "a".repeat(64),
+      failureKind: "MODEL_FAILED",
+      errorMessage: "provider timed out after privilege consumption",
+      modelInvoked: true,
+      privilegeEnded: true,
+    });
+  });
+
   it("returns null for malformed non-observability logs", async () => {
     await expect(
       parseCodingAiExecutionTelemetry(TASK_ID, {
