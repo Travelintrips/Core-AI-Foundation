@@ -171,7 +171,7 @@ function relativeImports(content: string): string[] {
   return [...found];
 }
 
-async function runDeterministicTests(
+export async function runDeterministicCodingTests(
   workspace: string,
   proposal: VerificationProposal,
 ): Promise<TestReport> {
@@ -548,7 +548,7 @@ export async function continueCodingVerification(context: VerificationContext): 
     );
 
     testRun = await createRun(context.task.id, "Test Agent");
-    const report = await runDeterministicTests(context.workspace, context.proposal);
+    const report = await runDeterministicCodingTests(context.workspace, context.proposal);
     await completeTestRun(testRun, report);
     testCompleted = true;
 
