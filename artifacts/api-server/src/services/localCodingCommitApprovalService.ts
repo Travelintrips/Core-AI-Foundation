@@ -62,6 +62,8 @@ interface LocalCommitContext {
   patchSha256: string;
   baseHeadSha: string;
   changedFiles: string[];
+  sandboxCommands: string[];
+  sandboxImage: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -187,6 +189,9 @@ async function latestCommitContext(taskId: string): Promise<LocalCommitContext> 
   const localPatchApproval = isRecord(payload.localPatchApproval)
     ? payload.localPatchApproval
     : null;
+  const sandboxVerification = isRecord(payload.sandboxVerification)
+    ? payload.sandboxVerification
+    : null;
   const localExecution = isRecord(payload.localExecution) ? payload.localExecution : null;
 
   if (orchestration?.nextAction !== "APPROVE_COMMIT") {
@@ -202,6 +207,15 @@ async function latestCommitContext(taskId: string): Promise<LocalCommitContext> 
   ) {
     throw new LocalCommitApprovalError(
       "Local patch has not passed the explicit validation gate",
+      "NOT_READY",
+    );
+  }
+  if (
+    sandboxVerification?.status !== "PASSED" ||
+    sandboxVerification.gateStatus !== "SANDBOX_VERIFIED"
+  ) {
+    throw new LocalCommitApprovalError(
+      "Repository scripts have not passed the sandbox verification gate",
       "NOT_READY",
     );
   }
@@ -244,6 +258,16 @@ async function latestCommitContext(taskId: string): Promise<LocalCommitContext> 
     );
   }
 
+  if (
+    sandboxVerification.patchSha256 !== patchSha256 ||
+    sandboxVerification.baseHeadSha !== baseHeadSha
+  ) {
+    throw new LocalCommitApprovalError(
+      "Sandbox verification no longer matches the approved patch or base HEAD",
+      "INVALID_PATCH",
+    );
+  }
+
   const changedFiles = stringArray(localPatchApproval.changedFiles).map(safeRepoPath);
   if (changedFiles.length === 0 || changedFiles.length > MAX_CHANGED_FILES) {
     throw new LocalCommitApprovalError(
@@ -275,6 +299,11 @@ async function latestCommitContext(taskId: string): Promise<LocalCommitContext> 
     patchSha256,
     baseHeadSha,
     changedFiles: [...new Set(changedFiles)].sort(),
+    sandboxCommands: stringArray(sandboxVerification.verificationCommands).slice(0, 6),
+    sandboxImage:
+      typeof sandboxVerification.image === "string"
+        ? sandboxVerification.image
+        : null,
   };
 }
 
@@ -494,6 +523,11 @@ async function executeCommitApproval(
         projectName: context.task.projectName,
         patchSha256: context.patchSha256,
         files,
+        sandboxVerification: {
+          status: "PASSED",
+          commands: context.sandboxCommands,
+          image: context.sandboxImage,
+        },
       },
       client,
     );
