@@ -11,7 +11,6 @@ const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
 const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
-const mockApproveLocalPatch = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
 const MockLocalPatchApprovalError = vi.hoisted(() => class extends Error {
   constructor(
@@ -80,10 +79,6 @@ vi.mock("../../services/codingAgentService.js", () => ({
   approvePlanAndStartCoding: mockApprovePlanAndStartCoding,
 }));
 
-vi.mock("../../services/localPatchApprovalService.js", () => ({
-  approveLocalPatch: mockApproveLocalPatch,
-}));
-
 vi.mock("../../services/localCodingPatchApprovalService.js", () => ({
   approveAndValidateLocalPatch: mockApproveAndValidateLocalPatch,
   LocalPatchApprovalError: MockLocalPatchApprovalError,
@@ -136,7 +131,6 @@ describe("AI coding workspace run endpoint", () => {
     mockUpdateWhere.mockResolvedValue([]);
     mockStartCodingOrchestration.mockResolvedValue({ sessionId: `coding-${runId}` });
     mockApprovePlanAndStartCoding.mockResolvedValue({ ...run, agentName: "Coding Agent" });
-    mockApproveLocalPatch.mockResolvedValue({ ...run, agentName: "Local Patch Approval" });
     mockApproveAndValidateLocalPatch.mockResolvedValue({
       ...run,
       agentName: "Local Patch Gate",
@@ -200,60 +194,6 @@ describe("AI coding workspace run endpoint", () => {
 
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ error: "Coding Orchestrator could not be started" });
-  });
-});
-
-describe("AI coding workspace local patch approval endpoint", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockApproveLocalPatch.mockResolvedValue({
-      ...run,
-      agentName: "Local Patch Approval",
-    });
-  });
-
-  it("starts isolated local patch verification only through explicit approval", async () => {
-    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
-
-    expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({
-      id: runId,
-      taskId,
-      agentName: "Local Patch Approval",
-      status: "RUNNING",
-    });
-    expect(mockApproveLocalPatch).toHaveBeenCalledWith(taskId);
-  });
-
-  it("returns 409 when the task is not at the local patch review gate", async () => {
-    mockApproveLocalPatch.mockRejectedValueOnce(
-      new Error("Coding task is not at REVIEW_LOCAL_PATCH gate"),
-    );
-
-    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
-
-    expect(response.status).toBe(409);
-    expect(response.body).toEqual({
-      error: "Coding task is not at REVIEW_LOCAL_PATCH gate",
-    });
-  });
-
-  it("returns 409 when another coding run is already active", async () => {
-    mockApproveLocalPatch.mockRejectedValueOnce(
-      new Error("Coding task already has an active run"),
-    );
-
-    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
-
-    expect(response.status).toBe(409);
-  });
-
-  it("returns 404 when the coding task does not exist", async () => {
-    mockApproveLocalPatch.mockRejectedValueOnce(new Error("Coding task not found"));
-
-    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
-
-    expect(response.status).toBe(404);
   });
 });
 
