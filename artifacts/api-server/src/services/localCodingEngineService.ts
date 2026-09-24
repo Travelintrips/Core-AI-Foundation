@@ -190,6 +190,13 @@ export interface VerificationCommandResult {
   durationMs: number;
 }
 
+export interface GitBlameContext {
+  file: string;
+  startLine: number;
+  endLine: number;
+  output: string;
+}
+
 export interface LocalCodingContextPackage {
   repository: string;
   branch: string;
@@ -943,11 +950,25 @@ function discoverVerificationCommands(index: RepositoryIndex, relevantFiles: str
 export async function runAllowlistedVerificationCommand(
   root: string,
   command: string,
-  options: { timeoutMs?: number; executor?: VerificationExecutor } = {},
+  options: {
+    timeoutMs?: number;
+    executor?: VerificationExecutor;
+    trustedWorkspace?: boolean;
+  } = {},
 ): Promise<VerificationCommandResult> {
   const parsed = parseAllowlistedVerificationCommand(command);
   if (!parsed) {
     return { command, status: "BLOCKED", exitCode: null, stdout: "", stderr: "Command is not allowlisted.", durationMs: 0 };
+  }
+  if (options.trustedWorkspace !== true) {
+    return {
+      command,
+      status: "BLOCKED",
+      exitCode: null,
+      stdout: "",
+      stderr: "Verification is fail-closed until the repository workspace is explicitly trusted.",
+      durationMs: 0,
+    };
   }
   const absoluteRoot = resolve(root);
   const rootInfo = await stat(absoluteRoot).catch(() => null);
@@ -994,6 +1015,44 @@ export async function runAllowlistedVerificationCommand(
       durationMs: Date.now() - started,
     };
   }
+}
+
+export async function readLocalGitBlame(
+  root: string,
+  file: string,
+  options: { startLine?: number; endLine?: number } = {},
+): Promise<GitBlameContext> {
+  const normalized = normalizeRepoPath(file);
+  if (!normalized || normalized.startsWith("../") || isSensitiveRepositoryPath(normalized)) {
+    throw new Error("Git blame target is outside the safe repository context");
+  }
+
+  const absoluteRoot = resolve(root);
+  const absoluteFile = resolve(absoluteRoot, normalized);
+  if (!isInsideRoot(absoluteRoot, absoluteFile)) {
+    throw new Error("Git blame target escapes the repository root");
+  }
+  const info = await stat(absoluteFile).catch(() => null);
+  if (!info?.isFile()) {
+    throw new Error(`Git blame target does not exist: ${normalized}`);
+  }
+
+  const startLine = Math.max(1, Math.floor(options.startLine ?? 1));
+  const requestedEnd = Math.max(startLine, Math.floor(options.endLine ?? startLine + 79));
+  const endLine = Math.min(requestedEnd, startLine + 199);
+  const output = await git(
+    absoluteRoot,
+    ["blame", "--line-porcelain", `-L${startLine},${endLine}`, "--", normalized],
+    15_000,
+    false,
+  );
+
+  return {
+    file: normalized,
+    startLine,
+    endLine,
+    output: output.slice(0, 120_000),
+  };
 }
 
 export async function buildLocalCodingContextPackage(
