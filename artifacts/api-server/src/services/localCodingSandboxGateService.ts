@@ -432,7 +432,7 @@ async function executeSandboxGate(
           : null);
       throw new LocalCodingSandboxGateError(
         failed
-          ? `${failed.command} failed with ${failed.status}: ${failed.stderr.slice(0, 700)}`
+          ? `${failed.command} failed with ${failed.status}${failed.exitCode === null ? "" : ` (exit ${failed.exitCode})`}. Output was intentionally withheld from persistent logs.`
           : "Sandbox verification failed.",
         "VERIFICATION_FAILED",
       );
