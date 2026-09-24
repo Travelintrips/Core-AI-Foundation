@@ -57,6 +57,21 @@ export type LocalEditOperation =
       from: string;
       to: string;
       expectedOccurrences?: number;
+    }
+  | {
+      kind: "typescript_replace_identifier_at_position";
+      path: string;
+      line: number;
+      column: number;
+      from: string;
+      to: string;
+    }
+  | {
+      kind: "typescript_insert_punctuation_at_position";
+      path: string;
+      line: number;
+      column: number;
+      text: ";" | ",";
     };
 
 export interface LocalCodingExecutionPlan {
@@ -252,6 +267,102 @@ function renameTypeScriptIdentifier(
   return next;
 }
 
+function sourceFileFor(file: string, content: string): ts.SourceFile {
+  if (!/\.[cm]?[jt]sx?$/.test(file)) {
+    throw new Error("Position-based TypeScript recovery only supports JS/TS source files");
+  }
+  const scriptKind = file.endsWith(".tsx") || file.endsWith(".jsx")
+    ? ts.ScriptKind.TSX
+    : file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".cjs")
+      ? ts.ScriptKind.JS
+      : ts.ScriptKind.TS;
+  return ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true, scriptKind);
+}
+
+function sourcePosition(
+  sourceFile: ts.SourceFile,
+  line: number,
+  column: number,
+): number {
+  if (
+    !Number.isInteger(line) ||
+    !Number.isInteger(column) ||
+    line < 1 ||
+    column < 1
+  ) {
+    throw new Error("Recovery line/column must be positive 1-based integers");
+  }
+  const lineIndex = line - 1;
+  const columnIndex = column - 1;
+  if (lineIndex >= sourceFile.getLineStarts().length) {
+    throw new Error("Recovery line is outside the source file");
+  }
+  const lineStart = sourceFile.getPositionOfLineAndCharacter(lineIndex, 0);
+  const lineEnd =
+    lineIndex + 1 < sourceFile.getLineStarts().length
+      ? sourceFile.getPositionOfLineAndCharacter(lineIndex + 1, 0)
+      : sourceFile.getEnd();
+  const position = lineStart + columnIndex;
+  if (position < lineStart || position > lineEnd) {
+    throw new Error("Recovery column is outside the source line");
+  }
+  return position;
+}
+
+function replaceTypeScriptIdentifierAtPosition(
+  file: string,
+  content: string,
+  line: number,
+  column: number,
+  from: string,
+  to: string,
+): string {
+  if (
+    !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(from) ||
+    !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(to)
+  ) {
+    throw new Error("Position-based TypeScript recovery requires valid identifiers");
+  }
+  const sourceFile = sourceFileFor(file, content);
+  const position = sourcePosition(sourceFile, line, column);
+  const candidates: Array<{ start: number; end: number }> = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && node.text === from) {
+      const start = node.getStart(sourceFile);
+      const end = node.getEnd();
+      if (position >= start && position <= end) {
+        candidates.push({ start, end });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  if (candidates.length !== 1) {
+    throw new Error(
+      `Expected exactly one identifier '${from}' at ${file}:${line}:${column}, found ${candidates.length}`,
+    );
+  }
+  const [span] = candidates;
+  return `${content.slice(0, span.start)}${to}${content.slice(span.end)}`;
+}
+
+function insertTypeScriptPunctuationAtPosition(
+  file: string,
+  content: string,
+  line: number,
+  column: number,
+  text: ";" | ",",
+): string {
+  const sourceFile = sourceFileFor(file, content);
+  const position = sourcePosition(sourceFile, line, column);
+  if (content[position] === text || content[position - 1] === text) {
+    throw new Error(
+      `Punctuation '${text}' is already present near ${file}:${line}:${column}`,
+    );
+  }
+  return `${content.slice(0, position)}${text}${content.slice(position)}`;
+}
+
 function applyOperation(content: string, operation: LocalEditOperation): string {
   switch (operation.kind) {
     case "replace_text":
@@ -279,6 +390,23 @@ function applyOperation(content: string, operation: LocalEditOperation): string 
         operation.from,
         operation.to,
         operation.expectedOccurrences,
+      );
+    case "typescript_replace_identifier_at_position":
+      return replaceTypeScriptIdentifierAtPosition(
+        operation.path,
+        content,
+        operation.line,
+        operation.column,
+        operation.from,
+        operation.to,
+      );
+    case "typescript_insert_punctuation_at_position":
+      return insertTypeScriptPunctuationAtPosition(
+        operation.path,
+        content,
+        operation.line,
+        operation.column,
+        operation.text,
       );
   }
 }
