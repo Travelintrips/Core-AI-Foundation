@@ -1,0 +1,72 @@
+name: Release Dependency Lock Refresh
+
+on:
+  push:
+    branches:
+      - release/7a12-prod-readiness
+    paths:
+      - pnpm-workspace.yaml
+      - artifacts/api-server/package.json
+      - .github/workflows/release-deps-refresh.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-deps-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: ${{ !contains(github.event.head_commit.message, '[deps-lock]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/7a12-prod-readiness
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Refresh lockfile only
+        run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
+
+      - name: Verify frozen install
+        run: pnpm install --frozen-lockfile
+
+      - name: Production dependency audit
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          pnpm audit --prod --audit-level=high
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit refreshed lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "pnpm-lock.yaml already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore(deps): refresh security lockfile [deps-lock]"
+          git push origin HEAD:release/7a12-prod-readiness
+
+      - name: Enforce high-severity audit gate
+        if: ${{ steps.audit.outputs.status != '0' }}
+        run: |
+          echo "Production dependency audit still has HIGH/CRITICAL findings."
+          exit 1
