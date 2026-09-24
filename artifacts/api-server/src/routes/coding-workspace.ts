@@ -36,6 +36,10 @@ import {
   LocalCodingSandboxGateError,
   startSandboxVerification,
 } from "../services/localCodingSandboxGateService.js";
+import {
+  LocalDeterministicRecoveryError,
+  startDeterministicLocalRecovery,
+} from "../services/localCodingDeterministicRecoveryService.js";
 
 const router = Router();
 
@@ -246,6 +250,37 @@ router.post("/ai/coding/tasks/:id/run-sandbox-verification", async (req, res): P
     res.status(201).json(StartCodingRunResponse.parse(run));
   } catch (error) {
     if (error instanceof LocalCodingSandboxGateError) {
+      if (error.kind === "NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "NOT_READY" || error.kind === "STALE_HEAD") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "SANDBOX_BLOCKED") {
+        res.status(503).json({ error: error.message });
+        return;
+      }
+      res.status(422).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/run-local-recovery", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await startDeterministicLocalRecovery(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof LocalDeterministicRecoveryError) {
       if (error.kind === "NOT_FOUND") {
         res.status(404).json({ error: error.message });
         return;
