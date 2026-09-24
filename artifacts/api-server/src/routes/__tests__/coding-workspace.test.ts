@@ -10,6 +10,7 @@ const mockInsertReturning = vi.hoisted(() => vi.fn());
 const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
+const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
 
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
@@ -65,6 +66,10 @@ vi.mock("../../services/codingOrchestratorService.js", () => ({
   startCodingOrchestration: mockStartCodingOrchestration,
 }));
 
+vi.mock("../../services/codingAgentService.js", () => ({
+  approvePlanAndStartCoding: mockApprovePlanAndStartCoding,
+}));
+
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -111,6 +116,7 @@ describe("AI coding workspace run endpoint", () => {
     mockUpdateSet.mockReturnValue(updateBuilder);
     mockUpdateWhere.mockResolvedValue([]);
     mockStartCodingOrchestration.mockResolvedValue({ sessionId: `coding-${runId}` });
+    mockApprovePlanAndStartCoding.mockResolvedValue({ ...run, agentName: "Coding Agent" });
   });
 
   it("creates one Coding Orchestrator run and moves the task to ANALYZING atomically", async () => {
@@ -168,5 +174,50 @@ describe("AI coding workspace run endpoint", () => {
 
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ error: "Coding Orchestrator could not be started" });
+  });
+});
+
+describe("AI coding workspace plan approval endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApprovePlanAndStartCoding.mockResolvedValue({
+      ...run,
+      agentName: "Coding Agent",
+    });
+  });
+
+  it("starts the Coding Agent only through explicit plan approval", async () => {
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-plan`);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Coding Agent",
+      status: "RUNNING",
+    });
+    expect(mockApprovePlanAndStartCoding).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when the task is not awaiting plan approval", async () => {
+    mockApprovePlanAndStartCoding.mockRejectedValueOnce(
+      new Error("Coding task is not awaiting plan approval"),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-plan`);
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({
+      error: "Coding task is not awaiting plan approval",
+    });
+  });
+
+  it("returns 404 when the task does not exist", async () => {
+    mockApprovePlanAndStartCoding.mockRejectedValueOnce(new Error("Coding task not found"));
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-plan`);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "Coding task not found" });
   });
 });

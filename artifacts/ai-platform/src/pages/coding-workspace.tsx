@@ -118,6 +118,82 @@ type RepositoryAnalyzerUiResult = {
   };
 };
 
+type CodingAgentUiResult = {
+  summary?: string;
+  nextAction?: string;
+  commitCreated?: boolean;
+  pushed?: boolean;
+  diff?: string;
+  proposal?: {
+    summary?: string;
+    changes: Array<{
+      path?: string;
+      changeType?: string;
+      rationale?: string;
+    }>;
+    verificationCommands: string[];
+    risks: string[];
+  };
+  model?: {
+    provider?: string;
+    modelUsed?: string;
+    totalTokens?: number;
+    latencyMs?: number;
+  };
+};
+
+function parseCodingAgentResult(logs?: string | null): CodingAgentUiResult | null {
+  if (!logs) return null;
+  try {
+    const value = JSON.parse(logs) as Record<string, unknown>;
+    const proposalValue =
+      value.proposal && typeof value.proposal === "object" && !Array.isArray(value.proposal)
+        ? value.proposal as Record<string, unknown>
+        : null;
+    const modelValue =
+      value.model && typeof value.model === "object" && !Array.isArray(value.model)
+        ? value.model as Record<string, unknown>
+        : null;
+    const stringList = (input: unknown) =>
+      Array.isArray(input)
+        ? input.filter((item): item is string => typeof item === "string")
+        : [];
+    const changes = proposalValue && Array.isArray(proposalValue.changes)
+      ? proposalValue.changes.filter(
+          (item): item is { path?: string; changeType?: string; rationale?: string } =>
+            Boolean(item) && typeof item === "object",
+        )
+      : [];
+
+    return {
+      summary: typeof value.summary === "string" ? value.summary : undefined,
+      nextAction: typeof value.nextAction === "string" ? value.nextAction : undefined,
+      commitCreated: value.commitCreated === true,
+      pushed: value.pushed === true,
+      diff: typeof value.diff === "string" ? value.diff : undefined,
+      proposal: proposalValue
+        ? {
+            summary: typeof proposalValue.summary === "string" ? proposalValue.summary : undefined,
+            changes,
+            verificationCommands: stringList(proposalValue.verificationCommands),
+            risks: stringList(proposalValue.risks),
+          }
+        : undefined,
+      model: modelValue
+        ? {
+            provider: typeof modelValue.provider === "string" ? modelValue.provider : undefined,
+            modelUsed: typeof modelValue.modelUsed === "string" ? modelValue.modelUsed : undefined,
+            totalTokens: typeof modelValue.totalTokens === "number" ? modelValue.totalTokens : undefined,
+            latencyMs: typeof modelValue.latencyMs === "number" ? modelValue.latencyMs : undefined,
+          }
+        : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzerUiResult | null {
   if (!logs) return null;
   try {
@@ -308,6 +384,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [status, setStatus] = useState<CodingTaskStatus>(CodingTaskStatus.PENDING);
   const [summary, setSummary] = useState("");
   const [commitSha, setCommitSha] = useState("");
+  const [approvePending, setApprovePending] = useState(false);
 
   useEffect(() => {
     if (detail?.task) {
@@ -328,7 +405,16 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       Boolean(run.logs),
   );
   const analyzerResult = parseRepositoryAnalyzerResult(latestResultRun?.logs);
+  const latestCodingAgentRun = detail.runs.find(
+    (run) => run.agentName === "Coding Agent" && Boolean(run.logs),
+  );
+  const codingResult = parseCodingAgentResult(latestCodingAgentRun?.logs);
   const displayedResultSummary = analyzerResult?.summary ?? task.resultSummary;
+  const canApprovePlan =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
+    analyzerResult?.implementationPlan?.approvalRequired === true &&
+    !hasActiveRun;
   const runAgent = () => {
     startCodingRun.mutate(
       { id: task.id },
@@ -346,6 +432,36 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
         },
       },
     );
+  };
+
+  const approvePlan = async () => {
+    setApprovePending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-plan`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "Plan approved",
+        description: "Coding Agent started in an isolated workspace. No commit or push will be created automatically.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not approve plan",
+        description: error instanceof Error ? error.message : "Approval failed",
+        variant: "destructive",
+      });
+    } finally {
+      setApprovePending(false);
+    }
   };
 
   const update = () => {
@@ -468,11 +584,25 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                 <div className="space-y-3 rounded-lg border border-violet-300/15 bg-violet-300/[0.035] p-3" data-testid="panel-coding-implementation-plan">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-300">Implementation plan</div>
-                    {analyzerResult.implementationPlan.approvalRequired && (
-                      <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-amber-300">
-                        Approval required
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {analyzerResult.implementationPlan.approvalRequired && (
+                        <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-amber-300">
+                          Approval required
+                        </span>
+                      )}
+                      {canApprovePlan && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={approvePlan}
+                          disabled={approvePending}
+                          className="h-7 bg-violet-300 px-2.5 text-[10px] font-semibold text-[#1b1230] hover:bg-violet-200"
+                          data-testid="button-approve-coding-plan"
+                        >
+                          {approvePending ? <><Loader2 className="size-3 animate-spin" />Starting Coding Agent</> : <><CheckCircle2 className="size-3" />Approve Plan & Start Coding</>}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {analyzerResult.implementationPlan.summary && (
                     <p className="text-xs leading-5 text-slate-300">{analyzerResult.implementationPlan.summary}</p>
@@ -510,6 +640,73 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
             </p>
           )}
         </section>
+        {(latestCodingAgentRun || codingResult) && (
+          <section className="rounded-xl border border-emerald-300/15 bg-emerald-300/[0.03] p-4" data-testid="panel-coding-proposed-changes">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <FileCode2 className="size-3.5 text-emerald-300" />
+                Proposed Changes
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "rounded px-2 py-1 text-[9px] font-semibold uppercase tracking-wider",
+                  latestCodingAgentRun?.status === "COMPLETED"
+                    ? "bg-emerald-300/10 text-emerald-300"
+                    : latestCodingAgentRun?.status === "FAILED"
+                      ? "bg-rose-300/10 text-rose-300"
+                      : "bg-amber-300/10 text-amber-300",
+                )}>
+                  {latestCodingAgentRun?.status ?? "PENDING"}
+                </span>
+                {codingResult?.nextAction && (
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
+                    Next: {codingResult.nextAction}
+                  </span>
+                )}
+              </div>
+            </div>
+            {codingResult?.summary && (
+              <p className="rounded-lg border border-white/[0.06] bg-[#091222] p-3 text-xs leading-5 text-slate-300">
+                {codingResult.summary}
+              </p>
+            )}
+            {codingResult?.proposal?.changes && codingResult.proposal.changes.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {codingResult.proposal.changes.map((change, index) => (
+                  <div key={`${change.path ?? "change"}-${index}`} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn(
+                        "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                        change.changeType === "ADDED"
+                          ? "bg-emerald-300/10 text-emerald-300"
+                          : change.changeType === "DELETED"
+                            ? "bg-rose-300/10 text-rose-300"
+                            : "bg-cyan-300/10 text-cyan-300",
+                      )}>
+                        {change.changeType ?? "MODIFIED"}
+                      </span>
+                      <span className="font-mono text-xs text-slate-200">{change.path ?? "unknown file"}</span>
+                    </div>
+                    {change.rationale && <p className="mt-2 text-[11px] leading-5 text-slate-500">{change.rationale}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {codingResult && (
+              <div className="mt-3 flex flex-wrap gap-2 text-[9px] uppercase tracking-wider text-slate-600">
+                <span>Commit: {codingResult.commitCreated ? "yes" : "no"}</span>
+                <span>·</span>
+                <span>Push: {codingResult.pushed ? "yes" : "no"}</span>
+                {codingResult.model?.modelUsed && (
+                  <>
+                    <span>·</span>
+                    <span>{codingResult.model.provider ?? "provider"} / {codingResult.model.modelUsed}</span>
+                  </>
+                )}
+              </div>
+            )}
+          </section>
+        )}
         <div className="grid gap-5 xl:grid-cols-2">
           <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><History className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.runs")}</div><span className="font-mono text-[10px] text-slate-600">{detail.runs.length.toString().padStart(2, "0")}</span></div>{detail.runs.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">{t("pages.codingWorkspace.noRuns")}</p> : <div className="space-y-2">{detail.runs.map((run) => <div key={run.id} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-run-${run.id}`}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm text-slate-300">{run.agentName}</span><span className={cn("text-[10px] font-semibold uppercase tracking-wider", run.status === "FAILED" ? "text-rose-300" : run.status === "COMPLETED" ? "text-emerald-300" : "text-amber-300")}>{t(`pages.codingWorkspace.runStatuses.${run.status.toLowerCase()}`)}</span></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-600">{run.startedAt ? formatDate(run.startedAt, lang, true) : "—"}{run.finishedAt && <><span>→</span>{formatDate(run.finishedAt, lang, true)}</>}</div>{run.errorMessage && <p className="mt-2 text-xs leading-5 text-rose-300">{run.errorMessage}</p>}{run.logs && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-cyan-300">{t("pages.codingWorkspace.runLogs")}</summary><pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 font-mono text-[10px] leading-5 text-slate-500">{run.logs}</pre></details>}</div>)}</div>}</section>
           <section className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium text-slate-200">{t("pages.codingWorkspace.runAgent")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{t("pages.codingWorkspace.runAgentHint")}</p></div><Button onClick={runAgent} disabled={startCodingRun.isPending || hasActiveRun} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.runningAgent")}</> : hasActiveRun ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.runningAgent")}</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
