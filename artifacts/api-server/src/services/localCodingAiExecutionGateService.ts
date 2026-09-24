@@ -11,8 +11,8 @@ import {
   type AiCodingTask,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
-import { executeAINoFallback } from "./aiExecutionService.js";
-import { routeToModel } from "./aiModelRouter.js";
+import { executeAINoFallback, type ObservabilityContext } from "./aiExecutionService.js";
+import { resolveProductionCodingModel } from "./localCodingAiProductionModelService.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
   ProviderInvocationError,
@@ -49,14 +49,6 @@ import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
 const execFileAsync = promisify(execFile);
 const DEFAULT_MODEL_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
-const ALLOWED_PROVIDER_SLUGS = new Set([
-  "openai",
-  "anthropic",
-  "google",
-  "google-gemini",
-  "gemini",
-  "mistral",
-]);
 
 export type LocalCodingAiExecutionGateErrorKind =
   | "NOT_FOUND"
@@ -226,6 +218,7 @@ function createProviderAdapter(input: {
   providerSlug: string;
   modelId: string;
   baseUrl?: string | null;
+  observability?: ObservabilityContext;
 }): ConstrainedModelProvider {
   return {
     provider: input.providerSlug,
@@ -254,6 +247,7 @@ function createProviderAdapter(input: {
           temperature: 0,
           maxTokens: request.maxOutputTokens,
           signal: context.signal,
+          observability: input.observability,
         });
         return {
           output: { type: "text" as const, text: result.content },
@@ -948,19 +942,21 @@ async function executeReserved(
 
   try {
     const prompt = buildLocalCodingAiPrompt(lease);
-    const routed = await routeToModel(prompt.system + "\n" + prompt.user);
-    if (!routed) {
+    const resolvedModel = await resolveProductionCodingModel();
+    if (!resolvedModel.ok) {
       throw new LocalCodingAiExecutionGateError(
-        "No active configured coding model is available",
+        resolvedModel.message,
         "MODEL_UNAVAILABLE",
+        { reason: resolvedModel.reason },
       );
     }
 
-    const providerSlug = String(routed.provider.slug ?? "").toLowerCase();
-    const modelId = String(routed.model.modelId ?? "");
-    if (!ALLOWED_PROVIDER_SLUGS.has(providerSlug) || !modelId) {
+    const selected = resolvedModel.selection;
+    const providerSlug = String(selected.provider.slug ?? "").toLowerCase();
+    const modelId = String(selected.model.modelId ?? "");
+    if (!providerSlug || !modelId) {
       throw new LocalCodingAiExecutionGateError(
-        "Selected model/provider is not allowed for constrained coding proposals",
+        "Production coding model resolver returned an invalid provider/model",
         "MODEL_UNAVAILABLE",
       );
     }
@@ -969,9 +965,17 @@ async function executeReserved(
       providerSlug,
       modelId,
       baseUrl:
-        typeof routed.provider.baseUrl === "string"
-          ? routed.provider.baseUrl
+        typeof selected.provider.baseUrl === "string"
+          ? selected.provider.baseUrl
           : null,
+      observability: {
+        conversationId: reserved.task.id,
+        agentName: "AI Execution Gate",
+        providerName: providerSlug,
+        modelName: modelId,
+        requestType: "code",
+        createdBy: `coding-run:${reserved.run.id}`,
+      },
     });
     const adapter = createConstrainedModelInvocationAdapter(provider);
     const target: ModelTarget = {
@@ -993,6 +997,8 @@ async function executeReserved(
       target,
       requestId: reserved.run.id,
       prompt,
+      timeoutMs: selected.timeoutMs,
+      maxOutputTokens: selected.maxOutputTokens,
     });
 
     const workspace = await prepareRepositoryWorkspace(
@@ -1041,6 +1047,9 @@ async function executeReserved(
         packageHash: lease.packageHash,
         provider: providerSlug,
         model: modelId,
+        selectionReason: selected.selectionReason,
+        timeoutMs: selected.timeoutMs,
+        maxOutputTokens: selected.maxOutputTokens,
         changedFiles: candidate.applyResult.changedFiles.length,
         candidatePatchSha256: candidate.applyResult.patchSha256,
         modelInvoked: true,
