@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CodingAiObservabilityPanel } from "./codingAiObservabilityPanel";
 import { useForm } from "react-hook-form";
 import { z } from "zod/v3";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -2799,6 +2800,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                   )}
                                 </div>
                               )}
+                              <CodingAiObservabilityPanel taskId={task.id} />
                               {analyzerResult.failureRecoveryContext.warnings.length > 0 && (
                                 <p className="mt-2 text-[10px] leading-4 text-slate-500">
                                   {analyzerResult.failureRecoveryContext.warnings.join(" ")}
