@@ -241,6 +241,7 @@ interface GitMetadata {
   headSha: string;
   changedFiles: string[];
   diff: string;
+  cacheFingerprint: string;
   commits: GitCommitContext[];
 }
 
@@ -556,13 +557,7 @@ async function buildRepositoryIndex(root: string): Promise<RepositoryIndex> {
 }
 
 function cacheKey(repository: string, metadata: GitMetadata): string {
-  const dirtyFingerprint = createHash("sha256")
-    .update(metadata.changedFiles.join("\n"))
-    .update("\n")
-    .update(metadata.diff)
-    .digest("hex")
-    .slice(0, 16);
-  return `${repository}|${metadata.headSha}|${dirtyFingerprint}`;
+  return `${repository}|${metadata.headSha}|${metadata.cacheFingerprint}`;
 }
 
 function rememberIndex(key: string, index: RepositoryIndex): void {
@@ -576,7 +571,12 @@ export function clearLocalCodingIndexCache(): void {
   indexCache.clear();
 }
 
-async function git(root: string, args: string[], timeout = 10_000): Promise<string> {
+async function git(
+  root: string,
+  args: string[],
+  timeout = 10_000,
+  trimOutput = true,
+): Promise<string> {
   const { stdout } = await execFileAsync("git", args, {
     cwd: root,
     timeout,
@@ -588,7 +588,7 @@ async function git(root: string, args: string[], timeout = 10_000): Promise<stri
       LC_ALL: "C",
     },
   });
-  return stdout.trim();
+  return trimOutput ? stdout.trim() : stdout;
 }
 
 function parseChangedFiles(statusOutput: string): string[] {
@@ -623,13 +623,13 @@ async function readGitMetadata(root: string, requestedBranch: string, keywords: 
     "unknown",
   );
   const statusOutput = await warningsFallback(
-    () => git(root, ["status", "--porcelain=v1", "--untracked-files=normal"]),
+    () => git(root, ["status", "--porcelain=v1", "--untracked-files=normal"], 10_000, false),
     "",
   );
   const changedFiles = parseChangedFiles(statusOutput);
   const diff = changedFiles.length > 0
     ? await warningsFallback(
-        () => git(root, ["diff", "--no-ext-diff", "--unified=2", "--", ...changedFiles.slice(0, 80)]),
+        () => git(root, ["diff", "--no-ext-diff", "--unified=2", "--", ...changedFiles.slice(0, 80)], 10_000, false),
         "",
       )
     : "";
@@ -648,11 +648,19 @@ async function readGitMetadata(root: string, requestedBranch: string, keywords: 
     .sort((a, b) => scoreText(b.subject, keywords) - scoreText(a.subject, keywords))
     .slice(0, MAX_RECENT_COMMITS);
 
+  const cacheFingerprint = createHash("sha256")
+    .update(statusOutput)
+    .update("\n")
+    .update(diff)
+    .digest("hex")
+    .slice(0, 16);
+
   return {
     branch: branch || requestedBranch,
     headSha,
     changedFiles,
     diff: redactSensitiveDiff(Buffer.byteLength(diff, "utf8") > MAX_DIFF_BYTES ? diff.slice(0, MAX_DIFF_BYTES) : diff),
+    cacheFingerprint,
     commits,
   };
 }
