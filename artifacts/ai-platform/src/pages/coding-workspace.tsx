@@ -208,6 +208,47 @@ type RepositoryAnalyzerUiResult = {
     pushed?: boolean;
     completedAt?: string;
   };
+  aiHandoff?: {
+    status?: string;
+    gateStatus?: string;
+    packageHash?: string;
+    preparedAt?: string;
+    approvedAt?: string | null;
+    modelInvoked?: boolean;
+    package?: {
+      allowedFiles: string[];
+      diagnostics: Array<{
+        command?: string;
+        kind?: string;
+        file?: string;
+        line?: number;
+        column?: number;
+        code?: string;
+        symbol?: string;
+        message?: string;
+      }>;
+      snippets: Array<{
+        file?: string;
+        startLine?: number;
+        endLine?: number;
+        reason?: string;
+      }>;
+      relatedTests: string[];
+      verificationCommands: string[];
+      policy?: {
+        readOnlyContext?: boolean;
+        repositoryAccess?: boolean;
+        networkAccess?: boolean;
+        shellAccess?: boolean;
+        secretAccess?: boolean;
+        sourceWrite?: boolean;
+        commitPushMerge?: boolean;
+        modelInvoked?: boolean;
+        requiresExplicitApprovalBeforeModel?: boolean;
+        allowedFilesOnly?: boolean;
+      };
+    };
+  };
   localCommitApproval?: {
     status?: string;
     branch?: string;
@@ -528,6 +569,10 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.localRecovery && typeof value.localRecovery === "object" && !Array.isArray(value.localRecovery)
         ? (value.localRecovery as Record<string, unknown>)
         : null;
+    const aiHandoffValue =
+      value.aiHandoff && typeof value.aiHandoff === "object" && !Array.isArray(value.aiHandoff)
+        ? (value.aiHandoff as Record<string, unknown>)
+        : null;
     const localCommitApprovalValue =
       value.localCommitApproval && typeof value.localCommitApproval === "object" && !Array.isArray(value.localCommitApproval)
         ? (value.localCommitApproval as Record<string, unknown>)
@@ -778,6 +823,77 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             pushed: localRecoveryValue.pushed === true,
             completedAt: typeof localRecoveryValue.completedAt === "string" ? localRecoveryValue.completedAt : undefined,
           }
+        : undefined,
+      aiHandoff: aiHandoffValue
+        ? (() => {
+            const packageValue =
+              aiHandoffValue.package &&
+              typeof aiHandoffValue.package === "object" &&
+              !Array.isArray(aiHandoffValue.package)
+                ? aiHandoffValue.package as Record<string, unknown>
+                : null;
+            const policyValue =
+              packageValue?.policy &&
+              typeof packageValue.policy === "object" &&
+              !Array.isArray(packageValue.policy)
+                ? packageValue.policy as Record<string, unknown>
+                : null;
+            return {
+              status: typeof aiHandoffValue.status === "string" ? aiHandoffValue.status : undefined,
+              gateStatus: typeof aiHandoffValue.gateStatus === "string" ? aiHandoffValue.gateStatus : undefined,
+              packageHash: typeof aiHandoffValue.packageHash === "string" ? aiHandoffValue.packageHash : undefined,
+              preparedAt: typeof aiHandoffValue.preparedAt === "string" ? aiHandoffValue.preparedAt : undefined,
+              approvedAt: typeof aiHandoffValue.approvedAt === "string" || aiHandoffValue.approvedAt === null
+                ? aiHandoffValue.approvedAt as string | null
+                : undefined,
+              modelInvoked: aiHandoffValue.modelInvoked === true,
+              package: packageValue
+                ? {
+                    allowedFiles: stringList(packageValue.allowedFiles),
+                    diagnostics: Array.isArray(packageValue.diagnostics)
+                      ? packageValue.diagnostics
+                          .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                          .map((item) => ({
+                            command: typeof item.command === "string" ? item.command : undefined,
+                            kind: typeof item.kind === "string" ? item.kind : undefined,
+                            file: typeof item.file === "string" ? item.file : undefined,
+                            line: typeof item.line === "number" ? item.line : undefined,
+                            column: typeof item.column === "number" ? item.column : undefined,
+                            code: typeof item.code === "string" ? item.code : undefined,
+                            symbol: typeof item.symbol === "string" ? item.symbol : undefined,
+                            message: typeof item.message === "string" ? item.message : undefined,
+                          }))
+                      : [],
+                    snippets: Array.isArray(packageValue.snippets)
+                      ? packageValue.snippets
+                          .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                          .map((item) => ({
+                            file: typeof item.file === "string" ? item.file : undefined,
+                            startLine: typeof item.startLine === "number" ? item.startLine : undefined,
+                            endLine: typeof item.endLine === "number" ? item.endLine : undefined,
+                            reason: typeof item.reason === "string" ? item.reason : undefined,
+                          }))
+                      : [],
+                    relatedTests: stringList(packageValue.relatedTests),
+                    verificationCommands: stringList(packageValue.verificationCommands),
+                    policy: policyValue
+                      ? {
+                          readOnlyContext: policyValue.readOnlyContext === true,
+                          repositoryAccess: policyValue.repositoryAccess === true,
+                          networkAccess: policyValue.networkAccess === true,
+                          shellAccess: policyValue.shellAccess === true,
+                          secretAccess: policyValue.secretAccess === true,
+                          sourceWrite: policyValue.sourceWrite === true,
+                          commitPushMerge: policyValue.commitPushMerge === true,
+                          modelInvoked: policyValue.modelInvoked === true,
+                          requiresExplicitApprovalBeforeModel: policyValue.requiresExplicitApprovalBeforeModel === true,
+                          allowedFilesOnly: policyValue.allowedFilesOnly === true,
+                        }
+                      : undefined,
+                  }
+                : undefined,
+            };
+          })()
         : undefined,
       localCommitApproval: localCommitApprovalValue
         ? {
@@ -1035,6 +1151,8 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [localPatchPending, setLocalPatchPending] = useState(false);
   const [sandboxPending, setSandboxPending] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(false);
+  const [handoffPreparePending, setHandoffPreparePending] = useState(false);
+  const [handoffApprovePending, setHandoffApprovePending] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
   const [prVerifyPending, setPrVerifyPending] = useState(false);
   const [mergePending, setMergePending] = useState(false);
@@ -1096,6 +1214,19 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     analyzerResult?.orchestration?.nextAction === "LOCAL_RECOVERY_REQUIRED" &&
     analyzerResult?.failureRecoveryContext?.nextAction === "LOCAL_RECOVERY_REQUIRED" &&
     analyzerResult?.sandboxVerification?.status === "FAILED" &&
+    !hasActiveRun;
+  const canPrepareAiHandoff =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    analyzerResult?.orchestration?.nextAction === "AI_REQUIRED" &&
+    analyzerResult?.localRecovery?.status === "AI_REQUIRED" &&
+    analyzerResult.localRecovery.aiInvoked !== true &&
+    !hasActiveRun;
+  const canApproveAiHandoff =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    analyzerResult?.orchestration?.nextAction === "APPROVE_AI_HANDOFF" &&
+    analyzerResult?.aiHandoff?.status === "PREPARED" &&
+    analyzerResult.aiHandoff.gateStatus === "AWAITING_EXPLICIT_APPROVAL" &&
+    analyzerResult.aiHandoff.modelInvoked !== true &&
     !hasActiveRun;
   const canApproveCommit =
     task.status === CodingTaskStatus.READY_REVIEW &&
@@ -1253,6 +1384,66 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       });
     } finally {
       setRecoveryPending(false);
+    }
+  };
+
+  const prepareAiHandoff = async () => {
+    setHandoffPreparePending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/prepare-ai-handoff`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "AI handoff preparation started",
+        description: "Preparing a bounded read-only package. No model is being invoked.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not prepare AI handoff",
+        description: error instanceof Error ? error.message : "AI handoff preparation failed",
+        variant: "destructive",
+      });
+    } finally {
+      setHandoffPreparePending(false);
+    }
+  };
+
+  const approveAiHandoff = async () => {
+    setHandoffApprovePending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-ai-handoff`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "AI handoff explicitly approved",
+        description: "Package integrity and remote HEAD were rechecked. Model execution remains locked.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not approve AI handoff",
+        description: error instanceof Error ? error.message : "AI handoff approval failed",
+        variant: "destructive",
+      });
+    } finally {
+      setHandoffApprovePending(false);
     }
   };
 
@@ -1779,6 +1970,83 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                   )}
                                   {analyzerResult.localRecovery.reason && (
                                     <p className="mt-2 text-[10px] leading-4 text-slate-500">{analyzerResult.localRecovery.reason}</p>
+                                  )}
+                                </div>
+                              )}
+                              {canPrepareAiHandoff && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={prepareAiHandoff}
+                                  disabled={handoffPreparePending}
+                                  className="mt-3 h-7 bg-amber-300 px-2.5 text-[10px] font-semibold text-[#2b2100] hover:bg-amber-200"
+                                  data-testid="button-prepare-ai-handoff"
+                                >
+                                  {handoffPreparePending
+                                    ? <><Loader2 className="size-3 animate-spin" />Preparing handoff</>
+                                    : <><ArrowUpRight className="size-3" />Prepare AI Handoff</>}
+                                </Button>
+                              )}
+                              {analyzerResult.aiHandoff && (
+                                <div className="mt-3 rounded border border-amber-300/15 bg-amber-300/[0.025] p-2" data-testid="panel-ai-handoff-gate">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="text-[9px] uppercase tracking-wider text-amber-300">AI handoff gate</div>
+                                    <span className={cn(
+                                      "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                                      analyzerResult.aiHandoff.status === "APPROVED"
+                                        ? "bg-emerald-300/10 text-emerald-300"
+                                        : "bg-amber-300/10 text-amber-300",
+                                    )}>
+                                      {analyzerResult.aiHandoff.status ?? "PREPARED"}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                                    <div>
+                                      <div className="text-[9px] uppercase text-slate-600">Allowed files</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiHandoff.package?.allowedFiles.length ?? 0}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] uppercase text-slate-600">Diagnostics</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiHandoff.package?.diagnostics.length ?? 0}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] uppercase text-slate-600">Snippets</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiHandoff.package?.snippets.length ?? 0}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] uppercase text-slate-600">Model invoked</div>
+                                      <div className="mt-1 font-mono text-[10px] text-emerald-300">{analyzerResult.aiHandoff.modelInvoked ? "yes" : "no"}</div>
+                                    </div>
+                                  </div>
+                                  {analyzerResult.aiHandoff.packageHash && (
+                                    <div className="mt-2">
+                                      <div className="text-[9px] uppercase text-slate-600">Package hash</div>
+                                      <div className="mt-1 break-all font-mono text-[9px] text-slate-400">{analyzerResult.aiHandoff.packageHash}</div>
+                                    </div>
+                                  )}
+                                  {analyzerResult.aiHandoff.package?.allowedFiles.length ? (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {analyzerResult.aiHandoff.package.allowedFiles.map((file) => (
+                                        <code key={file} className="rounded border border-white/[0.06] bg-[#07101d] px-2 py-1 text-[9px] text-slate-400">{file}</code>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  <p className="mt-2 text-[10px] leading-4 text-slate-500">
+                                    Read-only package · repository/network/shell/secrets/source writes disabled · explicit approval required before any future model execution.
+                                  </p>
+                                  {canApproveAiHandoff && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={approveAiHandoff}
+                                      disabled={handoffApprovePending}
+                                      className="mt-3 h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
+                                      data-testid="button-approve-ai-handoff"
+                                    >
+                                      {handoffApprovePending
+                                        ? <><Loader2 className="size-3 animate-spin" />Approving handoff</>
+                                        : <><CheckCircle2 className="size-3" />Approve AI Handoff</>}
+                                    </Button>
                                   )}
                                 </div>
                               )}
