@@ -202,13 +202,33 @@ async function applyProposal(workspace: string, proposal: CodingAgentProposal): 
   }
 }
 
-async function gitDiff(workspace: string): Promise<string> {
-  const { stdout } = await execFileAsync(
+function execStdoutText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (Buffer.isBuffer(result)) return result.toString("utf8");
+  if (result && typeof result === "object" && "stdout" in result) {
+    const stdout = (result as { stdout?: unknown }).stdout;
+    if (typeof stdout === "string") return stdout;
+    if (Buffer.isBuffer(stdout)) return stdout.toString("utf8");
+  }
+  return "";
+}
+
+export async function buildProposedDiff(workspace: string): Promise<string> {
+  // Intent-to-add exposes untracked ADDED files to git diff without staging,
+  // committing, or changing repository history.
+  await execFileAsync(
     "git",
-    ["diff", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"],
+    ["add", "-N", "--", "."],
+    { cwd: workspace, timeout: 30_000, maxBuffer: 128 * 1024 },
+  );
+
+  const result = await execFileAsync(
+    "git",
+    ["diff", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", "--", "."],
     { cwd: workspace, timeout: 30_000, maxBuffer: 512 * 1024 },
   );
-  return stdout.slice(0, 400_000);
+
+  return execStdoutText(result).slice(0, 400_000);
 }
 
 async function latestApprovedContext(taskId: string): Promise<ApprovedContext> {
@@ -332,7 +352,7 @@ async function executeCodingAgent(context: ApprovedContext, run: AiCodingRun): P
 
     const proposal = normalizeProposal(parseJsonObject(output.content));
     await applyProposal(workspace, proposal);
-    const diff = await gitDiff(workspace);
+    const diff = await buildProposedDiff(workspace);
 
     const completedAt = new Date();
     await db.transaction(async (tx) => {
