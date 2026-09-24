@@ -242,9 +242,9 @@ async function executePlanner(
         temperature: 0.2,
         maxTokens: 1800,
         observability: {
-          module: "coding-orchestrator",
-          operation: "planning",
-          resourceId: task.id,
+          agentName: "Coding Planning Agent",
+          requestType: "code",
+          createdBy: "coding-orchestrator",
         },
       });
       const normalized = normalizePlan(output.content, analysis);
