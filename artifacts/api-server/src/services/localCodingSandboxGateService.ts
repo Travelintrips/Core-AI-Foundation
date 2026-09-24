@@ -14,6 +14,7 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { isSensitiveRepositoryPath } from "./localCodingEngineService.js";
+import { enrichFailureContextsWithSymbols } from "./localCodingFailureDiagnosticService.js";
 import { runSandboxedRepositoryVerification } from "./localCodingSandboxService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
 import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
@@ -34,6 +35,7 @@ export class LocalCodingSandboxGateError extends Error {
       | "INVALID_PATCH"
       | "VERIFICATION_FAILED"
       | "SANDBOX_BLOCKED",
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "LocalCodingSandboxGateError";
@@ -302,6 +304,7 @@ async function markSandboxGateFailed(
       patchSha256: context.patchSha256,
       baseHeadSha: context.baseHeadSha,
       verifiedAt: new Date().toISOString(),
+      ...(error.details ?? {}),
     },
     orchestration: {
       ...currentOrchestration,
@@ -412,6 +415,9 @@ async function executeSandboxGate(
           (staticIssues[0]?.detail ?? "")
         ).trim(),
         "VERIFICATION_FAILED",
+        {
+          staticIssues: staticIssues.slice(0, 12),
+        },
       );
     }
 
@@ -430,11 +436,20 @@ async function executeSandboxGate(
         ?? (sandbox.dependencyBootstrap?.status !== "PASSED"
           ? sandbox.dependencyBootstrap
           : null);
+      const failureContexts = await enrichFailureContextsWithSymbols(
+        workspacePath,
+        sandbox.failureContexts,
+      );
       throw new LocalCodingSandboxGateError(
         failed
           ? `${failed.command} failed with ${failed.status}${failed.exitCode === null ? "" : ` (exit ${failed.exitCode})`}. Output was intentionally withheld from persistent logs.`
           : "Sandbox verification failed.",
         "VERIFICATION_FAILED",
+        {
+          failureContexts,
+          deterministicRetries: sandbox.deterministicRetries,
+          commands: compactCommands(sandbox.commands),
+        },
       );
     }
 
@@ -454,6 +469,8 @@ async function executeSandboxGate(
         baseHeadSha: context.baseHeadSha,
         verificationCommands: context.verificationCommands,
         commands: compactCommands(sandbox.commands),
+        deterministicRetries: sandbox.deterministicRetries,
+        failureContexts: [],
         dependencyBootstrap: sandbox.dependencyBootstrap
           ? {
               command: sandbox.dependencyBootstrap.command,
@@ -487,6 +504,8 @@ async function executeSandboxGate(
             image: sandbox.image,
             network: sandbox.network,
             commands: compactCommands(sandbox.commands),
+            deterministicRetries: sandbox.deterministicRetries,
+            failureContexts: [],
             dependencyBootstrap: sandbox.dependencyBootstrap
               ? {
                   status: sandbox.dependencyBootstrap.status,

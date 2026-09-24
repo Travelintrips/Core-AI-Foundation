@@ -133,6 +133,26 @@ type RepositoryAnalyzerUiResult = {
     network?: string;
     verificationCommands: string[];
     commands: Array<{ command?: string; status?: string; exitCode?: number | null; durationMs?: number }>;
+    deterministicRetries: Array<{ command?: string; trigger?: string; status?: string }>;
+    failureContexts: Array<{
+      command?: string;
+      status?: string;
+      exitCode?: number | null;
+      kind?: string;
+      primaryFiles: string[];
+      errorCodes: string[];
+      diagnostics: Array<{
+        kind?: string;
+        file?: string;
+        line?: number;
+        column?: number;
+        code?: string;
+        symbol?: string;
+        message?: string;
+      }>;
+      retry?: { allowed?: boolean; reason?: string; command?: string };
+      warnings: string[];
+    }>;
     scriptsExecuted?: boolean;
     warnings: string[];
     verifiedAt?: string;
@@ -575,6 +595,52 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
                     status: typeof item.status === "string" ? item.status : undefined,
                     exitCode: typeof item.exitCode === "number" || item.exitCode === null ? item.exitCode as number | null : undefined,
                     durationMs: typeof item.durationMs === "number" ? item.durationMs : undefined,
+                  }))
+              : [],
+            deterministicRetries: Array.isArray(sandboxVerificationValue.deterministicRetries)
+              ? sandboxVerificationValue.deterministicRetries
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    command: typeof item.command === "string" ? item.command : undefined,
+                    trigger: typeof item.trigger === "string" ? item.trigger : undefined,
+                    status: typeof item.status === "string" ? item.status : undefined,
+                  }))
+              : [],
+            failureContexts: Array.isArray(sandboxVerificationValue.failureContexts)
+              ? sandboxVerificationValue.failureContexts
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    command: typeof item.command === "string" ? item.command : undefined,
+                    status: typeof item.status === "string" ? item.status : undefined,
+                    exitCode: typeof item.exitCode === "number" || item.exitCode === null ? item.exitCode as number | null : undefined,
+                    kind: typeof item.kind === "string" ? item.kind : undefined,
+                    primaryFiles: stringList(item.primaryFiles),
+                    errorCodes: stringList(item.errorCodes),
+                    diagnostics: Array.isArray(item.diagnostics)
+                      ? item.diagnostics
+                          .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+                          .map((entry) => ({
+                            kind: typeof entry.kind === "string" ? entry.kind : undefined,
+                            file: typeof entry.file === "string" ? entry.file : undefined,
+                            line: typeof entry.line === "number" ? entry.line : undefined,
+                            column: typeof entry.column === "number" ? entry.column : undefined,
+                            code: typeof entry.code === "string" ? entry.code : undefined,
+                            symbol: typeof entry.symbol === "string" ? entry.symbol : undefined,
+                            message: typeof entry.message === "string" ? entry.message : undefined,
+                          }))
+                      : [],
+                    retry: item.retry && typeof item.retry === "object" && !Array.isArray(item.retry)
+                      ? {
+                          allowed: (item.retry as Record<string, unknown>).allowed === true,
+                          reason: typeof (item.retry as Record<string, unknown>).reason === "string"
+                            ? (item.retry as Record<string, unknown>).reason as string
+                            : undefined,
+                          command: typeof (item.retry as Record<string, unknown>).command === "string"
+                            ? (item.retry as Record<string, unknown>).command as string
+                            : undefined,
+                        }
+                      : undefined,
+                    warnings: stringList(item.warnings),
                   }))
               : [],
             scriptsExecuted: sandboxVerificationValue.scriptsExecuted === true,
@@ -1407,6 +1473,47 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                 <div key={`${command.command ?? "command"}-${index}`} className="flex items-center justify-between gap-3 font-mono text-[10px]">
                                   <span className="truncate text-slate-400">{command.command ?? "verification"}</span>
                                   <span className={command.status === "PASSED" ? "text-emerald-300" : "text-rose-300"}>{command.status ?? "UNKNOWN"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {analyzerResult.sandboxVerification.deterministicRetries.length > 0 && (
+                            <div className="mt-2 rounded border border-amber-300/10 bg-amber-300/[0.025] p-2">
+                              <div className="text-[9px] uppercase tracking-wider text-amber-300">Deterministic retries</div>
+                              {analyzerResult.sandboxVerification.deterministicRetries.map((retry, index) => (
+                                <div key={`${retry.command ?? "retry"}-${index}`} className="mt-1 flex items-center justify-between gap-3 font-mono text-[10px]">
+                                  <span className="truncate text-slate-400">{retry.command ?? "verification"}</span>
+                                  <span className={retry.status === "PASSED" ? "text-emerald-300" : "text-rose-300"}>
+                                    {retry.trigger ?? "RETRY"} → {retry.status ?? "UNKNOWN"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {analyzerResult.sandboxVerification.failureContexts.length > 0 && (
+                            <div className="mt-2 space-y-2" data-testid="panel-sandbox-failure-context">
+                              <div className="text-[9px] uppercase tracking-wider text-rose-300">Failure context</div>
+                              {analyzerResult.sandboxVerification.failureContexts.map((failure, failureIndex) => (
+                                <div key={`${failure.command ?? "failure"}-${failureIndex}`} className="rounded border border-rose-300/10 bg-rose-300/[0.025] p-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="font-mono text-[10px] text-slate-300">{failure.command ?? "verification"}</span>
+                                    <span className="text-[9px] font-semibold uppercase tracking-wider text-rose-300">{failure.kind ?? failure.status ?? "FAILED"}</span>
+                                  </div>
+                                  {failure.diagnostics.map((diagnostic, diagnosticIndex) => (
+                                    <div key={`${diagnostic.file ?? "diagnostic"}-${diagnostic.line ?? 0}-${diagnosticIndex}`} className="mt-2 text-[10px] leading-4">
+                                      <div className="font-mono text-slate-300">
+                                        {diagnostic.file ?? "unknown"}
+                                        {diagnostic.line ? `:${diagnostic.line}` : ""}
+                                        {diagnostic.column ? `:${diagnostic.column}` : ""}
+                                        {diagnostic.symbol ? <span className="ml-2 text-cyan-300">[{diagnostic.symbol}]</span> : null}
+                                        {diagnostic.code ? <span className="ml-2 text-amber-300">{diagnostic.code}</span> : null}
+                                      </div>
+                                      {diagnostic.message ? <div className="mt-0.5 text-slate-500">{diagnostic.message}</div> : null}
+                                    </div>
+                                  ))}
+                                  {failure.retry?.reason && (
+                                    <p className="mt-2 text-[10px] leading-4 text-slate-500">{failure.retry.reason}</p>
+                                  )}
                                 </div>
                               ))}
                             </div>

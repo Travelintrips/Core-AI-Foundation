@@ -6,6 +6,10 @@ import {
   parseAllowlistedVerificationCommand,
   type VerificationCommandResult,
 } from "./localCodingEngineService.js";
+import {
+  buildFailureContexts,
+  type LocalFailureContext,
+} from "./localCodingFailureDiagnosticService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -39,6 +43,12 @@ export interface SandboxedVerificationResult {
   network: "none";
   dependencyBootstrap: VerificationCommandResult | null;
   commands: VerificationCommandResult[];
+  deterministicRetries: Array<{
+    command: string;
+    trigger: "TIMEOUT";
+    status: VerificationCommandResult["status"];
+  }>;
+  failureContexts: LocalFailureContext[];
   scriptsExecuted: boolean;
   warnings: string[];
 }
@@ -212,6 +222,8 @@ export async function runSandboxedRepositoryVerification(
       network: "none",
       dependencyBootstrap: null,
       commands: [],
+      deterministicRetries: [],
+      failureContexts: [],
       scriptsExecuted: false,
       warnings: [
         "Sandboxed repository scripts remain fail-closed because AI_CODING_SANDBOX_ENABLED is not true.",
@@ -227,6 +239,8 @@ export async function runSandboxedRepositoryVerification(
       network: "none",
       dependencyBootstrap: null,
       commands: [],
+      deterministicRetries: [],
+      failureContexts: [],
       scriptsExecuted: false,
       warnings: [
         "AI_CODING_SANDBOX_IMAGE must be an immutable image reference pinned with @sha256:<64 hex>.",
@@ -244,6 +258,8 @@ export async function runSandboxedRepositoryVerification(
       network: "none",
       dependencyBootstrap: null,
       commands: [],
+      deterministicRetries: [],
+      failureContexts: [],
       scriptsExecuted: false,
       warnings: ["Repository sandbox root does not exist."],
     };
@@ -258,6 +274,8 @@ export async function runSandboxedRepositoryVerification(
       network: "none",
       dependencyBootstrap: null,
       commands: [],
+      deterministicRetries: [],
+      failureContexts: [],
       scriptsExecuted: false,
       warnings: ["Repository sandbox root could not be resolved safely."],
     };
@@ -280,6 +298,8 @@ export async function runSandboxedRepositoryVerification(
           stderr: "Command is not allowlisted for sandboxed repository verification.",
           durationMs: 0,
         }],
+        deterministicRetries: [],
+        failureContexts: [],
         scriptsExecuted: false,
         warnings: ["Sandbox verification rejected a non-allowlisted command before starting Docker."],
       };
@@ -302,6 +322,8 @@ export async function runSandboxedRepositoryVerification(
       network: "none",
       dependencyBootstrap: null,
       commands: [],
+      deterministicRetries: [],
+      failureContexts: [],
       scriptsExecuted: false,
       warnings: [
         "No repository verification scripts were discovered; static verification remains the only applicable check.",
@@ -329,6 +351,8 @@ export async function runSandboxedRepositoryVerification(
       network: "none",
       dependencyBootstrap: null,
       commands: [],
+      deterministicRetries: [],
+      failureContexts: [],
       scriptsExecuted: false,
       warnings: [`Docker sandbox runtime is unavailable: ${message}`],
     };
@@ -359,6 +383,8 @@ export async function runSandboxedRepositoryVerification(
         network: "none",
         dependencyBootstrap,
         commands: [],
+        deterministicRetries: [],
+        failureContexts: buildFailureContexts([dependencyBootstrap]),
         scriptsExecuted: false,
         warnings: [
           "Offline dependency bootstrap failed inside the network-disabled sandbox. No repository verification script was executed.",
@@ -368,9 +394,10 @@ export async function runSandboxedRepositoryVerification(
   }
 
   const results: VerificationCommandResult[] = [];
+  const deterministicRetries: SandboxedVerificationResult["deterministicRetries"] = [];
   for (const command of uniqueCommands) {
     const parsed = parseAllowlistedVerificationCommand(command)!;
-    const result = await executeInSandbox(
+    let result = await executeInSandbox(
       resolvedRoot,
       image,
       command,
@@ -378,10 +405,29 @@ export async function runSandboxedRepositoryVerification(
       timeoutMs,
       executor,
     );
+
+    if (result.status === "TIMEOUT") {
+      const retried = await executeInSandbox(
+        resolvedRoot,
+        image,
+        command,
+        parsed.args,
+        timeoutMs,
+        executor,
+      );
+      deterministicRetries.push({
+        command,
+        trigger: "TIMEOUT",
+        status: retried.status,
+      });
+      result = retried;
+    }
+
     results.push(result);
     if (result.status !== "PASSED") break;
   }
 
+  const failedResults = results.filter((item) => item.status !== "PASSED");
   return {
     status:
       results.length === uniqueCommands.length &&
@@ -393,10 +439,9 @@ export async function runSandboxedRepositoryVerification(
     network: "none",
     dependencyBootstrap,
     commands: results,
+    deterministicRetries,
+    failureContexts: buildFailureContexts(failedResults),
     scriptsExecuted: results.length > 0,
-    warnings:
-      uniqueCommands.length === 0
-        ? ["No repository verification scripts were discovered; static verification remains the only applicable check."]
-        : [],
+    warnings: [],
   };
 }
