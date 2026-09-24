@@ -668,7 +668,6 @@ export async function consumeApprovedWorkstreamAiHandoff(
           ),
         ),
       )
-      .limit(1)
       .for("update");
 
     if (!handoff) {
@@ -745,7 +744,6 @@ export async function revokeWorkstreamAiHandoff(
       .from(aiCodingWorkstreamAiHandoffsTable)
       .where(eq(aiCodingWorkstreamAiHandoffsTable.workstreamId, workstreamId))
       .orderBy(desc(aiCodingWorkstreamAiHandoffsTable.claimAttempt))
-      .limit(1)
       .for("update");
 
     if (!handoff) {
