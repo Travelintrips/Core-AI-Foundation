@@ -17,6 +17,8 @@ const mockStartDeterministicLocalRecovery = vi.hoisted(() => vi.fn());
 const mockStartAiHandoffPreparation = vi.hoisted(() => vi.fn());
 const mockApproveAiHandoff = vi.hoisted(() => vi.fn());
 const mockRevokeAiHandoff = vi.hoisted(() => vi.fn());
+const mockStartAiExecution = vi.hoisted(() => vi.fn());
+const mockApproveAndValidateAiPatch = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
 const mockApproveAndMergePullRequest = vi.hoisted(() => vi.fn());
@@ -67,6 +69,38 @@ const MockLocalAiHandoffError = vi.hoisted(() => class extends Error {
       | "APPROVAL_FAILED"
       | "EXPIRED"
       | "REVOKED",
+  ) {
+    super(message);
+  }
+});
+const MockLocalCodingAiExecutionGateError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind:
+      | "NOT_FOUND"
+      | "NOT_READY"
+      | "EXPIRED"
+      | "REVOKED"
+      | "STALE_HEAD"
+      | "INVALID_CONTEXT"
+      | "MODEL_UNAVAILABLE"
+      | "MODEL_FAILED"
+      | "INVALID_PROPOSAL"
+      | "POLICY_REJECTED"
+      | "APPLY_FAILED",
+  ) {
+    super(message);
+  }
+});
+const MockLocalAiPatchApprovalError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind:
+      | "NOT_FOUND"
+      | "NOT_READY"
+      | "STALE_HEAD"
+      | "INVALID_PATCH"
+      | "VERIFICATION_FAILED",
   ) {
     super(message);
   }
@@ -186,6 +220,16 @@ vi.mock("../../services/localCodingAiHandoffService.js", () => ({
   approveAiHandoff: mockApproveAiHandoff,
   revokeAiHandoff: mockRevokeAiHandoff,
   LocalAiHandoffError: MockLocalAiHandoffError,
+}));
+
+vi.mock("../../services/localCodingAiExecutionGateService.js", () => ({
+  startAiExecution: mockStartAiExecution,
+  LocalCodingAiExecutionGateError: MockLocalCodingAiExecutionGateError,
+}));
+
+vi.mock("../../services/localCodingAiPatchApprovalService.js", () => ({
+  approveAndValidateAiPatch: mockApproveAndValidateAiPatch,
+  LocalAiPatchApprovalError: MockLocalAiPatchApprovalError,
 }));
 
 vi.mock("../../services/localCodingPullRequestGateService.js", () => ({
@@ -713,6 +757,101 @@ describe("AI coding workspace AI handoff gates", () => {
     );
 
     expect(response.status).toBe(422);
+  });
+});
+
+
+describe("AI coding workspace constrained AI execution endpoints", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStartAiExecution.mockResolvedValue({
+      ...run,
+      agentName: "AI Execution Gate",
+      status: "RUNNING",
+    });
+    mockApproveAndValidateAiPatch.mockResolvedValue({
+      ...run,
+      agentName: "AI Patch Gate",
+      status: "COMPLETED",
+      finishedAt: new Date("2026-01-01T00:05:00.000Z"),
+    });
+  });
+
+  it("starts model execution only through the approved AI execution gate", async () => {
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-ai-execution`,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "AI Execution Gate",
+      status: "RUNNING",
+    });
+    expect(mockStartAiExecution).toHaveBeenCalledTimes(1);
+    expect(mockStartAiExecution).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when the handoff lease is expired or stale", async () => {
+    mockStartAiExecution.mockRejectedValueOnce(
+      new MockLocalCodingAiExecutionGateError(
+        "AI handoff approval lease expired",
+        "EXPIRED",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-ai-execution`,
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  it("returns 503 when no constrained model is configured", async () => {
+    mockStartAiExecution.mockRejectedValueOnce(
+      new MockLocalCodingAiExecutionGateError(
+        "No active configured coding model is available",
+        "MODEL_UNAVAILABLE",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-ai-execution`,
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  it("records explicit human approval before existing sandbox verification", async () => {
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/approve-ai-patch`,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "AI Patch Gate",
+      status: "COMPLETED",
+    });
+    expect(mockApproveAndValidateAiPatch).toHaveBeenCalledTimes(1);
+    expect(mockApproveAndValidateAiPatch).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when AI candidate HEAD is stale", async () => {
+    mockApproveAndValidateAiPatch.mockRejectedValueOnce(
+      new MockLocalAiPatchApprovalError(
+        "Repository HEAD changed; regenerate the AI proposal",
+        "STALE_HEAD",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/approve-ai-patch`,
+    );
+
+    expect(response.status).toBe(409);
   });
 });
 
