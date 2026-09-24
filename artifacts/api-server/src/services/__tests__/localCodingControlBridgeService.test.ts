@@ -1,0 +1,4 @@
+import { describe, expect, it, vi } from "vitest";
+vi.mock("@workspace/db",()=>({db:{},aiCodingBridgeCommandsTable:{},aiCodingBridgePresenceTable:{},aiCodingBridgeResponsesTable:{}}));
+vi.mock("../aiEventBusService.js",()=>({publishSafe:vi.fn()}));
+describe("coding control bridge contract",()=>{it("exports durable command and response primitives",async()=>{const x=await import("../localCodingControlBridgeService.js");expect(x).toHaveProperty("submitCodingBridgeCommand");expect(x).toHaveProperty("appendCodingBridgeResponse");expect(x).toHaveProperty("listPendingCodingBridgeResponses");expect(x).toHaveProperty("acknowledgeCodingBridgeResponse");});it("exports bounded presence lease primitives",async()=>{const x=await import("../localCodingControlBridgeService.js");expect(x).toHaveProperty("renewCodingBridgePresence");expect(x).toHaveProperty("getCodingBridgeAvailability");});});
