@@ -1,0 +1,65 @@
+name: Production Release Probe
+
+on:
+  push:
+    branches:
+      - release/7a12-prod-readiness
+    paths:
+      - .github/workflows/production-release-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe aicore production
+        shell: bash
+        run: |
+          set +e
+          DOMAIN="https://aicore.cstlogistic.co.id"
+          EXPECTED_ASSET="index-DxPi21ue.js"
+
+          echo "DNS:"
+          getent hosts aicore.cstlogistic.co.id || true
+
+          health_code=$(curl -L -sS -o /tmp/health -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/api/healthz")
+          health_rc=$?
+          echo "health_rc=$health_rc health_code=$health_code"
+          echo "health_body=$(head -c 500 /tmp/health 2>/dev/null | tr '\n' ' ')"
+
+          full_code=$(curl -L -sS -o /tmp/full -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/api/healthz/full")
+          full_rc=$?
+          echo "full_rc=$full_rc full_code=$full_code"
+          echo "full_body=$(head -c 1000 /tmp/full 2>/dev/null | tr '\n' ' ')"
+
+          root_code=$(curl -L -sS -o /tmp/root -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/")
+          root_rc=$?
+          echo "root_rc=$root_rc root_code=$root_code"
+          echo "expected_asset=$EXPECTED_ASSET"
+          if grep -q "$EXPECTED_ASSET" /tmp/root 2>/dev/null; then
+            echo "release_fingerprint=match"
+          else
+            echo "release_fingerprint=no-match"
+            echo "root_preview=$(head -c 1000 /tmp/root 2>/dev/null | tr '\n' ' ')"
+          fi
+
+          tasks_code=$(curl -L -sS -o /tmp/tasks -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/api/ai/coding/tasks")
+          tasks_rc=$?
+          echo "coding_tasks_rc=$tasks_rc coding_tasks_code=$tasks_code"
+          echo "coding_tasks_body=$(head -c 500 /tmp/tasks 2>/dev/null | tr '\n' ' ')"
+
+          if [ "$health_code" != "200" ] || [ "$root_code" != "200" ]; then
+            echo "PROBE_RESULT=production_unhealthy_or_unreachable"
+            exit 2
+          fi
+
+          if grep -q "$EXPECTED_ASSET" /tmp/root; then
+            echo "PROBE_RESULT=release_ba5b873a_live"
+            exit 0
+          fi
+
+          echo "PROBE_RESULT=healthy_but_release_fingerprint_not_live"
+          exit 3
