@@ -173,6 +173,7 @@ import codingWorkspaceRouter from "./coding-workspace.js";
 import codingTaskGraphRouter from "./coding-task-graph.js";
 import codingObservabilityRouter from "./coding-observability.js";
 import codingMissionControlRouter from "./coding-mission-control.js";
+import codingControlBridgeRouter from "./coding-control-bridge.js";
 
 const router: IRouter = Router();
 
@@ -183,6 +184,7 @@ router.use(codingWorkspaceRouter);
 router.use(codingTaskGraphRouter);
 router.use(codingObservabilityRouter);
 router.use(codingMissionControlRouter);
+router.use(codingControlBridgeRouter);
 router.use(internalAuthRouter);
 router.use(internalCatalogRouter);
 router.use(agentsRouter);
