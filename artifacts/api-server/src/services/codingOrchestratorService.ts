@@ -222,13 +222,24 @@ async function executePlanner(
   const routed = await routeToModel(
     `code implementation plan repository ${task.repository}: ${task.instruction}`,
   );
-  if (!routed) {
-    throw new Error("Planning Agent could not find an active model with a configured provider key");
+  const supportsCodingText = (candidate: {
+    model: { capabilities?: string[] | null };
+    provider: { slug: string };
+  }) => {
+    const capabilities = candidate.model.capabilities ?? [];
+    return (
+      candidate.provider.slug !== "replicate" &&
+      (capabilities.includes("code") || capabilities.includes("text"))
+    );
+  };
+
+  if (!routed || !supportsCodingText(routed)) {
+    throw new Error("Planning Agent could not find an active text/code model with a configured provider key");
   }
 
   const candidates = [
     routed,
-    ...(await getFallbackModels(routed.model.id)),
+    ...(await getFallbackModels(routed.model.id)).filter(supportsCodingText),
   ];
 
   let lastError: unknown = null;
