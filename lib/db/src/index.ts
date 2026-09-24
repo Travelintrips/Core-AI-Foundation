@@ -19,10 +19,10 @@ const isProduction = process.env["NODE_ENV"] === "production";
 const configuredPoolMax = Number(process.env["PG_POOL_MAX"]);
 const poolMax =
   Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
-    ? Math.max(1, Math.min(10, Math.floor(configuredPoolMax)))
+    ? Math.max(1, Math.min(5, Math.floor(configuredPoolMax)))
     : isProduction
-      ? 3
-      : 10;
+      ? 1
+      : 5;
 
 const poolConfig = {
   connectionString: resolveDatabaseUrl(),
@@ -31,7 +31,8 @@ const poolConfig = {
   // Supabase's session-pool client limit immediately.
   max: poolMax,
   idleTimeoutMillis: isProduction ? 10_000 : 30_000,
-  connectionTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 8_000,
+  application_name: "core-ai-foundation",
   verify: (
     client: { query: (sql: string) => Promise<unknown> },
     done: (err?: Error) => void,
