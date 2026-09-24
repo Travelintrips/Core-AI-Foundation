@@ -19,11 +19,13 @@ const router: IRouter = Router();
 /** Process start time — used to compute uptime in /healthz/full */
 const startedAt = Date.now();
 const RELEASE_MARKER = "phase7a12-workers-killswitch-20260924";
+const BUILD_COMMIT_SHA = process.env.CST_BUILD_COMMIT_SHA ?? "unknown";
 
 // ── GET /healthz — liveness (no I/O) ─────────────────────────────────────────
 router.get("/healthz", (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.setHeader("X-CST-Release-Marker", RELEASE_MARKER);
+  res.setHeader("X-CST-Commit-SHA", BUILD_COMMIT_SHA);
   res.json(data);
 });
 
@@ -117,6 +119,7 @@ router.get("/healthz/full", async (_req, res) => {
 
   // HTTP status mirrors readiness: 200 = ok/degraded, 503 = fail
   res.setHeader("X-CST-Release-Marker", RELEASE_MARKER);
+  res.setHeader("X-CST-Commit-SHA", BUILD_COMMIT_SHA);
   res.status(overallStatus === "fail" ? 503 : 200).json(payload);
 });
 
