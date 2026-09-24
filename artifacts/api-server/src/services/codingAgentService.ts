@@ -16,7 +16,7 @@ import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
 import { executeAI, type ExecutionOutput } from "./aiExecutionService.js";
 import { getFallbackModels, routeToModel } from "./aiModelRouter.js";
-import { continueCodingVerification } from "./codingVerificationService.js";
+import { continueCodingVerification, markCodingStageRunning } from "./codingVerificationService.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_CONTEXT_FILES = 8;
@@ -293,6 +293,7 @@ export async function approvePlanAndStartCoding(taskId: string): Promise<AiCodin
     { codingRunId: run.id, orchestratorRunId: context.orchestratorRun.id },
   );
 
+  await markCodingStageRunning(context.orchestratorRun);
   void executeCodingAgent(context, run);
   return run;
 }
