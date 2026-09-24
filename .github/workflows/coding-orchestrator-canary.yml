@@ -1,0 +1,140 @@
+name: Coding Orchestrator Canary
+
+on:
+  push:
+    branches:
+      - feat/coding-orchestrator
+    paths:
+      - .github/workflows/coding-orchestrator-canary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 8
+    env:
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      TASK_ID: 022d5103-50a8-40b4-a697-3f08e4ddeb2d
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Start Coding Orchestrator
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          code=$(curl -L -sS -o /tmp/start -w "%{http_code}" \
+            -X POST \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/run")
+
+          echo "start_http=$code"
+          cat /tmp/start
+          echo
+          test "$code" = "201"
+
+          node <<'NODE'
+          const fs = require("fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/start", "utf8"));
+          if (payload.agentName !== "Coding Orchestrator") {
+            throw new Error("Run did not start through Coding Orchestrator");
+          }
+          if (payload.status !== "RUNNING") {
+            throw new Error("Expected RUNNING orchestration run");
+          }
+          console.log("started_agent=" + payload.agentName);
+          console.log("started_run_id=" + payload.id);
+          NODE
+
+      - name: Wait for Analyzer and Planner
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          terminal="false"
+          for attempt in $(seq 1 48); do
+            code=$(curl -L -sS -o /tmp/detail -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/tasks/$TASK_ID")
+            test "$code" = "200"
+
+            state=$(node <<'NODE'
+          const fs = require("fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/detail", "utf8"));
+          const run = Array.isArray(payload.runs)
+            ? payload.runs.find((item) => item.agentName === "Coding Orchestrator")
+            : null;
+          console.log(JSON.stringify({
+            taskStatus: payload?.task?.status ?? null,
+            runStatus: run?.status ?? null,
+            runId: run?.id ?? null,
+          }));
+          NODE
+            )
+            echo "attempt=$attempt state=$state"
+
+            run_status=$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(String(x.runStatus ?? ""));' "$state")
+            if [ "$run_status" = "COMPLETED" ] || [ "$run_status" = "FAILED" ]; then
+              terminal="true"
+              break
+            fi
+            sleep 5
+          done
+
+          test "$terminal" = "true"
+
+      - name: Verify orchestration contract
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const fs = require("fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/detail", "utf8"));
+          const run = payload.runs.find((item) => item.agentName === "Coding Orchestrator");
+
+          if (!run) throw new Error("Coding Orchestrator run missing");
+          if (run.status !== "COMPLETED") {
+            throw new Error("Coding Orchestrator did not complete: " + (run.errorMessage ?? run.status));
+          }
+          if (!run.logs) throw new Error("Coding Orchestrator logs/result missing");
+
+          const result = JSON.parse(run.logs);
+          if (result.executionStatus !== "COMPLETED") throw new Error("executionStatus is not COMPLETED");
+          if (result?.orchestration?.status !== "READY_REVIEW") throw new Error("Orchestrator did not reach READY_REVIEW");
+          if (result?.orchestration?.nextAction !== "APPROVE_PLAN") throw new Error("Approval gate missing");
+
+          const stages = Array.isArray(result?.orchestration?.stages)
+            ? result.orchestration.stages
+            : [];
+          const statusOf = (id) => stages.find((stage) => stage.id === id)?.status;
+
+          if (statusOf("repository_analyzer") !== "COMPLETED") throw new Error("Analyzer stage not completed");
+          if (statusOf("planner") !== "COMPLETED") throw new Error("Planner stage not completed");
+          for (const id of ["coding", "testing", "review"]) {
+            if (statusOf(id) !== "BLOCKED") throw new Error(id + " stage is not safely BLOCKED");
+          }
+
+          if (!result.implementationPlan?.summary) throw new Error("Implementation plan missing");
+          if (!result.planner?.modelUsed) throw new Error("Planner model metadata missing");
+          if (payload?.task?.status !== "READY_REVIEW") throw new Error("Task is not READY_REVIEW");
+          if (!payload?.task?.resultSummary) throw new Error("Task result summary missing");
+
+          console.log("orchestrator_status=READY_REVIEW");
+          console.log("next_action=APPROVE_PLAN");
+          console.log("repository_analyzer=COMPLETED");
+          console.log("planner=COMPLETED");
+          console.log("coding=BLOCKED");
+          console.log("testing=BLOCKED");
+          console.log("review=BLOCKED");
+          console.log("planner_model=" + result.planner.modelUsed);
+          console.log("planner_provider=" + result.planner.provider);
+          console.log("planner_tokens=" + result.planner.totalTokens);
+          console.log("plan_summary_present=true");
+          NODE
