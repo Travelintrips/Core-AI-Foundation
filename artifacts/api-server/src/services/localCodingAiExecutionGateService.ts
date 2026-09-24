@@ -12,7 +12,6 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { executeAINoFallback } from "./aiExecutionService.js";
-import { routeToModel } from "./aiModelRouter.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
   ProviderInvocationError,
@@ -45,19 +44,11 @@ import {
   type LocalCodingAiPrompt,
 } from "./localCodingAiPromptBuilderService.js";
 import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
+import { resolveProductionCodingModel } from "./localCodingAiProductionModelService.js";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_MODEL_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
-const ALLOWED_PROVIDER_SLUGS = new Set([
-  "openai",
-  "anthropic",
-  "google",
-  "google-gemini",
-  "gemini",
-  "mistral",
-]);
-
 export type LocalCodingAiExecutionGateErrorKind =
   | "NOT_FOUND"
   | "NOT_READY"
@@ -147,6 +138,18 @@ function clampOutputTokens(value = process.env["AI_CODING_MODEL_MAX_OUTPUT_TOKEN
 
 function sha256Json(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
+}
+
+export async function resolveConstrainedCodingModelSelection() {
+  const resolved = await resolveProductionCodingModel();
+  if (!resolved.ok) {
+    throw new LocalCodingAiExecutionGateError(
+      resolved.message,
+      "MODEL_UNAVAILABLE",
+      { reason: resolved.reason },
+    );
+  }
+  return resolved.selection;
 }
 
 async function gitHead(root: string): Promise<string> {
@@ -948,19 +951,13 @@ async function executeReserved(
 
   try {
     const prompt = buildLocalCodingAiPrompt(lease);
-    const routed = await routeToModel(prompt.system + "\n" + prompt.user);
-    if (!routed) {
-      throw new LocalCodingAiExecutionGateError(
-        "No active configured coding model is available",
-        "MODEL_UNAVAILABLE",
-      );
-    }
+    const selected = await resolveConstrainedCodingModelSelection();
 
-    const providerSlug = String(routed.provider.slug ?? "").toLowerCase();
-    const modelId = String(routed.model.modelId ?? "");
-    if (!ALLOWED_PROVIDER_SLUGS.has(providerSlug) || !modelId) {
+    const providerSlug = String(selected.provider.slug ?? "").toLowerCase();
+    const modelId = String(selected.model.modelId ?? "");
+    if (!providerSlug || !modelId) {
       throw new LocalCodingAiExecutionGateError(
-        "Selected model/provider is not allowed for constrained coding proposals",
+        "Production coding model resolver returned an invalid model/provider",
         "MODEL_UNAVAILABLE",
       );
     }
@@ -969,8 +966,8 @@ async function executeReserved(
       providerSlug,
       modelId,
       baseUrl:
-        typeof routed.provider.baseUrl === "string"
-          ? routed.provider.baseUrl
+        typeof selected.provider.baseUrl === "string"
+          ? selected.provider.baseUrl
           : null,
     });
     const adapter = createConstrainedModelInvocationAdapter(provider);
@@ -993,6 +990,8 @@ async function executeReserved(
       target,
       requestId: reserved.run.id,
       prompt,
+      timeoutMs: selected.timeoutMs,
+      maxOutputTokens: selected.maxOutputTokens,
     });
 
     const workspace = await prepareRepositoryWorkspace(
