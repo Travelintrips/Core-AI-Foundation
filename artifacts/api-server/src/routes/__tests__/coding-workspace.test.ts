@@ -12,11 +12,26 @@ const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
 const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
+const mockStartSandboxVerification = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const MockLocalPatchApprovalError = vi.hoisted(() => class extends Error {
   constructor(
     message: string,
     readonly kind: "NOT_FOUND" | "NOT_READY" | "STALE_HEAD" | "INVALID_PATCH" | "VERIFICATION_FAILED",
+  ) {
+    super(message);
+  }
+});
+const MockLocalCodingSandboxGateError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind:
+      | "NOT_FOUND"
+      | "NOT_READY"
+      | "STALE_HEAD"
+      | "INVALID_PATCH"
+      | "VERIFICATION_FAILED"
+      | "SANDBOX_BLOCKED",
   ) {
     super(message);
   }
@@ -105,6 +120,11 @@ vi.mock("../../services/localCodingCommitApprovalService.js", () => ({
   LocalCommitApprovalError: MockLocalCommitApprovalError,
 }));
 
+vi.mock("../../services/localCodingSandboxGateService.js", () => ({
+  startSandboxVerification: mockStartSandboxVerification,
+  LocalCodingSandboxGateError: MockLocalCodingSandboxGateError,
+}));
+
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -157,6 +177,11 @@ describe("AI coding workspace run endpoint", () => {
       agentName: "Local Patch Gate",
       status: "COMPLETED",
       finishedAt: new Date("2026-01-01T00:02:00.000Z"),
+    });
+    mockStartSandboxVerification.mockResolvedValue({
+      ...run,
+      agentName: "Sandbox Verification",
+      status: "RUNNING",
     });
     mockApproveCommitAndCreatePullRequest.mockResolvedValue({
       ...run,
@@ -344,6 +369,79 @@ describe("AI coding workspace local patch approval endpoint", () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "Coding task not found" });
+  });
+});
+
+
+describe("AI coding workspace sandbox verification endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStartSandboxVerification.mockResolvedValue({
+      ...run,
+      agentName: "Sandbox Verification",
+      status: "RUNNING",
+    });
+  });
+
+  it("starts sandbox verification only through the explicit verification gate", async () => {
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-sandbox-verification`,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Sandbox Verification",
+      status: "RUNNING",
+    });
+    expect(mockStartSandboxVerification).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when the task is not at RUN_SANDBOX_VERIFICATION", async () => {
+    mockStartSandboxVerification.mockRejectedValueOnce(
+      new MockLocalCodingSandboxGateError(
+        "Coding task is not at the RUN_SANDBOX_VERIFICATION gate",
+        "NOT_READY",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-sandbox-verification`,
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/RUN_SANDBOX_VERIFICATION/);
+  });
+
+  it("returns 503 when the sandbox runtime is fail-closed", async () => {
+    mockStartSandboxVerification.mockRejectedValueOnce(
+      new MockLocalCodingSandboxGateError(
+        "AI_CODING_SANDBOX_ENABLED is not true",
+        "SANDBOX_BLOCKED",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-sandbox-verification`,
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  it("returns 422 when the approved patch cannot be verified safely", async () => {
+    mockStartSandboxVerification.mockRejectedValueOnce(
+      new MockLocalCodingSandboxGateError(
+        "Validated local patch digest no longer matches",
+        "INVALID_PATCH",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/run-sandbox-verification`,
+    );
+
+    expect(response.status).toBe(422);
   });
 });
 
