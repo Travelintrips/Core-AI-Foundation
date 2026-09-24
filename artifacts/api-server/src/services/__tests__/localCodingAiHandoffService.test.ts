@@ -31,6 +31,7 @@ function recoveryContext(): LocalFailureRecoveryContext {
       "src/i.ts",
       "src/j.ts",
       ".env",
+      "C:\\Windows\\System32\\drivers\\etc\\hosts",
       "../outside.ts",
     ],
     focusSymbols: [
@@ -125,6 +126,7 @@ describe("Local Coding AI Handoff Package", () => {
     expect(pkg.version).toBe(1);
     expect(pkg.allowedFiles).toHaveLength(12);
     expect(pkg.allowedFiles).not.toContain(".env");
+    expect(pkg.allowedFiles).not.toContain("C:/Windows/System32/drivers/etc/hosts");
     expect(pkg.allowedFiles).not.toContain("../outside.ts");
     expect(pkg.policy).toEqual({
       readOnlyContext: true,

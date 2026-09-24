@@ -149,6 +149,7 @@ function normalizeRepoPath(value: string): string | null {
   if (
     !normalized ||
     normalized.startsWith("/") ||
+    /^[A-Za-z]:(?:\/|$)/.test(normalized) ||
     normalized === ".." ||
     normalized.startsWith("../") ||
     normalized.includes("/../") ||
