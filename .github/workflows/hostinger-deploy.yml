@@ -7,6 +7,8 @@ on:
       - CI Verify
     types:
       - completed
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -36,8 +38,8 @@ jobs:
           for attempt in $(seq 1 36); do
             code=$(curl -L -sS -D /tmp/headers -o /tmp/body -w "%{http_code}" \
               --connect-timeout 15 --max-time 30 "$API_BASE_URL/healthz" || true)
-            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/headers | tail -n1)
-            marker=$(awk -F': ' 'tolower($1)=="x-cst-release-marker" {gsub("\r","",$2); print $2}' /tmp/headers | tail -n1)
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\\r","",$2); print $2}' /tmp/headers | tail -n1)
+            marker=$(awk -F': ' 'tolower($1)=="x-cst-release-marker" {gsub("\\r","",$2); print $2}' /tmp/headers | tail -n1)
             echo "attempt=$attempt http=$code live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA marker=${marker:-missing}"
             if [ "$code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ]; then
               exit 0
