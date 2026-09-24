@@ -14,6 +14,8 @@ const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
 const mockStartSandboxVerification = vi.hoisted(() => vi.fn());
 const mockStartDeterministicLocalRecovery = vi.hoisted(() => vi.fn());
+const mockStartAiHandoffPreparation = vi.hoisted(() => vi.fn());
+const mockApproveAiHandoff = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
 const mockApproveAndMergePullRequest = vi.hoisted(() => vi.fn());
@@ -49,6 +51,19 @@ const MockLocalDeterministicRecoveryError = vi.hoisted(() => class extends Error
       | "INVALID_CONTEXT"
       | "SANDBOX_BLOCKED"
       | "RECOVERY_FAILED",
+  ) {
+    super(message);
+  }
+});
+const MockLocalAiHandoffError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind:
+      | "NOT_FOUND"
+      | "NOT_READY"
+      | "STALE_HEAD"
+      | "INVALID_CONTEXT"
+      | "APPROVAL_FAILED",
   ) {
     super(message);
   }
@@ -161,6 +176,12 @@ vi.mock("../../services/localCodingSandboxGateService.js", () => ({
 vi.mock("../../services/localCodingDeterministicRecoveryService.js", () => ({
   startDeterministicLocalRecovery: mockStartDeterministicLocalRecovery,
   LocalDeterministicRecoveryError: MockLocalDeterministicRecoveryError,
+}));
+
+vi.mock("../../services/localCodingAiHandoffService.js", () => ({
+  startAiHandoffPreparation: mockStartAiHandoffPreparation,
+  approveAiHandoff: mockApproveAiHandoff,
+  LocalAiHandoffError: MockLocalAiHandoffError,
 }));
 
 vi.mock("../../services/localCodingPullRequestGateService.js", () => ({
@@ -556,6 +577,99 @@ describe("AI coding workspace deterministic local recovery endpoint", () => {
 
     const response = await request(app).post(
       `/ai/coding/tasks/${taskId}/run-local-recovery`,
+    );
+
+    expect(response.status).toBe(422);
+  });
+});
+
+
+describe("AI coding workspace AI handoff gates", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStartAiHandoffPreparation.mockResolvedValue({
+      ...run,
+      agentName: "AI Handoff Gate",
+      status: "RUNNING",
+    });
+    mockApproveAiHandoff.mockResolvedValue({
+      ...run,
+      agentName: "AI Handoff Approval",
+      status: "COMPLETED",
+      finishedAt: new Date("2026-01-01T00:03:00.000Z"),
+    });
+  });
+
+  it("prepares bounded AI handoff only from AI_REQUIRED", async () => {
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/prepare-ai-handoff`,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "AI Handoff Gate",
+      status: "RUNNING",
+    });
+    expect(mockStartAiHandoffPreparation).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when handoff preparation is not at AI_REQUIRED", async () => {
+    mockStartAiHandoffPreparation.mockRejectedValueOnce(
+      new MockLocalAiHandoffError(
+        "Coding task is not at the AI_REQUIRED gate",
+        "NOT_READY",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/prepare-ai-handoff`,
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  it("records explicit handoff approval without invoking a model", async () => {
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/approve-ai-handoff`,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "AI Handoff Approval",
+      status: "COMPLETED",
+    });
+    expect(mockApproveAiHandoff).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 for stale remote HEAD during handoff approval", async () => {
+    mockApproveAiHandoff.mockRejectedValueOnce(
+      new MockLocalAiHandoffError(
+        "Repository HEAD changed; prepare the AI handoff again",
+        "STALE_HEAD",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/approve-ai-handoff`,
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  it("returns 422 when package integrity or policy validation fails", async () => {
+    mockApproveAiHandoff.mockRejectedValueOnce(
+      new MockLocalAiHandoffError(
+        "AI handoff package hash no longer matches",
+        "APPROVAL_FAILED",
+      ),
+    );
+
+    const response = await request(app).post(
+      `/ai/coding/tasks/${taskId}/approve-ai-handoff`,
     );
 
     expect(response.status).toBe(422);
