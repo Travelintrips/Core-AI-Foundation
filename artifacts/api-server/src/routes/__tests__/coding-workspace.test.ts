@@ -12,10 +12,26 @@ const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
 const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
+const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const MockLocalPatchApprovalError = vi.hoisted(() => class extends Error {
   constructor(
     message: string,
     readonly kind: "NOT_FOUND" | "NOT_READY" | "STALE_HEAD" | "INVALID_PATCH" | "VERIFICATION_FAILED",
+  ) {
+    super(message);
+  }
+});
+const MockLocalCommitApprovalError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind:
+      | "NOT_FOUND"
+      | "NOT_READY"
+      | "STALE_HEAD"
+      | "INVALID_PATCH"
+      | "VERIFICATION_FAILED"
+      | "GITHUB_AUTH"
+      | "PUBLISH_FAILED",
   ) {
     super(message);
   }
@@ -84,6 +100,11 @@ vi.mock("../../services/localCodingPatchApprovalService.js", () => ({
   LocalPatchApprovalError: MockLocalPatchApprovalError,
 }));
 
+vi.mock("../../services/localCodingCommitApprovalService.js", () => ({
+  approveCommitAndCreatePullRequest: mockApproveCommitAndCreatePullRequest,
+  LocalCommitApprovalError: MockLocalCommitApprovalError,
+}));
+
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -136,6 +157,11 @@ describe("AI coding workspace run endpoint", () => {
       agentName: "Local Patch Gate",
       status: "COMPLETED",
       finishedAt: new Date("2026-01-01T00:02:00.000Z"),
+    });
+    mockApproveCommitAndCreatePullRequest.mockResolvedValue({
+      ...run,
+      agentName: "Local Commit Gate",
+      status: "RUNNING",
     });
   });
 
@@ -318,5 +344,83 @@ describe("AI coding workspace local patch approval endpoint", () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "Coding task not found" });
+  });
+});
+
+
+describe("AI coding workspace commit approval endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApproveCommitAndCreatePullRequest.mockResolvedValue({
+      ...run,
+      agentName: "Local Commit Gate",
+      status: "RUNNING",
+    });
+  });
+
+  it("starts safe branch and PR creation only through explicit commit approval", async () => {
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-commit`);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Local Commit Gate",
+      status: "RUNNING",
+    });
+    expect(mockApproveCommitAndCreatePullRequest).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when the task is not at APPROVE_COMMIT or base HEAD is stale", async () => {
+    mockApproveCommitAndCreatePullRequest.mockRejectedValueOnce(
+      new MockLocalCommitApprovalError(
+        "Coding task is not at the APPROVE_COMMIT gate",
+        "NOT_READY",
+      ),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-commit`);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/APPROVE_COMMIT/);
+  });
+
+  it("returns 503 when the dedicated GitHub publish token is not configured", async () => {
+    mockApproveCommitAndCreatePullRequest.mockRejectedValueOnce(
+      new MockLocalCommitApprovalError(
+        "AI_CODING_GITHUB_TOKEN is not configured",
+        "GITHUB_AUTH",
+      ),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-commit`);
+
+    expect(response.status).toBe(503);
+  });
+
+  it("returns 502 when GitHub branch or PR publication fails", async () => {
+    mockApproveCommitAndCreatePullRequest.mockRejectedValueOnce(
+      new MockLocalCommitApprovalError(
+        "GitHub API failed",
+        "PUBLISH_FAILED",
+      ),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-commit`);
+
+    expect(response.status).toBe(502);
+  });
+
+  it("returns 422 when the validated patch no longer passes commit verification", async () => {
+    mockApproveCommitAndCreatePullRequest.mockRejectedValueOnce(
+      new MockLocalCommitApprovalError(
+        "Validated patch digest no longer matches",
+        "INVALID_PATCH",
+      ),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-commit`);
+
+    expect(response.status).toBe(422);
   });
 });
