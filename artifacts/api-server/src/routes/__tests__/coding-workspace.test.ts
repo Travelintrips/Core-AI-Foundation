@@ -9,9 +9,7 @@ const mockInsertValues = vi.hoisted(() => vi.fn());
 const mockInsertReturning = vi.hoisted(() => vi.fn());
 const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
-const mockEnqueue = vi.hoisted(() => vi.fn());
-const mockFailRepositoryAnalyzerRun = vi.hoisted(() => vi.fn());
-const mockExecuteRepositoryAnalyzerJobOnDemand = vi.hoisted(() => vi.fn());
+const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
 
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
@@ -63,13 +61,8 @@ vi.mock("@workspace/db", () => ({
   },
 }));
 
-vi.mock("../../services/queueManagerService.js", () => ({
-  enqueue: mockEnqueue,
-}));
-
-vi.mock("../../services/repositoryAnalyzerService.js", () => ({
-  executeRepositoryAnalyzerJobOnDemand: mockExecuteRepositoryAnalyzerJobOnDemand,
-  failRepositoryAnalyzerRun: mockFailRepositoryAnalyzerRun,
+vi.mock("../../services/codingOrchestratorService.js", () => ({
+  startCodingOrchestration: mockStartCodingOrchestration,
 }));
 
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
@@ -95,7 +88,7 @@ const task = {
 const run = {
   id: runId,
   taskId,
-  agentName: "Repository Analyzer",
+  agentName: "Coding Orchestrator",
   status: "RUNNING",
   startedAt: new Date("2026-01-01T00:01:00.000Z"),
   finishedAt: null,
@@ -117,44 +110,31 @@ describe("AI coding workspace run endpoint", () => {
     mockInsertReturning.mockResolvedValue([run]);
     mockUpdateSet.mockReturnValue(updateBuilder);
     mockUpdateWhere.mockResolvedValue([]);
-    mockEnqueue.mockResolvedValue({ id: 701, jobType: "coding_repository_analyzer" });
-    mockExecuteRepositoryAnalyzerJobOnDemand.mockResolvedValue(undefined);
+    mockStartCodingOrchestration.mockResolvedValue({ sessionId: `coding-${runId}` });
   });
 
-  it("creates one Repository Analyzer run and moves the task to ANALYZING atomically", async () => {
+  it("creates one Coding Orchestrator run and moves the task to ANALYZING atomically", async () => {
     const response = await request(app).post(`/ai/coding/tasks/${taskId}/run`);
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
       id: runId,
       taskId,
-      agentName: "Repository Analyzer",
+      agentName: "Coding Orchestrator",
       status: "RUNNING",
     });
     expect(mockTransaction).toHaveBeenCalledOnce();
     expect(mockInsertValues).toHaveBeenCalledWith({
       taskId,
-      agentName: "Repository Analyzer",
+      agentName: "Coding Orchestrator",
       status: "RUNNING",
       startedAt: expect.any(Date),
     });
     expect(mockUpdateSet).toHaveBeenCalledWith({ status: "ANALYZING" });
-    expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
-      jobType: "coding_repository_analyzer",
-      requiredCapability: "coding_repository_analyzer",
-      maxRetry: 0,
-      payloadJson: expect.objectContaining({
-        codingTaskId: taskId,
-        codingRunId: runId,
-        repository: task.repository,
-        branch: task.branch,
-        title: task.projectName,
-        description: task.instruction,
-      }),
-    }));
-    expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 701, jobType: "coding_repository_analyzer" }),
-    );
+    expect(mockStartCodingOrchestration).toHaveBeenCalledWith({
+      task,
+      run,
+    });
   });
 
   it("returns 404 without creating a run when the task does not exist", async () => {
@@ -166,7 +146,7 @@ describe("AI coding workspace run endpoint", () => {
     expect(response.body).toEqual({ error: "Coding task not found" });
     expect(mockInsertValues).not.toHaveBeenCalled();
     expect(mockUpdateSet).not.toHaveBeenCalled();
-    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockStartCodingOrchestration).not.toHaveBeenCalled();
   });
 
   it("returns 409 and preserves history when a RUNNING run already exists", async () => {
@@ -178,20 +158,15 @@ describe("AI coding workspace run endpoint", () => {
     expect(response.body).toEqual({ error: "Coding task already has an active run" });
     expect(mockInsertValues).not.toHaveBeenCalled();
     expect(mockUpdateSet).not.toHaveBeenCalled();
-    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockStartCodingOrchestration).not.toHaveBeenCalled();
   });
 
-  it("marks the run failed instead of leaving it RUNNING when queueing fails", async () => {
-    mockEnqueue.mockRejectedValueOnce(new Error("queue unavailable"));
+  it("returns 503 when the Coding Orchestrator cannot start", async () => {
+    mockStartCodingOrchestration.mockRejectedValueOnce(new Error("queue unavailable"));
 
     const response = await request(app).post(`/ai/coding/tasks/${taskId}/run`);
 
     expect(response.status).toBe(503);
-    expect(response.body).toEqual({ error: "Repository Analyzer could not be queued" });
-    expect(mockFailRepositoryAnalyzerRun).toHaveBeenCalledWith(
-      { codingTaskId: taskId, codingRunId: runId },
-      "Could not enqueue Repository Analyzer: queue unavailable",
-    );
-    expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+    expect(response.body).toEqual({ error: "Coding Orchestrator could not be started" });
   });
 });

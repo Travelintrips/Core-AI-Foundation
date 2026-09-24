@@ -89,6 +89,33 @@ type RepositoryAnalyzerUiResult = {
     file?: string;
   }>;
   recommendedChanges: string[];
+  orchestration?: {
+    sessionId?: string;
+    status?: string;
+    nextAction?: string;
+    stages: Array<{
+      id?: string;
+      label?: string;
+      status?: string;
+      detail?: string;
+    }>;
+  };
+  implementationPlan?: {
+    summary?: string;
+    objectives: string[];
+    filesToInspect: string[];
+    implementationSteps: string[];
+    verificationSteps: string[];
+    risks: string[];
+    approvalRequired?: boolean;
+  };
+  planner?: {
+    modelUsed?: string;
+    provider?: string;
+    totalTokens?: number;
+    latencyMs?: number;
+    parsedAsJson?: boolean;
+  };
 };
 
 function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzerUiResult | null {
@@ -99,6 +126,23 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       ? value.findings.filter((item): item is RepositoryAnalyzerUiResult["findings"][number] =>
           Boolean(item) && typeof item === "object")
       : [];
+    const orchestrationValue =
+      value.orchestration && typeof value.orchestration === "object" && !Array.isArray(value.orchestration)
+        ? (value.orchestration as Record<string, unknown>)
+        : null;
+    const implementationPlanValue =
+      value.implementationPlan && typeof value.implementationPlan === "object" && !Array.isArray(value.implementationPlan)
+        ? (value.implementationPlan as Record<string, unknown>)
+        : null;
+    const plannerValue =
+      value.planner && typeof value.planner === "object" && !Array.isArray(value.planner)
+        ? (value.planner as Record<string, unknown>)
+        : null;
+    const stringList = (input: unknown) =>
+      Array.isArray(input)
+        ? input.filter((item): item is string => typeof item === "string")
+        : [];
+
     return {
       summary: typeof value.summary === "string" ? value.summary : undefined,
       executionStatus: typeof value.executionStatus === "string" ? value.executionStatus : undefined,
@@ -112,6 +156,39 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       recommendedChanges: Array.isArray(value.recommendedChanges)
         ? value.recommendedChanges.filter((item): item is string => typeof item === "string")
         : [],
+      orchestration: orchestrationValue
+        ? {
+            sessionId: typeof orchestrationValue.sessionId === "string" ? orchestrationValue.sessionId : undefined,
+            status: typeof orchestrationValue.status === "string" ? orchestrationValue.status : undefined,
+            nextAction: typeof orchestrationValue.nextAction === "string" ? orchestrationValue.nextAction : undefined,
+            stages: Array.isArray(orchestrationValue.stages)
+              ? orchestrationValue.stages.filter(
+                  (item): item is NonNullable<RepositoryAnalyzerUiResult["orchestration"]>["stages"][number] =>
+                    Boolean(item) && typeof item === "object",
+                )
+              : [],
+          }
+        : undefined,
+      implementationPlan: implementationPlanValue
+        ? {
+            summary: typeof implementationPlanValue.summary === "string" ? implementationPlanValue.summary : undefined,
+            objectives: stringList(implementationPlanValue.objectives),
+            filesToInspect: stringList(implementationPlanValue.filesToInspect),
+            implementationSteps: stringList(implementationPlanValue.implementationSteps),
+            verificationSteps: stringList(implementationPlanValue.verificationSteps),
+            risks: stringList(implementationPlanValue.risks),
+            approvalRequired: implementationPlanValue.approvalRequired === true,
+          }
+        : undefined,
+      planner: plannerValue
+        ? {
+            modelUsed: typeof plannerValue.modelUsed === "string" ? plannerValue.modelUsed : undefined,
+            provider: typeof plannerValue.provider === "string" ? plannerValue.provider : undefined,
+            totalTokens: typeof plannerValue.totalTokens === "number" ? plannerValue.totalTokens : undefined,
+            latencyMs: typeof plannerValue.latencyMs === "number" ? plannerValue.latencyMs : undefined,
+            parsedAsJson: plannerValue.parsedAsJson === true,
+          }
+        : undefined,
     };
   } catch {
     return null;
@@ -245,10 +322,12 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
 
   const task = detail.task;
   const hasActiveRun = detail.runs.some((run) => run.status === "RUNNING");
-  const latestCompletedRun = detail.runs.find(
-    (run) => run.agentName === "Repository Analyzer" && run.status === "COMPLETED" && Boolean(run.logs),
+  const latestResultRun = detail.runs.find(
+    (run) =>
+      ["Coding Orchestrator", "Repository Analyzer"].includes(run.agentName) &&
+      Boolean(run.logs),
   );
-  const analyzerResult = parseRepositoryAnalyzerResult(latestCompletedRun?.logs);
+  const analyzerResult = parseRepositoryAnalyzerResult(latestResultRun?.logs);
   const displayedResultSummary = analyzerResult?.summary ?? task.resultSummary;
   const runAgent = () => {
     startCodingRun.mutate(
@@ -259,7 +338,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
           void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
           toast({
             title: t("pages.codingWorkspace.runStarted"),
-            description: t("pages.codingWorkspace.repositoryAnalyzer"),
+            description: "Coding Orchestrator: Analyzer → Planner",
           });
         },
         onError: () => {
@@ -355,12 +434,79 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                   </ul>
                 </div>
               )}
+              {analyzerResult?.orchestration && (
+                <div className="space-y-2" data-testid="list-coding-orchestrator-stages">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Orchestrator stages</div>
+                    {analyzerResult.orchestration.sessionId && (
+                      <span className="font-mono text-[9px] text-slate-600">{analyzerResult.orchestration.sessionId}</span>
+                    )}
+                  </div>
+                  {analyzerResult.orchestration.stages.map((stage, index) => (
+                    <div key={`${stage.id ?? stage.label ?? "stage"}-${index}`} className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.06] bg-[#091222] p-3">
+                      <div>
+                        <div className="text-xs font-medium text-slate-200">{stage.label ?? stage.id ?? "Agent stage"}</div>
+                        {stage.detail && <p className="mt-1 text-[10px] leading-4 text-slate-500">{stage.detail}</p>}
+                      </div>
+                      <span className={cn(
+                        "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                        stage.status === "COMPLETED"
+                          ? "bg-emerald-300/10 text-emerald-300"
+                          : stage.status === "FAILED"
+                            ? "bg-rose-300/10 text-rose-300"
+                            : stage.status === "RUNNING"
+                              ? "bg-amber-300/10 text-amber-300"
+                              : "bg-slate-300/10 text-slate-400",
+                      )}>
+                        {stage.status ?? "PENDING"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analyzerResult?.implementationPlan && (
+                <div className="space-y-3 rounded-lg border border-violet-300/15 bg-violet-300/[0.035] p-3" data-testid="panel-coding-implementation-plan">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-300">Implementation plan</div>
+                    {analyzerResult.implementationPlan.approvalRequired && (
+                      <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-amber-300">
+                        Approval required
+                      </span>
+                    )}
+                  </div>
+                  {analyzerResult.implementationPlan.summary && (
+                    <p className="text-xs leading-5 text-slate-300">{analyzerResult.implementationPlan.summary}</p>
+                  )}
+                  {[
+                    ["Objectives", analyzerResult.implementationPlan.objectives],
+                    ["Files to inspect", analyzerResult.implementationPlan.filesToInspect],
+                    ["Implementation steps", analyzerResult.implementationPlan.implementationSteps],
+                    ["Verification", analyzerResult.implementationPlan.verificationSteps],
+                    ["Risks", analyzerResult.implementationPlan.risks],
+                  ].map(([label, items]) => (
+                    Array.isArray(items) && items.length > 0 ? (
+                      <div key={String(label)}>
+                        <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">{String(label)}</div>
+                        <ul className="space-y-1 text-[11px] leading-5 text-slate-400">
+                          {items.map((item, index) => <li key={`${String(label)}-${index}`}>• {item}</li>)}
+                        </ul>
+                      </div>
+                    ) : null
+                  ))}
+                  {analyzerResult.planner?.modelUsed && (
+                    <div className="border-t border-white/[0.06] pt-2 font-mono text-[9px] text-slate-600">
+                      Planner: {analyzerResult.planner.provider ?? "provider"} / {analyzerResult.planner.modelUsed}
+                      {typeof analyzerResult.planner.totalTokens === "number" ? ` · ${analyzerResult.planner.totalTokens} tokens` : ""}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">
               {hasActiveRun
-                ? "Repository Analyzer is running. The result will appear here automatically."
-                : "No Repository Analyzer result is available yet."}
+                ? "Coding Orchestrator is running. Analyzer and Planner progress will appear here automatically."
+                : "No Coding Orchestrator result is available yet."}
             </p>
           )}
         </section>
