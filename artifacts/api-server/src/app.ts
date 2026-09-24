@@ -15,6 +15,7 @@ import {
   blockUnknownMethods,
 } from "./middleware/securityHardening.js";
 import { requestCounterMiddleware } from "./routes/metrics.js";
+import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
 
 const app: Express = express();
 
@@ -109,6 +110,9 @@ app.use(
     },
   }),
 );
+
+// GitHub webhook must see exact raw bytes before the global JSON parser.
+app.use("/api", codingGithubWebhookRouter);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
