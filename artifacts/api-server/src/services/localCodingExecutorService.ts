@@ -371,6 +371,45 @@ function parseDeterministicDirectives(instruction: string): ParsedDirective[] {
     });
   }
 
+  const insertPattern = new RegExp(
+    `(?:insert|tambahkan)\\s+((?:\"(?:\\\\.|[^\"])*\")|(?:'(?:\\\\.|[^'])*'))\\s+(?:after|setelah)\\s+((?:\"(?:\\\\.|[^\"])*\")|(?:'(?:\\\\.|[^'])*'))\\s+(?:in|di)\\s+${pathPattern}`,
+    "gi",
+  );
+  for (const match of instruction.matchAll(insertPattern)) {
+    directives.push({
+      index: match.index ?? 0,
+      operation: {
+        kind: "insert_after",
+        path: match[3],
+        anchor: quotedValue(match[2]),
+        content: quotedValue(match[1]),
+        expectedOccurrences: 1,
+      },
+    });
+  }
+
+  const jsonSetPattern = new RegExp(
+    `(?:set|atur)\\s+json\\s+([A-Za-z0-9_.-]+(?:\\.[A-Za-z0-9_.-]+)*)\\s+(?:to|menjadi)\\s+((?:\"(?:\\\\.|[^\"])*\")|true|false|null|-?\\d+(?:\\.\\d+)?)\\s+(?:in|di)\\s+${pathPattern}`,
+    "gi",
+  );
+  for (const match of instruction.matchAll(jsonSetPattern)) {
+    let value: JsonValue;
+    try {
+      value = JSON.parse(match[2]) as JsonValue;
+    } catch {
+      continue;
+    }
+    directives.push({
+      index: match.index ?? 0,
+      operation: {
+        kind: "json_set",
+        path: match[3],
+        keyPath: match[1].split(".").filter(Boolean),
+        value,
+      },
+    });
+  }
+
   const renamePattern = new RegExp(
     `(?:rename|ganti)\\s+(?:identifier|simbol)\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s+(?:to|menjadi)\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s+(?:in|di)\\s+${pathPattern}`,
     "gi",
