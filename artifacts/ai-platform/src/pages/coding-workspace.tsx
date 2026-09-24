@@ -163,7 +163,7 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             nextAction: typeof orchestrationValue.nextAction === "string" ? orchestrationValue.nextAction : undefined,
             stages: Array.isArray(orchestrationValue.stages)
               ? orchestrationValue.stages.filter(
-                  (item): item is RepositoryAnalyzerUiResult["orchestration"]["stages"][number] =>
+                  (item): item is NonNullable<RepositoryAnalyzerUiResult["orchestration"]>["stages"][number] =>
                     Boolean(item) && typeof item === "object",
                 )
               : [],
