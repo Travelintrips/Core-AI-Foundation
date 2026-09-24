@@ -157,6 +157,35 @@ type RepositoryAnalyzerUiResult = {
     warnings: string[];
     verifiedAt?: string;
   };
+  failureRecoveryContext?: {
+    status?: string;
+    nextAction?: string;
+    failureCommands: string[];
+    failureKinds: string[];
+    errorCodes: string[];
+    focusFiles: string[];
+    focusSymbols: Array<{
+      name?: string;
+      kind?: string;
+      file?: string;
+      line?: number;
+      exported?: boolean;
+    }>;
+    dependencies: Array<{
+      file?: string;
+      specifier?: string;
+      resolvedFile?: string;
+      kind?: string;
+    }>;
+    relatedTests: string[];
+    verificationCommands: string[];
+    deterministicRetry?: {
+      attempted?: boolean;
+      exhausted?: boolean;
+      commands: string[];
+    };
+    warnings: string[];
+  };
   localCommitApproval?: {
     status?: string;
     branch?: string;
@@ -469,6 +498,10 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.sandboxVerification && typeof value.sandboxVerification === "object" && !Array.isArray(value.sandboxVerification)
         ? (value.sandboxVerification as Record<string, unknown>)
         : null;
+    const failureRecoveryContextValue =
+      value.failureRecoveryContext && typeof value.failureRecoveryContext === "object" && !Array.isArray(value.failureRecoveryContext)
+        ? (value.failureRecoveryContext as Record<string, unknown>)
+        : null;
     const localCommitApprovalValue =
       value.localCommitApproval && typeof value.localCommitApproval === "object" && !Array.isArray(value.localCommitApproval)
         ? (value.localCommitApproval as Record<string, unknown>)
@@ -646,6 +679,50 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             scriptsExecuted: sandboxVerificationValue.scriptsExecuted === true,
             warnings: stringList(sandboxVerificationValue.warnings),
             verifiedAt: typeof sandboxVerificationValue.verifiedAt === "string" ? sandboxVerificationValue.verifiedAt : undefined,
+          }
+        : undefined,
+      failureRecoveryContext: failureRecoveryContextValue
+        ? {
+            status: typeof failureRecoveryContextValue.status === "string" ? failureRecoveryContextValue.status : undefined,
+            nextAction: typeof failureRecoveryContextValue.nextAction === "string" ? failureRecoveryContextValue.nextAction : undefined,
+            failureCommands: stringList(failureRecoveryContextValue.failureCommands),
+            failureKinds: stringList(failureRecoveryContextValue.failureKinds),
+            errorCodes: stringList(failureRecoveryContextValue.errorCodes),
+            focusFiles: stringList(failureRecoveryContextValue.focusFiles),
+            focusSymbols: Array.isArray(failureRecoveryContextValue.focusSymbols)
+              ? failureRecoveryContextValue.focusSymbols
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    name: typeof item.name === "string" ? item.name : undefined,
+                    kind: typeof item.kind === "string" ? item.kind : undefined,
+                    file: typeof item.file === "string" ? item.file : undefined,
+                    line: typeof item.line === "number" ? item.line : undefined,
+                    exported: item.exported === true,
+                  }))
+              : [],
+            dependencies: Array.isArray(failureRecoveryContextValue.dependencies)
+              ? failureRecoveryContextValue.dependencies
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    file: typeof item.file === "string" ? item.file : undefined,
+                    specifier: typeof item.specifier === "string" ? item.specifier : undefined,
+                    resolvedFile: typeof item.resolvedFile === "string" ? item.resolvedFile : undefined,
+                    kind: typeof item.kind === "string" ? item.kind : undefined,
+                  }))
+              : [],
+            relatedTests: stringList(failureRecoveryContextValue.relatedTests),
+            verificationCommands: stringList(failureRecoveryContextValue.verificationCommands),
+            deterministicRetry:
+              failureRecoveryContextValue.deterministicRetry &&
+              typeof failureRecoveryContextValue.deterministicRetry === "object" &&
+              !Array.isArray(failureRecoveryContextValue.deterministicRetry)
+                ? {
+                    attempted: (failureRecoveryContextValue.deterministicRetry as Record<string, unknown>).attempted === true,
+                    exhausted: (failureRecoveryContextValue.deterministicRetry as Record<string, unknown>).exhausted === true,
+                    commands: stringList((failureRecoveryContextValue.deterministicRetry as Record<string, unknown>).commands),
+                  }
+                : undefined,
+            warnings: stringList(failureRecoveryContextValue.warnings),
           }
         : undefined,
       localCommitApproval: localCommitApprovalValue
@@ -1397,7 +1474,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
                             Next: {analyzerResult.localMergeApproval?.status === "MERGED"
                               ? "DONE"
-                              : analyzerResult.localCommitApproval?.status === "PUBLISHED"
+                              : analyzerResult.failureRecoveryContext?.nextAction === "LOCAL_RECOVERY_REQUIRED"
+                                ? "LOCAL_RECOVERY_REQUIRED"
+                                : analyzerResult.localCommitApproval?.status === "PUBLISHED"
                                 ? analyzerResult.prVerification?.status === "PASSED"
                                   ? "APPROVE_MERGE"
                                   : "REVIEW_PR"
@@ -1516,6 +1595,54 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                                   )}
                                 </div>
                               ))}
+                            </div>
+                          )}
+                          {analyzerResult.failureRecoveryContext && (
+                            <div className="mt-2 rounded border border-cyan-300/15 bg-cyan-300/[0.025] p-2" data-testid="panel-local-failure-recovery-context">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-[9px] uppercase tracking-wider text-cyan-300">Failure-directed recovery context</div>
+                                <span className="rounded bg-cyan-300/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
+                                  {analyzerResult.failureRecoveryContext.status ?? "CONTEXT_REFINED"}
+                                </span>
+                              </div>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                                <div>
+                                  <div className="text-[9px] uppercase text-slate-600">Focus files</div>
+                                  <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.failureRecoveryContext.focusFiles.length}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] uppercase text-slate-600">Symbols</div>
+                                  <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.failureRecoveryContext.focusSymbols.length}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] uppercase text-slate-600">Related tests</div>
+                                  <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.failureRecoveryContext.relatedTests.length}</div>
+                                </div>
+                              </div>
+                              {analyzerResult.failureRecoveryContext.focusFiles.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {analyzerResult.failureRecoveryContext.focusFiles.slice(0, 12).map((file) => (
+                                    <code key={file} className="rounded border border-white/[0.06] bg-[#07101d] px-2 py-1 text-[9px] text-slate-400">{file}</code>
+                                  ))}
+                                </div>
+                              )}
+                              {analyzerResult.failureRecoveryContext.focusSymbols.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {analyzerResult.failureRecoveryContext.focusSymbols.slice(0, 12).map((symbol, index) => (
+                                    <div key={`${symbol.file ?? "symbol"}-${symbol.name ?? index}-${index}`} className="flex items-center justify-between gap-3 font-mono text-[10px]">
+                                      <span className="truncate text-slate-400">
+                                        {symbol.file ?? "unknown"}{symbol.line ? `:${symbol.line}` : ""}
+                                      </span>
+                                      <span className="text-cyan-300">{symbol.name ?? symbol.kind ?? "symbol"}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {analyzerResult.failureRecoveryContext.warnings.length > 0 && (
+                                <p className="mt-2 text-[10px] leading-4 text-slate-500">
+                                  {analyzerResult.failureRecoveryContext.warnings.join(" ")}
+                                </p>
+                              )}
                             </div>
                           )}
                           {analyzerResult.sandboxVerification.warnings.length > 0 && (
