@@ -161,6 +161,31 @@ describe("Local Coding Sandbox", () => {
     expect(calls).toBe(2);
   });
 
+  it("returns sanitized structured diagnostics for a failed verification command", async () => {
+    const root = await workspace();
+    const result = await runSandboxedRepositoryVerification(root, ["pnpm typecheck"], {
+      enabled: true,
+      image,
+      bootstrapDependencies: false,
+      executor: async (_file, args) => {
+        if (args[0] === "version") return { stdout: "27.0.0" };
+        throw Object.assign(new Error("typecheck failed"), {
+          code: 2,
+          stderr: "src/payment.ts(8,4): error TS2322: password=super-secret is invalid",
+        });
+      },
+    });
+
+    expect(result.status).toBe("FAILED");
+    expect(result.failureContexts[0]).toMatchObject({
+      kind: "typescript",
+      primaryFiles: ["src/payment.ts"],
+      errorCodes: ["TS2322"],
+    });
+    expect(JSON.stringify(result.failureContexts)).toContain("password=[REDACTED]");
+    expect(JSON.stringify(result.failureContexts)).not.toContain("super-secret");
+  });
+
   it("fails closed when Docker runtime is unavailable", async () => {
     const root = await workspace();
     const result = await runSandboxedRepositoryVerification(root, ["pnpm test"], {
@@ -174,6 +199,42 @@ describe("Local Coding Sandbox", () => {
     expect(result.status).toBe("BLOCKED");
     expect(result.scriptsExecuted).toBe(false);
     expect(result.warnings.join(" ")).toMatch(/runtime is unavailable/i);
+  });
+
+  it("continues when a single deterministic timeout retry succeeds", async () => {
+    const root = await workspace();
+    let testAttempts = 0;
+    const result = await runSandboxedRepositoryVerification(
+      root,
+      ["pnpm test", "pnpm typecheck"],
+      {
+        enabled: true,
+        image,
+        bootstrapDependencies: false,
+        executor: async (_file, args) => {
+          if (args[0] === "version") return { stdout: "27.0.0" };
+          if (args.at(-1) === "test") {
+            testAttempts += 1;
+            if (testAttempts === 1) {
+              throw Object.assign(new Error("timed out"), {
+                code: "ETIMEDOUT",
+                killed: true,
+                signal: "SIGTERM",
+              });
+            }
+          }
+          return { stdout: "ok", stderr: "" };
+        },
+      },
+    );
+
+    expect(result.status).toBe("PASSED");
+    expect(result.commands.map((item) => item.status)).toEqual(["PASSED", "PASSED"]);
+    expect(result.deterministicRetries).toEqual([
+      { command: "pnpm test", trigger: "TIMEOUT", status: "PASSED" },
+    ]);
+    expect(result.failureContexts).toEqual([]);
+    expect(testAttempts).toBe(2);
   });
 
   it("reports timeout and stops the verification sequence", async () => {
@@ -201,6 +262,14 @@ describe("Local Coding Sandbox", () => {
     expect(result.status).toBe("FAILED");
     expect(result.commands[0]?.status).toBe("TIMEOUT");
     expect(result.commands).toHaveLength(1);
-    expect(calls).toBe(2);
+    expect(result.deterministicRetries).toEqual([
+      { command: "pnpm test", trigger: "TIMEOUT", status: "TIMEOUT" },
+    ]);
+    expect(result.failureContexts[0]).toMatchObject({
+      command: "pnpm test",
+      kind: "timeout",
+      retry: expect.objectContaining({ allowed: true }),
+    });
+    expect(calls).toBe(3);
   });
 });
