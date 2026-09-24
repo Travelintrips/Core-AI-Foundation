@@ -1,0 +1,155 @@
+name: Full Coding Pipeline Canary
+
+on:
+  push:
+    branches:
+      - ops/full-coding-pipeline-canary
+    paths:
+      - .github/workflows/full-coding-pipeline-canary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      TASK_ID: 022d5103-50a8-40b4-a697-3f08e4ddeb2d
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Start Coding Orchestrator
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -L -sS -o /tmp/run -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -X POST \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/run")
+          echo "run_http=$code"
+          test "$code" = "201"
+          node - <<'NODE'
+          const fs=require("fs");
+          const r=JSON.parse(fs.readFileSync("/tmp/run","utf8"));
+          if(r.agentName!=="Coding Orchestrator") throw new Error("Expected Coding Orchestrator");
+          console.log("orchestrator_run_id="+r.id);
+          NODE
+
+      - name: Wait for plan approval gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            curl -L -sS -o /tmp/detail \
+              --connect-timeout 15 --max-time 30 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/tasks/$TASK_ID"
+            state=$(node - <<'NODE'
+          const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync("/tmp/detail","utf8"));
+          const r=(p.runs||[]).find(x=>x.agentName==="Coding Orchestrator");
+          let next="";
+          if(r?.logs){try{next=JSON.parse(r.logs)?.orchestration?.nextAction||""}catch{}}
+          console.log([p.task.status,r?.status||"missing",next].join("|"));
+          NODE
+            )
+            echo "attempt=$attempt state=$state"
+            if echo "$state" | grep -q '^READY_REVIEW|COMPLETED|APPROVE_PLAN$'; then
+              break
+            fi
+            sleep 5
+          done
+          node - <<'NODE'
+          const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync("/tmp/detail","utf8"));
+          const r=(p.runs||[]).find(x=>x.agentName==="Coding Orchestrator");
+          if(!r?.logs) throw new Error("Orchestrator result missing");
+          const result=JSON.parse(r.logs);
+          if(p.task.status!=="READY_REVIEW") throw new Error("Task not READY_REVIEW");
+          if(result?.orchestration?.nextAction!=="APPROVE_PLAN") throw new Error("APPROVE_PLAN gate missing");
+          console.log("planner_ready=true");
+          console.log("planner_model="+(result?.planner?.modelUsed||""));
+          console.log("planner_provider="+(result?.planner?.provider||""));
+          NODE
+
+      - name: Approve plan and start Coding Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -L -sS -o /tmp/approve -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -X POST \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/approve-plan")
+          echo "approve_http=$code"
+          cat /tmp/approve
+          echo
+          test "$code" = "201"
+          node - <<'NODE'
+          const fs=require("fs");
+          const r=JSON.parse(fs.readFileSync("/tmp/approve","utf8"));
+          if(r.agentName!=="Coding Agent") throw new Error("Expected Coding Agent");
+          console.log("coding_run_id="+r.id);
+          NODE
+
+      - name: Wait for Test and Review
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 90); do
+            curl -L -sS -o /tmp/final \
+              --connect-timeout 15 --max-time 30 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/tasks/$TASK_ID"
+            state=$(node - <<'NODE'
+          const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync("/tmp/final","utf8"));
+          const review=(p.runs||[]).find(x=>x.agentName==="Review Agent");
+          console.log([p.task.status,review?.status||"missing"].join("|"));
+          NODE
+            )
+            echo "attempt=$attempt state=$state"
+            if echo "$state" | grep -q '^READY_REVIEW|COMPLETED$'; then
+              break
+            fi
+            sleep 5
+          done
+
+          node - <<'NODE'
+          const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync("/tmp/final","utf8"));
+          const coding=(p.runs||[]).find(x=>x.agentName==="Coding Agent");
+          const test=(p.runs||[]).find(x=>x.agentName==="Test Agent");
+          const review=(p.runs||[]).find(x=>x.agentName==="Review Agent");
+          if(!coding?.logs) throw new Error("Coding Agent logs missing");
+          if(!test?.logs) throw new Error("Test Agent logs missing");
+          if(!review?.logs) throw new Error("Review Agent logs missing");
+          const c=JSON.parse(coding.logs);
+          const t=JSON.parse(test.logs);
+          const r=JSON.parse(review.logs);
+          console.log("task_status="+p.task.status);
+          console.log("coding_status="+coding.status);
+          console.log("coding_commit_created="+c.commitCreated);
+          console.log("coding_pushed="+c.pushed);
+          console.log("proposed_changes="+(c?.proposal?.changes?.length||0));
+          console.log("test_status="+test.status);
+          console.log("test_outcome="+t.testOutcome);
+          console.log("test_checks="+(t?.report?.checks?.length||0));
+          console.log("review_status="+review.status);
+          console.log("review_decision="+r.decision);
+          console.log("review_next_action="+r.nextAction);
+          console.log("review_commit_created="+r.commitCreated);
+          console.log("review_pushed="+r.pushed);
+          console.log("review_model="+(r?.model?.modelUsed||""));
+          console.log("review_provider="+(r?.model?.provider||""));
+          if(p.task.status!=="READY_REVIEW") throw new Error("Task not READY_REVIEW after Review");
+          if(c.commitCreated!==false || c.pushed!==false) throw new Error("Coding stage created commit/push");
+          if(r.commitCreated!==false || r.pushed!==false) throw new Error("Review stage created commit/push");
+          if(r.decision!=="REVISE_CHANGES" && r.decision!=="APPROVE_FOR_COMMIT") throw new Error("Invalid review decision");
+          NODE
