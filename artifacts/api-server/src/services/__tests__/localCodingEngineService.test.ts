@@ -10,6 +10,7 @@ import {
   extractTypeScriptSymbols,
   isSensitiveRepositoryPath,
   parseAllowlistedVerificationCommand,
+  readLocalGitBlame,
   runAllowlistedVerificationCommand,
 } from "../localCodingEngineService.js";
 
@@ -187,15 +188,36 @@ describe("Local Coding Engine", () => {
     const timedOut = Object.assign(new Error("timed out"), { killed: true, signal: "SIGTERM" });
     const result = await runAllowlistedVerificationCommand(root, "pnpm test", {
       timeoutMs: 1_000,
+      trustedWorkspace: true,
       executor: async () => {
         throw timedOut;
       },
     });
     const blocked = await runAllowlistedVerificationCommand(root, "pnpm exec sh", {
+      trustedWorkspace: true,
+      executor: async () => ({ stdout: "should not run" }),
+    });
+    const untrusted = await runAllowlistedVerificationCommand(root, "pnpm test", {
       executor: async () => ({ stdout: "should not run" }),
     });
 
     expect(result.status).toBe("TIMEOUT");
     expect(blocked.status).toBe("BLOCKED");
+    expect(untrusted.status).toBe("BLOCKED");
+    expect(untrusted.stderr).toContain("explicitly trusted");
+  });
+
+  it("reads bounded git blame only on demand and rejects sensitive targets", async () => {
+    const root = await createFixtureRepository();
+    const blame = await readLocalGitBlame(root, "src/reconciliation.ts", {
+      startLine: 1,
+      endLine: 3,
+    });
+
+    expect(blame.file).toBe("src/reconciliation.ts");
+    expect(blame.startLine).toBe(1);
+    expect(blame.endLine).toBe(3);
+    expect(blame.output).toContain("filename src/reconciliation.ts");
+    await expect(readLocalGitBlame(root, ".env")).rejects.toThrow(/safe repository context/);
   });
 });
