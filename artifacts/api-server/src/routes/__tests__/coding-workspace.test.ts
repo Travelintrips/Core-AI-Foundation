@@ -113,7 +113,7 @@ describe("AI coding workspace run endpoint", () => {
     mockStartCodingOrchestration.mockResolvedValue({ sessionId: `coding-${runId}` });
   });
 
-  it("creates one Repository Analyzer run and moves the task to ANALYZING atomically", async () => {
+  it("creates one Coding Orchestrator run and moves the task to ANALYZING atomically", async () => {
     const response = await request(app).post(`/ai/coding/tasks/${taskId}/run`);
 
     expect(response.status).toBe(201);
@@ -126,7 +126,7 @@ describe("AI coding workspace run endpoint", () => {
     expect(mockTransaction).toHaveBeenCalledOnce();
     expect(mockInsertValues).toHaveBeenCalledWith({
       taskId,
-      agentName: "Repository Analyzer",
+      agentName: "Coding Orchestrator",
       status: "RUNNING",
       startedAt: expect.any(Date),
     });
