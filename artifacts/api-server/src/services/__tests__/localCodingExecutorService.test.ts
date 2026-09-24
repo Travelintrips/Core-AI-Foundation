@@ -178,6 +178,7 @@ describe("Local Coding Executor", () => {
     const result = await executeLocalCodingPlan(root, plan, {
       trustedWorkspace: true,
       expectedHeadSha: head(root),
+      trustedVerificationScripts: true,
       verificationExecutor: async (file, args) => {
         calls.push({ file, args });
         return { stdout: "ok", stderr: "" };
@@ -206,6 +207,7 @@ describe("Local Coding Executor", () => {
     const result = await executeLocalCodingPlan(root, plan, {
       trustedWorkspace: true,
       expectedHeadSha: head(root),
+      trustedVerificationScripts: true,
       verificationExecutor: async () => {
         throw Object.assign(new Error("test failure"), { code: 1, stderr: "failed" });
       },
@@ -320,6 +322,55 @@ describe("Local Coding Executor", () => {
     expect(dirty.reason).toMatch(/not clean/i);
   });
 
+  it("runs static verification but skips repository scripts unless script execution is separately trusted", async () => {
+    const root = await createWorkspace();
+    const plan = planLocalCodingExecution(
+      'Replace "old value" with "new value" in src/sample.ts',
+      context(),
+    );
+    let invoked = false;
+
+    const result = await executeLocalCodingPlan(root, plan, {
+      trustedWorkspace: true,
+      expectedHeadSha: head(root),
+      verificationExecutor: async () => {
+        invoked = true;
+        return { stdout: "unexpected", stderr: "" };
+      },
+    });
+
+    expect(result.status).toBe("APPLIED");
+    expect(result.scriptsExecuted).toBe(false);
+    expect(result.verification).toEqual([]);
+    expect(result.verificationAttempts?.[0]?.staticIssues).toEqual([]);
+    expect(result.reason).toMatch(/static verification passed/i);
+    expect(result.warnings.join(" ")).toMatch(/not explicitly trusted/i);
+    expect(invoked).toBe(false);
+  });
+
+  it("rolls back deterministic edits that introduce a TypeScript syntax error", async () => {
+    const root = await createWorkspace();
+    const original = await readFile(join(root, "src", "sample.ts"), "utf8");
+    const plan = planLocalCodingExecution(
+      'Replace "return \\"old value\\";" with "return {" in src/sample.ts',
+      context(),
+    );
+
+    const result = await executeLocalCodingPlan(root, plan, {
+      trustedWorkspace: true,
+      expectedHeadSha: head(root),
+      runVerification: false,
+    });
+
+    expect(result.status).toBe("VERIFICATION_FAILED");
+    expect(result.rolledBack).toBe(true);
+    expect(result.verificationAttempts?.[0]?.staticIssues[0]).toMatchObject({
+      file: "src/sample.ts",
+      kind: "syntax",
+    });
+    expect(await readFile(join(root, "src", "sample.ts"), "utf8")).toBe(original);
+  });
+
   it("blocks non-allowlisted verification and rolls the patch back", async () => {
     const root = await createWorkspace();
     const plan = planLocalCodingExecution(
@@ -334,6 +385,7 @@ describe("Local Coding Executor", () => {
     const result = await executeLocalCodingPlan(root, unsafePlan, {
       trustedWorkspace: true,
       expectedHeadSha: head(root),
+      trustedVerificationScripts: true,
       verificationExecutor: async () => ({ stdout: "must not run" }),
     });
 
