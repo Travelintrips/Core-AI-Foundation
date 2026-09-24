@@ -45,6 +45,7 @@ export interface ClaimReadyCodingWorkstreamsOptions {
   maxClaims?: number;
   leaseSeconds?: number;
   baseSha: string;
+  requireOwnershipPaths?: boolean;
 }
 
 interface DependencyRow {
@@ -218,7 +219,13 @@ export async function claimReadyCodingWorkstreams(
       workstreams,
       dependencies,
       now,
-    ).slice(0, maxClaims);
+    )
+      .filter(
+        (item) =>
+          !options.requireOwnershipPaths ||
+          (Array.isArray(item.ownershipPaths) && item.ownershipPaths.length > 0),
+      )
+      .slice(0, maxClaims);
 
     const claims: CodingWorkstreamClaim[] = [];
     for (const candidate of candidates) {
@@ -442,6 +449,114 @@ export async function completeCodingWorkstreamClaim(
       throw new LocalCodingMultiWorkerError(
         "Workstream completion update was lost.",
         "LEASE_LOST",
+      );
+    }
+
+    await unlockDependents(tx, completed.graphId);
+
+    const all = await tx
+      .select()
+      .from(aiCodingWorkstreamsTable)
+      .where(eq(aiCodingWorkstreamsTable.graphId, completed.graphId));
+    if (all.every((item) => item.id === completed.id || item.status === "COMPLETED")) {
+      await tx
+        .update(aiCodingTaskGraphsTable)
+        .set({ status: "COMPLETED", completedAt: now })
+        .where(eq(aiCodingTaskGraphsTable.id, completed.graphId));
+    }
+
+    return completed;
+  });
+}
+
+export async function markCodingWorkstreamReviewRequired(
+  workstreamId: string,
+  leaseToken: string,
+  result: {
+    baseSha?: string | null;
+    resultJson?: Record<string, unknown> | null;
+  } = {},
+): Promise<AiCodingWorkstream> {
+  const now = new Date();
+  const baseSha =
+    result.baseSha == null ? null : validateBaseSha(result.baseSha);
+
+  const [updated] = await db
+    .update(aiCodingWorkstreamsTable)
+    .set({
+      status: "REVIEW_REQUIRED",
+      ...(baseSha ? { baseSha } : {}),
+      resultJson: result.resultJson ?? null,
+      heartbeatAt: now,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      errorMessage: null,
+    })
+    .where(
+      and(
+        eq(aiCodingWorkstreamsTable.id, workstreamId),
+        inArray(aiCodingWorkstreamsTable.status, ["CLAIMED", "RUNNING"]),
+        eq(aiCodingWorkstreamsTable.leaseToken, leaseToken),
+        sql`${aiCodingWorkstreamsTable.leaseExpiresAt} > ${now}`,
+      ),
+    )
+    .returning();
+
+  if (!updated) {
+    throw new LocalCodingMultiWorkerError(
+      "Workstream review handoff rejected because the lease was lost or expired.",
+      "LEASE_LOST",
+    );
+  }
+
+  return updated;
+}
+
+export async function completeReviewedCodingWorkstream(
+  workstreamId: string,
+): Promise<AiCodingWorkstream> {
+  const now = new Date();
+
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(aiCodingWorkstreamsTable)
+      .where(eq(aiCodingWorkstreamsTable.id, workstreamId))
+      .for("update");
+
+    if (!current) {
+      throw new LocalCodingMultiWorkerError(
+        "Coding workstream not found.",
+        "NOT_FOUND",
+      );
+    }
+    if (current.status !== "REVIEW_REQUIRED") {
+      throw new LocalCodingMultiWorkerError(
+        "Only REVIEW_REQUIRED workstreams can be explicitly completed.",
+        "NOT_READY",
+        { status: current.status },
+      );
+    }
+
+    const [completed] = await tx
+      .update(aiCodingWorkstreamsTable)
+      .set({
+        status: "COMPLETED",
+        completedAt: now,
+        errorMessage: null,
+      })
+      .where(
+        and(
+          eq(aiCodingWorkstreamsTable.id, workstreamId),
+          eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"),
+        ),
+      )
+      .returning();
+
+    if (!completed) {
+      throw new LocalCodingMultiWorkerError(
+        "Reviewed workstream completion update was lost.",
+        "CLAIM_FAILED",
       );
     }
 

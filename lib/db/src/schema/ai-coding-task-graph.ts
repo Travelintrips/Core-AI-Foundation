@@ -8,7 +8,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { aiCodingTasksTable } from "./ai-coding-workspace";
+import { aiCodingRunsTable, aiCodingTasksTable } from "./ai-coding-workspace";
+import { aiJobsTable } from "./ai-jobs";
 
 export const CODING_GRAPH_STATUSES = [
   "PREPARED",
@@ -90,6 +91,15 @@ export const aiCodingWorkstreamsTable = appSchema.table(
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
     branchName: text("branch_name"),
+    childTaskId: uuid("child_task_id").references(() => aiCodingTasksTable.id, {
+      onDelete: "set null",
+    }),
+    childRunId: uuid("child_run_id").references(() => aiCodingRunsTable.id, {
+      onDelete: "set null",
+    }),
+    jobId: integer("job_id").references(() => aiJobsTable.id, {
+      onDelete: "set null",
+    }),
     baseSha: text("base_sha"),
     headSha: text("head_sha"),
     attemptCount: integer("attempt_count").notNull().default(0),
@@ -113,6 +123,8 @@ export const aiCodingWorkstreamsTable = appSchema.table(
     ),
     index("ai_coding_workstreams_graph_idx").on(table.graphId),
     index("ai_coding_workstreams_status_idx").on(table.status),
+    index("ai_coding_workstreams_child_task_idx").on(table.childTaskId),
+    index("ai_coding_workstreams_job_idx").on(table.jobId),
   ],
 );
 
