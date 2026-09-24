@@ -293,6 +293,19 @@ export function isSensitiveRepositoryPath(file: string): boolean {
   return false;
 }
 
+function redactSensitiveDiff(value: string): string {
+  return value
+    .split("\n")
+    .map((line) => {
+      const body = line.replace(/^[ +\-]/, "");
+      const looksSensitive =
+        /(?:api[_-]?key|access[_-]?token|secret|password|private[_-]?key|authorization)\s*[:=]/i.test(body);
+      if (!looksSensitive) return line;
+      const prefix = /^[ +\-]/.test(line) ? line[0] : "";
+      return `${prefix}[REDACTED_SENSITIVE_DIFF_LINE]`;
+    })
+    .join("\n");
+}
 function shouldIndexFile(file: string): boolean {
   if (isSensitiveRepositoryPath(file)) return false;
   if (/(^|\/)(__generated__|generated)(\/|$)/i.test(file) || /\.generated\./i.test(file)) return false;
@@ -633,7 +646,7 @@ async function readGitMetadata(root: string, requestedBranch: string, keywords: 
     branch: branch || requestedBranch,
     headSha,
     changedFiles,
-    diff: Buffer.byteLength(diff, "utf8") > MAX_DIFF_BYTES ? diff.slice(0, MAX_DIFF_BYTES) : diff,
+    diff: redactSensitiveDiff(Buffer.byteLength(diff, "utf8") > MAX_DIFF_BYTES ? diff.slice(0, MAX_DIFF_BYTES) : diff),
     commits,
   };
 }
