@@ -89,6 +89,16 @@ type RepositoryAnalyzerUiResult = {
     file?: string;
   }>;
   recommendedChanges: string[];
+  orchestration?: {
+    version?: string;
+    currentStage?: string;
+    nextStage?: string;
+    stages?: Array<{
+      stage?: string;
+      agent?: string;
+      status?: string;
+    }>;
+  };
 };
 
 function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzerUiResult | null {
@@ -112,6 +122,10 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       recommendedChanges: Array.isArray(value.recommendedChanges)
         ? value.recommendedChanges.filter((item): item is string => typeof item === "string")
         : [],
+      orchestration:
+        value.orchestration && typeof value.orchestration === "object"
+          ? value.orchestration as RepositoryAnalyzerUiResult["orchestration"]
+          : undefined,
     };
   } catch {
     return null;
@@ -319,6 +333,48 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                   <div className="rounded-lg border border-white/[0.06] bg-[#091222] p-3">
                     <div className="text-[10px] uppercase tracking-wider text-slate-600">Findings</div>
                     <div className="mt-1 font-mono text-lg text-cyan-300">{analyzerResult.findings.length}</div>
+                  </div>
+                </div>
+              )}
+              {analyzerResult?.orchestration?.stages && analyzerResult.orchestration.stages.length > 0 && (
+                <div data-testid="list-coding-orchestration-stages">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Orchestrator stages</div>
+                    {analyzerResult.orchestration.nextStage && (
+                      <span className="text-[10px] uppercase tracking-wider text-cyan-300">
+                        Next: {analyzerResult.orchestration.nextStage}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-5">
+                    {analyzerResult.orchestration.stages.map((stage, index) => (
+                      <div
+                        key={`${stage.stage ?? "stage"}-${index}`}
+                        className={cn(
+                          "rounded-lg border p-2.5",
+                          stage.status === "COMPLETED"
+                            ? "border-emerald-300/20 bg-emerald-300/[0.06]"
+                            : stage.status === "READY"
+                              ? "border-cyan-300/20 bg-cyan-300/[0.06]"
+                              : "border-white/[0.06] bg-[#091222]",
+                        )}
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+                          {stage.stage ?? "—"}
+                        </div>
+                        <div className="mt-1 truncate text-[10px] text-slate-500">{stage.agent ?? "—"}</div>
+                        <div className={cn(
+                          "mt-2 text-[9px] font-semibold uppercase tracking-wider",
+                          stage.status === "COMPLETED"
+                            ? "text-emerald-300"
+                            : stage.status === "READY"
+                              ? "text-cyan-300"
+                              : "text-slate-600",
+                        )}>
+                          {stage.status ?? "PENDING"}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
