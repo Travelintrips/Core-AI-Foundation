@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
@@ -9,6 +10,27 @@ import { rm } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+
+function resolveBuildCommitSha() {
+  for (const candidate of [
+    process.env.GITHUB_SHA,
+    process.env.HOSTINGER_COMMIT_SHA,
+    process.env.CST_BUILD_COMMIT_SHA,
+  ]) {
+    if (candidate?.trim()) return candidate.trim();
+  }
+
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: path.resolve(artifactDir, "../.."),
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+const buildCommitSha = resolveBuildCommitSha();
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
@@ -112,6 +134,9 @@ async function buildAll() {
       "qrcode",
     ],
     sourcemap: "linked",
+    define: {
+      "process.env.CST_BUILD_COMMIT_SHA": JSON.stringify(buildCommitSha),
+    },
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
       esbuildPluginPino({ transports: ["pino-pretty"] })

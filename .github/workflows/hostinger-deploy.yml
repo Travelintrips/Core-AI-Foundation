@@ -1,26 +1,7 @@
-name: Hostinger Deploy
+name: Hostinger Production Verify
 
 on:
   workflow_dispatch:
-    inputs:
-      target:
-        description: Deployment target
-        required: true
-        default: all
-        type: choice
-        options:
-          - all
-          - ai-platform
-          - customer-portal
-          - api
-      method:
-        description: Hostinger transport method
-        required: true
-        default: sftp
-        type: choice
-        options:
-          - check
-          - sftp
   workflow_run:
     workflows:
       - CI Verify
@@ -31,135 +12,57 @@ permissions:
   contents: read
 
 concurrency:
-  group: hostinger-production-deploy
-  cancel-in-progress: false
+  group: hostinger-production-verify
+  cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Hostinger deployment
+  verify:
+    name: Verify Hostinger native deployment
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: production
+    timeout-minutes: 10
     env:
-      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'all' }}
-      DEPLOY_METHOD: ${{ github.event_name == 'workflow_dispatch' && inputs.method || 'sftp' }}
-      RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
 
     steps:
-      - name: Checkout release commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_SHA }}
-
-      - uses: pnpm/action-setup@v4
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build release artifacts
-        env:
-          PORT: 4173
-          BASE_PATH: /
-          HOSTINGER_FRONTEND: customer-portal
-        run: pnpm run build
-
-      - name: Validate deployment artifacts
+      - name: Wait for exact production commit
         shell: bash
         run: |
-          echo "Target: $DEPLOY_TARGET"
-          echo "Method: $DEPLOY_METHOD"
-          test -d artifacts/ai-platform/dist
-          test -d artifacts/customer-portal/dist
-          test -d artifacts/api-server/dist
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            code=$(curl -L -sS -D /tmp/headers -o /tmp/body -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 "$API_BASE_URL/healthz" || true)
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/headers | tail -n1)
+            marker=$(awk -F': ' 'tolower($1)=="x-cst-release-marker" {gsub("\r","",$2); print $2}' /tmp/headers | tail -n1)
+            echo "attempt=$attempt http=$code live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA marker=${marker:-missing}"
+            if [ "$code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Production did not reach expected commit $EXPECTED_SHA"
+          exit 1
 
-      - name: Deployment metadata
-        id: release
+      - name: Verify readiness
         shell: bash
         run: |
-          echo "commit_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-          echo "deploy_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-          echo "target=$DEPLOY_TARGET" >> "$GITHUB_OUTPUT"
+          curl --fail --silent --show-error "$API_BASE_URL/healthz/full" > /tmp/full
+          cat /tmp/full
+          grep -q '"status":"ok"' /tmp/full
 
-      - name: Transport guard
-        if: env.DEPLOY_METHOD == 'sftp'
+      - name: Verify admin auth guard
         shell: bash
         run: |
-          test -n "${{ secrets.HOSTINGER_SFTP_HOST }}"
-          test -n "${{ secrets.HOSTINGER_SFTP_USERNAME }}"
-          test -n "${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}"
-          if [ "$DEPLOY_TARGET" = "all" ] || [ "$DEPLOY_TARGET" = "ai-platform" ]; then
-            test -n "${{ secrets.HOSTINGER_AI_PATH }}"
-          fi
-          if [ "$DEPLOY_TARGET" = "all" ] || [ "$DEPLOY_TARGET" = "customer-portal" ]; then
-            test -n "${{ secrets.HOSTINGER_CUSTOMER_PATH }}"
-          fi
-          if [ "$DEPLOY_TARGET" = "all" ] || [ "$DEPLOY_TARGET" = "api" ]; then
-            test -n "${{ secrets.HOSTINGER_API_PATH }}"
-          fi
+          code=$(curl -L -sS -o /tmp/tasks -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 "$API_BASE_URL/ai/coding/tasks")
+          echo "coding_tasks_unauthenticated_http=$code"
+          test "$code" = "401"
 
-      - name: Upload AI Platform
-        if: env.DEPLOY_METHOD == 'sftp' && (env.DEPLOY_TARGET == 'all' || env.DEPLOY_TARGET == 'ai-platform')
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
-          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: artifacts/ai-platform/dist/*
-          target: ${{ secrets.HOSTINGER_AI_PATH }}
-
-      - name: Upload Customer Portal
-        if: env.DEPLOY_METHOD == 'sftp' && (env.DEPLOY_TARGET == 'all' || env.DEPLOY_TARGET == 'customer-portal')
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
-          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: artifacts/customer-portal/dist/*
-          target: ${{ secrets.HOSTINGER_CUSTOMER_PATH }}
-
-      - name: Upload API
-        if: env.DEPLOY_METHOD == 'sftp' && (env.DEPLOY_TARGET == 'all' || env.DEPLOY_TARGET == 'api')
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
-          key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: artifacts/api-server/dist/*
-          target: ${{ secrets.HOSTINGER_API_PATH }}
-
-      - name: Health check
-        if: env.DEPLOY_METHOD == 'sftp'
-        shell: bash
+      - name: Verification summary
         run: |
-          if [ -n "${{ secrets.HOSTINGER_AI_URL }}" ]; then curl --fail --silent --show-error "${{ secrets.HOSTINGER_AI_URL }}" >/dev/null; fi
-          if [ -n "${{ secrets.HOSTINGER_CUSTOMER_URL }}" ]; then curl --fail --silent --show-error "${{ secrets.HOSTINGER_CUSTOMER_URL }}" >/dev/null; fi
-          if [ -n "${{ secrets.HOSTINGER_API_HEALTH_URL }}" ]; then curl --fail --silent --show-error "${{ secrets.HOSTINGER_API_HEALTH_URL }}" >/dev/null; fi
-
-      - name: Authenticated production smoke
-        if: env.DEPLOY_METHOD == 'sftp'
-        shell: bash
-        env:
-          API_BASE_URL: https://aicore.cstlogistic.co.id/api
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-        run: |
-          test -n "$ADMIN_API_KEY"
-          bash scripts/smoke-test.sh
-          curl --fail --silent --show-error \
-            -H "x-admin-api-key: $ADMIN_API_KEY" \
-            "$API_BASE_URL/ai/coding/tasks" >/dev/null
-
-      - name: Release summary
-        run: |
-          echo "Commit: ${{ steps.release.outputs.commit_sha }}"
-          echo "Target: ${{ steps.release.outputs.target }}"
-          echo "Time: ${{ steps.release.outputs.deploy_time }}"
+          echo "Production commit verified: $EXPECTED_SHA"
+          echo "Health/readiness: PASS"
+          echo "Admin auth guard: PASS"
