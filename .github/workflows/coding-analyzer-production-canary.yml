@@ -1,0 +1,136 @@
+name: Coding Analyzer Production Canary
+
+on:
+  push:
+    branches:
+      - ops/coding-analyzer-canary
+    paths:
+      - .github/workflows/coding-analyzer-production-canary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      EXPECTED_SHA: 8a2a58bffd9d6b9032c34412274ecb30c97dc92a
+      TASK_ID: 022d5103-50a8-40b4-a697-3f08e4ddeb2d
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+
+    steps:
+      - name: Wait for fixed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          for attempt in $(seq 1 60); do
+            code=$(curl -sS -D /tmp/headers -o /tmp/health -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 "$API_BASE_URL/healthz" || true)
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/headers | tail -1)
+            echo "attempt=$attempt http=$code live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA"
+            if [ "$code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Production did not reach $EXPECTED_SHA"
+          exit 1
+
+      - name: Wait for stale legacy run recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --show-error \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/tasks/$TASK_ID" > /tmp/task-before.json
+            active=$(node -e 'const v=require("/tmp/task-before.json"); console.log(v.runs.some(r=>r.status==="RUNNING") ? "yes" : "no")')
+            echo "attempt=$attempt active_run=$active"
+            if [ "$active" = "no" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Legacy RUNNING analyzer was not recovered"
+          cat /tmp/task-before.json
+          exit 1
+
+      - name: Start Repository Analyzer
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/run.json -w "%{http_code}" \
+            -X POST \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "Content-Type: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/run")
+          echo "run_http=$code"
+          cat /tmp/run.json
+          test "$code" = "201"
+          run_id=$(node -e 'const v=require("/tmp/run.json"); if(!v.id) process.exit(1); console.log(v.id)')
+          echo "RUN_ID=$run_id" >> "$GITHUB_ENV"
+
+      - name: Wait for analyzer result
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 48); do
+            curl --fail --silent --show-error \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/tasks/$TASK_ID" > /tmp/task-result.json
+            state=$(RUN_ID="$RUN_ID" node -e '
+              const fs=require("fs");
+              const v=JSON.parse(fs.readFileSync("/tmp/task-result.json","utf8"));
+              const r=v.runs.find(x=>x.id===process.env.RUN_ID);
+              console.log(r?.status ?? "MISSING");
+            ')
+            echo "attempt=$attempt run_id=$RUN_ID status=$state"
+            if [ "$state" = "COMPLETED" ]; then
+              exit 0
+            fi
+            if [ "$state" = "FAILED" ]; then
+              echo "Repository Analyzer failed:"
+              RUN_ID="$RUN_ID" node -e '
+                const fs=require("fs");
+                const v=JSON.parse(fs.readFileSync("/tmp/task-result.json","utf8"));
+                const r=v.runs.find(x=>x.id===process.env.RUN_ID);
+                console.log(r?.errorMessage ?? "unknown failure");
+              '
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Analyzer did not finish within the canary window"
+          exit 1
+
+      - name: Validate structured result
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID="$RUN_ID" node <<'NODE'
+          const fs = require("fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/task-result.json", "utf8"));
+          const run = payload.runs.find((item) => item.id === process.env.RUN_ID);
+          if (!run) throw new Error("Canary run missing from task detail");
+          if (run.status !== "COMPLETED") throw new Error(`Expected COMPLETED, got ${run.status}`);
+          if (!run.finishedAt) throw new Error("finishedAt is missing");
+          if (!run.logs) throw new Error("run.logs is missing");
+          if (!payload.task?.resultSummary) throw new Error("task.resultSummary is missing");
+
+          const result = JSON.parse(run.logs);
+          if (result.executionStatus !== "COMPLETED") throw new Error("Analyzer executionStatus is not COMPLETED");
+          if (!Array.isArray(result.filesInspected)) throw new Error("filesInspected is missing");
+          if (!Array.isArray(result.findings)) throw new Error("findings is missing");
+          if (!Array.isArray(result.recommendedChanges)) throw new Error("recommendedChanges is missing");
+
+          console.log(`result_summary=${payload.task.resultSummary}`);
+          console.log(`files_inspected=${result.filesInspected.length}`);
+          console.log(`findings=${result.findings.length}`);
+          console.log(`recommendations=${result.recommendedChanges.length}`);
+          console.log("CANARY_RESULT=PASS");
+          NODE
