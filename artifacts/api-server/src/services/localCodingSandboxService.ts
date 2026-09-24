@@ -294,6 +294,21 @@ export async function runSandboxedRepositoryVerification(
       return { stdout: output.stdout, stderr: output.stderr };
     });
 
+  if (uniqueCommands.length === 0) {
+    return {
+      status: "PASSED",
+      runtime: "docker",
+      image,
+      network: "none",
+      dependencyBootstrap: null,
+      commands: [],
+      scriptsExecuted: false,
+      warnings: [
+        "No repository verification scripts were discovered; static verification remains the only applicable check.",
+      ],
+    };
+  }
+
   try {
     await executor(
       "docker",
