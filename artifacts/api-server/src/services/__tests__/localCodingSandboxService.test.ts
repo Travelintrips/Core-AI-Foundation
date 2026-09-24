@@ -102,8 +102,14 @@ describe("Local Coding Sandbox", () => {
       expect(call.env).not.toHaveProperty("DATABASE_URL");
       expect(call.env).not.toHaveProperty("OPENAI_API_KEY");
     }
-    expect(calls[0]?.args.slice(-5)).toEqual([
-      "pnpm", "install", "--offline", "--frozen-lockfile", "--ignore-scripts",
+    expect(calls[0]?.args.slice(-7)).toEqual([
+      "pnpm",
+      "install",
+      "--offline",
+      "--frozen-lockfile",
+      "--ignore-scripts",
+      "--store-dir",
+      "/opt/pnpm-store",
     ]);
     expect(calls[1]?.args.slice(-2)).toEqual(["pnpm", "test"]);
     expect(calls[2]?.args.slice(-4)).toEqual([
