@@ -102,15 +102,7 @@ const replaceTextOperationSchema = z
     newText: z.string().max(MAX_CONTENT_CHARS),
     expectedOccurrences: expectedOccurrencesSchema,
   })
-  .strict()
-  .superRefine((operation, ctx) => {
-    if (operation.oldText === operation.newText) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "replace_text must not be a no-op",
-      });
-    }
-  });
+  .strict();
 
 const insertBeforeOperationSchema = z
   .object({
@@ -173,6 +165,17 @@ const proposalBodySchema = z
   .superRefine((proposal, ctx) => {
     let totalChars = 0;
     for (const operation of proposal.operations) {
+      if (
+        operation.type === "replace_text" &&
+        operation.oldText === operation.newText
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "replace_text must not be a no-op",
+          path: ["operations"],
+        });
+      }
+
       if (operation.type === "replace_text") {
         totalChars += operation.oldText.length + operation.newText.length;
       } else if (
