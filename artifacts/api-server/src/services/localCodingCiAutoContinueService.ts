@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { aiCodingCiBindingsTable, aiCodingTaskGraphsTable, aiCodingWorkstreamsTable, db } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
+import { dispatchReadyCodingWorkstreams } from "./localCodingMultiWorkerExecutionService.js";
 
 export async function continueAfterGreenCi(input: { bindingId: string; eventId: string }) {
   return db.transaction(async (tx) => {
