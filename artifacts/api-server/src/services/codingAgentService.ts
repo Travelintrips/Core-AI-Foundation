@@ -16,6 +16,7 @@ import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
 import { executeAI, type ExecutionOutput } from "./aiExecutionService.js";
 import { getFallbackModels, routeToModel } from "./aiModelRouter.js";
+import { continueCodingVerification } from "./codingVerificationService.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_CONTEXT_FILES = 8;
@@ -408,6 +409,15 @@ async function executeCodingAgent(context: ApprovedContext, run: AiCodingRun): P
       "success",
       { codingRunId: run.id, changedFiles: proposal.changes.length, modelUsed, provider },
     );
+
+    await continueCodingVerification({
+      task: context.task,
+      orchestratorRun: context.orchestratorRun,
+      codingRun: run,
+      workspace,
+      proposal,
+      diff,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await db.transaction(async (tx) => {
