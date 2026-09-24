@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { aiCodingCiBindingsTable, aiCodingTaskGraphsTable, aiCodingWorkstreamsTable, db } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
-import { dispatchReadyCodingWorkstreams } from "./localCodingMultiWorkerExecutionService.js";
 
 export async function continueAfterGreenCi(input: { bindingId: string; eventId: string }) {
   return db.transaction(async (tx) => {
@@ -36,4 +35,31 @@ export async function continueAfterGreenCi(input: { bindingId: string; eventId: 
       sourceId: binding.id, correlationId: input.eventId, payload: checkpoint });
     return { continued: true, ...checkpoint };
   });
+}
+
+
+export async function executeGreenCiNextAction(checkpoint: Awaited<ReturnType<typeof continueAfterGreenCi>>) {
+  if (!checkpoint.continued || checkpoint.nextAction !== "DISPATCH_READY_WORKSTREAMS") {
+    return { executed: false, reason: "NO_BOUNDED_DISPATCH_ACTION" as const };
+  }
+  const { dispatchReadyCodingWorkstreams } = await import("./localCodingMultiWorkerExecutionService.js");
+  const result = await dispatchReadyCodingWorkstreams(checkpoint.graphId, {
+    baseSha: checkpoint.headSha,
+    maxParallel: 8,
+    workerPoolId: "coding-ci-auto-continue",
+  });
+  publishSafe({
+    eventType: "coding.ci.auto_continue.dispatched",
+    sourceModule: "coding-ci-auto-continue",
+    sourceId: checkpoint.workstreamId,
+    correlationId: checkpoint.eventId,
+    payload: {
+      taskId: checkpoint.taskId,
+      graphId: checkpoint.graphId,
+      dispatched: result.dispatched.map((item) => item.workstreamId),
+      manualReview: result.manualReview.map((item) => item.workstreamId),
+      approvalGatesPreserved: true,
+    },
+  });
+  return { executed: true, result };
 }
