@@ -20,6 +20,30 @@ export interface CodingAiExecutionJobPayload {
   requestedBy?: string;
 }
 
+export interface CodingAiExecutionJobStatus {
+  id: number;
+  jobCode: string;
+  status: string;
+  jobType: string;
+  requiredCapability: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+}
+
+function toJobStatus(job: AiJob): CodingAiExecutionJobStatus {
+  return {
+    id: job.id,
+    jobCode: job.jobCode,
+    status: job.status,
+    jobType: job.jobType,
+    requiredCapability: job.requiredCapability ?? null,
+    startedAt: job.startedAt?.toISOString() ?? null,
+    completedAt: job.completedAt?.toISOString() ?? null,
+    errorMessage: job.errorMessage ?? null,
+  };
+}
+
 function clampPriority(value: number | undefined): number {
   if (value == null || !Number.isFinite(value)) return 50;
   return Math.max(0, Math.min(100, Math.floor(value)));
@@ -47,6 +71,25 @@ export function parseCodingAiExecutionJobPayload(
     taskId,
     ...(requestedBy ? { requestedBy } : {}),
   };
+}
+
+export async function getLatestCodingAiExecutionJob(
+  taskId: string,
+): Promise<CodingAiExecutionJobStatus | null> {
+  const payload = parseCodingAiExecutionJobPayload({ taskId });
+  const [latest] = await db
+    .select()
+    .from(aiJobsTable)
+    .where(
+      and(
+        eq(aiJobsTable.jobType, CODING_AI_EXECUTION_JOB_TYPE),
+        sql`${aiJobsTable.payloadJson}->>'taskId' = ${payload.taskId}`,
+      ),
+    )
+    .orderBy(desc(aiJobsTable.id))
+    .limit(1);
+
+  return latest ? toJobStatus(latest) : null;
 }
 
 async function findExistingCodingAiExecutionJob(
