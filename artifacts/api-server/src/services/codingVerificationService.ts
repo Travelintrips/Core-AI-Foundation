@@ -364,6 +364,21 @@ async function persistOrchestratorPayload(
   return next;
 }
 
+export async function markCodingStageRunning(orchestratorRun: AiCodingRun): Promise<void> {
+  let payload = parseOrchestratorPayload(orchestratorRun);
+  payload = updateStage(
+    payload,
+    "coding",
+    "RUNNING",
+    "Plan approved. Coding Agent is preparing an isolated proposed change set.",
+  );
+  await persistOrchestratorPayload(
+    orchestratorRun.id,
+    payload,
+    "CODING",
+  );
+}
+
 async function createRun(taskId: string, agentName: string): Promise<AiCodingRun> {
   const [run] = await db
     .insert(aiCodingRunsTable)
