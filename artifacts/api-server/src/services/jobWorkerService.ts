@@ -51,6 +51,7 @@ import {
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
 } from "./repositoryAnalyzerService.js";
+import { executeCodingAiExecutionJob } from "./localCodingAiQueueRuntimeService.js";
 
 export const WORKER_CLAIM_PAYLOAD_KEY = "_claimedByWorkerId";
 
@@ -572,6 +573,9 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
 
     case "coding_repository_analyzer":
       return executeRepositoryAnalyzerJob(job);
+
+    case "coding_ai_execution":
+      return executeCodingAiExecutionJob(job);
 
     case "image_generation":
       return executeImageJob(job);
