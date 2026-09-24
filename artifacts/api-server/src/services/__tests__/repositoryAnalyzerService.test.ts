@@ -91,6 +91,11 @@ describe("repository analyzer execution", () => {
     expect(Array.isArray(result.filesInspected)).toBe(true);
     expect(Array.isArray(result.findings)).toBe(true);
     expect(Array.isArray(result.recommendedChanges)).toBe(true);
+    expect(result.localExecutionPlan).toMatchObject({
+      status: "AI_REQUIRED",
+      operations: [],
+    });
+    expect(result.localExecution).toBeNull();
   });
 
   it("persists successful analysis and moves the task to READY_REVIEW", async () => {
