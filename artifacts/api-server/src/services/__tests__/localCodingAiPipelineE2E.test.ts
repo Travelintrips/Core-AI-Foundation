@@ -32,6 +32,8 @@ async function git(root: string, args: string[], trim = true): Promise<string> {
       LANG: "C",
       LC_ALL: "C",
       GIT_TERMINAL_PROMPT: "0",
+      GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+      GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
     },
   });
   return trim ? stdout.trim() : stdout;
