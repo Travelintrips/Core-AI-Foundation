@@ -122,7 +122,16 @@ describe("Coding Orchestrator", () => {
       relevantFiles: ["package.json", "src/index.ts"],
       filesInspected: ["package.json", "src/index.ts"],
       findings: [{ severity: "info", title: "Inventory complete", detail: "20 files" }],
-      recommendedChanges: ["Update src/index.ts"],
+      recommendedChanges: ["Use AI reasoning only if needed."],
+      localExecutionPlan: {
+        status: "AI_REQUIRED",
+        reason: "No deterministic local edit directive was detected.",
+        operations: [],
+        verificationCommands: ["pnpm test"],
+        targetFiles: [],
+        warnings: [],
+      },
+      localExecution: null,
     });
 
     mockRouteToModel.mockResolvedValue({
@@ -146,7 +155,7 @@ describe("Coding Orchestrator", () => {
     });
   });
 
-  it("runs the Local Coding Engine without AI and leaves AI/write stages blocked", async () => {
+  it("marks semantic tasks AI_REQUIRED without invoking any AI provider", async () => {
     const started = await startCodingOrchestration({ task: task as never, run: run as never });
 
     expect(started.sessionId).toBe(`coding-${run.id}`);
@@ -178,7 +187,7 @@ describe("Coding Orchestrator", () => {
     expect(runUpdates).toEqual(expect.arrayContaining([
       expect.objectContaining({
         status: "COMPLETED",
-        logs: expect.stringContaining('"nextAction": "REVIEW_LOCAL_CONTEXT"'),
+        logs: expect.stringContaining('"nextAction": "AI_REQUIRED"'),
       }),
       expect.objectContaining({
         status: "READY_REVIEW",
@@ -189,11 +198,64 @@ describe("Coding Orchestrator", () => {
     const finalLogs = runUpdates
       .map((value) => (value as { logs?: string }).logs)
       .find((value): value is string =>
-        typeof value === "string" && value.includes('"nextAction": "REVIEW_LOCAL_CONTEXT"'),
+        typeof value === "string" && value.includes('"nextAction": "AI_REQUIRED"'),
       );
 
-    expect(finalLogs).toContain('"Planning Agent"');
+    expect(finalLogs).toContain('"Local Deterministic Planner"');
+    expect(finalLogs).toContain('"Local Coding Executor"');
     expect(finalLogs).toContain('"status": "BLOCKED"');
     expect(finalLogs).not.toContain('"implementationPlan"');
+  });
+
+  it("surfaces a deterministic review-only patch before any AI fallback", async () => {
+    mockExecuteRepositoryAnalyzerJobOnDemand.mockResolvedValueOnce({
+      codingTaskId: task.id,
+      codingRunId: run.id,
+      executionStatus: "COMPLETED",
+      summary: "Local Coding Executor produced a review-only patch.",
+      relevantFiles: ["src/index.ts"],
+      filesInspected: ["src/index.ts"],
+      findings: [],
+      recommendedChanges: ["Review the deterministic patch."],
+      localExecutionPlan: {
+        status: "EXECUTABLE",
+        reason: "Detected one deterministic local edit operation.",
+        operations: [{
+          kind: "replace_text",
+          path: "src/index.ts",
+          search: "old",
+          replacement: "new",
+        }],
+        verificationCommands: ["pnpm test"],
+        targetFiles: ["src/index.ts"],
+        warnings: [],
+      },
+      localExecution: {
+        status: "APPLIED",
+        reason: "Deterministic local patch was produced; verification was intentionally not executed.",
+        changedFiles: ["src/index.ts"],
+        patch: "diff --git a/src/index.ts b/src/index.ts",
+        verification: [],
+        rolledBack: false,
+        warnings: ["Verification was skipped; repository scripts were not executed."],
+      },
+    });
+
+    await startCodingOrchestration({ task: task as never, run: run as never });
+
+    await vi.waitFor(() => {
+      const logs = mockUpdateSet.mock.calls
+        .map(([value]) => (value as { logs?: string })?.logs)
+        .find((value): value is string =>
+          typeof value === "string" && value.includes('"nextAction": "REVIEW_LOCAL_PATCH"'),
+        );
+      expect(logs).toContain('"Local Deterministic Planner"');
+      expect(logs).toContain('"Local Coding Executor"');
+      expect(logs).toContain('"status": "COMPLETED"');
+    });
+
+    expect(mockRouteToModel).not.toHaveBeenCalled();
+    expect(mockGetFallbackModels).not.toHaveBeenCalled();
+    expect(mockExecuteAI).not.toHaveBeenCalled();
   });
 });
