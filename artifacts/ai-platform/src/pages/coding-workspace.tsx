@@ -116,6 +116,7 @@ type RepositoryAnalyzerUiResult = {
   };
   localPatchApproval?: {
     status?: string;
+    gateStatus?: string;
     reason?: string;
     changedFiles: string[];
     scriptsExecuted?: boolean;
@@ -123,6 +124,19 @@ type RepositoryAnalyzerUiResult = {
     approvedAt?: string;
     commitCreated?: boolean;
     pushed?: boolean;
+  };
+  localCommitApproval?: {
+    status?: string;
+    branch?: string;
+    baseBranch?: string;
+    baseHeadSha?: string;
+    commitSha?: string;
+    pullRequestNumber?: number;
+    pullRequestUrl?: string;
+    commitCreated?: boolean;
+    pushed?: boolean;
+    autoMerged?: boolean;
+    publishedAt?: string;
   };
   contextPackage?: {
     branch?: string;
@@ -393,6 +407,10 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.localPatchApproval && typeof value.localPatchApproval === "object" && !Array.isArray(value.localPatchApproval)
         ? (value.localPatchApproval as Record<string, unknown>)
         : null;
+    const localCommitApprovalValue =
+      value.localCommitApproval && typeof value.localCommitApproval === "object" && !Array.isArray(value.localCommitApproval)
+        ? (value.localCommitApproval as Record<string, unknown>)
+        : null;
     const contextIndexValue =
       contextPackageValue?.index && typeof contextPackageValue.index === "object" && !Array.isArray(contextPackageValue.index)
         ? (contextPackageValue.index as Record<string, unknown>)
@@ -481,6 +499,7 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       localPatchApproval: localPatchApprovalValue
         ? {
             status: typeof localPatchApprovalValue.status === "string" ? localPatchApprovalValue.status : undefined,
+            gateStatus: typeof localPatchApprovalValue.gateStatus === "string" ? localPatchApprovalValue.gateStatus : undefined,
             reason: typeof localPatchApprovalValue.reason === "string" ? localPatchApprovalValue.reason : undefined,
             changedFiles: stringList(localPatchApprovalValue.changedFiles),
             scriptsExecuted: localPatchApprovalValue.scriptsExecuted === true,
@@ -488,6 +507,21 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             approvedAt: typeof localPatchApprovalValue.approvedAt === "string" ? localPatchApprovalValue.approvedAt : undefined,
             commitCreated: localPatchApprovalValue.commitCreated === true,
             pushed: localPatchApprovalValue.pushed === true,
+          }
+        : undefined,
+      localCommitApproval: localCommitApprovalValue
+        ? {
+            status: typeof localCommitApprovalValue.status === "string" ? localCommitApprovalValue.status : undefined,
+            branch: typeof localCommitApprovalValue.branch === "string" ? localCommitApprovalValue.branch : undefined,
+            baseBranch: typeof localCommitApprovalValue.baseBranch === "string" ? localCommitApprovalValue.baseBranch : undefined,
+            baseHeadSha: typeof localCommitApprovalValue.baseHeadSha === "string" ? localCommitApprovalValue.baseHeadSha : undefined,
+            commitSha: typeof localCommitApprovalValue.commitSha === "string" ? localCommitApprovalValue.commitSha : undefined,
+            pullRequestNumber: typeof localCommitApprovalValue.pullRequestNumber === "number" ? localCommitApprovalValue.pullRequestNumber : undefined,
+            pullRequestUrl: typeof localCommitApprovalValue.pullRequestUrl === "string" ? localCommitApprovalValue.pullRequestUrl : undefined,
+            commitCreated: localCommitApprovalValue.commitCreated === true,
+            pushed: localCommitApprovalValue.pushed === true,
+            autoMerged: localCommitApprovalValue.autoMerged === true,
+            publishedAt: typeof localCommitApprovalValue.publishedAt === "string" ? localCommitApprovalValue.publishedAt : undefined,
           }
         : undefined,
       contextPackage: contextPackageValue
@@ -685,6 +719,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [commitSha, setCommitSha] = useState("");
   const [approvePending, setApprovePending] = useState(false);
   const [localPatchPending, setLocalPatchPending] = useState(false);
+  const [commitPending, setCommitPending] = useState(false);
 
   useEffect(() => {
     if (detail?.task) {
@@ -730,6 +765,13 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     analyzerResult?.orchestration?.nextAction === "REVIEW_LOCAL_PATCH" &&
     analyzerResult?.localExecution?.status === "APPLIED" &&
     analyzerResult.localExecution.rolledBack !== true &&
+    !hasActiveRun;
+  const canApproveCommit =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    analyzerResult?.orchestration?.nextAction === "APPROVE_COMMIT" &&
+    analyzerResult?.localPatchApproval?.gateStatus === "PATCH_VALIDATED" &&
+    analyzerResult.localPatchApproval.commitCreated !== true &&
+    analyzerResult.localPatchApproval.pushed !== true &&
     !hasActiveRun;
   const runAgent = () => {
     startCodingRun.mutate(
@@ -807,6 +849,36 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       });
     } finally {
       setLocalPatchPending(false);
+    }
+  };
+
+  const approveCommit = async () => {
+    setCommitPending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-commit`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "Commit gate started",
+        description: "Creating an isolated task branch, commit, and pull request. The base branch will not be modified or merged automatically.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not start commit gate",
+        description: error instanceof Error ? error.message : "Commit approval failed",
+        variant: "destructive",
+      });
+    } finally {
+      setCommitPending(false);
     }
   };
 
@@ -1025,13 +1097,57 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                     <div className="rounded-md border border-cyan-300/15 bg-cyan-300/[0.035] p-3" data-testid="panel-local-patch-approved">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-300">Local Patch Approved & Revalidated</div>
-                        <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
-                          Next: APPROVE_COMMIT
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
+                            Next: {analyzerResult.localCommitApproval?.status === "PUBLISHED" ? "REVIEW_PR" : "APPROVE_COMMIT"}
+                          </span>
+                          {canApproveCommit && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={approveCommit}
+                              disabled={commitPending}
+                              className="h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
+                              data-testid="button-approve-local-commit"
+                            >
+                              {commitPending
+                                ? <><Loader2 className="size-3 animate-spin" />Creating PR</>
+                                : <><GitCommitHorizontal className="size-3" />Approve Commit & Create PR</>}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <p className="mt-2 text-[10px] leading-4 text-slate-400">
-                        Remote HEAD matched the analyzed SHA and deterministic static verification passed. Repository scripts remained fail-closed. No commit or push was created.
+                        Remote HEAD matched the analyzed SHA and deterministic static verification passed. Repository scripts remained fail-closed. The commit gate publishes only to a task branch; the base branch is never auto-merged.
                       </p>
+                      {analyzerResult.localCommitApproval?.status === "PUBLISHED" && (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="panel-local-commit-published">
+                          <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Task branch</div>
+                            <div className="mt-1 truncate font-mono text-[10px] text-cyan-300">{analyzerResult.localCommitApproval.branch ?? "—"}</div>
+                          </div>
+                          <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
+                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Commit</div>
+                            <div className="mt-1 truncate font-mono text-[10px] text-emerald-300">{analyzerResult.localCommitApproval.commitSha?.slice(0, 12) ?? "—"}</div>
+                          </div>
+                          <div className="sm:col-span-2 rounded border border-white/[0.06] bg-[#07101d] p-2">
+                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Pull request</div>
+                            {analyzerResult.localCommitApproval.pullRequestUrl?.startsWith("https://github.com/") ? (
+                              <a
+                                href={analyzerResult.localCommitApproval.pullRequestUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-1 inline-flex items-center gap-1 font-mono text-[10px] text-cyan-300 hover:text-cyan-200"
+                                data-testid="link-local-coding-pull-request"
+                              >
+                                #{analyzerResult.localCommitApproval.pullRequestNumber ?? "PR"} <ArrowUpRight className="size-3" />
+                              </a>
+                            ) : (
+                              <div className="mt-1 font-mono text-[10px] text-slate-500">PR_CREATED</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {analyzerResult.localExecutionPlan.status === "AI_REQUIRED" && (
