@@ -100,6 +100,7 @@ export * from "./ai-coding-workspace";
 export * from "./ai-coding-task-graph";
 export * from "./ai-coding-workstream-ai-handoffs";
 export * from "./ai-coding-control-bridge";
+export * from "./ai-coding-github-events";
 export * from "./material-library";
 export * from "./room-design-catalog";
 export * from "./furniture-library";
