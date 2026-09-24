@@ -214,7 +214,7 @@ function mapProviderFailure(error: unknown): ProviderInvocationError {
   return new ProviderInvocationError("Constrained provider invocation failed", "UNKNOWN");
 }
 
-function createProviderAdapter(input: {
+export function createConstrainedCodingProviderAdapter(input: {
   providerSlug: string;
   modelId: string;
   baseUrl?: string | null;
@@ -961,7 +961,7 @@ async function executeReserved(
       );
     }
 
-    const provider = createProviderAdapter({
+    const provider = createConstrainedCodingProviderAdapter({
       providerSlug,
       modelId,
       baseUrl:
