@@ -18,7 +18,7 @@ import {
   UpdateCodingTaskResponse,
 } from "@workspace/api-zod";
 import { enqueue } from "../services/queueManagerService.js";
-import { failRepositoryAnalyzerRun } from "../services/repositoryAnalyzerService.js";
+import { executeRepositoryAnalyzerJobOnDemand, failRepositoryAnalyzerRun } from "../services/repositoryAnalyzerService.js";
 
 const router = Router();
 
@@ -142,7 +142,7 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
     });
 
     try {
-      await enqueue({
+      const queuedJob = await enqueue({
         jobType: "coding_repository_analyzer",
         requiredCapability: "coding_repository_analyzer",
         priority: task.priority,
@@ -157,6 +157,11 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
           description: task.instruction,
         },
       });
+
+      // Production keeps the global dispatcher fail-closed. Run Agent is an
+      // explicit user action, so execute only this freshly-enqueued analyzer
+      // job in a bounded background task.
+      void executeRepositoryAnalyzerJobOnDemand(queuedJob);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await failRepositoryAnalyzerRun(
