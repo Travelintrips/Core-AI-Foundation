@@ -146,20 +146,37 @@ app.use("/api", globalLimiter);
 // short-circuiting the DB lookup because req.internalUser is already set.
 app.use("/api", adminAuthWithExceptions, router);
 
-// Keep the retired public sitemap URL on aicore readable for Search Console.
-// The public Creative Studio now lives on aifront; aicore is the authenticated
-// internal AI Platform. Host-based redirect avoids serving stale public URLs
-// from the internal frontend while preserving the previously submitted sitemap.
+const productionPublicDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "public",
+);
+
+// Serve sitemap with an explicit XML content type. Search Console must receive
+// a real XML response rather than relying on the hosting layer to infer MIME
+// from a staged static file. Keep the retired aicore sitemap URL as a permanent
+// redirect because that URL was submitted before the public/internal split.
 app.get("/sitemap.xml", (req, res, next) => {
-  if (req.hostname.toLowerCase() === "aicore.cstlogistic.co.id") {
+  const hostname = req.hostname.toLowerCase();
+
+  if (hostname === "aicore.cstlogistic.co.id") {
     return res.redirect(301, "https://aifront.cstlogistic.co.id/sitemap.xml");
   }
+
+  if (
+    process.env["NODE_ENV"] === "production" &&
+    hostname === "aifront.cstlogistic.co.id"
+  ) {
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    return res.sendFile(path.join(productionPublicDir, "sitemap.xml"));
+  }
+
   return next();
 });
 
-// Serve the production AI Platform UI from the same Hostinger Node deployment.
+// Serve the production frontend from the same Hostinger Node deployment.
 if (process.env["NODE_ENV"] === "production") {
-  const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "public");
+  const publicDir = productionPublicDir;
   app.use(express.static(publicDir));
   app.use((req, res, next) => {
     if (req.method !== "GET") return next();
