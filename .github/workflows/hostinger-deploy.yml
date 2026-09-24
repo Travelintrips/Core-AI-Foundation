@@ -21,80 +21,142 @@ on:
         options:
           - check
           - sftp
-          - git
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - CI Verify
+    types:
+      - completed
 
 permissions:
   contents: read
 
+concurrency:
+  group: hostinger-production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Hostinger deployment
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
-    steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: core-ai-foundation-build
+    env:
+      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'all' }}
+      DEPLOY_METHOD: ${{ github.event_name == 'workflow_dispatch' && inputs.method || 'sftp' }}
+      RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Validate deployment
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build release artifacts
+        env:
+          PORT: 4173
+          BASE_PATH: /
+          HOSTINGER_FRONTEND: customer-portal
+        run: pnpm run build
+
+      - name: Validate deployment artifacts
+        shell: bash
         run: |
-          echo "Target: ${{ inputs.target || 'all' }}"
-          find . -maxdepth 3 -type d | sort
+          echo "Target: $DEPLOY_TARGET"
+          echo "Method: $DEPLOY_METHOD"
+          test -d artifacts/ai-platform/dist
+          test -d artifacts/customer-portal/dist
+          test -d artifacts/api-server/dist
 
       - name: Deployment metadata
         id: release
+        shell: bash
         run: |
-          echo "commit_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           echo "deploy_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-          echo "target=${{ inputs.target || 'all' }}" >> "$GITHUB_OUTPUT"
+          echo "target=$DEPLOY_TARGET" >> "$GITHUB_OUTPUT"
 
       - name: Transport guard
+        if: env.DEPLOY_METHOD == 'sftp'
+        shell: bash
         run: |
-          if [ "${{ inputs.method || 'sftp' }}" = "check" ]; then exit 0; fi
           test -n "${{ secrets.HOSTINGER_SFTP_HOST }}"
           test -n "${{ secrets.HOSTINGER_SFTP_USERNAME }}"
           test -n "${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}"
+          if [ "$DEPLOY_TARGET" = "all" ] || [ "$DEPLOY_TARGET" = "ai-platform" ]; then
+            test -n "${{ secrets.HOSTINGER_AI_PATH }}"
+          fi
+          if [ "$DEPLOY_TARGET" = "all" ] || [ "$DEPLOY_TARGET" = "customer-portal" ]; then
+            test -n "${{ secrets.HOSTINGER_CUSTOMER_PATH }}"
+          fi
+          if [ "$DEPLOY_TARGET" = "all" ] || [ "$DEPLOY_TARGET" = "api" ]; then
+            test -n "${{ secrets.HOSTINGER_API_PATH }}"
+          fi
 
       - name: Upload AI Platform
-        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'ai-platform')
+        if: env.DEPLOY_METHOD == 'sftp' && (env.DEPLOY_TARGET == 'all' || env.DEPLOY_TARGET == 'ai-platform')
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOSTINGER_SFTP_HOST }}
           username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
           key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: ai-platform/dist/*
+          source: artifacts/ai-platform/dist/*
           target: ${{ secrets.HOSTINGER_AI_PATH }}
 
       - name: Upload Customer Portal
-        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'customer-portal')
+        if: env.DEPLOY_METHOD == 'sftp' && (env.DEPLOY_TARGET == 'all' || env.DEPLOY_TARGET == 'customer-portal')
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOSTINGER_SFTP_HOST }}
           username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
           key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: customer-portal/dist/*
+          source: artifacts/customer-portal/dist/*
           target: ${{ secrets.HOSTINGER_CUSTOMER_PATH }}
 
       - name: Upload API
-        if: inputs.method == 'sftp' && (inputs.target == 'all' || inputs.target == 'api')
+        if: env.DEPLOY_METHOD == 'sftp' && (env.DEPLOY_TARGET == 'all' || env.DEPLOY_TARGET == 'api')
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOSTINGER_SFTP_HOST }}
           username: ${{ secrets.HOSTINGER_SFTP_USERNAME }}
           key: ${{ secrets.HOSTINGER_SFTP_PRIVATE_KEY }}
-          source: api-server/dist/*
+          source: artifacts/api-server/dist/*
           target: ${{ secrets.HOSTINGER_API_PATH }}
 
       - name: Health check
-        if: inputs.method == 'sftp'
+        if: env.DEPLOY_METHOD == 'sftp'
+        shell: bash
         run: |
-          if [ -n "${{ secrets.HOSTINGER_AI_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_AI_URL }}" >/dev/null; fi
-          if [ -n "${{ secrets.HOSTINGER_CUSTOMER_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_CUSTOMER_URL }}" >/dev/null; fi
-          if [ -n "${{ secrets.HOSTINGER_API_HEALTH_URL }}" ]; then curl --fail --silent "${{ secrets.HOSTINGER_API_HEALTH_URL }}" >/dev/null; fi
+          if [ -n "${{ secrets.HOSTINGER_AI_URL }}" ]; then curl --fail --silent --show-error "${{ secrets.HOSTINGER_AI_URL }}" >/dev/null; fi
+          if [ -n "${{ secrets.HOSTINGER_CUSTOMER_URL }}" ]; then curl --fail --silent --show-error "${{ secrets.HOSTINGER_CUSTOMER_URL }}" >/dev/null; fi
+          if [ -n "${{ secrets.HOSTINGER_API_HEALTH_URL }}" ]; then curl --fail --silent --show-error "${{ secrets.HOSTINGER_API_HEALTH_URL }}" >/dev/null; fi
+
+      - name: Authenticated production smoke
+        if: env.DEPLOY_METHOD == 'sftp'
+        shell: bash
+        env:
+          API_BASE_URL: https://aicore.cstlogistic.co.id/api
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          test -n "$ADMIN_API_KEY"
+          bash scripts/smoke-test.sh
+          curl --fail --silent --show-error \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/coding/tasks" >/dev/null
 
       - name: Release summary
         run: |
