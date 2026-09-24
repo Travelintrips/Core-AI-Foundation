@@ -1,0 +1,37 @@
+name: Production Marker Watch
+
+on:
+  push:
+    branches:
+      - release/7a12-prod-readiness
+    paths:
+      - .github/workflows/production-marker-watch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for deterministic release marker
+        shell: bash
+        run: |
+          set -u
+          URL="https://aicore.cstlogistic.co.id/api/healthz"
+          EXPECTED="phase7a12-prod-ready-20260924"
+
+          for attempt in $(seq 1 24); do
+            code=$(curl -L -sS -D /tmp/headers -o /tmp/body -w "%{http_code}" --connect-timeout 15 --max-time 30 "$URL" || true)
+            marker=$(awk -F': ' 'tolower($1)=="x-cst-release-marker" {gsub("\r","",$2); print $2}' /tmp/headers | tail -n1)
+            echo "attempt=$attempt http=$code marker=${marker:-missing} body=$(head -c 200 /tmp/body 2>/dev/null | tr '\n' ' ')"
+            if [ "$code" = "200" ] && [ "$marker" = "$EXPECTED" ]; then
+              echo "PRODUCTION_MARKER=LIVE"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "PRODUCTION_MARKER=NOT_LIVE"
+          exit 1
