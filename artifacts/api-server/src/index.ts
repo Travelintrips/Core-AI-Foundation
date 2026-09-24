@@ -105,17 +105,12 @@ async function initializeRuntimeServices(): Promise<void> {
   }
 
   const isProduction = process.env["NODE_ENV"] === "production";
-  const isAifrontProduction =
-    isProduction &&
-    (
-      process.env["PUBLIC_APP_URL"] === "https://aifront.cstlogistic.co.id" ||
-      (process.env["ALLOWED_ORIGINS"] ?? "").split(",").map((value) => value.trim())
-        .includes("https://aifront.cstlogistic.co.id")
-    );
 
+  // Production workers fail closed: they only auto-start when explicitly enabled.
+  // Development keeps the existing auto-start behavior for local workflows.
   const dispatcherFlag = process.env["AI_DISPATCHER_ENABLED"];
   const dispatcherEnabled = isProduction
-    ? dispatcherFlag === "true" || (dispatcherFlag == null && isAifrontProduction)
+    ? dispatcherFlag === "true"
     : true;
 
   if (dispatcherEnabled) {
@@ -140,7 +135,7 @@ async function initializeRuntimeServices(): Promise<void> {
 
   const schedulerFlag = process.env["AI_SCHEDULER_ENABLED"];
   const schedulerEnabled = isProduction
-    ? schedulerFlag === "true" || (schedulerFlag == null && isAifrontProduction)
+    ? schedulerFlag === "true"
     : true;
 
   const pollIntervalMs = Number(process.env["AI_SCHEDULER_POLL_INTERVAL_MS"]);
