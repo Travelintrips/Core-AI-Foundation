@@ -122,6 +122,7 @@ export function selectClaimableCodingWorkstreams(
       if (item.status === "PENDING" || item.status === "READY") return true;
       if (
         (item.status === "CLAIMED" || item.status === "RUNNING") &&
+        Boolean(item.leaseToken) &&
         item.leaseExpiresAt &&
         item.leaseExpiresAt.getTime() <= now.getTime()
       ) {
@@ -146,9 +147,18 @@ function claimCondition(
     );
   }
 
+  const leaseToken = workstream.leaseToken;
+  if (!leaseToken) {
+    throw new LocalCodingMultiWorkerError(
+      "Expired claimed/running workstream is missing its lease token.",
+      "CLAIM_FAILED",
+      { workstreamId: workstream.id, status: workstream.status },
+    );
+  }
+
   return and(
     eq(aiCodingWorkstreamsTable.id, workstream.id),
-    eq(aiCodingWorkstreamsTable.leaseToken, workstream.leaseToken),
+    eq(aiCodingWorkstreamsTable.leaseToken, leaseToken),
     sql`${aiCodingWorkstreamsTable.leaseExpiresAt} <= ${now}`,
   );
 }
