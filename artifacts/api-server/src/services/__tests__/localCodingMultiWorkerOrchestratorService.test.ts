@@ -178,6 +178,7 @@ describe("multi-worker coding claim runtime", () => {
         workstreamKey: "WS-004",
         status: "RUNNING",
         priority: 60,
+        leaseToken: "expired-lease-token",
         leaseExpiresAt: new Date("2026-09-24T11:59:00.000Z"),
       }),
       ws({
@@ -185,6 +186,7 @@ describe("multi-worker coding claim runtime", () => {
         workstreamKey: "WS-005",
         status: "CLAIMED",
         priority: 100,
+        leaseToken: "live-lease-token",
         leaseExpiresAt: new Date("2026-09-24T12:05:00.000Z"),
       }),
     ];
@@ -198,6 +200,21 @@ describe("multi-worker coding claim runtime", () => {
         (item) => item.workstreamKey,
       ),
     ).toEqual(["WS-002", "WS-004"]);
+  });
+
+  it("does not reclaim malformed claimed state without a lease token", () => {
+    const now = new Date("2026-09-24T12:00:00.000Z");
+    const malformed = ws({
+      id: "malformed",
+      workstreamKey: "WS-009",
+      status: "RUNNING",
+      leaseToken: null,
+      leaseExpiresAt: new Date("2026-09-24T11:59:00.000Z"),
+    });
+
+    expect(
+      selectClaimableCodingWorkstreams([malformed], [], now),
+    ).toEqual([]);
   });
 
   it("builds deterministic isolated branch names per workstream attempt", () => {
