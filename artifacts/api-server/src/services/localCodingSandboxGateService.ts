@@ -311,6 +311,7 @@ async function markSandboxGateFailed(
     : "RUN_SANDBOX_VERIFICATION";
   const failedPayload = {
     ...context.orchestratorPayload,
+    ...(recoveryContext ? { failureRecoveryContext: recoveryContext } : {}),
     sandboxVerification: {
       status: error.kind === "SANDBOX_BLOCKED" ? "BLOCKED" : "FAILED",
       gateStatus: "SANDBOX_NOT_VERIFIED",
