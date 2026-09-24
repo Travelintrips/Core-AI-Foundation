@@ -74,6 +74,11 @@ async function createFixtureRepository(): Promise<string> {
   execFileSync("git", ["config", "user.name", "CI"], { cwd: root });
   execFileSync("git", ["add", "package.json", "src", "tests"], { cwd: root });
   execFileSync("git", ["commit", "-m", "feat: add qris reconciliation candidate"], { cwd: root });
+  await writeFile(
+    join(root, "src", "payment.ts"),
+    "export type Payment = { amount: number };\nexport function normalizePayment(amount: number) { return amount; }\nexport const apiKey = \"super-secret-value\";\n",
+    "utf8",
+  );
   return root;
 }
 
@@ -159,6 +164,8 @@ describe("Local Coding Engine", () => {
     ]));
     expect(first.recentCommits[0]?.subject).toContain("qris reconciliation candidate");
     expect(JSON.stringify(first)).not.toContain("QRIS_SECRET");
+    expect(JSON.stringify(first)).not.toContain("super-secret-value");
+    expect(first.gitDiff).toContain("[REDACTED_SENSITIVE_DIFF_LINE]");
     expect(first.index.sensitiveFilesExcluded).toBeGreaterThan(0);
     expect(second.index.cacheHit).toBe(true);
   });
