@@ -27,7 +27,7 @@ jobs:
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
           code=$(curl -L -sS -o /tmp/run -w "%{http_code}" \
-            --connect-timeout 15 --max-time 30 \
+            --connect-timeout 15 --max-time 60 \
             -X POST \
             -H "x-admin-api-key: $ADMIN_API_KEY" \
             -H "content-type: application/json" \
@@ -101,4 +101,4 @@ jobs:
           if(coding?.status!=="BLOCKED") throw new Error("Coding stage should remain blocked");
           NODE
 
-# rerun-after-coding-diff-hotfix
+# rerun-after-coding-diff-hotfix-retry-1790239850930
