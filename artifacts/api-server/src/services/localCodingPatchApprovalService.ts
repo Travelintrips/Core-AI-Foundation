@@ -376,7 +376,7 @@ export async function approveAndValidateLocalPatch(taskId: string): Promise<AiCo
       localPatchApproval: {
         status: "APPLIED",
         gateStatus: "PATCH_VALIDATED",
-        reason: "Deterministic local patch matched the analyzed HEAD and passed static verification.",
+        reason: "Deterministic local patch matched the analyzed HEAD and passed static verification. Repository scripts must pass the sandbox gate before commit approval.",
         baseHeadSha: context.expectedHeadSha,
         patchSha256,
         changedFiles: context.changedFiles,
@@ -392,7 +392,7 @@ export async function approveAndValidateLocalPatch(taskId: string): Promise<AiCo
       orchestration: {
         ...currentOrchestration,
         status: "READY_REVIEW",
-        nextAction: "APPROVE_COMMIT",
+        nextAction: "RUN_SANDBOX_VERIFICATION",
       },
     };
 
@@ -410,7 +410,7 @@ export async function approveAndValidateLocalPatch(taskId: string): Promise<AiCo
             patchSha256,
             changedFiles: context.changedFiles,
             staticVerification: "PASSED",
-            nextAction: "APPROVE_COMMIT",
+            nextAction: "RUN_SANDBOX_VERIFICATION",
             commitCreated: false,
             pushed: false,
           }, null, 2),
@@ -440,7 +440,7 @@ export async function approveAndValidateLocalPatch(taskId: string): Promise<AiCo
           status: "READY_REVIEW",
           resultSummary:
             `Deterministic patch revalidated against remote HEAD ${context.expectedHeadSha.slice(0, 12)}. ` +
-            "Static verification passed. Ready for explicit commit approval; nothing was committed or pushed.",
+            "Static verification passed. Ready for network-disabled sandbox verification; nothing was committed or pushed.",
         })
         .where(eq(aiCodingTasksTable.id, taskId));
 

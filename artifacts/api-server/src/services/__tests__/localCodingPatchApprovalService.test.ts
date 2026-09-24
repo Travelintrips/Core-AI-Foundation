@@ -222,6 +222,7 @@ describe("Local Patch Approval Gate", () => {
       .map(([value]) => value)
       .find((value) => value && typeof value === "object" && "logs" in value);
     expect(runUpdate.logs).toContain('"gateStatus": "PATCH_VALIDATED"');
+    expect(runUpdate.logs).toContain('"nextAction": "RUN_SANDBOX_VERIFICATION"');
     expect(runUpdate.logs).toContain('"commitCreated": false');
     expect(runUpdate.logs).toContain('"pushed": false');
   });

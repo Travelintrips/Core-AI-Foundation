@@ -38,6 +38,11 @@ export interface PublishVerifiedPatchInput {
   projectName: string;
   patchSha256: string;
   files: GitHubPublishFile[];
+  sandboxVerification?: {
+    status: "PASSED";
+    commands: string[];
+    image: string | null;
+  };
 }
 
 export interface GitHubPublishResult {
@@ -429,7 +434,19 @@ export async function publishVerifiedPatchToGitHub(
           `Base SHA: ${expectedBaseSha}`,
           `Patch SHA-256: ${input.patchSha256.toLowerCase()}`,
           "Static verification: PASSED",
-          "Repository-defined scripts: NOT EXECUTED (fail-closed)",
+          input.sandboxVerification?.status === "PASSED"
+            ? "Sandbox verification: PASSED"
+            : "Sandbox verification: NOT RECORDED",
+          ...(input.sandboxVerification?.status === "PASSED"
+            ? [
+                "Sandbox network: DISABLED",
+                "Sandbox image: " + (input.sandboxVerification.image ?? "configured runtime"),
+                "Repository commands: " +
+                  (input.sandboxVerification.commands.length > 0
+                    ? input.sandboxVerification.commands.join(", ")
+                    : "none discovered"),
+              ]
+            : []),
           "",
           "This pull request was created by an explicit commit approval gate. It is not auto-merged.",
         ].join("\n"),

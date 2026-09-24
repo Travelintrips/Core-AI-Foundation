@@ -125,6 +125,18 @@ type RepositoryAnalyzerUiResult = {
     commitCreated?: boolean;
     pushed?: boolean;
   };
+  sandboxVerification?: {
+    status?: string;
+    gateStatus?: string;
+    runtime?: string;
+    image?: string;
+    network?: string;
+    verificationCommands: string[];
+    commands: Array<{ command?: string; status?: string; exitCode?: number | null; durationMs?: number }>;
+    scriptsExecuted?: boolean;
+    warnings: string[];
+    verifiedAt?: string;
+  };
   localCommitApproval?: {
     status?: string;
     branch?: string;
@@ -407,6 +419,10 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.localPatchApproval && typeof value.localPatchApproval === "object" && !Array.isArray(value.localPatchApproval)
         ? (value.localPatchApproval as Record<string, unknown>)
         : null;
+    const sandboxVerificationValue =
+      value.sandboxVerification && typeof value.sandboxVerification === "object" && !Array.isArray(value.sandboxVerification)
+        ? (value.sandboxVerification as Record<string, unknown>)
+        : null;
     const localCommitApprovalValue =
       value.localCommitApproval && typeof value.localCommitApproval === "object" && !Array.isArray(value.localCommitApproval)
         ? (value.localCommitApproval as Record<string, unknown>)
@@ -507,6 +523,29 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             approvedAt: typeof localPatchApprovalValue.approvedAt === "string" ? localPatchApprovalValue.approvedAt : undefined,
             commitCreated: localPatchApprovalValue.commitCreated === true,
             pushed: localPatchApprovalValue.pushed === true,
+          }
+        : undefined,
+      sandboxVerification: sandboxVerificationValue
+        ? {
+            status: typeof sandboxVerificationValue.status === "string" ? sandboxVerificationValue.status : undefined,
+            gateStatus: typeof sandboxVerificationValue.gateStatus === "string" ? sandboxVerificationValue.gateStatus : undefined,
+            runtime: typeof sandboxVerificationValue.runtime === "string" ? sandboxVerificationValue.runtime : undefined,
+            image: typeof sandboxVerificationValue.image === "string" ? sandboxVerificationValue.image : undefined,
+            network: typeof sandboxVerificationValue.network === "string" ? sandboxVerificationValue.network : undefined,
+            verificationCommands: stringList(sandboxVerificationValue.verificationCommands),
+            commands: Array.isArray(sandboxVerificationValue.commands)
+              ? sandboxVerificationValue.commands
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    command: typeof item.command === "string" ? item.command : undefined,
+                    status: typeof item.status === "string" ? item.status : undefined,
+                    exitCode: typeof item.exitCode === "number" || item.exitCode === null ? item.exitCode as number | null : undefined,
+                    durationMs: typeof item.durationMs === "number" ? item.durationMs : undefined,
+                  }))
+              : [],
+            scriptsExecuted: sandboxVerificationValue.scriptsExecuted === true,
+            warnings: stringList(sandboxVerificationValue.warnings),
+            verifiedAt: typeof sandboxVerificationValue.verifiedAt === "string" ? sandboxVerificationValue.verifiedAt : undefined,
           }
         : undefined,
       localCommitApproval: localCommitApprovalValue
@@ -719,6 +758,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [commitSha, setCommitSha] = useState("");
   const [approvePending, setApprovePending] = useState(false);
   const [localPatchPending, setLocalPatchPending] = useState(false);
+  const [sandboxPending, setSandboxPending] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
 
   useEffect(() => {
@@ -766,10 +806,19 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     analyzerResult?.localExecution?.status === "APPLIED" &&
     analyzerResult.localExecution.rolledBack !== true &&
     !hasActiveRun;
+  const canRunSandboxVerification =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    analyzerResult?.orchestration?.nextAction === "RUN_SANDBOX_VERIFICATION" &&
+    analyzerResult?.localPatchApproval?.gateStatus === "PATCH_VALIDATED" &&
+    analyzerResult.localPatchApproval.commitCreated !== true &&
+    analyzerResult.localPatchApproval.pushed !== true &&
+    !hasActiveRun;
   const canApproveCommit =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "APPROVE_COMMIT" &&
     analyzerResult?.localPatchApproval?.gateStatus === "PATCH_VALIDATED" &&
+    analyzerResult?.sandboxVerification?.gateStatus === "SANDBOX_VERIFIED" &&
+    analyzerResult.sandboxVerification.status === "PASSED" &&
     analyzerResult.localPatchApproval.commitCreated !== true &&
     analyzerResult.localPatchApproval.pushed !== true &&
     !hasActiveRun;
@@ -839,7 +888,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
       toast({
         title: "Local patch validated",
-        description: "Patch still applies to the latest remote HEAD and passed static verification. Nothing was committed or pushed.",
+        description: "Patch still applies to the latest remote HEAD and passed static verification. Sandboxed repository verification is required before commit approval.",
       });
     } catch (error) {
       toast({
@@ -849,6 +898,36 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       });
     } finally {
       setLocalPatchPending(false);
+    }
+  };
+
+  const runSandboxVerification = async () => {
+    setSandboxPending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/run-sandbox-verification`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "Sandbox verification started",
+        description: "Repository checks are running with network disabled, scrubbed environment, and bounded Docker resources.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not start sandbox verification",
+        description: error instanceof Error ? error.message : "Sandbox verification failed",
+        variant: "destructive",
+      });
+    } finally {
+      setSandboxPending(false);
     }
   };
 
@@ -1099,8 +1178,26 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-300">Local Patch Approved & Revalidated</div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
-                            Next: {analyzerResult.localCommitApproval?.status === "PUBLISHED" ? "REVIEW_PR" : "APPROVE_COMMIT"}
+                            Next: {analyzerResult.localCommitApproval?.status === "PUBLISHED"
+                              ? "REVIEW_PR"
+                              : analyzerResult.sandboxVerification?.status === "PASSED"
+                                ? "APPROVE_COMMIT"
+                                : "RUN_SANDBOX_VERIFICATION"}
                           </span>
+                          {canRunSandboxVerification && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={runSandboxVerification}
+                              disabled={sandboxPending}
+                              className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
+                              data-testid="button-run-sandbox-verification"
+                            >
+                              {sandboxPending
+                                ? <><Loader2 className="size-3 animate-spin" />Starting sandbox</>
+                                : <><TerminalSquare className="size-3" />Run Sandboxed Verification</>}
+                            </Button>
+                          )}
                           {canApproveCommit && (
                             <Button
                               type="button"
@@ -1118,8 +1215,54 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                         </div>
                       </div>
                       <p className="mt-2 text-[10px] leading-4 text-slate-400">
-                        Remote HEAD matched the analyzed SHA and deterministic static verification passed. Repository scripts remained fail-closed. The commit gate publishes only to a task branch; the base branch is never auto-merged.
+                        Remote HEAD matched the analyzed SHA and deterministic static verification passed. Repository scripts can run only inside the hardened sandbox; the commit gate remains locked until that gate passes.
                       </p>
+                      {analyzerResult.sandboxVerification && (
+                        <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-sandbox-verification">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Sandbox verification</div>
+                            <span className={cn(
+                              "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                              analyzerResult.sandboxVerification.status === "PASSED"
+                                ? "bg-emerald-300/10 text-emerald-300"
+                                : analyzerResult.sandboxVerification.status === "BLOCKED"
+                                  ? "bg-amber-300/10 text-amber-300"
+                                  : "bg-rose-300/10 text-rose-300",
+                            )}>
+                              {analyzerResult.sandboxVerification.status ?? "PENDING"}
+                            </span>
+                          </div>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                            <div>
+                              <div className="text-[9px] uppercase text-slate-600">Runtime</div>
+                              <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.sandboxVerification.runtime ?? "docker"}</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] uppercase text-slate-600">Network</div>
+                              <div className="mt-1 font-mono text-[10px] text-emerald-300">{analyzerResult.sandboxVerification.network ?? "none"}</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] uppercase text-slate-600">Scripts</div>
+                              <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.sandboxVerification.commands.length}</div>
+                            </div>
+                          </div>
+                          {analyzerResult.sandboxVerification.commands.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {analyzerResult.sandboxVerification.commands.map((command, index) => (
+                                <div key={`${command.command ?? "command"}-${index}`} className="flex items-center justify-between gap-3 font-mono text-[10px]">
+                                  <span className="truncate text-slate-400">{command.command ?? "verification"}</span>
+                                  <span className={command.status === "PASSED" ? "text-emerald-300" : "text-rose-300"}>{command.status ?? "UNKNOWN"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {analyzerResult.sandboxVerification.warnings.length > 0 && (
+                            <p className="mt-2 text-[10px] leading-4 text-amber-200">
+                              {analyzerResult.sandboxVerification.warnings.join(" ")}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {analyzerResult.localCommitApproval?.status === "PUBLISHED" && (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="panel-local-commit-published">
                           <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
