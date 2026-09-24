@@ -60,7 +60,10 @@ export async function enqueueCodingAiExecution(
   return enqueue({
     jobType: CODING_AI_EXECUTION_JOB_TYPE,
     requiredCapability: CODING_AI_EXECUTION_CAPABILITY,
-    payloadJson: payload,
+    payloadJson: {
+      taskId: payload.taskId,
+      ...(payload.requestedBy ? { requestedBy: payload.requestedBy } : {}),
+    },
     priority: clampPriority(options.priority),
     tenantId: options.tenantId,
     // Model privilege is one-shot. Generic queue retry must never invoke a
