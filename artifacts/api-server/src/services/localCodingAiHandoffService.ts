@@ -824,16 +824,51 @@ export async function approveAiHandoff(
       "APPROVAL_FAILED",
     );
   }
+
+  const policy = isRecord(pkg.policy) ? pkg.policy : null;
+  const repository = isRecord(pkg.repository) ? pkg.repository : null;
+  const patch = isRecord(pkg.currentPatch) ? pkg.currentPatch : null;
+  const allowedFiles = stringArray(pkg.allowedFiles)
+    .map(normalizeRepoPath)
+    .filter((item): item is string => Boolean(item));
+  const currentAllowedFiles = new Set(
+    context.recoveryContext.focusFiles
+      .map(normalizeRepoPath)
+      .filter((item): item is string => Boolean(item)),
+  );
+
   if (
-    typedPackage.policy.modelInvoked !== false ||
-    typedPackage.policy.sourceWrite !== false ||
-    typedPackage.policy.repositoryAccess !== false ||
-    typedPackage.policy.networkAccess !== false ||
-    typedPackage.policy.secretAccess !== false ||
-    typedPackage.policy.requiresExplicitApprovalBeforeModel !== true
+    !policy ||
+    policy.modelInvoked !== false ||
+    policy.sourceWrite !== false ||
+    policy.repositoryAccess !== false ||
+    policy.networkAccess !== false ||
+    policy.shellAccess !== false ||
+    policy.secretAccess !== false ||
+    policy.commitPushMerge !== false ||
+    policy.readOnlyContext !== true ||
+    policy.requiresExplicitApprovalBeforeModel !== true ||
+    policy.allowedFilesOnly !== true
   ) {
     throw new LocalAiHandoffError(
       "AI handoff policy flags are not fail-closed",
+      "APPROVAL_FAILED",
+    );
+  }
+  if (
+    !repository ||
+    repository.baseHeadSha !== context.baseHeadSha ||
+    repository.repository !== context.task.repository ||
+    repository.branch !== context.task.branch ||
+    !patch ||
+    patch.sha256 !== context.currentPatchSha256 ||
+    !isRecord(pkg.task) ||
+    pkg.task.id !== context.task.id ||
+    allowedFiles.length > MAX_ALLOWED_FILES ||
+    allowedFiles.some((file) => !currentAllowedFiles.has(file))
+  ) {
+    throw new LocalAiHandoffError(
+      "AI handoff package no longer matches the current bounded coding context",
       "APPROVAL_FAILED",
     );
   }
