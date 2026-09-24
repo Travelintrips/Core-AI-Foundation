@@ -339,7 +339,6 @@ function declarationName(node: ts.Node): string | null {
   if (ts.isTypeAliasDeclaration(node)) return identifierName(node.name);
   if (ts.isMethodDeclaration(node)) return identifierName(node.name);
   if (ts.isFunctionExpression(node)) return identifierName(node.name);
-  if (ts.isVariableDeclaration(node)) return identifierName(node.name);
   return null;
 }
 
