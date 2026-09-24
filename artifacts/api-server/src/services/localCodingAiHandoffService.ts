@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { lstat, readFile, realpath, rm } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { lstat, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { and, desc, eq } from "drizzle-orm";
 import {
@@ -536,6 +537,7 @@ async function executePrepareHandoff(
   run: AiCodingRun,
 ): Promise<void> {
   let workspacePath: string | null = null;
+  let patchFile: string | null = null;
   try {
     const workspace = await prepareRepositoryWorkspace(
       context.task.repository,
@@ -554,6 +556,20 @@ async function executePrepareHandoff(
       throw new LocalAiHandoffError(
         `Repository HEAD changed from ${context.baseHeadSha} to ${actualHead}; rerun Local Coding Engine before AI handoff`,
         "STALE_HEAD",
+      );
+    }
+
+    patchFile = resolve(tmpdir(), `ai-handoff-${randomUUID()}.diff`);
+    await writeFile(patchFile, context.currentPatch, "utf8");
+    try {
+      await git(workspacePath, ["apply", "--check", "--whitespace=error-all", patchFile]);
+      await git(workspacePath, ["apply", "--whitespace=nowarn", patchFile]);
+      await git(workspacePath, ["diff", "--check"]);
+    } catch (error) {
+      throw new LocalAiHandoffError(
+        "Failing patch no longer applies cleanly while preparing AI handoff: " +
+          (error instanceof Error ? error.message.slice(0, 700) : String(error)),
+        "INVALID_CONTEXT",
       );
     }
 
@@ -697,6 +713,9 @@ async function executePrepareHandoff(
   } finally {
     if (workspacePath) {
       await rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+    }
+    if (patchFile) {
+      await rm(patchFile, { force: true }).catch(() => undefined);
     }
   }
 }
