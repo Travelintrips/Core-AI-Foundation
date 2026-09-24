@@ -46,6 +46,7 @@ export class LocalCommitApprovalError extends Error {
       | "INVALID_PATCH"
       | "VERIFICATION_FAILED"
       | "GITHUB_AUTH"
+      | "INVALID_REPOSITORY"
       | "PUBLISH_FAILED",
   ) {
     super(message);
@@ -257,7 +258,14 @@ async function latestCommitContext(taskId: string): Promise<LocalCommitContext> 
     );
   }
 
-  parseGitHubRepository(task.repository);
+  try {
+    parseGitHubRepository(task.repository);
+  } catch (error) {
+    throw new LocalCommitApprovalError(
+      error instanceof Error ? error.message : String(error),
+      "INVALID_REPOSITORY",
+    );
+  }
 
   return {
     task,
