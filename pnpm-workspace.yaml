@@ -158,3 +158,15 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.27.3"
+
+  # Phase 7A-12 targeted security remediation. Keep these narrow and remove
+  # them once upstream dependency ranges resolve to patched versions.
+  "fast-uri": "3.1.7"
+  "browserslist": "4.28.7"
+  "fast-xml-parser": "5.10.1"
+  "ip-address": "10.3.1"
+  "postcss": "8.5.18"
+  # pptxgenjs@4.0.1 declares image-size but does not import it in its shipped
+  # runtime bundles; all published image-size versions are currently affected
+  # by the 2026 infinite-loop advisories, so remove this dead transitive dep.
+  "pptxgenjs@4.0.1>image-size": "-"
