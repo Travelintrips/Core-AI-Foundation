@@ -13,6 +13,7 @@
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
+import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "../services/zeroLlmLocalService.js";
 
 const router: IRouter = Router();
 
@@ -97,7 +98,44 @@ router.get("/healthz/full", async (_req, res) => {
     checks["env"] = { status: "ok" };
   }
 
-  // ── 4. Process metrics ────────────────────────────────────────────────────
+  // ── 4. Optional local ZeroLLM readiness ───────────────────────────────────
+  try {
+    const zeroLlm = readZeroLlmLocalConfig();
+    if (!zeroLlm.enabled) {
+      checks["zerollm"] = { status: "ok", detail: "disabled" };
+    } else {
+      const localHealth = await checkZeroLlmHealth(zeroLlm);
+      if (localHealth.status === "ok") {
+        checks["zerollm"] = {
+          status: "ok",
+          latencyMs: localHealth.latencyMs,
+          detail: "model=" + localHealth.model + "; loopback-only",
+        };
+      } else {
+        checks["zerollm"] = {
+          status: "fail",
+          latencyMs: localHealth.latencyMs,
+          detail: localHealth.detail ?? "local provider unavailable",
+        };
+        overallStatus = zeroLlm.required ? "fail" : overallStatus === "ok" ? "degraded" : overallStatus;
+      }
+    }
+  } catch (error) {
+    checks["zerollm"] = {
+      status: "fail",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+    if (
+      process.env["ZEROLLM_REQUIRED"] === "true" ||
+      process.env["AI_CODING_PROVIDER"]?.toLowerCase() === "zerollm"
+    ) {
+      overallStatus = "fail";
+    } else if (overallStatus === "ok") {
+      overallStatus = "degraded";
+    }
+  }
+
+  // ── 5. Process metrics ────────────────────────────────────────────────────
   const uptimeMs = Date.now() - startedAt;
   const memUsage = process.memoryUsage();
 

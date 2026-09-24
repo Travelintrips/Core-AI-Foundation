@@ -56,3 +56,4 @@ if (process.platform === "linux" && fs.existsSync(pnpmStore)) {
 }
 
 run("pnpm", ["run", "build:workspace"], env);
+run(process.execPath, [path.join(process.cwd(), "scripts", "zerollm-bootstrap.cjs")], env);

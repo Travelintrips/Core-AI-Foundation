@@ -1,5 +1,6 @@
 import { getProviderApiKey } from "./aiSecretService.js";
 import { logExecutionSafe, type ObservabilityContext } from "./observabilityService.js";
+import { readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
 export type { ObservabilityContext };
 
@@ -255,6 +256,77 @@ async function executeMistral(input: ExecutionInput, apiKey: string): Promise<Ex
   return { content, promptTokens, completionTokens, tokensUsed: promptTokens + completionTokens, latencyMs };
 }
 
+// ─── ZeroLLM local sidecar (OpenAI-compatible, loopback-only) ───────────────
+
+async function executeZeroLlm(input: ExecutionInput): Promise<ExecutionOutput> {
+  if (input.imageUrl) {
+    throw new Error("ZeroLLM constrained local provider does not accept image input.");
+  }
+
+  const configuredBaseUrl =
+    typeof input.provider.baseUrl === "string" && input.provider.baseUrl.trim()
+      ? input.provider.baseUrl.trim()
+      : process.env["ZEROLLM_BASE_URL"];
+
+  const config = readZeroLlmLocalConfig({
+    ...process.env,
+    ZEROLLM_ENABLED: "true",
+    ZEROLLM_BASE_URL: configuredBaseUrl,
+    ZEROLLM_MODEL: input.model.modelId,
+  });
+
+  const started = Date.now();
+  const messages: Array<{ role: "system" | "user"; content: string }> = [];
+  if (input.systemPrompt) {
+    messages.push({ role: "system", content: input.systemPrompt });
+  }
+  messages.push({ role: "user", content: input.prompt });
+
+  const response = await fetch(config.baseUrl + "/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages,
+      max_tokens:
+        input.maxTokens ??
+        (input.model.maxOutputTokens as number | null | undefined) ??
+        4096,
+      ...(input.temperature != null ? { temperature: input.temperature } : {}),
+    }),
+    signal: input.signal,
+  });
+
+  const latencyMs = Date.now() - started;
+  if (!response.ok) {
+    throw providerRequestError("ZeroLLM", response.status);
+  }
+
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+    };
+  };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  const promptTokens = data.usage?.prompt_tokens ?? 0;
+  const completionTokens = data.usage?.completion_tokens ?? 0;
+
+  return {
+    content,
+    promptTokens,
+    completionTokens,
+    tokensUsed:
+      data.usage?.total_tokens ?? promptTokens + completionTokens,
+    latencyMs,
+  };
+}
+
 // ─── Replicate ───────────────────────────────────────────────────────────────
 
 async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<ExecutionOutput> {
@@ -377,9 +449,10 @@ async function executeAIInternal(
   input: ExecutionInput,
   allowQuotaFallback: boolean,
 ): Promise<ExecutionOutput> {
-  const apiKey = getProviderApiKey(input.provider.slug);
+  const slug = input.provider.slug.toLowerCase();
+  const apiKey = slug === "zerollm" ? null : getProviderApiKey(input.provider.slug);
 
-  if (!apiKey) {
+  if (slug !== "zerollm" && !apiKey) {
     const hint = input.provider.slug.toUpperCase().replace(/-/g, "_");
     throw new Error(
       `No API key configured for provider '${input.provider.slug}'. ` +
@@ -387,7 +460,6 @@ async function executeAIInternal(
     );
   }
 
-  const slug = input.provider.slug.toLowerCase();
   const startedAt = new Date();
 
   let result: ExecutionOutput;
@@ -395,26 +467,30 @@ async function executeAIInternal(
     switch (slug) {
       case "openai":
         result = allowQuotaFallback
-          ? await executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey))
-          : await executeOpenAI(input, apiKey);
+          ? await executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey!))
+          : await executeOpenAI(input, apiKey!);
         break;
       case "anthropic":
-        result = await executeAnthropic(input, apiKey);
+        result = await executeAnthropic(input, apiKey!);
         break;
       case "google":
       case "google-gemini":
       case "gemini":
         result = allowQuotaFallback
-          ? await executeWithQuotaFallback(input, () => executeGemini(input, apiKey))
-          : await executeGemini(input, apiKey);
+          ? await executeWithQuotaFallback(input, () => executeGemini(input, apiKey!))
+          : await executeGemini(input, apiKey!);
         break;
       case "replicate":
-        result = await executeReplicate(input, apiKey);
+        result = await executeReplicate(input, apiKey!);
         break;
       case "mistral":
         result = allowQuotaFallback
-          ? await executeWithQuotaFallback(input, () => executeMistral(input, apiKey))
-          : await executeMistral(input, apiKey);
+          ? await executeWithQuotaFallback(input, () => executeMistral(input, apiKey!))
+          : await executeMistral(input, apiKey!);
+        break;
+      case "zerollm":
+        // Local provider never falls back to an external provider.
+        result = await executeZeroLlm(input);
         break;
       default:
         throw new Error(
