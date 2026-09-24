@@ -199,7 +199,10 @@ export async function verifyChangedFilesStatically(
         true,
         scriptKind(loaded.normalized),
       );
-      for (const diagnostic of source.parseDiagnostics.slice(0, 12)) {
+      const parseDiagnostics = (
+        source as unknown as { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] }
+      ).parseDiagnostics ?? [];
+      for (const diagnostic of parseDiagnostics.slice(0, 12)) {
         const start = diagnostic.start ?? 0;
         const line = source.getLineAndCharacterOfPosition(Math.min(start, source.end)).line + 1;
         issues.push({
