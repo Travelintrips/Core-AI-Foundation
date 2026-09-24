@@ -298,6 +298,8 @@ export async function runSandboxedRepositoryVerification(
           stderr: "Command is not allowlisted for sandboxed repository verification.",
           durationMs: 0,
         }],
+        deterministicRetries: [],
+        failureContexts: [],
         scriptsExecuted: false,
         warnings: ["Sandbox verification rejected a non-allowlisted command before starting Docker."],
       };
@@ -320,8 +322,6 @@ export async function runSandboxedRepositoryVerification(
       network: "none",
       dependencyBootstrap: null,
       commands: [],
-      deterministicRetries: [],
-      failureContexts: [],
       deterministicRetries: [],
       failureContexts: [],
       scriptsExecuted: false,
