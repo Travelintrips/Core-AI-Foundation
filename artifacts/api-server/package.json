@@ -20,8 +20,8 @@
     "seed:builtin-templates": "tsx --tsconfig tsconfig.json src/seedBuiltinTemplates.ts",
     "migrate:builtin-templates": "tsx --tsconfig tsconfig.json src/migrate-builtin-templates.ts",
     "migrate:v44": "tsx --tsconfig tsconfig.json src/migrate-v44.ts",
-    "migrate:tkl-v50": "tsx --tsconfig tsconfig.json src/migrate-tkl-v50.ts"
-    ,"migrate:catalog-ux": "tsx --tsconfig tsconfig.json src/migrate-catalog-ux.ts"
+    "migrate:tkl-v50": "tsx --tsconfig tsconfig.json src/migrate-tkl-v50.ts",
+    "migrate:catalog-ux": "tsx --tsconfig tsconfig.json src/migrate-catalog-ux.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",
@@ -48,7 +48,8 @@
     "pptxgenjs": "4.0.1",
     "qrcode": "^1.5.4",
     "sharp": "^0.35.4",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "typescript": "~5.9.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
