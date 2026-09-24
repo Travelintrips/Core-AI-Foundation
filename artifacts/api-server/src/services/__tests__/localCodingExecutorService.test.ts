@@ -101,6 +101,40 @@ describe("Local Coding Executor", () => {
     expect(plan.verificationCommands).toEqual(["pnpm test", "pnpm typecheck"]);
   });
 
+  it("plans insert-after and JSON set recipes without AI", () => {
+    const insertPlan = planLocalCodingExecution(
+      'Insert " // patched" after "export const oldName = 1;" in src/sample.ts',
+      context(),
+    );
+    const jsonContext = {
+      ...context(),
+      relevantFiles: [
+        ...context().relevantFiles,
+        { path: "package.json", score: 9, reasons: ["manifest"] },
+      ],
+      affectedFiles: [...context().affectedFiles, "package.json"],
+    };
+    const jsonPlan = planLocalCodingExecution(
+      'Set JSON scripts.lint to "eslint ." in package.json',
+      jsonContext,
+    );
+
+    expect(insertPlan.status).toBe("EXECUTABLE");
+    expect(insertPlan.operations[0]).toMatchObject({
+      kind: "insert_after",
+      path: "src/sample.ts",
+      anchor: "export const oldName = 1;",
+      content: " // patched",
+    });
+    expect(jsonPlan.status).toBe("EXECUTABLE");
+    expect(jsonPlan.operations[0]).toMatchObject({
+      kind: "json_set",
+      path: "package.json",
+      keyPath: ["scripts", "lint"],
+      value: "eslint .",
+    });
+  });
+
   it("returns AI_REQUIRED instead of guessing for semantic coding instructions", () => {
     const plan = planLocalCodingExecution(
       "Perbaiki kandidat QRIS yang tidak muncul dan pastikan logika matching benar",
