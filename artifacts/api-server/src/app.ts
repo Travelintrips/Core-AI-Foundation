@@ -146,6 +146,17 @@ app.use("/api", globalLimiter);
 // short-circuiting the DB lookup because req.internalUser is already set.
 app.use("/api", adminAuthWithExceptions, router);
 
+// Keep the retired public sitemap URL on aicore readable for Search Console.
+// The public Creative Studio now lives on aifront; aicore is the authenticated
+// internal AI Platform. Host-based redirect avoids serving stale public URLs
+// from the internal frontend while preserving the previously submitted sitemap.
+app.get("/sitemap.xml", (req, res, next) => {
+  if (req.hostname.toLowerCase() === "aicore.cstlogistic.co.id") {
+    return res.redirect(301, "https://aifront.cstlogistic.co.id/sitemap.xml");
+  }
+  return next();
+});
+
 // Serve the production AI Platform UI from the same Hostinger Node deployment.
 if (process.env["NODE_ENV"] === "production") {
   const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "public");
