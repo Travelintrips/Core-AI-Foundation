@@ -1,0 +1,162 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runSandboxedRepositoryVerification } from "../localCodingSandboxService.js";
+
+const roots: string[] = [];
+const image = "ghcr.io/travelintrips/ai-coding-sandbox@sha256:" + "a".repeat(64);
+
+async function workspace(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "coding-sandbox-test-"));
+  roots.push(root);
+  return root;
+}
+
+describe("Local Coding Sandbox", () => {
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  it("fails closed when sandbox execution is disabled", async () => {
+    const root = await workspace();
+    let invoked = false;
+    const result = await runSandboxedRepositoryVerification(root, ["pnpm test"], {
+      enabled: false,
+      image,
+      executor: async () => {
+        invoked = true;
+        return {};
+      },
+    });
+
+    expect(result.status).toBe("BLOCKED");
+    expect(result.scriptsExecuted).toBe(false);
+    expect(invoked).toBe(false);
+  });
+
+  it("requires an immutable digest-pinned sandbox image", async () => {
+    const root = await workspace();
+    const result = await runSandboxedRepositoryVerification(root, ["pnpm test"], {
+      enabled: true,
+      image: "node:22",
+      executor: async () => ({ stdout: "unexpected" }),
+    });
+
+    expect(result.status).toBe("BLOCKED");
+    expect(result.image).toBeNull();
+    expect(result.warnings.join(" ")).toMatch(/sha256/i);
+  });
+
+  it("blocks arbitrary commands before starting the runtime", async () => {
+    const root = await workspace();
+    let invoked = false;
+    const result = await runSandboxedRepositoryVerification(
+      root,
+      ["pnpm exec bash -lc whoami"],
+      {
+        enabled: true,
+        image,
+        executor: async () => {
+          invoked = true;
+          return {};
+        },
+      },
+    );
+
+    expect(result.status).toBe("BLOCKED");
+    expect(result.commands[0]?.status).toBe("BLOCKED");
+    expect(invoked).toBe(false);
+  });
+
+  it("runs offline dependency bootstrap and allowlisted scripts with hardened Docker arguments", async () => {
+    const root = await workspace();
+    const calls: Array<{ file: string; args: string[]; env: NodeJS.ProcessEnv }> = [];
+    const result = await runSandboxedRepositoryVerification(
+      root,
+      ["pnpm test", "pnpm --filter @workspace/api-server typecheck"],
+      {
+        enabled: true,
+        image,
+        executor: async (file, args, options) => {
+          calls.push({ file, args, env: options.env });
+          return { stdout: "ok", stderr: "" };
+        },
+      },
+    );
+
+    expect(result.status).toBe("PASSED");
+    expect(result.scriptsExecuted).toBe(true);
+    expect(calls).toHaveLength(3);
+    expect(calls.every((call) => call.file === "docker")).toBe(true);
+    for (const call of calls) {
+      expect(call.args).toEqual(expect.arrayContaining([
+        "--network", "none",
+        "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges",
+        "--read-only",
+        "--workdir", "/workspace",
+        image,
+      ]));
+      expect(call.env).not.toHaveProperty("AI_CODING_GITHUB_TOKEN");
+      expect(call.env).not.toHaveProperty("DATABASE_URL");
+      expect(call.env).not.toHaveProperty("OPENAI_API_KEY");
+    }
+    expect(calls[0]?.args.slice(-5)).toEqual([
+      "pnpm", "install", "--offline", "--frozen-lockfile", "--ignore-scripts",
+    ]);
+    expect(calls[1]?.args.slice(-2)).toEqual(["pnpm", "test"]);
+    expect(calls[2]?.args.slice(-4)).toEqual([
+      "pnpm", "--filter", "@workspace/api-server", "typecheck",
+    ]);
+  });
+
+  it("stops before repository scripts when offline bootstrap fails", async () => {
+    const root = await workspace();
+    let calls = 0;
+    const result = await runSandboxedRepositoryVerification(root, ["pnpm test"], {
+      enabled: true,
+      image,
+      executor: async () => {
+        calls += 1;
+        throw Object.assign(new Error("offline store miss"), {
+          code: 1,
+          stderr: "ERR_PNPM_NO_OFFLINE_META",
+        });
+      },
+    });
+
+    expect(result.status).toBe("FAILED");
+    expect(result.dependencyBootstrap?.status).toBe("FAILED");
+    expect(result.commands).toEqual([]);
+    expect(result.scriptsExecuted).toBe(false);
+    expect(calls).toBe(1);
+  });
+
+  it("reports timeout and stops the verification sequence", async () => {
+    const root = await workspace();
+    let calls = 0;
+    const result = await runSandboxedRepositoryVerification(
+      root,
+      ["pnpm test", "pnpm typecheck"],
+      {
+        enabled: true,
+        image,
+        bootstrapDependencies: false,
+        executor: async () => {
+          calls += 1;
+          throw Object.assign(new Error("timed out"), {
+            code: "ETIMEDOUT",
+            killed: true,
+            signal: "SIGTERM",
+          });
+        },
+      },
+    );
+
+    expect(result.status).toBe("FAILED");
+    expect(result.commands[0]?.status).toBe("TIMEOUT");
+    expect(result.commands).toHaveLength(1);
+    expect(calls).toBe(1);
+  });
+});
