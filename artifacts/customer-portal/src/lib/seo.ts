@@ -5,7 +5,7 @@
  * Never imports auth, API keys, or business logic.
  */
 
-export const SITE_URL = "https://aicore.cstlogistic.co.id";
+export const SITE_URL = "https://aifront.cstlogistic.co.id";
 export const SITE_NAME = "Creative Studio";
 export const SITE_TAGLINE = "Platform AI Creative Enterprise";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/opengraph.jpg`;
