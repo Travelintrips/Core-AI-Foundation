@@ -336,7 +336,7 @@ interface ParsedDirective {
 
 function parseDeterministicDirectives(instruction: string): ParsedDirective[] {
   const directives: ParsedDirective[] = [];
-  const pathPattern = "([A-Za-z0-9_@./\\-]+\\.[A-Za-z0-9]+)";
+  const pathPattern = "((?:[A-Za-z0-9_@./\\-]+\\.[A-Za-z0-9]+)|(?:\\.[A-Za-z0-9_.-]+))";
 
   const replacePattern = new RegExp(
     `(?:replace|ganti)\\s+((?:\"(?:\\\\.|[^\"])*\")|(?:'(?:\\\\.|[^'])*'))\\s+(?:with|menjadi|ke)\\s+((?:\"(?:\\\\.|[^\"])*\")|(?:'(?:\\\\.|[^'])*'))\\s+(?:in|di)\\s+${pathPattern}`,
