@@ -802,6 +802,7 @@ describe("AI coding workspace constrained AI execution endpoints", () => {
     expect(mockAssertApprovedAiHandoffFresh).toHaveBeenCalledWith(taskId);
     expect(mockEnqueueCodingAiExecution).toHaveBeenCalledWith(taskId, {
       requestedBy: "coding-workspace",
+      expectedPackageHash: "a".repeat(64),
     });
   });
 

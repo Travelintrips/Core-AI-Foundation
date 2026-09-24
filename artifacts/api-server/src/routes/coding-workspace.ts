@@ -374,9 +374,10 @@ router.post("/ai/coding/tasks/:id/run-ai-execution", async (req, res): Promise<v
   }
 
   try {
-    await assertApprovedAiHandoffFresh(params.data.id);
+    const lease = await assertApprovedAiHandoffFresh(params.data.id);
     const job = await enqueueCodingAiExecution(params.data.id, {
       requestedBy: "coding-workspace",
+      expectedPackageHash: lease.packageHash,
     });
     res.status(202).json({
       taskId: params.data.id,
