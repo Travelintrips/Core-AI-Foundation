@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, readFile, realpath, relative, resolve, sep } from "node:fs/promises";
+import { lstat, readFile, realpath, rm } from "node:fs/promises";
+import { relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { and, desc, eq } from "drizzle-orm";
 import {
@@ -688,9 +689,7 @@ async function executePrepareHandoff(
     ).catch(() => undefined);
   } finally {
     if (workspacePath) {
-      await workspacePath && import("node:fs/promises").then(({ rm }) =>
-        rm(workspacePath!, { recursive: true, force: true }).catch(() => undefined)
-      );
+      await rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
     }
   }
 }
@@ -833,7 +832,6 @@ export async function approveAiHandoff(
       );
     }
   } finally {
-    const { rm } = await import("node:fs/promises");
     await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
   }
 
