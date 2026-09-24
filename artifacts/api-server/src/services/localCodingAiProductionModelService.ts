@@ -1,5 +1,6 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
+import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -15,6 +16,7 @@ export const DEFAULT_CODING_PROVIDER_ALLOWLIST = Object.freeze([
   "google-gemini",
   "gemini",
   "mistral",
+  "zerollm",
 ]);
 
 export interface ProductionCodingModelConfig {
@@ -27,8 +29,15 @@ export interface ProductionCodingModelConfig {
 }
 
 export interface ProductionCodingModelSelection {
-  model: ModelWithProvider["model"];
-  provider: ModelWithProvider["provider"];
+  model: {
+    modelId: string;
+    maxOutputTokens?: number | null;
+    capabilities?: unknown;
+  };
+  provider: {
+    slug: string;
+    baseUrl?: string | null;
+  };
   timeoutMs: number;
   maxOutputTokens: number;
   selectionReason:
@@ -45,7 +54,8 @@ export type ProductionCodingModelUnavailableReason =
   | "MODEL_NOT_ALLOWED"
   | "EXPLICIT_PROVIDER_NOT_AVAILABLE"
   | "EXPLICIT_MODEL_NOT_AVAILABLE"
-  | "NO_CODING_CAPABLE_MODEL";
+  | "NO_CODING_CAPABLE_MODEL"
+  | "LOCAL_PROVIDER_UNAVAILABLE";
 
 export interface ProductionCodingModelResolution {
   ok: true;
@@ -175,6 +185,77 @@ function failure(
 export async function resolveProductionCodingModel(
   config = readProductionCodingModelConfig(),
 ): Promise<ProductionCodingModelResolution | ProductionCodingModelFailure> {
+  if (config.provider === "zerollm") {
+    if (!config.providerAllowlist.map(normalizeSlug).includes("zerollm")) {
+      return failure(
+        "PROVIDER_NOT_ALLOWED",
+        "ZeroLLM is not present in AI_CODING_PROVIDER_ALLOWLIST.",
+      );
+    }
+
+    let local;
+    try {
+      local = readZeroLlmLocalConfig();
+    } catch (error) {
+      return failure(
+        "LOCAL_PROVIDER_UNAVAILABLE",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
+    if (!local.enabled) {
+      return failure(
+        "LOCAL_PROVIDER_UNAVAILABLE",
+        "ZeroLLM local provider is not enabled.",
+      );
+    }
+    if (config.model && config.model !== local.model) {
+      return failure(
+        "EXPLICIT_MODEL_NOT_AVAILABLE",
+        "AI_CODING_MODEL does not match the configured local ZeroLLM model.",
+      );
+    }
+    if (
+      config.modelAllowlist.length > 0 &&
+      !config.modelAllowlist.includes(local.model)
+    ) {
+      return failure(
+        "MODEL_NOT_ALLOWED",
+        "Configured ZeroLLM model is not present in AI_CODING_MODEL_ALLOWLIST.",
+      );
+    }
+
+    const health = await checkZeroLlmHealth(local);
+    if (health.status !== "ok") {
+      return failure(
+        "LOCAL_PROVIDER_UNAVAILABLE",
+        "ZeroLLM local provider health check failed" +
+          (health.detail ? ": " + health.detail : "."),
+      );
+    }
+
+    return {
+      ok: true,
+      selection: {
+        model: {
+          modelId: local.model,
+          maxOutputTokens: config.maxOutputTokens,
+          capabilities: ["code", "reasoning", "text", "local"],
+        },
+        provider: {
+          slug: "zerollm",
+          baseUrl: local.baseUrl,
+        },
+        timeoutMs: config.timeoutMs,
+        maxOutputTokens: config.maxOutputTokens,
+        selectionReason:
+          config.model
+            ? "EXPLICIT_PROVIDER_AND_MODEL"
+            : "EXPLICIT_PROVIDER",
+      },
+    };
+  }
+
   const allModels = await getAllActiveModels();
   if (allModels.length === 0) {
     return failure("NO_ACTIVE_MODELS", "No active AI models are registered.");

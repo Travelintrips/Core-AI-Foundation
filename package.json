@@ -5,7 +5,7 @@
   "scripts": {
     "preinstall": "node ./scripts/hostinger-pnpm-bootstrap.cjs",
     "build": "node ./scripts/hostinger-build.cjs",
-    "start": "node --enable-source-maps ./artifacts/api-server/dist/index.mjs",
+    "start": "node ./scripts/hostinger-start.cjs",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "build:generated": "pnpm --filter @workspace/api-spec run codegen",
@@ -26,7 +26,9 @@
     "ci:build": "pnpm run build:workspace",
     "ci:test": "pnpm -r --if-present run test",
     "ci:codegen": "pnpm run build:generated",
-    "security:scan-secrets": "pnpm --filter @workspace/scripts run security:scan-secrets"
+    "security:scan-secrets": "pnpm --filter @workspace/scripts run security:scan-secrets",
+    "zerollm:bootstrap": "node ./scripts/zerollm-bootstrap.cjs",
+    "zerollm:verify": "node --check ./scripts/zerollm-bootstrap.cjs && node --check ./scripts/hostinger-start.cjs"
   },
   "private": true,
   "packageManager": "pnpm@10.26.1",

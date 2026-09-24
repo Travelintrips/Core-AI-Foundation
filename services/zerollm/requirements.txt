@@ -1,0 +1,2 @@
+# Pinned because ZeroLLM is still alpha and its API may change.
+zerollm-kit==0.1.8

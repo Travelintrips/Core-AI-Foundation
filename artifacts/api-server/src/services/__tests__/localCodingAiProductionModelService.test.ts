@@ -3,6 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   models: [] as any[],
   keys: new Map<string, string>(),
+  zeroConfig: {
+    enabled: true,
+    required: true,
+    baseUrl: "http://127.0.0.1:8765/v1",
+    model: "Qwen/Qwen3.5-4B",
+  },
+  zeroHealth: {
+    status: "ok" as "ok" | "disabled" | "fail",
+    latencyMs: 4,
+    model: "Qwen/Qwen3.5-4B",
+  },
 }));
 
 vi.mock("../aiModelService.js", () => ({
@@ -11,6 +22,11 @@ vi.mock("../aiModelService.js", () => ({
 
 vi.mock("../aiSecretService.js", () => ({
   getProviderApiKey: vi.fn((slug: string) => mocks.keys.get(slug) ?? null),
+}));
+
+vi.mock("../zeroLlmLocalService.js", () => ({
+  readZeroLlmLocalConfig: vi.fn(() => ({ ...mocks.zeroConfig })),
+  checkZeroLlmHealth: vi.fn(async () => ({ ...mocks.zeroHealth })),
 }));
 
 import {
@@ -49,6 +65,13 @@ describe("Production constrained coding model resolution", () => {
   beforeEach(() => {
     mocks.models.length = 0;
     mocks.keys.clear();
+    mocks.zeroConfig.enabled = true;
+    mocks.zeroConfig.required = true;
+    mocks.zeroConfig.baseUrl = "http://127.0.0.1:8765/v1";
+    mocks.zeroConfig.model = "Qwen/Qwen3.5-4B";
+    mocks.zeroHealth.status = "ok";
+    mocks.zeroHealth.latencyMs = 4;
+    mocks.zeroHealth.model = "Qwen/Qwen3.5-4B";
   });
 
   it("reads bounded backend-only configuration without exposing secrets", () => {
@@ -82,6 +105,50 @@ describe("Production constrained coding model resolution", () => {
     ]);
     expect(config.timeoutMs).toBe(45_000);
     expect(config.maxOutputTokens).toBe(4_096);
+  });
+
+  it("selects explicit ZeroLLM without requiring a provider API key or DB model row", async () => {
+    const result = await resolveProductionCodingModel({
+      provider: "zerollm",
+      model: "Qwen/Qwen3.5-4B",
+      providerAllowlist: ["zerollm"],
+      modelAllowlist: ["Qwen/Qwen3.5-4B"],
+      timeoutMs: 20_000,
+      maxOutputTokens: 2_048,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      selection: {
+        provider: {
+          slug: "zerollm",
+          baseUrl: "http://127.0.0.1:8765/v1",
+        },
+        model: {
+          modelId: "Qwen/Qwen3.5-4B",
+        },
+        timeoutMs: 20_000,
+        maxOutputTokens: 2_048,
+        selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
+      },
+    });
+  });
+
+  it("fails closed when explicit ZeroLLM health is unavailable", async () => {
+    mocks.zeroHealth.status = "fail";
+
+    await expect(
+      resolveProductionCodingModel({
+        provider: "zerollm",
+        providerAllowlist: ["zerollm"],
+        modelAllowlist: [],
+        timeoutMs: 20_000,
+        maxOutputTokens: 2_048,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "LOCAL_PROVIDER_UNAVAILABLE",
+    });
   });
 
   it("selects an explicitly configured provider and model only when key and capability are present", async () => {

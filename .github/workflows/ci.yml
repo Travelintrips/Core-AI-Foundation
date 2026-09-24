@@ -28,6 +28,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify ZeroLLM deployment scripts
+        run: |
+          pnpm run zerollm:verify
+          python3 -m py_compile services/zerollm/server.py
       - name: Typecheck
         run: pnpm run typecheck
       - name: Test
@@ -39,6 +43,7 @@ jobs:
           PORT: 4173
           BASE_PATH: /
           HOSTINGER_FRONTEND: customer-portal
+          ZEROLLM_INSTALL_ENABLED: "false"
         run: pnpm run build
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
