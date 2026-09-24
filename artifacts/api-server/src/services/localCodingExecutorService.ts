@@ -5,11 +5,14 @@ import { promisify } from "node:util";
 import * as ts from "typescript";
 import {
   isSensitiveRepositoryPath,
-  runAllowlistedVerificationCommand,
   type LocalCodingContextPackage,
   type VerificationCommandResult,
   type VerificationExecutor,
 } from "./localCodingEngineService.js";
+import {
+  runLocalVerificationLoop,
+  type LocalVerificationAttempt,
+} from "./localCodingVerificationService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -77,6 +80,9 @@ export interface LocalCodingExecutionResult {
   changedFiles: string[];
   patch: string;
   verification: VerificationCommandResult[];
+  verificationAttempts?: LocalVerificationAttempt[];
+  autoFixes?: string[];
+  scriptsExecuted?: boolean;
   rolledBack: boolean;
   warnings: string[];
 }
@@ -87,6 +93,8 @@ interface ExecutionOptions {
   runVerification?: boolean;
   verificationTimeoutMs?: number;
   verificationExecutor?: VerificationExecutor;
+  trustedVerificationScripts?: boolean;
+  maxVerificationAttempts?: number;
   requireCleanWorktree?: boolean;
 }
 
@@ -625,6 +633,20 @@ export async function executeLocalCodingPlan(
         await writeFile(resolve(absoluteRoot, file), nextContents.get(file)!, "utf8");
       }
 
+      const verificationLoop = await runLocalVerificationLoop(
+        absoluteRoot,
+        actuallyChanged,
+        {
+          commands: options.runVerification === false
+            ? []
+            : plan.verificationCommands.slice(0, 6),
+          trustedScripts: options.trustedVerificationScripts === true,
+          timeoutMs: options.verificationTimeoutMs,
+          executor: options.verificationExecutor,
+          maxAttempts: options.maxVerificationAttempts,
+        },
+      );
+
       const rawPatch = await git(
         absoluteRoot,
         ["diff", "--no-ext-diff", "--unified=2", "--", ...actuallyChanged],
@@ -636,44 +658,49 @@ export async function executeLocalCodingPlan(
           : rawPatch,
       );
 
-      const verification: VerificationCommandResult[] = [];
-      if (options.runVerification !== false) {
-        for (const command of plan.verificationCommands.slice(0, 6)) {
-          const result = await runAllowlistedVerificationCommand(absoluteRoot, command, {
-            trustedWorkspace: true,
-            timeoutMs: options.verificationTimeoutMs,
-            executor: options.verificationExecutor,
-          });
-          verification.push(result);
-          if (result.status !== "PASSED") {
-            await rollback();
-            return {
-              status: "VERIFICATION_FAILED",
-              reason: `Verification command did not pass: ${command}`,
-              changedFiles: actuallyChanged,
-              patch,
-              verification,
-              rolledBack: true,
-              warnings: plan.warnings,
-            };
-          }
-        }
+      if (verificationLoop.status !== "PASSED") {
+        await rollback();
+        const lastAttempt = verificationLoop.attempts.at(-1);
+        const firstStaticIssue = lastAttempt?.staticIssues[0];
+        const firstCommandFailure = lastAttempt?.commands.find((item) => item.status !== "PASSED");
+        return {
+          status: "VERIFICATION_FAILED",
+          reason:
+            firstStaticIssue
+              ? `Static verification failed for ${firstStaticIssue.file}: ${firstStaticIssue.detail}`
+              : firstCommandFailure
+                ? `Verification command did not pass: ${firstCommandFailure.command}`
+                : "Local verification did not pass.",
+          changedFiles: actuallyChanged,
+          patch,
+          verification: verificationLoop.commandResults,
+          verificationAttempts: verificationLoop.attempts,
+          autoFixes: verificationLoop.autoFixes,
+          scriptsExecuted: verificationLoop.scriptsExecuted,
+          rolledBack: true,
+          warnings: [...plan.warnings, ...verificationLoop.warnings],
+        };
       }
+
+      const projectScriptsRequested =
+        options.runVerification !== false && plan.verificationCommands.length > 0;
+      const scriptSummary = verificationLoop.scriptsExecuted
+        ? "allowlisted project verification passed"
+        : projectScriptsRequested
+          ? "static verification passed; project scripts stayed fail-closed because execution was not explicitly trusted"
+          : "static verification passed";
 
       return {
         status: "APPLIED",
-        reason:
-          options.runVerification === false
-            ? "Deterministic local patch was produced; verification was intentionally not executed."
-            : "Deterministic local patch was produced and allowlisted verification passed.",
+        reason: `Deterministic local patch was produced and ${scriptSummary}.`,
         changedFiles: actuallyChanged,
         patch,
-        verification,
+        verification: verificationLoop.commandResults,
+        verificationAttempts: verificationLoop.attempts,
+        autoFixes: verificationLoop.autoFixes,
+        scriptsExecuted: verificationLoop.scriptsExecuted,
         rolledBack: false,
-        warnings:
-          options.runVerification === false
-            ? [...plan.warnings, "Verification was skipped; repository scripts were not executed."]
-            : plan.warnings,
+        warnings: [...plan.warnings, ...verificationLoop.warnings],
       };
     } catch (error) {
       await rollback().catch(() => undefined);
