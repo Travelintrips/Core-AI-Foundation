@@ -34,6 +34,7 @@ export class LocalCodingSandboxGateError extends Error {
       | "INVALID_PATCH"
       | "VERIFICATION_FAILED"
       | "SANDBOX_BLOCKED",
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "LocalCodingSandboxGateError";
@@ -302,6 +303,7 @@ async function markSandboxGateFailed(
       patchSha256: context.patchSha256,
       baseHeadSha: context.baseHeadSha,
       verifiedAt: new Date().toISOString(),
+      ...(error.details ?? {}),
     },
     orchestration: {
       ...currentOrchestration,
@@ -412,6 +414,11 @@ async function executeSandboxGate(
           (staticIssues[0]?.detail ?? "")
         ).trim(),
         "VERIFICATION_FAILED",
+        {
+          failureContexts: sandbox.failureContexts,
+          deterministicRetries: sandbox.deterministicRetries,
+          commands: compactCommands(sandbox.commands),
+        },
       );
     }
 
@@ -454,6 +461,8 @@ async function executeSandboxGate(
         baseHeadSha: context.baseHeadSha,
         verificationCommands: context.verificationCommands,
         commands: compactCommands(sandbox.commands),
+        deterministicRetries: sandbox.deterministicRetries,
+        failureContexts: [],
         dependencyBootstrap: sandbox.dependencyBootstrap
           ? {
               command: sandbox.dependencyBootstrap.command,
@@ -487,6 +496,8 @@ async function executeSandboxGate(
             image: sandbox.image,
             network: sandbox.network,
             commands: compactCommands(sandbox.commands),
+            deterministicRetries: sandbox.deterministicRetries,
+            failureContexts: [],
             dependencyBootstrap: sandbox.dependencyBootstrap
               ? {
                   status: sandbox.dependencyBootstrap.status,
