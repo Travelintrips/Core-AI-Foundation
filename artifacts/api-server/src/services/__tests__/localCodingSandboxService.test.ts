@@ -18,6 +18,24 @@ describe("Local Coding Sandbox", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
+  it("passes without starting Docker when no repository scripts are discovered", async () => {
+    const root = await workspace();
+    let invoked = false;
+    const result = await runSandboxedRepositoryVerification(root, [], {
+      enabled: true,
+      image,
+      executor: async () => {
+        invoked = true;
+        return {};
+      },
+    });
+
+    expect(result.status).toBe("PASSED");
+    expect(result.scriptsExecuted).toBe(false);
+    expect(result.warnings.join(" ")).toMatch(/no repository verification scripts/i);
+    expect(invoked).toBe(false);
+  });
+
   it("fails closed when sandbox execution is disabled", async () => {
     const root = await workspace();
     let invoked = false;
