@@ -1854,12 +1854,13 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
         const body = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(body?.error ?? `HTTP ${response.status}`);
       }
-      await response.json();
+      const queued = await response.json() as { jobId?: number; jobCode?: string; status?: string };
       void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
       void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
       toast({
-        title: "Constrained AI started",
-        description: "The approved lease is revalidated before one bounded model call. Tools, shell, repository, network, filesystem, secrets, and Git actions remain disabled.",
+        title: "Constrained AI queued",
+        description:
+          `Execution job ${queued.jobCode ?? queued.jobId ?? "queued"} is waiting for the dedicated coding worker. The worker will revalidate the approved lease before one bounded model call; tools, shell, repository, network, filesystem, secrets, and Git actions remain disabled.`,
       });
     } catch (error) {
       toast({
