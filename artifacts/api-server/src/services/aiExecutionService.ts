@@ -23,6 +23,8 @@ export interface ExecutionInput {
   imageUrl?: string | null;
   /** Optional: when present, every call is fire-and-forget logged to ai_execution_logs. */
   observability?: ObservabilityContext;
+  /** Optional bounded cancellation signal for constrained one-shot calls. */
+  signal?: AbortSignal;
 }
 
 export interface ExecutionOutput {
@@ -83,6 +85,7 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: input.signal,
   });
 
   const latencyMs = Date.now() - startTime;
@@ -131,6 +134,7 @@ async function executeAnthropic(input: ExecutionInput, apiKey: string): Promise<
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: input.signal,
   });
 
   const latencyMs = Date.now() - startTime;
@@ -181,6 +185,7 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal: input.signal,
   });
 
   const latencyMs = Date.now() - startTime;
@@ -229,6 +234,7 @@ async function executeMistral(input: ExecutionInput, apiKey: string): Promise<Ex
       max_tokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
       ...(input.temperature != null ? { temperature: input.temperature } : {}),
     }),
+    signal: input.signal,
   });
 
   const latencyMs = Date.now() - startTime;
@@ -266,6 +272,7 @@ async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<
         Prefer: "wait=60",
       },
       body: JSON.stringify({ input: { prompt: input.prompt } }),
+      signal: input.signal,
     },
   );
 
@@ -290,6 +297,7 @@ async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<
       await new Promise<void>((r) => setTimeout(r, 1000));
       const pollRes = await fetch(pollUrl, {
         headers: { Authorization: `Token ${apiKey}` },
+        signal: input.signal,
       });
       result = (await pollRes.json()) as typeof result;
       attempts++;
@@ -365,7 +373,10 @@ async function executeWithQuotaFallback(
  * Throws on failure — callers handle fallback logic.
  * When input.observability is set, fires-and-forgets a log to ai_execution_logs.
  */
-export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput> {
+async function executeAIInternal(
+  input: ExecutionInput,
+  allowQuotaFallback: boolean,
+): Promise<ExecutionOutput> {
   const apiKey = getProviderApiKey(input.provider.slug);
 
   if (!apiKey) {
@@ -383,7 +394,9 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
   try {
     switch (slug) {
       case "openai":
-        result = await executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey));
+        result = allowQuotaFallback
+          ? await executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey))
+          : await executeOpenAI(input, apiKey);
         break;
       case "anthropic":
         result = await executeAnthropic(input, apiKey);
@@ -391,13 +404,17 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
       case "google":
       case "google-gemini":
       case "gemini":
-        result = await executeWithQuotaFallback(input, () => executeGemini(input, apiKey));
+        result = allowQuotaFallback
+          ? await executeWithQuotaFallback(input, () => executeGemini(input, apiKey))
+          : await executeGemini(input, apiKey);
         break;
       case "replicate":
         result = await executeReplicate(input, apiKey);
         break;
       case "mistral":
-        result = await executeWithQuotaFallback(input, () => executeMistral(input, apiKey));
+        result = allowQuotaFallback
+          ? await executeWithQuotaFallback(input, () => executeMistral(input, apiKey))
+          : await executeMistral(input, apiKey);
         break;
       default:
         throw new Error(
@@ -439,4 +456,22 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
   }
 
   return result;
+}
+
+
+/**
+ * One-shot provider execution for constrained coding. No provider fallback and no retry.
+ */
+export async function executeAINoFallback(
+  input: ExecutionInput,
+): Promise<ExecutionOutput> {
+  return executeAIInternal(input, false);
+}
+
+/**
+ * Legacy execution path. Existing quota fallback behavior is preserved for callers
+ * outside the constrained coding execution gate.
+ */
+export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput> {
+  return executeAIInternal(input, true);
 }

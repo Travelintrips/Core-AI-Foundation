@@ -46,6 +46,14 @@ import {
   revokeAiHandoff,
   startAiHandoffPreparation,
 } from "../services/localCodingAiHandoffService.js";
+import {
+  LocalCodingAiExecutionGateError,
+  startAiExecution,
+} from "../services/localCodingAiExecutionGateService.js";
+import {
+  approveAndValidateAiPatch,
+  LocalAiPatchApprovalError,
+} from "../services/localCodingAiPatchApprovalService.js";
 
 const router = Router();
 
@@ -345,6 +353,73 @@ router.post("/ai/coding/tasks/:id/approve-ai-handoff", async (req, res): Promise
     res.status(201).json(StartCodingRunResponse.parse(run));
   } catch (error) {
     if (error instanceof LocalAiHandoffError) {
+      if (error.kind === "NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "NOT_READY" || error.kind === "STALE_HEAD") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      res.status(422).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/run-ai-execution", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await startAiExecution(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof LocalCodingAiExecutionGateError) {
+      if (error.kind === "NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (
+        error.kind === "NOT_READY" ||
+        error.kind === "EXPIRED" ||
+        error.kind === "REVOKED" ||
+        error.kind === "STALE_HEAD"
+      ) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "MODEL_UNAVAILABLE") {
+        res.status(503).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "MODEL_FAILED") {
+        res.status(502).json({ error: error.message });
+        return;
+      }
+      res.status(422).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/approve-ai-patch", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await approveAndValidateAiPatch(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof LocalAiPatchApprovalError) {
       if (error.kind === "NOT_FOUND") {
         res.status(404).json({ error: error.message });
         return;
