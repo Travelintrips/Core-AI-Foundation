@@ -12,6 +12,10 @@ import {
   db,
   type AiJob,
 } from "@workspace/db";
+import {
+  buildLocalCodingContextPackage,
+  type LocalCodingContextPackage,
+} from "./localCodingEngineService.js";
 
 const execFileAsync = promisify(execFile);
 const CODING_ANALYZER_JOB_TYPE = "coding_repository_analyzer";
@@ -80,6 +84,7 @@ export interface RepositoryAnalyzerResult {
     title: string;
     description: string;
   };
+  contextPackage: LocalCodingContextPackage;
 }
 
 interface AnalyzerInput {
@@ -165,7 +170,7 @@ async function prepareRepositoryWorkspace(
       [
         "clone",
         "--depth",
-        "1",
+        "50",
         "--no-tags",
         "--single-branch",
         "--branch",
@@ -238,69 +243,76 @@ async function readInspectableFiles(
 async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyzerResult> {
   const workspace = await prepareRepositoryWorkspace(input.repository, input.branch);
   try {
-    const filesInspected = await collectFiles(workspace.path);
-    const contents = await readInspectableFiles(workspace.path, filesInspected);
-    const relevantFiles = filesInspected.filter((file) => {
-      const name = basename(file).toLowerCase();
-      return RELEVANT_FILE_NAMES.has(name) || file.split("/").length <= 2;
+    const contextPackage = await buildLocalCodingContextPackage({
+      root: workspace.path,
+      repository: input.repository,
+      requestedBranch: input.branch,
+      task: `${input.title}\n${input.description}`,
     });
-    const findings: RepositoryAnalyzerResult["findings"] = [];
-    const recommendedChanges: string[] = [];
 
-    if (filesInspected.length === 0) {
+    const relevantFiles = contextPackage.relevantFiles.map((item) => item.path);
+    const filesInspected = [...new Set([
+      ...relevantFiles,
+      ...contextPackage.affectedFiles,
+      ...contextPackage.relatedTests,
+    ])].slice(0, 200);
+    const findings: RepositoryAnalyzerResult["findings"] = [
+      {
+        severity: "info",
+        title: "Local repository index complete",
+        detail:
+          `Indexed ${contextPackage.index.filesIndexed} files and parsed ${contextPackage.index.sourceFilesParsed} ` +
+          `TypeScript/JavaScript source files locally using ${contextPackage.index.searchBackend}.`,
+      },
+      {
+        severity: "info",
+        title: "Relevant context selected",
+        detail:
+          `Selected ${relevantFiles.length} ranked relevant files, ${contextPackage.affectedFiles.length} bounded ` +
+          `affected files, and ${contextPackage.symbols.length} symbols without loading the whole repository into AI context.`,
+        ...(relevantFiles[0] ? { file: relevantFiles[0] } : {}),
+      },
+      {
+        severity: "info",
+        title: "Git context captured",
+        detail:
+          `Branch ${contextPackage.branch}, HEAD ${contextPackage.headSha.slice(0, 12)}, ` +
+          `${contextPackage.changedFiles.length} changed files, and ${contextPackage.recentCommits.length} recent relevant commits.`,
+      },
+      {
+        severity: "info",
+        title: "Tests and verification discovered",
+        detail:
+          `${contextPackage.relatedTests.length} related tests, ${contextPackage.testFrameworks.length} test framework(s), ` +
+          `and ${contextPackage.verificationCommands.length} allowlisted verification command(s) are available.`,
+      },
+    ];
+
+    if (relevantFiles.length === 0) {
       findings.push({
         severity: "warning",
-        title: "No inspectable source files found",
-        detail: "The repository did not contain supported text source or configuration files.",
+        title: "No task-relevant source file ranked",
+        detail: "Local indexing completed, but the task keywords did not produce a confident relevant-file match.",
       });
-      recommendedChanges.push("Confirm the repository target and branch contain the expected source tree.");
+    }
+    for (const warning of contextPackage.warnings.slice(0, 8)) {
+      findings.push({ severity: "warning", title: "Local engine warning", detail: warning });
     }
 
-    const packageJson = contents.get("package.json");
-    if (packageJson) {
-      try {
-        const parsed = JSON.parse(packageJson) as { scripts?: Record<string, unknown>; dependencies?: object };
-        const scripts = parsed.scripts ?? {};
-        if (!("test" in scripts) && !("check" in scripts && "lint" in scripts)) {
-          findings.push({
-            severity: "warning",
-            title: "No obvious automated verification script",
-            detail: "package.json does not expose a test, check, or lint script.",
-            file: "package.json",
-          });
-          recommendedChanges.push("Add a repeatable test or validation command to the project scripts.");
-        }
-      } catch {
-        findings.push({
-          severity: "warning",
-          title: "Invalid package manifest",
-          detail: "package.json could not be parsed as JSON.",
-          file: "package.json",
-        });
-      }
-    }
-
-    if (!filesInspected.some((file) => /^readme(?:\.[^/]+)?$/i.test(basename(file)))) {
-      findings.push({
-        severity: "info",
-        title: "Repository documentation is not obvious",
-        detail: "No README file was found in the inspected source tree.",
-      });
-      recommendedChanges.push("Document the requested change and local verification steps in a README.");
-    }
-
-    const sourceCount = filesInspected.filter((file) =>
-      [".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rs", ".vue"].includes(extname(file).toLowerCase()),
-    ).length;
-    findings.push({
-      severity: "info",
-      title: "Repository inventory complete",
-      detail: `Inspected ${filesInspected.length} supported files, including ${sourceCount} source files.`,
-    });
+    const recommendedChanges = [
+      "Review the ranked relevant files and bounded dependency neighborhood before requesting AI reasoning.",
+      ...(contextPackage.verificationCommands.length > 0
+        ? [`Use only discovered allowlisted verification commands: ${contextPackage.verificationCommands.join(", ")}`]
+        : ["No safe verification script was discovered; add or identify deterministic verification before code changes."]),
+      ...(contextPackage.relatedTests.length === 0
+        ? ["Add or identify tests covering the affected files before code changes."]
+        : []),
+    ];
 
     const summary =
-      `Repository Analyzer inspected ${filesInspected.length} files on branch ` +
-      `${input.branch} and identified ${findings.length} findings.`;
+      `Local Coding Engine indexed ${contextPackage.index.filesIndexed} files, selected ${relevantFiles.length} relevant ` +
+      `files and ${contextPackage.affectedFiles.length} affected files on ${contextPackage.branch} at ` +
+      `${contextPackage.headSha.slice(0, 12)}. No AI/LLM was used.`;
 
     return {
       codingTaskId: input.codingTaskId,
@@ -308,7 +320,7 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       executionStatus: "COMPLETED",
       summary,
       sourceTarget: input.repository,
-      branch: input.branch,
+      branch: contextPackage.branch,
       filesInspected,
       relevantFiles,
       findings,
@@ -317,6 +329,7 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
         title: input.title,
         description: input.description,
       },
+      contextPackage,
     };
   } finally {
     if (workspace.cleanup) {
