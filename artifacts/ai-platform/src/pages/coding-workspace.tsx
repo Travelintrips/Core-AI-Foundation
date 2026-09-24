@@ -114,6 +114,16 @@ type RepositoryAnalyzerUiResult = {
     autoFixes: string[];
     scriptsExecuted?: boolean;
   };
+  localPatchApproval?: {
+    status?: string;
+    reason?: string;
+    changedFiles: string[];
+    scriptsExecuted?: boolean;
+    warnings: string[];
+    approvedAt?: string;
+    commitCreated?: boolean;
+    pushed?: boolean;
+  };
   contextPackage?: {
     branch?: string;
     headSha?: string;
@@ -379,6 +389,10 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.localExecution && typeof value.localExecution === "object" && !Array.isArray(value.localExecution)
         ? (value.localExecution as Record<string, unknown>)
         : null;
+    const localPatchApprovalValue =
+      value.localPatchApproval && typeof value.localPatchApproval === "object" && !Array.isArray(value.localPatchApproval)
+        ? (value.localPatchApproval as Record<string, unknown>)
+        : null;
     const contextIndexValue =
       contextPackageValue?.index && typeof contextPackageValue.index === "object" && !Array.isArray(contextPackageValue.index)
         ? (contextPackageValue.index as Record<string, unknown>)
@@ -462,6 +476,18 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
               : [],
             autoFixes: stringList(localExecutionValue.autoFixes),
             scriptsExecuted: localExecutionValue.scriptsExecuted === true,
+          }
+        : undefined,
+      localPatchApproval: localPatchApprovalValue
+        ? {
+            status: typeof localPatchApprovalValue.status === "string" ? localPatchApprovalValue.status : undefined,
+            reason: typeof localPatchApprovalValue.reason === "string" ? localPatchApprovalValue.reason : undefined,
+            changedFiles: stringList(localPatchApprovalValue.changedFiles),
+            scriptsExecuted: localPatchApprovalValue.scriptsExecuted === true,
+            warnings: stringList(localPatchApprovalValue.warnings),
+            approvedAt: typeof localPatchApprovalValue.approvedAt === "string" ? localPatchApprovalValue.approvedAt : undefined,
+            commitCreated: localPatchApprovalValue.commitCreated === true,
+            pushed: localPatchApprovalValue.pushed === true,
           }
         : undefined,
       contextPackage: contextPackageValue
@@ -691,7 +717,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     (run) => run.agentName === "Review Agent" && Boolean(run.logs),
   );
   const reviewResult = parseReviewAgentResult(latestReviewAgentRun?.logs);
-  const displayedResultSummary = analyzerResult?.summary ?? task.resultSummary;
+  const displayedResultSummary = analyzerResult?.localPatchApproval
+    ? task.resultSummary
+    : analyzerResult?.summary ?? task.resultSummary;
   const canApprovePlan =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
@@ -991,6 +1019,19 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                       <pre className="max-h-80 overflow-auto whitespace-pre rounded-md border border-white/[0.06] bg-[#07101d] p-3 font-mono text-[10px] leading-4 text-slate-300" data-testid="text-local-coding-patch">
                         {analyzerResult.localExecution.patch}
                       </pre>
+                    </div>
+                  )}
+                  {analyzerResult.localPatchApproval?.status === "APPLIED" && (
+                    <div className="rounded-md border border-cyan-300/15 bg-cyan-300/[0.035] p-3" data-testid="panel-local-patch-approved">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-300">Local Patch Approved & Revalidated</div>
+                        <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
+                          Next: APPROVE_COMMIT
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[10px] leading-4 text-slate-400">
+                        Remote HEAD matched the analyzed SHA and deterministic static verification passed. Repository scripts remained fail-closed. No commit or push was created.
+                      </p>
                     </div>
                   )}
                   {analyzerResult.localExecutionPlan.status === "AI_REQUIRED" && (
