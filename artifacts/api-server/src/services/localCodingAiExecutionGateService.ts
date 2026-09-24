@@ -1081,10 +1081,17 @@ async function executeReserved(
   }
 }
 
-export async function startAiExecution(taskId: string): Promise<AiCodingRun> {
+interface PreparedAiExecution {
+  run: AiCodingRun;
+  execution: Promise<void> | null;
+}
+
+async function prepareAiExecution(taskId: string): Promise<PreparedAiExecution> {
   const snapshot = await loadSnapshot(taskId);
   const existing = existingExecutionFromSnapshot(snapshot);
-  if (existing) return existing;
+  if (existing) {
+    return { run: existing, execution: null };
+  }
 
   let lease: ApprovedAiHandoffLease;
   try {
@@ -1095,7 +1102,9 @@ export async function startAiExecution(taskId: string): Promise<AiCodingRun> {
   }
 
   const reserved = await reserveExecution(taskId, lease);
-  if (!reserved.created) return reserved.run;
+  if (!reserved.created) {
+    return { run: reserved.run, execution: null };
+  }
 
   await logAudit(
     "coding-orchestrator",
@@ -1111,6 +1120,48 @@ export async function startAiExecution(taskId: string): Promise<AiCodingRun> {
     },
   );
 
-  void executeReserved(reserved, lease);
-  return reserved.run;
+  return {
+    run: reserved.run,
+    execution: executeReserved(reserved, lease),
+  };
+}
+
+export async function startAiExecution(taskId: string): Promise<AiCodingRun> {
+  const prepared = await prepareAiExecution(taskId);
+  if (prepared.execution) {
+    void prepared.execution;
+  }
+  return prepared.run;
+}
+
+export async function runAiExecutionToCompletion(
+  taskId: string,
+): Promise<AiCodingRun> {
+  const prepared = await prepareAiExecution(taskId);
+
+  if (!prepared.execution) {
+    if (prepared.run.status === "COMPLETED" || prepared.run.status === "FAILED") {
+      return prepared.run;
+    }
+    throw new LocalCodingAiExecutionGateError(
+      "Constrained AI execution is already running in another execution context",
+      "NOT_READY",
+    );
+  }
+
+  await prepared.execution;
+
+  const [finalRun] = await db
+    .select()
+    .from(aiCodingRunsTable)
+    .where(eq(aiCodingRunsTable.id, prepared.run.id));
+
+  if (!finalRun) {
+    throw new LocalCodingAiExecutionGateError(
+      "Constrained AI execution run disappeared before completion",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  return finalRun;
 }
