@@ -580,7 +580,8 @@ export async function continueCodingVerification(context: VerificationContext): 
       "REVIEWING",
     );
 
-    reviewRun = await createRun(context.task.id, "Review Agent");
+    const createdReviewRun = await createRun(context.task.id, "Review Agent");
+    reviewRun = createdReviewRun;
     const review = await executeReviewAgent(context, report);
     const completedAt = new Date();
 
@@ -610,7 +611,7 @@ export async function continueCodingVerification(context: VerificationContext): 
           }),
           errorMessage: null,
         })
-        .where(eq(aiCodingRunsTable.id, reviewRun.id));
+        .where(eq(aiCodingRunsTable.id, createdReviewRun.id));
 
       await tx
         .update(aiCodingTasksTable)
