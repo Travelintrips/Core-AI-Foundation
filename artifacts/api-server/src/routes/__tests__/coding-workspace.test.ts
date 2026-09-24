@@ -14,6 +14,8 @@ const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
 const mockStartSandboxVerification = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
+const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
+const mockApproveAndMergePullRequest = vi.hoisted(() => vi.fn());
 const MockLocalPatchApprovalError = vi.hoisted(() => class extends Error {
   constructor(
     message: string,
@@ -32,6 +34,22 @@ const MockLocalCodingSandboxGateError = vi.hoisted(() => class extends Error {
       | "INVALID_PATCH"
       | "VERIFICATION_FAILED"
       | "SANDBOX_BLOCKED",
+  ) {
+    super(message);
+  }
+});
+const MockLocalPullRequestGateError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind:
+      | "NOT_FOUND"
+      | "NOT_READY"
+      | "GITHUB_AUTH"
+      | "INVALID_CONTEXT"
+      | "CHECKS_PENDING"
+      | "CHECKS_FAILED"
+      | "STALE_PR"
+      | "MERGE_FAILED",
   ) {
     super(message);
   }
@@ -123,6 +141,12 @@ vi.mock("../../services/localCodingCommitApprovalService.js", () => ({
 vi.mock("../../services/localCodingSandboxGateService.js", () => ({
   startSandboxVerification: mockStartSandboxVerification,
   LocalCodingSandboxGateError: MockLocalCodingSandboxGateError,
+}));
+
+vi.mock("../../services/localCodingPullRequestGateService.js", () => ({
+  startPullRequestVerification: mockStartPullRequestVerification,
+  approveAndMergePullRequest: mockApproveAndMergePullRequest,
+  LocalPullRequestGateError: MockLocalPullRequestGateError,
 }));
 
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
@@ -520,5 +544,84 @@ describe("AI coding workspace commit approval endpoint", () => {
     const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-commit`);
 
     expect(response.status).toBe(422);
+  });
+});
+
+
+describe("AI coding workspace pull request verification endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStartPullRequestVerification.mockResolvedValue({
+      ...run,
+      agentName: "Pull Request Verification",
+      status: "RUNNING",
+    });
+  });
+
+  it("starts explicit PR verification", async () => {
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/verify-pull-request`);
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Pull Request Verification",
+      status: "RUNNING",
+    });
+    expect(mockStartPullRequestVerification).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when the task is not at REVIEW_PR", async () => {
+    mockStartPullRequestVerification.mockRejectedValueOnce(
+      new MockLocalPullRequestGateError("Coding task is not at the REVIEW_PR gate", "NOT_READY"),
+    );
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/verify-pull-request`);
+    expect(response.status).toBe(409);
+  });
+
+  it("returns 503 when GitHub verification auth is unavailable", async () => {
+    mockStartPullRequestVerification.mockRejectedValueOnce(
+      new MockLocalPullRequestGateError("AI_CODING_GITHUB_TOKEN is not configured", "GITHUB_AUTH"),
+    );
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/verify-pull-request`);
+    expect(response.status).toBe(503);
+  });
+});
+
+describe("AI coding workspace explicit merge endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApproveAndMergePullRequest.mockResolvedValue({
+      ...run,
+      agentName: "Pull Request Merge Gate",
+      status: "RUNNING",
+    });
+  });
+
+  it("starts merge only after explicit approval", async () => {
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-merge`);
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Pull Request Merge Gate",
+      status: "RUNNING",
+    });
+    expect(mockApproveAndMergePullRequest).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when PR verification is stale or missing", async () => {
+    mockApproveAndMergePullRequest.mockRejectedValueOnce(
+      new MockLocalPullRequestGateError("Pull request has not passed the explicit verification gate", "NOT_READY"),
+    );
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-merge`);
+    expect(response.status).toBe(409);
+  });
+
+  it("returns 502 when GitHub merge mutation fails", async () => {
+    mockApproveAndMergePullRequest.mockRejectedValueOnce(
+      new MockLocalPullRequestGateError("GitHub merge failed", "MERGE_FAILED"),
+    );
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-merge`);
+    expect(response.status).toBe(502);
   });
 });

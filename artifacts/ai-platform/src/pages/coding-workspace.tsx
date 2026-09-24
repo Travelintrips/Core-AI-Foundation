@@ -150,6 +150,32 @@ type RepositoryAnalyzerUiResult = {
     autoMerged?: boolean;
     publishedAt?: string;
   };
+  prVerification?: {
+    status?: string;
+    gateStatus?: string;
+    reason?: string;
+    pullRequestNumber?: number;
+    pullRequestUrl?: string;
+    baseSha?: string;
+    headSha?: string;
+    checks: Array<{ name?: string; status?: string; conclusion?: string | null }>;
+    combinedStatus?: string | null;
+    mergeable?: boolean | null;
+    mergeableState?: string | null;
+    draft?: boolean;
+    verifiedAt?: string;
+  };
+  localMergeApproval?: {
+    status?: string;
+    pullRequestNumber?: number;
+    pullRequestUrl?: string;
+    sourceCommitSha?: string;
+    baseHeadSha?: string;
+    mergeCommitSha?: string;
+    explicitApproval?: boolean;
+    autoMerged?: boolean;
+    mergedAt?: string;
+  };
   contextPackage?: {
     branch?: string;
     headSha?: string;
@@ -427,6 +453,14 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
       value.localCommitApproval && typeof value.localCommitApproval === "object" && !Array.isArray(value.localCommitApproval)
         ? (value.localCommitApproval as Record<string, unknown>)
         : null;
+    const prVerificationValue =
+      value.prVerification && typeof value.prVerification === "object" && !Array.isArray(value.prVerification)
+        ? (value.prVerification as Record<string, unknown>)
+        : null;
+    const localMergeApprovalValue =
+      value.localMergeApproval && typeof value.localMergeApproval === "object" && !Array.isArray(value.localMergeApproval)
+        ? (value.localMergeApproval as Record<string, unknown>)
+        : null;
     const contextIndexValue =
       contextPackageValue?.index && typeof contextPackageValue.index === "object" && !Array.isArray(contextPackageValue.index)
         ? (contextPackageValue.index as Record<string, unknown>)
@@ -561,6 +595,50 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             pushed: localCommitApprovalValue.pushed === true,
             autoMerged: localCommitApprovalValue.autoMerged === true,
             publishedAt: typeof localCommitApprovalValue.publishedAt === "string" ? localCommitApprovalValue.publishedAt : undefined,
+          }
+        : undefined,
+      prVerification: prVerificationValue
+        ? {
+            status: typeof prVerificationValue.status === "string" ? prVerificationValue.status : undefined,
+            gateStatus: typeof prVerificationValue.gateStatus === "string" ? prVerificationValue.gateStatus : undefined,
+            reason: typeof prVerificationValue.reason === "string" ? prVerificationValue.reason : undefined,
+            pullRequestNumber: typeof prVerificationValue.pullRequestNumber === "number" ? prVerificationValue.pullRequestNumber : undefined,
+            pullRequestUrl: typeof prVerificationValue.pullRequestUrl === "string" ? prVerificationValue.pullRequestUrl : undefined,
+            baseSha: typeof prVerificationValue.baseSha === "string" ? prVerificationValue.baseSha : undefined,
+            headSha: typeof prVerificationValue.headSha === "string" ? prVerificationValue.headSha : undefined,
+            checks: Array.isArray(prVerificationValue.checks)
+              ? prVerificationValue.checks
+                  .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                  .map((item) => ({
+                    name: typeof item.name === "string" ? item.name : undefined,
+                    status: typeof item.status === "string" ? item.status : undefined,
+                    conclusion: typeof item.conclusion === "string" || item.conclusion === null ? item.conclusion as string | null : undefined,
+                  }))
+              : [],
+            combinedStatus: typeof prVerificationValue.combinedStatus === "string" || prVerificationValue.combinedStatus === null
+              ? prVerificationValue.combinedStatus as string | null
+              : undefined,
+            mergeable: typeof prVerificationValue.mergeable === "boolean" || prVerificationValue.mergeable === null
+              ? prVerificationValue.mergeable as boolean | null
+              : undefined,
+            mergeableState: typeof prVerificationValue.mergeableState === "string" || prVerificationValue.mergeableState === null
+              ? prVerificationValue.mergeableState as string | null
+              : undefined,
+            draft: prVerificationValue.draft === true,
+            verifiedAt: typeof prVerificationValue.verifiedAt === "string" ? prVerificationValue.verifiedAt : undefined,
+          }
+        : undefined,
+      localMergeApproval: localMergeApprovalValue
+        ? {
+            status: typeof localMergeApprovalValue.status === "string" ? localMergeApprovalValue.status : undefined,
+            pullRequestNumber: typeof localMergeApprovalValue.pullRequestNumber === "number" ? localMergeApprovalValue.pullRequestNumber : undefined,
+            pullRequestUrl: typeof localMergeApprovalValue.pullRequestUrl === "string" ? localMergeApprovalValue.pullRequestUrl : undefined,
+            sourceCommitSha: typeof localMergeApprovalValue.sourceCommitSha === "string" ? localMergeApprovalValue.sourceCommitSha : undefined,
+            baseHeadSha: typeof localMergeApprovalValue.baseHeadSha === "string" ? localMergeApprovalValue.baseHeadSha : undefined,
+            mergeCommitSha: typeof localMergeApprovalValue.mergeCommitSha === "string" ? localMergeApprovalValue.mergeCommitSha : undefined,
+            explicitApproval: localMergeApprovalValue.explicitApproval === true,
+            autoMerged: localMergeApprovalValue.autoMerged === true,
+            mergedAt: typeof localMergeApprovalValue.mergedAt === "string" ? localMergeApprovalValue.mergedAt : undefined,
           }
         : undefined,
       contextPackage: contextPackageValue
@@ -760,6 +838,8 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [localPatchPending, setLocalPatchPending] = useState(false);
   const [sandboxPending, setSandboxPending] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
+  const [prVerifyPending, setPrVerifyPending] = useState(false);
+  const [mergePending, setMergePending] = useState(false);
 
   useEffect(() => {
     if (detail?.task) {
@@ -821,6 +901,17 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     analyzerResult.sandboxVerification.status === "PASSED" &&
     analyzerResult.localPatchApproval.commitCreated !== true &&
     analyzerResult.localPatchApproval.pushed !== true &&
+    !hasActiveRun;
+  const canVerifyPullRequest =
+    task.status === CodingTaskStatus.PR_CREATED &&
+    analyzerResult?.orchestration?.nextAction === "REVIEW_PR" &&
+    analyzerResult?.localCommitApproval?.status === "PUBLISHED" &&
+    !hasActiveRun;
+  const canApproveMerge =
+    task.status === CodingTaskStatus.PR_CREATED &&
+    analyzerResult?.orchestration?.nextAction === "APPROVE_MERGE" &&
+    analyzerResult?.prVerification?.status === "PASSED" &&
+    analyzerResult.prVerification.gateStatus === "PR_VERIFIED" &&
     !hasActiveRun;
   const runAgent = () => {
     startCodingRun.mutate(
@@ -958,6 +1049,66 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       });
     } finally {
       setCommitPending(false);
+    }
+  };
+
+  const verifyPullRequest = async () => {
+    setPrVerifyPending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/verify-pull-request`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "PR verification started",
+        description: "Checking PR head, base, changed files, mergeability, and GitHub CI before merge approval is unlocked.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not verify pull request",
+        description: error instanceof Error ? error.message : "PR verification failed",
+        variant: "destructive",
+      });
+    } finally {
+      setPrVerifyPending(false);
+    }
+  };
+
+  const approveMerge = async () => {
+    setMergePending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-merge`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "Explicit merge gate started",
+        description: "The PR will be re-verified against the approved commit and CI immediately before GitHub merge.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not start merge",
+        description: error instanceof Error ? error.message : "Merge approval failed",
+        variant: "destructive",
+      });
+    } finally {
+      setMergePending(false);
     }
   };
 
@@ -1178,11 +1329,15 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-300">Local Patch Approved & Revalidated</div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
-                            Next: {analyzerResult.localCommitApproval?.status === "PUBLISHED"
-                              ? "REVIEW_PR"
-                              : analyzerResult.sandboxVerification?.status === "PASSED"
-                                ? "APPROVE_COMMIT"
-                                : "RUN_SANDBOX_VERIFICATION"}
+                            Next: {analyzerResult.localMergeApproval?.status === "MERGED"
+                              ? "DONE"
+                              : analyzerResult.localCommitApproval?.status === "PUBLISHED"
+                                ? analyzerResult.prVerification?.status === "PASSED"
+                                  ? "APPROVE_MERGE"
+                                  : "REVIEW_PR"
+                                : analyzerResult.sandboxVerification?.status === "PASSED"
+                                  ? "APPROVE_COMMIT"
+                                  : "RUN_SANDBOX_VERIFICATION"}
                           </span>
                           {canRunSandboxVerification && (
                             <Button
@@ -1289,6 +1444,76 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                               <div className="mt-1 font-mono text-[10px] text-slate-500">PR_CREATED</div>
                             )}
                           </div>
+                          <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+                            {canVerifyPullRequest && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={verifyPullRequest}
+                                disabled={prVerifyPending}
+                                className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
+                                data-testid="button-verify-pull-request"
+                              >
+                                {prVerifyPending
+                                  ? <><Loader2 className="size-3 animate-spin" />Checking PR</>
+                                  : <><CheckCircle2 className="size-3" />Verify PR & CI</>}
+                              </Button>
+                            )}
+                            {canApproveMerge && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={approveMerge}
+                                disabled={mergePending}
+                                className="h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
+                                data-testid="button-approve-pull-request-merge"
+                              >
+                                {mergePending
+                                  ? <><Loader2 className="size-3 animate-spin" />Merging</>
+                                  : <><GitCommitHorizontal className="size-3" />Approve Merge</>}
+                              </Button>
+                            )}
+                          </div>
+                          {analyzerResult.prVerification && (
+                            <div className="sm:col-span-2 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-pr-verification">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-[9px] uppercase tracking-wider text-slate-600">PR integrity + CI</div>
+                                <span className={cn(
+                                  "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                                  analyzerResult.prVerification.status === "PASSED"
+                                    ? "bg-emerald-300/10 text-emerald-300"
+                                    : analyzerResult.prVerification.status === "PENDING"
+                                      ? "bg-amber-300/10 text-amber-300"
+                                      : "bg-rose-300/10 text-rose-300",
+                                )}>
+                                  {analyzerResult.prVerification.status ?? "UNKNOWN"}
+                                </span>
+                              </div>
+                              {analyzerResult.prVerification.reason && (
+                                <p className="mt-1 text-[10px] leading-4 text-slate-400">{analyzerResult.prVerification.reason}</p>
+                              )}
+                              {analyzerResult.prVerification.checks.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {analyzerResult.prVerification.checks.map((check, index) => (
+                                    <div key={`${check.name ?? "check"}-${index}`} className="flex items-center justify-between gap-3 font-mono text-[10px]">
+                                      <span className="truncate text-slate-400">{check.name ?? "GitHub check"}</span>
+                                      <span className={check.conclusion === "success" || check.conclusion === "neutral" || check.conclusion === "skipped" ? "text-emerald-300" : check.status === "completed" ? "text-rose-300" : "text-amber-300"}>
+                                        {check.conclusion ?? check.status ?? "pending"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {analyzerResult.localMergeApproval?.status === "MERGED" && (
+                            <div className="sm:col-span-2 rounded border border-emerald-300/15 bg-emerald-300/[0.04] p-2" data-testid="panel-explicit-merge-complete">
+                              <div className="text-[9px] uppercase tracking-wider text-emerald-300">Merged with explicit approval</div>
+                              <div className="mt-1 font-mono text-[10px] text-slate-300">
+                                Merge commit {analyzerResult.localMergeApproval.mergeCommitSha?.slice(0, 12) ?? "—"} · auto-merge disabled
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

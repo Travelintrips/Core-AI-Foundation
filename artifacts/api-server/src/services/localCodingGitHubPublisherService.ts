@@ -57,7 +57,7 @@ export interface GitHubPublishResult {
 
 export interface GitHubApiClient {
   request<T = Record<string, unknown>>(
-    method: "GET" | "POST" | "PATCH" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     body?: Record<string, unknown>,
   ): Promise<T>;
@@ -201,7 +201,7 @@ export function createGitHubApiClient(
 
   return {
     async request<T>(
-      method: "GET" | "POST" | "PATCH" | "DELETE",
+      method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
       path: string,
       body?: Record<string, unknown>,
     ): Promise<T> {

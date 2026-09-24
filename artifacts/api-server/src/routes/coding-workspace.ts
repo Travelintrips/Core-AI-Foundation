@@ -28,6 +28,11 @@ import {
   LocalCommitApprovalError,
 } from "../services/localCodingCommitApprovalService.js";
 import {
+  approveAndMergePullRequest,
+  LocalPullRequestGateError,
+  startPullRequestVerification,
+} from "../services/localCodingPullRequestGateService.js";
+import {
   LocalCodingSandboxGateError,
   startSandboxVerification,
 } from "../services/localCodingSandboxGateService.js";
@@ -285,6 +290,76 @@ router.post("/ai/coding/tasks/:id/approve-commit", async (req, res): Promise<voi
         return;
       }
       if (error.kind === "PUBLISH_FAILED") {
+        res.status(502).json({ error: error.message });
+        return;
+      }
+      res.status(422).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/verify-pull-request", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await startPullRequestVerification(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof LocalPullRequestGateError) {
+      if (error.kind === "NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "NOT_READY" || error.kind === "CHECKS_PENDING") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "GITHUB_AUTH") {
+        res.status(503).json({ error: error.message });
+        return;
+      }
+      res.status(422).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/approve-merge", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const run = await approveAndMergePullRequest(params.data.id);
+    res.status(201).json(StartCodingRunResponse.parse(run));
+  } catch (error) {
+    if (error instanceof LocalPullRequestGateError) {
+      if (error.kind === "NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (
+        error.kind === "NOT_READY" ||
+        error.kind === "CHECKS_PENDING" ||
+        error.kind === "STALE_PR"
+      ) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "GITHUB_AUTH") {
+        res.status(503).json({ error: error.message });
+        return;
+      }
+      if (error.kind === "MERGE_FAILED") {
         res.status(502).json({ error: error.message });
         return;
       }
