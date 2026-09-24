@@ -379,7 +379,10 @@ function parseFailureContexts(value: unknown): LocalFailureContext[] {
     : [];
 }
 
-async function latestAiRequiredContext(taskId: string): Promise<HandoffContext> {
+async function latestAiRequiredContext(
+  taskId: string,
+  expectedAction: "AI_REQUIRED" | "APPROVE_AI_HANDOFF",
+): Promise<HandoffContext> {
   const [task] = await db
     .select()
     .from(aiCodingTasksTable)
@@ -435,9 +438,9 @@ async function latestAiRequiredContext(taskId: string): Promise<HandoffContext> 
   const localExecution = isRecord(payload.localExecution) ? payload.localExecution : null;
   const sandbox = isRecord(payload.sandboxVerification) ? payload.sandboxVerification : null;
 
-  if (orchestration?.nextAction !== "AI_REQUIRED") {
+  if (orchestration?.nextAction !== expectedAction) {
     throw new LocalAiHandoffError(
-      "Coding task is not at the AI_REQUIRED gate",
+      `Coding task is not at the ${expectedAction} gate`,
       "NOT_READY",
     );
   }
@@ -697,7 +700,7 @@ async function executePrepareHandoff(
 export async function startAiHandoffPreparation(
   taskId: string,
 ): Promise<AiCodingRun> {
-  const context = await latestAiRequiredContext(taskId);
+  const context = await latestAiRequiredContext(taskId, "AI_REQUIRED");
 
   const [run] = await db.transaction(async (tx) => {
     const [lockedTask] = await tx
@@ -764,7 +767,7 @@ export async function startAiHandoffPreparation(
 export async function approveAiHandoff(
   taskId: string,
 ): Promise<AiCodingRun> {
-  const context = await latestAiRequiredContext(taskId);
+  const context = await latestAiRequiredContext(taskId, "APPROVE_AI_HANDOFF");
   const payload = context.orchestratorPayload;
   const orchestration = isRecord(payload.orchestration) ? payload.orchestration : null;
   const aiHandoff = isRecord(payload.aiHandoff) ? payload.aiHandoff : null;
