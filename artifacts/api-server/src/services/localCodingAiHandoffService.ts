@@ -348,7 +348,11 @@ export function buildAiHandoffPackage(input: {
     diagnostics: compactDiagnostics(input.failureContexts),
     snippets: input.snippets
       .filter((item) => allowed.has(item.file))
-      .slice(0, MAX_SNIPPETS),
+      .slice(0, MAX_SNIPPETS)
+      .map((item) => ({
+        ...item,
+        content: redactText(item.content).slice(0, MAX_SNIPPET_CHARS),
+      })),
     symbols,
     dependencies,
     relatedTests,
