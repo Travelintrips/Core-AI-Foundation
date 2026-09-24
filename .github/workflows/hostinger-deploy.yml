@@ -29,6 +29,8 @@ jobs:
     env:
       EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      PUBLIC_SITEMAP_URL: https://aifront.cstlogistic.co.id/sitemap.xml
+      LEGACY_SITEMAP_URL: https://aicore.cstlogistic.co.id/sitemap.xml
 
     steps:
       - name: Wait for exact production commit
@@ -79,9 +81,45 @@ jobs:
           test "$code" = "200"
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/tasks-auth","utf8")); if(!Array.isArray(v)) throw new Error("Expected coding tasks array"); console.log("coding_tasks_authenticated_payload=array");'
 
+      - name: Verify public sitemap for Googlebot
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -D /tmp/sitemap-headers -o /tmp/sitemap-body -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "User-Agent: Googlebot" \
+            "$PUBLIC_SITEMAP_URL")
+          content_type=$(awk -F': ' 'tolower($1)=="content-type" {gsub("\r","",$2); print tolower($2)}' /tmp/sitemap-headers | tail -n1)
+          echo "public_sitemap_http=$code content_type=${content_type:-missing}"
+          test "$code" = "200"
+          case "$content_type" in
+            application/xml*|text/xml*) ;;
+            *)
+              echo "Unexpected sitemap Content-Type: ${content_type:-missing}"
+              cat /tmp/sitemap-headers
+              exit 1
+              ;;
+          esac
+          grep -q '<urlset' /tmp/sitemap-body
+          grep -q '<loc>https://aifront.cstlogistic.co.id/' /tmp/sitemap-body
+          if grep -q 'https://aicore.cstlogistic.co.id/' /tmp/sitemap-body; then
+            echo "Public sitemap still contains retired aicore URLs"
+            exit 1
+          fi
+
+          legacy_code=$(curl -sS -D /tmp/legacy-sitemap-headers -o /dev/null -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "User-Agent: Googlebot" \
+            "$LEGACY_SITEMAP_URL")
+          legacy_location=$(awk -F': ' 'tolower($1)=="location" {gsub("\r","",$2); print $2}' /tmp/legacy-sitemap-headers | tail -n1)
+          echo "legacy_sitemap_http=$legacy_code location=${legacy_location:-missing}"
+          test "$legacy_code" = "301"
+          test "$legacy_location" = "$PUBLIC_SITEMAP_URL"
+
       - name: Verification summary
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
           echo "Health/readiness: PASS"
           echo "Admin auth guard: PASS"
           echo "Authenticated Coding Workspace smoke: PASS"
+          echo "Public sitemap Googlebot fetch: PASS"
