@@ -163,6 +163,7 @@ describe("Local Coding Engine", () => {
       "pnpm build",
     ]));
     expect(first.recentCommits[0]?.subject).toContain("qris reconciliation candidate");
+    expect(first.changedFiles).toContain("src/payment.ts");
     expect(JSON.stringify(first)).not.toContain("QRIS_SECRET");
     expect(JSON.stringify(first)).not.toContain("super-secret-value");
     expect(first.gitDiff).toContain("[REDACTED_SENSITIVE_DIFF_LINE]");
