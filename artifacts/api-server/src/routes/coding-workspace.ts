@@ -19,7 +19,6 @@ import {
 } from "@workspace/api-zod";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { approvePlanAndStartCoding } from "../services/codingAgentService.js";
-import { approveLocalPatch } from "../services/localPatchApprovalService.js";
 import {
   approveAndValidateLocalPatch,
   LocalPatchApprovalError,
@@ -216,35 +215,6 @@ router.post("/ai/coding/tasks/:id/approve-local-patch", async (req, res): Promis
         return;
       }
       res.status(422).json({ error: error.message });
-      return;
-    }
-    throw error;
-  }
-});
-
-router.post("/ai/coding/tasks/:id/approve-local-patch", async (req, res): Promise<void> => {
-  const params = GetCodingTaskParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  try {
-    const run = await approveLocalPatch(params.data.id);
-    res.status(201).json(StartCodingRunResponse.parse(run));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message === "Coding task not found") {
-      res.status(404).json({ error: message });
-      return;
-    }
-    if (
-      message.includes("not awaiting local patch approval") ||
-      message.includes("REVIEW_LOCAL_PATCH") ||
-      message.includes("active run") ||
-      message.includes("payload is incomplete")
-    ) {
-      res.status(409).json({ error: message });
       return;
     }
     throw error;
