@@ -108,9 +108,10 @@ async function initializeRuntimeServices(): Promise<void> {
 
   // Production workers fail closed: they only auto-start when explicitly enabled.
   // Development keeps the existing auto-start behavior for local workflows.
+  const productionWorkersAllowed = process.env["AI_PRODUCTION_WORKERS_ALLOWED"] === "true";
   const dispatcherFlag = process.env["AI_DISPATCHER_ENABLED"];
   const dispatcherEnabled = isProduction
-    ? dispatcherFlag === "true"
+    ? productionWorkersAllowed && dispatcherFlag === "true"
     : true;
 
   if (dispatcherEnabled) {
@@ -130,12 +131,12 @@ async function initializeRuntimeServices(): Promise<void> {
       });
     }
   } else {
-    logger.info("[dispatcher] Auto-start disabled (set AI_DISPATCHER_ENABLED=true to enable in production)");
+    logger.info("[dispatcher] Auto-start disabled (production requires AI_PRODUCTION_WORKERS_ALLOWED=true and AI_DISPATCHER_ENABLED=true)");
   }
 
   const schedulerFlag = process.env["AI_SCHEDULER_ENABLED"];
   const schedulerEnabled = isProduction
-    ? schedulerFlag === "true"
+    ? productionWorkersAllowed && schedulerFlag === "true"
     : true;
 
   const pollIntervalMs = Number(process.env["AI_SCHEDULER_POLL_INTERVAL_MS"]);
@@ -153,7 +154,7 @@ async function initializeRuntimeServices(): Promise<void> {
       logger.error({ err }, "[scheduler] Failed to auto-start");
     }
   } else {
-    logger.info("[scheduler] Auto-start disabled (set AI_SCHEDULER_ENABLED=true to enable in production)");
+    logger.info("[scheduler] Auto-start disabled (production requires AI_PRODUCTION_WORKERS_ALLOWED=true and AI_SCHEDULER_ENABLED=true)");
   }
 
   try {
