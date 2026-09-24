@@ -356,7 +356,8 @@ function nearestSymbolAtLine(
     scriptKind(file),
   );
   const targetLine = Math.max(0, lineNumber - 1);
-  let best: { name: string; span: number } | null = null;
+  let bestName: string | null = null;
+  let bestSpan = Number.POSITIVE_INFINITY;
 
   const visit = (node: ts.Node): void => {
     const name = declarationName(node);
@@ -365,13 +366,16 @@ function nearestSymbolAtLine(
       const end = source.getLineAndCharacterOfPosition(node.getEnd()).line;
       if (targetLine >= start && targetLine <= end) {
         const span = Math.max(0, end - start);
-        if (!best || span < best.span) best = { name, span };
+        if (span < bestSpan) {
+          bestName = name;
+          bestSpan = span;
+        }
       }
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return best?.name ?? null;
+  return bestName;
 }
 
 export async function enrichFailureContextsWithSymbols(
