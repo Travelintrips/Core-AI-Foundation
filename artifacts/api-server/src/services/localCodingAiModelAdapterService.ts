@@ -490,25 +490,28 @@ function validateProviderResult(
 
   let normalizedOutput: ModelTextOutput | ModelStructuredOutput;
   if (requestedFormat.type === "text") {
+    if (output.type !== "text") {
+      throw new ModelInvocationError(
+        "Provider response type does not match text request",
+        "MALFORMED_RESPONSE",
+        { retryable: false },
+      );
+    }
     assertOnlyKeys(output, new Set(["type", "text"]), "Provider text output");
     if (
-      output.type !== "text" ||
       typeof output.text !== "string" ||
       output.text.length > MAX_OUTPUT_CHARS
     ) {
       throw new ModelInvocationError(
         "Provider text output is malformed or oversized",
-        output.type === "text" ? "OUTPUT_LIMIT_EXCEEDED" : "MALFORMED_RESPONSE",
+        typeof output.text === "string"
+          ? "OUTPUT_LIMIT_EXCEEDED"
+          : "MALFORMED_RESPONSE",
         { retryable: false },
       );
     }
     normalizedOutput = { type: "text", text: output.text };
   } else {
-    assertOnlyKeys(
-      output,
-      new Set(["type", "value"]),
-      "Provider structured output",
-    );
     if (output.type !== "structured") {
       throw new ModelInvocationError(
         "Provider response type does not match structured request",
@@ -516,6 +519,11 @@ function validateProviderResult(
         { retryable: false },
       );
     }
+    assertOnlyKeys(
+      output,
+      new Set(["type", "value"]),
+      "Provider structured output",
+    );
     const chars = serializedSize(output.value);
     if (chars < 0) {
       throw new ModelInvocationError(

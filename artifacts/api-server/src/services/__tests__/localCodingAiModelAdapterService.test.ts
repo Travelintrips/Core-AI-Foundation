@@ -268,14 +268,15 @@ describe("ConstrainedModelInvocationAdapter", () => {
         timeoutMs: MODEL_INVOCATION_LIMITS.minTimeoutMs,
       }),
     );
+    const timeoutAssertion = expect(pending).rejects.toMatchObject({
+      code: "TIMEOUT",
+    });
 
     await vi.advanceTimersByTimeAsync(
       MODEL_INVOCATION_LIMITS.minTimeoutMs + 1,
     );
 
-    await expect(pending).rejects.toMatchObject({
-      code: "TIMEOUT",
-    });
+    await timeoutAssertion;
     expect(providerSignal?.aborted).toBe(true);
     expect(provider.calls).toHaveLength(1);
   });
