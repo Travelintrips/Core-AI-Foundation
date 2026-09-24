@@ -1,5 +1,4 @@
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 
@@ -14,7 +13,7 @@ const required =
 
 const runtimeHome =
   process.env.ZEROLLM_HOME ||
-  path.join(os.homedir(), ".cache", "core-ai", "zerollm");
+  path.join(root, ".runtime", "zerollm");
 const venvPython = path.join(
   runtimeHome,
   "venv",

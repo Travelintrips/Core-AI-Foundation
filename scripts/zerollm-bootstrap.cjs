@@ -1,5 +1,4 @@
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
@@ -48,7 +47,7 @@ function findPython() {
 
 const runtimeHome =
   process.env.ZEROLLM_HOME ||
-  path.join(os.homedir(), ".cache", "core-ai", "zerollm");
+  path.join(root, ".runtime", "zerollm");
 const venvDir = path.join(runtimeHome, "venv");
 const marker = path.join(runtimeHome, "requirements.sha256");
 const statusFile = path.join(runtimeHome, "status.json");
