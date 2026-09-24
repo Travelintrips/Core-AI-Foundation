@@ -47,7 +47,7 @@ import {
   revokeAiHandoff,
   startAiHandoffPreparation,
 } from "../services/localCodingAiHandoffService.js";
-import { enqueueCodingAiExecution } from "../services/localCodingAiQueueRuntimeService.js";
+import { enqueueCodingAiExecution, getLatestCodingAiExecutionJob } from "../services/localCodingAiQueueRuntimeService.js";
 import {
   approveAndValidateAiPatch,
   LocalAiPatchApprovalError,
@@ -364,6 +364,17 @@ router.post("/ai/coding/tasks/:id/approve-ai-handoff", async (req, res): Promise
     }
     throw error;
   }
+});
+
+router.get("/ai/coding/tasks/:id/ai-execution-job", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const job = await getLatestCodingAiExecutionJob(params.data.id);
+  res.json({ taskId: params.data.id, job });
 });
 
 router.post("/ai/coding/tasks/:id/run-ai-execution", async (req, res): Promise<void> => {
