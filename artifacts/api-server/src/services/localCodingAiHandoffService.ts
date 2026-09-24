@@ -37,6 +37,9 @@ const MAX_DEPENDENCIES = 80;
 const MAX_TESTS = 24;
 const MAX_COMMITS = 6;
 const MAX_INSTRUCTION_CHARS = 5_000;
+const DEFAULT_HANDOFF_TTL_SECONDS = 900;
+const MIN_HANDOFF_TTL_SECONDS = 60;
+const MAX_HANDOFF_TTL_SECONDS = 3_600;
 
 export class LocalAiHandoffError extends Error {
   constructor(
@@ -46,7 +49,9 @@ export class LocalAiHandoffError extends Error {
       | "NOT_READY"
       | "STALE_HEAD"
       | "INVALID_CONTEXT"
-      | "APPROVAL_FAILED",
+      | "APPROVAL_FAILED"
+      | "EXPIRED"
+      | "REVOKED",
   ) {
     super(message);
     this.name = "LocalAiHandoffError";
@@ -204,6 +209,134 @@ function packageHash(value: AiHandoffPackage): string {
   return createHash("sha256")
     .update(JSON.stringify(value), "utf8")
     .digest("hex");
+}
+
+export function resolveAiHandoffTtlSeconds(
+  value = process.env["AI_CODING_AI_HANDOFF_TTL_SECONDS"],
+): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_HANDOFF_TTL_SECONDS;
+  return Math.min(
+    MAX_HANDOFF_TTL_SECONDS,
+    Math.max(MIN_HANDOFF_TTL_SECONDS, parsed),
+  );
+}
+
+export function computeAiHandoffExpiresAt(
+  approvedAt: Date,
+  ttlSeconds = resolveAiHandoffTtlSeconds(),
+): string {
+  return new Date(approvedAt.getTime() + ttlSeconds * 1_000).toISOString();
+}
+
+export function isAiHandoffLeaseFresh(
+  expiresAt: string,
+  now = new Date(),
+): boolean {
+  const parsed = Date.parse(expiresAt);
+  return Number.isFinite(parsed) && parsed > now.getTime();
+}
+
+function validateApprovedPackageBinding(
+  context: HandoffContext,
+  aiHandoff: Record<string, unknown>,
+): {
+  package: AiHandoffPackage;
+  packageHash: string;
+} {
+  const pkg = aiHandoff.package;
+  if (!isRecord(pkg)) {
+    throw new LocalAiHandoffError(
+      "AI handoff package is missing",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  const typedPackage = pkg as unknown as AiHandoffPackage;
+  const storedHash = typeof aiHandoff.packageHash === "string" ? aiHandoff.packageHash : "";
+  const actualHash = packageHash(typedPackage);
+  if (!/^[0-9a-f]{64}$/.test(storedHash) || storedHash !== actualHash) {
+    throw new LocalAiHandoffError(
+      "AI handoff package hash no longer matches the prepared context",
+      "APPROVAL_FAILED",
+    );
+  }
+
+  const policy = isRecord(pkg.policy) ? pkg.policy : null;
+  const repository = isRecord(pkg.repository) ? pkg.repository : null;
+  const patch = isRecord(pkg.currentPatch) ? pkg.currentPatch : null;
+  const allowedFiles = stringArray(pkg.allowedFiles)
+    .map(normalizeRepoPath)
+    .filter((item): item is string => Boolean(item));
+  const currentAllowedFiles = new Set(
+    context.recoveryContext.focusFiles
+      .map(normalizeRepoPath)
+      .filter((item): item is string => Boolean(item)),
+  );
+
+  if (
+    !policy ||
+    policy.modelInvoked !== false ||
+    policy.sourceWrite !== false ||
+    policy.repositoryAccess !== false ||
+    policy.networkAccess !== false ||
+    policy.shellAccess !== false ||
+    policy.secretAccess !== false ||
+    policy.commitPushMerge !== false ||
+    policy.readOnlyContext !== true ||
+    policy.requiresExplicitApprovalBeforeModel !== true ||
+    policy.allowedFilesOnly !== true
+  ) {
+    throw new LocalAiHandoffError(
+      "AI handoff policy flags are not fail-closed",
+      "APPROVAL_FAILED",
+    );
+  }
+
+  if (
+    !repository ||
+    repository.baseHeadSha !== context.baseHeadSha ||
+    repository.repository !== context.task.repository ||
+    repository.branch !== context.task.branch ||
+    !patch ||
+    patch.sha256 !== context.currentPatchSha256 ||
+    !isRecord(pkg.task) ||
+    pkg.task.id !== context.task.id ||
+    allowedFiles.length > MAX_ALLOWED_FILES ||
+    allowedFiles.some((file) => !currentAllowedFiles.has(file))
+  ) {
+    throw new LocalAiHandoffError(
+      "AI handoff package no longer matches the current bounded coding context",
+      "APPROVAL_FAILED",
+    );
+  }
+
+  return { package: typedPackage, packageHash: storedHash };
+}
+
+async function assertRemoteHeadCurrent(context: HandoffContext): Promise<void> {
+  const workspace = await prepareRepositoryWorkspace(
+    context.task.repository,
+    context.task.branch,
+  );
+  if (!workspace.cleanup) {
+    throw new LocalAiHandoffError(
+      "AI handoff validation only verifies against an isolated remote clone",
+      "APPROVAL_FAILED",
+    );
+  }
+
+  try {
+    const actualHead = (await git(workspace.path, ["rev-parse", "HEAD"])).toLowerCase();
+    if (actualHead !== context.baseHeadSha) {
+      throw new LocalAiHandoffError(
+        `Repository HEAD changed from ${context.baseHeadSha} to ${actualHead}; prepare the AI handoff again`,
+        "STALE_HEAD",
+      );
+    }
+  } finally {
+    await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 async function git(root: string, args: string[]): Promise<string> {
@@ -398,7 +531,7 @@ function parseFailureContexts(value: unknown): LocalFailureContext[] {
 
 async function latestAiRequiredContext(
   taskId: string,
-  expectedAction: "AI_REQUIRED" | "APPROVE_AI_HANDOFF",
+  expectedAction: "AI_REQUIRED" | "APPROVE_AI_HANDOFF" | "AI_HANDOFF_APPROVED",
 ): Promise<HandoffContext> {
   const [task] = await db
     .select()
@@ -827,88 +960,12 @@ export async function approveAiHandoff(
     );
   }
 
-  const typedPackage = pkg as unknown as AiHandoffPackage;
-  const storedHash = typeof aiHandoff.packageHash === "string" ? aiHandoff.packageHash : "";
-  const actualHash = packageHash(typedPackage);
-  if (!/^[0-9a-f]{64}$/.test(storedHash) || storedHash !== actualHash) {
-    throw new LocalAiHandoffError(
-      "AI handoff package hash no longer matches the prepared context",
-      "APPROVAL_FAILED",
-    );
-  }
-
-  const policy = isRecord(pkg.policy) ? pkg.policy : null;
-  const repository = isRecord(pkg.repository) ? pkg.repository : null;
-  const patch = isRecord(pkg.currentPatch) ? pkg.currentPatch : null;
-  const allowedFiles = stringArray(pkg.allowedFiles)
-    .map(normalizeRepoPath)
-    .filter((item): item is string => Boolean(item));
-  const currentAllowedFiles = new Set(
-    context.recoveryContext.focusFiles
-      .map(normalizeRepoPath)
-      .filter((item): item is string => Boolean(item)),
-  );
-
-  if (
-    !policy ||
-    policy.modelInvoked !== false ||
-    policy.sourceWrite !== false ||
-    policy.repositoryAccess !== false ||
-    policy.networkAccess !== false ||
-    policy.shellAccess !== false ||
-    policy.secretAccess !== false ||
-    policy.commitPushMerge !== false ||
-    policy.readOnlyContext !== true ||
-    policy.requiresExplicitApprovalBeforeModel !== true ||
-    policy.allowedFilesOnly !== true
-  ) {
-    throw new LocalAiHandoffError(
-      "AI handoff policy flags are not fail-closed",
-      "APPROVAL_FAILED",
-    );
-  }
-  if (
-    !repository ||
-    repository.baseHeadSha !== context.baseHeadSha ||
-    repository.repository !== context.task.repository ||
-    repository.branch !== context.task.branch ||
-    !patch ||
-    patch.sha256 !== context.currentPatchSha256 ||
-    !isRecord(pkg.task) ||
-    pkg.task.id !== context.task.id ||
-    allowedFiles.length > MAX_ALLOWED_FILES ||
-    allowedFiles.some((file) => !currentAllowedFiles.has(file))
-  ) {
-    throw new LocalAiHandoffError(
-      "AI handoff package no longer matches the current bounded coding context",
-      "APPROVAL_FAILED",
-    );
-  }
-
-  const workspace = await prepareRepositoryWorkspace(
-    context.task.repository,
-    context.task.branch,
-  );
-  if (!workspace.cleanup) {
-    throw new LocalAiHandoffError(
-      "AI handoff approval only verifies against an isolated remote clone",
-      "APPROVAL_FAILED",
-    );
-  }
-
-  try {
-    const actualHead = (await git(workspace.path, ["rev-parse", "HEAD"])).toLowerCase();
-    if (actualHead !== context.baseHeadSha) {
-      throw new LocalAiHandoffError(
-        `Repository HEAD changed from ${context.baseHeadSha} to ${actualHead}; prepare the AI handoff again`,
-        "STALE_HEAD",
-      );
-    }
-  } finally {
-    await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
-  }
+  const { package: typedPackage, packageHash: storedHash } =
+    validateApprovedPackageBinding(context, aiHandoff);
+  await assertRemoteHeadCurrent(context);
 
   const completedAt = new Date();
+  const expiresAt = computeAiHandoffExpiresAt(completedAt);
   const [run] = await db.transaction(async (tx) => {
     const [lockedTask] = await tx
       .select()
@@ -938,6 +995,8 @@ export async function approveAiHandoff(
           executionStatus: "COMPLETED",
           handoffStatus: "APPROVED",
           packageHash: storedHash,
+          approvedAt: completedAt.toISOString(),
+          expiresAt,
           modelInvoked: false,
           nextAction: "AI_HANDOFF_APPROVED",
         }, null, 2),
@@ -951,6 +1010,8 @@ export async function approveAiHandoff(
         status: "APPROVED",
         gateStatus: "EXPLICITLY_APPROVED",
         approvedAt: completedAt.toISOString(),
+        expiresAt,
+        revokedAt: null,
         modelInvoked: false,
       },
       orchestration: {
@@ -989,6 +1050,229 @@ export async function approveAiHandoff(
       allowedFiles: typedPackage.allowedFiles.length,
       modelInvoked: false,
       nextAction: "AI_HANDOFF_APPROVED",
+    },
+  );
+
+  return run;
+}
+
+
+export interface ApprovedAiHandoffLease {
+  package: AiHandoffPackage;
+  packageHash: string;
+  approvedAt: string;
+  expiresAt: string;
+}
+
+export async function assertApprovedAiHandoffFresh(
+  taskId: string,
+): Promise<ApprovedAiHandoffLease> {
+  const context = await latestAiRequiredContext(taskId, "AI_HANDOFF_APPROVED");
+  const aiHandoff = isRecord(context.orchestratorPayload.aiHandoff)
+    ? context.orchestratorPayload.aiHandoff
+    : null;
+
+  if (!aiHandoff) {
+    throw new LocalAiHandoffError(
+      "Approved AI handoff state is missing",
+      "INVALID_CONTEXT",
+    );
+  }
+  if (aiHandoff.status === "REVOKED" || aiHandoff.gateStatus === "REVOKED") {
+    throw new LocalAiHandoffError(
+      "AI handoff approval was revoked",
+      "REVOKED",
+    );
+  }
+  if (
+    aiHandoff.status !== "APPROVED" ||
+    aiHandoff.gateStatus !== "EXPLICITLY_APPROVED" ||
+    aiHandoff.modelInvoked === true
+  ) {
+    throw new LocalAiHandoffError(
+      "AI handoff is not explicitly approved",
+      "NOT_READY",
+    );
+  }
+
+  const approvedAt = typeof aiHandoff.approvedAt === "string" ? aiHandoff.approvedAt : "";
+  const expiresAt = typeof aiHandoff.expiresAt === "string" ? aiHandoff.expiresAt : "";
+  if (!approvedAt || !isAiHandoffLeaseFresh(expiresAt)) {
+    throw new LocalAiHandoffError(
+      "AI handoff approval lease expired; prepare and approve a fresh package",
+      "EXPIRED",
+    );
+  }
+
+  const validated = validateApprovedPackageBinding(context, aiHandoff);
+  await assertRemoteHeadCurrent(context);
+
+  return {
+    package: validated.package,
+    packageHash: validated.packageHash,
+    approvedAt,
+    expiresAt,
+  };
+}
+
+export async function revokeAiHandoff(taskId: string): Promise<AiCodingRun> {
+  const [task] = await db
+    .select()
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, taskId));
+
+  if (!task) {
+    throw new LocalAiHandoffError("Coding task not found", "NOT_FOUND");
+  }
+  if (task.status !== "READY_REVIEW" || task.commitSha) {
+    throw new LocalAiHandoffError(
+      "Coding task is not awaiting AI handoff review",
+      "NOT_READY",
+    );
+  }
+
+  const runs = await db
+    .select()
+    .from(aiCodingRunsTable)
+    .where(eq(aiCodingRunsTable.taskId, taskId))
+    .orderBy(desc(aiCodingRunsTable.startedAt));
+
+  if (runs.some((run) => run.status === "RUNNING")) {
+    throw new LocalAiHandoffError(
+      "Coding task already has an active run",
+      "NOT_READY",
+    );
+  }
+
+  const orchestratorRun = runs.find(
+    (run) =>
+      run.agentName === "Coding Orchestrator" &&
+      run.status === "COMPLETED" &&
+      typeof run.logs === "string" &&
+      run.logs.length > 0,
+  );
+  if (!orchestratorRun?.logs) {
+    throw new LocalAiHandoffError(
+      "Completed Coding Orchestrator payload was not found",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(orchestratorRun.logs) as Record<string, unknown>;
+  } catch {
+    throw new LocalAiHandoffError(
+      "Coding Orchestrator payload is invalid",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  const orchestration = isRecord(payload.orchestration) ? payload.orchestration : null;
+  const aiHandoff = isRecord(payload.aiHandoff) ? payload.aiHandoff : null;
+  if (
+    !orchestration ||
+    !["APPROVE_AI_HANDOFF", "AI_HANDOFF_APPROVED"].includes(
+      typeof orchestration.nextAction === "string" ? orchestration.nextAction : "",
+    ) ||
+    !aiHandoff ||
+    !["PREPARED", "APPROVED"].includes(
+      typeof aiHandoff.status === "string" ? aiHandoff.status : "",
+    ) ||
+    aiHandoff.modelInvoked === true
+  ) {
+    throw new LocalAiHandoffError(
+      "AI handoff is not revocable in its current state",
+      "NOT_READY",
+    );
+  }
+
+  const completedAt = new Date();
+  const [run] = await db.transaction(async (tx) => {
+    const [lockedTask] = await tx
+      .select()
+      .from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, taskId))
+      .for("update");
+    if (!lockedTask) {
+      throw new LocalAiHandoffError("Coding task not found", "NOT_FOUND");
+    }
+
+    const [activeRun] = await tx
+      .select({ id: aiCodingRunsTable.id })
+      .from(aiCodingRunsTable)
+      .where(and(eq(aiCodingRunsTable.taskId, taskId), eq(aiCodingRunsTable.status, "RUNNING")))
+      .limit(1);
+    if (activeRun) {
+      throw new LocalAiHandoffError(
+        "Coding task already has an active run",
+        "NOT_READY",
+      );
+    }
+
+    const [created] = await tx
+      .insert(aiCodingRunsTable)
+      .values({
+        taskId,
+        agentName: "AI Handoff Revocation",
+        status: "COMPLETED",
+        startedAt: completedAt,
+        finishedAt: completedAt,
+        logs: JSON.stringify({
+          executionStatus: "COMPLETED",
+          handoffStatus: "REVOKED",
+          packageHash: aiHandoff.packageHash ?? null,
+          modelInvoked: false,
+          nextAction: "AI_REQUIRED",
+        }, null, 2),
+      })
+      .returning();
+
+    const revokedPayload = {
+      ...payload,
+      aiHandoff: {
+        ...aiHandoff,
+        status: "REVOKED",
+        gateStatus: "REVOKED",
+        revokedAt: completedAt.toISOString(),
+        modelInvoked: false,
+      },
+      orchestration: {
+        ...orchestration,
+        status: "READY_REVIEW",
+        nextAction: "AI_REQUIRED",
+      },
+    };
+
+    await tx
+      .update(aiCodingRunsTable)
+      .set({ logs: JSON.stringify(revokedPayload, null, 2) })
+      .where(eq(aiCodingRunsTable.id, orchestratorRun.id));
+
+    await tx
+      .update(aiCodingTasksTable)
+      .set({
+        status: "READY_REVIEW",
+        resultSummary:
+          "AI handoff approval revoked. No model was invoked; prepare a fresh handoff package before any future AI execution.",
+      })
+      .where(eq(aiCodingTasksTable.id, taskId));
+
+    return [created];
+  });
+
+  await logAudit(
+    "coding-orchestrator",
+    "ai_handoff_revoked",
+    taskId,
+    "coding_task",
+    "success",
+    {
+      codingRunId: run.id,
+      packageHash:
+        typeof aiHandoff.packageHash === "string" ? aiHandoff.packageHash : null,
+      modelInvoked: false,
+      nextAction: "AI_REQUIRED",
     },
   );
 
