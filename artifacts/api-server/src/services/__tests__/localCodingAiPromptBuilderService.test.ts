@@ -92,6 +92,7 @@ describe("Local Coding AI Prompt Builder", () => {
     expect(first).toEqual(second);
     expect(Object.keys(data).sort()).toEqual([
       "allowedFiles",
+      "contractBinding",
       "currentPatchExcerpt",
       "dependencies",
       "diagnostics",
@@ -102,14 +103,18 @@ describe("Local Coding AI Prompt Builder", () => {
       "symbols",
       "verificationCommands",
     ]);
-    expect(first.user).not.toContain("task-secret-id");
+    expect(first.user).toContain("task-secret-id");
+    expect(first.user).toContain(lease.packageHash);
+    expect(first.user).toContain(lease.package.currentPatch.sha256);
     expect(first.user).not.toContain("project-secret-name");
     expect(first.user).not.toContain("internal handoff reason");
     expect(first.user).not.toContain("internal commit context");
-    expect(first.user).not.toContain(lease.packageHash);
     expect(first.user).not.toContain(lease.approvedAt);
     expect(first.user).not.toContain(lease.expiresAt);
     expect(first.user).not.toContain("requiresExplicitApprovalBeforeModel");
+    expect((data.contractBinding as Record<string, unknown>).taskId).toBe(lease.package.task.id);
+    expect((data.contractBinding as Record<string, unknown>).packageHash).toBe(lease.packageHash);
+    expect((data.contractBinding as Record<string, unknown>).allowedFiles).toEqual(lease.package.allowedFiles);
   });
 
   it("installs fail-closed system constraints and proposal-only JSON output", () => {
@@ -123,7 +128,9 @@ describe("Local Coding AI Prompt Builder", () => {
     expect(prompt.system).toMatch(/secrets, credentials, tokens, environment variables/i);
     expect(prompt.system).toMatch(/Do not commit, push, merge/i);
     expect(prompt.system).toMatch(/outside allowedFiles/i);
-    expect(prompt.system).toMatch(/empty changes array/i);
+    expect(prompt.system).toMatch(/Proposal Contract V1/i);
+    expect(prompt.system).toMatch(/capabilities\.shellCommand/i);
+    expect(prompt.system).toMatch(/replace_text, insert_before, insert_after, and delete_text/i);
   });
 
   it("keeps prompt injection in source text as quoted data rather than system instruction", () => {
