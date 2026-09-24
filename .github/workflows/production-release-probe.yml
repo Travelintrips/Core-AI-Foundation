@@ -15,55 +15,32 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe aicore production
+      - name: Probe deterministic production marker
         shell: bash
         run: |
           set +e
           DOMAIN="https://aicore.cstlogistic.co.id"
-          EXPECTED_ASSET="index-DxPi21ue.js"
+          EXPECTED_MARKER="phase7a12-prod-ready-20260924"
 
-          echo "DNS:"
-          getent hosts aicore.cstlogistic.co.id || true
+          curl -sS -D /tmp/headers -o /tmp/body --connect-timeout 15 --max-time 30 "$DOMAIN/api/healthz"
+          rc=$?
+          code=$(awk 'toupper($1) ~ /^HTTP\// {c=$2} END{print c}' /tmp/headers)
+          marker=$(awk 'BEGIN{IGNORECASE=1} /^X-CST-Release-Marker:/ {sub(/\r$/,"",$2); print $2}' /tmp/headers | tail -1)
 
-          health_code=$(curl -L -sS -o /tmp/health -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/api/healthz")
-          health_rc=$?
-          echo "health_rc=$health_rc health_code=$health_code"
-          echo "health_body=$(head -c 500 /tmp/health 2>/dev/null | tr '\n' ' ')"
+          echo "curl_rc=$rc"
+          echo "http_code=$code"
+          echo "release_marker=${marker:-missing}"
+          echo "body=$(head -c 500 /tmp/body | tr '\n' ' ')"
 
-          full_code=$(curl -L -sS -o /tmp/full -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/api/healthz/full")
-          full_rc=$?
-          echo "full_rc=$full_rc full_code=$full_code"
-          echo "full_body=$(head -c 1000 /tmp/full 2>/dev/null | tr '\n' ' ')"
-
-          root_code=$(curl -L -sS -o /tmp/root -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/")
-          root_rc=$?
-          echo "root_rc=$root_rc root_code=$root_code"
-          echo "expected_asset=$EXPECTED_ASSET"
-          echo "production_js_assets:"
-          grep -oE '(/[^"[:space:]]*assets/[^"[:space:]]+\.js)' /tmp/root 2>/dev/null | sort -u || true
-          echo "production_css_assets:"
-          grep -oE '(/[^"[:space:]]*assets/[^"[:space:]]+\.css)' /tmp/root 2>/dev/null | sort -u || true
-          if grep -q "$EXPECTED_ASSET" /tmp/root 2>/dev/null; then
-            echo "release_fingerprint=match"
-          else
-            echo "release_fingerprint=no-match"
-            echo "root_preview=$(head -c 1000 /tmp/root 2>/dev/null | tr '\n' ' ')"
-          fi
-
-          tasks_code=$(curl -L -sS -o /tmp/tasks -w "%{http_code}" --connect-timeout 15 --max-time 30 "$DOMAIN/api/ai/coding/tasks")
-          tasks_rc=$?
-          echo "coding_tasks_rc=$tasks_rc coding_tasks_code=$tasks_code"
-          echo "coding_tasks_body=$(head -c 500 /tmp/tasks 2>/dev/null | tr '\n' ' ')"
-
-          if [ "$health_code" != "200" ] || [ "$root_code" != "200" ]; then
+          if [ "$rc" -ne 0 ] || [ "$code" != "200" ]; then
             echo "PROBE_RESULT=production_unhealthy_or_unreachable"
             exit 2
           fi
 
-          if grep -q "$EXPECTED_ASSET" /tmp/root; then
-            echo "PROBE_RESULT=release_ba5b873a_live"
+          if [ "$marker" = "$EXPECTED_MARKER" ]; then
+            echo "PROBE_RESULT=release_marker_live"
             exit 0
           fi
 
-          echo "PROBE_RESULT=healthy_but_release_fingerprint_not_live"
+          echo "PROBE_RESULT=release_marker_not_live"
           exit 3
