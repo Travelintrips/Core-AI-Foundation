@@ -531,7 +531,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
           void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
           toast({
             title: t("pages.codingWorkspace.runStarted"),
-            description: "Coding Orchestrator: Analyzer → Planner",
+            description: "Local Coding Engine: index → symbols → dependencies → tests → context",
           });
         },
         onError: () => {
