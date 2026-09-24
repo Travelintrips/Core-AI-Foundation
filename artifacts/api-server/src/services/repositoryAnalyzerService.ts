@@ -16,6 +16,12 @@ import {
   buildLocalCodingContextPackage,
   type LocalCodingContextPackage,
 } from "./localCodingEngineService.js";
+import {
+  executeLocalCodingPlan,
+  planLocalCodingExecution,
+  type LocalCodingExecutionPlan,
+  type LocalCodingExecutionResult,
+} from "./localCodingExecutorService.js";
 
 const execFileAsync = promisify(execFile);
 const CODING_ANALYZER_JOB_TYPE = "coding_repository_analyzer";
@@ -85,6 +91,8 @@ export interface RepositoryAnalyzerResult {
     description: string;
   };
   contextPackage: LocalCodingContextPackage;
+  localExecutionPlan: LocalCodingExecutionPlan;
+  localExecution: LocalCodingExecutionResult | null;
 }
 
 interface AnalyzerInput {
@@ -250,6 +258,19 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       task: `${input.title}\n${input.description}`,
     });
 
+    const localExecutionPlan = planLocalCodingExecution(
+      `${input.title}\n${input.description}`,
+      contextPackage,
+    );
+    const localExecution =
+      workspace.cleanup && localExecutionPlan.status === "EXECUTABLE"
+        ? await executeLocalCodingPlan(workspace.path, localExecutionPlan, {
+            trustedWorkspace: true,
+            expectedHeadSha: contextPackage.headSha,
+            runVerification: false,
+          })
+        : null;
+
     const relevantFiles = contextPackage.relevantFiles.map((item) => item.path);
     const filesInspected = [...new Set([
       ...relevantFiles,
@@ -288,6 +309,41 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       },
     ];
 
+    if (localExecutionPlan.status === "EXECUTABLE") {
+      if (localExecution?.status === "APPLIED") {
+        findings.push({
+          severity: "info",
+          title: "Deterministic local patch produced",
+          detail:
+            `Local Coding Executor changed ${localExecution.changedFiles.length} file(s) in the temporary clone. ` +
+            "Repository scripts were not executed and the patch is review-only.",
+          ...(localExecution.changedFiles[0] ? { file: localExecution.changedFiles[0] } : {}),
+        });
+      } else if (!workspace.cleanup) {
+        findings.push({
+          severity: "warning",
+          title: "Local execution requires isolated workspace",
+          detail:
+            "A deterministic edit plan was found, but the analyzer was pointed at a local checkout. " +
+            "Automatic writes are disabled for non-temporary workspaces.",
+        });
+      } else if (localExecution) {
+        findings.push({
+          severity: "warning",
+          title: "Local executor did not produce a patch",
+          detail: localExecution.reason,
+        });
+      }
+    } else {
+      findings.push({
+        severity: "info",
+        title: "Semantic reasoning required",
+        detail:
+          "The Local Coding Executor found no safe deterministic edit recipe and made no file changes. " +
+          "This task may be escalated to AI reasoning using the bounded context package.",
+      });
+    }
+
     if (relevantFiles.length === 0) {
       findings.push({
         severity: "warning",
@@ -300,7 +356,11 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
     }
 
     const recommendedChanges = [
-      "Review the ranked relevant files and bounded dependency neighborhood before requesting AI reasoning.",
+      ...(localExecution?.status === "APPLIED"
+        ? ["Review the deterministic local patch before applying it to the repository branch."]
+        : localExecutionPlan.status === "AI_REQUIRED"
+          ? ["Use AI reasoning only if needed; the deterministic executor refused to guess at semantic code changes."]
+          : ["Review the ranked relevant files and bounded dependency neighborhood before code changes."]),
       ...(contextPackage.verificationCommands.length > 0
         ? [`Use only discovered allowlisted verification commands: ${contextPackage.verificationCommands.join(", ")}`]
         : ["No safe verification script was discovered; add or identify deterministic verification before code changes."]),
@@ -309,10 +369,16 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
         : []),
     ];
 
+    const executionSummary =
+      localExecution?.status === "APPLIED"
+        ? ` Local Coding Executor produced a review-only patch for ${localExecution.changedFiles.length} file(s).`
+        : localExecutionPlan.status === "AI_REQUIRED"
+          ? " Local Coding Executor classified the task as AI_REQUIRED and made no changes."
+          : " Local Coding Executor did not modify the repository.";
     const summary =
       `Local Coding Engine indexed ${contextPackage.index.filesIndexed} files, selected ${relevantFiles.length} relevant ` +
       `files and ${contextPackage.affectedFiles.length} affected files on ${contextPackage.branch} at ` +
-      `${contextPackage.headSha.slice(0, 12)}. No AI/LLM was used.`;
+      `${contextPackage.headSha.slice(0, 12)}.${executionSummary} No AI/LLM was used.`;
 
     return {
       codingTaskId: input.codingTaskId,
@@ -330,6 +396,8 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
         description: input.description,
       },
       contextPackage,
+      localExecutionPlan,
+      localExecution,
     };
   } finally {
     if (workspace.cleanup) {
