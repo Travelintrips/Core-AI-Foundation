@@ -14,6 +14,7 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { isSensitiveRepositoryPath } from "./localCodingEngineService.js";
+import { enrichFailureContextsWithSymbols } from "./localCodingFailureDiagnosticService.js";
 import { runSandboxedRepositoryVerification } from "./localCodingSandboxService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
 import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
@@ -435,13 +436,17 @@ async function executeSandboxGate(
         ?? (sandbox.dependencyBootstrap?.status !== "PASSED"
           ? sandbox.dependencyBootstrap
           : null);
+      const failureContexts = await enrichFailureContextsWithSymbols(
+        workspacePath,
+        sandbox.failureContexts,
+      );
       throw new LocalCodingSandboxGateError(
         failed
           ? `${failed.command} failed with ${failed.status}${failed.exitCode === null ? "" : ` (exit ${failed.exitCode})`}. Output was intentionally withheld from persistent logs.`
           : "Sandbox verification failed.",
         "VERIFICATION_FAILED",
         {
-          failureContexts: sandbox.failureContexts,
+          failureContexts,
           deterministicRetries: sandbox.deterministicRetries,
           commands: compactCommands(sandbox.commands),
         },
