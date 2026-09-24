@@ -1,5 +1,4 @@
 import { readFile, statfs } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765/v1";
 const DEFAULT_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B";
@@ -122,7 +121,7 @@ export interface ZeroLlmInstallStatus {
 }
 
 function zeroLlmRuntimeHome(env: NodeJS.ProcessEnv = process.env): string {
-  return env["ZEROLLM_HOME"] || join(homedir(), ".cache", "core-ai", "zerollm");
+  return env["ZEROLLM_HOME"] || join(process.cwd(), ".runtime", "zerollm");
 }
 
 export async function readZeroLlmInstallStatus(
@@ -186,7 +185,7 @@ export async function getZeroLlmHostCapacity(
 
   let diskAvailableMb: number | null = null;
   try {
-    const stats = await statfs(zeroLlmRuntimeHome(env)).catch(() => statfs(homedir()));
+    const stats = await statfs(zeroLlmRuntimeHome(env)).catch(() => statfs(process.cwd()));
     diskAvailableMb = Math.floor((Number(stats.bavail) * Number(stats.bsize)) / 1024 / 1024);
   } catch {
     diskAvailableMb = null;
