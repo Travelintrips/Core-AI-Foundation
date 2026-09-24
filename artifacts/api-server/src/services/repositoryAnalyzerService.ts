@@ -104,7 +104,7 @@ interface AnalyzerInput {
   description: string;
 }
 
-interface RepositoryWorkspace {
+export interface RepositoryWorkspace {
   path: string;
   cleanup: boolean;
 }
@@ -144,7 +144,7 @@ function normalizeRemoteRepository(repository: string): string {
   return parsed.toString();
 }
 
-async function prepareRepositoryWorkspace(
+export async function prepareRepositoryWorkspace(
   repository: string,
   branch: string,
 ): Promise<RepositoryWorkspace> {

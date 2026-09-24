@@ -11,6 +11,15 @@ const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
 const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
+const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
+const MockLocalPatchApprovalError = vi.hoisted(() => class extends Error {
+  constructor(
+    message: string,
+    readonly kind: "NOT_FOUND" | "NOT_READY" | "STALE_HEAD" | "INVALID_PATCH" | "VERIFICATION_FAILED",
+  ) {
+    super(message);
+  }
+});
 
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
@@ -70,6 +79,11 @@ vi.mock("../../services/codingAgentService.js", () => ({
   approvePlanAndStartCoding: mockApprovePlanAndStartCoding,
 }));
 
+vi.mock("../../services/localCodingPatchApprovalService.js", () => ({
+  approveAndValidateLocalPatch: mockApproveAndValidateLocalPatch,
+  LocalPatchApprovalError: MockLocalPatchApprovalError,
+}));
+
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -117,6 +131,12 @@ describe("AI coding workspace run endpoint", () => {
     mockUpdateWhere.mockResolvedValue([]);
     mockStartCodingOrchestration.mockResolvedValue({ sessionId: `coding-${runId}` });
     mockApprovePlanAndStartCoding.mockResolvedValue({ ...run, agentName: "Coding Agent" });
+    mockApproveAndValidateLocalPatch.mockResolvedValue({
+      ...run,
+      agentName: "Local Patch Gate",
+      status: "COMPLETED",
+      finishedAt: new Date("2026-01-01T00:02:00.000Z"),
+    });
   });
 
   it("creates one Coding Orchestrator run and moves the task to ANALYZING atomically", async () => {
@@ -216,6 +236,85 @@ describe("AI coding workspace plan approval endpoint", () => {
     mockApprovePlanAndStartCoding.mockRejectedValueOnce(new Error("Coding task not found"));
 
     const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-plan`);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "Coding task not found" });
+  });
+});
+
+
+describe("AI coding workspace local patch approval endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApproveAndValidateLocalPatch.mockResolvedValue({
+      ...run,
+      agentName: "Local Patch Gate",
+      status: "COMPLETED",
+      finishedAt: new Date("2026-01-01T00:02:00.000Z"),
+    });
+  });
+
+  it("revalidates a deterministic local patch only through explicit approval", async () => {
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Local Patch Gate",
+      status: "COMPLETED",
+    });
+    expect(mockApproveAndValidateLocalPatch).toHaveBeenCalledWith(taskId);
+  });
+
+  it("returns 409 when the local patch is stale against remote HEAD", async () => {
+    mockApproveAndValidateLocalPatch.mockRejectedValueOnce(
+      new MockLocalPatchApprovalError(
+        "Repository HEAD changed; rerun Local Coding Engine before approval",
+        "STALE_HEAD",
+      ),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/HEAD changed/);
+  });
+
+  it("returns 409 when the task is not at the local patch approval gate", async () => {
+    mockApproveAndValidateLocalPatch.mockRejectedValueOnce(
+      new MockLocalPatchApprovalError(
+        "Coding task is not at the REVIEW_LOCAL_PATCH gate",
+        "NOT_READY",
+      ),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/REVIEW_LOCAL_PATCH/);
+  });
+
+  it("returns 422 for an invalid or unverifiable patch", async () => {
+    mockApproveAndValidateLocalPatch.mockRejectedValueOnce(
+      new MockLocalPatchApprovalError(
+        "Local patch headers do not match the recorded changed-file list",
+        "INVALID_PATCH",
+      ),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
+
+    expect(response.status).toBe(422);
+    expect(response.body.error).toMatch(/headers do not match/);
+  });
+
+  it("returns 404 when the coding task does not exist", async () => {
+    mockApproveAndValidateLocalPatch.mockRejectedValueOnce(
+      new MockLocalPatchApprovalError("Coding task not found", "NOT_FOUND"),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-local-patch`);
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "Coding task not found" });

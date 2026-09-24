@@ -658,6 +658,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
   const [summary, setSummary] = useState("");
   const [commitSha, setCommitSha] = useState("");
   const [approvePending, setApprovePending] = useState(false);
+  const [localPatchPending, setLocalPatchPending] = useState(false);
 
   useEffect(() => {
     if (detail?.task) {
@@ -695,6 +696,12 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
     analyzerResult?.implementationPlan?.approvalRequired === true &&
+    !hasActiveRun;
+  const canApproveLocalPatch =
+    task.status === CodingTaskStatus.READY_REVIEW &&
+    analyzerResult?.orchestration?.nextAction === "REVIEW_LOCAL_PATCH" &&
+    analyzerResult?.localExecution?.status === "APPLIED" &&
+    analyzerResult.localExecution.rolledBack !== true &&
     !hasActiveRun;
   const runAgent = () => {
     startCodingRun.mutate(
@@ -742,6 +749,36 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
       });
     } finally {
       setApprovePending(false);
+    }
+  };
+
+  const approveLocalPatch = async () => {
+    setLocalPatchPending(true);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-local-patch`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      await response.json();
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: "Local patch validated",
+        description: "Patch still applies to the latest remote HEAD and passed static verification. Nothing was committed or pushed.",
+      });
+    } catch (error) {
+      toast({
+        title: "Local patch validation failed",
+        description: error instanceof Error ? error.message : "Patch approval failed",
+        variant: "destructive",
+      });
+    } finally {
+      setLocalPatchPending(false);
     }
   };
 
@@ -861,16 +898,32 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
                 <div className="space-y-3 rounded-lg border border-emerald-300/15 bg-emerald-300/[0.025] p-3" data-testid="panel-local-coding-executor">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Local Coding Executor</div>
-                    <span className={cn(
-                      "rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wider",
-                      analyzerResult.localExecution?.status === "APPLIED"
-                        ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-300"
-                        : analyzerResult.localExecutionPlan.status === "AI_REQUIRED"
-                          ? "border-amber-300/20 bg-amber-300/10 text-amber-300"
-                          : "border-slate-300/20 bg-slate-300/10 text-slate-400",
-                    )}>
-                      {analyzerResult.localExecution?.status ?? analyzerResult.localExecutionPlan.status ?? "PENDING"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wider",
+                        analyzerResult.localExecution?.status === "APPLIED"
+                          ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-300"
+                          : analyzerResult.localExecutionPlan.status === "AI_REQUIRED"
+                            ? "border-amber-300/20 bg-amber-300/10 text-amber-300"
+                            : "border-slate-300/20 bg-slate-300/10 text-slate-400",
+                      )}>
+                        {analyzerResult.localExecution?.status ?? analyzerResult.localExecutionPlan.status ?? "PENDING"}
+                      </span>
+                      {canApproveLocalPatch && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={approveLocalPatch}
+                          disabled={localPatchPending}
+                          className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
+                          data-testid="button-approve-local-patch"
+                        >
+                          {localPatchPending
+                            ? <><Loader2 className="size-3 animate-spin" />Validating</>
+                            : <><CheckCircle2 className="size-3" />Validate Local Patch</>}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {(analyzerResult.localExecution?.reason ?? analyzerResult.localExecutionPlan.reason) && (
                     <p className="text-xs leading-5 text-slate-400">
