@@ -42,6 +42,9 @@ export interface CodingTaskGraphWorkstreamSnapshot {
   verificationProfiles: string[];
   workerId: string | null;
   branchName: string | null;
+  childTaskId: string | null;
+  childRunId: string | null;
+  jobId: number | null;
   baseSha: string | null;
   headSha: string | null;
   attemptCount: number;
@@ -146,6 +149,9 @@ async function loadGraphSnapshotById(
         verificationProfiles: stringArray(item.verificationProfiles),
         workerId: item.workerId,
         branchName: item.branchName,
+        childTaskId: item.childTaskId,
+        childRunId: item.childRunId,
+        jobId: item.jobId,
         baseSha: item.baseSha,
         headSha: item.headSha,
         attemptCount: item.attemptCount,
