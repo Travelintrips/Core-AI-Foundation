@@ -250,6 +250,73 @@ describe("Local Coding Executor", () => {
     expect(next).toContain('label = "oldName"');
   });
 
+  it("replaces only the compiler-pointed identifier at an exact source position", async () => {
+    const root = await createWorkspace();
+    const plan: LocalCodingExecutionPlan = {
+      status: "EXECUTABLE",
+      reason: "recovery",
+      operations: [{
+        kind: "typescript_replace_identifier_at_position",
+        path: "src/sample.ts",
+        line: 3,
+        column: 37,
+        from: "oldName",
+        to: "newName",
+      }],
+      verificationCommands: [],
+      targetFiles: ["src/sample.ts"],
+      warnings: [],
+    };
+
+    const result = await executeLocalCodingPlan(root, plan, {
+      trustedWorkspace: true,
+      expectedHeadSha: head(root),
+      runVerification: false,
+    });
+    const next = await readFile(join(root, "src", "sample.ts"), "utf8");
+
+    expect(result.status).toBe("APPLIED");
+    expect(next).toContain("export const oldName = 1;");
+    expect(next).toContain("return newName;");
+    expect(next).toContain('label = "oldName"');
+  });
+
+  it("inserts only allowlisted punctuation at the compiler position", async () => {
+    const root = await createWorkspace();
+    await writeFile(
+      join(root, "src", "sample.ts"),
+      "export const value = { a: 1 b: 2 };\n",
+      "utf8",
+    );
+    execFileSync("git", ["add", "src/sample.ts"], { cwd: root });
+    execFileSync("git", ["commit", "-m", "broken fixture"], { cwd: root });
+
+    const plan: LocalCodingExecutionPlan = {
+      status: "EXECUTABLE",
+      reason: "recovery",
+      operations: [{
+        kind: "typescript_insert_punctuation_at_position",
+        path: "src/sample.ts",
+        line: 1,
+        column: 28,
+        text: ",",
+      }],
+      verificationCommands: [],
+      targetFiles: ["src/sample.ts"],
+      warnings: [],
+    };
+
+    const result = await executeLocalCodingPlan(root, plan, {
+      trustedWorkspace: true,
+      expectedHeadSha: head(root),
+      runVerification: false,
+    });
+    const next = await readFile(join(root, "src", "sample.ts"), "utf8");
+
+    expect(result.status).toBe("APPLIED");
+    expect(next).toContain("{ a: 1, b: 2 }");
+  });
+
   it("supports bounded JSON set operations without arbitrary script execution", async () => {
     const root = await createWorkspace();
     const plan: LocalCodingExecutionPlan = {
