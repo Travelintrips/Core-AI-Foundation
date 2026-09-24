@@ -146,7 +146,7 @@ describe("Coding Orchestrator", () => {
     });
   });
 
-  it("runs Analyzer then Planner and leaves write stages blocked", async () => {
+  it("runs the Local Coding Engine without AI and leaves AI/write stages blocked", async () => {
     const started = await startCodingOrchestration({ task: task as never, run: run as never });
 
     expect(started.sessionId).toBe(`coding-${run.id}`);
@@ -165,8 +165,11 @@ describe("Coding Orchestrator", () => {
         expect.objectContaining({ id: 701 }),
         { finalizeCodingRun: false },
       );
-      expect(mockExecuteAI).toHaveBeenCalledOnce();
     });
+
+    expect(mockRouteToModel).not.toHaveBeenCalled();
+    expect(mockGetFallbackModels).not.toHaveBeenCalled();
+    expect(mockExecuteAI).not.toHaveBeenCalled();
 
     const runUpdates = mockUpdateSet.mock.calls
       .map(([value]) => value)
@@ -175,19 +178,22 @@ describe("Coding Orchestrator", () => {
     expect(runUpdates).toEqual(expect.arrayContaining([
       expect.objectContaining({
         status: "COMPLETED",
-        logs: expect.stringContaining('"nextAction": "APPROVE_PLAN"'),
+        logs: expect.stringContaining('"nextAction": "REVIEW_LOCAL_CONTEXT"'),
       }),
       expect.objectContaining({
         status: "READY_REVIEW",
-        resultSummary: expect.stringContaining("awaiting approval"),
+        resultSummary: expect.stringContaining("no AI/LLM was invoked"),
       }),
     ]));
 
     const finalLogs = runUpdates
       .map((value) => (value as { logs?: string }).logs)
-      .find((value): value is string => typeof value === "string" && value.includes('"implementationPlan"'));
+      .find((value): value is string =>
+        typeof value === "string" && value.includes('"nextAction": "REVIEW_LOCAL_CONTEXT"'),
+      );
 
-    expect(finalLogs).toContain('"Coding Agent"');
+    expect(finalLogs).toContain('"Planning Agent"');
     expect(finalLogs).toContain('"status": "BLOCKED"');
+    expect(finalLogs).not.toContain('"implementationPlan"');
   });
 });
