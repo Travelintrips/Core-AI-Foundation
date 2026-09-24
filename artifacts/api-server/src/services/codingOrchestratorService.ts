@@ -78,12 +78,17 @@ function nowIso(): string {
 function initStages(): CodingStage[] {
   return [
     { id: "repository_analyzer", label: "Repository Analyzer", status: "PENDING" },
-    { id: "planner", label: "Planning Agent", status: "PENDING" },
+    {
+      id: "planner",
+      label: "Planning Agent",
+      status: "BLOCKED",
+      detail: "Deferred in this phase; Local Coding Engine runs without AI/LLM.",
+    },
     {
       id: "coding",
       label: "Coding Agent",
       status: "BLOCKED",
-      detail: "Requires explicit approval after plan review.",
+      detail: "Deferred until a later AI coding phase.",
     },
     {
       id: "testing",
@@ -306,18 +311,16 @@ async function persistSnapshot(
   });
 }
 
-async function completeOrchestration(
+async function completeLocalAnalysis(
   input: CodingOrchestrationInput,
   sessionId: string,
   stages: CodingStage[],
   analysis: Record<string, unknown>,
-  plan: CodingImplementationPlan,
-  planner: PlannerMetadata,
 ): Promise<void> {
   const completedAt = new Date();
   const analysisSummary =
-    typeof analysis.summary === "string" ? analysis.summary : "Repository analysis completed.";
-  const summary = `${analysisSummary} Planning Agent produced an implementation plan awaiting approval.`;
+    typeof analysis.summary === "string" ? analysis.summary : "Local repository analysis completed.";
+  const summary = `${analysisSummary} Local context is ready for review; no AI/LLM was invoked.`;
 
   const result: Record<string, unknown> = {
     ...analysis,
@@ -327,10 +330,8 @@ async function completeOrchestration(
       sessionId,
       status: "READY_REVIEW",
       stages,
-      nextAction: "APPROVE_PLAN",
+      nextAction: "REVIEW_LOCAL_CONTEXT",
     },
-    implementationPlan: plan,
-    planner,
   };
 
   await db.transaction(async (tx) => {
@@ -355,24 +356,23 @@ async function completeOrchestration(
     await tx
       .update(aiOrchestratorSessionsTable)
       .set({
-        totalTokens: planner.totalTokens,
-        totalRequests: 1,
-        lastModelUsed: planner.modelUsed,
+        totalTokens: 0,
+        totalRequests: 0,
+        lastModelUsed: null,
       })
       .where(eq(aiOrchestratorSessionsTable.sessionId, sessionId));
   });
 
   await logAudit(
     "coding-orchestrator",
-    "pipeline_ready_review",
+    "local_analysis_ready_review",
     input.task.id,
     "coding_task",
     "success",
     {
       sessionId,
       codingRunId: input.run.id,
-      plannerModel: planner.modelUsed,
-      plannerTokens: planner.totalTokens,
+      aiInvoked: false,
     },
   );
 }
@@ -448,7 +448,7 @@ async function continueCodingOrchestration(
         codingTaskId: input.task.id,
         codingRunId: input.run.id,
         executionStatus: "RUNNING",
-        summary: "Coding Orchestrator is running Repository Analyzer.",
+        summary: "Coding Orchestrator is running the Local Coding Engine.",
         orchestration: { sessionId, status: "RUNNING", stages },
       },
       "ANALYZING",
@@ -462,36 +462,18 @@ async function continueCodingOrchestration(
       throw new Error("Repository Analyzer job was not claimed by the Coding Orchestrator");
     }
 
-    stages = updateStage(stages, "repository_analyzer", "COMPLETED");
-    stages = updateStage(stages, "planner", "RUNNING");
-
-    await persistSnapshot(
-      input.run.id,
-      input.task.id,
-      {
-        ...analysis,
-        executionStatus: "RUNNING",
-        summary: analysis.summary,
-        orchestration: { sessionId, status: "PLANNING", stages },
-      },
-      "ANALYZING",
-    );
-
-    const planned = await executePlanner(input.task, analysis);
-    stages = updateStage(stages, "planner", "COMPLETED");
-
-    await completeOrchestration(
-      input,
-      sessionId,
+    stages = updateStage(
       stages,
-      analysis,
-      planned.plan,
-      planned.metadata,
+      "repository_analyzer",
+      "COMPLETED",
+      "Local search, AST/symbols, dependency graph, git context, tests, and context packaging completed.",
     );
+
+    await completeLocalAnalysis(input, sessionId, stages, analysis);
 
     logger.info(
       { taskId: input.task.id, codingRunId: input.run.id, sessionId },
-      "[coding-orchestrator] Pipeline ready for review",
+      "[coding-orchestrator] Local Coding Engine ready for review without AI/LLM",
     );
   } catch (error) {
     const runningStage = stages.find((stage) => stage.status === "RUNNING");
@@ -511,8 +493,9 @@ async function continueCodingOrchestration(
  * Starts a bounded Coding Orchestrator run.
  *
  * The production global dispatcher remains fail-closed. The orchestrator only
- * executes work created by this explicit Run Agent request. Coding/Test/Review
- * stay blocked until the plan is approved in a later phase.
+ * executes work created by this explicit Run Agent request. This phase stops
+ * after deterministic local context packaging; Planner/Coding/Test/Review AI
+ * stages remain blocked and no model provider is invoked.
  */
 export async function startCodingOrchestration(
   input: CodingOrchestrationInput,
