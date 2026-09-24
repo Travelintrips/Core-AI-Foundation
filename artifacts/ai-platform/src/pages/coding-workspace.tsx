@@ -1410,7 +1410,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   );
 }
 
-function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { detail?: CodingTaskDetail; isLoading: boolean; isError: boolean; onRetry: () => void; onClose: () => void }) {
+function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExecutionQueued }: { detail?: CodingTaskDetail; isLoading: boolean; isError: boolean; onRetry: () => void; onClose: () => void; onAiExecutionQueued: () => void }) {
   const { t, lang } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1855,6 +1855,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose }: { det
         throw new Error(body?.error ?? `HTTP ${response.status}`);
       }
       const queued = await response.json() as { jobId?: number; jobCode?: string; status?: string };
+      onAiExecutionQueued();
       void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
       void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
       toast({
@@ -3236,6 +3237,7 @@ export default function CodingWorkspace() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [queuedAiBaselineRunCount, setQueuedAiBaselineRunCount] = useState<number | null>(null);
   const { data: tasks, isLoading, isError, refetch } = useListCodingTasks();
   const activeFromRoute = params.id;
   const visibleTasks = useMemo(() => {
@@ -3246,6 +3248,23 @@ export default function CodingWorkspace() {
   const selectedId = activeFromRoute ?? visibleTasks[0]?.id;
   const detailQuery = useGetCodingTask(selectedId ?? "", { query: { enabled: Boolean(selectedId), queryKey: getGetCodingTaskQueryKey(selectedId ?? "") } });
   const hasActiveRun = detailQuery.data?.runs.some((run) => run.status === "RUNNING") ?? false;
+  const aiExecutionRunCount =
+    detailQuery.data?.runs.filter((run) => run.agentName === "AI Execution Gate").length ?? 0;
+  const queuedAiPolling = queuedAiBaselineRunCount !== null;
+
+  useEffect(() => {
+    if (
+      queuedAiBaselineRunCount !== null &&
+      aiExecutionRunCount > queuedAiBaselineRunCount
+    ) {
+      setQueuedAiBaselineRunCount(null);
+    }
+  }, [aiExecutionRunCount, queuedAiBaselineRunCount]);
+
+  useEffect(() => {
+    setQueuedAiBaselineRunCount(null);
+  }, [selectedId]);
+
   const activeCount = (tasks ?? []).filter((task) => ACTIVE_STATUSES.has(task.status)).length;
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
   const completedCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.COMPLETED).length;
@@ -3254,7 +3273,10 @@ export default function CodingWorkspace() {
     void detailQuery.refetch();
     void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
   }, [detailQuery.refetch, queryClient]);
-  useCodingTaskPolling(Boolean(selectedId) && hasActiveRun, pollCodingTask);
+  useCodingTaskPolling(
+    Boolean(selectedId) && (hasActiveRun || queuedAiPolling),
+    pollCodingTask,
+  );
 
   const selectTask = (task: CodingTask) => setLocation(`/coding-workspace/${task.id}`);
   const openFreshTask = (task: CodingTask) => setLocation(`/coding-workspace/${task.id}`);
@@ -3281,7 +3303,14 @@ export default function CodingWorkspace() {
               {isLoading ? <TaskSkeleton /> : isError ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><XCircle className="mb-4 size-8 text-rose-300" /><p className="font-display text-lg text-slate-100">{t("pages.codingWorkspace.errorTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{t("pages.codingWorkspace.errorHint")}</p><Button variant="outline" onClick={() => refetch()} className="mt-5 border-white/10 text-slate-300 hover:bg-white/5" data-testid="button-retry-coding-tasks"><RotateCcw />{t("pages.codingWorkspace.retry")}</Button></div> : visibleTasks.length === 0 ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyHint")}</p>{!tasks?.length && <Button onClick={() => setCreateOpen(true)} className="mt-5 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-empty-create-coding-task"><Plus />{t("pages.codingWorkspace.newTask")}</Button>}</div> : <div className="divide-y divide-white/[0.05]">{visibleTasks.map((task) => <button type="button" key={task.id} onClick={() => selectTask(task)} className={cn("group grid w-full grid-cols-1 gap-3 px-4 py-4 text-left transition-colors hover:bg-cyan-300/[0.04] sm:grid-cols-[1.05fr_1.5fr_1fr_0.85fr] sm:items-center sm:gap-4 sm:px-5", selectedId === task.id && "bg-cyan-300/[0.06]")} data-testid={`row-coding-task-${task.id}`}><div className="flex items-center justify-between sm:block"><div className="font-mono text-xs font-semibold text-cyan-300">{task.taskNumber}</div><div className="mt-1 hidden items-center gap-1.5 text-[10px] text-slate-600 sm:flex"><Clock3 className="size-3" />{formatDate(task.createdAt, lang)}</div><ChevronRight className="size-4 text-slate-700 transition-transform group-hover:translate-x-0.5 sm:hidden" /></div><div className="min-w-0"><div className="truncate text-sm font-medium text-slate-200">{task.projectName}</div><div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-600"><span className="truncate">{task.repository}</span><span className="text-slate-700">·</span><span className="truncate text-slate-500">{task.branch}</span></div></div><div><StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} /></div><div className="flex items-center justify-between text-xs text-slate-600 sm:block sm:text-right"><span className="sm:hidden">{formatDate(task.createdAt, lang)}</span><span className="font-mono text-[10px] text-slate-500">P{task.priority}</span></div></button>)}</div>}
             </CardContent>
           </Card>
-          <div className={cn(!selectedId && "hidden xl:block")}>{selectedId ? <TaskDetailPanel detail={detailQuery.data} isLoading={detailQuery.isLoading} isError={detailQuery.isError} onRetry={() => detailQuery.refetch()} onClose={() => setLocation("/coding-workspace")} /> : <Card className="min-h-[420px] border-white/[0.08] bg-[#0c1628]"><CardContent className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{isLoading ? t("pages.codingWorkspace.loading") : t("pages.codingWorkspace.selectTask")}</p></CardContent></Card>}</div>
+          <div className={cn(!selectedId && "hidden xl:block")}>{selectedId ? <TaskDetailPanel
+            detail={detailQuery.data}
+            isLoading={detailQuery.isLoading}
+            isError={detailQuery.isError}
+            onRetry={() => detailQuery.refetch()}
+            onClose={() => setLocation("/coding-workspace")}
+            onAiExecutionQueued={() => setQueuedAiBaselineRunCount(aiExecutionRunCount)}
+          /> : <Card className="min-h-[420px] border-white/[0.08] bg-[#0c1628]"><CardContent className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{isLoading ? t("pages.codingWorkspace.loading") : t("pages.codingWorkspace.selectTask")}</p></CardContent></Card>}</div>
         </div>
         <div className="mt-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-slate-700"><div className="h-px flex-1 bg-white/[0.05]" /><span>Travelintrips engineering / coding intake</span><div className="h-px flex-1 bg-white/[0.05]" /></div>
       </div>
