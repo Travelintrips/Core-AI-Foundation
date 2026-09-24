@@ -328,20 +328,18 @@ function scriptKind(file: string): ts.ScriptKind {
   return ts.ScriptKind.TS;
 }
 
+function identifierName(name: ts.DeclarationName | ts.BindingName | undefined): string | null {
+  return name && ts.isIdentifier(name) ? name.text : null;
+}
+
 function declarationName(node: ts.Node): string | null {
-  if (
-    ts.isFunctionDeclaration(node) ||
-    ts.isClassDeclaration(node) ||
-    ts.isInterfaceDeclaration(node) ||
-    ts.isTypeAliasDeclaration(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isArrowFunction(node) ||
-    ts.isVariableDeclaration(node)
-  ) {
-    const name = "name" in node ? node.name : undefined;
-    if (name && ts.isIdentifier(name)) return name.text;
-  }
+  if (ts.isFunctionDeclaration(node)) return identifierName(node.name);
+  if (ts.isClassDeclaration(node)) return identifierName(node.name);
+  if (ts.isInterfaceDeclaration(node)) return identifierName(node.name);
+  if (ts.isTypeAliasDeclaration(node)) return identifierName(node.name);
+  if (ts.isMethodDeclaration(node)) return identifierName(node.name);
+  if (ts.isFunctionExpression(node)) return identifierName(node.name);
+  if (ts.isVariableDeclaration(node)) return identifierName(node.name);
   return null;
 }
 
