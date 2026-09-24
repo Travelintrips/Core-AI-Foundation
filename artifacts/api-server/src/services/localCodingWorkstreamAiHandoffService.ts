@@ -9,6 +9,8 @@ import {
   type AiCodingWorkstream,
   type AiCodingWorkstreamAiHandoff,
 } from "@workspace/db";
+import { validateCodingMultiTaskPlanV1 } from "./localCodingMultiTaskPlannerService.js";
+import { hashCodingMultiTaskPlan } from "./localCodingTaskGraphService.js";
 
 const DEFAULT_TTL_SECONDS = 900;
 const MIN_TTL_SECONDS = 60;
@@ -90,6 +92,71 @@ function strings(value: unknown): string[] {
     : [];
 }
 
+function sameStringArray(left: unknown, right: string[]): boolean {
+  const values = strings(left);
+  return (
+    values.length === right.length &&
+    values.every((value, index) => value === right[index])
+  );
+}
+
+function assertApprovedPlanWorkstreamBinding(
+  graph: AiCodingTaskGraph,
+  workstream: AiCodingWorkstream,
+): void {
+  let plan;
+  try {
+    plan = validateCodingMultiTaskPlanV1(graph.planJson);
+  } catch (error) {
+    throw new LocalCodingWorkstreamAiHandoffError(
+      "Persisted coding task graph plan is no longer a valid Plan V1 contract.",
+      "STALE_CONTEXT",
+      { graphId: graph.id, cause: error instanceof Error ? error.message : String(error) },
+    );
+  }
+
+  if (
+    plan.taskId !== graph.taskId ||
+    hashCodingMultiTaskPlan(plan) !== graph.planHash.toLowerCase()
+  ) {
+    throw new LocalCodingWorkstreamAiHandoffError(
+      "Persisted coding task graph no longer matches its approved plan hash.",
+      "STALE_CONTEXT",
+      { graphId: graph.id },
+    );
+  }
+
+  const planned = plan.workstreams.find(
+    (item) => item.id === workstream.workstreamKey,
+  );
+  if (
+    !planned ||
+    planned.title !== workstream.title ||
+    planned.role !== workstream.role ||
+    planned.instruction !== workstream.instruction ||
+    planned.priority !== workstream.priority ||
+    !sameStringArray(workstream.ownershipPaths, planned.ownershipPaths) ||
+    !sameStringArray(
+      workstream.acceptanceCriteria,
+      planned.acceptanceCriteria,
+    ) ||
+    !sameStringArray(
+      workstream.verificationProfiles,
+      planned.verificationProfiles,
+    )
+  ) {
+    throw new LocalCodingWorkstreamAiHandoffError(
+      "Persisted workstream no longer matches the explicitly approved task graph.",
+      "STALE_CONTEXT",
+      {
+        graphId: graph.id,
+        workstreamId: workstream.id,
+        workstreamKey: workstream.workstreamKey,
+      },
+    );
+  }
+}
+
 function assertGraphBinding(graph: AiCodingTaskGraph): void {
   if (!SHA64_RE.test(graph.planHash)) {
     throw new LocalCodingWorkstreamAiHandoffError(
@@ -151,6 +218,7 @@ export function buildWorkstreamAiHandoffPackage(
       "INVALID_CONTEXT",
     );
   }
+  assertApprovedPlanWorkstreamBinding(graph, workstream);
   if (workstream.attemptCount <= 0 || !workstream.branchName) {
     throw new LocalCodingWorkstreamAiHandoffError(
       "Workstream has not been claimed for an isolated execution attempt.",
