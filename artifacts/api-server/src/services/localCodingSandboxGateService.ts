@@ -13,8 +13,12 @@ import {
   type AiCodingTask,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
-import { isSensitiveRepositoryPath } from "./localCodingEngineService.js";
+import {
+  isSensitiveRepositoryPath,
+  type LocalCodingContextPackage,
+} from "./localCodingEngineService.js";
 import { enrichFailureContextsWithSymbols } from "./localCodingFailureDiagnosticService.js";
+import { buildLocalFailureRecoveryContext } from "./localCodingFailureRecoveryService.js";
 import { runSandboxedRepositoryVerification } from "./localCodingSandboxService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
 import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
@@ -51,6 +55,7 @@ interface SandboxGateContext {
   baseHeadSha: string;
   changedFiles: string[];
   verificationCommands: string[];
+  contextPackage: LocalCodingContextPackage | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -268,6 +273,7 @@ async function latestSandboxContext(taskId: string): Promise<SandboxGateContext>
     baseHeadSha,
     changedFiles: [...new Set(changedFiles)].sort(),
     verificationCommands,
+    contextPackage: contextPackage as unknown as LocalCodingContextPackage | null,
   };
 }
 
@@ -295,6 +301,14 @@ async function markSandboxGateFailed(
   const currentOrchestration = isRecord(context.orchestratorPayload.orchestration)
     ? context.orchestratorPayload.orchestration
     : {};
+  const recoveryContext =
+    error.kind === "VERIFICATION_FAILED" &&
+    isRecord(error.details?.failureRecoveryContext)
+      ? error.details.failureRecoveryContext
+      : null;
+  const nextAction = recoveryContext
+    ? "LOCAL_RECOVERY_REQUIRED"
+    : "RUN_SANDBOX_VERIFICATION";
   const failedPayload = {
     ...context.orchestratorPayload,
     sandboxVerification: {
@@ -309,7 +323,7 @@ async function markSandboxGateFailed(
     orchestration: {
       ...currentOrchestration,
       status: "READY_REVIEW",
-      nextAction: "RUN_SANDBOX_VERIFICATION",
+      nextAction,
     },
   };
 
@@ -325,7 +339,7 @@ async function markSandboxGateFailed(
           gateStatus: "SANDBOX_NOT_VERIFIED",
           kind: error.kind,
           error: error.message.slice(0, 1200),
-          nextAction: "RUN_SANDBOX_VERIFICATION",
+          nextAction,
         }, null, 2),
       })
       .where(eq(aiCodingRunsTable.id, run.id));
@@ -340,7 +354,9 @@ async function markSandboxGateFailed(
       .set({
         status: "READY_REVIEW",
         resultSummary:
-          "Sandbox verification did not pass: " +
+          (recoveryContext
+            ? "Sandbox verification found a source-level failure and refined the local recovery context: "
+            : "Sandbox verification did not pass: ") +
           error.message.slice(0, 500) +
           " Commit approval remains locked.",
       })
@@ -440,6 +456,13 @@ async function executeSandboxGate(
         workspacePath,
         sandbox.failureContexts,
       );
+      const failureRecoveryContext = context.contextPackage
+        ? buildLocalFailureRecoveryContext(
+            context.contextPackage,
+            failureContexts,
+            sandbox.deterministicRetries,
+          )
+        : null;
       throw new LocalCodingSandboxGateError(
         failed
           ? `${failed.command} failed with ${failed.status}${failed.exitCode === null ? "" : ` (exit ${failed.exitCode})`}. Output was intentionally withheld from persistent logs.`
@@ -447,6 +470,7 @@ async function executeSandboxGate(
         "VERIFICATION_FAILED",
         {
           failureContexts,
+          ...(failureRecoveryContext ? { failureRecoveryContext } : {}),
           deterministicRetries: sandbox.deterministicRetries,
           commands: compactCommands(sandbox.commands),
         },
