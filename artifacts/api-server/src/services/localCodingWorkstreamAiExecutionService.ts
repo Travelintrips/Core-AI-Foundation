@@ -625,6 +625,21 @@ async function loadExecutionContext(
     );
   }
 
+  const [parentTask] = await db
+    .select()
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, graph.taskId));
+  if (
+    !parentTask ||
+    childTask.repository !== parentTask.repository ||
+    childTask.branch !== parentTask.branch
+  ) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Child coding task repository binding no longer matches its parent graph task.",
+      "STALE_CONTEXT",
+    );
+  }
+
   const analyzerResult = isRecord(workstream.resultJson)
     ? workstream.resultJson
     : null;
@@ -635,6 +650,22 @@ async function loadExecutionContext(
   ) {
     throw new LocalCodingWorkstreamAiExecutionError(
       "Analyzer result changed after workstream AI execution was queued.",
+      "STALE_CONTEXT",
+    );
+  }
+  const analyzerContext = isRecord(analyzerResult.contextPackage)
+    ? analyzerResult.contextPackage
+    : null;
+  if (
+    analyzerResult.codingTaskId !== childTask.id ||
+    analyzerResult.sourceTarget !== childTask.repository ||
+    analyzerResult.branch !== childTask.branch ||
+    !analyzerContext ||
+    analyzerContext.repository !== childTask.repository ||
+    analyzerContext.branch !== childTask.branch
+  ) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Analyzer result no longer matches the bound child task repository/branch.",
       "STALE_CONTEXT",
     );
   }
