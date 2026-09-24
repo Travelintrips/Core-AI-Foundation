@@ -18,6 +18,10 @@ import type { AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { failRepositoryAnalyzerRun } from "./repositoryAnalyzerService.js";
 import { recoverFailedCodingWorkstreamJob } from "./localCodingMultiWorkerExecutionService.js";
+import {
+  CODING_WORKSTREAM_AI_JOB_TYPE,
+  recoverFailedCodingWorkstreamAiJob,
+} from "./localCodingWorkstreamAiExecutionService.js";
 import { logger } from "../lib/logger.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -348,6 +352,12 @@ export async function rebalanceJobs(): Promise<number> {
     }
     if (row["job_type"] === "coding_workstream_execution") {
       await recoverFailedCodingWorkstreamJob(
+        (row["payload_json"] ?? {}) as Record<string, unknown>,
+        "Worker lease expired before completion",
+      );
+    }
+    if (row["job_type"] === CODING_WORKSTREAM_AI_JOB_TYPE) {
+      await recoverFailedCodingWorkstreamAiJob(
         (row["payload_json"] ?? {}) as Record<string, unknown>,
         "Worker lease expired before completion",
       );
