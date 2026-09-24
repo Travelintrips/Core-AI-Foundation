@@ -687,21 +687,34 @@ export async function executeCodingWorkstreamJob(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await failRepositoryAnalyzerRun(
+    await failCodingWorkstreamExecution(
       job.payloadJson as Record<string, unknown>,
       message,
     ).catch(() => undefined);
-    await db
-      .update(aiCodingWorkstreamsTable)
-      .set({
-        status: "FAILED",
-        errorMessage: message.slice(0, 2000),
-        completedAt: new Date(),
-      })
-      .where(eq(aiCodingWorkstreamsTable.id, payload.workstreamId))
-      .catch(() => undefined);
     throw error;
   }
+}
+
+export async function failCodingWorkstreamExecution(
+  payload: Record<string, unknown>,
+  errorMessage: string,
+): Promise<void> {
+  const workstreamId =
+    typeof payload.workstreamId === "string" ? payload.workstreamId : null;
+  const message = errorMessage.slice(0, 2000);
+
+  await failRepositoryAnalyzerRun(payload, message).catch(() => undefined);
+
+  if (!workstreamId || !UUID_RE.test(workstreamId)) return;
+
+  await db
+    .update(aiCodingWorkstreamsTable)
+    .set({
+      status: "FAILED",
+      errorMessage: message,
+      completedAt: new Date(),
+    })
+    .where(eq(aiCodingWorkstreamsTable.id, workstreamId));
 }
 
 export async function reconcileCodingTaskGraph(
