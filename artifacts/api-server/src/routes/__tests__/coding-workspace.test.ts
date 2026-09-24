@@ -19,6 +19,7 @@ const mockApproveAiHandoff = vi.hoisted(() => vi.fn());
 const mockRevokeAiHandoff = vi.hoisted(() => vi.fn());
 const mockAssertApprovedAiHandoffFresh = vi.hoisted(() => vi.fn());
 const mockEnqueueCodingAiExecution = vi.hoisted(() => vi.fn());
+const mockGetLatestCodingAiExecutionJob = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateAiPatch = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
@@ -226,6 +227,7 @@ vi.mock("../../services/localCodingAiHandoffService.js", () => ({
 
 vi.mock("../../services/localCodingAiQueueRuntimeService.js", () => ({
   enqueueCodingAiExecution: mockEnqueueCodingAiExecution,
+  getLatestCodingAiExecutionJob: mockGetLatestCodingAiExecutionJob,
 }));
 
 vi.mock("../../services/localCodingAiPatchApprovalService.js", () => ({
@@ -765,6 +767,7 @@ describe("AI coding workspace AI handoff gates", () => {
 describe("AI coding workspace constrained AI execution endpoints", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetLatestCodingAiExecutionJob.mockResolvedValue(null);
     mockAssertApprovedAiHandoffFresh.mockResolvedValue({
       packageHash: "a".repeat(64),
       approvedAt: "2026-01-01T00:00:00.000Z",
@@ -783,6 +786,34 @@ describe("AI coding workspace constrained AI execution endpoints", () => {
       status: "COMPLETED",
       finishedAt: new Date("2026-01-01T00:05:00.000Z"),
     });
+  });
+
+  it("returns the latest worker queue status for the coding task", async () => {
+    mockGetLatestCodingAiExecutionJob.mockResolvedValueOnce({
+      id: 77,
+      jobCode: "JOB-AI123456",
+      status: "running",
+      jobType: "coding_ai_execution",
+      requiredCapability: "coding_ai_execution",
+      startedAt: "2026-01-01T00:05:00.000Z",
+      completedAt: null,
+      errorMessage: null,
+    });
+
+    const response = await request(app).get(
+      `/ai/coding/tasks/${taskId}/ai-execution-job`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      taskId,
+      job: {
+        id: 77,
+        status: "running",
+        jobType: "coding_ai_execution",
+      },
+    });
+    expect(mockGetLatestCodingAiExecutionJob).toHaveBeenCalledWith(taskId);
   });
 
   it("validates the handoff and enqueues constrained AI instead of invoking the model in HTTP", async () => {
