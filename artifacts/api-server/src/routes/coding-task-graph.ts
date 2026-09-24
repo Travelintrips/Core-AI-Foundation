@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod";
 import { GetCodingTaskParams } from "@workspace/api-zod";
 import {
@@ -33,7 +33,7 @@ const concurrencySchema = z
   .strict();
 
 function sendGraphError(
-  res: Parameters<Router["use"]>[0] extends never ? never : any,
+  res: Response,
   error: unknown,
 ): boolean {
   if (error instanceof LocalCodingTaskGraphError) {
