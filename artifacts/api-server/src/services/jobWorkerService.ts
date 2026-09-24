@@ -53,6 +53,11 @@ import {
 } from "./repositoryAnalyzerService.js";
 import { executeCodingAiExecutionJob } from "./localCodingAiQueueRuntimeService.js";
 import { executeCodingWorkstreamJob, recoverFailedCodingWorkstreamJob } from "./localCodingMultiWorkerExecutionService.js";
+import {
+  CODING_WORKSTREAM_AI_JOB_TYPE,
+  executeCodingWorkstreamAiJob,
+  recoverFailedCodingWorkstreamAiJob,
+} from "./localCodingWorkstreamAiExecutionService.js";
 
 export const WORKER_CLAIM_PAYLOAD_KEY = "_claimedByWorkerId";
 
@@ -581,6 +586,9 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     case "coding_workstream_execution":
       return executeCodingWorkstreamJob(job);
 
+    case CODING_WORKSTREAM_AI_JOB_TYPE:
+      return executeCodingWorkstreamAiJob(job);
+
     case "image_generation":
       return executeImageJob(job);
 
@@ -906,6 +914,12 @@ export async function retryJob(
   }
   if (exhausted && job.jobType === "coding_workstream_execution") {
     await recoverFailedCodingWorkstreamJob(
+      (job.payloadJson ?? {}) as Record<string, unknown>,
+      errorMessage,
+    );
+  }
+  if (exhausted && job.jobType === CODING_WORKSTREAM_AI_JOB_TYPE) {
+    await recoverFailedCodingWorkstreamAiJob(
       (job.payloadJson ?? {}) as Record<string, unknown>,
       errorMessage,
     );

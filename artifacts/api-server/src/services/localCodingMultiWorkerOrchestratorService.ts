@@ -538,6 +538,29 @@ export async function completeReviewedCodingWorkstream(
       );
     }
 
+    const resultJson =
+      current.resultJson &&
+      typeof current.resultJson === "object" &&
+      !Array.isArray(current.resultJson)
+        ? (current.resultJson as Record<string, unknown>)
+        : null;
+    const aiExecution =
+      resultJson?.workstreamAiExecution &&
+      typeof resultJson.workstreamAiExecution === "object" &&
+      !Array.isArray(resultJson.workstreamAiExecution)
+        ? (resultJson.workstreamAiExecution as Record<string, unknown>)
+        : null;
+    if (
+      aiExecution?.status === "CANDIDATE_READY" &&
+      aiExecution.reviewStatus !== "APPROVED"
+    ) {
+      throw new LocalCodingMultiWorkerError(
+        "Workstream AI candidate must pass explicit REVIEW_AI_PATCH approval before completion.",
+        "NOT_READY",
+        { nextAction: "REVIEW_AI_PATCH" },
+      );
+    }
+
     const [completed] = await tx
       .update(aiCodingWorkstreamsTable)
       .set({
