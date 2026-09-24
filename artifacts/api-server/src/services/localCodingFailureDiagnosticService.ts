@@ -1,4 +1,6 @@
-import { isAbsolute, normalize } from "node:path";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, normalize, relative, resolve, sep } from "node:path";
+import * as ts from "typescript";
 import {
   isSensitiveRepositoryPath,
   type VerificationCommandResult,
@@ -24,6 +26,7 @@ export interface LocalFailureDiagnostic {
   line?: number;
   column?: number;
   code?: string;
+  symbol?: string;
   message: string;
 }
 
@@ -101,6 +104,7 @@ function diagnostic(
     ...(typeof extras.line === "number" && extras.line > 0 ? { line: extras.line } : {}),
     ...(typeof extras.column === "number" && extras.column > 0 ? { column: extras.column } : {}),
     ...(extras.code ? { code: extras.code.slice(0, 80) } : {}),
+    ...(extras.symbol ? { symbol: extras.symbol.slice(0, 160) } : {}),
     message: cleanMessage,
   };
 }
@@ -306,4 +310,134 @@ export function buildFailureContexts(
     .filter((result) => result.status !== "PASSED")
     .slice(0, 6)
     .map(buildLocalFailureContext);
+}
+
+
+function isInsideRoot(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate);
+  return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`));
+}
+
+function scriptKind(file: string): ts.ScriptKind {
+  const lower = file.toLowerCase();
+  if (lower.endsWith(".tsx")) return ts.ScriptKind.TSX;
+  if (lower.endsWith(".jsx")) return ts.ScriptKind.JSX;
+  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) {
+    return ts.ScriptKind.JS;
+  }
+  return ts.ScriptKind.TS;
+}
+
+function declarationName(node: ts.Node): string | null {
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isVariableDeclaration(node)
+  ) {
+    const name = "name" in node ? node.name : undefined;
+    if (name && ts.isIdentifier(name)) return name.text;
+  }
+  return null;
+}
+
+function nearestSymbolAtLine(
+  file: string,
+  content: string,
+  lineNumber: number,
+): string | null {
+  const source = ts.createSourceFile(
+    file,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind(file),
+  );
+  const targetLine = Math.max(0, lineNumber - 1);
+  let best: { name: string; span: number } | null = null;
+
+  const visit = (node: ts.Node): void => {
+    const name = declarationName(node);
+    if (name) {
+      const start = source.getLineAndCharacterOfPosition(node.getStart(source)).line;
+      const end = source.getLineAndCharacterOfPosition(node.getEnd()).line;
+      if (targetLine >= start && targetLine <= end) {
+        const span = Math.max(0, end - start);
+        if (!best || span < best.span) best = { name, span };
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return best?.name ?? null;
+}
+
+export async function enrichFailureContextsWithSymbols(
+  root: string,
+  contexts: LocalFailureContext[],
+): Promise<LocalFailureContext[]> {
+  const absoluteRoot = resolve(root);
+  const resolvedRoot = await realpath(absoluteRoot).catch(() => null);
+  if (!resolvedRoot) return contexts;
+
+  const cache = new Map<string, string | null>();
+  const enriched: LocalFailureContext[] = [];
+
+  for (const context of contexts) {
+    const diagnostics: LocalFailureDiagnostic[] = [];
+    for (const item of context.diagnostics) {
+      if (
+        !item.file ||
+        !item.line ||
+        !/\.[cm]?[jt]sx?$/i.test(item.file)
+      ) {
+        diagnostics.push(item);
+        continue;
+      }
+
+      const normalized = normalizeRepoPath(item.file);
+      if (!normalized) {
+        diagnostics.push(item);
+        continue;
+      }
+      const candidate = resolve(absoluteRoot, normalized);
+      if (!isInsideRoot(absoluteRoot, candidate)) {
+        diagnostics.push(item);
+        continue;
+      }
+
+      let content = cache.get(normalized);
+      if (content === undefined) {
+        const info = await lstat(candidate).catch(() => null);
+        if (!info?.isFile() || info.isSymbolicLink() || info.size > 512_000) {
+          cache.set(normalized, null);
+          diagnostics.push(item);
+          continue;
+        }
+        const resolvedFile = await realpath(candidate).catch(() => null);
+        if (!resolvedFile || !isInsideRoot(resolvedRoot, resolvedFile)) {
+          cache.set(normalized, null);
+          diagnostics.push(item);
+          continue;
+        }
+        content = await readFile(resolvedFile, "utf8").catch(() => null);
+        cache.set(normalized, content);
+      }
+
+      if (!content) {
+        diagnostics.push(item);
+        continue;
+      }
+      const symbol = nearestSymbolAtLine(normalized, content, item.line);
+      diagnostics.push(symbol ? { ...item, symbol } : item);
+    }
+
+    enriched.push({ ...context, diagnostics });
+  }
+
+  return enriched;
 }
