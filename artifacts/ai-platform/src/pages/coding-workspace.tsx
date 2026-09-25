@@ -1394,6 +1394,7 @@ function GitHubRepositoryPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [repositories, setRepositories] = useState<CodingGitHubRepository[]>([]);
+  const [connectionMode, setConnectionMode] = useState<"authenticated" | "public" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1401,10 +1402,13 @@ function GitHubRepositoryPicker({
     setLoading(true);
     setError(null);
     try {
-      const response = await apiFetch<{ repositories: CodingGitHubRepository[] }>(
-        "/api/ai/coding/github/repositories",
-      );
+      const response = await apiFetch<{
+        repositories: CodingGitHubRepository[];
+        connectionMode: "authenticated" | "public";
+        privateRepositoriesAvailable: boolean;
+      }>("/api/ai/coding/github/repositories");
       setRepositories(response.repositories);
+      setConnectionMode(response.connectionMode);
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -1515,9 +1519,12 @@ function GitHubRepositoryPicker({
             )}
           </CommandList>
         </Command>
-        {selected && (
+        {!error && connectionMode && (
           <div className="border-t border-white/[0.06] px-3 py-2 text-[10px] text-slate-600">
-            Terhubung ke GitHub · {selected.private ? "private repository" : "public repository"}
+            {connectionMode === "authenticated"
+              ? "GitHub authenticated · public + private repository"
+              : "GitHub public · private repository membutuhkan token server"}
+            {selected ? ` · dipilih: ${selected.fullName}` : ""}
           </div>
         )}
       </PopoverContent>
@@ -1739,7 +1746,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
                       disabled={createTask.isPending}
                     />
                   </FormControl>
-                  <p className="text-[10px] text-slate-600">Repository diambil dari koneksi GitHub Core AI.</p>
+                  <p className="text-[10px] text-slate-600">Search repository GitHub. Repo public tetap tersedia tanpa token; repo private muncul saat credential server aktif.</p>
                   <FormMessage />
                 </FormItem>
               )} />

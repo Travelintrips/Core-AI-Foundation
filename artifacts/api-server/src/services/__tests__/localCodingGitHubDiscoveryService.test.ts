@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getCodingGitHubDiscoveryMode,
   listAccessibleCodingRepositories,
   listCodingRepositoryBranches,
 } from "../localCodingGitHubDiscoveryService.js";
@@ -9,7 +10,55 @@ function clientWith(handler: GitHubApiClient["request"]): GitHubApiClient {
   return { request: handler };
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("local coding GitHub discovery", () => {
+  it("falls back to public owner repositories when no server token is configured", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      const url = String(input);
+      if (url.endsWith("/users/Travelintrips")) {
+        return new Response(JSON.stringify({ type: "User" }), { status: 200 });
+      }
+      if (url.includes("/users/Travelintrips/repos?")) {
+        return new Response(JSON.stringify([
+          {
+            full_name: "Travelintrips/Core-AI-Foundation",
+            name: "Core-AI-Foundation",
+            private: false,
+            default_branch: "main",
+            html_url: "https://github.com/Travelintrips/Core-AI-Foundation",
+            updated_at: "2026-09-25T00:00:00Z",
+            owner: { login: "Travelintrips" },
+          },
+        ]), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const env = {
+      AI_CODING_GITHUB_PUBLIC_OWNERS: "Travelintrips",
+    } as NodeJS.ProcessEnv;
+
+    expect(getCodingGitHubDiscoveryMode(env)).toBe("public");
+    await expect(
+      listAccessibleCodingRepositories({ query: "core-ai", env }),
+    ).resolves.toEqual([
+      {
+        fullName: "Travelintrips/Core-AI-Foundation",
+        owner: "Travelintrips",
+        name: "Core-AI-Foundation",
+        private: false,
+        defaultBranch: "main",
+        htmlUrl: "https://github.com/Travelintrips/Core-AI-Foundation",
+        updatedAt: "2026-09-25T00:00:00Z",
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("lists repositories visible to the configured GitHub identity and filters by search", async () => {
     const request = vi.fn(async (_method: string, path: string) => {
       expect(path).toContain("/user/repos?");
