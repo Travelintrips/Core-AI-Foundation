@@ -225,17 +225,15 @@ export function createConstrainedCodingProviderAdapter(input: {
     model: input.modelId,
     capabilities: CONSTRAINED_MODEL_CAPABILITIES,
     async invoke(request, context) {
-      if (request.responseFormat.type !== "text") {
-        throw new ProviderInvocationError(
-          "Coding proposal execution only accepts text responses",
-          "BAD_REQUEST",
-        );
-      }
       const bounded = parseBoundedModelPrompt(request.input);
       try {
         const result = await executeAINoFallback({
           prompt: bounded.user,
-          systemPrompt: bounded.system,
+          systemPrompt:
+            bounded.system +
+            (request.responseFormat.type === "structured"
+              ? " Return exactly one JSON object matching the requested structured schema. No markdown fences or prose."
+              : ""),
           model: {
             modelId: input.modelId,
             maxOutputTokens: request.maxOutputTokens,
@@ -249,8 +247,24 @@ export function createConstrainedCodingProviderAdapter(input: {
           signal: context.signal,
           observability: input.observability,
         });
+        const output =
+          request.responseFormat.type === "structured"
+            ? (() => {
+                try {
+                  return {
+                    type: "structured" as const,
+                    value: JSON.parse(result.content) as unknown,
+                  };
+                } catch {
+                  throw new ProviderInvocationError(
+                    "Constrained provider returned malformed structured JSON",
+                    "BAD_REQUEST",
+                  );
+                }
+              })()
+            : { type: "text" as const, text: result.content };
         return {
-          output: { type: "text" as const, text: result.content },
+          output,
           usage: {
             inputTokens: result.promptTokens,
             outputTokens: result.completionTokens,
