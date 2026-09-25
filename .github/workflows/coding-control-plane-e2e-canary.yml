@@ -111,9 +111,17 @@ jobs:
           set -euo pipefail
           task="${{ steps.task.outputs.task_id }}"
           code=$(curl -sS -o /tmp/graph.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
-          [[ "$code" = "200" || "$code" = "201" ]]
+          if [[ "$code" != "200" && "$code" != "201" ]]; then
+            echo "::error::Generate task graph failed with HTTP $code"
+            cat /tmp/graph.json
+            exit 1
+          fi
           graph_id=$(jq -r '.snapshot.graph.id // .graph.id // empty' /tmp/graph.json)
-          [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          if [[ ! "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::Generate task graph response missing a valid graph id"
+            cat /tmp/graph.json
+            exit 1
+          fi
           bound=$(jq -r '.snapshot.graph.taskId // .graph.taskId // empty' /tmp/graph.json)
           test "$bound" = "$task"
           echo "graph_id=$graph_id" >> "$GITHUB_OUTPUT"
