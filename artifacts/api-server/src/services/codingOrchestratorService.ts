@@ -574,6 +574,15 @@ async function continueCodingOrchestration(
       );
     }
 
+    // Persist the completed bounded repository analysis before invoking the
+    // automated multi-task planner. The planner deliberately reads only a
+    // COMPLETED Coding Orchestrator/Repository Analyzer run, so invoking it
+    // while this run is still RUNNING creates a circular ANALYSIS_REQUIRED
+    // failure even though repository_analyzer has already completed.
+    if (localPlan?.status === "AI_REQUIRED") {
+      await completeLocalAnalysis(input, sessionId, stages, analysis);
+    }
+
     const aiEscalation =
       localPlan?.status === "AI_REQUIRED"
         ? await generateAndPersistCodingMultiTaskPlan(input.task.id)
