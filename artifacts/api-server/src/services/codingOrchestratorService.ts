@@ -664,7 +664,7 @@ export async function startCodingOrchestration(
         orchestratorSessionId: sessionId,
         repository: input.task.repository,
         branch: input.task.branch,
-        expectedBaseSha: input.task.instruction.match(/\\bbase-sha:([0-9a-f]{40})\\b/i)?.[1]?.toLowerCase(),
+        expectedBaseSha: input.task.instruction.match(/\bbase-sha:([0-9a-f]{40})\b/i)?.[1]?.toLowerCase(),
         title: input.task.projectName,
         description: input.task.instruction,
       },
