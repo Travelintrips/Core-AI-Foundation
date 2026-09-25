@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { aiCodingBridgeCommandsTable, aiCodingBridgePresenceTable, aiCodingBridgeResponsesTable, db } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
+import { notifyCodingBridgeResponse } from "./codingWhatsappNotificationService.js";
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
 
@@ -19,6 +20,13 @@ export async function appendCodingBridgeResponse(input:{commandId:string;taskId?
  const [response]=await db.insert(aiCodingBridgeResponsesTable).values({commandId:input.commandId,taskId:input.taskId??null,kind:input.kind,message:input.message,checkpointJson:input.checkpoint??{},metadataJson:input.metadata??{}}).returning();
  if(!response) throw new Error("Failed to persist bridge response");
  publishSafe({eventType:"coding.bridge.response.created",sourceModule:"coding-control-bridge",sourceId:response.id,correlationId:input.commandId,payload:{responseId:response.id,commandId:input.commandId,kind:input.kind}});
+ void notifyCodingBridgeResponse({
+  responseId: response.id,
+  commandId: input.commandId,
+  taskId: input.taskId ?? null,
+  kind: input.kind,
+  message: input.message,
+ });
  return response;
 }
 export async function listPendingCodingBridgeResponses(limit=50){return db.select().from(aiCodingBridgeResponsesTable).where(isNull(aiCodingBridgeResponsesTable.acknowledgedAt)).orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(Math.max(1,Math.min(100,limit)));}
