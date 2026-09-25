@@ -16,7 +16,10 @@ import {
 import {
   createConstrainedCodingProviderAdapter,
 } from "./localCodingAiExecutionGateService.js";
-import { resolveProductionCodingModel } from "./localCodingAiProductionModelService.js";
+import {
+  resolveConfiguredCodingFallbackModel,
+  resolvePreferredCodingModel,
+} from "./localCodingAiPreferredModelService.js";
 import {
   validateCodingMultiTaskPlanV1,
   type CodingMultiTaskPlanV1,
@@ -519,16 +522,19 @@ export async function generateAndPersistCodingMultiTaskPlan(
     throw error;
   }
 
-  const resolved = await resolveProductionCodingModel();
+  const resolved = await resolvePreferredCodingModel();
   if (!resolved.ok) {
     throw new AutomatedMultiTaskPlannerError(
       resolved.message,
       "MODEL_UNAVAILABLE",
-      { reason: resolved.reason },
+      {
+        reason: resolved.reason,
+        fallbackFailure: resolved.fallbackFailure,
+      },
     );
   }
 
-  const selection = resolved.selection;
+  let selection = resolved.selection;
   const providerSlug = String(selection.provider.slug ?? "").toLowerCase();
   const modelId = String(selection.model.modelId ?? "");
   if (!providerSlug || !modelId) {
@@ -557,6 +563,10 @@ export async function generateAndPersistCodingMultiTaskPlan(
   const adapter = createConstrainedModelInvocationAdapter(provider);
 
   let generated: GeneratedMultiTaskPlan;
+  let selectedProviderSlug = providerSlug;
+  let selectedModelId = modelId;
+  let fallbackUsed = resolved.route === "FALLBACK";
+
   try {
     generated = await generateCodingMultiTaskPlanWithAdapter({
       context,
@@ -570,13 +580,115 @@ export async function generateAndPersistCodingMultiTaskPlan(
     });
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
-    throw new AutomatedMultiTaskPlannerError(
-      "Constrained multi-task planner model invocation failed.",
-      "MODEL_FAILED",
-      {
-        cause: error instanceof Error ? error.message.slice(0, 1_000) : String(error),
-      },
-    );
+
+    const retryablePrimaryFailure =
+      error instanceof ModelInvocationError &&
+      error.details.retryable === true &&
+      resolved.route === "PRIMARY";
+
+    if (retryablePrimaryFailure) {
+      const fallback = await resolveConfiguredCodingFallbackModel();
+      if (fallback.ok) {
+        const fallbackProviderSlug = String(
+          fallback.selection.provider.slug ?? "",
+        ).toLowerCase();
+        const fallbackModelId = String(
+          fallback.selection.model.modelId ?? "",
+        );
+
+        if (
+          fallbackProviderSlug &&
+          fallbackModelId &&
+          (fallbackProviderSlug !== providerSlug || fallbackModelId !== modelId)
+        ) {
+          const fallbackProvider = createConstrainedCodingProviderAdapter({
+            providerSlug: fallbackProviderSlug,
+            modelId: fallbackModelId,
+            baseUrl:
+              typeof fallback.selection.provider.baseUrl === "string"
+                ? fallback.selection.provider.baseUrl
+                : null,
+            observability: {
+              conversationId: taskId,
+              agentName: "Automated Multi-Task Planner",
+              providerName: fallbackProviderSlug,
+              modelName: fallbackModelId,
+              requestType: "code-fallback",
+              createdBy: "coding-task-graph-generator",
+            },
+          });
+          const fallbackAdapter =
+            createConstrainedModelInvocationAdapter(fallbackProvider);
+
+          try {
+            generated = await generateCodingMultiTaskPlanWithAdapter({
+              context,
+              adapter: fallbackAdapter,
+              target: {
+                provider: fallbackProviderSlug,
+                model: fallbackModelId,
+              },
+              timeoutMs: fallback.selection.timeoutMs,
+              maxOutputTokens: fallback.selection.maxOutputTokens,
+            });
+            selection = fallback.selection;
+            selectedProviderSlug = fallbackProviderSlug;
+            selectedModelId = fallbackModelId;
+            fallbackUsed = true;
+          } catch (fallbackError) {
+            throw new AutomatedMultiTaskPlannerError(
+              "Constrained multi-task planner primary and fallback model invocation failed.",
+              "MODEL_FAILED",
+              {
+                primaryCause:
+                  error instanceof Error
+                    ? error.message.slice(0, 1_000)
+                    : String(error),
+                fallbackCause:
+                  fallbackError instanceof Error
+                    ? fallbackError.message.slice(0, 1_000)
+                    : String(fallbackError),
+              },
+            );
+          }
+        } else {
+          throw new AutomatedMultiTaskPlannerError(
+            "Configured planner fallback resolves to the same provider/model as primary.",
+            "MODEL_FAILED",
+            {
+              cause:
+                error instanceof Error
+                  ? error.message.slice(0, 1_000)
+                  : String(error),
+            },
+          );
+        }
+      } else {
+        throw new AutomatedMultiTaskPlannerError(
+          "Constrained multi-task planner model invocation failed and fallback is unavailable.",
+          "MODEL_FAILED",
+          {
+            cause:
+              error instanceof Error
+                ? error.message.slice(0, 1_000)
+                : String(error),
+            fallbackReason: fallback.reason,
+            fallbackFailure: fallback.message,
+          },
+        );
+      }
+    } else {
+      throw new AutomatedMultiTaskPlannerError(
+        "Constrained multi-task planner model invocation failed.",
+        "MODEL_FAILED",
+        {
+          cause:
+            error instanceof Error
+              ? error.message.slice(0, 1_000)
+              : String(error),
+        },
+      );
+    }
   }
 
   try {
@@ -607,11 +719,13 @@ export async function generateAndPersistCodingMultiTaskPlan(
       workstreamCount: generated.plan.workstreams.length,
       provider: generated.metadata.provider,
       model: generated.metadata.model,
+      selectedProvider: selectedProviderSlug,
+      selectedModel: selectedModelId,
       inputTokens: generated.metadata.usage.inputTokens,
       outputTokens: generated.metadata.usage.outputTokens,
       totalTokens: generated.metadata.usage.totalTokens,
       latencyMs: generated.metadata.latencyMs,
-      fallbackUsed: generated.metadata.fallbackUsed,
+      fallbackUsed,
       plannerAuthorityGeneration: authority.fencingGeneration,
       repositoryHeadSha: context.headSha,
       nextAction: "APPROVE_TASK_GRAPH",

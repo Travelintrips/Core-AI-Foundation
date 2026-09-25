@@ -62,6 +62,7 @@ vi.mock("../ollamaLocalService.js", () => ({
 
 import {
   describePreferredCodingModelConfig,
+  resolveConfiguredCodingFallbackModel,
   resolvePreferredCodingModel,
 } from "../localCodingAiPreferredModelService.js";
 
@@ -83,6 +84,34 @@ describe("Preferred constrained coding model routing", () => {
       fallbackProvider: "ollama",
       fallbackModel: "qwen2.5-coder:7b",
       apiKeysExposed: false,
+    });
+  });
+
+
+  it("resolves healthy Ollama as an explicit runtime fallback target", async () => {
+    await expect(
+      resolveConfiguredCodingFallbackModel({} as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      fallback: { provider: "ollama", model: "qwen2.5-coder:7b" },
+      selection: {
+        provider: {
+          slug: "ollama",
+          baseUrl: "http://127.0.0.1:11434/v1",
+        },
+        model: { modelId: "qwen2.5-coder:7b" },
+      },
+    });
+  });
+
+  it("refuses runtime fallback when fallback is explicitly disabled", async () => {
+    await expect(
+      resolveConfiguredCodingFallbackModel({
+        AI_CODING_FALLBACK_ENABLED: "false",
+      } as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "FALLBACK_DISABLED",
     });
   });
 
