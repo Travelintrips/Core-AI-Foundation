@@ -37,14 +37,34 @@ export interface ExecutionOutput {
   latencyMs: number;
 }
 
-function providerRequestError(provider: string, status: number): Error {
+function providerRequestError(
+  provider: string,
+  status: number,
+  detail?: string,
+): Error {
   if (status === 401 || status === 403) {
-    return new Error(`${provider} authentication failed. Check the API key configured in Replit Secrets.`);
+    return new Error(`${provider} authentication failed. Check the configured API key.`);
   }
   if (status === 429) {
     return new Error(`${provider} rate limit or quota exceeded. Check the provider account.`);
   }
-  return new Error(`${provider} API request failed (HTTP ${status}).`);
+
+  const safeDetail = (detail ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 700);
+
+  return new Error(
+    `${provider} API request failed (HTTP ${status})${safeDetail ? `: ${safeDetail}` : "."}`,
+  );
+}
+
+export function openAIModelSupportsTemperature(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  if (/^o\d/.test(normalized)) return false;
+  if (/^gpt-5(?:[.\-]|$)/.test(normalized)) return false;
+  return true;
 }
 
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
@@ -54,6 +74,7 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
 
   const modelId = input.model.modelId;
   const isOSeries = /^o\d/i.test(modelId);
+  const supportsTemperature = openAIModelSupportsTemperature(modelId);
   const baseURL = (input.provider.baseUrl as string | undefined) || "https://api.openai.com/v1";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,7 +99,7 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
     messages,
     max_completion_tokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
   };
-  if (!isOSeries) body.temperature = input.temperature ?? 0.7;
+  if (supportsTemperature) body.temperature = input.temperature ?? 0.7;
 
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: "POST",
@@ -93,7 +114,8 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    throw providerRequestError("OpenAI", response.status);
+    const detail = await response.text().catch(() => "");
+    throw providerRequestError("OpenAI", response.status, detail);
   }
 
   const data = (await response.json()) as {
