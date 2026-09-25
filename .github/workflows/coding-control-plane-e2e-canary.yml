@@ -1,0 +1,158 @@
+name: AI Coding Control Plane E2E Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type RUN_CONTROL_PLANE_E2E to execute the controlled production canary"
+        required: true
+        type: string
+      base_sha:
+        description: "40-character production repository base SHA used for bounded dispatch"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-coding-control-plane-e2e-canary
+  cancel-in-progress: false
+
+jobs:
+  controlled-e2e:
+    name: Controlled production E2E canary
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      API_BASE_URL: ${{ vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      BASE_SHA: ${{ inputs.base_sha }}
+    steps:
+      - name: Guard explicit execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "RUN_CONTROL_PLANE_E2E"
+          [[ "$BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          test -n "$ADMIN_API_KEY"
+
+      - name: Verify production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/health.json -w "%{http_code}" "$API_BASE_URL/health")
+          test "$code" = "200"
+
+      - name: Create fresh isolated canary task
+        id: task
+        shell: bash
+        run: |
+          set -euo pipefail
+          correlation="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          body=$(jq -nc --arg c "$correlation" '{
+            projectName:"Control Plane E2E Canary",
+            repository:"Travelintrips/Core-AI-Foundation",
+            branch:"main",
+            instruction:("Controlled E2E canary "+$c+". Analyze and plan only bounded non-production changes. Do not commit, push, merge, access secrets, or modify production."),
+            priority:"LOW"
+          }')
+          code=$(curl -sS -o /tmp/task.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
+          test "$code" = "201"
+          task_id=$(jq -r '.id // .task.id // empty' /tmp/task.json)
+          [[ "$task_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
+          echo "scope=coding-task:$task_id" >> "$GITHUB_OUTPUT"
+
+      - name: Acquire and assert Planner Authority
+        id: authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          holder="gha-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          body=$(jq -nc --arg scope "${{ steps.task.outputs.scope }}" --arg holder "$holder" '{
+            scope:$scope,holderId:$holder,holderType:"chatgpt",leaseSeconds:300,
+            metadata:{purpose:"production-control-plane-e2e-canary"}
+          }')
+          code=$(curl -sS -o /tmp/authority.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/acquire"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
+          test "$code" = "201"
+          token=$(jq -r '.leaseToken // empty' /tmp/authority.json)
+          generation=$(jq -r '.fencingGeneration // empty' /tmp/authority.json)
+          test -n "$token"; test -n "$generation"
+          assert=$(jq -nc --arg scope "${{ steps.task.outputs.scope }}" --arg holder "$holder" --arg token "$token" --argjson generation "$generation"             '{scope:$scope,holderId:$holder,leaseToken:$token,fencingGeneration:$generation}')
+          code=$(curl -sS -o /tmp/assert.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/assert"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$assert")
+          test "$code" = "200"
+          echo "holder=$holder" >> "$GITHUB_OUTPUT"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          echo "generation=$generation" >> "$GITHUB_OUTPUT"
+
+      - name: Generate fresh Plan V1 and task graph
+        id: graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          task="${{ steps.task.outputs.task_id }}"
+          code=$(curl -sS -o /tmp/graph.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
+          [[ "$code" = "200" || "$code" = "201" ]]
+          graph_id=$(jq -r '.snapshot.graph.id // .graph.id // empty' /tmp/graph.json)
+          [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          bound=$(jq -r '.snapshot.graph.taskId // .graph.taskId // empty' /tmp/graph.json)
+          test "$bound" = "$task"
+          echo "graph_id=$graph_id" >> "$GITHUB_OUTPUT"
+
+      - name: Reassert fence before planner mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(jq -nc --arg scope "${{ steps.task.outputs.scope }}" --arg holder "${{ steps.authority.outputs.holder }}"             --arg token "${{ steps.authority.outputs.token }}" --argjson generation "${{ steps.authority.outputs.generation }}"             '{scope:$scope,holderId:$holder,leaseToken:$token,fencingGeneration:$generation}')
+          code=$(curl -sS -o /tmp/fence.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/assert"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
+          test "$code" = "200"
+
+      - name: Approve graph and bounded dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          task="${{ steps.task.outputs.task_id }}"; graph="${{ steps.graph.outputs.graph_id }}"
+          code=$(curl -sS -o /tmp/approve.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/$graph/approve"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
+          test "$code" = "200"
+          body=$(jq -nc --arg sha "$BASE_SHA" '{baseSha:$sha,maxParallel:1,leaseSeconds:120,workerPoolId:"production-e2e-canary"}')
+          code=$(curl -sS -o /tmp/dispatch.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/$graph/dispatch"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
+          test "$code" = "202"
+
+      - name: Verify exact task graph, Mission Control, and observability provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          task="${{ steps.task.outputs.task_id }}"; graph="${{ steps.graph.outputs.graph_id }}"
+          for path in "task-graph" "mission-control" "observability"; do
+            code=$(curl -sS -o "/tmp/$path.json" -w "%{http_code}" "$API_BASE_URL/ai/coding/tasks/$task/$path"               -H "x-admin-api-key: $ADMIN_API_KEY")
+            test "$code" = "200"
+          done
+          test "$(jq -r '.graph.id' /tmp/task-graph.json)" = "$graph"
+          test "$(jq -r '.graph.taskId' /tmp/task-graph.json)" = "$task"
+          test "$(jq -r '.taskId' /tmp/mission-control.json)" = "$task"
+          test "$(jq -r '.taskId' /tmp/observability.json)" = "$task"
+
+      - name: Assert stale fencing token is rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          stale=$(jq -nc --arg scope "${{ steps.task.outputs.scope }}" --arg holder "${{ steps.authority.outputs.holder }}"             --arg token "00000000-0000-4000-8000-000000000000" --argjson generation "${{ steps.authority.outputs.generation }}"             '{scope:$scope,holderId:$holder,leaseToken:$token,fencingGeneration:$generation}')
+          code=$(curl -sS -o /tmp/stale.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/assert"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$stale")
+          test "$code" = "409"
+          jq -e '.code == "STALE_FENCE" or .code == "NOT_HOLDER"' /tmp/stale.json >/dev/null
+
+      - name: Canary safety summary
+        shell: bash
+        run: |
+          echo "task_id=${{ steps.task.outputs.task_id }}"
+          echo "graph_id=${{ steps.graph.outputs.graph_id }}"
+          echo "fresh_identity=true"
+          echo "planner_fence_asserted=true"
+          echo "stale_fence_rejected=true"
+          echo "max_parallel=1"
+          echo "commit_created=false"
+          echo "pushed=false"
+          echo "merged=false"
