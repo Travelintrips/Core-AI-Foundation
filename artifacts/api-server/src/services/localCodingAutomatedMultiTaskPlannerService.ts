@@ -137,13 +137,10 @@ function staticOwnershipPrefix(pattern: string): string {
   return prefix;
 }
 
-function parentDirectories(path: string): string[] {
+function immediateParentDirectory(path: string): string | null {
   const parts = path.split("/").filter(Boolean);
-  const result: string[] = [];
-  for (let index = 1; index < parts.length; index += 1) {
-    result.push(parts.slice(0, index).join("/"));
-  }
-  return result;
+  if (parts.length < 2) return null;
+  return parts.slice(0, -1).join("/");
 }
 
 export function groundedPlannerPaths(
@@ -158,7 +155,8 @@ export function groundedPlannerPaths(
   const grounded = new Set<string>();
   for (const file of files) {
     grounded.add(file);
-    for (const parent of parentDirectories(file)) grounded.add(parent);
+    const parent = immediateParentDirectory(file);
+    if (parent) grounded.add(parent);
   }
   return [...grounded].sort();
 }
@@ -184,7 +182,6 @@ export function assertGeneratedPlanOwnershipGrounded(
       return !grounded.some(
         (candidate) =>
           candidate === prefix ||
-          candidate.startsWith(prefix + "/") ||
           prefix.startsWith(candidate + "/"),
       );
     });
