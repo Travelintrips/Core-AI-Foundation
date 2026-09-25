@@ -37,6 +37,7 @@ import {
   startSandboxVerification,
 } from "../services/localCodingSandboxGateService.js";
 import {
+  getCodingGitHubDiscoveryMode,
   listAccessibleCodingRepositories,
   listCodingRepositoryBranches,
 } from "../services/localCodingGitHubDiscoveryService.js";
@@ -68,7 +69,12 @@ router.get("/ai/coding/github/repositories", async (req, res): Promise<void> => 
   const query = typeof req.query["q"] === "string" ? req.query["q"] : undefined;
   try {
     const repositories = await listAccessibleCodingRepositories({ query });
-    res.json({ repositories });
+    res.json({
+      repositories,
+      connectionMode: getCodingGitHubDiscoveryMode(),
+      privateRepositoriesAvailable:
+        getCodingGitHubDiscoveryMode() === "authenticated",
+    });
   } catch (error) {
     if (error instanceof GitHubPublisherError) {
       if (error.kind === "AUTH_REQUIRED") {
@@ -105,7 +111,10 @@ router.get(
         `${owner}/${repo}`,
         { query },
       );
-      res.json({ branches });
+      res.json({
+        branches,
+        connectionMode: getCodingGitHubDiscoveryMode(),
+      });
     } catch (error) {
       if (error instanceof GitHubPublisherError) {
         if (error.kind === "AUTH_REQUIRED") {
