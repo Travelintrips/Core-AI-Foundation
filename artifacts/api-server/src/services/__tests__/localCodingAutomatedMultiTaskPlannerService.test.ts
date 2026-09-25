@@ -97,7 +97,10 @@ class FakeProvider implements ConstrainedModelProvider {
     this.calls.push(request);
     return {
       providerRequestId: "planner-provider-1",
-      output: { type: "text", text: this.output },
+      output:
+        request.responseFormat.type === "structured"
+          ? { type: "structured", value: JSON.parse(this.output) as unknown }
+          : { type: "text", text: this.output },
       usage: {
         inputTokens: 100,
         outputTokens: 80,
