@@ -302,7 +302,7 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
       system: prompt.system,
       user: prompt.user,
     }),
-    responseFormat: { type: "text" },
+    responseFormat: { type: "json_object" },
     maxOutputTokens: Math.min(
       DEFAULT_MAX_OUTPUT_TOKENS,
       input.maxOutputTokens,
