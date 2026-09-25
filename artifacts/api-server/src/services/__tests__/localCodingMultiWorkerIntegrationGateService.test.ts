@@ -41,7 +41,7 @@ function workstream(
       localExecution: {
         status: "APPLIED",
         changedFiles: ["artifacts/api-server/src/example/routes.ts"],
-        patch: "diff --git a/routes.ts b/routes.ts\n+backend",
+        patch: "diff --git a/artifacts/api-server/src/example/routes.ts b/artifacts/api-server/src/example/routes.ts\n+backend",
       },
     },
     errorMessage: null,
@@ -74,7 +74,7 @@ function snapshot(overrides: Record<string, unknown> = {}) {
 
 describe("multi-worker integration review manifest", () => {
   it("builds a deterministic read-only manifest across reviewed workstreams", () => {
-    const aiPatch = "diff --git a/page.tsx b/page.tsx\n+frontend";
+    const aiPatch = "diff --git a/artifacts/ai-platform/src/example/page.tsx b/artifacts/ai-platform/src/example/page.tsx\n+frontend";
     const input = snapshot({
       workstreams: [
         workstream(),
@@ -141,7 +141,7 @@ describe("multi-worker integration review manifest", () => {
             localExecution: {
               status: "APPLIED",
               changedFiles: ["artifacts/ai-platform/src/escape.tsx"],
-              patch: "diff --git a/escape.tsx b/escape.tsx\n+escape",
+              patch: "diff --git a/artifacts/ai-platform/src/escape.tsx b/artifacts/ai-platform/src/escape.tsx\n+escape",
             },
           },
         }),
@@ -168,7 +168,7 @@ describe("multi-worker integration review manifest", () => {
             localExecution: {
               status: "APPLIED",
               changedFiles: ["artifacts/ai-platform/src/example/page.tsx"],
-              patch: "diff --git a/page.tsx b/page.tsx\n+frontend",
+              patch: "diff --git a/artifacts/ai-platform/src/example/page.tsx b/artifacts/ai-platform/src/example/page.tsx\n+frontend",
             },
           },
         }),
@@ -181,7 +181,7 @@ describe("multi-worker integration review manifest", () => {
   });
 
   it("rejects same-file changes from parallel workstreams", () => {
-    const patch = "diff --git a/shared.ts b/shared.ts\n+change";
+    const patch = "diff --git a/artifacts/api-server/src/shared.ts b/artifacts/api-server/src/shared.ts\n+change";
     const input = snapshot({
       workstreams: [
         workstream({
@@ -215,8 +215,8 @@ describe("multi-worker integration review manifest", () => {
   });
 
   it("allows same-file changes only when dependency order serializes them", () => {
-    const patch1 = "diff --git a/shared.ts b/shared.ts\n+first";
-    const patch2 = "diff --git a/shared.ts b/shared.ts\n+second";
+    const patch1 = "diff --git a/artifacts/api-server/src/shared.ts b/artifacts/api-server/src/shared.ts\n+first";
+    const patch2 = "diff --git a/artifacts/api-server/src/shared.ts b/artifacts/api-server/src/shared.ts\n+second";
     const input = snapshot({
       workstreams: [
         workstream({
