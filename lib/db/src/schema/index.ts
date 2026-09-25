@@ -98,6 +98,7 @@ export * from "./ai-review-workspace-meta";
 export * from "./ai-provider-health-logs";
 export * from "./ai-coding-workspace";
 export * from "./ai-coding-task-graph";
+export * from "./ai-coding-integration-reviews";
 export * from "./ai-coding-workstream-ai-handoffs";
 export * from "./ai-coding-control-bridge";
 export * from "./ai-coding-github-events";
