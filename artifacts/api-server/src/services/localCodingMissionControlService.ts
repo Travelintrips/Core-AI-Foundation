@@ -93,7 +93,9 @@ export function summarizeCodingMissionControl(
   if (reviewRequired > 0) nextActions.push("REVIEW_WORKSTREAMS");
   if (ready > 0) nextActions.push("DISPATCH_READY_WORKSTREAMS");
   if (running > 0) nextActions.push("MONITOR_ACTIVE_LEASES");
-  if (total > 0 && completed === total) nextActions.push("PROGRAM_COMPLETE");
+  if (total > 0 && completed === total) {
+    nextActions.push("REVIEW_INTEGRATION_MANIFEST");
+  }
   if (nextActions.length === 0 && waiting > 0) nextActions.push("WAIT_FOR_DEPENDENCIES");
 
   return {

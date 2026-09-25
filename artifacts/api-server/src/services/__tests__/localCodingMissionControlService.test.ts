@@ -78,6 +78,22 @@ describe("summarizeCodingMissionControl", () => {
     expect(result.blockers.map((item) => item.key)).toEqual(["T04"]);
   });
 
+  it("routes a fully completed graph to explicit integration manifest review", () => {
+    const snapshot = graph("COMPLETED");
+    for (const workstream of snapshot.workstreams) {
+      workstream.status = "COMPLETED";
+      workstream.errorMessage = null;
+    }
+
+    const result = summarizeCodingMissionControl(
+      "22222222-2222-4222-8222-222222222222",
+      snapshot,
+    );
+
+    expect(result.progressPercent).toBe(100);
+    expect(result.nextActions).toEqual(["REVIEW_INTEGRATION_MANIFEST"]);
+  });
+
   it("prioritizes failed workstreams and ready dispatch", () => {
     const snapshot = graph("FAILED");
     snapshot.workstreams[1].status = "FAILED";

@@ -50,6 +50,7 @@ export interface CodingTaskGraphWorkstreamSnapshot {
   baseSha: string | null;
   headSha: string | null;
   attemptCount: number;
+  resultJson: Record<string, unknown> | null;
   errorMessage: string | null;
   dependencies: string[];
 }
@@ -159,6 +160,12 @@ async function loadGraphSnapshotById(
         baseSha: item.baseSha,
         headSha: item.headSha,
         attemptCount: item.attemptCount,
+        resultJson:
+          item.resultJson &&
+          typeof item.resultJson === "object" &&
+          !Array.isArray(item.resultJson)
+            ? (item.resultJson as Record<string, unknown>)
+            : null,
         errorMessage: item.errorMessage,
         dependencies: (dependenciesByWorkstream.get(item.workstreamKey) ?? []).sort(),
       }))
