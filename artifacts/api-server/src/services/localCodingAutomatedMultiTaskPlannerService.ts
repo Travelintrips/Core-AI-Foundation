@@ -582,26 +582,25 @@ export async function generateAndPersistCodingMultiTaskPlan(
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
 
-    const retryablePrimaryFailure =
+    const retryableSelectedFailure =
       error instanceof ModelInvocationError &&
-      error.details.retryable === true &&
-      resolved.route === "PRIMARY";
+      error.details.retryable === true;
 
-    if (retryablePrimaryFailure) {
+    if (retryableSelectedFailure) {
       const fallback = await resolveConfiguredCodingFallbackModel();
-      if (fallback.ok) {
-        const fallbackProviderSlug = String(
-          fallback.selection.provider.slug ?? "",
-        ).toLowerCase();
-        const fallbackModelId = String(
-          fallback.selection.model.modelId ?? "",
-        );
+      const fallbackProviderSlug = fallback.ok
+        ? String(fallback.selection.provider.slug ?? "").toLowerCase()
+        : "";
+      const fallbackModelId = fallback.ok
+        ? String(fallback.selection.model.modelId ?? "")
+        : "";
+      const fallbackIsDifferent =
+        fallback.ok &&
+        fallbackProviderSlug &&
+        fallbackModelId &&
+        (fallbackProviderSlug !== providerSlug || fallbackModelId !== modelId);
 
-        if (
-          fallbackProviderSlug &&
-          fallbackModelId &&
-          (fallbackProviderSlug !== providerSlug || fallbackModelId !== modelId)
-        ) {
+      if (fallbackIsDifferent && fallback.ok) {
           const fallbackProvider = createConstrainedCodingProviderAdapter({
             providerSlug: fallbackProviderSlug,
             modelId: fallbackModelId,
@@ -652,19 +651,14 @@ export async function generateAndPersistCodingMultiTaskPlan(
               },
             );
           }
-        } else {
-          throw new AutomatedMultiTaskPlannerError(
-            "Configured planner fallback resolves to the same provider/model as primary.",
-            "MODEL_FAILED",
-            {
-              cause:
-                error instanceof Error
-                  ? error.message.slice(0, 1_000)
-                  : String(error),
-            },
-          );
-        }
       } else {
+        const localFallbackReason = fallback.ok
+          ? "SAME_TARGET"
+          : fallback.reason;
+        const localFallbackFailure = fallback.ok
+          ? "Configured local fallback resolves to the same provider/model as the currently selected target."
+          : fallback.message;
+
         const cloudFallback = await resolveAlternativeCloudCodingModel({
           excludeProvider: providerSlug,
           excludeModel: modelId,
@@ -722,8 +716,8 @@ export async function generateAndPersistCodingMultiTaskPlan(
                   error instanceof Error
                     ? error.message.slice(0, 1_000)
                     : String(error),
-                localFallbackReason: fallback.reason,
-                localFallbackFailure: fallback.message,
+                localFallbackReason,
+                localFallbackFailure,
                 cloudFallbackCause:
                   cloudError instanceof Error
                     ? cloudError.message.slice(0, 1_000)
@@ -740,8 +734,8 @@ export async function generateAndPersistCodingMultiTaskPlan(
                 error instanceof Error
                   ? error.message.slice(0, 1_000)
                   : String(error),
-              localFallbackReason: fallback.reason,
-              localFallbackFailure: fallback.message,
+              localFallbackReason,
+              localFallbackFailure,
               cloudFallbackReason: cloudFallback.reason,
               cloudFallbackFailure: cloudFallback.message,
             },
