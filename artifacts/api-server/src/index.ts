@@ -44,6 +44,7 @@ const jobDispatcher                 = await import("./services/jobDispatcherServ
 const scheduler                     = await import("./services/aiSchedulerService.js");
 const sseManager                    = await import("./services/sseManager.js");
 const healthAlerts                  = await import("./services/providerHealthAlertService.js");
+const incidentWatcher                = await import("./services/incidentWatcherService.js");
 const { ensureObservabilityTables } = await import("./services/observabilityService.js");
 const { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } =
   await import("./domains/material-library/seed.js");
@@ -170,6 +171,13 @@ async function initializeRuntimeServices(): Promise<void> {
   } catch (err) {
     logger.error({ err }, "[health-alerts] Failed to auto-start");
   }
+
+  const incidentWatcherEnabled = process.env["AI_INCIDENT_WATCHER_ENABLED"] !== "false";
+  if (incidentWatcherEnabled) {
+    await runStartupStep("[incident] Watcher start", () => incidentWatcher.start());
+  } else {
+    logger.info("[incident] Watcher disabled by AI_INCIDENT_WATCHER_ENABLED=false");
+  }
 }
 
 app.listen(port, (err) => {
@@ -187,6 +195,7 @@ function shutdown(signal: string): void {
   logger.info(`${signal} received — shutting down dispatcher, scheduler, health alerts, and SSE`);
   sseManager.shutdown();
   healthAlerts.shutdown();
+  incidentWatcher.shutdown();
   Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
