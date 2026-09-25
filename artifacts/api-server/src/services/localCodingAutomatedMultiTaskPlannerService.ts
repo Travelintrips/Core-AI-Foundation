@@ -302,7 +302,21 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
       system: prompt.system,
       user: prompt.user,
     }),
-    responseFormat: { type: "json_object" },
+    responseFormat: {
+      type: "structured",
+      schemaName: "coding_multi_task_plan_v1",
+      jsonSchema: {
+        type: "object",
+        required: ["version", "taskId", "objective", "workstreams"],
+        additionalProperties: false,
+        properties: {
+          version: { const: 1 },
+          taskId: { type: "string" },
+          objective: { type: "string" },
+          workstreams: { type: "array", minItems: 1, maxItems: MAX_PLANNER_WORKSTREAMS },
+        },
+      },
+    },
     maxOutputTokens: Math.min(
       DEFAULT_MAX_OUTPUT_TOKENS,
       input.maxOutputTokens,
