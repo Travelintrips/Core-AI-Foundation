@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
   ConstrainedModelInvocationAdapter,
+  ProviderInvocationError,
   type ConstrainedModelProvider,
   type ProviderModelInvocation,
   type ProviderModelResult,
@@ -107,6 +108,24 @@ class FakeProvider implements ConstrainedModelProvider {
         totalTokens: 180,
       },
     };
+  }
+}
+
+
+class FlakyRateLimitedProvider extends FakeProvider {
+  attempts = 0;
+
+  override async invoke(
+    request: ProviderModelInvocation,
+  ): Promise<ProviderModelResult> {
+    this.attempts += 1;
+    if (this.attempts < 3) {
+      throw new ProviderInvocationError(
+        "Synthetic planner rate limit",
+        "RATE_LIMIT",
+      );
+    }
+    return super.invoke(request);
   }
 }
 
@@ -285,4 +304,26 @@ describe("automated multi-task planner", () => {
       fallbackUsed: false,
     });
   });
+  it("retries bounded transient provider rate limits before succeeding", async () => {
+    const provider = new FlakyRateLimitedProvider(JSON.stringify(validPlan()));
+    const adapter = new ConstrainedModelInvocationAdapter(provider);
+
+    const result = await generateCodingMultiTaskPlanWithAdapter({
+      context: context(),
+      adapter,
+      target: {
+        provider: "fake-provider",
+        model: "fake-model",
+      },
+      timeoutMs: 2_000,
+      maxOutputTokens: 2_048,
+      requestId: "planner-rate-limit-retry",
+    });
+
+    expect(provider.attempts).toBe(3);
+    expect(provider.calls).toHaveLength(1);
+    expect(result.plan.taskId).toBe(TASK_ID);
+  });
+
+
 });

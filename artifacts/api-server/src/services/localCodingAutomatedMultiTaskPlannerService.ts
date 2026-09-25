@@ -10,6 +10,7 @@ import { logAudit } from "./aiAuditService.js";
 import {
   createConstrainedModelInvocationAdapter,
   type ConstrainedModelInvocationAdapter,
+  ModelInvocationError,
   type ModelInvocationMetadata,
 } from "./localCodingAiModelAdapterService.js";
 import {
@@ -34,6 +35,8 @@ const AUTO_PLANNER_HOLDER_ID = "ai-core:auto-multi-task-planner";
 const AUTO_PLANNER_LEASE_SECONDS = 120;
 const MAX_PLANNER_WORKSTREAMS = 8;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
+const PLANNER_MODEL_MAX_ATTEMPTS = 3;
+const PLANNER_MODEL_BACKOFF_MS = [750, 1_500] as const;
 
 export type AutomatedMultiTaskPlannerErrorCode =
   | "NOT_FOUND"
@@ -285,6 +288,39 @@ export function parseGeneratedCodingMultiTaskPlan(
   return plan;
 }
 
+function isRetryablePlannerModelError(error: unknown): error is ModelInvocationError {
+  return (
+    error instanceof ModelInvocationError &&
+    error.details.retryable === true &&
+    ["PROVIDER_RATE_LIMIT", "PROVIDER_UNAVAILABLE", "TIMEOUT"].includes(error.code)
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function invokePlannerModelWithBoundedRetry(input: {
+  adapter: ConstrainedModelInvocationAdapter;
+  request: Parameters<ConstrainedModelInvocationAdapter["invoke"]>[0];
+}): Promise<Awaited<ReturnType<ConstrainedModelInvocationAdapter["invoke"]>>> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= PLANNER_MODEL_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await input.adapter.invoke(input.request);
+    } catch (error) {
+      lastError = error;
+      if (!isRetryablePlannerModelError(error) || attempt === PLANNER_MODEL_MAX_ATTEMPTS) {
+        throw error;
+      }
+      await sleep(PLANNER_MODEL_BACKOFF_MS[attempt - 1] ?? 1_500);
+    }
+  }
+
+  throw lastError;
+}
+
 export async function generateCodingMultiTaskPlanWithAdapter(input: {
   context: AutomatedPlannerContext;
   adapter: ConstrainedModelInvocationAdapter;
@@ -294,7 +330,9 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
   requestId?: string;
 }): Promise<GeneratedMultiTaskPlan> {
   const prompt = buildAutomatedMultiTaskPlannerPrompt(input.context);
-  const response = await input.adapter.invoke({
+  const response = await invokePlannerModelWithBoundedRetry({
+    adapter: input.adapter,
+    request: {
     requestId: input.requestId ?? randomUUID(),
     target: input.target,
     input: JSON.stringify({
@@ -321,7 +359,8 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
       DEFAULT_MAX_OUTPUT_TOKENS,
       input.maxOutputTokens,
     ),
-    timeoutMs: input.timeoutMs,
+      timeoutMs: input.timeoutMs,
+    },
   });
 
   if (response.output.type !== "structured") {
