@@ -21,7 +21,6 @@ import {
   resolvePreferredCodingModel,
 } from "./localCodingAiPreferredModelService.js";
 import {
-  resolveAlternativeCloudCodingModel,
   resolveAlternativeCloudCodingModels,
 } from "./localCodingAiProductionModelService.js";
 import {
