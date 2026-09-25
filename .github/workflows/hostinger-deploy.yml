@@ -144,6 +144,33 @@ jobs:
           test "$legacy_code" = "301"
           test "$legacy_location" = "$PUBLIC_SITEMAP_URL"
 
+      - name: Report Hostinger verification failure
+        if: failure()
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set +e
+          payload=$(node -e 'console.log(JSON.stringify({
+            source:"hostinger",
+            kind:"production_verification_failed",
+            title:"Hostinger production verification failed",
+            summary:"GitHub Actions Hostinger Production Verify failed for expected commit "+process.env.EXPECTED_SHA,
+            severity:"critical",
+            riskClass:"GUARDED",
+            repository:"Travelintrips/Core-AI-Foundation",
+            branch:"main",
+            headSha:process.env.EXPECTED_SHA,
+            environment:"production",
+            fingerprint:"hostinger:production:"+process.env.EXPECTED_SHA,
+            metadata:{workflow:"Hostinger Production Verify",runId:process.env.GITHUB_RUN_ID}
+          }))')
+          curl --silent --show-error --max-time 20 \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/incidents" || true
+
       - name: Verification summary
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
