@@ -95,6 +95,23 @@ function validateBaseSha(value: string): string {
   return normalized;
 }
 
+export function buildCodingWorkstreamBranchBinding(
+  parentBranch: string,
+  claim: Pick<CodingWorkstreamClaim, "branchName" | "baseSha">,
+): {
+  childTaskBranch: string;
+  analyzerSourceBranch: string;
+  isolatedBranchName: string;
+  expectedBaseSha: string;
+} {
+  return {
+    childTaskBranch: claim.branchName,
+    analyzerSourceBranch: parentBranch,
+    isolatedBranchName: claim.branchName,
+    expectedBaseSha: claim.baseSha,
+  };
+}
+
 function ownershipDescription(workstream: AiCodingWorkstream): string {
   const ownership = stringArray(workstream.ownershipPaths);
   const acceptance = stringArray(workstream.acceptanceCriteria);
@@ -379,6 +396,10 @@ async function createChildExecutionForClaim(
       "-A" +
       String(claim.attempt);
     const description = ownershipDescription(workstream);
+    const branchBinding = buildCodingWorkstreamBranchBinding(
+      parentTask.branch,
+      claim,
+    );
 
     const [childTask] = await tx
       .insert(aiCodingTasksTable)
@@ -391,7 +412,7 @@ async function createChildExecutionForClaim(
           " " +
           workstream.title,
         repository: parentTask.repository,
-        branch: parentTask.branch,
+        branch: branchBinding.childTaskBranch,
         instruction: description,
         status: "ANALYZING",
         priority: workstream.priority,
@@ -440,7 +461,9 @@ async function createChildExecutionForClaim(
           codingTaskId: childTask.id,
           codingRunId: childRun.id,
           repository: parentTask.repository,
-          branch: parentTask.branch,
+          branch: branchBinding.analyzerSourceBranch,
+          isolatedBranchName: branchBinding.isolatedBranchName,
+          expectedBaseSha: branchBinding.expectedBaseSha,
           title: childTask.projectName,
           description,
           ownershipPaths: stringArray(workstream.ownershipPaths),

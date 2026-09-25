@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 
 const mockDbSelect = vi.hoisted(() => vi.fn());
 const mockDbTransaction = vi.hoisted(() => vi.fn());
@@ -53,12 +58,97 @@ const {
   buildRepositoryCloneEnvironment,
   isRetryableRepositoryCloneResourceError,
   completeRepositoryAnalyzerRun,
+  configureIsolatedRepositoryWorkspace,
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
+  prepareRepositoryWorkspace,
 } = await import("../repositoryAnalyzerService.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";
 const runId = "22222222-2222-4222-8222-222222222222";
+
+const execFileAsync = promisify(execFile);
+
+describe("repository analyzer isolated multi-worker workspace", () => {
+  it("creates a local isolated branch only when cloned HEAD matches the approved base SHA", async () => {
+    const root = await mkdtemp(join(tmpdir(), "coding-analyzer-isolated-"));
+    try {
+      await execFileAsync("git", ["init", "-b", "main"], { cwd: root });
+      await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: root });
+      await execFileAsync("git", ["config", "user.name", "Isolation Test"], { cwd: root });
+      await writeFile(join(root, "fixture.ts"), "export const value = 1;\n", "utf8");
+      await execFileAsync("git", ["add", "fixture.ts"], { cwd: root });
+      await execFileAsync("git", ["commit", "-m", "fixture"], {
+        cwd: root,
+        env: {
+          ...process.env,
+          GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+          GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
+        },
+      });
+      const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root });
+      const head = stdout.trim();
+
+      await configureIsolatedRepositoryWorkspace(
+        root,
+        head,
+        "ai-core/111111111111/ws-001-a1",
+      );
+
+      const branch = await execFileAsync(
+        "git",
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        { cwd: root },
+      );
+      const isolatedHead = await execFileAsync("git", ["rev-parse", "HEAD"], {
+        cwd: root,
+      });
+
+      expect(branch.stdout.trim()).toBe("ai-core/111111111111/ws-001-a1");
+      expect(isolatedHead.stdout.trim()).toBe(head);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed before branch creation when the cloned HEAD no longer matches approved base SHA", async () => {
+    const root = await mkdtemp(join(tmpdir(), "coding-analyzer-stale-"));
+    try {
+      await execFileAsync("git", ["init", "-b", "main"], { cwd: root });
+      await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: root });
+      await execFileAsync("git", ["config", "user.name", "Isolation Test"], { cwd: root });
+      await writeFile(join(root, "fixture.ts"), "export const value = 1;\n", "utf8");
+      await execFileAsync("git", ["add", "fixture.ts"], { cwd: root });
+      await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root });
+
+      await expect(
+        configureIsolatedRepositoryWorkspace(
+          root,
+          "f".repeat(40),
+          "ai-core/111111111111/ws-001-a1",
+        ),
+      ).rejects.toThrow(/HEAD changed before isolated worker execution/);
+
+      const branch = await execFileAsync(
+        "git",
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        { cwd: root },
+      );
+      expect(branch.stdout.trim()).toBe("main");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses isolated execution against a non-disposable local repository", async () => {
+    await expect(
+      prepareRepositoryWorkspace(".", "main", {
+        isolatedBranchName: "ai-core/111111111111/ws-001-a1",
+        expectedBaseSha: "a".repeat(40),
+      }),
+    ).rejects.toThrow(/requires a disposable cloned workspace/);
+  });
+});
 
 describe("repository analyzer GitHub clone authentication", () => {
   it("passes GitHub credentials through process environment without embedding them in the repository URL", () => {
