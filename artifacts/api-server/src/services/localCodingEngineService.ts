@@ -580,13 +580,20 @@ export function clearLocalCodingIndexCache(): void {
   indexCache.clear();
 }
 
+export function normalizeCommandStdout(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Buffer.isBuffer(value)) return value.toString("utf8");
+  if (value instanceof Uint8Array) return Buffer.from(value).toString("utf8");
+  return "";
+}
+
 async function git(
   root: string,
   args: string[],
   timeout = 10_000,
   trimOutput = true,
 ): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, {
+  const result = await execFileAsync("git", args, {
     cwd: root,
     timeout,
     maxBuffer: 512 * 1024,
@@ -597,6 +604,9 @@ async function git(
       LC_ALL: "C",
     },
   });
+  const stdout = normalizeCommandStdout(
+    (result as { stdout?: unknown }).stdout,
+  );
   return trimOutput ? stdout.trim() : stdout;
 }
 
@@ -663,10 +673,12 @@ async function readGitMetadata(root: string, requestedBranch: string, keywords: 
     .sort((a, b) => scoreText(b.subject, keywords) - scoreText(a.subject, keywords))
     .slice(0, MAX_RECENT_COMMITS);
 
+  const safeStatusOutput = normalizeCommandStdout(statusOutput);
+  const safeDiff = normalizeCommandStdout(diff);
   const cacheFingerprint = createHash("sha256")
-    .update(statusOutput)
+    .update(safeStatusOutput)
     .update("\n")
-    .update(diff)
+    .update(safeDiff)
     .digest("hex")
     .slice(0, 16);
 
@@ -674,7 +686,11 @@ async function readGitMetadata(root: string, requestedBranch: string, keywords: 
     branch: branch || requestedBranch,
     headSha,
     changedFiles,
-    diff: redactSensitiveDiff(Buffer.byteLength(diff, "utf8") > MAX_DIFF_BYTES ? diff.slice(0, MAX_DIFF_BYTES) : diff),
+    diff: redactSensitiveDiff(
+      Buffer.byteLength(safeDiff, "utf8") > MAX_DIFF_BYTES
+        ? safeDiff.slice(0, MAX_DIFF_BYTES)
+        : safeDiff,
+    ),
     cacheFingerprint,
     commits,
   };
@@ -728,13 +744,15 @@ async function findMatchesWithRipgrep(root: string, keywords: string[]): Promise
   const args = ["--files-with-matches", "--ignore-case", "--hidden", "--no-messages", ...rgExcludeArgs()];
   for (const keyword of keywords) args.push("-e", keyword);
   args.push(".");
-  const { stdout } = await execFileAsync("rg", args, {
+  const result = await execFileAsync("rg", args, {
     cwd: root,
     timeout: 20_000,
     maxBuffer: MAX_RG_BUFFER,
     env: { PATH: process.env.PATH ?? "", LANG: "C", LC_ALL: "C" },
   });
-  const safeStdout = typeof stdout === "string" ? stdout : "";
+  const safeStdout = normalizeCommandStdout(
+    (result as { stdout?: unknown }).stdout,
+  );
   return new Set(
     safeStdout
       .split("\n")
