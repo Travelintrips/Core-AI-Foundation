@@ -242,6 +242,7 @@ vi.mock("../../services/localCodingPullRequestGateService.js", () => ({
 }));
 
 vi.mock("../../services/localCodingGitHubDiscoveryService.js", () => ({
+  getCodingGitHubDiscoveryMode: vi.fn(() => "public"),
   listAccessibleCodingRepositories: mockListAccessibleCodingRepositories,
   listCodingRepositoryBranches: mockListCodingRepositoryBranches,
 }));
