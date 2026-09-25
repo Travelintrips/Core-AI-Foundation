@@ -45,6 +45,34 @@ jobs:
           HOSTINGER_FRONTEND: customer-portal
           ZEROLLM_INSTALL_ENABLED: "false"
         run: pnpm run build
+      - name: Report CI failure to incident inbox
+        if: failure() && github.event_name != 'pull_request'
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: https://aicore.cstlogistic.co.id/api
+        run: |
+          set +e
+          payload=$(node -e 'console.log(JSON.stringify({
+            source:"github",
+            kind:"ci_failed",
+            title:"GitHub CI Verify failed",
+            summary:"CI Verify failed for "+process.env.GITHUB_REPOSITORY+" @ "+process.env.GITHUB_SHA,
+            severity:"critical",
+            riskClass:"GUARDED",
+            repository:process.env.GITHUB_REPOSITORY,
+            branch:process.env.GITHUB_REF_NAME,
+            headSha:process.env.GITHUB_SHA,
+            environment:"production",
+            fingerprint:"github:ci:"+process.env.GITHUB_REPOSITORY+":"+process.env.GITHUB_SHA,
+            metadata:{workflow:"CI Verify",runId:process.env.GITHUB_RUN_ID}
+          }))')
+          curl --silent --show-error --max-time 20 \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/incidents" || true
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
