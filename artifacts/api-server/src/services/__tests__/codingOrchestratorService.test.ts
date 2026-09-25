@@ -10,6 +10,7 @@ const mockRouteToModel = vi.hoisted(() => vi.fn());
 const mockGetFallbackModels = vi.hoisted(() => vi.fn());
 const mockExecuteAI = vi.hoisted(() => vi.fn());
 const mockLogAudit = vi.hoisted(() => vi.fn());
+const mockGenerateAndPersistCodingMultiTaskPlan = vi.hoisted(() => vi.fn());
 
 const insertBuilder = {
   values: mockInsertValues,
@@ -64,6 +65,10 @@ vi.mock("../aiModelRouter.js", () => ({
 
 vi.mock("../aiExecutionService.js", () => ({
   executeAI: mockExecuteAI,
+}));
+
+vi.mock("../localCodingAutomatedMultiTaskPlannerService.js", () => ({
+  generateAndPersistCodingMultiTaskPlan: mockGenerateAndPersistCodingMultiTaskPlan,
 }));
 
 const { startCodingOrchestration } = await import("../codingOrchestratorService.js");
@@ -153,9 +158,32 @@ describe("Coding Orchestrator", () => {
       tokensUsed: 180,
       latencyMs: 250,
     });
+
+    mockGenerateAndPersistCodingMultiTaskPlan.mockResolvedValue({
+      created: true,
+      graphId: "33333333-3333-4333-8333-333333333333",
+      graphVersion: 1,
+      planHash: "a".repeat(64),
+      graphStatus: "PREPARED",
+      plan: {
+        version: 1,
+        taskId: task.id,
+        objective: "Implement semantic change safely",
+        workstreams: [],
+      },
+      model: {
+        provider: "openai",
+        model: "gpt-5",
+        inputTokens: 120,
+        outputTokens: 80,
+        totalTokens: 200,
+        latencyMs: 300,
+      },
+      nextAction: "APPROVE_TASK_GRAPH",
+    });
   });
 
-  it("marks semantic tasks AI_REQUIRED without invoking any AI provider", async () => {
+  it("escalates AI_REQUIRED into a PREPARED task graph without coding execution", async () => {
     const started = await startCodingOrchestration({ task: task as never, run: run as never });
 
     expect(started.sessionId).toBe(`coding-${run.id}`);
@@ -176,6 +204,8 @@ describe("Coding Orchestrator", () => {
       );
     });
 
+    expect(mockGenerateAndPersistCodingMultiTaskPlan).toHaveBeenCalledTimes(1);
+    expect(mockGenerateAndPersistCodingMultiTaskPlan).toHaveBeenCalledWith(task.id);
     expect(mockRouteToModel).not.toHaveBeenCalled();
     expect(mockGetFallbackModels).not.toHaveBeenCalled();
     expect(mockExecuteAI).not.toHaveBeenCalled();
@@ -187,23 +217,26 @@ describe("Coding Orchestrator", () => {
     expect(runUpdates).toEqual(expect.arrayContaining([
       expect.objectContaining({
         status: "COMPLETED",
-        logs: expect.stringContaining('"nextAction": "AI_REQUIRED"'),
+        logs: expect.stringContaining('"nextAction": "APPROVE_TASK_GRAPH"'),
       }),
       expect.objectContaining({
         status: "READY_REVIEW",
-        resultSummary: expect.stringContaining("No AI/LLM was invoked"),
+        resultSummary: expect.stringContaining("bounded AI planner generated a PREPARED task graph"),
       }),
     ]));
 
     const finalLogs = runUpdates
       .map((value) => (value as { logs?: string }).logs)
       .find((value): value is string =>
-        typeof value === "string" && value.includes('"nextAction": "AI_REQUIRED"'),
+        typeof value === "string" && value.includes('"nextAction": "APPROVE_TASK_GRAPH"'),
       );
 
     expect(finalLogs).toContain('"Local Deterministic Planner"');
     expect(finalLogs).toContain('"Local Coding Executor"');
     expect(finalLogs).toContain('"status": "BLOCKED"');
+    expect(finalLogs).toContain('"graphStatus": "PREPARED"');
+    expect(finalLogs).toContain('"graphVersion": 1');
+    expect(finalLogs).toContain('"provider": "openai"');
     expect(finalLogs).not.toContain('"implementationPlan"');
   });
 
@@ -254,6 +287,7 @@ describe("Coding Orchestrator", () => {
       expect(logs).toContain('"status": "COMPLETED"');
     });
 
+    expect(mockGenerateAndPersistCodingMultiTaskPlan).not.toHaveBeenCalled();
     expect(mockRouteToModel).not.toHaveBeenCalled();
     expect(mockGetFallbackModels).not.toHaveBeenCalled();
     expect(mockExecuteAI).not.toHaveBeenCalled();
