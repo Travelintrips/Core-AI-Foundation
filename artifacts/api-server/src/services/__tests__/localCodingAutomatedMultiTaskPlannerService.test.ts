@@ -97,7 +97,10 @@ class FakeProvider implements ConstrainedModelProvider {
     this.calls.push(request);
     return {
       providerRequestId: "planner-provider-1",
-      output: { type: "text", text: this.output },
+      output:
+        request.responseFormat.type === "structured"
+          ? { type: "structured", value: JSON.parse(this.output) as unknown }
+          : { type: "text", text: this.output },
       usage: {
         inputTokens: 100,
         outputTokens: 80,
@@ -266,7 +269,10 @@ describe("automated multi-task planner", () => {
     expect(provider.calls).toHaveLength(1);
     expect(provider.calls[0]).toMatchObject({
       requestId: "planner-request-1",
-      responseFormat: { type: "text" },
+      responseFormat: expect.objectContaining({
+        type: "structured",
+        schemaName: "coding_multi_task_plan_v1",
+      }),
       maxOutputTokens: 2_048,
       capabilities: CONSTRAINED_MODEL_CAPABILITIES,
     });

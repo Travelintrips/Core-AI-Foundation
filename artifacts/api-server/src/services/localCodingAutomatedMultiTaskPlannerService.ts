@@ -302,7 +302,21 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
       system: prompt.system,
       user: prompt.user,
     }),
-    responseFormat: { type: "text" },
+    responseFormat: {
+      type: "structured",
+      schemaName: "coding_multi_task_plan_v1",
+      jsonSchema: {
+        type: "object",
+        required: ["version", "taskId", "objective", "workstreams"],
+        additionalProperties: false,
+        properties: {
+          version: { const: 1 },
+          taskId: { type: "string" },
+          objective: { type: "string" },
+          workstreams: { type: "array", minItems: 1, maxItems: MAX_PLANNER_WORKSTREAMS },
+        },
+      },
+    },
     maxOutputTokens: Math.min(
       DEFAULT_MAX_OUTPUT_TOKENS,
       input.maxOutputTokens,
@@ -310,16 +324,16 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
     timeoutMs: input.timeoutMs,
   });
 
-  if (response.output.type !== "text") {
+  if (response.output.type !== "structured") {
     throw new AutomatedMultiTaskPlannerError(
-      "Planner model returned a non-text response.",
+      "Planner model returned a non-structured response.",
       "MODEL_FAILED",
     );
   }
 
   return {
     plan: parseGeneratedCodingMultiTaskPlan(
-      response.output.text,
+      JSON.stringify(response.output.value),
       input.context,
     ),
     metadata: response.metadata,
