@@ -89,14 +89,29 @@ export function summarizeCodingMissionControl(
     }));
 
   const nextActions: string[] = [];
-  if (failed > 0) nextActions.push("RESOLVE_FAILED_WORKSTREAMS");
-  if (reviewRequired > 0) nextActions.push("REVIEW_WORKSTREAMS");
-  if (ready > 0) nextActions.push("DISPATCH_READY_WORKSTREAMS");
-  if (running > 0) nextActions.push("MONITOR_ACTIVE_LEASES");
-  if (total > 0 && completed === total) {
-    nextActions.push("REVIEW_INTEGRATION_MANIFEST");
+  if (snapshot.graph.status === "PREPARED") {
+    nextActions.push("APPROVE_TASK_GRAPH");
+  } else {
+    if (failed > 0) nextActions.push("RESOLVE_FAILED_WORKSTREAMS");
+    if (reviewRequired > 0) nextActions.push("REVIEW_WORKSTREAMS");
+    if (
+      ready > 0 &&
+      ["APPROVED", "RUNNING"].includes(snapshot.graph.status)
+    ) {
+      nextActions.push("DISPATCH_READY_WORKSTREAMS");
+    }
+    if (running > 0) nextActions.push("MONITOR_ACTIVE_LEASES");
+    if (
+      snapshot.graph.status === "COMPLETED" &&
+      total > 0 &&
+      completed === total
+    ) {
+      nextActions.push("REVIEW_INTEGRATION_MANIFEST");
+    }
+    if (nextActions.length === 0 && waiting > 0) {
+      nextActions.push("WAIT_FOR_DEPENDENCIES");
+    }
   }
-  if (nextActions.length === 0 && waiting > 0) nextActions.push("WAIT_FOR_DEPENDENCIES");
 
   return {
     taskId,

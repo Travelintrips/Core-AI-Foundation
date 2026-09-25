@@ -78,6 +78,22 @@ describe("summarizeCodingMissionControl", () => {
     expect(result.blockers.map((item) => item.key)).toEqual(["T04"]);
   });
 
+  it("requires explicit graph approval before exposing worker dispatch", () => {
+    const snapshot = graph("PREPARED");
+    snapshot.workstreams[0].status = "READY";
+    snapshot.workstreams[1].status = "READY";
+    snapshot.workstreams[2].status = "PENDING";
+    snapshot.workstreams[3].status = "PENDING";
+
+    const result = summarizeCodingMissionControl(
+      "22222222-2222-4222-8222-222222222222",
+      snapshot,
+    );
+
+    expect(result.nextActions).toEqual(["APPROVE_TASK_GRAPH"]);
+    expect(result.nextActions).not.toContain("DISPATCH_READY_WORKSTREAMS");
+  });
+
   it("routes a fully completed graph to explicit integration manifest review", () => {
     const snapshot = graph("COMPLETED");
     for (const workstream of snapshot.workstreams) {
@@ -106,8 +122,8 @@ describe("summarizeCodingMissionControl", () => {
     expect(result.nextActions).toEqual([
       "RESOLVE_FAILED_WORKSTREAMS",
       "REVIEW_WORKSTREAMS",
-      "DISPATCH_READY_WORKSTREAMS",
     ]);
+    expect(result.nextActions).not.toContain("DISPATCH_READY_WORKSTREAMS");
     expect(result.blockers[0]?.errorMessage).toBe("test failed");
   });
 });
