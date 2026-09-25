@@ -23,6 +23,8 @@ const mockApproveAndValidateAiPatch = vi.hoisted(() => vi.fn());
 const mockApproveCommitAndCreatePullRequest = vi.hoisted(() => vi.fn());
 const mockStartPullRequestVerification = vi.hoisted(() => vi.fn());
 const mockApproveAndMergePullRequest = vi.hoisted(() => vi.fn());
+const mockListAccessibleCodingRepositories = vi.hoisted(() => vi.fn());
+const mockListCodingRepositoryBranches = vi.hoisted(() => vi.fn());
 const MockLocalPatchApprovalError = vi.hoisted(() => class extends Error {
   constructor(
     message: string,
@@ -239,6 +241,11 @@ vi.mock("../../services/localCodingPullRequestGateService.js", () => ({
   LocalPullRequestGateError: MockLocalPullRequestGateError,
 }));
 
+vi.mock("../../services/localCodingGitHubDiscoveryService.js", () => ({
+  listAccessibleCodingRepositories: mockListAccessibleCodingRepositories,
+  listCodingRepositoryBranches: mockListCodingRepositoryBranches,
+}));
+
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -273,6 +280,75 @@ const run = {
 const app = express();
 app.use(express.json());
 app.use(codingWorkspaceRouter);
+
+describe("AI coding workspace GitHub discovery endpoints", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListAccessibleCodingRepositories.mockResolvedValue([
+      {
+        fullName: "Travelintrips/Core-AI-Foundation",
+        owner: "Travelintrips",
+        name: "Core-AI-Foundation",
+        private: true,
+        defaultBranch: "main",
+        htmlUrl: "https://github.com/Travelintrips/Core-AI-Foundation",
+        updatedAt: "2026-09-25T00:00:00Z",
+      },
+    ]);
+    mockListCodingRepositoryBranches.mockResolvedValue([
+      {
+        name: "main",
+        protected: true,
+        commitSha: "a".repeat(40),
+      },
+    ]);
+  });
+
+  it("returns repositories visible through the Core AI GitHub connection", async () => {
+    const response = await request(app).get(
+      "/ai/coding/github/repositories?q=core-ai",
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockListAccessibleCodingRepositories).toHaveBeenCalledWith({
+      query: "core-ai",
+    });
+    expect(response.body.repositories).toHaveLength(1);
+    expect(response.body.repositories[0]).toMatchObject({
+      fullName: "Travelintrips/Core-AI-Foundation",
+      defaultBranch: "main",
+      private: true,
+    });
+  });
+
+  it("returns branches only for valid GitHub repository coordinates", async () => {
+    const response = await request(app).get(
+      "/ai/coding/github/repositories/Travelintrips/Core-AI-Foundation/branches?q=main",
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockListCodingRepositoryBranches).toHaveBeenCalledWith(
+      "Travelintrips/Core-AI-Foundation",
+      { query: "main" },
+    );
+    expect(response.body.branches).toEqual([
+      {
+        name: "main",
+        protected: true,
+        commitSha: "a".repeat(40),
+      },
+    ]);
+  });
+
+  it("rejects invalid repository coordinates before GitHub is called", async () => {
+    const response = await request(app).get(
+      "/ai/coding/github/repositories/Travelintrips/bad%20repo/branches",
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockListCodingRepositoryBranches).not.toHaveBeenCalled();
+  });
+});
 
 describe("AI coding workspace run endpoint", () => {
   beforeEach(() => {

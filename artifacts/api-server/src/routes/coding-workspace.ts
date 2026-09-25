@@ -37,6 +37,11 @@ import {
   startSandboxVerification,
 } from "../services/localCodingSandboxGateService.js";
 import {
+  listAccessibleCodingRepositories,
+  listCodingRepositoryBranches,
+} from "../services/localCodingGitHubDiscoveryService.js";
+import { GitHubPublisherError } from "../services/localCodingGitHubPublisherService.js";
+import {
   LocalDeterministicRecoveryError,
   startDeterministicLocalRecovery,
 } from "../services/localCodingDeterministicRecoveryService.js";
@@ -58,6 +63,65 @@ const router = Router();
 function createTaskNumber(): string {
   return `CWS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
+
+router.get("/ai/coding/github/repositories", async (req, res): Promise<void> => {
+  const query = typeof req.query["q"] === "string" ? req.query["q"] : undefined;
+  try {
+    const repositories = await listAccessibleCodingRepositories({ query });
+    res.json({ repositories });
+  } catch (error) {
+    if (error instanceof GitHubPublisherError) {
+      if (error.kind === "AUTH_REQUIRED") {
+        res.status(503).json({
+          error:
+            "GitHub repository discovery is unavailable because AI_CODING_GITHUB_TOKEN is not configured or authorized.",
+        });
+        return;
+      }
+      res.status(error.status === 403 ? 403 : 502).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.get(
+  "/ai/coding/github/repositories/:owner/:repo/branches",
+  async (req, res): Promise<void> => {
+    const owner = typeof req.params.owner === "string" ? req.params.owner.trim() : "";
+    const repo = typeof req.params.repo === "string" ? req.params.repo.trim() : "";
+    const query = typeof req.query["q"] === "string" ? req.query["q"] : undefined;
+
+    if (
+      !/^[A-Za-z0-9_.-]+$/.test(owner) ||
+      !/^[A-Za-z0-9_.-]+$/.test(repo)
+    ) {
+      res.status(400).json({ error: "Invalid GitHub repository coordinates." });
+      return;
+    }
+
+    try {
+      const branches = await listCodingRepositoryBranches(
+        `${owner}/${repo}`,
+        { query },
+      );
+      res.json({ branches });
+    } catch (error) {
+      if (error instanceof GitHubPublisherError) {
+        if (error.kind === "AUTH_REQUIRED") {
+          res.status(503).json({
+            error:
+              "GitHub branch discovery is unavailable because AI_CODING_GITHUB_TOKEN is not configured or authorized.",
+          });
+          return;
+        }
+        res.status(error.status === 403 ? 403 : 502).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  },
+);
 
 router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
   const tasks = await db
