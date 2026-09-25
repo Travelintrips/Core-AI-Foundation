@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
+import { isAbsolute, normalize } from "node:path";
 import {
   getLatestCodingTaskGraph,
   type CodingTaskGraphSnapshot,
 } from "./localCodingTaskGraphService.js";
 import { codingWorkstreamOwnsFile } from "./localCodingMultiWorkerExecutionService.js";
+import { isSensitiveRepositoryPath } from "./localCodingEngineService.js";
 
 const SHA40_RE = /^[0-9a-f]{40}$/i;
 const SHA64_RE = /^[0-9a-f]{64}$/i;
+const MAX_WORKSTREAM_PATCH_BYTES = 400_000;
 
 export type CodingIntegrationGateErrorCode =
   | "NOT_FOUND"
@@ -78,6 +81,61 @@ function sha256(value: string): string {
 
 function canonicalHash(value: unknown): string {
   return sha256(JSON.stringify(value));
+}
+
+function safePatchPath(value: string): string {
+  const normalized = normalize(value).replaceAll("\\", "/").replace(/^\.\//, "");
+  if (
+    !normalized ||
+    isAbsolute(normalized) ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    isSensitiveRepositoryPath(normalized)
+  ) {
+    throw new CodingIntegrationGateError(
+      `Unsafe integration patch path: ${value}`,
+      "INVALID_RESULT",
+    );
+  }
+  return normalized;
+}
+
+function parsePatchFiles(patch: string): string[] {
+  if (
+    Buffer.byteLength(patch, "utf8") > MAX_WORKSTREAM_PATCH_BYTES ||
+    patch.includes("[REDACTED_SENSITIVE_DIFF_LINE]") ||
+    patch.includes("GIT binary patch") ||
+    /(?:^|\n)Binary files /.test(patch) ||
+    /(?:^|\n)(?:---|\+\+\+) \/dev\/null/.test(patch)
+  ) {
+    throw new CodingIntegrationGateError(
+      "Integration patch contains unsupported or oversized content.",
+      "INVALID_RESULT",
+    );
+  }
+
+  const files = new Set<string>();
+  for (const line of patch.split("\n")) {
+    const match = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
+    if (!match) continue;
+    const left = safePatchPath(match[1]!);
+    const right = safePatchPath(match[2]!);
+    if (left !== right) {
+      throw new CodingIntegrationGateError(
+        "Integration review does not support renamed files.",
+        "INVALID_RESULT",
+      );
+    }
+    files.add(left);
+  }
+  return [...files].sort();
+}
+
+function sameFiles(left: string[], right: string[]): boolean {
+  const a = [...new Set(left)].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function dependsTransitively(
@@ -172,6 +230,27 @@ function extractCandidate(
       );
     }
     patchSha256 = patch ? sha256(patch) : null;
+  }
+
+  if (patch) {
+    const patchFiles = parsePatchFiles(patch);
+    if (!sameFiles(changedFiles, patchFiles)) {
+      throw new CodingIntegrationGateError(
+        `Workstream ${workstream.key} patch headers no longer match recorded changedFiles.`,
+        "INVALID_RESULT",
+        {
+          workstreamKey: workstream.key,
+          changedFiles: [...new Set(changedFiles)].sort(),
+          patchFiles,
+        },
+      );
+    }
+  } else if (changedFiles.length > 0) {
+    throw new CodingIntegrationGateError(
+      `Workstream ${workstream.key} has changedFiles without a patch.`,
+      "INVALID_RESULT",
+      { workstreamKey: workstream.key },
+    );
   }
 
   const ownershipPaths = workstream.ownershipPaths;
