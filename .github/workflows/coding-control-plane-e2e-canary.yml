@@ -70,6 +70,57 @@ jobs:
           echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
           echo "scope=coding-task:$task_id" >> "$GITHUB_OUTPUT"
 
+      - name: Run repository analysis and wait for completion
+        id: analysis
+        run: |
+          set -euo pipefail
+          task="${{ steps.task.outputs.task_id }}"
+          code=$(curl -sS -o /tmp/run.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/run" \
+            -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
+          if [ "$code" != "201" ]; then
+            echo "::error::Start repository analysis failed with HTTP $code"
+            cat /tmp/run.json
+            exit 1
+          fi
+          run_id=$(jq -r '.id // empty' /tmp/run.json)
+          if [[ ! "$run_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::Repository analysis response missing run id"
+            cat /tmp/run.json
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            code=$(curl -sS -o /tmp/task-status.json -w "%{http_code}" "$API_BASE_URL/ai/coding/tasks/$task" \
+              -H "x-admin-api-key: $ADMIN_API_KEY")
+            if [ "$code" != "200" ]; then
+              echo "::error::Read coding task during analysis failed with HTTP $code"
+              cat /tmp/task-status.json
+              exit 1
+            fi
+            status=$(jq -r '.status // empty' /tmp/task-status.json)
+            if [[ "$status" != "ANALYZING" && "$status" != "PENDING" ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+          code=$(curl -sS -o /tmp/graph-probe.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate" \
+            -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
+          if [ "$code" = "409" ] && [ "$(jq -r '.code // empty' /tmp/graph-probe.json)" = "ANALYSIS_REQUIRED" ]; then
+            echo "::error::Repository analysis did not produce a completed bounded context package within the canary timeout"
+            cat /tmp/graph-probe.json
+            exit 1
+          fi
+          if [[ "$code" != "200" && "$code" != "201" ]]; then
+            echo "::error::Post-analysis planner probe failed with HTTP $code"
+            cat /tmp/graph-probe.json
+            exit 1
+          fi
+          cp /tmp/graph-probe.json /tmp/graph.json
+          graph_id=$(jq -r '.snapshot.graph.id // .graph.id // empty' /tmp/graph.json)
+          [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          echo "graph_id=$graph_id" >> "$GITHUB_OUTPUT"
+
       - name: Acquire and assert Planner Authority
         id: authority
         shell: bash
@@ -104,25 +155,17 @@ jobs:
           echo "token=$token" >> "$GITHUB_OUTPUT"
           echo "generation=$generation" >> "$GITHUB_OUTPUT"
 
-      - name: Generate fresh Plan V1 and task graph
+      - name: Verify fresh Plan V1 and task graph
         id: graph
-        shell: bash
         run: |
           set -euo pipefail
           task="${{ steps.task.outputs.task_id }}"
-          code=$(curl -sS -o /tmp/graph.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
-          if [[ "$code" != "200" && "$code" != "201" ]]; then
-            echo "::error::Generate task graph failed with HTTP $code"
-            cat /tmp/graph.json
-            exit 1
-          fi
-          graph_id=$(jq -r '.snapshot.graph.id // .graph.id // empty' /tmp/graph.json)
-          if [[ ! "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-            echo "::error::Generate task graph response missing a valid graph id"
-            cat /tmp/graph.json
-            exit 1
-          fi
-          bound=$(jq -r '.snapshot.graph.taskId // .graph.taskId // empty' /tmp/graph.json)
+          graph_id="${{ steps.analysis.outputs.graph_id }}"
+          [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          code=$(curl -sS -o /tmp/graph.json -w "%{http_code}" "$API_BASE_URL/ai/coding/tasks/$task/task-graph" \
+            -H "x-admin-api-key: $ADMIN_API_KEY")
+          test "$code" = "200"
+          bound=$(jq -r '.graph.taskId // empty' /tmp/graph.json)
           test "$bound" = "$task"
           echo "graph_id=$graph_id" >> "$GITHUB_OUTPUT"
 
