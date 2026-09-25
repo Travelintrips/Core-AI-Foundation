@@ -145,6 +145,24 @@ describe("automated multi-task planner", () => {
     expect(prompt.user).toContain("groundedOwnershipPaths");
   });
 
+
+  it("describes the complete Plan V1 workstream contract to the model", () => {
+    const prompt = buildAutomatedMultiTaskPlannerPrompt(context());
+
+    expect(prompt.system).toContain(
+      "Each workstream object MUST contain exactly these fields",
+    );
+    expect(prompt.system).toContain(
+      "acceptanceCriteria must contain between 1 and 20",
+    );
+    expect(prompt.system).toContain(
+      "priority must be an integer from 0 through 100",
+    );
+    expect(prompt.system).toContain(
+      "Do not add any extra fields at plan or workstream level",
+    );
+  });
+
   it("derives grounded files and parent directories only from analyzer-visible paths", () => {
     const paths = groundedPlannerPaths(context());
 
