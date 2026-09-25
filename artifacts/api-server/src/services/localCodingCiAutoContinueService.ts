@@ -2,19 +2,19 @@ import { eq } from "drizzle-orm";
 import { aiCodingCiBindingsTable, aiCodingTaskGraphsTable, aiCodingWorkstreamsTable, db } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
 
-export async function continueAfterGreenCi(input: { bindingId: string; eventId: string }) {
+export async function continueAfterGreenCi(input: { bindingId: string; eventId: string }): Promise<\n  | { continued: false; reason: "BINDING_NOT_GREEN" | "STALE_HEAD_SHA" | "GRAPH_NOT_FOUND" }\n  | { continued: true; eventId: string; taskId: string; graphId: string; workstreamId: string; workstreamStatus: string; repository: string; pullRequestNumber: string | null; headSha: string; nextAction: string; approvalGatesPreserved: true }\n> {
   return db.transaction(async (tx) => {
     const [binding] = await tx.select().from(aiCodingCiBindingsTable)
       .where(eq(aiCodingCiBindingsTable.id, input.bindingId)).for("update");
-    if (!binding || binding.state !== "GREEN") return { continued: false, reason: "BINDING_NOT_GREEN" as const };
+    if (!binding || binding.state !== "GREEN") return { continued: false, reason: "BINDING_NOT_GREEN" };
 
     const [workstream] = await tx.select().from(aiCodingWorkstreamsTable)
       .where(eq(aiCodingWorkstreamsTable.id, binding.workstreamId)).for("update");
-    if (!workstream || workstream.headSha !== binding.headSha) return { continued: false, reason: "STALE_HEAD_SHA" as const };
+    if (!workstream || workstream.headSha !== binding.headSha) return { continued: false, reason: "STALE_HEAD_SHA" };
 
     const [graph] = await tx.select().from(aiCodingTaskGraphsTable)
       .where(eq(aiCodingTaskGraphsTable.id, workstream.graphId)).limit(1);
-    if (!graph) return { continued: false, reason: "GRAPH_NOT_FOUND" as const };
+    if (!graph) return { continued: false, reason: "GRAPH_NOT_FOUND" };
 
     let nextAction = "NO_AUTOMATIC_ACTION";
     if (workstream.status === "COMPLETED") nextAction = "DISPATCH_READY_WORKSTREAMS";
@@ -26,7 +26,7 @@ export async function continueAfterGreenCi(input: { bindingId: string; eventId: 
       eventId: input.eventId, taskId: graph.taskId, graphId: graph.id,
       workstreamId: workstream.id, workstreamStatus: workstream.status,
       repository: binding.repository, pullRequestNumber: binding.pullRequestNumber,
-      headSha: binding.headSha, nextAction, approvalGatesPreserved: true,
+      headSha: binding.headSha, nextAction, approvalGatesPreserved: true as const,
     };
     await tx.update(aiCodingCiBindingsTable).set({ lastCheckpointJson: checkpoint })
       .where(eq(aiCodingCiBindingsTable.id, binding.id));
@@ -41,24 +41,24 @@ export async function continueAfterGreenCi(input: { bindingId: string; eventId: 
 type GreenCiCheckpoint = Extract<Awaited<ReturnType<typeof continueAfterGreenCi>>, { continued: true }>;
 
 export async function executeGreenCiNextAction(checkpoint: Awaited<ReturnType<typeof continueAfterGreenCi>>) {
-  if (!checkpoint.continued || checkpoint.nextAction !== "DISPATCH_READY_WORKSTREAMS") {
+  if (!checkpoint.continued) {\n    return { executed: false, reason: "NO_BOUNDED_DISPATCH_ACTION" as const };\n  }\n  if (checkpoint.nextAction !== "DISPATCH_READY_WORKSTREAMS") {
     return { executed: false, reason: "NO_BOUNDED_DISPATCH_ACTION" as const };
   }
   const ready = checkpoint as GreenCiCheckpoint;
   const { dispatchReadyCodingWorkstreams } = await import("./localCodingMultiWorkerExecutionService.js");
-  const result = await dispatchReadyCodingWorkstreams(ready.graphId, {
-    baseSha: ready.headSha,
+  const result = await dispatchReadyCodingWorkstreams(checkpoint.graphId, {
+    baseSha: checkpoint.headSha,
     maxParallel: 8,
     workerPoolId: "coding-ci-auto-continue",
   });
   publishSafe({
     eventType: "coding.ci.auto_continue.dispatched",
     sourceModule: "coding-ci-auto-continue",
-    sourceId: ready.workstreamId,
-    correlationId: ready.eventId,
+    sourceId: checkpoint.workstreamId,
+    correlationId: checkpoint.eventId,
     payload: {
-      taskId: ready.taskId,
-      graphId: ready.graphId,
+      taskId: checkpoint.taskId,
+      graphId: checkpoint.graphId,
       dispatched: result.dispatched.map((item) => item.workstreamId),
       manualReview: result.manualReview.map((item) => item.workstreamId),
       approvalGatesPreserved: true,
