@@ -20,7 +20,10 @@ import {
   resolveConfiguredCodingFallbackModel,
   resolvePreferredCodingModel,
 } from "./localCodingAiPreferredModelService.js";
-import { resolveAlternativeCloudCodingModel } from "./localCodingAiProductionModelService.js";
+import {
+  resolveAlternativeCloudCodingModel,
+  resolveAlternativeCloudCodingModels,
+} from "./localCodingAiProductionModelService.js";
 import {
   validateCodingMultiTaskPlanV1,
   type CodingMultiTaskPlanV1,
@@ -659,57 +662,80 @@ export async function generateAndPersistCodingMultiTaskPlan(
           ? "Configured local fallback resolves to the same provider/model as the currently selected target."
           : fallback.message;
 
-        const cloudFallback = await resolveAlternativeCloudCodingModel({
-          excludeProvider: providerSlug,
-          excludeModel: modelId,
+        const cloudFallbacks = await resolveAlternativeCloudCodingModels({
+          excludeTargets: [
+            { provider: providerSlug, model: modelId },
+            ...(fallbackIsDifferent
+              ? [{ provider: fallbackProviderSlug, model: fallbackModelId }]
+              : []),
+          ],
+          limit: 3,
         });
 
-        if (cloudFallback.ok) {
-          const cloudProviderSlug = String(
-            cloudFallback.selection.provider.slug ?? "",
-          ).toLowerCase();
-          const cloudModelId = String(
-            cloudFallback.selection.model.modelId ?? "",
-          );
+        if (cloudFallbacks.ok) {
+          let cloudSucceeded = false;
+          const cloudFailures: Array<Record<string, unknown>> = [];
 
-          const cloudProvider = createConstrainedCodingProviderAdapter({
-            providerSlug: cloudProviderSlug,
-            modelId: cloudModelId,
-            baseUrl:
-              typeof cloudFallback.selection.provider.baseUrl === "string"
-                ? cloudFallback.selection.provider.baseUrl
-                : null,
-            observability: {
-              conversationId: taskId,
-              agentName: "Automated Multi-Task Planner",
-              providerName: cloudProviderSlug,
-              modelName: cloudModelId,
-              requestType: "code-cloud-fallback",
-              createdBy: "coding-task-graph-generator",
-            },
-          });
+          for (const cloudSelection of cloudFallbacks.selections) {
+            const cloudProviderSlug = String(
+              cloudSelection.provider.slug ?? "",
+            ).toLowerCase();
+            const cloudModelId = String(
+              cloudSelection.model.modelId ?? "",
+            );
+            if (!cloudProviderSlug || !cloudModelId) continue;
 
-          const cloudAdapter =
-            createConstrainedModelInvocationAdapter(cloudProvider);
+            const cloudProvider = createConstrainedCodingProviderAdapter({
+              providerSlug: cloudProviderSlug,
+              modelId: cloudModelId,
+              baseUrl:
+                typeof cloudSelection.provider.baseUrl === "string"
+                  ? cloudSelection.provider.baseUrl
+                  : null,
+              observability: {
+                conversationId: taskId,
+                agentName: "Automated Multi-Task Planner",
+                providerName: cloudProviderSlug,
+                modelName: cloudModelId,
+                requestType: "code-cloud-fallback",
+                createdBy: "coding-task-graph-generator",
+              },
+            });
+            const cloudAdapter =
+              createConstrainedModelInvocationAdapter(cloudProvider);
 
-          try {
-            generated = await generateCodingMultiTaskPlanWithAdapter({
-              context,
-              adapter: cloudAdapter,
-              target: {
+            try {
+              generated = await generateCodingMultiTaskPlanWithAdapter({
+                context,
+                adapter: cloudAdapter,
+                target: {
+                  provider: cloudProviderSlug,
+                  model: cloudModelId,
+                },
+                timeoutMs: cloudSelection.timeoutMs,
+                maxOutputTokens: cloudSelection.maxOutputTokens,
+              });
+              selection = cloudSelection;
+              selectedProviderSlug = cloudProviderSlug;
+              selectedModelId = cloudModelId;
+              fallbackUsed = true;
+              cloudSucceeded = true;
+              break;
+            } catch (cloudError) {
+              cloudFailures.push({
                 provider: cloudProviderSlug,
                 model: cloudModelId,
-              },
-              timeoutMs: cloudFallback.selection.timeoutMs,
-              maxOutputTokens: cloudFallback.selection.maxOutputTokens,
-            });
-            selection = cloudFallback.selection;
-            selectedProviderSlug = cloudProviderSlug;
-            selectedModelId = cloudModelId;
-            fallbackUsed = true;
-          } catch (cloudError) {
+                cause:
+                  cloudError instanceof Error
+                    ? cloudError.message.slice(0, 1_000)
+                    : String(cloudError),
+              });
+            }
+          }
+
+          if (!cloudSucceeded) {
             throw new AutomatedMultiTaskPlannerError(
-              "Constrained multi-task planner primary and cloud fallback model invocation failed.",
+              "Constrained multi-task planner exhausted all bounded cloud fallback candidates.",
               "MODEL_FAILED",
               {
                 primaryCause:
@@ -718,10 +744,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
                     : String(error),
                 localFallbackReason,
                 localFallbackFailure,
-                cloudFallbackCause:
-                  cloudError instanceof Error
-                    ? cloudError.message.slice(0, 1_000)
-                    : String(cloudError),
+                cloudFailures,
               },
             );
           }
@@ -736,8 +759,8 @@ export async function generateAndPersistCodingMultiTaskPlan(
                   : String(error),
               localFallbackReason,
               localFallbackFailure,
-              cloudFallbackReason: cloudFallback.reason,
-              cloudFallbackFailure: cloudFallback.message,
+              cloudFallbackReason: cloudFallbacks.reason,
+              cloudFallbackFailure: cloudFallbacks.message,
             },
           );
         }
