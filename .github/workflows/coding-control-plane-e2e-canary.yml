@@ -52,11 +52,11 @@ jobs:
         run: |
           set -euo pipefail
           correlation="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          body=$(jq -nc --arg c "$correlation" '{
+          body=$(jq -nc --arg c "$correlation" --arg base "$BASE_SHA" '{
             projectName:"Control Plane E2E Canary",
             repository:"Travelintrips/Core-AI-Foundation",
             branch:"main",
-            instruction:("Controlled E2E canary "+$c+". Analyze and plan only bounded non-production changes. Do not commit, push, merge, access secrets, or modify production."),
+            instruction:("Controlled E2E canary "+$c+" base-sha:"+$base+". Analyze and plan only bounded non-production changes. Do not commit, push, merge, access secrets, or modify production."),
             priority:10
           }')
           code=$(curl -sS -o /tmp/task.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
