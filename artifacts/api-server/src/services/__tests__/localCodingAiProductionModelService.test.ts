@@ -33,6 +33,7 @@ import {
   DEFAULT_CODING_PROVIDER_ALLOWLIST,
   describeProductionCodingModelConfig,
   readProductionCodingModelConfig,
+  resolveAlternativeCloudCodingModel,
   resolveProductionCodingModel,
 } from "../localCodingAiProductionModelService.js";
 
@@ -202,6 +203,61 @@ describe("Production constrained coding model resolution", () => {
         model: { modelId: "code-model" },
         selectionReason: "AUTO_CODING_CAPABILITY",
       },
+    });
+  });
+
+
+  it("selects an alternative configured cloud coding model while excluding the primary target", async () => {
+    mocks.models.push(
+      row("openai", "gpt-code", ["code", "reasoning"], "0.00001"),
+      row("anthropic", "claude-code", ["code", "reasoning"], "0.00002"),
+      row("mistral", "codestral", ["code"], "0.000001"),
+    );
+    mocks.keys.set("openai", "secret");
+    mocks.keys.set("anthropic", "secret");
+    mocks.keys.set("mistral", "secret");
+
+    const result = await resolveAlternativeCloudCodingModel({
+      excludeProvider: "openai",
+      excludeModel: "gpt-code",
+      config: {
+        providerAllowlist: ["openai", "anthropic", "mistral", "ollama"],
+        modelAllowlist: [],
+        timeoutMs: 30_000,
+        maxOutputTokens: 2_048,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      selection: {
+        provider: { slug: "anthropic" },
+        model: { modelId: "claude-code" },
+        timeoutMs: 30_000,
+        maxOutputTokens: 2_048,
+        selectionReason: "AUTO_CODING_CAPABILITY",
+      },
+    });
+  });
+
+  it("fails closed when no alternative cloud coding model is available", async () => {
+    mocks.models.push(row("openai", "gpt-code", ["code"]));
+    mocks.keys.set("openai", "secret");
+
+    await expect(
+      resolveAlternativeCloudCodingModel({
+        excludeProvider: "openai",
+        excludeModel: "gpt-code",
+        config: {
+          providerAllowlist: ["openai", "ollama"],
+          modelAllowlist: [],
+          timeoutMs: 30_000,
+          maxOutputTokens: 2_048,
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "NO_CODING_CAPABLE_MODEL",
     });
   });
 
