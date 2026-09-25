@@ -190,6 +190,15 @@ export async function resolvePreferredCodingModel(
     };
   }
 
+  if (!fallbackEnabled) {
+    return {
+      ok: false,
+      reason: primary.reason,
+      message: primary.message,
+      primaryFailure: primary,
+    };
+  }
+
   const fallbackResolution = await resolveConfiguredCodingFallbackModel(env);
   if (!fallbackResolution.ok) {
     return {
