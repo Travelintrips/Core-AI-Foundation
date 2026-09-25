@@ -61,6 +61,7 @@ vi.mock("../localCodingMultiWorkerOrchestratorService.js", () => ({
 }));
 
 import {
+  buildCodingWorkstreamBranchBinding,
   codingWorkstreamOwnsFile,
   executeCodingWorkstreamJob,
 } from "../localCodingMultiWorkerExecutionService.js";
@@ -88,6 +89,22 @@ function job() {
     },
   } as any;
 }
+
+describe("multi-worker execution branch isolation", () => {
+  it("keeps clone source on the parent branch but binds child execution to its isolated branch/base SHA", () => {
+    expect(
+      buildCodingWorkstreamBranchBinding("main", {
+        branchName: "ai-core/111111111111/ws-001-a2",
+        baseSha: "b".repeat(40),
+      }),
+    ).toEqual({
+      childTaskBranch: "ai-core/111111111111/ws-001-a2",
+      analyzerSourceBranch: "main",
+      isolatedBranchName: "ai-core/111111111111/ws-001-a2",
+      expectedBaseSha: "b".repeat(40),
+    });
+  });
+});
 
 describe("multi-worker execution boundary", () => {
   beforeEach(() => {

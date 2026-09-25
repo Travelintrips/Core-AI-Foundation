@@ -103,6 +103,8 @@ interface AnalyzerInput {
   codingRunId: string;
   repository: string;
   branch: string;
+  isolatedBranchName?: string;
+  expectedBaseSha?: string;
   title: string;
   description: string;
 }
@@ -233,6 +235,45 @@ async function cloneRepository(
   );
 }
 
+export async function configureIsolatedRepositoryWorkspace(
+  workspace: string,
+  expectedBaseSha: string,
+  isolatedBranchName: string,
+): Promise<void> {
+  const normalizedBaseSha = expectedBaseSha.trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(normalizedBaseSha)) {
+    throw new Error("Expected repository base SHA must be a 40-character Git SHA");
+  }
+  if (
+    !/^[A-Za-z0-9._/-]+$/.test(isolatedBranchName) ||
+    isolatedBranchName.startsWith("-")
+  ) {
+    throw new Error("Isolated repository branch contains unsupported characters");
+  }
+
+  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+    cwd: workspace,
+    timeout: 15_000,
+    maxBuffer: 64 * 1024,
+  });
+  const actualHead = stdout.trim().toLowerCase();
+  if (actualHead !== normalizedBaseSha) {
+    throw new Error(
+      `Repository HEAD changed before isolated worker execution: expected ${normalizedBaseSha}, got ${actualHead}`,
+    );
+  }
+
+  await execFileAsync(
+    "git",
+    ["checkout", "-b", isolatedBranchName, normalizedBaseSha],
+    {
+      cwd: workspace,
+      timeout: 15_000,
+      maxBuffer: 64 * 1024,
+    },
+  );
+}
+
 function normalizeRemoteRepository(repository: string): string {
   if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
     return `https://github.com/${repository.replace(/\/+$/, "")}.git`;
@@ -259,6 +300,10 @@ function normalizeRemoteRepository(repository: string): string {
 export async function prepareRepositoryWorkspace(
   repository: string,
   branch: string,
+  options: {
+    isolatedBranchName?: string;
+    expectedBaseSha?: string;
+  } = {},
 ): Promise<RepositoryWorkspace> {
   const looksLocal =
     isAbsolute(repository) ||
@@ -273,6 +318,11 @@ export async function prepareRepositoryWorkspace(
     if (!info?.isDirectory()) {
       throw new Error(`Local repository directory does not exist: ${repository}`);
     }
+    if (options.isolatedBranchName || options.expectedBaseSha) {
+      throw new Error(
+        "Isolated multi-worker execution requires a disposable cloned workspace, not a local repository directory",
+      );
+    }
     return { path: localPath, cleanup: false };
   }
 
@@ -281,12 +331,36 @@ export async function prepareRepositoryWorkspace(
     throw new Error("Repository branch contains unsupported characters");
   }
 
+  const isolatedBranchName = options.isolatedBranchName?.trim();
+  if (
+    isolatedBranchName &&
+    (!/^[A-Za-z0-9._/-]+$/.test(isolatedBranchName) ||
+      isolatedBranchName.startsWith("-"))
+  ) {
+    throw new Error("Isolated repository branch contains unsupported characters");
+  }
+
+  const expectedBaseSha = options.expectedBaseSha?.trim().toLowerCase();
+  if (expectedBaseSha && !/^[0-9a-f]{40}$/.test(expectedBaseSha)) {
+    throw new Error("Expected repository base SHA must be a 40-character Git SHA");
+  }
+  if (isolatedBranchName && !expectedBaseSha) {
+    throw new Error("Isolated repository branch requires expectedBaseSha binding");
+  }
+
   const workspace = join(tmpdir(), `coding-analyzer-${crypto.randomUUID()}`);
   await mkdir(workspace, { recursive: true });
 
   return withRepositoryCloneSlot(async () => {
     try {
       await cloneRepository(remote, branch, workspace, PRIMARY_CLONE_DEPTH);
+      if (expectedBaseSha && isolatedBranchName) {
+        await configureIsolatedRepositoryWorkspace(
+          workspace,
+          expectedBaseSha,
+          isolatedBranchName,
+        );
+      }
       return { path: workspace, cleanup: true };
     } catch (firstError) {
       const firstDetail =
@@ -314,6 +388,13 @@ export async function prepareRepositoryWorkspace(
 
       try {
         await cloneRepository(remote, branch, workspace, FALLBACK_CLONE_DEPTH);
+        if (expectedBaseSha && isolatedBranchName) {
+          await configureIsolatedRepositoryWorkspace(
+            workspace,
+            expectedBaseSha,
+            isolatedBranchName,
+          );
+        }
         return { path: workspace, cleanup: true };
       } catch (retryError) {
         await rm(workspace, { recursive: true, force: true });
@@ -380,12 +461,15 @@ async function readInspectableFiles(
 }
 
 async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyzerResult> {
-  const workspace = await prepareRepositoryWorkspace(input.repository, input.branch);
+  const workspace = await prepareRepositoryWorkspace(input.repository, input.branch, {
+    isolatedBranchName: input.isolatedBranchName,
+    expectedBaseSha: input.expectedBaseSha,
+  });
   try {
     const contextPackage = await buildLocalCodingContextPackage({
       root: workspace.path,
       repository: input.repository,
-      requestedBranch: input.branch,
+      requestedBranch: input.isolatedBranchName ?? input.branch,
       task: `${input.title}\n${input.description}`,
     });
 
@@ -544,6 +628,14 @@ export async function executeRepositoryAnalyzerJob(job: AiJob): Promise<Record<s
     codingRunId: requiredString(payload, "codingRunId"),
     repository: requiredString(payload, "repository"),
     branch: requiredString(payload, "branch"),
+    isolatedBranchName:
+      typeof payload["isolatedBranchName"] === "string"
+        ? String(payload["isolatedBranchName"]).trim()
+        : undefined,
+    expectedBaseSha:
+      typeof payload["expectedBaseSha"] === "string"
+        ? String(payload["expectedBaseSha"]).trim()
+        : undefined,
     title: requiredString(payload, "title"),
     description: requiredString(payload, "description"),
   };
