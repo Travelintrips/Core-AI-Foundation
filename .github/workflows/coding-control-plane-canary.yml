@@ -1,0 +1,308 @@
+name: AI Coding Control Plane Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "Optional production canary coding task UUID; falls back to AI_CODING_CANARY_TASK_ID secret"
+        required: false
+        type: string
+      require_graph:
+        description: "Fail if the canary task has no task graph yet"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-coding-control-plane-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Read-only production control-plane canary
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      API_BASE_URL: ${{ vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      TASK_ID: ${{ inputs.task_id || secrets.AI_CODING_CANARY_TASK_ID }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+      REQUIRE_GRAPH: ${{ inputs.require_graph || 'false' }}
+
+    steps:
+      - name: Verify production API health
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          code=$(curl -L -sS -o /tmp/health -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "accept: application/json" \
+            "$API_BASE_URL/health")
+
+          echo "health_http=$code"
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const body = JSON.parse(fs.readFileSync("/tmp/health", "utf8"));
+          if (!body || typeof body !== "object") {
+            throw new Error("Health response must be a JSON object");
+          }
+          console.log("health_ok=true");
+          NODE
+
+      - name: Resolve optional canary task
+        id: task
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TASK_ID:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "No AI_CODING_CANARY_TASK_ID/task_id configured; health-only scheduled canary."
+            exit 0
+          fi
+
+          node - <<'NODE'
+          const taskId = process.env.TASK_ID || "";
+          const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          if (!uuid.test(taskId)) throw new Error("Canary TASK_ID must be a UUID");
+          NODE
+
+          if [ -z "${ADMIN_API_KEY:-}" ]; then
+            echo "::error::ADMIN_API_KEY is required when a canary task is configured."
+            exit 1
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify coding task detail
+        if: steps.task.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          code=$(curl -L -sS -o /tmp/task-detail -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID")
+
+          echo "task_detail_http=$code"
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("/tmp/task-detail", "utf8"));
+          if (p?.task?.id !== process.env.TASK_ID) {
+            throw new Error("Task detail ID binding mismatch");
+          }
+          if (!Array.isArray(p?.runs)) {
+            throw new Error("Task detail runs must be an array");
+          }
+          console.log("task_status=" + String(p.task.status || ""));
+          console.log("run_count=" + p.runs.length);
+          NODE
+
+      - name: Verify planner authority control plane
+        if: steps.task.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          code=$(curl -G -L -sS -o /tmp/planner-authority -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            --data-urlencode "scope=coding-task:$TASK_ID" \
+            "$API_BASE_URL/ai/coding/planner-authority")
+
+          echo "planner_authority_http=$code"
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("/tmp/planner-authority", "utf8"));
+          const allowed = new Set([
+            "UNCLAIMED",
+            "PRIMARY_ACTIVE",
+            "FALLBACK_ACTIVE",
+            "PRIMARY_LOST",
+          ]);
+          if (p?.scope !== "coding-task:" + process.env.TASK_ID) {
+            throw new Error("Planner authority scope mismatch");
+          }
+          if (!allowed.has(p?.state)) {
+            throw new Error("Unexpected planner authority state: " + String(p?.state));
+          }
+          console.log("planner_authority_state=" + p.state);
+          NODE
+
+      - name: Verify task graph and mission control
+        if: steps.task.outputs.configured == 'true'
+        id: graph
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          graph_code=$(curl -L -sS -o /tmp/task-graph -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/task-graph")
+
+          echo "task_graph_http=$graph_code"
+
+          if [ "$graph_code" = "404" ]; then
+            if [ "$REQUIRE_GRAPH" = "true" ]; then
+              echo "::error::Task graph is required but production returned 404."
+              exit 1
+            fi
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Task has no graph yet; graph-scoped checks skipped."
+            exit 0
+          fi
+
+          test "$graph_code" = "200"
+          echo "present=true" >> "$GITHUB_OUTPUT"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("/tmp/task-graph", "utf8"));
+          const allowed = new Set([
+            "PREPARED",
+            "APPROVED",
+            "RUNNING",
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED",
+          ]);
+          if (p?.graph?.taskId !== process.env.TASK_ID) {
+            throw new Error("Task graph task binding mismatch");
+          }
+          if (!allowed.has(p?.graph?.status)) {
+            throw new Error("Unexpected graph status: " + String(p?.graph?.status));
+          }
+          if (!Array.isArray(p?.workstreams)) {
+            throw new Error("Task graph workstreams must be an array");
+          }
+          fs.writeFileSync("/tmp/graph-id", String(p.graph.id));
+          fs.writeFileSync("/tmp/graph-status", String(p.graph.status));
+          console.log("graph_status=" + p.graph.status);
+          console.log("workstream_count=" + p.workstreams.length);
+          NODE
+
+          mission_code=$(curl -L -sS -o /tmp/mission-control -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/mission-control")
+
+          echo "mission_control_http=$mission_code"
+          test "$mission_code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("/tmp/mission-control", "utf8"));
+          if (p?.taskId !== process.env.TASK_ID) {
+            throw new Error("Mission Control task binding mismatch");
+          }
+          if (!Number.isFinite(p?.progressPercent) || p.progressPercent < 0 || p.progressPercent > 100) {
+            throw new Error("Mission Control progressPercent is invalid");
+          }
+          if (!p?.totals || typeof p.totals !== "object") {
+            throw new Error("Mission Control totals missing");
+          }
+          if (!Array.isArray(p?.nextActions)) {
+            throw new Error("Mission Control nextActions must be an array");
+          }
+          console.log("mission_progress=" + p.progressPercent);
+          console.log("mission_next_actions=" + p.nextActions.join(","));
+          NODE
+
+      - name: Verify coding observability
+        if: steps.task.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          code=$(curl -L -sS -o /tmp/observability -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/observability")
+
+          echo "observability_http=$code"
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("/tmp/observability", "utf8"));
+          if (p?.taskId !== process.env.TASK_ID) {
+            throw new Error("Observability task binding mismatch");
+          }
+          if (!Array.isArray(p?.executions)) {
+            throw new Error("Observability executions must be an array");
+          }
+          if (!p?.totals || typeof p.totals !== "object") {
+            throw new Error("Observability totals missing");
+          }
+          console.log("observability_executions=" + p.executions.length);
+          console.log("observability_total_tokens=" + Number(p.totals.totalTokens || 0));
+          NODE
+
+      - name: Verify completed integration manifest is review-only
+        if: steps.task.outputs.configured == 'true' && steps.graph.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          graph_status=$(cat /tmp/graph-status)
+          if [ "$graph_status" != "COMPLETED" ]; then
+            echo "graph_status=$graph_status; integration manifest check not applicable."
+            exit 0
+          fi
+
+          graph_id=$(cat /tmp/graph-id)
+          code=$(curl -L -sS -o /tmp/integration-manifest -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "accept: application/json" \
+            "$API_BASE_URL/ai/coding/tasks/$TASK_ID/task-graph/$graph_id/integration-manifest")
+
+          echo "integration_manifest_http=$code"
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("/tmp/integration-manifest", "utf8"));
+          if (p?.taskId !== process.env.TASK_ID) {
+            throw new Error("Integration manifest task binding mismatch");
+          }
+          if (p.commitCreated !== false || p.pushed !== false || p.merged !== false) {
+            throw new Error("Integration manifest unexpectedly reports Git mutation");
+          }
+          if (p.nextAction !== "REVIEW_INTEGRATION_MANIFEST") {
+            throw new Error("Unexpected integration nextAction: " + String(p.nextAction));
+          }
+          console.log("integration_review_only=true");
+          console.log("integration_patch_count=" + Number(p.patchCount || 0));
+          NODE
+
+      - name: Canary summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "AI Coding production control-plane canary passed."
+          echo "read_only=true"
+          echo "model_invoked=false"
+          echo "worker_dispatched=false"
+          echo "commit_created=false"
+          echo "pushed=false"
+          echo "merged=false"
