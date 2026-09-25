@@ -1,6 +1,6 @@
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { processOpenIncidents, upsertIncident } from "./incidentAutoRepairService.js";
+import { processOpenIncidents, syncIncidentRepairStatuses, upsertIncident } from "./incidentAutoRepairService.js";
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
@@ -43,6 +43,7 @@ export async function tickIncidentWatcher(): Promise<void> {
   running = true;
   try {
     await checkDatabase();
+    await syncIncidentRepairStatuses(50);
     await processOpenIncidents(5);
   } finally {
     running = false;

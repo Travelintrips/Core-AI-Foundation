@@ -45,20 +45,45 @@ export function classifyIncidentRisk(source: IncidentSource, kind: string): Inci
   return "GUARDED";
 }
 
+const RISK_RANK: Record<IncidentRisk, number> = {
+  SAFE: 0,
+  GUARDED: 1,
+  OWNER_APPROVAL: 2,
+};
+
+export function resolveIncidentRisk(
+  source: IncidentSource,
+  kind: string,
+  requested?: IncidentRisk,
+): IncidentRisk {
+  const classified = classifyIncidentRisk(source, kind);
+  if (!requested) return classified;
+  return RISK_RANK[requested] > RISK_RANK[classified] ? requested : classified;
+}
+
 export async function upsertIncident(input: IncidentInput) {
   const fingerprint = stableFingerprint(input);
-  const riskClass = input.riskClass ?? classifyIncidentRisk(input.source, input.kind);
+  const riskClass = resolveIncidentRisk(input.source, input.kind, input.riskClass);
   const now = new Date();
   const [existing] = await db.select().from(aiIncidentsTable)
     .where(eq(aiIncidentsTable.fingerprint, fingerprint)).limit(1);
 
   if (existing) {
+    const escalated = RISK_RANK[riskClass] > RISK_RANK[existing.riskClass as IncidentRisk];
+    const nextStatus = riskClass === "OWNER_APPROVAL"
+      ? "BLOCKED"
+      : existing.status === "RESOLVED"
+        ? "OPEN"
+        : existing.status;
+
     const [updated] = await db.update(aiIncidentsTable).set({
       lastSeenAt: now,
       severity: input.severity ?? existing.severity,
       summary: input.summary,
       metadataJson: { ...(existing.metadataJson as Record<string, unknown> ?? {}), ...(input.metadata ?? {}) },
-      ...(existing.status === "RESOLVED" ? { status: "OPEN", resolvedAt: null } : {}),
+      ...(escalated ? { riskClass } : {}),
+      ...(nextStatus !== existing.status ? { status: nextStatus } : {}),
+      ...(existing.status === "RESOLVED" && nextStatus === "OPEN" ? { resolvedAt: null } : {}),
     }).where(eq(aiIncidentsTable.id, existing.id)).returning();
     return updated ?? existing;
   }
@@ -165,6 +190,41 @@ export async function processOpenIncidents(limit = 5) {
     }
   }
   return { scanned: rows.length, queued };
+}
+
+export async function syncIncidentRepairStatuses(limit = 50) {
+  const incidents = await db.select().from(aiIncidentsTable)
+    .where(inArray(aiIncidentsTable.status, ["REPAIRING", "VERIFYING"]))
+    .orderBy(asc(aiIncidentsTable.firstSeenAt))
+    .limit(Math.max(1, Math.min(200, limit)));
+
+  let updated = 0;
+  for (const incident of incidents) {
+    if (!incident.repairTaskId) continue;
+    const [task] = await db.select().from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, incident.repairTaskId))
+      .limit(1);
+    if (!task) continue;
+
+    if (task.status === "FAILED" && incident.status !== "FAILED") {
+      await db.update(aiIncidentsTable).set({
+        status: "FAILED",
+        lastError: "Associated repair task failed.",
+      }).where(eq(aiIncidentsTable.id, incident.id));
+      updated += 1;
+      continue;
+    }
+
+    if (task.status === "READY_REVIEW" && incident.status !== "VERIFYING") {
+      await db.update(aiIncidentsTable).set({
+        status: "VERIFYING",
+        lastError: null,
+      }).where(eq(aiIncidentsTable.id, incident.id));
+      updated += 1;
+    }
+  }
+
+  return { scanned: incidents.length, updated };
 }
 
 export async function listIncidents(limit = 100) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyIncidentRisk } from "../incidentAutoRepairService.js";
+import { classifyIncidentRisk, resolveIncidentRisk } from "../incidentAutoRepairService.js";
 
 describe("classifyIncidentRisk", () => {
   it("blocks destructive or structural Supabase incidents behind owner approval", () => {
@@ -15,5 +15,19 @@ describe("classifyIncidentRisk", () => {
 
   it("allows only bounded retry-like system incidents as safe", () => {
     expect(classifyIncidentRisk("system", "stale_worker_retryable")).toBe("SAFE");
+  });
+});
+
+describe("resolveIncidentRisk", () => {
+  it("never lets a caller downgrade a Supabase structural incident", () => {
+    expect(resolveIncidentRisk("supabase", "schema_drift", "SAFE")).toBe("OWNER_APPROVAL");
+  });
+
+  it("never lets a caller downgrade a guarded GitHub incident", () => {
+    expect(resolveIncidentRisk("github", "workflow_failed", "SAFE")).toBe("GUARDED");
+  });
+
+  it("allows callers to escalate risk", () => {
+    expect(resolveIncidentRisk("github", "workflow_failed", "OWNER_APPROVAL")).toBe("OWNER_APPROVAL");
   });
 });
