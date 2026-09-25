@@ -38,6 +38,10 @@ describe("coding workstream review model", () => {
       kind: "AI_CANDIDATE",
       policyStatus: "PASSED",
       changedFiles: ["src/payments.ts"],
+      latencyMs: 123,
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
       completeForReview: true,
     });
     expect(codingWorkstreamReviewCanApproveAiPatch(model)).toBe(true);
