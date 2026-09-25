@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  buildCodingWorkstreamReviewModel,
+  codingWorkstreamReviewCanApproveAiPatch,
+} from "./codingWorkstreamReviewModel";
+import {
   Activity,
   AlertTriangle,
   CheckCircle2,
@@ -84,11 +88,6 @@ type IntegrationManifest = {
   merged: boolean;
 };
 
-type WorkstreamAiExecution = {
-  status?: string;
-  reviewStatus?: string;
-};
-
 const SHA40_RE = /^[0-9a-f]{40}$/i;
 
 function shortHash(value: string): string {
@@ -102,29 +101,6 @@ function statusTone(status: string): string {
   if (status === "REVIEW_REQUIRED") return "text-amber-300";
   if (status === "READY") return "text-violet-300";
   return "text-slate-400";
-}
-
-function record(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function workstreamAiExecution(
-  workstream: TaskGraphWorkstream | undefined,
-): WorkstreamAiExecution | null {
-  const result = record(workstream?.resultJson);
-  const execution = record(result?.workstreamAiExecution);
-  return execution
-    ? {
-        status:
-          typeof execution.status === "string" ? execution.status : undefined,
-        reviewStatus:
-          typeof execution.reviewStatus === "string"
-            ? execution.reviewStatus
-            : undefined,
-      }
-    : null;
 }
 
 async function responseError(response: Response): Promise<string> {
@@ -549,16 +525,22 @@ export function CodingMissionControlPanel({
               const persisted = graphSnapshot?.workstreams.find(
                 (candidate) => candidate.id === item.id,
               );
-              const aiExecution = workstreamAiExecution(persisted);
+              const reviewModel = buildCodingWorkstreamReviewModel(
+                persisted?.resultJson,
+              );
               const needsAiPatchApproval =
                 item.status === "REVIEW_REQUIRED" &&
-                aiExecution?.status === "CANDIDATE_READY" &&
-                aiExecution.reviewStatus !== "APPROVED";
+                codingWorkstreamReviewCanApproveAiPatch(reviewModel);
+              const incompleteAiReview =
+                item.status === "REVIEW_REQUIRED" &&
+                reviewModel?.kind === "AI_CANDIDATE" &&
+                reviewModel.reviewStatus !== "APPROVED" &&
+                !reviewModel.completeForReview;
               const canCompleteReviewed =
                 item.status === "REVIEW_REQUIRED" &&
-                (!aiExecution ||
-                  aiExecution.status !== "CANDIDATE_READY" ||
-                  aiExecution.reviewStatus === "APPROVED");
+                (!reviewModel ||
+                  reviewModel.kind !== "AI_CANDIDATE" ||
+                  reviewModel.reviewStatus === "APPROVED");
 
               return (
                 <div
@@ -602,6 +584,127 @@ export function CodingMissionControlPanel({
                       deps {item.dependencies.length > 0 ? item.dependencies.join(", ") : "none"}
                     </div>
                   </div>
+
+                  {item.status === "REVIEW_REQUIRED" && reviewModel && (
+                    <div
+                      className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/[0.025] p-3"
+                      data-testid={`panel-workstream-review-${item.key}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-300">
+                          {reviewModel.kind === "AI_CANDIDATE"
+                            ? "AI candidate review"
+                            : "Deterministic patch review"}
+                        </div>
+                        <div className="font-mono text-[9px] text-slate-500">
+                          {reviewModel.kind === "AI_CANDIDATE"
+                            ? `${reviewModel.policyStatus ?? "policy ?"} · ${reviewModel.reviewStatus ?? "review ?"}`
+                            : reviewModel.status ?? "local"}
+                        </div>
+                      </div>
+
+                      {reviewModel.kind === "AI_CANDIDATE" && (
+                        <>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded border border-white/[0.06] bg-black/10 p-2">
+                              <div className="text-[8px] uppercase text-slate-600">model</div>
+                              <div className="mt-1 truncate font-mono text-[9px] text-slate-300">
+                                {reviewModel.provider ?? "—"} / {reviewModel.model ?? "—"}
+                              </div>
+                            </div>
+                            <div className="rounded border border-white/[0.06] bg-black/10 p-2">
+                              <div className="text-[8px] uppercase text-slate-600">tokens</div>
+                              <div className="mt-1 font-mono text-[9px] text-slate-300">
+                                {reviewModel.totalTokens ?? "—"} total · {reviewModel.inputTokens ?? "—"} in · {reviewModel.outputTokens ?? "—"} out
+                              </div>
+                            </div>
+                            <div className="rounded border border-white/[0.06] bg-black/10 p-2">
+                              <div className="text-[8px] uppercase text-slate-600">latency</div>
+                              <div className="mt-1 font-mono text-[9px] text-slate-300">
+                                {reviewModel.latencyMs == null ? "—" : `${reviewModel.latencyMs} ms`}
+                              </div>
+                            </div>
+                            <div className="rounded border border-white/[0.06] bg-black/10 p-2">
+                              <div className="text-[8px] uppercase text-slate-600">patch hash</div>
+                              <div className="mt-1 font-mono text-[9px] text-slate-300" title={reviewModel.patchSha256 ?? undefined}>
+                                {shortHash(reviewModel.patchSha256 ?? "")}
+                              </div>
+                            </div>
+                          </div>
+
+                          {(reviewModel.proposalSummary || reviewModel.proposalRationale) && (
+                            <div className="mt-2 rounded border border-white/[0.06] bg-black/10 p-2 text-[9px] leading-4 text-slate-400">
+                              {reviewModel.proposalSummary && (
+                                <div>
+                                  <span className="text-slate-600">summary · </span>
+                                  {reviewModel.proposalSummary}
+                                </div>
+                              )}
+                              {reviewModel.proposalRationale && (
+                                <div className="mt-1">
+                                  <span className="text-slate-600">rationale · </span>
+                                  {reviewModel.proposalRationale}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[8px]">
+                            <span className={reviewModel.scriptsExecuted === false ? "text-emerald-300" : "text-rose-300"}>
+                              scripts={String(reviewModel.scriptsExecuted)}
+                            </span>
+                            <span className={reviewModel.networkUsed === false ? "text-emerald-300" : "text-rose-300"}>
+                              network={String(reviewModel.networkUsed)}
+                            </span>
+                            <span className={reviewModel.commitCreated === false ? "text-emerald-300" : "text-rose-300"}>
+                              commit={String(reviewModel.commitCreated)}
+                            </span>
+                            <span className={reviewModel.pushed === false ? "text-emerald-300" : "text-rose-300"}>
+                              push={String(reviewModel.pushed)}
+                            </span>
+                            <span className={reviewModel.privilegeEnded === true ? "text-emerald-300" : "text-rose-300"}>
+                              privilegeEnded={String(reviewModel.privilegeEnded)}
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="mt-2">
+                        <div className="mb-1 text-[8px] uppercase tracking-wider text-slate-600">
+                          Changed files ({reviewModel.changedFiles.length})
+                        </div>
+                        <div className="max-h-24 overflow-auto rounded border border-white/[0.05] bg-black/10 p-2 font-mono text-[9px] text-slate-400">
+                          {reviewModel.changedFiles.length > 0
+                            ? reviewModel.changedFiles.join("\n")
+                            : "No changed files recorded"}
+                        </div>
+                      </div>
+
+                      {reviewModel.warnings.length > 0 && (
+                        <div className="mt-2 rounded border border-amber-300/10 bg-amber-300/[0.02] p-2 text-[9px] text-amber-200/80">
+                          {reviewModel.warnings.join(" · ")}
+                        </div>
+                      )}
+
+                      <div className="mt-2">
+                        <div className="mb-1 flex items-center justify-between text-[8px] uppercase tracking-wider text-slate-600">
+                          <span>Patch / diff</span>
+                          <span className="font-mono normal-case">
+                            result {shortHash(reviewModel.resultSha256 ?? "")}
+                          </span>
+                        </div>
+                        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-white/[0.06] bg-[#030812] p-2 font-mono text-[9px] leading-4 text-slate-300">
+                          {reviewModel.patch ?? "Patch payload unavailable"}
+                        </pre>
+                      </div>
+
+                      {incompleteAiReview && (
+                        <div className="mt-2 rounded border border-rose-300/15 bg-rose-300/[0.035] p-2 text-[9px] text-rose-200">
+                          Approval locked: the persisted candidate is missing complete review evidence or a required no-privilege invariant.
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {(needsAiPatchApproval || canCompleteReviewed) && (
                     <div className="mt-3 flex flex-wrap gap-2">
