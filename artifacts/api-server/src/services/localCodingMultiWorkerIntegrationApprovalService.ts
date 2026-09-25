@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -411,7 +411,7 @@ export async function verifyApprovedCodingIntegration(
       { maxBuffer: 8 * 1024 * 1024 },
     );
     const combinedPatchSha256 = combinedPatch
-      ? (await import("node:crypto")).createHash("sha256").update(combinedPatch, "utf8").digest("hex")
+      ? createHash("sha256").update(combinedPatch, "utf8").digest("hex")
       : null;
     const verifiedAt = new Date().toISOString();
 
