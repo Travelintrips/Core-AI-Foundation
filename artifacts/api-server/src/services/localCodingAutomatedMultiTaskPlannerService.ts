@@ -565,7 +565,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
   });
   const adapter = createConstrainedModelInvocationAdapter(provider);
 
-  let generated: GeneratedMultiTaskPlan;
+  let generated: GeneratedMultiTaskPlan | null = null;
   let selectedProviderSlug = providerSlug;
   let selectedModelId = modelId;
   let fallbackUsed = resolved.route === "FALLBACK";
@@ -776,6 +776,13 @@ export async function generateAndPersistCodingMultiTaskPlan(
         },
       );
     }
+  }
+
+  if (!generated) {
+    throw new AutomatedMultiTaskPlannerError(
+      "Planner fallback chain completed without a generated plan.",
+      "MODEL_FAILED",
+    );
   }
 
   try {
