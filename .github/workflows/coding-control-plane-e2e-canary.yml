@@ -81,13 +81,25 @@ jobs:
             metadata:{purpose:"production-control-plane-e2e-canary"}
           }')
           code=$(curl -sS -o /tmp/authority.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/acquire"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
-          test "$code" = "201"
+          if [ "$code" != "201" ]; then
+            echo "::error::Acquire planner authority failed with HTTP $code"
+            cat /tmp/authority.json
+            exit 1
+          fi
           token=$(jq -r '.leaseToken // empty' /tmp/authority.json)
           generation=$(jq -r '.fencingGeneration // empty' /tmp/authority.json)
-          test -n "$token"; test -n "$generation"
+          if [ -z "$token" ] || [ -z "$generation" ]; then
+            echo "::error::Planner authority response missing leaseToken or fencingGeneration"
+            cat /tmp/authority.json
+            exit 1
+          fi
           assert=$(jq -nc --arg scope "${{ steps.task.outputs.scope }}" --arg holder "$holder" --arg token "$token" --argjson generation "$generation"             '{scope:$scope,holderId:$holder,leaseToken:$token,fencingGeneration:$generation}')
           code=$(curl -sS -o /tmp/assert.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/assert"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$assert")
-          test "$code" = "200"
+          if [ "$code" != "200" ]; then
+            echo "::error::Assert planner authority failed with HTTP $code"
+            cat /tmp/assert.json
+            exit 1
+          fi
           echo "holder=$holder" >> "$GITHUB_OUTPUT"
           echo "token=$token" >> "$GITHUB_OUTPUT"
           echo "generation=$generation" >> "$GITHUB_OUTPUT"
