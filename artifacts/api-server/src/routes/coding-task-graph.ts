@@ -11,6 +11,10 @@ import {
   completeReviewedCodingWorkstream,
   LocalCodingMultiWorkerError,
 } from "../services/localCodingMultiWorkerOrchestratorService.js";
+import {
+  buildCodingIntegrationManifest,
+  CodingIntegrationGateError,
+} from "../services/localCodingMultiWorkerIntegrationGateService.js";
 import { dispatchReadyCodingWorkstreams } from "../services/localCodingMultiWorkerExecutionService.js";
 import { LocalCodingWorkstreamAiHandoffError } from "../services/localCodingWorkstreamAiHandoffService.js";
 import {
@@ -61,6 +65,21 @@ function sendKnownError(res: Response, error: unknown): boolean {
       error.code === "NOT_FOUND"
         ? 404
         : ["NOT_READY", "ACTIVE_GRAPH_EXISTS"].includes(error.code)
+          ? 409
+          : 422;
+    res.status(status).json({
+      error: error.message,
+      code: error.code,
+      details: error.details ?? null,
+    });
+    return true;
+  }
+
+  if (error instanceof CodingIntegrationGateError) {
+    const status =
+      error.code === "NOT_FOUND"
+        ? 404
+        : error.code === "NOT_READY"
           ? 409
           : 422;
     res.status(status).json({
@@ -185,6 +204,32 @@ router.post(
         graph: result.graph,
         snapshot,
       });
+    } catch (error) {
+      if (sendKnownError(res, error)) return;
+      throw error;
+    }
+  },
+);
+
+router.get(
+  "/ai/coding/tasks/:id/task-graph/:graphId/integration-manifest",
+  async (req, res): Promise<void> => {
+    const params = graphParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+
+    try {
+      const snapshot = await requireGraphForTask(
+        params.data.id,
+        params.data.graphId,
+      );
+      const manifest = buildCodingIntegrationManifest(
+        params.data.id,
+        snapshot,
+      );
+      res.json(manifest);
     } catch (error) {
       if (sendKnownError(res, error)) return;
       throw error;

@@ -53,6 +53,16 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockIntegrationGateError extends Error {
+    constructor(
+      message: string,
+      readonly code: string,
+      readonly details?: Record<string, unknown>,
+    ) {
+      super(message);
+    }
+  }
+
   return {
     persist: vi.fn(),
     latest: vi.fn(),
@@ -64,6 +74,8 @@ const mocks = vi.hoisted(() => {
     revokeAiHandoff: vi.fn(),
     enqueueAi: vi.fn(),
     approveAiPatch: vi.fn(),
+    buildIntegrationManifest: vi.fn(),
+    MockIntegrationGateError,
     MockTaskGraphError,
     MockMultiWorkerError,
     MockWorkstreamHandoffError,
@@ -85,6 +97,11 @@ vi.mock("../../services/localCodingMultiWorkerOrchestratorService.js", () => ({
 
 vi.mock("../../services/localCodingMultiWorkerExecutionService.js", () => ({
   dispatchReadyCodingWorkstreams: mocks.dispatch,
+}));
+
+vi.mock("../../services/localCodingMultiWorkerIntegrationGateService.js", () => ({
+  buildCodingIntegrationManifest: mocks.buildIntegrationManifest,
+  CodingIntegrationGateError: mocks.MockIntegrationGateError,
 }));
 
 vi.mock("../../services/localCodingWorkstreamAiHandoffService.js", () => ({
@@ -189,6 +206,23 @@ describe("multi-worker coding task graph API", () => {
           reviewStatus: "APPROVED",
         },
       },
+    });
+    mocks.buildIntegrationManifest.mockReturnValue({
+      version: 1,
+      taskId: TASK_ID,
+      graphId: GRAPH_ID,
+      graphVersion: 1,
+      planHash: "f".repeat(64),
+      objective: "Parallel implementation",
+      baseSha: BASE_SHA,
+      workstreams: [],
+      changedFiles: [],
+      patchCount: 0,
+      manifestHash: "c".repeat(64),
+      nextAction: "REVIEW_INTEGRATION_MANIFEST",
+      commitCreated: false,
+      pushed: false,
+      merged: false,
     });
   });
 
@@ -357,6 +391,27 @@ describe("multi-worker coding task graph API", () => {
 
     expect(response.status).toBe(404);
     expect(mocks.completeReviewed).not.toHaveBeenCalled();
+  });
+
+  it("returns a read-only integration manifest for the task-bound graph", async () => {
+    const response = await request(app).get(
+      `/ai/coding/tasks/${TASK_ID}/task-graph/${GRAPH_ID}/integration-manifest`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.buildIntegrationManifest).toHaveBeenCalledWith(
+      TASK_ID,
+      expect.objectContaining({
+        graph: expect.objectContaining({ id: GRAPH_ID }),
+      }),
+    );
+    expect(response.body).toMatchObject({
+      graphId: GRAPH_ID,
+      nextAction: "REVIEW_INTEGRATION_MANIFEST",
+      commitCreated: false,
+      pushed: false,
+      merged: false,
+    });
   });
 
   it("returns the current graph snapshot for the control tower", async () => {
