@@ -8,6 +8,10 @@ import {
   persistCodingTaskGraph,
 } from "../services/localCodingTaskGraphService.js";
 import {
+  AutomatedMultiTaskPlannerError,
+  generateAndPersistCodingMultiTaskPlan,
+} from "../services/localCodingAutomatedMultiTaskPlannerService.js";
+import {
   completeReviewedCodingWorkstream,
   LocalCodingMultiWorkerError,
 } from "../services/localCodingMultiWorkerOrchestratorService.js";
@@ -60,6 +64,25 @@ const dispatchBodySchema = z
   .strict();
 
 function sendKnownError(res: Response, error: unknown): boolean {
+  if (error instanceof AutomatedMultiTaskPlannerError) {
+    const status =
+      error.code === "NOT_FOUND"
+        ? 404
+        : ["ANALYSIS_REQUIRED", "ACTIVE_GRAPH_EXISTS", "AUTHORITY_HELD", "AUTHORITY_LOST"].includes(error.code)
+          ? 409
+          : error.code === "MODEL_UNAVAILABLE"
+            ? 503
+            : error.code === "MODEL_FAILED"
+              ? 502
+              : 422;
+    res.status(status).json({
+      error: error.message,
+      code: error.code,
+      details: error.details ?? null,
+    });
+    return true;
+  }
+
   if (error instanceof LocalCodingTaskGraphError) {
     const status =
       error.code === "NOT_FOUND"
@@ -184,6 +207,31 @@ router.get(
       return;
     }
     res.json(snapshot);
+  },
+);
+
+router.post(
+  "/ai/coding/tasks/:id/task-graph/generate",
+  async (req, res): Promise<void> => {
+    const params = GetCodingTaskParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+
+    try {
+      const result = await generateAndPersistCodingMultiTaskPlan(
+        params.data.id,
+      );
+      const snapshot = await getLatestCodingTaskGraph(params.data.id);
+      res.status(result.created ? 201 : 200).json({
+        ...result,
+        snapshot,
+      });
+    } catch (error) {
+      if (sendKnownError(res, error)) return;
+      throw error;
+    }
   },
 );
 
