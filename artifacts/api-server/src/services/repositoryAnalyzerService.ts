@@ -354,11 +354,11 @@ export async function prepareRepositoryWorkspace(
   return withRepositoryCloneSlot(async () => {
     try {
       await cloneRepository(remote, branch, workspace, PRIMARY_CLONE_DEPTH);
-      if (expectedBaseSha && isolatedBranchName) {
+      if (expectedBaseSha) {
         await configureIsolatedRepositoryWorkspace(
           workspace,
           expectedBaseSha,
-          isolatedBranchName,
+          isolatedBranchName ?? `analysis-${expectedBaseSha.slice(0, 12)}`,
         );
       }
       return { path: workspace, cleanup: true };
@@ -388,11 +388,11 @@ export async function prepareRepositoryWorkspace(
 
       try {
         await cloneRepository(remote, branch, workspace, FALLBACK_CLONE_DEPTH);
-        if (expectedBaseSha && isolatedBranchName) {
+        if (expectedBaseSha) {
           await configureIsolatedRepositoryWorkspace(
             workspace,
             expectedBaseSha,
-            isolatedBranchName,
+            isolatedBranchName ?? `analysis-${expectedBaseSha.slice(0, 12)}`,
           );
         }
         return { path: workspace, cleanup: true };
