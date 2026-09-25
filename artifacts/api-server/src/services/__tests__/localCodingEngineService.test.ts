@@ -9,6 +9,7 @@ import {
   extractTaskKeywords,
   extractTypeScriptSymbols,
   isSensitiveRepositoryPath,
+  normalizeCommandStdout,
   parseAllowlistedVerificationCommand,
   readLocalGitBlame,
   runAllowlistedVerificationCommand,
@@ -82,6 +83,23 @@ async function createFixtureRepository(): Promise<string> {
   );
   return root;
 }
+
+describe("command stdout normalization", () => {
+  it("normalizes missing stdout to an empty string before hashing or splitting", () => {
+    expect(normalizeCommandStdout(undefined)).toBe("");
+    expect(normalizeCommandStdout(null)).toBe("");
+  });
+
+  it("preserves strings and decodes Buffer/Uint8Array stdout", () => {
+    expect(normalizeCommandStdout("git-output\n")).toBe("git-output\n");
+    expect(normalizeCommandStdout(Buffer.from("buffer-output"))).toBe(
+      "buffer-output",
+    );
+    expect(
+      normalizeCommandStdout(new Uint8Array(Buffer.from("typed-output"))),
+    ).toBe("typed-output");
+  });
+});
 
 describe("Local Coding Engine", () => {
   afterEach(async () => {
