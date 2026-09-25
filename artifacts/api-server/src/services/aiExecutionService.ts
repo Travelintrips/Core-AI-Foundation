@@ -164,7 +164,8 @@ async function executeAnthropic(input: ExecutionInput, apiKey: string): Promise<
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    throw providerRequestError("Anthropic", response.status);
+    const detail = await response.text().catch(() => "");
+    throw providerRequestError("Anthropic", response.status, detail);
   }
 
   const data = (await response.json()) as {
@@ -215,7 +216,8 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    throw providerRequestError("Gemini", response.status);
+    const detail = await response.text().catch(() => "");
+    throw providerRequestError("Gemini", response.status, detail);
   }
 
   const data = (await response.json()) as {
@@ -264,7 +266,8 @@ async function executeMistral(input: ExecutionInput, apiKey: string): Promise<Ex
   const latencyMs = Date.now() - startTime;
 
   if (!response.ok) {
-    throw providerRequestError("Mistral", response.status);
+    const detail = await response.text().catch(() => "");
+    throw providerRequestError("Mistral", response.status, detail);
   }
 
   const data = (await response.json()) as {
