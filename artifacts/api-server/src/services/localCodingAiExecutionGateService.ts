@@ -199,19 +199,39 @@ function parseBoundedModelPrompt(input: string): { system: string; user: string 
 function mapProviderFailure(error: unknown): ProviderInvocationError {
   if (error instanceof ProviderInvocationError) return error;
   const message = error instanceof Error ? error.message : String(error);
+  const detail = message
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 700);
   if (/auth|api key|401|403/i.test(message)) {
-    return new ProviderInvocationError("Constrained provider authentication failed", "AUTH");
+    return new ProviderInvocationError(
+      "Constrained provider authentication failed" + (detail ? ": " + detail : ""),
+      "AUTH",
+    );
   }
   if (/rate limit|quota|429/i.test(message)) {
-    return new ProviderInvocationError("Constrained provider rate limit reached", "RATE_LIMIT");
+    return new ProviderInvocationError(
+      "Constrained provider rate limit reached" + (detail ? ": " + detail : ""),
+      "RATE_LIMIT",
+    );
   }
   if (/timeout|network|fetch failed|unavailable|502|503|504/i.test(message)) {
-    return new ProviderInvocationError("Constrained provider is unavailable", "UNAVAILABLE");
+    return new ProviderInvocationError(
+      "Constrained provider is unavailable" + (detail ? ": " + detail : ""),
+      "UNAVAILABLE",
+    );
   }
   if (/400|bad request|unsupported/i.test(message)) {
-    return new ProviderInvocationError("Constrained provider rejected the request", "BAD_REQUEST");
+    return new ProviderInvocationError(
+      "Constrained provider rejected the request" + (detail ? ": " + detail : ""),
+      "BAD_REQUEST",
+    );
   }
-  return new ProviderInvocationError("Constrained provider invocation failed", "UNKNOWN");
+  return new ProviderInvocationError(
+    "Constrained provider invocation failed" + (detail ? ": " + detail : ""),
+    "UNKNOWN",
+  );
 }
 
 export function createConstrainedCodingProviderAdapter(input: {
