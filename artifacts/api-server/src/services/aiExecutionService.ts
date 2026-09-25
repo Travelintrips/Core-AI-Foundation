@@ -1,6 +1,7 @@
 import { getProviderApiKey } from "./aiSecretService.js";
 import { logExecutionSafe, type ObservabilityContext } from "./observabilityService.js";
 import { readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
+import { readOllamaLocalConfig } from "./ollamaLocalService.js";
 
 export type { ObservabilityContext };
 
@@ -256,6 +257,73 @@ async function executeMistral(input: ExecutionInput, apiKey: string): Promise<Ex
   return { content, promptTokens, completionTokens, tokensUsed: promptTokens + completionTokens, latencyMs };
 }
 
+// ─── Ollama local runtime (OpenAI-compatible, loopback-only) ─────────────────
+
+async function executeOllama(input: ExecutionInput): Promise<ExecutionOutput> {
+  if (input.imageUrl) {
+    throw new Error("Ollama constrained local provider does not accept image input.");
+  }
+
+  const configuredBaseUrl =
+    typeof input.provider.baseUrl === "string" && input.provider.baseUrl.trim()
+      ? input.provider.baseUrl.trim()
+      : process.env["OLLAMA_BASE_URL"];
+
+  const config = readOllamaLocalConfig({
+    ...process.env,
+    OLLAMA_ENABLED: "true",
+    OLLAMA_BASE_URL: configuredBaseUrl,
+    OLLAMA_MODEL: input.model.modelId,
+  });
+
+  const started = Date.now();
+  const messages: Array<{ role: "system" | "user"; content: string }> = [];
+  if (input.systemPrompt) messages.push({ role: "system", content: input.systemPrompt });
+  messages.push({ role: "user", content: input.prompt });
+
+  const response = await fetch(config.baseUrl + "/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages,
+      stream: false,
+      max_tokens:
+        input.maxTokens ??
+        (input.model.maxOutputTokens as number | null | undefined) ??
+        4096,
+      ...(input.temperature != null ? { temperature: input.temperature } : {}),
+    }),
+    signal: input.signal,
+  });
+
+  const latencyMs = Date.now() - started;
+  if (!response.ok) throw providerRequestError("Ollama", response.status);
+
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+    };
+  };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  const promptTokens = data.usage?.prompt_tokens ?? 0;
+  const completionTokens = data.usage?.completion_tokens ?? 0;
+
+  return {
+    content,
+    promptTokens,
+    completionTokens,
+    tokensUsed: data.usage?.total_tokens ?? promptTokens + completionTokens,
+    latencyMs,
+  };
+}
+
 // ─── ZeroLLM local sidecar (OpenAI-compatible, loopback-only) ───────────────
 
 async function executeZeroLlm(input: ExecutionInput): Promise<ExecutionOutput> {
@@ -450,9 +518,10 @@ async function executeAIInternal(
   allowQuotaFallback: boolean,
 ): Promise<ExecutionOutput> {
   const slug = input.provider.slug.toLowerCase();
-  const apiKey = slug === "zerollm" ? null : getProviderApiKey(input.provider.slug);
+  const localProvider = slug === "zerollm" || slug === "ollama";
+  const apiKey = localProvider ? null : getProviderApiKey(input.provider.slug);
 
-  if (slug !== "zerollm" && !apiKey) {
+  if (!localProvider && !apiKey) {
     const hint = input.provider.slug.toUpperCase().replace(/-/g, "_");
     throw new Error(
       `No API key configured for provider '${input.provider.slug}'. ` +
@@ -487,6 +556,10 @@ async function executeAIInternal(
         result = allowQuotaFallback
           ? await executeWithQuotaFallback(input, () => executeMistral(input, apiKey!))
           : await executeMistral(input, apiKey!);
+        break;
+      case "ollama":
+        // Ollama is loopback-only and never falls back to an external provider.
+        result = await executeOllama(input);
         break;
       case "zerollm":
         // Local provider never falls back to an external provider.

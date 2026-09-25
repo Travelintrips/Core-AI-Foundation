@@ -17,6 +17,7 @@ export const DEFAULT_CODING_PROVIDER_ALLOWLIST = Object.freeze([
   "gemini",
   "mistral",
   "zerollm",
+  "ollama",
 ]);
 
 export interface ProductionCodingModelConfig {

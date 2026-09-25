@@ -12,7 +12,7 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { executeAINoFallback, type ObservabilityContext } from "./aiExecutionService.js";
-import { resolveProductionCodingModel } from "./localCodingAiProductionModelService.js";
+import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
   ProviderInvocationError,
@@ -942,16 +942,21 @@ async function executeReserved(
 
   try {
     const prompt = buildLocalCodingAiPrompt(lease);
-    const resolvedModel = await resolveProductionCodingModel();
+    const resolvedModel = await resolvePreferredCodingModel();
     if (!resolvedModel.ok) {
       throw new LocalCodingAiExecutionGateError(
         resolvedModel.message,
         "MODEL_UNAVAILABLE",
-        { reason: resolvedModel.reason },
+        {
+          reason: resolvedModel.reason,
+          primaryFailure: resolvedModel.primaryFailure,
+          fallbackFailure: resolvedModel.fallbackFailure,
+        },
       );
     }
 
     const selected = resolvedModel.selection;
+    const modelRoute = resolvedModel.route;
     const providerSlug = String(selected.provider.slug ?? "").toLowerCase();
     const modelId = String(selected.model.modelId ?? "");
     if (!providerSlug || !modelId) {
@@ -973,7 +978,7 @@ async function executeReserved(
         agentName: "AI Execution Gate",
         providerName: providerSlug,
         modelName: modelId,
-        requestType: "code",
+        requestType: modelRoute === "PRIMARY" ? "code-primary" : "code-fallback",
         createdBy: `coding-run:${reserved.run.id}`,
       },
     });
