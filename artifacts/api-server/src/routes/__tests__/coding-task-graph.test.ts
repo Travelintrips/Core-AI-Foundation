@@ -63,10 +63,21 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockAutomatedPlannerError extends Error {
+    constructor(
+      message: string,
+      readonly code: string,
+      readonly details?: Record<string, unknown>,
+    ) {
+      super(message);
+    }
+  }
+
   return {
     persist: vi.fn(),
     latest: vi.fn(),
     approve: vi.fn(),
+    generate: vi.fn(),
     dispatch: vi.fn(),
     completeReviewed: vi.fn(),
     prepareAiHandoff: vi.fn(),
@@ -80,6 +91,7 @@ const mocks = vi.hoisted(() => {
     MockMultiWorkerError,
     MockWorkstreamHandoffError,
     MockWorkstreamAiExecutionError,
+    MockAutomatedPlannerError,
   };
 });
 
@@ -88,6 +100,11 @@ vi.mock("../../services/localCodingTaskGraphService.js", () => ({
   getLatestCodingTaskGraph: mocks.latest,
   approveCodingTaskGraph: mocks.approve,
   LocalCodingTaskGraphError: mocks.MockTaskGraphError,
+}));
+
+vi.mock("../../services/localCodingAutomatedMultiTaskPlannerService.js", () => ({
+  generateAndPersistCodingMultiTaskPlan: mocks.generate,
+  AutomatedMultiTaskPlannerError: mocks.MockAutomatedPlannerError,
 }));
 
 vi.mock("../../services/localCodingMultiWorkerOrchestratorService.js", () => ({
@@ -154,6 +171,28 @@ describe("multi-worker coding task graph API", () => {
         taskId: TASK_ID,
         status: "PREPARED",
       },
+    });
+    mocks.generate.mockResolvedValue({
+      created: true,
+      graphId: GRAPH_ID,
+      graphVersion: 1,
+      planHash: "f".repeat(64),
+      graphStatus: "PREPARED",
+      plan: {
+        version: 1,
+        taskId: TASK_ID,
+        objective: "Parallel implementation",
+        workstreams: [],
+      },
+      model: {
+        provider: "fake-provider",
+        model: "fake-model",
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        latencyMs: 25,
+      },
+      nextAction: "APPROVE_TASK_GRAPH",
     });
     mocks.approve.mockResolvedValue({
       id: GRAPH_ID,
@@ -224,6 +263,41 @@ describe("multi-worker coding task graph API", () => {
       pushed: false,
       merged: false,
     });
+  });
+
+  it("generates and persists a constrained PREPARED multi-task plan", async () => {
+    const response = await request(app)
+      .post(`/ai/coding/tasks/${TASK_ID}/task-graph/generate`)
+      .send({});
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      created: true,
+      graphId: GRAPH_ID,
+      graphStatus: "PREPARED",
+      nextAction: "APPROVE_TASK_GRAPH",
+      model: {
+        provider: "fake-provider",
+        model: "fake-model",
+      },
+    });
+    expect(mocks.generate).toHaveBeenCalledWith(TASK_ID);
+  });
+
+  it("returns 409 when repository analysis is not ready for automated planning", async () => {
+    mocks.generate.mockRejectedValueOnce(
+      new mocks.MockAutomatedPlannerError(
+        "Repository analysis must complete first.",
+        "ANALYSIS_REQUIRED",
+      ),
+    );
+
+    const response = await request(app)
+      .post(`/ai/coding/tasks/${TASK_ID}/task-graph/generate`)
+      .send({});
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("ANALYSIS_REQUIRED");
   });
 
   it("persists a bounded planner contract and returns the durable snapshot", async () => {
