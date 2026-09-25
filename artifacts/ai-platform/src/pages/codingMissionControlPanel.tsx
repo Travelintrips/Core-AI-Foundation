@@ -292,7 +292,68 @@ export function CodingMissionControlPanel({
     );
   }
 
-  if (unavailable || !snapshot) return null;
+  if (unavailable || !snapshot) {
+    const analyzerReady = Boolean(
+      dispatchBaseSha && SHA40_RE.test(dispatchBaseSha),
+    );
+
+    return (
+      <section
+        className="mt-4 rounded-xl border border-violet-300/15 bg-[#07101d] p-4"
+        data-testid="panel-coding-plan-generator"
+      >
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded border border-violet-300/15 bg-violet-300/[0.04] p-1.5 text-violet-300">
+            <Workflow className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-300">
+              Automated multi-task planner
+            </div>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
+              Generate a bounded Plan V1 from the completed repository analysis.
+              The planner has no shell, repository, network, secret, commit, push,
+              or merge access. The generated graph remains PREPARED until you
+              explicitly approve it.
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={!analyzerReady || actionBusy !== null}
+                onClick={() =>
+                  void postAction(
+                    "generate-plan",
+                    `/api/ai/coding/tasks/${taskId}/task-graph/generate`,
+                  )
+                }
+                className="inline-flex items-center gap-1.5 rounded border border-violet-300/20 bg-violet-300/[0.06] px-2.5 py-1.5 text-[10px] font-medium text-violet-200 disabled:cursor-not-allowed disabled:opacity-40"
+                data-testid="button-generate-multi-task-plan"
+              >
+                {actionBusy === "generate-plan" ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Workflow className="size-3" />
+                )}
+                Generate multi-worker plan
+              </button>
+              <span className="font-mono text-[9px] text-slate-600">
+                {analyzerReady
+                  ? `analysis HEAD ${shortHash(dispatchBaseSha ?? "")}`
+                  : "repository analysis required"}
+              </span>
+            </div>
+
+            {actionError && (
+              <div className="mt-3 rounded border border-rose-300/15 bg-rose-300/[0.035] px-3 py-2 text-[10px] text-rose-200">
+                {actionError}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   const canApproveGraph = snapshot.graphStatus === "PREPARED";
   const canDispatch =
