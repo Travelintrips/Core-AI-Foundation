@@ -7,7 +7,9 @@ import { Link, useLocation, useParams } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
+  Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleDot,
   Clock3,
@@ -15,6 +17,7 @@ import {
   Copy,
   FileCode2,
   GitBranch,
+  Github,
   GitCommitHorizontal,
   History,
   Loader2,
@@ -47,8 +50,22 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/apiFetch";
 import { useLang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useCodingTaskPolling } from "./codingWorkspacePolling";
@@ -62,6 +79,22 @@ const taskSchema = z.object({
 });
 
 type TaskFormValues = z.infer<typeof taskSchema>;
+
+type CodingGitHubRepository = {
+  fullName: string;
+  owner: string;
+  name: string;
+  private: boolean;
+  defaultBranch: string;
+  htmlUrl: string;
+  updatedAt: string | null;
+};
+
+type CodingGitHubBranch = {
+  name: string;
+  protected: boolean;
+  commitSha: string;
+};
 
 const STATUSES = Object.values(CodingTaskStatus) as CodingTaskStatus[];
 const ACTIVE_STATUSES = new Set<CodingTaskStatus>([
@@ -1346,6 +1379,300 @@ function TaskSkeleton() {
   );
 }
 
+function GitHubRepositoryPicker({
+  value,
+  onChange,
+  onDefaultBranch,
+  onRepositoryName,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onDefaultBranch: (branch: string) => void;
+  onRepositoryName: (name: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [repositories, setRepositories] = useState<CodingGitHubRepository[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadRepositories = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiFetch<{ repositories: CodingGitHubRepository[] }>(
+        "/api/ai/coding/github/repositories",
+      );
+      setRepositories(response.repositories);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Gagal memuat repository GitHub.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open && repositories.length === 0 && !loading && !error) {
+      void loadRepositories();
+    }
+  }, [open, repositories.length, loading, error, loadRepositories]);
+
+  const selected = repositories.find((item) => item.fullName === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="h-10 w-full justify-between border-white/10 bg-[#091222] px-3 font-normal text-slate-100 hover:bg-white/[0.04] hover:text-slate-100"
+          data-testid="button-coding-repository-picker"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Github className="size-4 shrink-0 text-slate-500" />
+            <span className={cn("truncate", !value && "text-slate-600")}>
+              {value || "Cari repository GitHub…"}
+            </span>
+          </span>
+          <ChevronDown className="size-4 shrink-0 text-slate-600" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] min-w-[360px] border-white/10 bg-[#0b1425] p-0 shadow-2xl"
+      >
+        <Command className="bg-transparent text-slate-100">
+          <CommandInput
+            placeholder="Cari owner / repository…"
+            className="text-slate-100 placeholder:text-slate-600"
+            data-testid="input-search-github-repositories"
+          />
+          <CommandList className="max-h-72">
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-slate-500">
+                <Loader2 className="size-4 animate-spin" />
+                Memuat repository GitHub…
+              </div>
+            ) : error ? (
+              <div className="space-y-3 px-4 py-5 text-center">
+                <p className="text-xs leading-5 text-rose-300">{error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadRepositories()}
+                  className="border-white/10 text-slate-300"
+                >
+                  <RefreshCw className="size-3.5" />
+                  Coba lagi
+                </Button>
+              </div>
+            ) : (
+              <>
+                <CommandEmpty>Tidak ada repository yang cocok.</CommandEmpty>
+                <CommandGroup heading="Repository yang terhubung">
+                  {repositories.map((repository) => (
+                    <CommandItem
+                      key={repository.fullName}
+                      value={`${repository.fullName} ${repository.owner} ${repository.name}`}
+                      onSelect={() => {
+                        onChange(repository.fullName);
+                        onDefaultBranch(repository.defaultBranch);
+                        onRepositoryName(repository.name);
+                        setOpen(false);
+                      }}
+                      className="cursor-pointer py-2.5 text-slate-300 data-[selected=true]:bg-cyan-300/10 data-[selected=true]:text-slate-100"
+                      data-testid={`option-coding-repository-${repository.fullName.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
+                    >
+                      <Check
+                        className={cn(
+                          "size-4 text-cyan-300",
+                          value === repository.fullName ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium">
+                          {repository.fullName}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-600">
+                          <span>{repository.private ? "Private" : "Public"}</span>
+                          <span>·</span>
+                          <span>default: {repository.defaultBranch}</span>
+                        </div>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+        {selected && (
+          <div className="border-t border-white/[0.06] px-3 py-2 text-[10px] text-slate-600">
+            Terhubung ke GitHub · {selected.private ? "private repository" : "public repository"}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function GitHubBranchPicker({
+  repository,
+  value,
+  onChange,
+  disabled,
+}: {
+  repository: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [branches, setBranches] = useState<CodingGitHubBranch[]>([]);
+  const [loadedRepository, setLoadedRepository] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadBranches = useCallback(async () => {
+    if (!repository || !repository.includes("/")) return;
+    const [owner, name] = repository.split("/");
+    if (!owner || !name) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiFetch<{ branches: CodingGitHubBranch[] }>(
+        `/api/ai/coding/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/branches`,
+      );
+      setBranches(response.branches);
+      setLoadedRepository(repository);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error ? loadError.message : "Gagal memuat branch GitHub.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [repository]);
+
+  useEffect(() => {
+    if (repository !== loadedRepository) {
+      setBranches([]);
+      setError(null);
+    }
+  }, [repository, loadedRepository]);
+
+  useEffect(() => {
+    if (
+      open &&
+      repository &&
+      repository !== loadedRepository &&
+      !loading &&
+      !error
+    ) {
+      void loadBranches();
+    }
+  }, [open, repository, loadedRepository, loading, error, loadBranches]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled || !repository}
+          className="h-10 w-full justify-between border-white/10 bg-[#091222] px-3 font-normal text-slate-100 hover:bg-white/[0.04] hover:text-slate-100 disabled:opacity-50"
+          data-testid="button-coding-branch-picker"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <GitBranch className="size-4 shrink-0 text-slate-600" />
+            <span className={cn("truncate", !value && "text-slate-600")}>
+              {value || (repository ? "Pilih branch…" : "Pilih repository dulu")}
+            </span>
+          </span>
+          <ChevronDown className="size-4 shrink-0 text-slate-600" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] min-w-[300px] border-white/10 bg-[#0b1425] p-0 shadow-2xl"
+      >
+        <Command className="bg-transparent text-slate-100">
+          <CommandInput
+            placeholder="Cari branch…"
+            className="text-slate-100 placeholder:text-slate-600"
+            data-testid="input-search-github-branches"
+          />
+          <CommandList className="max-h-64">
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-slate-500">
+                <Loader2 className="size-4 animate-spin" />
+                Memuat branch…
+              </div>
+            ) : error ? (
+              <div className="space-y-3 px-4 py-5 text-center">
+                <p className="text-xs text-rose-300">{error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadBranches()}
+                  className="border-white/10 text-slate-300"
+                >
+                  <RefreshCw className="size-3.5" />
+                  Coba lagi
+                </Button>
+              </div>
+            ) : (
+              <>
+                <CommandEmpty>Tidak ada branch yang cocok.</CommandEmpty>
+                <CommandGroup heading="Branch GitHub">
+                  {branches.map((branchItem) => (
+                    <CommandItem
+                      key={branchItem.name}
+                      value={branchItem.name}
+                      onSelect={() => {
+                        onChange(branchItem.name);
+                        setOpen(false);
+                      }}
+                      className="cursor-pointer text-slate-300 data-[selected=true]:bg-cyan-300/10 data-[selected=true]:text-slate-100"
+                      data-testid={`option-coding-branch-${branchItem.name.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
+                    >
+                      <Check
+                        className={cn(
+                          "size-4 text-cyan-300",
+                          value === branchItem.name ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{branchItem.name}</span>
+                      {branchItem.protected && (
+                        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-amber-300">
+                          protected
+                        </span>
+                      )}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (task: CodingTask) => void }) {
   const { t } = useLang();
   const { toast } = useToast();
@@ -1387,10 +1714,48 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
                 <FormItem><FormLabel className="text-slate-300">{t("pages.codingWorkspace.project")} <span className="text-cyan-300">*</span></FormLabel><FormControl><Input {...field} placeholder={t("pages.codingWorkspace.projectPlaceholder")} className="border-white/10 bg-[#091222] text-slate-100 placeholder:text-slate-600" data-testid="input-coding-project" /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="repository" render={({ field }) => (
-                <FormItem><FormLabel className="text-slate-300">{t("pages.codingWorkspace.repository")} <span className="text-cyan-300">*</span></FormLabel><FormControl><Input {...field} placeholder={t("pages.codingWorkspace.repositoryPlaceholder")} className="border-white/10 bg-[#091222] text-slate-100 placeholder:text-slate-600" data-testid="input-coding-repository" /></FormControl><FormMessage /></FormItem>
+                <FormItem>
+                  <FormLabel className="text-slate-300">{t("pages.codingWorkspace.repository")} <span className="text-cyan-300">*</span></FormLabel>
+                  <FormControl>
+                    <GitHubRepositoryPicker
+                      value={field.value}
+                      onChange={(nextRepository) => {
+                        field.onChange(nextRepository);
+                      }}
+                      onDefaultBranch={(defaultBranch) => {
+                        form.setValue("branch", defaultBranch, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }}
+                      onRepositoryName={(repositoryName) => {
+                        if (!form.getValues("projectName").trim()) {
+                          form.setValue("projectName", repositoryName, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                        }
+                      }}
+                      disabled={createTask.isPending}
+                    />
+                  </FormControl>
+                  <p className="text-[10px] text-slate-600">Repository diambil dari koneksi GitHub Core AI.</p>
+                  <FormMessage />
+                </FormItem>
               )} />
               <FormField control={form.control} name="branch" render={({ field }) => (
-                <FormItem><FormLabel className="text-slate-300">{t("pages.codingWorkspace.branch")} <span className="text-cyan-300">*</span></FormLabel><FormControl><div className="relative"><GitBranch className="pointer-events-none absolute left-3 top-2.5 size-4 text-slate-600" /><Input {...field} className="border-white/10 bg-[#091222] pl-9 text-slate-100 placeholder:text-slate-600" placeholder={t("pages.codingWorkspace.branchPlaceholder")} data-testid="input-coding-branch" /></div></FormControl><FormMessage /></FormItem>
+                <FormItem>
+                  <FormLabel className="text-slate-300">{t("pages.codingWorkspace.branch")} <span className="text-cyan-300">*</span></FormLabel>
+                  <FormControl>
+                    <GitHubBranchPicker
+                      repository={form.watch("repository")}
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled={createTask.isPending}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )} />
               <FormField control={form.control} name="priority" render={({ field }) => (
                 <FormItem><div className="flex items-center justify-between"><FormLabel className="text-slate-300">{t("pages.codingWorkspace.priority")}</FormLabel><output className="font-mono text-sm font-semibold text-cyan-300" data-testid="text-coding-priority">{field.value}</output></div><FormControl><input {...field} type="range" min="0" max="100" step="1" className="mt-3 h-1.5 w-full cursor-pointer accent-cyan-300" aria-label={t("pages.codingWorkspace.priority")} data-testid="input-coding-priority" /></FormControl><p className="text-xs text-slate-500">{t("pages.codingWorkspace.priorityHint")}</p><FormMessage /></FormItem>

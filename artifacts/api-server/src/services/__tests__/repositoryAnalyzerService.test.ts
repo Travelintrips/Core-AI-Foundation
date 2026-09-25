@@ -49,6 +49,7 @@ vi.mock("@workspace/db", () => ({
 }));
 
 const {
+  buildRepositoryCloneEnvironment,
   completeRepositoryAnalyzerRun,
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
@@ -56,6 +57,44 @@ const {
 
 const taskId = "11111111-1111-4111-8111-111111111111";
 const runId = "22222222-2222-4222-8222-222222222222";
+
+describe("repository analyzer GitHub clone authentication", () => {
+  it("passes GitHub credentials through process environment without embedding them in the repository URL", () => {
+    const token = "github_pat_test_secret";
+    const env = buildRepositoryCloneEnvironment(
+      "https://github.com/Travelintrips/Core-AI-Foundation.git",
+      {
+        PATH: "/usr/bin",
+        AI_CODING_GITHUB_TOKEN: token,
+      } as NodeJS.ProcessEnv,
+    );
+
+    expect(env.GIT_TERMINAL_PROMPT).toBe("0");
+    expect(env.GIT_CONFIG_COUNT).toBe("1");
+    expect(env.GIT_CONFIG_KEY_0).toBe("http.extraHeader");
+    expect(env.GIT_CONFIG_VALUE_0).toContain("AUTHORIZATION: basic ");
+    expect(env.GIT_CONFIG_VALUE_0).not.toContain(token);
+    expect(
+      Buffer.from(
+        String(env.GIT_CONFIG_VALUE_0).replace("AUTHORIZATION: basic ", ""),
+        "base64",
+      ).toString("utf8"),
+    ).toBe("x-access-token:" + token);
+  });
+
+  it("does not attach the GitHub token to GitLab clones", () => {
+    const env = buildRepositoryCloneEnvironment(
+      "https://gitlab.com/example/repo.git",
+      {
+        AI_CODING_GITHUB_TOKEN: "do-not-forward",
+      } as NodeJS.ProcessEnv,
+    );
+
+    expect(env.GIT_TERMINAL_PROMPT).toBe("0");
+    expect(env.GIT_CONFIG_COUNT).toBeUndefined();
+    expect(env.GIT_CONFIG_VALUE_0).toBeUndefined();
+  });
+});
 
 describe("repository analyzer execution", () => {
   beforeEach(() => {

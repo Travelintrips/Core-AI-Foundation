@@ -121,6 +121,38 @@ function requiredString(payload: Record<string, unknown>, key: string): string {
   return value.trim();
 }
 
+export function buildRepositoryCloneEnvironment(
+  remote: string,
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const cloneEnv: NodeJS.ProcessEnv = {
+    ...env,
+    GIT_TERMINAL_PROMPT: "0",
+  };
+
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(remote);
+  } catch {
+    return cloneEnv;
+  }
+
+  if (parsed.hostname.toLowerCase() !== "github.com") {
+    return cloneEnv;
+  }
+
+  const token = env["AI_CODING_GITHUB_TOKEN"]?.trim();
+  if (!token) {
+    return cloneEnv;
+  }
+
+  const basic = Buffer.from(`x-access-token:${token}`, "utf8").toString("base64");
+  cloneEnv["GIT_CONFIG_COUNT"] = "1";
+  cloneEnv["GIT_CONFIG_KEY_0"] = "http.extraHeader";
+  cloneEnv["GIT_CONFIG_VALUE_0"] = `AUTHORIZATION: basic ${basic}`;
+  return cloneEnv;
+}
+
 function normalizeRemoteRepository(repository: string): string {
   if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
     return `https://github.com/${repository.replace(/\/+$/, "")}.git`;
@@ -186,7 +218,11 @@ export async function prepareRepositoryWorkspace(
         remote,
         workspace,
       ],
-      { timeout: CLONE_TIMEOUT_MS, maxBuffer: 64 * 1024 },
+      {
+        timeout: CLONE_TIMEOUT_MS,
+        maxBuffer: 64 * 1024,
+        env: buildRepositoryCloneEnvironment(remote),
+      },
     );
     return { path: workspace, cleanup: true };
   } catch (error) {
