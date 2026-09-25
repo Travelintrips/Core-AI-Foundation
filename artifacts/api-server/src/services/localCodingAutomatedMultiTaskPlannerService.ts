@@ -691,14 +691,6 @@ export async function generateAndPersistCodingMultiTaskPlan(
     }
   }
 
-  generated = {
-    ...generated,
-    metadata: {
-      ...generated.metadata,
-      fallbackUsed,
-    },
-  };
-
   try {
     await assertPlannerAuthority({
       scope,
@@ -733,7 +725,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
       outputTokens: generated.metadata.usage.outputTokens,
       totalTokens: generated.metadata.usage.totalTokens,
       latencyMs: generated.metadata.latencyMs,
-      fallbackUsed: generated.metadata.fallbackUsed,
+      fallbackUsed,
       plannerAuthorityGeneration: authority.fencingGeneration,
       repositoryHeadSha: context.headSha,
       nextAction: "APPROVE_TASK_GRAPH",
