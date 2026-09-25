@@ -13,7 +13,7 @@ on:
         type: string
   workflow_run:
     workflows:
-      - Hostinger Release Manifest
+      - Hostinger Production Verify
     types:
       - completed
     branches:
@@ -53,8 +53,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -o /tmp/health.json -w "%{http_code}" "$API_BASE_URL/health")
-          test "$code" = "200"
+          code=""
+          for attempt in $(seq 1 18); do
+            code=$(curl --connect-timeout 10 --max-time 20 -sS -o /tmp/health.json -w "%{http_code}" "$API_BASE_URL/health" || true)
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            echo "Production health not ready yet (attempt $attempt/18, HTTP=${code:-curl-error}); retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Production health did not become ready after bounded retries (last HTTP=${code:-curl-error})"
+          if [ -f /tmp/health.json ]; then
+            cat /tmp/health.json
+          fi
+          exit 1
 
       - name: Create fresh isolated canary task
         id: task
