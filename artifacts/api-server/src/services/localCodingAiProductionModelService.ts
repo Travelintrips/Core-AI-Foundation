@@ -357,6 +357,61 @@ export async function resolveProductionCodingModel(
   };
 }
 
+
+export async function resolveAlternativeCloudCodingModel(input: {
+  excludeProvider: string;
+  excludeModel: string;
+  config?: ProductionCodingModelConfig;
+}): Promise<ProductionCodingModelResolution | ProductionCodingModelFailure> {
+  const config = input.config ?? readProductionCodingModelConfig();
+  const excludedProvider = normalizeSlug(input.excludeProvider);
+  const excludedModel = input.excludeModel;
+
+  const allModels = await getAllActiveModels();
+  if (allModels.length === 0) {
+    return failure("NO_ACTIVE_MODELS", "No active AI models are registered.");
+  }
+
+  const providerAllowed = new Set(config.providerAllowlist.map(normalizeSlug));
+  const localProviders = new Set(["ollama", "zerollm"]);
+  const modelAllowed = new Set(config.modelAllowlist);
+
+  let candidates = allModels.filter((row) => {
+    const provider = normalizeSlug(String(row.provider.slug));
+    const model = String(row.model.modelId);
+
+    if (localProviders.has(provider)) return false;
+    if (!providerAllowed.has(provider)) return false;
+    if (!getProviderApiKey(String(row.provider.slug))) return false;
+    if (modelAllowed.size > 0 && !modelAllowed.has(model)) return false;
+    if (!isCodingCapable(row)) return false;
+    if (provider === excludedProvider && model === excludedModel) return false;
+
+    return true;
+  });
+
+  if (candidates.length === 0) {
+    return failure(
+      "NO_CODING_CAPABLE_MODEL",
+      "No alternative configured cloud coding model is available.",
+    );
+  }
+
+  candidates.sort(deterministicSort);
+  const selected = candidates[0]!;
+
+  return {
+    ok: true,
+    selection: {
+      model: selected.model,
+      provider: selected.provider,
+      timeoutMs: config.timeoutMs,
+      maxOutputTokens: config.maxOutputTokens,
+      selectionReason: "AUTO_CODING_CAPABILITY",
+    },
+  };
+}
+
 export function describeProductionCodingModelConfig(
   config = readProductionCodingModelConfig(),
 ): Record<string, unknown> {
