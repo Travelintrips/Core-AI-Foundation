@@ -49,7 +49,9 @@ vi.mock("@workspace/db", () => ({
 }));
 
 const {
+  buildRepositoryCloneArgs,
   buildRepositoryCloneEnvironment,
+  isRetryableRepositoryCloneResourceError,
   completeRepositoryAnalyzerRun,
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
@@ -70,13 +72,33 @@ describe("repository analyzer GitHub clone authentication", () => {
     );
 
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
-    expect(env.GIT_CONFIG_COUNT).toBe("1");
-    expect(env.GIT_CONFIG_KEY_0).toBe("http.extraHeader");
-    expect(env.GIT_CONFIG_VALUE_0).toContain("AUTHORIZATION: basic ");
-    expect(env.GIT_CONFIG_VALUE_0).not.toContain(token);
+    expect(env.GIT_CONFIG_COUNT).toBe("7");
+
+    const configs = Array.from(
+      { length: Number(env.GIT_CONFIG_COUNT) },
+      (_, index) => [
+        env[`GIT_CONFIG_KEY_${index}`],
+        env[`GIT_CONFIG_VALUE_${index}`],
+      ],
+    );
+
+    expect(configs).toEqual(
+      expect.arrayContaining([
+        ["pack.threads", "1"],
+        ["index.threads", "1"],
+        ["checkout.workers", "1"],
+        ["fetch.parallel", "1"],
+        ["core.preloadIndex", "false"],
+        ["core.deltaBaseCacheLimit", "16m"],
+      ]),
+    );
+
+    const authorization = configs.find(([key]) => key === "http.extraHeader");
+    expect(authorization?.[1]).toContain("AUTHORIZATION: basic ");
+    expect(authorization?.[1]).not.toContain(token);
     expect(
       Buffer.from(
-        String(env.GIT_CONFIG_VALUE_0).replace("AUTHORIZATION: basic ", ""),
+        String(authorization?.[1]).replace("AUTHORIZATION: basic ", ""),
         "base64",
       ).toString("utf8"),
     ).toBe("x-access-token:" + token);
@@ -91,8 +113,54 @@ describe("repository analyzer GitHub clone authentication", () => {
     );
 
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
-    expect(env.GIT_CONFIG_COUNT).toBeUndefined();
-    expect(env.GIT_CONFIG_VALUE_0).toBeUndefined();
+    expect(env.GIT_CONFIG_COUNT).toBe("6");
+
+    const keys = Array.from(
+      { length: Number(env.GIT_CONFIG_COUNT) },
+      (_, index) => env[`GIT_CONFIG_KEY_${index}`],
+    );
+    expect(keys).toContain("pack.threads");
+    expect(keys).toContain("index.threads");
+    expect(keys).not.toContain("http.extraHeader");
+  });
+
+  it("builds a shallow single-branch clone command without changing the remote", () => {
+    expect(
+      buildRepositoryCloneArgs(
+        "https://github.com/Travelintrips/Core-AI-Foundation.git",
+        "main",
+        "/tmp/coding-analyzer-test",
+        20,
+      ),
+    ).toEqual([
+      "clone",
+      "--depth",
+      "20",
+      "--no-tags",
+      "--single-branch",
+      "--branch",
+      "main",
+      "https://github.com/Travelintrips/Core-AI-Foundation.git",
+      "/tmp/coding-analyzer-test",
+    ]);
+  });
+
+  it("retries only resource/index-pack failures with minimal history", () => {
+    expect(
+      isRetryableRepositoryCloneResourceError(
+        "fatal: unable to create thread: Resource temporarily unavailable",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableRepositoryCloneResourceError(
+        "fetch-pack: invalid index-pack output",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableRepositoryCloneResourceError(
+        "fatal: Remote branch missing does not exist",
+      ),
+    ).toBe(false);
   });
 });
 
