@@ -67,6 +67,16 @@ export function openAIModelSupportsTemperature(modelId: string): boolean {
   return true;
 }
 
+export function anthropicModelSupportsTemperature(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  if (normalized.includes("mythos")) return false;
+  const match = normalized.match(/^claude-[a-z]+-(\d+)(?:-(\d+))?/);
+  if (!match) return true;
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? "0");
+  return major < 4 || (major === 4 && minor < 7);
+}
+
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
 
 async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<ExecutionOutput> {
@@ -148,7 +158,12 @@ async function executeAnthropic(input: ExecutionInput, apiKey: string): Promise<
   };
 
   if (input.systemPrompt) body.system = input.systemPrompt;
-  if (input.temperature != null) body.temperature = input.temperature;
+  if (
+    input.temperature != null &&
+    anthropicModelSupportsTemperature(input.model.modelId)
+  ) {
+    body.temperature = input.temperature;
+  }
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
