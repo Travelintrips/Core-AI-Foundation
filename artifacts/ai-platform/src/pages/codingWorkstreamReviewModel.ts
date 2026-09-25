@@ -20,6 +20,10 @@ export interface CodingWorkstreamAiReviewModel {
   modelInvoked: boolean | null;
   privilegeEnded: boolean | null;
   metadata: Record<string, unknown> | null;
+  latencyMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
   completeForReview: boolean;
 }
 
@@ -58,6 +62,10 @@ function boolValue(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export function buildCodingWorkstreamReviewModel(
   resultJson: unknown,
 ): CodingWorkstreamReviewModel | null {
@@ -77,6 +85,18 @@ export function buildCodingWorkstreamReviewModel(
     const pushed = boolValue(ai.pushed);
     const modelInvoked = boolValue(ai.modelInvoked);
     const privilegeEnded = boolValue(ai.privilegeEnded);
+    const metadata = record(ai.metadata);
+    const usage = record(metadata?.usage);
+    const latencyMs = numberValue(metadata?.latencyMs);
+    const inputTokens =
+      numberValue(usage?.inputTokens) ?? numberValue(usage?.promptTokens);
+    const outputTokens =
+      numberValue(usage?.outputTokens) ?? numberValue(usage?.completionTokens);
+    const totalTokens =
+      numberValue(usage?.totalTokens) ??
+      (inputTokens != null && outputTokens != null
+        ? inputTokens + outputTokens
+        : null);
 
     const completeForReview =
       policyStatus === "PASSED" &&
@@ -112,7 +132,11 @@ export function buildCodingWorkstreamReviewModel(
       pushed,
       modelInvoked,
       privilegeEnded,
-      metadata: record(ai.metadata),
+      metadata,
+      latencyMs,
+      inputTokens,
+      outputTokens,
+      totalTokens,
       completeForReview,
     };
   }
