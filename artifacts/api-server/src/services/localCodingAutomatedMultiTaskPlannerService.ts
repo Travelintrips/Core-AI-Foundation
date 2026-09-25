@@ -131,7 +131,7 @@ function strictJsonObject(text: string): unknown {
 }
 
 function staticOwnershipPrefix(pattern: string): string {
-  const wildcard = pattern.search(/[?*{[]/);
+  const wildcard = pattern.search(/[?*{\[]/);
   const prefix = (wildcard >= 0 ? pattern.slice(0, wildcard) : pattern)
     .replace(/\/+$/, "");
   return prefix;
