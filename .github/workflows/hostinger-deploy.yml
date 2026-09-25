@@ -33,23 +33,11 @@ jobs:
       LEGACY_SITEMAP_URL: https://aicore.cstlogistic.co.id/sitemap.xml
 
     steps:
-      - name: Wait for exact production commit
+      - uses: actions/checkout@v4
+
+      - name: Wait for stable exact production commit
         shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 36); do
-            code=$(curl -L -sS -D /tmp/headers -o /tmp/body -w "%{http_code}" \
-              --connect-timeout 15 --max-time 30 "$API_BASE_URL/healthz" || true)
-            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/headers | tail -n1)
-            marker=$(awk -F': ' 'tolower($1)=="x-cst-release-marker" {gsub("\r","",$2); print $2}' /tmp/headers | tail -n1)
-            echo "attempt=$attempt http=$code live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA marker=${marker:-missing}"
-            if [ "$code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ]; then
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Production did not reach expected commit $EXPECTED_SHA"
-          exit 1
+        run: bash scripts/hostinger-production-probe.sh
 
       - name: Verify readiness
         shell: bash
