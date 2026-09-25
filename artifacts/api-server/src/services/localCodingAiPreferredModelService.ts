@@ -5,6 +5,7 @@ import {
   type ProductionCodingModelSelection,
 } from "./localCodingAiProductionModelService.js";
 import { checkOllamaHealth, readOllamaLocalConfig } from "./ollamaLocalService.js";
+import { getOllamaWorkerAvailability } from "./ollamaWorkerRegistryService.js";
 
 const DEFAULT_PRIMARY_PROVIDER = "openai";
 const DEFAULT_PRIMARY_MODEL = "gpt-5.6-sol";
@@ -103,6 +104,31 @@ export async function resolvePreferredCodingModel(
         "Primary coding model is unavailable and Ollama is not present in AI_CODING_PROVIDER_ALLOWLIST.",
       primaryFailure: primary,
       fallbackFailure: "Ollama provider is not allowed.",
+    };
+  }
+
+  const registeredWorker = await getOllamaWorkerAvailability(
+    fallbackModel,
+  ).catch(() => null);
+
+  if (registeredWorker) {
+    return {
+      ok: true,
+      route: "FALLBACK",
+      primary: { provider: primaryProvider, model: primaryModel },
+      fallback: { provider: "ollama", model: fallbackModel },
+      primaryFailure: primary,
+      selection: {
+        model: {
+          modelId: fallbackModel,
+          maxOutputTokens: base.maxOutputTokens,
+          capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
+        },
+        provider: { slug: "ollama" },
+        timeoutMs: base.timeoutMs,
+        maxOutputTokens: base.maxOutputTokens,
+        selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
+      },
     };
   }
 

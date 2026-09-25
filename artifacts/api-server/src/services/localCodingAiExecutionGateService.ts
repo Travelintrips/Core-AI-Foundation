@@ -13,6 +13,7 @@ import {
 import { logAudit } from "./aiAuditService.js";
 import { executeAINoFallback, type ObservabilityContext } from "./aiExecutionService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
+import { createScheduledOllamaProviderAdapter } from "./localCodingOllamaWorkerProviderService.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
   ProviderInvocationError,
@@ -966,22 +967,32 @@ async function executeReserved(
       );
     }
 
-    const provider = createConstrainedCodingProviderAdapter({
-      providerSlug,
-      modelId,
-      baseUrl:
-        typeof selected.provider.baseUrl === "string"
-          ? selected.provider.baseUrl
-          : null,
-      observability: {
-        conversationId: reserved.task.id,
-        agentName: "AI Execution Gate",
-        providerName: providerSlug,
-        modelName: modelId,
-        requestType: modelRoute === "PRIMARY" ? "code-primary" : "code-fallback",
-        createdBy: `coding-run:${reserved.run.id}`,
-      },
-    });
+    const observability: ObservabilityContext = {
+      conversationId: reserved.task.id,
+      agentName: "AI Execution Gate",
+      providerName: providerSlug,
+      modelName: modelId,
+      requestType:
+        modelRoute === "PRIMARY"
+          ? "code-primary"
+          : "code-fallback",
+      createdBy: `coding-run:${reserved.run.id}`,
+    };
+
+    const selectedBaseUrl =
+      typeof selected.provider.baseUrl === "string"
+        ? selected.provider.baseUrl
+        : null;
+
+    const provider =
+      providerSlug === "ollama" && !selectedBaseUrl
+        ? createScheduledOllamaProviderAdapter({ modelId })
+        : createConstrainedCodingProviderAdapter({
+            providerSlug,
+            modelId,
+            baseUrl: selectedBaseUrl,
+            observability,
+          });
     const adapter = createConstrainedModelInvocationAdapter(provider);
     const target: ModelTarget = {
       provider: providerSlug,
