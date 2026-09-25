@@ -32,6 +32,7 @@ import {
   RotateCcw,
   Search,
   TerminalSquare,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import {
@@ -3609,8 +3610,11 @@ export default function CodingWorkspace() {
   const params = useParams<{ id?: string }>();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [deletingTaskIds, setDeletingTaskIds] = useState<Set<string>>(new Set());
+  const [bulkDeletePending, setBulkDeletePending] = useState(false);
   const [queuedAiBaselineRunCount, setQueuedAiBaselineRunCount] = useState<number | null>(null);
   const { data: tasks, isLoading, isError, refetch } = useListCodingTasks();
   const activeFromRoute = params.id;
@@ -3642,6 +3646,7 @@ export default function CodingWorkspace() {
   const activeCount = (tasks ?? []).filter((task) => ACTIVE_STATUSES.has(task.status)).length;
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
   const completedCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.COMPLETED).length;
+  const failedTasks = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.FAILED);
 
   const pollCodingTask = useCallback(() => {
     void detailQuery.refetch();
@@ -3659,6 +3664,89 @@ export default function CodingWorkspace() {
     refetch();
   };
 
+  const canDeleteTask = (task: CodingTask) =>
+    task.status === CodingTaskStatus.PENDING ||
+    task.status === CodingTaskStatus.FAILED ||
+    task.status === CodingTaskStatus.COMPLETED;
+
+  const deleteTask = async (task: CodingTask, skipConfirm = false) => {
+    if (!canDeleteTask(task) || deletingTaskIds.has(task.id)) return false;
+    if (
+      !skipConfirm &&
+      !window.confirm(
+        `Hapus tugas ${task.taskNumber}? Riwayat run dan perubahan terkait akan ikut dihapus.`,
+      )
+    ) {
+      return false;
+    }
+
+    setDeletingTaskIds((current) => new Set(current).add(task.id));
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+
+      if (selectedId === task.id) {
+        setLocation("/coding-workspace");
+      }
+      await queryClient.invalidateQueries({
+        queryKey: getListCodingTasksQueryKey(),
+      });
+      toast({
+        title: "Tugas dihapus",
+        description: `${task.taskNumber} sudah dihapus dari antrean.`,
+      });
+      return true;
+    } catch (error) {
+      toast({
+        title: "Gagal menghapus tugas",
+        description:
+          error instanceof Error ? error.message : "Penghapusan tugas gagal.",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setDeletingTaskIds((current) => {
+        const next = new Set(current);
+        next.delete(task.id);
+        return next;
+      });
+    }
+  };
+
+  const deleteFailedTasks = async () => {
+    if (failedTasks.length === 0 || bulkDeletePending) return;
+    if (
+      !window.confirm(
+        `Hapus ${failedTasks.length} tugas gagal? Riwayat run dan perubahan terkait akan ikut dihapus.`,
+      )
+    ) {
+      return;
+    }
+
+    setBulkDeletePending(true);
+    let deletedCount = 0;
+    try {
+      for (const task of failedTasks) {
+        if (await deleteTask(task, true)) deletedCount += 1;
+      }
+      toast({
+        title: "Pembersihan selesai",
+        description: `${deletedCount} dari ${failedTasks.length} tugas gagal berhasil dihapus.`,
+      });
+    } finally {
+      setBulkDeletePending(false);
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] bg-[#060b18] text-slate-100">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_70%_0%,rgba(32,211,193,0.10),transparent_60%)]" />
@@ -3672,9 +3760,9 @@ export default function CodingWorkspace() {
         </div>
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
           <Card className="min-w-0 overflow-hidden border-white/[0.08] bg-[#0b1425]/85">
-            <CardHeader className="border-b border-white/[0.07] p-4 sm:p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><h2 className="font-display text-base text-slate-100">{t("pages.codingWorkspace.taskQueue")}</h2><span className="rounded-full bg-cyan-300/10 px-2 py-0.5 font-mono text-[10px] text-cyan-300">{tasks?.length ?? 0}</span></div><p className="mt-1 text-xs text-slate-600">{t("pages.codingWorkspace.taskQueueHint")}</p></div><div className="relative w-full sm:w-56"><Search className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("common.actions.search")} className="h-9 border-white/10 bg-[#091222] pl-9 text-xs text-slate-200 placeholder:text-slate-600" aria-label={t("common.actions.search")} data-testid="input-search-coding-tasks" /></div></div></CardHeader>
+            <CardHeader className="border-b border-white/[0.07] p-4 sm:p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><h2 className="font-display text-base text-slate-100">{t("pages.codingWorkspace.taskQueue")}</h2><span className="rounded-full bg-cyan-300/10 px-2 py-0.5 font-mono text-[10px] text-cyan-300">{tasks?.length ?? 0}</span></div><p className="mt-1 text-xs text-slate-600">{t("pages.codingWorkspace.taskQueueHint")}</p></div><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><Button type="button" variant="outline" size="sm" onClick={() => void deleteFailedTasks()} disabled={failedTasks.length === 0 || bulkDeletePending} className="border-rose-400/20 bg-rose-400/[0.04] text-rose-300 hover:bg-rose-400/10 hover:text-rose-200" data-testid="button-delete-failed-coding-tasks">{bulkDeletePending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}Hapus gagal{failedTasks.length > 0 ? ` (${failedTasks.length})` : ""}</Button><div className="relative w-full sm:w-56"><Search className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("common.actions.search")} className="h-9 border-white/10 bg-[#091222] pl-9 text-xs text-slate-200 placeholder:text-slate-600" aria-label={t("common.actions.search")} data-testid="input-search-coding-tasks" /></div></div></div></CardHeader>
             <CardContent className="p-0">
-              {isLoading ? <TaskSkeleton /> : isError ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><XCircle className="mb-4 size-8 text-rose-300" /><p className="font-display text-lg text-slate-100">{t("pages.codingWorkspace.errorTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{t("pages.codingWorkspace.errorHint")}</p><Button variant="outline" onClick={() => refetch()} className="mt-5 border-white/10 text-slate-300 hover:bg-white/5" data-testid="button-retry-coding-tasks"><RotateCcw />{t("pages.codingWorkspace.retry")}</Button></div> : visibleTasks.length === 0 ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyHint")}</p>{!tasks?.length && <Button onClick={() => setCreateOpen(true)} className="mt-5 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-empty-create-coding-task"><Plus />{t("pages.codingWorkspace.newTask")}</Button>}</div> : <div className="divide-y divide-white/[0.05]">{visibleTasks.map((task) => <button type="button" key={task.id} onClick={() => selectTask(task)} className={cn("group grid w-full grid-cols-1 gap-3 px-4 py-4 text-left transition-colors hover:bg-cyan-300/[0.04] sm:grid-cols-[1.05fr_1.5fr_1fr_0.85fr] sm:items-center sm:gap-4 sm:px-5", selectedId === task.id && "bg-cyan-300/[0.06]")} data-testid={`row-coding-task-${task.id}`}><div className="flex items-center justify-between sm:block"><div className="font-mono text-xs font-semibold text-cyan-300">{task.taskNumber}</div><div className="mt-1 hidden items-center gap-1.5 text-[10px] text-slate-600 sm:flex"><Clock3 className="size-3" />{formatDate(task.createdAt, lang)}</div><ChevronRight className="size-4 text-slate-700 transition-transform group-hover:translate-x-0.5 sm:hidden" /></div><div className="min-w-0"><div className="truncate text-sm font-medium text-slate-200">{task.projectName}</div><div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-600"><span className="truncate">{task.repository}</span><span className="text-slate-700">·</span><span className="truncate text-slate-500">{task.branch}</span></div></div><div><StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} /></div><div className="flex items-center justify-between text-xs text-slate-600 sm:block sm:text-right"><span className="sm:hidden">{formatDate(task.createdAt, lang)}</span><span className="font-mono text-[10px] text-slate-500">P{task.priority}</span></div></button>)}</div>}
+              {isLoading ? <TaskSkeleton /> : isError ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><XCircle className="mb-4 size-8 text-rose-300" /><p className="font-display text-lg text-slate-100">{t("pages.codingWorkspace.errorTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{t("pages.codingWorkspace.errorHint")}</p><Button variant="outline" onClick={() => refetch()} className="mt-5 border-white/10 text-slate-300 hover:bg-white/5" data-testid="button-retry-coding-tasks"><RotateCcw />{t("pages.codingWorkspace.retry")}</Button></div> : visibleTasks.length === 0 ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyHint")}</p>{!tasks?.length && <Button onClick={() => setCreateOpen(true)} className="mt-5 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-empty-create-coding-task"><Plus />{t("pages.codingWorkspace.newTask")}</Button>}</div> : <div className="divide-y divide-white/[0.05]">{visibleTasks.map((task) => <div key={task.id} role="button" tabIndex={0} onClick={() => selectTask(task)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectTask(task); } }} className={cn("group grid w-full cursor-pointer grid-cols-1 gap-3 px-4 py-4 text-left transition-colors hover:bg-cyan-300/[0.04] sm:grid-cols-[1.05fr_1.5fr_1fr_1fr] sm:items-center sm:gap-4 sm:px-5", selectedId === task.id && "bg-cyan-300/[0.06]")} data-testid={`row-coding-task-${task.id}`}><div className="flex items-center justify-between sm:block"><div className="font-mono text-xs font-semibold text-cyan-300">{task.taskNumber}</div><div className="mt-1 hidden items-center gap-1.5 text-[10px] text-slate-600 sm:flex"><Clock3 className="size-3" />{formatDate(task.createdAt, lang)}</div><ChevronRight className="size-4 text-slate-700 transition-transform group-hover:translate-x-0.5 sm:hidden" /></div><div className="min-w-0"><div className="truncate text-sm font-medium text-slate-200">{task.projectName}</div><div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-600"><span className="truncate">{task.repository}</span><span className="text-slate-700">·</span><span className="truncate text-slate-500">{task.branch}</span></div></div><div><StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} /></div><div className="flex items-center justify-between gap-2 text-xs text-slate-600 sm:justify-end"><span className="sm:hidden">{formatDate(task.createdAt, lang)}</span><span className="font-mono text-[10px] text-slate-500">P{task.priority}</span>{canDeleteTask(task) && <Button type="button" variant="ghost" size="icon" disabled={deletingTaskIds.has(task.id)} onClick={(event) => { event.stopPropagation(); void deleteTask(task); }} className="size-8 text-slate-600 hover:bg-rose-400/10 hover:text-rose-300" aria-label={`Hapus ${task.taskNumber}`} title="Hapus tugas" data-testid={`button-delete-coding-task-${task.id}`}>{deletingTaskIds.has(task.id) ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}</Button>}</div></div>)}</div>}
             </CardContent>
           </Card>
           <div className={cn(!selectedId && "hidden xl:block")}>{selectedId ? <TaskDetailPanel
