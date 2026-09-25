@@ -324,16 +324,16 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
     timeoutMs: input.timeoutMs,
   });
 
-  if (response.output.type !== "text") {
+  if (response.output.type !== "structured") {
     throw new AutomatedMultiTaskPlannerError(
-      "Planner model returned a non-text response.",
+      "Planner model returned a non-structured response.",
       "MODEL_FAILED",
     );
   }
 
   return {
     plan: parseGeneratedCodingMultiTaskPlan(
-      response.output.text,
+      JSON.stringify(response.output.value),
       input.context,
     ),
     metadata: response.metadata,
