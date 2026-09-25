@@ -266,7 +266,7 @@ describe("automated multi-task planner", () => {
     expect(provider.calls).toHaveLength(1);
     expect(provider.calls[0]).toMatchObject({
       requestId: "planner-request-1",
-      responseFormat: { type: "text" },
+      responseFormat: { type: "json_object" },
       maxOutputTokens: 2_048,
       capabilities: CONSTRAINED_MODEL_CAPABILITIES,
     });
