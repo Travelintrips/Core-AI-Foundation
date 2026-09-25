@@ -229,7 +229,7 @@ export function describePreferredCodingModelConfig(
       env["OLLAMA_MODEL"] ||
       DEFAULT_FALLBACK_MODEL,
     fallbackPolicy:
-      "Fallback selection occurs before one-shot model privilege consumption only.",
+      "Primary is preferred; bounded constrained planners may fail over to the configured local fallback on retryable provider failures.",
     apiKeysExposed: false,
   };
 }
