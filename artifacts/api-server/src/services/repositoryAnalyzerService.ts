@@ -251,16 +251,22 @@ export async function configureIsolatedRepositoryWorkspace(
     throw new Error("Isolated repository branch contains unsupported characters");
   }
 
-  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+  const headResult = await execFileAsync("git", ["rev-parse", "HEAD"], {
     cwd: workspace,
     timeout: 15_000,
     maxBuffer: 64 * 1024,
   });
-  const actualHead = Buffer.isBuffer(stdout)
-    ? stdout.toString("utf8").trim().toLowerCase()
-    : typeof stdout === "string"
-      ? stdout.trim().toLowerCase()
-      : "";
+  const rawHead =
+    typeof headResult === "string" || Buffer.isBuffer(headResult)
+      ? headResult
+      : (headResult as { stdout?: unknown } | null | undefined)?.stdout;
+  const actualHead = Buffer.isBuffer(rawHead)
+    ? rawHead.toString("utf8").trim().toLowerCase()
+    : rawHead instanceof Uint8Array
+      ? Buffer.from(rawHead).toString("utf8").trim().toLowerCase()
+      : typeof rawHead === "string"
+        ? rawHead.trim().toLowerCase()
+        : "";
   if (!actualHead) {
     throw new Error("Repository HEAD could not be resolved in isolated workspace");
   }
