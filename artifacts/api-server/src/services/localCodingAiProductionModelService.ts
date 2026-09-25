@@ -358,14 +358,21 @@ export async function resolveProductionCodingModel(
 }
 
 
-export async function resolveAlternativeCloudCodingModel(input: {
-  excludeProvider: string;
-  excludeModel: string;
+
+export async function resolveAlternativeCloudCodingModels(input: {
+  excludeTargets: Array<{ provider: string; model: string }>;
   config?: ProductionCodingModelConfig;
-}): Promise<ProductionCodingModelResolution | ProductionCodingModelFailure> {
+  limit?: number;
+}): Promise<
+  | { ok: true; selections: ProductionCodingModelSelection[] }
+  | ProductionCodingModelFailure
+> {
   const config = input.config ?? readProductionCodingModelConfig();
-  const excludedProvider = normalizeSlug(input.excludeProvider);
-  const excludedModel = input.excludeModel;
+  const excluded = new Set(
+    input.excludeTargets.map(
+      (target) => normalizeSlug(target.provider) + "\n" + target.model,
+    ),
+  );
 
   const allModels = await getAllActiveModels();
   if (allModels.length === 0) {
@@ -376,17 +383,15 @@ export async function resolveAlternativeCloudCodingModel(input: {
   const localProviders = new Set(["ollama", "zerollm"]);
   const modelAllowed = new Set(config.modelAllowlist);
 
-  let candidates = allModels.filter((row) => {
+  const candidates = allModels.filter((row) => {
     const provider = normalizeSlug(String(row.provider.slug));
     const model = String(row.model.modelId);
-
     if (localProviders.has(provider)) return false;
     if (!providerAllowed.has(provider)) return false;
     if (!getProviderApiKey(String(row.provider.slug))) return false;
     if (modelAllowed.size > 0 && !modelAllowed.has(model)) return false;
     if (!isCodingCapable(row)) return false;
-    if (provider === excludedProvider && model === excludedModel) return false;
-
+    if (excluded.has(provider + "\n" + model)) return false;
     return true;
   });
 
@@ -398,18 +403,34 @@ export async function resolveAlternativeCloudCodingModel(input: {
   }
 
   candidates.sort(deterministicSort);
-  const selected = candidates[0]!;
+  const limit = Math.max(1, Math.min(input.limit ?? 3, 5));
 
   return {
     ok: true,
-    selection: {
+    selections: candidates.slice(0, limit).map((selected) => ({
       model: selected.model,
       provider: selected.provider,
       timeoutMs: config.timeoutMs,
       maxOutputTokens: config.maxOutputTokens,
-      selectionReason: "AUTO_CODING_CAPABILITY",
-    },
+      selectionReason: "AUTO_CODING_CAPABILITY" as const,
+    })),
   };
+}
+
+export async function resolveAlternativeCloudCodingModel(input: {
+  excludeProvider: string;
+  excludeModel: string;
+  config?: ProductionCodingModelConfig;
+}): Promise<ProductionCodingModelResolution | ProductionCodingModelFailure> {
+  const result = await resolveAlternativeCloudCodingModels({
+    excludeTargets: [
+      { provider: input.excludeProvider, model: input.excludeModel },
+    ],
+    config: input.config,
+    limit: 1,
+  });
+  if (!result.ok) return result;
+  return { ok: true, selection: result.selections[0]! };
 }
 
 export function describeProductionCodingModelConfig(
