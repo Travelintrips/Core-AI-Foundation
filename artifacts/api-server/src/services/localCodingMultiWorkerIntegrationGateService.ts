@@ -133,6 +133,21 @@ function extractCandidate(
 
   if (
     ai?.status === "CANDIDATE_READY" &&
+    ai?.reviewStatus !== "APPROVED"
+  ) {
+    throw new CodingIntegrationGateError(
+      `AI candidate for workstream ${workstream.key} has not passed explicit patch review.`,
+      "NOT_READY",
+      {
+        workstreamKey: workstream.key,
+        reviewStatus:
+          typeof ai.reviewStatus === "string" ? ai.reviewStatus : null,
+      },
+    );
+  }
+
+  if (
+    ai?.status === "CANDIDATE_READY" &&
     ai?.reviewStatus === "APPROVED"
   ) {
     source = "AI_CANDIDATE";
