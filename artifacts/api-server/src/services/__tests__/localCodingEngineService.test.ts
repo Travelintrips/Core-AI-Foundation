@@ -131,6 +131,9 @@ describe("Local Coding Engine", () => {
     expect(isSensitiveRepositoryPath("certs/server.pem")).toBe(true);
     expect(isSensitiveRepositoryPath("auth/access-token.txt")).toBe(true);
     expect(isSensitiveRepositoryPath("src/reconciliation.ts")).toBe(false);
+    expect(isSensitiveRepositoryPath(undefined)).toBe(true);
+    expect(isSensitiveRepositoryPath(null)).toBe(true);
+    expect(isSensitiveRepositoryPath("")).toBe(true);
   });
 
   it("builds a bounded context package with relevance, symbols, graph, git context, tests, commands, and cache reuse", async () => {
