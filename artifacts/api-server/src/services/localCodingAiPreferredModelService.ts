@@ -1,5 +1,6 @@
 import {
   readProductionCodingModelConfig,
+  resolveAlternativeCloudCodingModel,
   resolveProductionCodingModel,
   type ProductionCodingModelFailure,
   type ProductionCodingModelSelection,
@@ -200,24 +201,45 @@ export async function resolvePreferredCodingModel(
   }
 
   const fallbackResolution = await resolveConfiguredCodingFallbackModel(env);
-  if (!fallbackResolution.ok) {
+  if (fallbackResolution.ok) {
     return {
-      ok: false,
-      reason: fallbackResolution.reason,
-      message:
-        "Primary coding model is unavailable and configured fallback could not be used.",
+      ok: true,
+      route: "FALLBACK",
+      primary: { provider: primaryProvider, model: primaryModel },
+      fallback: fallbackResolution.fallback,
       primaryFailure: primary,
-      fallbackFailure: fallbackResolution.message,
+      selection: fallbackResolution.selection,
+    };
+  }
+
+  const cloudFallback = await resolveAlternativeCloudCodingModel({
+    excludeProvider: primaryProvider,
+    excludeModel: primaryModel,
+    config: base,
+  });
+
+  if (cloudFallback.ok) {
+    return {
+      ok: true,
+      route: "FALLBACK",
+      primary: { provider: primaryProvider, model: primaryModel },
+      fallback: {
+        provider: String(cloudFallback.selection.provider.slug),
+        model: String(cloudFallback.selection.model.modelId),
+      },
+      primaryFailure: primary,
+      selection: cloudFallback.selection,
     };
   }
 
   return {
-    ok: true,
-    route: "FALLBACK",
-    primary: { provider: primaryProvider, model: primaryModel },
-    fallback: fallbackResolution.fallback,
+    ok: false,
+    reason: fallbackResolution.reason,
+    message:
+      "Primary coding model is unavailable and neither local nor cloud fallback could be used.",
     primaryFailure: primary,
-    selection: fallbackResolution.selection,
+    fallbackFailure:
+      fallbackResolution.message + "; cloud fallback: " + cloudFallback.message,
   };
 }
 
@@ -238,7 +260,7 @@ export function describePreferredCodingModelConfig(
       env["OLLAMA_MODEL"] ||
       DEFAULT_FALLBACK_MODEL,
     fallbackPolicy:
-      "Primary is preferred; bounded constrained planners may fail over to the configured local fallback on retryable provider failures.",
+      "Primary is preferred; bounded constrained planners may fail over to the configured local fallback, then to another allowed configured cloud coding model when local fallback is unavailable.",
     apiKeysExposed: false,
   };
 }
