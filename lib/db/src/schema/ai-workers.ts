@@ -26,6 +26,12 @@ export const aiWorkersTable = appSchema.table("ai_workers", {
   capabilities:      jsonb("capabilities").notNull().default([]),
   maxConcurrentJobs: integer("max_concurrent_jobs").notNull().default(2),
 
+  // Optional model-runtime identity. Null for legacy/internal workers.
+  providerSlug: text("provider_slug"),
+  modelId:      text("model_id"),
+  endpointUrl:  text("endpoint_url"),
+  runtimeKind:  text("runtime_kind"),
+
   // ── Lease ───────────────────────────────────────────────────────────────
   leaseOwner:     text("lease_owner"),
   leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     status: "ok" as "ok" | "disabled" | "fail",
     detail: undefined as string | undefined,
   },
+  registeredWorkerAvailable: false,
 }));
 
 vi.mock("../localCodingAiProductionModelService.js", async () => {
@@ -45,6 +46,20 @@ vi.mock("../localCodingAiProductionModelService.js", async () => {
   };
 });
 
+vi.mock("../ollamaWorkerRegistryService.js", () => ({
+  getOllamaWorkerAvailability: vi.fn(async (modelId: string) =>
+    mocks.registeredWorkerAvailable
+      ? {
+          id: 21,
+          workerName: "ollama-gpu-01",
+          modelId,
+          endpointUrl: "http://10.10.0.21:11434/v1",
+          availableSlots: 1,
+        }
+      : null,
+  ),
+}));
+
 vi.mock("../ollamaLocalService.js", () => ({
   readOllamaLocalConfig: vi.fn((env: NodeJS.ProcessEnv) => ({
     enabled: true,
@@ -71,6 +86,7 @@ describe("Preferred constrained coding model routing", () => {
     mocks.primary.failureReason = "NO_CONFIGURED_PROVIDER_KEY";
     mocks.health.status = "ok";
     mocks.health.detail = undefined;
+    mocks.registeredWorkerAvailable = false;
   });
 
   it("defaults to GPT-5.6 Sol primary and Ollama qwen coder fallback", () => {
@@ -99,6 +115,22 @@ describe("Preferred constrained coding model routing", () => {
       fallback: {
         provider: "ollama",
         model: "qwen2.5-coder:7b",
+      },
+    });
+  });
+
+  it("prefers a registered Ollama worker pool before loopback fallback", async () => {
+    mocks.primary.ok = false;
+    mocks.registeredWorkerAvailable = true;
+
+    await expect(
+      resolvePreferredCodingModel({} as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      route: "FALLBACK",
+      selection: {
+        provider: { slug: "ollama" },
+        model: { modelId: "qwen2.5-coder:7b" },
       },
     });
   });
