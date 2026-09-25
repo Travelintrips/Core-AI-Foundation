@@ -8527,7 +8527,10 @@ components:
         qcPassed: { type: boolean, nullable: true }
         qcDimensions: { type: object, nullable: true, additionalProperties: true }
         qcWarnings: { type: array, items: { type: string } }
-        currentVersion: { $ref: "#/components/schemas/CpDocumentVersion", nullable: true }
+        currentVersion:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/CpDocumentVersion" }
         totalVersions: { type: integer }
         totalComments: { type: integer }
         resolvedComments: { type: integer }
@@ -15249,7 +15252,10 @@ components:
       type: object
       required: [dna, recommendations, consistencyReport, memory]
       properties:
-        dna: { $ref: "#/components/schemas/BrandDnaView", nullable: true }
+        dna:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/BrandDnaView" }
         recommendations: { type: array, items: { $ref: "#/components/schemas/BrandRecommendation" } }
         consistencyReport: { $ref: "#/components/schemas/BrandConsistencyReport" }
         memory: { $ref: "#/components/schemas/CreativeMemoryView" }
@@ -15362,12 +15368,24 @@ components:
         category: { type: string }
         style: { type: string }
         industry: { type: string, nullable: true }
-        colorTheme: { $ref: "#/components/schemas/TemplateColorTheme", nullable: true }
-        typography: { $ref: "#/components/schemas/TemplateTypography", nullable: true }
+        colorTheme:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/TemplateColorTheme" }
+        typography:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/TemplateTypography" }
         layout: { type: string, nullable: true }
         supportedPackages: { type: array, items: { type: string }, nullable: true }
-        brandDnaTags: { $ref: "#/components/schemas/TemplateBrandDnaTags", nullable: true }
-        previewImages: { $ref: "#/components/schemas/TemplatePreviewImages", nullable: true }
+        brandDnaTags:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/TemplateBrandDnaTags" }
+        previewImages:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/TemplatePreviewImages" }
         pdfPreviewUrl: { type: string, nullable: true }
         pptPreviewUrl: { type: string, nullable: true }
         coverImage: { type: string, nullable: true }
@@ -15510,7 +15528,10 @@ components:
       required: [industry, totalTemplates]
       properties:
         industry: { type: string }
-        topTemplate: { $ref: "#/components/schemas/TemplateItem", nullable: true }
+        topTemplate:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/TemplateItem" }
         totalTemplates: { type: integer }
 
     IndustryShowcase:
