@@ -20,6 +20,7 @@ import {
   resolveConfiguredCodingFallbackModel,
   resolvePreferredCodingModel,
 } from "./localCodingAiPreferredModelService.js";
+import { resolveAlternativeCloudCodingModel } from "./localCodingAiProductionModelService.js";
 import {
   validateCodingMultiTaskPlanV1,
   type CodingMultiTaskPlanV1,
@@ -664,18 +665,88 @@ export async function generateAndPersistCodingMultiTaskPlan(
           );
         }
       } else {
-        throw new AutomatedMultiTaskPlannerError(
-          "Constrained multi-task planner model invocation failed and fallback is unavailable.",
-          "MODEL_FAILED",
-          {
-            cause:
-              error instanceof Error
-                ? error.message.slice(0, 1_000)
-                : String(error),
-            fallbackReason: fallback.reason,
-            fallbackFailure: fallback.message,
-          },
-        );
+        const cloudFallback = await resolveAlternativeCloudCodingModel({
+          excludeProvider: providerSlug,
+          excludeModel: modelId,
+        });
+
+        if (cloudFallback.ok) {
+          const cloudProviderSlug = String(
+            cloudFallback.selection.provider.slug ?? "",
+          ).toLowerCase();
+          const cloudModelId = String(
+            cloudFallback.selection.model.modelId ?? "",
+          );
+
+          const cloudProvider = createConstrainedCodingProviderAdapter({
+            providerSlug: cloudProviderSlug,
+            modelId: cloudModelId,
+            baseUrl:
+              typeof cloudFallback.selection.provider.baseUrl === "string"
+                ? cloudFallback.selection.provider.baseUrl
+                : null,
+            observability: {
+              conversationId: taskId,
+              agentName: "Automated Multi-Task Planner",
+              providerName: cloudProviderSlug,
+              modelName: cloudModelId,
+              requestType: "code-cloud-fallback",
+              createdBy: "coding-task-graph-generator",
+            },
+          });
+
+          const cloudAdapter =
+            createConstrainedModelInvocationAdapter(cloudProvider);
+
+          try {
+            generated = await generateCodingMultiTaskPlanWithAdapter({
+              context,
+              adapter: cloudAdapter,
+              target: {
+                provider: cloudProviderSlug,
+                model: cloudModelId,
+              },
+              timeoutMs: cloudFallback.selection.timeoutMs,
+              maxOutputTokens: cloudFallback.selection.maxOutputTokens,
+            });
+            selection = cloudFallback.selection;
+            selectedProviderSlug = cloudProviderSlug;
+            selectedModelId = cloudModelId;
+            fallbackUsed = true;
+          } catch (cloudError) {
+            throw new AutomatedMultiTaskPlannerError(
+              "Constrained multi-task planner primary and cloud fallback model invocation failed.",
+              "MODEL_FAILED",
+              {
+                primaryCause:
+                  error instanceof Error
+                    ? error.message.slice(0, 1_000)
+                    : String(error),
+                localFallbackReason: fallback.reason,
+                localFallbackFailure: fallback.message,
+                cloudFallbackCause:
+                  cloudError instanceof Error
+                    ? cloudError.message.slice(0, 1_000)
+                    : String(cloudError),
+              },
+            );
+          }
+        } else {
+          throw new AutomatedMultiTaskPlannerError(
+            "Constrained multi-task planner model invocation failed and no fallback is available.",
+            "MODEL_FAILED",
+            {
+              cause:
+                error instanceof Error
+                  ? error.message.slice(0, 1_000)
+                  : String(error),
+              localFallbackReason: fallback.reason,
+              localFallbackFailure: fallback.message,
+              cloudFallbackReason: cloudFallback.reason,
+              cloudFallbackFailure: cloudFallback.message,
+            },
+          );
+        }
       }
     } else {
       throw new AutomatedMultiTaskPlannerError(
