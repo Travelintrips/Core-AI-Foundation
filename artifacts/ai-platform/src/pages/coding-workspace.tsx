@@ -3176,7 +3176,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                 </div>
                               )}
                               <CodingAiObservabilityPanel taskId={task.id} />
-                              <CodingMissionControlPanel taskId={task.id} />
+                              <CodingMissionControlPanel taskId={task.id} dispatchBaseSha={analyzerResult?.contextPackage?.headSha} />
                               {analyzerResult.failureRecoveryContext.warnings.length > 0 && (
                                 <p className="mt-2 text-[10px] leading-4 text-slate-500">
                                   {analyzerResult.failureRecoveryContext.warnings.join(" ")}
