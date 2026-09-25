@@ -279,7 +279,8 @@ export type VerificationExecutor = (
 
 const indexCache = new Map<string, RepositoryIndex>();
 
-function normalizeRepoPath(value: string): string {
+export function normalizeRepoPath(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) return "";
   return value.split(sep).join("/").replace(/^\.\//, "");
 }
 
@@ -288,8 +289,9 @@ function isInsideRoot(root: string, candidate: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`));
 }
 
-export function isSensitiveRepositoryPath(file: string): boolean {
+export function isSensitiveRepositoryPath(file: unknown): boolean {
   const normalized = normalizeRepoPath(file);
+  if (!normalized) return true;
   const segments = normalized.split("/").filter(Boolean);
   if (segments.some((segment) => segment.toLowerCase() === ".git")) return true;
   const name = basename(normalized);
@@ -598,8 +600,14 @@ async function git(
   return trimOutput ? stdout.trim() : stdout;
 }
 
-function parseChangedFiles(statusOutput: string): string[] {
-  return statusOutput
+function parseChangedFiles(statusOutput: unknown): string[] {
+  const safeOutput =
+    typeof statusOutput === "string"
+      ? statusOutput
+      : Buffer.isBuffer(statusOutput)
+        ? statusOutput.toString("utf8")
+        : "";
+  return safeOutput
     .split("\n")
     .filter((line) => line.trim().length > 0)
     .map((line) => line.length >= 4 ? line.slice(3).split(" -> ").at(-1) ?? "" : "")
@@ -672,7 +680,8 @@ async function readGitMetadata(root: string, requestedBranch: string, keywords: 
   };
 }
 
-export function extractTaskKeywords(task: string): string[] {
+export function extractTaskKeywords(task: unknown): string[] {
+  if (typeof task !== "string" || !task.trim()) return [];
   const base = task
     .toLowerCase()
     .normalize("NFKD")
@@ -725,11 +734,12 @@ async function findMatchesWithRipgrep(root: string, keywords: string[]): Promise
     maxBuffer: MAX_RG_BUFFER,
     env: { PATH: process.env.PATH ?? "", LANG: "C", LC_ALL: "C" },
   });
+  const safeStdout = typeof stdout === "string" ? stdout : "";
   return new Set(
-    stdout
+    safeStdout
       .split("\n")
-      .map((file) => normalizeRepoPath(file.trim()))
-      .filter((file) => file && !isSensitiveRepositoryPath(file)),
+      .map((file: string) => normalizeRepoPath(file.trim()))
+      .filter((file: string) => file && !isSensitiveRepositoryPath(file)),
   );
 }
 
@@ -908,11 +918,16 @@ function discoverTestFrameworks(index: RepositoryIndex): string[] {
   return [...frameworks];
 }
 
-function safeFilterName(value: string): boolean {
-  return /^[@A-Za-z0-9._/*-]+$/.test(value) && !value.includes("..");
+function safeFilterName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[@A-Za-z0-9._/*-]+$/.test(value) &&
+    !value.includes("..")
+  );
 }
 
-export function parseAllowlistedVerificationCommand(command: string): { file: "pnpm"; args: string[] } | null {
+export function parseAllowlistedVerificationCommand(command: unknown): { file: "pnpm"; args: string[] } | null {
+  if (typeof command !== "string" || !command.trim()) return null;
   const parts = command.trim().split(/\s+/).filter(Boolean);
   if (parts[0] !== "pnpm") return null;
   let script: string | undefined;
@@ -933,7 +948,12 @@ export function parseAllowlistedVerificationCommand(command: string): { file: "p
 
 function discoverVerificationCommands(index: RepositoryIndex, relevantFiles: string[]): string[] {
   const commands = new Set<string>();
-  const manifests = [...index.manifests].sort((a, b) => a.path.split("/").length - b.path.split("/").length);
+  const manifests = [...index.manifests]
+    .filter((manifest) => typeof manifest.path === "string" && manifest.path.length > 0)
+    .sort(
+      (a, b) =>
+        a.path.split("/").length - b.path.split("/").length,
+    );
   for (const manifest of manifests) {
     const packageDir = dirname(manifest.path) === "." ? "" : dirname(manifest.path);
     const isRelevantPackage = !packageDir || relevantFiles.some((file) => file === packageDir || file.startsWith(`${packageDir}/`));

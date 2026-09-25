@@ -295,6 +295,38 @@ describe("repository analyzer execution", () => {
     expect(result.localExecution).toBeNull();
   });
 
+  it("handles the exact production audit instruction without undefined split failures", async () => {
+    const result = await executeRepositoryAnalyzerJob({
+      id: 702,
+      jobType: "coding_repository_analyzer",
+      payloadJson: {
+        codingTaskId: taskId,
+        codingRunId: runId,
+        repository: ".",
+        branch: "main",
+        title: "cek",
+        description:
+          "audit apa anda konek dengan bizportla dan supabase dan dapat coding sendiri",
+      },
+    } as never);
+
+    expect(result).toMatchObject({
+      codingTaskId: taskId,
+      codingRunId: runId,
+      executionStatus: "COMPLETED",
+      sourceTarget: ".",
+      branch: expect.any(String),
+    });
+    expect(result.summary).toEqual(expect.any(String));
+    expect(result.contextPackage).toEqual(
+      expect.objectContaining({
+        affectedFiles: expect.any(Array),
+        relevantFiles: expect.any(Array),
+        verificationCommands: expect.any(Array),
+      }),
+    );
+  });
+
   it("persists successful analysis and moves the task to READY_REVIEW", async () => {
     const result = {
       codingTaskId: taskId,

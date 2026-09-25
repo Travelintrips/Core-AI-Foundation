@@ -465,6 +465,7 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
     isolatedBranchName: input.isolatedBranchName,
     expectedBaseSha: input.expectedBaseSha,
   });
+  let phase = "build_local_context";
   try {
     const contextPackage = await buildLocalCodingContextPackage({
       root: workspace.path,
@@ -473,10 +474,12 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       task: `${input.title}\n${input.description}`,
     });
 
+    phase = "plan_local_execution";
     const localExecutionPlan = planLocalCodingExecution(
       `${input.title}\n${input.description}`,
       contextPackage,
     );
+    phase = "execute_local_plan";
     const localExecution =
       workspace.cleanup && localExecutionPlan.status === "EXECUTABLE"
         ? await executeLocalCodingPlan(workspace.path, localExecutionPlan, {
@@ -614,6 +617,16 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       localExecutionPlan,
       localExecution,
     };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const wrapped = new Error(
+      `Repository Analyzer phase '${phase}' failed: ${message}`,
+      { cause: error },
+    );
+    if (error instanceof Error && error.stack) {
+      wrapped.stack += "\nCaused by:\n" + error.stack;
+    }
+    throw wrapped;
   } finally {
     if (workspace.cleanup) {
       await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
