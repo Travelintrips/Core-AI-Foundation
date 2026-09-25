@@ -126,7 +126,7 @@ describe("automated multi-task planner", () => {
   it("derives grounded files and parent directories only from analyzer-visible paths", () => {
     const paths = groundedPlannerPaths(context());
 
-    expect(paths).toContain("artifacts/api-server/src");
+    expect(paths).not.toContain("artifacts/api-server/src");
     expect(paths).toContain("artifacts/api-server/src/routes");
     expect(paths).toContain("artifacts/ai-platform/src/pages");
     expect(paths).toContain(
@@ -172,6 +172,19 @@ describe("automated multi-task planner", () => {
     ).toThrow(
       expect.objectContaining({
         code: "INVALID_PLAN",
+      }),
+    );
+  });
+
+  it("rejects overly broad ownership roots even when analyzed files exist below them", () => {
+    const plan = validPlan();
+    plan.workstreams[0]!.ownershipPaths = ["artifacts/**"];
+
+    expect(() =>
+      parseGeneratedCodingMultiTaskPlan(JSON.stringify(plan), context()),
+    ).toThrow(
+      expect.objectContaining({
+        code: "UNGROUNDED_OWNERSHIP",
       }),
     );
   });
