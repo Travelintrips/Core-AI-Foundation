@@ -486,6 +486,18 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       requestedBranch: input.isolatedBranchName ?? input.branch,
       task: `${input.title}\n${input.description}`,
     });
+    if (input.expectedBaseSha) {
+      const expectedHeadSha = input.expectedBaseSha.trim().toLowerCase();
+      if (
+        contextPackage.headSha !== "unknown" &&
+        contextPackage.headSha !== expectedHeadSha
+      ) {
+        throw new Error(
+          `Repository context HEAD mismatch: expected ${expectedHeadSha}, got ${contextPackage.headSha}`,
+        );
+      }
+      contextPackage.headSha = expectedHeadSha;
+    }
 
     phase = "plan_local_execution";
     const localExecutionPlan = planLocalCodingExecution(
