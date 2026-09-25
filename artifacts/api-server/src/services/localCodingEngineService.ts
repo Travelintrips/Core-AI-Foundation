@@ -595,7 +595,10 @@ async function git(
       LC_ALL: "C",
     },
   });
-  return trimOutput ? stdout.trim() : stdout;
+  const text = typeof stdout === "string"
+    ? stdout
+    : stdout?.toString("utf8") ?? "";
+  return trimOutput ? text.trim() : text;
 }
 
 function parseChangedFiles(statusOutput: string): string[] {
@@ -725,8 +728,11 @@ async function findMatchesWithRipgrep(root: string, keywords: string[]): Promise
     maxBuffer: MAX_RG_BUFFER,
     env: { PATH: process.env.PATH ?? "", LANG: "C", LC_ALL: "C" },
   });
+  const text = typeof stdout === "string"
+    ? stdout
+    : stdout?.toString("utf8") ?? "";
   return new Set(
-    stdout
+    text
       .split("\n")
       .map((file) => normalizeRepoPath(file.trim()))
       .filter((file) => file && !isSensitiveRepositoryPath(file)),
@@ -933,7 +939,9 @@ export function parseAllowlistedVerificationCommand(command: string): { file: "p
 
 function discoverVerificationCommands(index: RepositoryIndex, relevantFiles: string[]): string[] {
   const commands = new Set<string>();
-  const manifests = [...index.manifests].sort((a, b) => a.path.split("/").length - b.path.split("/").length);
+  const manifests = [...index.manifests]
+    .filter((manifest) => typeof manifest?.path === "string" && manifest.path.trim().length > 0)
+    .sort((a, b) => a.path.split("/").length - b.path.split("/").length);
   for (const manifest of manifests) {
     const packageDir = dirname(manifest.path) === "." ? "" : dirname(manifest.path);
     const isRelevantPackage = !packageDir || relevantFiles.some((file) => file === packageDir || file.startsWith(`${packageDir}/`));
