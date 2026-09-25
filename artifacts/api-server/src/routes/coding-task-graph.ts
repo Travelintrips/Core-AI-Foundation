@@ -15,6 +15,11 @@ import {
   buildCodingIntegrationManifest,
   CodingIntegrationGateError,
 } from "../services/localCodingMultiWorkerIntegrationGateService.js";
+import {
+  approveCodingIntegrationManifest,
+  CodingIntegrationApprovalError,
+  verifyApprovedCodingIntegration,
+} from "../services/localCodingMultiWorkerIntegrationApprovalService.js";
 import { dispatchReadyCodingWorkstreams } from "../services/localCodingMultiWorkerExecutionService.js";
 import { LocalCodingWorkstreamAiHandoffError } from "../services/localCodingWorkstreamAiHandoffService.js";
 import {
@@ -50,6 +55,19 @@ const runWorkstreamAiBodySchema = z
   })
   .strict();
 
+const integrationApprovalBodySchema = z
+  .object({
+    expectedManifestHash: z.string().regex(/^[0-9a-f]{64}$/i),
+    approvedBy: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+
+const integrationVerifyBodySchema = z
+  .object({
+    expectedManifestHash: z.string().regex(/^[0-9a-f]{64}$/i),
+  })
+  .strict();
+
 const dispatchBodySchema = z
   .object({
     baseSha: z.string().regex(/^[0-9a-f]{40}$/i),
@@ -65,6 +83,21 @@ function sendKnownError(res: Response, error: unknown): boolean {
       error.code === "NOT_FOUND"
         ? 404
         : ["NOT_READY", "ACTIVE_GRAPH_EXISTS"].includes(error.code)
+          ? 409
+          : 422;
+    res.status(status).json({
+      error: error.message,
+      code: error.code,
+      details: error.details ?? null,
+    });
+    return true;
+  }
+
+  if (error instanceof CodingIntegrationApprovalError) {
+    const status =
+      error.code === "NOT_FOUND"
+        ? 404
+        : ["NOT_READY", "STALE_MANIFEST", "STALE_HEAD"].includes(error.code)
           ? 409
           : 422;
     res.status(status).json({
@@ -230,6 +263,76 @@ router.get(
         snapshot,
       );
       res.json(manifest);
+    } catch (error) {
+      if (sendKnownError(res, error)) return;
+      throw error;
+    }
+  },
+);
+
+router.post(
+  "/ai/coding/tasks/:id/task-graph/:graphId/integration-manifest/approve",
+  async (req, res): Promise<void> => {
+    const params = graphParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const body = integrationApprovalBodySchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json({ error: body.error.message });
+      return;
+    }
+
+    try {
+      await requireGraphForTask(params.data.id, params.data.graphId);
+      const review = await approveCodingIntegrationManifest(
+        params.data.id,
+        params.data.graphId,
+        body.data.expectedManifestHash,
+        body.data.approvedBy,
+      );
+      res.json({
+        reviewId: review.id,
+        taskId: review.taskId,
+        graphId: review.graphId,
+        manifestHash: review.manifestHash,
+        status: review.status,
+        approvedAt: review.approvedAt,
+        nextAction:
+          review.status === "VERIFIED"
+            ? "RUN_INTEGRATION_SANDBOX"
+            : "VERIFY_INTEGRATION_APPLY",
+      });
+    } catch (error) {
+      if (sendKnownError(res, error)) return;
+      throw error;
+    }
+  },
+);
+
+router.post(
+  "/ai/coding/tasks/:id/task-graph/:graphId/integration-manifest/verify",
+  async (req, res): Promise<void> => {
+    const params = graphParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const body = integrationVerifyBodySchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json({ error: body.error.message });
+      return;
+    }
+
+    try {
+      await requireGraphForTask(params.data.id, params.data.graphId);
+      const result = await verifyApprovedCodingIntegration(
+        params.data.id,
+        params.data.graphId,
+        body.data.expectedManifestHash,
+      );
+      res.json(result);
     } catch (error) {
       if (sendKnownError(res, error)) return;
       throw error;
