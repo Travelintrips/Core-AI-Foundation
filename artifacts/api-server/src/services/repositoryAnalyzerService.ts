@@ -29,6 +29,9 @@ const MAX_FILES = 120;
 const MAX_READ_BYTES = 400_000;
 const MAX_FILE_BYTES = 80_000;
 const CLONE_TIMEOUT_MS = 120_000;
+const PRIMARY_CLONE_DEPTH = 20;
+const FALLBACK_CLONE_DEPTH = 1;
+let cloneQueueTail: Promise<void> = Promise.resolve();
 const IGNORED_DIRECTORIES = new Set([
   ".git",
   ".next",
@@ -121,6 +124,18 @@ function requiredString(payload: Record<string, unknown>, key: string): string {
   return value.trim();
 }
 
+function appendGitConfig(
+  target: NodeJS.ProcessEnv,
+  key: string,
+  value: string,
+): void {
+  const count = Number.parseInt(target["GIT_CONFIG_COUNT"] ?? "0", 10);
+  const index = Number.isFinite(count) && count >= 0 ? count : 0;
+  target[`GIT_CONFIG_KEY_${index}`] = key;
+  target[`GIT_CONFIG_VALUE_${index}`] = value;
+  target["GIT_CONFIG_COUNT"] = String(index + 1);
+}
+
 export function buildRepositoryCloneEnvironment(
   remote: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -129,6 +144,16 @@ export function buildRepositoryCloneEnvironment(
     ...env,
     GIT_TERMINAL_PROMPT: "0",
   };
+
+  // Hostinger's managed runtime has a tight process/thread budget. Git's
+  // index-pack/checkout defaults may spawn multiple worker threads, so keep
+  // the clone phase deliberately single-threaded and memory conservative.
+  appendGitConfig(cloneEnv, "pack.threads", "1");
+  appendGitConfig(cloneEnv, "index.threads", "1");
+  appendGitConfig(cloneEnv, "checkout.workers", "1");
+  appendGitConfig(cloneEnv, "fetch.parallel", "1");
+  appendGitConfig(cloneEnv, "core.preloadIndex", "false");
+  appendGitConfig(cloneEnv, "core.deltaBaseCacheLimit", "16m");
 
   let parsed: URL | null = null;
   try {
@@ -147,10 +172,65 @@ export function buildRepositoryCloneEnvironment(
   }
 
   const basic = Buffer.from(`x-access-token:${token}`, "utf8").toString("base64");
-  cloneEnv["GIT_CONFIG_COUNT"] = "1";
-  cloneEnv["GIT_CONFIG_KEY_0"] = "http.extraHeader";
-  cloneEnv["GIT_CONFIG_VALUE_0"] = `AUTHORIZATION: basic ${basic}`;
+  appendGitConfig(cloneEnv, "http.extraHeader", `AUTHORIZATION: basic ${basic}`);
   return cloneEnv;
+}
+
+export function isRetryableRepositoryCloneResourceError(detail: string): boolean {
+  return /unable to create thread|resource temporarily unavailable|invalid index-pack output|index-pack.*failed/i.test(
+    detail,
+  );
+}
+
+export function buildRepositoryCloneArgs(
+  remote: string,
+  branch: string,
+  workspace: string,
+  depth: number,
+): string[] {
+  return [
+    "clone",
+    "--depth",
+    String(depth),
+    "--no-tags",
+    "--single-branch",
+    "--branch",
+    branch,
+    remote,
+    workspace,
+  ];
+}
+
+async function withRepositoryCloneSlot<T>(run: () => Promise<T>): Promise<T> {
+  const previous = cloneQueueTail;
+  let release!: () => void;
+  cloneQueueTail = new Promise<void>((resolveQueue) => {
+    release = resolveQueue;
+  });
+
+  await previous.catch(() => undefined);
+  try {
+    return await run();
+  } finally {
+    release();
+  }
+}
+
+async function cloneRepository(
+  remote: string,
+  branch: string,
+  workspace: string,
+  depth: number,
+): Promise<void> {
+  await execFileAsync(
+    "git",
+    buildRepositoryCloneArgs(remote, branch, workspace, depth),
+    {
+      timeout: CLONE_TIMEOUT_MS,
+      maxBuffer: 64 * 1024,
+      env: buildRepositoryCloneEnvironment(remote),
+    },
+  );
 }
 
 function normalizeRemoteRepository(repository: string): string {
@@ -204,32 +284,47 @@ export async function prepareRepositoryWorkspace(
   const workspace = join(tmpdir(), `coding-analyzer-${crypto.randomUUID()}`);
   await mkdir(workspace, { recursive: true });
 
-  try {
-    await execFileAsync(
-      "git",
-      [
-        "clone",
-        "--depth",
-        "50",
-        "--no-tags",
-        "--single-branch",
-        "--branch",
-        branch,
-        remote,
-        workspace,
-      ],
-      {
-        timeout: CLONE_TIMEOUT_MS,
-        maxBuffer: 64 * 1024,
-        env: buildRepositoryCloneEnvironment(remote),
-      },
-    );
-    return { path: workspace, cleanup: true };
-  } catch (error) {
-    await rm(workspace, { recursive: true, force: true });
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Repository clone failed: ${detail.slice(0, 500)}`);
-  }
+  return withRepositoryCloneSlot(async () => {
+    try {
+      await cloneRepository(remote, branch, workspace, PRIMARY_CLONE_DEPTH);
+      return { path: workspace, cleanup: true };
+    } catch (firstError) {
+      const firstDetail =
+        firstError instanceof Error ? firstError.message : String(firstError);
+
+      if (!isRetryableRepositoryCloneResourceError(firstDetail)) {
+        await rm(workspace, { recursive: true, force: true });
+        throw new Error(
+          `Repository clone failed: ${firstDetail.slice(0, 500)}`,
+        );
+      }
+
+      logger.warn(
+        {
+          repository: remote,
+          branch,
+          primaryDepth: PRIMARY_CLONE_DEPTH,
+          fallbackDepth: FALLBACK_CLONE_DEPTH,
+        },
+        "[coding-analyzer] clone hit host resource pressure; retrying with minimal history",
+      );
+
+      await rm(workspace, { recursive: true, force: true });
+      await mkdir(workspace, { recursive: true });
+
+      try {
+        await cloneRepository(remote, branch, workspace, FALLBACK_CLONE_DEPTH);
+        return { path: workspace, cleanup: true };
+      } catch (retryError) {
+        await rm(workspace, { recursive: true, force: true });
+        const retryDetail =
+          retryError instanceof Error ? retryError.message : String(retryError);
+        throw new Error(
+          `Repository clone failed after low-resource retry: ${retryDetail.slice(0, 500)}`,
+        );
+      }
+    }
+  });
 }
 
 async function collectFiles(root: string): Promise<string[]> {
