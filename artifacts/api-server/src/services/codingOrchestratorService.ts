@@ -14,6 +14,7 @@ import { executeAI, type ExecutionOutput } from "./aiExecutionService.js";
 import { getFallbackModels, routeToModel } from "./aiModelRouter.js";
 import { enqueue } from "./queueManagerService.js";
 import { executeRepositoryAnalyzerJobOnDemand } from "./repositoryAnalyzerService.js";
+import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
 
 type CodingStageId =
   | "repository_analyzer"
@@ -316,6 +317,7 @@ async function completeLocalAnalysis(
   sessionId: string,
   stages: CodingStage[],
   analysis: Record<string, unknown>,
+  aiEscalation?: Awaited<ReturnType<typeof generateAndPersistCodingMultiTaskPlan>>,
 ): Promise<void> {
   const completedAt = new Date();
   const analysisSummary =
@@ -331,16 +333,19 @@ async function completeLocalAnalysis(
   const nextAction =
     localExecution?.status === "APPLIED"
       ? "REVIEW_LOCAL_PATCH"
-      : localPlan?.status === "AI_REQUIRED"
-        ? "AI_REQUIRED"
-        : "REVIEW_LOCAL_CONTEXT";
-  const summarySuffix =
+      : aiEscalation
+        ? "APPROVE_TASK_GRAPH"
+        : localPlan?.status === "AI_REQUIRED"
+          ? "AI_REQUIRED"
+          : "REVIEW_LOCAL_CONTEXT";
+  const summary =
     nextAction === "REVIEW_LOCAL_PATCH"
-      ? " A deterministic local patch is ready for review; repository scripts were not executed."
-      : nextAction === "AI_REQUIRED"
-        ? " The deterministic executor declined to guess; AI reasoning is required for the remaining semantic work."
-        : " Local context is ready for review.";
-  const summary = `${analysisSummary}${summarySuffix} No AI/LLM was invoked.`;
+      ? `${analysisSummary} A deterministic local patch is ready for review; repository scripts were not executed. No AI/LLM was invoked.`
+      : nextAction === "APPROVE_TASK_GRAPH"
+        ? `${analysisSummary} The deterministic executor declined to guess, so the bounded AI planner generated a PREPARED task graph. Explicit task-graph approval is required before any worker or coding-model execution; no patch, commit, push, or merge was performed.`
+        : nextAction === "AI_REQUIRED"
+          ? `${analysisSummary} The deterministic executor declined to guess; AI reasoning is required for the remaining semantic work. No AI/LLM was invoked.`
+          : `${analysisSummary} Local context is ready for review. No AI/LLM was invoked.`;
 
   const result: Record<string, unknown> = {
     ...analysis,
@@ -351,6 +356,18 @@ async function completeLocalAnalysis(
       status: "READY_REVIEW",
       stages,
       nextAction,
+      ...(aiEscalation
+        ? {
+            taskGraph: {
+              graphId: aiEscalation.graphId,
+              graphVersion: aiEscalation.graphVersion,
+              planHash: aiEscalation.planHash,
+              graphStatus: aiEscalation.graphStatus,
+              nextAction: aiEscalation.nextAction,
+              model: aiEscalation.model,
+            },
+          }
+        : {}),
     },
   };
 
@@ -376,9 +393,9 @@ async function completeLocalAnalysis(
     await tx
       .update(aiOrchestratorSessionsTable)
       .set({
-        totalTokens: 0,
-        totalRequests: 0,
-        lastModelUsed: null,
+        totalTokens: aiEscalation?.model.totalTokens ?? 0,
+        totalRequests: aiEscalation ? 1 : 0,
+        lastModelUsed: aiEscalation?.model.model ?? null,
       })
       .where(eq(aiOrchestratorSessionsTable.sessionId, sessionId));
   });
@@ -387,17 +404,28 @@ async function completeLocalAnalysis(
     "coding-orchestrator",
     nextAction === "REVIEW_LOCAL_PATCH"
       ? "local_patch_ready_review"
-      : nextAction === "AI_REQUIRED"
-        ? "local_execution_ai_required"
-        : "local_analysis_ready_review",
+      : nextAction === "APPROVE_TASK_GRAPH"
+        ? "local_execution_ai_required_escalated"
+        : nextAction === "AI_REQUIRED"
+          ? "local_execution_ai_required"
+          : "local_analysis_ready_review",
     input.task.id,
     "coding_task",
     "success",
     {
       sessionId,
       codingRunId: input.run.id,
-      aiInvoked: false,
+      aiInvoked: Boolean(aiEscalation),
       nextAction,
+      ...(aiEscalation
+        ? {
+            graphId: aiEscalation.graphId,
+            graphVersion: aiEscalation.graphVersion,
+            graphStatus: aiEscalation.graphStatus,
+            plannerProvider: aiEscalation.model.provider,
+            plannerModel: aiEscalation.model.model,
+          }
+        : {}),
     },
   );
 }
@@ -546,11 +574,24 @@ async function continueCodingOrchestration(
       );
     }
 
-    await completeLocalAnalysis(input, sessionId, stages, analysis);
+    const aiEscalation =
+      localPlan?.status === "AI_REQUIRED"
+        ? await generateAndPersistCodingMultiTaskPlan(input.task.id)
+        : undefined;
+
+    await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
     logger.info(
-      { taskId: input.task.id, codingRunId: input.run.id, sessionId },
-      "[coding-orchestrator] Local Coding Engine ready for review without AI/LLM",
+      {
+        taskId: input.task.id,
+        codingRunId: input.run.id,
+        sessionId,
+        nextAction: aiEscalation ? "APPROVE_TASK_GRAPH" : undefined,
+        graphId: aiEscalation?.graphId,
+      },
+      aiEscalation
+        ? "[coding-orchestrator] AI_REQUIRED escalated to a PREPARED task graph"
+        : "[coding-orchestrator] Local Coding Engine ready for review without AI/LLM",
     );
   } catch (error) {
     const runningStage = stages.find((stage) => stage.status === "RUNNING");
@@ -572,8 +613,10 @@ async function continueCodingOrchestration(
  * The production global dispatcher remains fail-closed. The orchestrator only
  * executes work created by this explicit Run Agent request. The local analyzer
  * may also produce a deterministic review-only patch inside its isolated clone.
- * Semantic tasks are marked AI_REQUIRED rather than guessed. No model provider
- * is invoked in this phase and repository scripts remain fail-closed.
+ * Semantic tasks are marked AI_REQUIRED rather than guessed. AI_REQUIRED is
+ * escalated through the bounded multi-task planner into a PREPARED task graph;
+ * explicit task-graph approval remains mandatory before worker/model coding
+ * execution. Repository scripts and direct repository writes remain fail-closed.
  */
 export async function startCodingOrchestration(
   input: CodingOrchestrationInput,
