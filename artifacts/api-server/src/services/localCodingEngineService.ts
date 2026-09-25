@@ -639,14 +639,19 @@ async function readGitMetadata(root: string, requestedBranch: string, keywords: 
     }
   };
 
-  const branch = await warningsFallback(
+  const branchOutput = await warningsFallback(
     () => git(root, ["branch", "--show-current"]),
     requestedBranch,
   );
-  const headSha = await warningsFallback(
+  const branch = normalizeCommandStdout(branchOutput).trim() || requestedBranch;
+  const headShaOutput = await warningsFallback(
     () => git(root, ["rev-parse", "HEAD"]),
     "unknown",
   );
+  const normalizedHeadSha = normalizeCommandStdout(headShaOutput).trim().toLowerCase();
+  const headSha = /^[0-9a-f]{40}$/.test(normalizedHeadSha)
+    ? normalizedHeadSha
+    : "unknown";
   const statusOutput = await warningsFallback(
     () => git(root, ["status", "--porcelain=v1", "--untracked-files=normal"], 10_000, false),
     "",
