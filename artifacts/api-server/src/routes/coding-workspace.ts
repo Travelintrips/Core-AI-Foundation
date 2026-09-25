@@ -200,6 +200,75 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
 class CodingTaskNotFoundError extends Error {}
 class CodingRunAlreadyActiveError extends Error {}
 
+const DELETABLE_CODING_TASK_STATUSES = new Set(["PENDING", "FAILED", "COMPLETED"]);
+
+router.delete("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const deleted = await db.transaction(async (tx) => {
+      const [task] = await tx
+        .select()
+        .from(aiCodingTasksTable)
+        .where(eq(aiCodingTasksTable.id, params.data.id))
+        .for("update");
+
+      if (!task) {
+        throw new CodingTaskNotFoundError("Coding task not found");
+      }
+
+      if (!DELETABLE_CODING_TASK_STATUSES.has(task.status)) {
+        throw new CodingRunAlreadyActiveError(
+          "Only pending, failed, or completed coding tasks can be deleted",
+        );
+      }
+
+      const [activeRun] = await tx
+        .select({ id: aiCodingRunsTable.id })
+        .from(aiCodingRunsTable)
+        .where(
+          and(
+            eq(aiCodingRunsTable.taskId, task.id),
+            eq(aiCodingRunsTable.status, "RUNNING"),
+          ),
+        )
+        .limit(1);
+
+      if (activeRun) {
+        throw new CodingRunAlreadyActiveError(
+          "Coding task has an active run and cannot be deleted",
+        );
+      }
+
+      await tx
+        .delete(aiCodingTasksTable)
+        .where(eq(aiCodingTasksTable.id, task.id));
+
+      return task;
+    });
+
+    res.status(200).json({
+      id: deleted.id,
+      taskNumber: deleted.taskNumber,
+      deleted: true,
+    });
+  } catch (error) {
+    if (error instanceof CodingTaskNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof CodingRunAlreadyActiveError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
 router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
   const params = GetCodingTaskParams.safeParse(req.params);
   if (!params.success) {
