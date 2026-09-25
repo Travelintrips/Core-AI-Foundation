@@ -947,11 +947,16 @@ async function executeReserved(
       throw new LocalCodingAiExecutionGateError(
         resolvedModel.message,
         "MODEL_UNAVAILABLE",
-        {\n          reason: resolvedModel.reason,\n          primaryFailure: resolvedModel.primaryFailure,\n          fallbackFailure: resolvedModel.fallbackFailure,\n        },
+        {
+          reason: resolvedModel.reason,
+          primaryFailure: resolvedModel.primaryFailure,
+          fallbackFailure: resolvedModel.fallbackFailure,
+        },
       );
     }
 
-    const selected = resolvedModel.selection;\n    const modelRoute = resolvedModel.route;
+    const selected = resolvedModel.selection;
+    const modelRoute = resolvedModel.route;
     const providerSlug = String(selected.provider.slug ?? "").toLowerCase();
     const modelId = String(selected.model.modelId ?? "");
     if (!providerSlug || !modelId) {
