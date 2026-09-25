@@ -256,7 +256,14 @@ export async function configureIsolatedRepositoryWorkspace(
     timeout: 15_000,
     maxBuffer: 64 * 1024,
   });
-  const actualHead = stdout.trim().toLowerCase();
+  const actualHead = Buffer.isBuffer(stdout)
+    ? stdout.toString("utf8").trim().toLowerCase()
+    : typeof stdout === "string"
+      ? stdout.trim().toLowerCase()
+      : "";
+  if (!actualHead) {
+    throw new Error("Repository HEAD could not be resolved in isolated workspace");
+  }
   if (actualHead !== normalizedBaseSha) {
     throw new Error(
       `Repository HEAD changed before isolated worker execution: expected ${normalizedBaseSha}, got ${actualHead}`,
