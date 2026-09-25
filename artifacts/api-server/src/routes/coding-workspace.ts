@@ -200,7 +200,7 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
 class CodingTaskNotFoundError extends Error {}
 class CodingRunAlreadyActiveError extends Error {}
 
-const DELETABLE_CODING_TASK_STATUSES = new Set(["PENDING", "FAILED", "COMPLETED"]);
+const DELETABLE_CODING_TASK_STATUSES = new Set(["PENDING", "FAILED", "READY_REVIEW", "COMPLETED"]);
 
 router.delete("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   const params = GetCodingTaskParams.safeParse(req.params);
@@ -223,7 +223,7 @@ router.delete("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
 
       if (!DELETABLE_CODING_TASK_STATUSES.has(task.status)) {
         throw new CodingRunAlreadyActiveError(
-          "Only pending, failed, or completed coding tasks can be deleted",
+          "Only pending, failed, ready-for-review, or completed coding tasks can be deleted",
         );
       }
 

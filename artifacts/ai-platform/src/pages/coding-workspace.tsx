@@ -3667,6 +3667,7 @@ export default function CodingWorkspace() {
   const canDeleteTask = (task: CodingTask) =>
     task.status === CodingTaskStatus.PENDING ||
     task.status === CodingTaskStatus.FAILED ||
+    task.status === CodingTaskStatus.READY_REVIEW ||
     task.status === CodingTaskStatus.COMPLETED;
 
   const deleteTask = async (task: CodingTask, skipConfirm = false) => {
