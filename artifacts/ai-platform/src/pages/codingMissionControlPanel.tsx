@@ -3,6 +3,7 @@ import {
   buildCodingWorkstreamReviewModel,
   codingWorkstreamReviewCanApproveAiPatch,
 } from "./codingWorkstreamReviewModel";
+import { buildCodingTaskGraphPlanReviewModel } from "./codingTaskGraphPlanReviewModel";
 import {
   Activity,
   AlertTriangle,
@@ -59,7 +60,15 @@ type MissionControlSnapshot = {
 type TaskGraphWorkstream = {
   id: string;
   key: string;
+  title: string;
+  role: string;
+  instruction: string;
   status: string;
+  priority: number;
+  ownershipPaths: string[];
+  acceptanceCriteria: string[];
+  verificationProfiles: string[];
+  dependencies: string[];
   baseSha: string | null;
   resultJson: Record<string, unknown> | null;
 };
@@ -201,6 +210,11 @@ export function CodingMissionControlPanel({
     return persisted?.toLowerCase() ?? null;
   }, [dispatchBaseSha, graphSnapshot]);
 
+  const planReview = useMemo(
+    () => buildCodingTaskGraphPlanReviewModel(graphSnapshot?.workstreams),
+    [graphSnapshot],
+  );
+
   const postAction = useCallback(
     async (
       actionKey: string,
@@ -331,7 +345,8 @@ export function CodingMissionControlPanel({
     );
   }
 
-  const canApproveGraph = snapshot.graphStatus === "PREPARED";
+  const graphPrepared = snapshot.graphStatus === "PREPARED";
+  const canApproveGraph = graphPrepared && planReview.completeForApproval;
   const canDispatch =
     ["APPROVED", "RUNNING"].includes(snapshot.graphStatus) &&
     snapshot.totals.ready > 0 &&
@@ -365,11 +380,110 @@ export function CodingMissionControlPanel({
         </div>
       </div>
 
+      {graphPrepared && (
+        <div
+          className="mt-4 rounded-lg border border-emerald-300/15 bg-emerald-300/[0.02] p-3"
+          data-testid="panel-task-graph-plan-review"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                Plan V1 review before approval
+              </div>
+              <div className="mt-1 text-[9px] text-slate-500">
+                Review ownership, dependencies, acceptance criteria, and verification scope before workers can be dispatched.
+              </div>
+            </div>
+            <div className="font-mono text-[9px] text-slate-500">
+              {planReview.workstreams.length} workstreams · {planReview.dependencyEdges} dependency edges · {planReview.rootWorkstreams.length} roots
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 xl:grid-cols-2">
+            {planReview.workstreams.map((item) => (
+              <div
+                key={item.id}
+                className="rounded border border-white/[0.06] bg-black/10 p-3"
+                data-testid={`plan-review-${item.key}`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[9px] text-emerald-300">{item.key}</span>
+                      <span className="text-[10px] text-slate-200">{item.title}</span>
+                    </div>
+                    <div className="mt-1 text-[8px] uppercase tracking-wider text-slate-600">
+                      {item.role} · priority {item.priority} · {item.status}
+                    </div>
+                  </div>
+                  <span className={item.complete ? "font-mono text-[8px] text-emerald-300" : "font-mono text-[8px] text-rose-300"}>
+                    {item.complete ? "REVIEWABLE" : "INCOMPLETE"}
+                  </span>
+                </div>
+
+                <div className="mt-2 rounded border border-white/[0.05] bg-[#030812] p-2 text-[9px] leading-4 text-slate-400">
+                  {item.instruction || "No instruction recorded"}
+                </div>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-[8px] uppercase tracking-wider text-slate-600">Ownership</div>
+                    <div className="max-h-24 overflow-auto rounded border border-white/[0.05] bg-black/10 p-2 font-mono text-[8px] text-slate-400">
+                      {item.ownershipPaths.length > 0 ? item.ownershipPaths.join("\n") : "None"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[8px] uppercase tracking-wider text-slate-600">Dependencies</div>
+                    <div className="rounded border border-white/[0.05] bg-black/10 p-2 font-mono text-[8px] text-slate-400">
+                      {item.dependencies.length > 0 ? item.dependencies.join(", ") : "root workstream"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-2">
+                  <div className="mb-1 text-[8px] uppercase tracking-wider text-slate-600">Acceptance criteria</div>
+                  <div className="space-y-1">
+                    {item.acceptanceCriteria.map((criterion, index) => (
+                      <div key={index} className="text-[9px] text-slate-400">
+                        {index + 1}. {criterion}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {item.verificationProfiles.map((profile) => (
+                    <span
+                      key={profile}
+                      className="rounded border border-cyan-300/10 bg-cyan-300/[0.025] px-1.5 py-0.5 font-mono text-[8px] text-cyan-200"
+                    >
+                      {profile}
+                    </span>
+                  ))}
+                </div>
+
+                {item.issues.length > 0 && (
+                  <div className="mt-2 rounded border border-rose-300/15 bg-rose-300/[0.03] p-2 text-[8px] text-rose-200">
+                    {item.issues.join(" · ")}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {!planReview.completeForApproval && (
+            <div className="mt-3 rounded border border-rose-300/15 bg-rose-300/[0.035] p-2 text-[9px] text-rose-200">
+              Graph approval locked: {planReview.issues.length > 0 ? planReview.issues.join(" · ") : "plan review data is incomplete"}.
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap gap-2">
-        {canApproveGraph && (
+        {graphPrepared && (
           <button
             type="button"
-            disabled={actionBusy !== null}
+            disabled={!canApproveGraph || actionBusy !== null}
             onClick={() =>
               void postAction(
                 "approve-graph",
@@ -378,6 +492,11 @@ export function CodingMissionControlPanel({
             }
             className="inline-flex items-center gap-1.5 rounded border border-emerald-300/20 bg-emerald-300/[0.05] px-2.5 py-1.5 text-[10px] font-medium text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
             data-testid="button-approve-task-graph"
+            title={
+              canApproveGraph
+                ? "Approve the reviewed task graph"
+                : "Approval is locked until the full Plan V1 review evidence is complete"
+            }
           >
             {actionBusy === "approve-graph" ? (
               <Loader2 className="size-3 animate-spin" />
