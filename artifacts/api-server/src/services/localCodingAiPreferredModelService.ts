@@ -32,6 +32,121 @@ function envFalse(value: string | undefined): boolean {
   return ["0", "false", "no", "off"].includes((value ?? "").trim().toLowerCase());
 }
 
+
+export interface CodingFallbackResolution {
+  ok: true;
+  selection: ProductionCodingModelSelection;
+  fallback: { provider: string; model: string };
+}
+
+export interface CodingFallbackFailure {
+  ok: false;
+  reason: string;
+  message: string;
+}
+
+export async function resolveConfiguredCodingFallbackModel(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<CodingFallbackResolution | CodingFallbackFailure> {
+  const base = readProductionCodingModelConfig(env);
+  const fallbackEnabled = !envFalse(env["AI_CODING_FALLBACK_ENABLED"]);
+  if (!fallbackEnabled) {
+    return {
+      ok: false,
+      reason: "FALLBACK_DISABLED",
+      message: "Constrained coding fallback is disabled.",
+    };
+  }
+
+  const fallbackProvider = (
+    env["AI_CODING_FALLBACK_PROVIDER"] || DEFAULT_FALLBACK_PROVIDER
+  ).trim().toLowerCase();
+  const fallbackModel = (
+    env["AI_CODING_FALLBACK_MODEL"] ||
+    env["OLLAMA_MODEL"] ||
+    DEFAULT_FALLBACK_MODEL
+  ).trim();
+
+  if (fallbackProvider !== "ollama") {
+    return {
+      ok: false,
+      reason: "FALLBACK_PROVIDER_UNSUPPORTED",
+      message: "Only loopback Ollama is supported as constrained local fallback.",
+    };
+  }
+
+  if (!base.providerAllowlist.map((value) => value.toLowerCase()).includes("ollama")) {
+    return {
+      ok: false,
+      reason: "FALLBACK_PROVIDER_NOT_ALLOWED",
+      message: "Ollama is not present in AI_CODING_PROVIDER_ALLOWLIST.",
+    };
+  }
+
+  let local;
+  try {
+    local = readOllamaLocalConfig({
+      ...env,
+      AI_CODING_FALLBACK_PROVIDER: "ollama",
+      AI_CODING_FALLBACK_MODEL: fallbackModel,
+      OLLAMA_MODEL: fallbackModel,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "LOCAL_FALLBACK_UNAVAILABLE",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (!local.enabled) {
+    return {
+      ok: false,
+      reason: "LOCAL_FALLBACK_UNAVAILABLE",
+      message: "Ollama fallback is disabled.",
+    };
+  }
+
+  if (
+    base.modelAllowlist.length > 0 &&
+    !base.modelAllowlist.includes(local.model)
+  ) {
+    return {
+      ok: false,
+      reason: "FALLBACK_MODEL_NOT_ALLOWED",
+      message: "Fallback model is not present in AI_CODING_MODEL_ALLOWLIST.",
+    };
+  }
+
+  const health = await checkOllamaHealth(local);
+  if (health.status !== "ok") {
+    return {
+      ok: false,
+      reason: "LOCAL_FALLBACK_UNAVAILABLE",
+      message: health.detail || "Ollama health check failed.",
+    };
+  }
+
+  return {
+    ok: true,
+    fallback: { provider: "ollama", model: local.model },
+    selection: {
+      model: {
+        modelId: local.model,
+        maxOutputTokens: base.maxOutputTokens,
+        capabilities: ["code", "reasoning", "text", "local"],
+      },
+      provider: {
+        slug: "ollama",
+        baseUrl: local.baseUrl,
+      },
+      timeoutMs: base.timeoutMs,
+      maxOutputTokens: base.maxOutputTokens,
+      selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
+    },
+  };
+}
+
 export async function resolvePreferredCodingModel(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<PreferredCodingModelResolution | PreferredCodingModelFailure> {
@@ -75,89 +190,15 @@ export async function resolvePreferredCodingModel(
     };
   }
 
-  if (!fallbackEnabled) {
+  const fallbackResolution = await resolveConfiguredCodingFallbackModel(env);
+  if (!fallbackResolution.ok) {
     return {
       ok: false,
-      reason: primary.reason,
-      message: primary.message,
-      primaryFailure: primary,
-    };
-  }
-
-  if (fallbackProvider !== "ollama") {
-    return {
-      ok: false,
-      reason: "FALLBACK_PROVIDER_UNSUPPORTED",
+      reason: fallbackResolution.reason,
       message:
-        "Primary coding model is unavailable and configured fallback provider is unsupported.",
+        "Primary coding model is unavailable and configured fallback could not be used.",
       primaryFailure: primary,
-      fallbackFailure: "Only loopback Ollama is supported as constrained local fallback.",
-    };
-  }
-
-  if (!base.providerAllowlist.map((value) => value.toLowerCase()).includes("ollama")) {
-    return {
-      ok: false,
-      reason: "FALLBACK_PROVIDER_NOT_ALLOWED",
-      message:
-        "Primary coding model is unavailable and Ollama is not present in AI_CODING_PROVIDER_ALLOWLIST.",
-      primaryFailure: primary,
-      fallbackFailure: "Ollama provider is not allowed.",
-    };
-  }
-
-  let local;
-  try {
-    local = readOllamaLocalConfig({
-      ...env,
-      AI_CODING_FALLBACK_PROVIDER: "ollama",
-      AI_CODING_FALLBACK_MODEL: fallbackModel,
-      OLLAMA_MODEL: fallbackModel,
-    });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      ok: false,
-      reason: "LOCAL_FALLBACK_UNAVAILABLE",
-      message: "Primary coding model is unavailable and Ollama fallback configuration is invalid.",
-      primaryFailure: primary,
-      fallbackFailure: detail,
-    };
-  }
-
-  if (!local.enabled) {
-    return {
-      ok: false,
-      reason: "LOCAL_FALLBACK_UNAVAILABLE",
-      message: "Primary coding model is unavailable and Ollama fallback is disabled.",
-      primaryFailure: primary,
-      fallbackFailure: "Ollama is disabled.",
-    };
-  }
-
-  if (
-    base.modelAllowlist.length > 0 &&
-    !base.modelAllowlist.includes(local.model)
-  ) {
-    return {
-      ok: false,
-      reason: "FALLBACK_MODEL_NOT_ALLOWED",
-      message:
-        "Primary coding model is unavailable and configured Ollama fallback model is not allowed.",
-      primaryFailure: primary,
-      fallbackFailure: "Fallback model is not present in AI_CODING_MODEL_ALLOWLIST.",
-    };
-  }
-
-  const health = await checkOllamaHealth(local);
-  if (health.status !== "ok") {
-    return {
-      ok: false,
-      reason: "LOCAL_FALLBACK_UNAVAILABLE",
-      message:
-        "Primary coding model is unavailable and Ollama fallback health check failed.",
-      primaryFailure: primary,
-      fallbackFailure: health.detail || "Ollama health check failed.",
+      fallbackFailure: fallbackResolution.message,
     };
   }
 
@@ -165,22 +206,9 @@ export async function resolvePreferredCodingModel(
     ok: true,
     route: "FALLBACK",
     primary: { provider: primaryProvider, model: primaryModel },
-    fallback: { provider: "ollama", model: local.model },
+    fallback: fallbackResolution.fallback,
     primaryFailure: primary,
-    selection: {
-      model: {
-        modelId: local.model,
-        maxOutputTokens: base.maxOutputTokens,
-        capabilities: ["code", "reasoning", "text", "local"],
-      },
-      provider: {
-        slug: "ollama",
-        baseUrl: local.baseUrl,
-      },
-      timeoutMs: base.timeoutMs,
-      maxOutputTokens: base.maxOutputTokens,
-      selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
-    },
+    selection: fallbackResolution.selection,
   };
 }
 
