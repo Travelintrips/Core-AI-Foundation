@@ -47,7 +47,7 @@ const MAX_PLANNER_WORKSTREAMS = 8;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const PLANNER_MODEL_MAX_ATTEMPTS = 3;
 const PLANNER_MODEL_BACKOFF_MS = [750, 1_500] as const;
-const PLANNER_AUTHORITY_WAIT_MS = 30_000;
+const PLANNER_AUTHORITY_WAIT_MS = 180_000;
 const PLANNER_AUTHORITY_POLL_MS = 1_000;
 
 export type AutomatedMultiTaskPlannerErrorCode =
@@ -700,28 +700,54 @@ export async function generateAndPersistCodingMultiTaskPlan(
   const plannerHolderId = `${AUTO_PLANNER_HOLDER_ID}:${randomUUID()}`;
 
   let authority;
-  try {
-    authority = await acquirePlannerAuthority({
-      scope,
-      holderId: plannerHolderId,
-      holderType: "fallback",
-      leaseSeconds: AUTO_PLANNER_LEASE_SECONDS,
-      metadata: {
-        taskId,
-        repository: task.repository,
-        branch: task.branch,
-        mode: "AUTOMATED_MULTI_TASK_PLAN_V1",
-      },
-    });
-  } catch (error) {
-    if (error instanceof PlannerAuthorityError) {
-      if (error.code === "AUTHORITY_HELD") {
-        const existing = await waitForPreparedPlannerResult(taskId);
-        if (existing) return existing;
+  const authorityDeadline = Date.now() + PLANNER_AUTHORITY_WAIT_MS;
+  while (!authority) {
+    try {
+      authority = await acquirePlannerAuthority({
+        scope,
+        holderId: plannerHolderId,
+        holderType: "fallback",
+        leaseSeconds: AUTO_PLANNER_LEASE_SECONDS,
+        metadata: {
+          taskId,
+          repository: task.repository,
+          branch: task.branch,
+          mode: "AUTOMATED_MULTI_TASK_PLAN_V1",
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof PlannerAuthorityError)) {
+        throw error;
       }
-      throw mapAuthorityError(error);
+      if (error.code !== "AUTHORITY_HELD") {
+        throw mapAuthorityError(error);
+      }
+
+      // An overlapping retry may arrive while another invocation is still
+      // generating the same task graph. Reuse the graph as soon as it becomes
+      // PREPARED; otherwise keep retrying authority acquisition until the
+      // bounded wait expires. This also lets us take over immediately when the
+      // prior holder releases without persisting a graph.
+      const snapshot = await getLatestCodingTaskGraph(taskId);
+      if (snapshot?.graph.status === "PREPARED") {
+        return existingPreparedGraphResult(snapshot);
+      }
+      if (snapshot && ["APPROVED", "RUNNING"].includes(snapshot.graph.status)) {
+        throw new AutomatedMultiTaskPlannerError(
+          "An approved or running task graph already exists; finish or cancel it before generating another plan.",
+          "ACTIVE_GRAPH_EXISTS",
+          {
+            graphId: snapshot.graph.id,
+            graphStatus: snapshot.graph.status,
+            graphVersion: snapshot.graph.version,
+          },
+        );
+      }
+      if (Date.now() >= authorityDeadline) {
+        throw mapAuthorityError(error);
+      }
+      await sleep(PLANNER_AUTHORITY_POLL_MS);
     }
-    throw error;
   }
 
   try {
