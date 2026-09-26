@@ -166,6 +166,46 @@ describe("Ollama PowerShell approval gate", () => {
     expect(executor.mock.calls[0]?.[2]?.env).not.toHaveProperty("ADMIN_API_KEY");
   });
 
+  it("preserves Windows Path casing for child PowerShell commands", async () => {
+    const root = await workspace();
+    const env = {
+      OLLAMA_WORKER_POWERSHELL_ENABLED: "true",
+      LOCAL_CODING_POWERSHELL_ROOT: root,
+      LOCAL_CODING_POWERSHELL_BIN: "powershell.exe",
+      Path: "C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs",
+      SystemRoot: "C:\\Windows",
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+    } as NodeJS.ProcessEnv;
+
+    const prepared = await prepareOllamaPowerShellExecution({
+      requestedBy: "windows-path-test",
+      modelId: "qwen2.5-coder:7b",
+      commands: ["git status --short"],
+      env,
+    });
+    await approveOllamaPowerShellExecution(
+      prepared.approvalId,
+      prepared.digest,
+    );
+
+    const executor = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const result = await executeApprovedOllamaPowerShellExecution({
+      approvalId: prepared.approvalId,
+      expectedDigest: prepared.digest,
+      env,
+      executor,
+    });
+
+    expect(result.status).toBe("COMPLETED");
+    expect(executor.mock.calls[0]?.[2]?.env).toEqual(
+      expect.objectContaining({
+        PATH: "C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs",
+        SystemRoot: "C:\\Windows",
+        ComSpec: "C:\\Windows\\System32\\cmd.exe",
+      }),
+    );
+  });
+
   it("runs without per-command approval when persistent trusted mode is enabled", async () => {
     const root = await workspace();
     const env = {

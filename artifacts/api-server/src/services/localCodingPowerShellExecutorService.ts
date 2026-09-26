@@ -93,6 +93,22 @@ function envTrue(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }
 
+function readEnvCaseInsensitive(
+  env: NodeJS.ProcessEnv,
+  name: string,
+): string {
+  const direct = env[name];
+  if (typeof direct === "string") return direct;
+
+  const target = name.toLowerCase();
+  for (const [key, value] of Object.entries(env)) {
+    if (key.toLowerCase() === target && typeof value === "string") {
+      return value;
+    }
+  }
+  return "";
+}
+
 function assertTrustedModeEnabled(env: NodeJS.ProcessEnv = process.env): void {
   assertRuntimeEnabled(env);
   if (!envTrue(env["OLLAMA_WORKER_POWERSHELL_TRUSTED_MODE"])) {
@@ -525,11 +541,13 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
             timeout,
             maxBuffer: 2 * 1024 * 1024,
             env: {
-              PATH: env["PATH"] ?? "",
-              HOME: env["HOME"] ?? "",
-              USERPROFILE: env["USERPROFILE"] ?? "",
-              TEMP: env["TEMP"] ?? "",
-              TMP: env["TMP"] ?? "",
+              PATH: readEnvCaseInsensitive(env, "PATH"),
+              HOME: readEnvCaseInsensitive(env, "HOME"),
+              USERPROFILE: readEnvCaseInsensitive(env, "USERPROFILE"),
+              TEMP: readEnvCaseInsensitive(env, "TEMP"),
+              TMP: readEnvCaseInsensitive(env, "TMP"),
+              SystemRoot: readEnvCaseInsensitive(env, "SystemRoot"),
+              ComSpec: readEnvCaseInsensitive(env, "ComSpec"),
               CI: "1",
               NO_COLOR: "1",
             },
