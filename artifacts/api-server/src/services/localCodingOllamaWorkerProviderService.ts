@@ -96,13 +96,6 @@ export function createScheduledOllamaProviderAdapter(input: {
     capabilities: CONSTRAINED_MODEL_CAPABILITIES,
 
     async invoke(request, context) {
-      if (request.responseFormat.type !== "text") {
-        throw new ProviderInvocationError(
-          "Ollama coding worker only accepts text responses",
-          "BAD_REQUEST",
-        );
-      }
-
       const bounded = parseBoundedPrompt(request.input);
       const reservation = await reserveOllamaWorker(input.modelId);
 
@@ -171,6 +164,29 @@ export function createScheduledOllamaProviderAdapter(input: {
           );
         }
 
+        let output:
+          | { type: "text"; text: string }
+          | { type: "structured"; value: unknown };
+
+        if (request.responseFormat.type === "structured") {
+          try {
+            output = {
+              type: "structured",
+              value: JSON.parse(text) as unknown,
+            };
+          } catch {
+            throw new ProviderInvocationError(
+              "Ollama worker returned malformed structured JSON",
+              "UNKNOWN",
+            );
+          }
+        } else {
+          output = {
+            type: "text",
+            text,
+          };
+        }
+
         const inputTokens =
           typeof data.usage?.prompt_tokens === "number" &&
           Number.isInteger(data.usage.prompt_tokens) &&
@@ -201,10 +217,7 @@ export function createScheduledOllamaProviderAdapter(input: {
                   data.id.slice(0, 200),
               }
             : {}),
-          output: {
-            type: "text" as const,
-            text,
-          },
+          output,
           usage: {
             inputTokens,
             outputTokens,
