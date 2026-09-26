@@ -1,4 +1,3 @@
-
 import {
   afterEach,
   beforeEach,
@@ -37,8 +36,7 @@ describe("scheduled Ollama constrained provider", () => {
       id: 9,
       workerName: "ollama-gpu-01",
       modelId: "qwen2.5-coder:7b",
-      endpointUrl:
-        "http://10.10.0.21:11434/v1",
+      endpointUrl: "http://10.10.0.21:11434/v1",
       availableSlots: 0,
       reservedAt: new Date().toISOString(),
     });
@@ -62,15 +60,15 @@ describe("scheduled Ollama constrained provider", () => {
               total_tokens: 14,
             },
           }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
           },
-        },
+        ),
       ),
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     const provider =
       createScheduledOllamaProviderAdapter({
@@ -124,33 +122,33 @@ describe("scheduled Ollama constrained provider", () => {
       new Response(
         JSON.stringify({
           id: "ollama-request-structured",
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    version: 1,
-                    taskId: "task-1",
-                    objective: "Create the requested file.",
-                    workstreams: [],
-                  }),
-                },
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  version: 1,
+                  taskId: "task-1",
+                  objective: "Create the requested file.",
+                  workstreams: [],
+                }),
               },
-            ],
-            usage: {
-              prompt_tokens: 20,
-              completion_tokens: 8,
-              total_tokens: 28,
             },
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
-            },
+          ],
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 8,
+            total_tokens: 28,
           },
-        ),
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
       ),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     const provider = createScheduledOllamaProviderAdapter({
       modelId: "qwen2.5-coder:7b",
@@ -187,7 +185,7 @@ describe("scheduled Ollama constrained provider", () => {
 
     const requestBody = JSON.parse(
       String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body),
-    ) as Record<string, any>;
+    ) as Record<string, unknown>;
     expect(requestBody.response_format).toEqual({
       type: "json_schema",
       json_schema: {
@@ -226,8 +224,7 @@ describe("scheduled Ollama constrained provider", () => {
           capabilities: provider.capabilities,
         },
         {
-          signal:
-            new AbortController().signal,
+          signal: new AbortController().signal,
         },
       ),
     ).rejects.toMatchObject({
