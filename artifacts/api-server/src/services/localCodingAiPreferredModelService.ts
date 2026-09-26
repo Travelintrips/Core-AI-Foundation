@@ -6,6 +6,7 @@ import {
   type ProductionCodingModelSelection,
 } from "./localCodingAiProductionModelService.js";
 import { checkOllamaHealth, readOllamaLocalConfig } from "./ollamaLocalService.js";
+import { getOllamaWorkerAvailability } from "./ollamaWorkerRegistryService.js";
 
 const DEFAULT_PRIMARY_PROVIDER = "openai";
 const DEFAULT_PRIMARY_MODEL = "gpt-5.6-sol";
@@ -84,6 +85,38 @@ export async function resolveConfiguredCodingFallbackModel(
     };
   }
 
+  if (
+    base.modelAllowlist.length > 0 &&
+    !base.modelAllowlist.includes(fallbackModel)
+  ) {
+    return {
+      ok: false,
+      reason: "FALLBACK_MODEL_NOT_ALLOWED",
+      message: "Fallback model is not present in AI_CODING_MODEL_ALLOWLIST.",
+    };
+  }
+
+  const registeredWorker = await getOllamaWorkerAvailability(fallbackModel)
+    .catch(() => null);
+
+  if (registeredWorker) {
+    return {
+      ok: true,
+      fallback: { provider: "ollama", model: fallbackModel },
+      selection: {
+        model: {
+          modelId: fallbackModel,
+          maxOutputTokens: base.maxOutputTokens,
+          capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
+        },
+        provider: { slug: "ollama" },
+        timeoutMs: base.timeoutMs,
+        maxOutputTokens: base.maxOutputTokens,
+        selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
+      },
+    };
+  }
+
   let local;
   try {
     local = readOllamaLocalConfig({
@@ -105,17 +138,6 @@ export async function resolveConfiguredCodingFallbackModel(
       ok: false,
       reason: "LOCAL_FALLBACK_UNAVAILABLE",
       message: "Ollama fallback is disabled.",
-    };
-  }
-
-  if (
-    base.modelAllowlist.length > 0 &&
-    !base.modelAllowlist.includes(local.model)
-  ) {
-    return {
-      ok: false,
-      reason: "FALLBACK_MODEL_NOT_ALLOWED",
-      message: "Fallback model is not present in AI_CODING_MODEL_ALLOWLIST.",
     };
   }
 
