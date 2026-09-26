@@ -64,6 +64,45 @@ describe("Local Coding AI Patch Applier", () => {
     });
   });
 
+  it("normalizes create-file trailing newline before patch and result hashing", async () => {
+    const root = await workspace({ "docs/.keep": "" });
+    const out = await applyAiProposalPatch(
+      root,
+      {
+        operations: [
+          {
+            kind: "create_file",
+            path: "docs/no-newline.md",
+            content: "deterministic content without terminal newline",
+          },
+        ],
+      },
+      context(root, ["docs/no-newline.md"]),
+    );
+
+    expect(out.status).toBe("APPLIED");
+    expect(await readFile(join(root, "docs/no-newline.md"), "utf8")).toBe(
+      "deterministic content without terminal newline\n",
+    );
+    expect(out.patch).toContain("+deterministic content without terminal newline");
+    expect(out.patch.endsWith("\n")).toBe(true);
+
+    const replay = await workspace({ "docs/.keep": "" });
+    const patchFile = join(replay, "candidate.patch");
+    await writeFile(patchFile, out.patch, "utf8");
+    execFileSync("git", ["apply", patchFile], { cwd: replay });
+
+    const replayContent = await readFile(join(replay, "docs/no-newline.md"));
+    const replayDigest = await import("node:crypto").then(({ createHash }) =>
+      createHash("sha256")
+        .update(
+          `docs/no-newline.md\0${createHash("sha256").update(replayContent).digest("hex")}`,
+        )
+        .digest("hex"),
+    );
+    expect(replayDigest).toBe(out.resultSha256);
+  });
+
   it("fails closed for disallowed, traversal, absolute, sensitive, shell, and hidden command fields", async () => {
     const root = await workspace();
     expect(await applyAiProposalPatch(root, replace(), context(root, ["package.json"]))).toMatchObject({ status: "BLOCKED", code: "FILE_NOT_ALLOWED" });
