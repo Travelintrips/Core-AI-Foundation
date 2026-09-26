@@ -205,7 +205,14 @@ describe("Coding Orchestrator", () => {
     });
 
     expect(mockGenerateAndPersistCodingMultiTaskPlan).toHaveBeenCalledTimes(1);
-    expect(mockGenerateAndPersistCodingMultiTaskPlan).toHaveBeenCalledWith(task.id);
+    expect(mockGenerateAndPersistCodingMultiTaskPlan).toHaveBeenCalledWith(
+      task.id,
+      expect.objectContaining({
+        codingTaskId: task.id,
+        codingRunId: run.id,
+        localExecutionPlan: expect.objectContaining({ status: "AI_REQUIRED" }),
+      }),
+    );
     expect(mockRouteToModel).not.toHaveBeenCalled();
     expect(mockGetFallbackModels).not.toHaveBeenCalled();
     expect(mockExecuteAI).not.toHaveBeenCalled();
