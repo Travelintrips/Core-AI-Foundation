@@ -57,6 +57,8 @@ const { verifyMaterialImportTables } =
   await import("./services/materialImportService.js");
 const { failStaleRepositoryAnalyzerRuns } =
   await import("./services/repositoryAnalyzerService.js");
+const { reconcileStaleMultiWorkerRuns } =
+  await import("./services/localCodingMultiWorkerRecoveryService.js");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 let _designBatchRecoveryStarted = false;
@@ -104,6 +106,17 @@ async function initializeRuntimeServices(): Promise<void> {
     const recovered = await failStaleRepositoryAnalyzerRuns();
     if (recovered > 0) {
       logger.warn({ recovered }, "[coding-analyzer] Recovered stale RUNNING analyzer rows");
+    }
+  });
+  await runStartupStep("[coding-multi-worker] Stale run recovery", async () => {
+    const recovered = await reconcileStaleMultiWorkerRuns();
+    if (
+      recovered.recoveredRuns > 0 ||
+      recovered.recoveredWorkstreams > 0 ||
+      recovered.recoveredTasks > 0 ||
+      recovered.recoveredJobs > 0
+    ) {
+      logger.warn(recovered, "[coding-multi-worker] Recovered stale multi-worker lifecycle rows");
     }
   });
   // Production storage buckets are infrastructure and already provisioned.
