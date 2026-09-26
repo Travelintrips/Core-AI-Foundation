@@ -149,6 +149,19 @@ export function hashWorkstreamAnalyzerResult(value: unknown): string {
   return sha256(stableStringify(value));
 }
 
+export function isAnalyzerBranchFromPriorWorkstreamAttempt(
+  taskId: string,
+  workstreamKey: string,
+  analyzerBranch: string,
+  currentAttempt: number,
+): boolean {
+  if (!Number.isInteger(currentAttempt) || currentAttempt <= 1) return false;
+  for (let attempt = 1; attempt < currentAttempt; attempt += 1) {
+    if (buildCodingWorkstreamBranchName(taskId, workstreamKey, attempt) === analyzerBranch) return true;
+  }
+  return false;
+}
+
 function normalizeRepoPath(value: string): string | null {
   const normalized = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
   if (
@@ -663,10 +676,10 @@ async function loadExecutionContext(
   if (
     analyzerResult.codingTaskId !== childTask.id ||
     analyzerResult.sourceTarget !== childTask.repository ||
-    analyzerResult.branch !== expectedAnalyzerBranch ||
+    !isAnalyzerBranchFromPriorWorkstreamAttempt(graph.taskId, workstream.workstreamKey, String(analyzerResult.branch ?? ""), payload.claimAttempt) ||
     !analyzerContext ||
     analyzerContext.repository !== childTask.repository ||
-    analyzerContext.branch !== expectedAnalyzerBranch
+    analyzerContext.branch !== analyzerResult.branch
   ) {
     throw new LocalCodingWorkstreamAiExecutionError(
       "Analyzer result no longer matches the bound child task repository/isolated branch.",
