@@ -1,6 +1,7 @@
 
 import {
   afterEach,
+  beforeEach,
   describe,
   expect,
   it,
@@ -22,10 +23,13 @@ import {
 } from "../localCodingOllamaWorkerProviderService.js";
 
 describe("scheduled Ollama constrained provider", () => {
+  beforeEach(() => {
+    mocks.release.mockResolvedValue(undefined);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
-    mocks.release.mockResolvedValue(undefined);
   });
 
   it("reserves a worker, invokes it, and releases capacity", async () => {
