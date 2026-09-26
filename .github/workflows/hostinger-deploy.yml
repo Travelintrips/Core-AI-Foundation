@@ -33,7 +33,7 @@ jobs:
       LEGACY_SITEMAP_URL: https://aicore.cstlogistic.co.id/sitemap.xml
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Wait for stable exact production commit
         shell: bash
