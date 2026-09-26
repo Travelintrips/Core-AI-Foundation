@@ -12,6 +12,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [devSubmitting, setDevSubmitting] = useState(false);
 
   if (user && !user.mustChangePassword) {
     navigate("/");
@@ -37,6 +38,29 @@ export default function Login() {
     }
   }
 
+  async function handleDevLogin() {
+    setDevSubmitting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/internal/auth/dev-login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.error ?? "Login lokal gagal.");
+        return;
+      }
+      navigate("/");
+    } catch {
+      setMessage("Login lokal gagal. Pastikan backend lokal aktif.");
+    } finally {
+      setDevSubmitting(false);
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
@@ -52,9 +76,21 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)} data-testid="input-email" />
             </div>
             {message && <p className="text-sm text-muted-foreground">{message}</p>}
-            <Button type="submit" className="w-full" disabled={submitting} data-testid="button-login">
+            <Button type="submit" className="w-full" disabled={submitting || devSubmitting} data-testid="button-login">
               {submitting ? "Mengirim..." : "Kirim link login"}
             </Button>
+            {import.meta.env.DEV && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={submitting || devSubmitting || !email.trim()}
+                onClick={handleDevLogin}
+                data-testid="button-dev-login"
+              >
+                {devSubmitting ? "Masuk lokal..." : "Login lokal (development)"}
+              </Button>
+            )}
             <p className="text-center text-xs text-muted-foreground">Link berlaku 10 menit. Password tidak diperlukan.</p>
           </form>
         </CardContent>

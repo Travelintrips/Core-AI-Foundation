@@ -85,6 +85,37 @@ router.post("/internal/auth/login", loginLimiter, async (req, res): Promise<void
   res.json({ user: toSafeInternalUser(user) });
 });
 
+router.post("/internal/auth/dev-login", loginLimiter, async (req, res): Promise<void> => {
+  if (process.env["NODE_ENV"] === "production" || process.env["LOCAL_DEV_AUTH_ENABLED"] !== "true") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!email) {
+    res.status(400).json({ error: "Email wajib diisi." });
+    return;
+  }
+
+  const user = await getInternalUserByEmail(email);
+  if (!user || user.status !== "active" || user.accountType !== "internal") {
+    await logAudit("internal_auth", "dev_login", email, "internal_user", "failure", {
+      reason: "not_found_or_inactive",
+      ip: clientIp(req),
+    });
+    res.status(401).json({ error: "Akun internal aktif tidak ditemukan." });
+    return;
+  }
+
+  await db.update(internalUsersTable).set({ lastLoginAt: new Date() }).where(eq(internalUsersTable.id, user.id));
+  setSessionCookie(res, issueSessionToken(user.id));
+  await logAudit("internal_auth", "dev_login", String(user.id), "internal_user", "success", {
+    ip: clientIp(req),
+    localOnly: true,
+  });
+  res.json({ user: toSafeInternalUser(user) });
+});
+
 router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res): Promise<void> => {
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   const generic = { ok: true, message: "Jika akun aktif terdaftar, link login akan dikirim ke email." };
