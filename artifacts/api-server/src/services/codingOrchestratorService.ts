@@ -585,7 +585,7 @@ async function continueCodingOrchestration(
 
     const aiEscalation =
       localPlan?.status === "AI_REQUIRED"
-        ? await generateAndPersistCodingMultiTaskPlan(input.task.id)
+        ? await generateAndPersistCodingMultiTaskPlan(input.task.id, analysis)
         : undefined;
 
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
