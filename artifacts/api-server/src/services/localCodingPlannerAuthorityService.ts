@@ -30,9 +30,34 @@ export async function acquirePlannerAuthority(input: {
     const now = new Date();
     const [current] = await tx.select().from(aiCodingPlannerAuthorityTable)
       .where(eq(aiCodingPlannerAuthorityTable.scope, scope)).for("update");
-    if (current && current.leaseExpiresAt.getTime() > now.getTime() && current.holderId !== input.holderId) {
-      throw new PlannerAuthorityError("AUTHORITY_HELD");
+    if (current && current.leaseExpiresAt.getTime() > now.getTime()) {
+      if (current.holderId !== input.holderId) {
+        throw new PlannerAuthorityError("AUTHORITY_HELD");
+      }
+
+      // Re-acquiring an active lease for the same holder must be idempotent.
+      // Rotating the token/generation here self-fences an in-flight planner
+      // when duplicate/retried requests arrive for the same task.
+      const leaseExpiresAt = new Date(
+        now.getTime() + boundedSeconds(input.leaseSeconds) * 1000,
+      );
+      const state = input.holderType === "chatgpt" ? "PRIMARY_ACTIVE" : "FALLBACK_ACTIVE";
+      const [renewed] = await tx
+        .update(aiCodingPlannerAuthorityTable)
+        .set({
+          holderType: input.holderType,
+          state,
+          leaseExpiresAt,
+          lastHeartbeatAt: now,
+          metadataJson: input.metadata ?? current.metadataJson ?? {},
+          updatedAt: now,
+        })
+        .where(eq(aiCodingPlannerAuthorityTable.scope, scope))
+        .returning();
+      if (!renewed) throw new Error("Failed to renew existing planner authority");
+      return renewed;
     }
+
     const generation = (current?.fencingGeneration ?? 0) + 1;
     const leaseToken = randomUUID();
     const leaseExpiresAt = new Date(now.getTime() + boundedSeconds(input.leaseSeconds) * 1000);
