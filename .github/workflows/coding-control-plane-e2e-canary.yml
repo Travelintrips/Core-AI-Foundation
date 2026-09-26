@@ -141,15 +141,22 @@ jobs:
           fi
 
           code=""
-          for attempt in 1 2 3; do
-            code=$(curl -sS -D /tmp/graph-probe.headers -o /tmp/graph-probe.json -w "%{http_code}" \
+          for attempt in $(seq 1 18); do
+            code=$(curl --http1.1 -sS -D /tmp/graph-probe.headers -o /tmp/graph-probe.json -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 \
               -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate" \
-              -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
-            if [[ "$code" != "307" && "$code" != "308" ]]; then
+              -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+            planner_code=$(jq -r '.code // empty' /tmp/graph-probe.json 2>/dev/null || true)
+            if [[ "$code" = "200" || "$code" = "201" ]]; then
               break
             fi
-            echo "Planner probe received transient HTTP $code from production edge (attempt $attempt/3); retrying same canonical API URL in 5s..."
-            sleep 5
+            if [[ "$code" = "409" && "$planner_code" = "AUTHORITY_HELD" ]] || \
+               [[ "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" || "$code" = "000" ]]; then
+              echo "Planner probe transient response HTTP $code code=${planner_code:-none} (attempt $attempt/18); retrying in 5s..."
+              sleep 5
+              continue
+            fi
+            break
           done
           if [ "$code" = "409" ] && [ "$(jq -r '.code // empty' /tmp/graph-probe.json 2>/dev/null)" = "ANALYSIS_REQUIRED" ]; then
             echo "::error::Repository analysis did not produce a completed bounded context package within the canary timeout"
