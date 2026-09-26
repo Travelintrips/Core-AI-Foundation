@@ -60,6 +60,8 @@ const { failStaleRepositoryAnalyzerRuns } =
   await import("./services/repositoryAnalyzerService.js");
 const { reconcileStaleMultiWorkerRuns } =
   await import("./services/localCodingMultiWorkerRecoveryService.js");
+const { ensureCodingControlBridgeTables } =
+  await import("./services/codingControlBridgeSchemaService.js");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 let _designBatchRecoveryStarted = false;
@@ -98,6 +100,7 @@ async function initializeRuntimeServices(): Promise<void> {
   // Supabase session-pool exhaustion during deploys.
   await runStartupStep("[observability] Table init", () => ensureObservabilityTables());
   await runStartupStep("[submit-idempotency] Table init", () => ensureSubmitIdempotencyTable());
+  await runStartupStep("[coding-bridge] Table init", () => ensureCodingControlBridgeTables());
   await runStartupStep("[material-library] Table/seed init", async () => {
     await ensureMaterialLibraryTables();
     await seedMaterialLibraryIfEmpty();
