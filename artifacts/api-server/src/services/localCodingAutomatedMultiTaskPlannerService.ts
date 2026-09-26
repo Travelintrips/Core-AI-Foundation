@@ -676,7 +676,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
     throw error;
   }
 
-  const resolved = await resolvePreferredCodingModel();
+  try {\n    const resolved = await resolvePreferredCodingModel();
   if (!resolved.ok) {
     throw new AutomatedMultiTaskPlannerError(
       resolved.message,
@@ -950,21 +950,6 @@ export async function generateAndPersistCodingMultiTaskPlan(
 
   const persisted = await persistCodingTaskGraph(taskId, generated.plan);
 
-  await releasePlannerAuthority({
-    scope,
-    holderId: plannerHolderId,
-    leaseToken: authority.leaseToken,
-    fencingGeneration: authority.fencingGeneration,
-  }).catch((error) => {
-    if (
-      error instanceof PlannerAuthorityError &&
-      ["NOT_HOLDER", "STALE_FENCE", "LEASE_EXPIRED"].includes(error.code)
-    ) {
-      return;
-    }
-    throw error;
-  });
-
   await logAudit(
     "automated-multi-task-planner",
     "multi_task_plan_generated",
@@ -1009,4 +994,22 @@ export async function generateAndPersistCodingMultiTaskPlan(
     },
     nextAction: "APPROVE_TASK_GRAPH",
   };
+  } finally {
+    await releasePlannerAuthority({
+      scope,
+      holderId: plannerHolderId,
+      leaseToken: authority.leaseToken,
+      fencingGeneration: authority.fencingGeneration,
+    }).catch((error) => {
+      // The planner result/error is primary. A stale or already-released lease
+      // during cleanup must not mask it, but every live lease is released here.
+      if (
+        error instanceof PlannerAuthorityError &&
+        ["NOT_HOLDER", "STALE_FENCE", "LEASE_EXPIRED"].includes(error.code)
+      ) {
+        return;
+      }
+      throw error;
+    });
+  }
 }
