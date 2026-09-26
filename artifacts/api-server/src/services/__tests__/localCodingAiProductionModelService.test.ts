@@ -49,6 +49,7 @@ function row(
       slug: provider,
       isActive: true,
       baseUrl: null,
+      consecutiveFailures: 0,
     },
     model: {
       id: 1,
@@ -206,6 +207,77 @@ describe("Production constrained coding model resolution", () => {
     });
   });
 
+
+
+  it("excludes a provider with an active health-check failure from primary coding selection", async () => {
+    const unhealthyGoogle = row("google", "gemini-code", ["code", "reasoning"]);
+    unhealthyGoogle.provider.consecutiveFailures = 6;
+    mocks.models.push(
+      unhealthyGoogle,
+      row("anthropic", "claude-code", ["code"]),
+    );
+    mocks.keys.set("google", "secret");
+    mocks.keys.set("anthropic", "secret");
+
+    const result = await resolveProductionCodingModel({
+      providerAllowlist: ["google", "anthropic"],
+      modelAllowlist: [],
+      timeoutMs: 45_000,
+      maxOutputTokens: 4_096,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      selection: {
+        provider: { slug: "anthropic" },
+        model: { modelId: "claude-code" },
+      },
+    });
+  });
+
+  it("keeps an unhealthy provider out of cloud fallback candidates until health recovers", async () => {
+    const unhealthyGoogle = row("google", "gemini-code", ["code", "reasoning"]);
+    unhealthyGoogle.provider.consecutiveFailures = 6;
+    mocks.models.push(
+      row("openai", "gpt-code", ["code", "reasoning"]),
+      unhealthyGoogle,
+      row("anthropic", "claude-code", ["code"]),
+    );
+    mocks.keys.set("openai", "secret");
+    mocks.keys.set("google", "secret");
+    mocks.keys.set("anthropic", "secret");
+
+    const result = await resolveAlternativeCloudCodingModel({
+      excludeProvider: "openai",
+      excludeModel: "gpt-code",
+      config: {
+        providerAllowlist: ["openai", "google", "anthropic"],
+        modelAllowlist: [],
+        timeoutMs: 30_000,
+        maxOutputTokens: 2_048,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      selection: {
+        provider: { slug: "anthropic" },
+        model: { modelId: "claude-code" },
+      },
+    });
+  });
+
+  it("fails closed when every configured cloud provider is unhealthy", async () => {
+    const unhealthyGoogle = row("google", "gemini-code", ["code"]);
+    unhealthyGoogle.provider.consecutiveFailures = 6;
+    mocks.models.push(unhealthyGoogle);
+    mocks.keys.set("google", "secret");
+
+    await expect(resolveProductionCodingModel()).resolves.toMatchObject({
+      ok: false,
+      reason: "PROVIDER_UNHEALTHY",
+    });
+  });
 
   it("selects an alternative configured cloud coding model while excluding the primary target", async () => {
     mocks.models.push(
