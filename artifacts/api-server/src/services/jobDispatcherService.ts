@@ -107,6 +107,16 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     capabilities:      WORKER_TYPE_CAPABILITIES["storage_worker"]!,
     maxConcurrentJobs: 4,
   },
+  {
+    // Coding workstream jobs are executed by the Core AI process itself.
+    // The Ollama runtime registers a coding_worker for model inference/heartbeat,
+    // but it does not poll ai_jobs, so a dispatcher-owned coding worker is
+    // required to claim coding_workstream / coding_ai_execution queue items.
+    suffix:            "4",
+    workerType:        "coding_worker",
+    capabilities:      WORKER_TYPE_CAPABILITIES["coding_worker"]!,
+    maxConcurrentJobs: 1,
+  },
 ];
 
 // ── Module state ──────────────────────────────────────────────────────────────
