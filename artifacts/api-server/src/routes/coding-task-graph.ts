@@ -26,6 +26,7 @@ import {
   approveWorkstreamAiExecutionHandoff,
   enqueueWorkstreamAiExecution,
   LocalCodingWorkstreamAiExecutionError,
+  materializeApprovedWorkstreamAiCandidate,
   prepareWorkstreamAiExecutionHandoff,
   revokeWorkstreamAiExecutionHandoff,
 } from "../services/localCodingWorkstreamAiExecutionService.js";
@@ -503,6 +504,9 @@ router.post(
         params.data.workstreamId,
       );
 
+      await materializeApprovedWorkstreamAiCandidate(
+        params.data.workstreamId,
+      );
       await completeReviewedCodingWorkstream(params.data.workstreamId);
       const refreshed = await getLatestCodingTaskGraph(params.data.id);
       res.json(refreshed);
