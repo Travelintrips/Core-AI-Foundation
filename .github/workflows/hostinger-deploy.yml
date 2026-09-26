@@ -42,14 +42,14 @@ jobs:
       - name: Verify readiness
         shell: bash
         run: |
-          curl --fail --silent --show-error "$API_BASE_URL/healthz/full" > /tmp/full
+          curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors --fail --silent --show-error "$API_BASE_URL/healthz/full" > /tmp/full
           cat /tmp/full
           grep -q '"status":"ok"' /tmp/full
 
       - name: Verify admin auth guard
         shell: bash
         run: |
-          code=$(curl -L -sS -o /tmp/tasks -w "%{http_code}" \
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/tasks -w "%{http_code}" \
             --connect-timeout 15 --max-time 30 "$API_BASE_URL/ai/coding/tasks")
           echo "coding_tasks_unauthenticated_http=$code"
           test "$code" = "401"
@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
-          code=$(curl -L -sS -o /tmp/tasks-auth -w "%{http_code}" \
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/tasks-auth -w "%{http_code}" \
             --connect-timeout 15 --max-time 30 \
             -H "x-admin-api-key: $ADMIN_API_KEY" \
             "$API_BASE_URL/ai/coding/tasks")
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
-          curl --fail --silent --show-error \
+          curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors --fail --silent --show-error \
             -H "x-admin-api-key: $ADMIN_API_KEY" \
             "$API_BASE_URL/ai/coding/zerollm/readiness" > /tmp/zerollm-readiness
           cat /tmp/zerollm-readiness
@@ -89,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
-          code=$(curl -L -sS -o /tmp/github-repositories -w "%{http_code}" \
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/github-repositories -w "%{http_code}" \
             --connect-timeout 15 --max-time 30 \
             -H "x-admin-api-key: $ADMIN_API_KEY" \
             "$API_BASE_URL/ai/coding/github/repositories?q=Core-AI-Foundation")
@@ -101,7 +101,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -D /tmp/sitemap-headers -o /tmp/sitemap-body -w "%{http_code}" \
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -sS -D /tmp/sitemap-headers -o /tmp/sitemap-body -w "%{http_code}" \
             --connect-timeout 15 --max-time 30 \
             -H "User-Agent: Googlebot" \
             "$PUBLIC_SITEMAP_URL")
@@ -123,7 +123,7 @@ jobs:
             exit 1
           fi
 
-          legacy_code=$(curl -sS -D /tmp/legacy-sitemap-headers -o /dev/null -w "%{http_code}" \
+          legacy_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -sS -D /tmp/legacy-sitemap-headers -o /dev/null -w "%{http_code}" \
             --connect-timeout 15 --max-time 30 \
             -H "User-Agent: Googlebot" \
             "$LEGACY_SITEMAP_URL")
@@ -153,7 +153,7 @@ jobs:
             fingerprint:"hostinger:production:"+process.env.EXPECTED_SHA,
             metadata:{workflow:"Hostinger Production Verify",runId:process.env.GITHUB_RUN_ID}
           }))')
-          curl --silent --show-error --max-time 20 \
+          curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors --silent --show-error --max-time 20 \
             -H "Content-Type: application/json" \
             -H "x-admin-api-key: $ADMIN_API_KEY" \
             -d "$payload" \
