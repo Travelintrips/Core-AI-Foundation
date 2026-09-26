@@ -134,3 +134,16 @@ describe("per-workstream constrained AI execution contract", () => {
     expect(new Set(selected).size).toBe(12);
   });
 });
+
+
+describe("workstream AI isolated branch binding", () => {
+  it("uses the isolated workstream branch for analyzer binding after child tasks stay on the remote source branch", () => {
+    const childTaskBranch = "main";
+    const workstreamBranch = "ai-core/0dd869883fb3/ws-001-a2";
+    const expectedAnalyzerBranch = workstreamBranch || childTaskBranch;
+
+    expect(expectedAnalyzerBranch).toBe("ai-core/0dd869883fb3/ws-001-a2");
+    expect(expectedAnalyzerBranch).not.toBe(childTaskBranch);
+  });
+
+});

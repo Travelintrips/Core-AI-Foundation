@@ -656,17 +656,27 @@ async function loadExecutionContext(
   const analyzerContext = isRecord(analyzerResult.contextPackage)
     ? analyzerResult.contextPackage
     : null;
+  const expectedAnalyzerBranch =
+    typeof workstream.branchName === "string" && workstream.branchName.trim()
+      ? workstream.branchName
+      : childTask.branch;
   if (
     analyzerResult.codingTaskId !== childTask.id ||
     analyzerResult.sourceTarget !== childTask.repository ||
-    analyzerResult.branch !== childTask.branch ||
+    analyzerResult.branch !== expectedAnalyzerBranch ||
     !analyzerContext ||
     analyzerContext.repository !== childTask.repository ||
-    analyzerContext.branch !== childTask.branch
+    analyzerContext.branch !== expectedAnalyzerBranch
   ) {
     throw new LocalCodingWorkstreamAiExecutionError(
-      "Analyzer result no longer matches the bound child task repository/branch.",
+      "Analyzer result no longer matches the bound child task repository/isolated branch.",
       "STALE_CONTEXT",
+      {
+        childTaskBranch: childTask.branch,
+        expectedAnalyzerBranch,
+        analyzerResultBranch: analyzerResult.branch,
+        analyzerContextBranch: analyzerContext?.branch,
+      },
     );
   }
 
