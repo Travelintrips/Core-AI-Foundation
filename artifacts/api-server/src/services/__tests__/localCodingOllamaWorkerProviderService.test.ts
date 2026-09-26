@@ -110,6 +110,90 @@ describe("scheduled Ollama constrained provider", () => {
     );
   });
 
+  it("parses structured planner JSON returned by a scheduled Ollama worker", async () => {
+    mocks.reserve.mockResolvedValue({
+      id: 10,
+      workerName: "ollama-gpu-02",
+      modelId: "qwen2.5-coder:7b",
+      endpointUrl: "http://10.10.0.22:11434/v1",
+      availableSlots: 0,
+      reservedAt: new Date().toISOString(),
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: "ollama-request-structured",
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    version: 1,
+                    taskId: "task-1",
+                    objective: "Create the requested file.",
+                    workstreams: [],
+                  }),
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 20,
+              completion_tokens: 8,
+              total_tokens: 28,
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        ),
+      ),
+    );
+
+    const provider = createScheduledOllamaProviderAdapter({
+      modelId: "qwen2.5-coder:7b",
+    });
+
+    const result = await provider.invoke(
+      {
+        requestId: "req-structured",
+        input: JSON.stringify({
+          version: 1,
+          system: "Return JSON.",
+          user: "Plan the task.",
+        }),
+        responseFormat: {
+          type: "structured",
+          schemaName: "coding_multi_task_plan_v1",
+          jsonSchema: { type: "object" },
+        },
+        maxOutputTokens: 256,
+        capabilities: provider.capabilities,
+      },
+      { signal: new AbortController().signal },
+    );
+
+    expect(result.output).toEqual({
+      type: "structured",
+      value: {
+        version: 1,
+        taskId: "task-1",
+        objective: "Create the requested file.",
+        workstreams: [],
+      },
+    });
+
+    expect(mocks.release).toHaveBeenCalledWith(
+      10,
+      "success",
+      expect.any(Number),
+    );
+  });
+
   it("fails when no worker has capacity", async () => {
     mocks.reserve.mockResolvedValue(null);
 
