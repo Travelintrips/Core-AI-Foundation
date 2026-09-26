@@ -12,6 +12,15 @@ const DEFAULT_PRIMARY_PROVIDER = "openai";
 const DEFAULT_PRIMARY_MODEL = "gpt-5.6-sol";
 const DEFAULT_FALLBACK_PROVIDER = "ollama";
 const DEFAULT_FALLBACK_MODEL = "qwen2.5-coder:7b";
+const DEFAULT_LOCAL_TIMEOUT_MS = 180_000;
+const MIN_LOCAL_TIMEOUT_MS = 15_000;
+const MAX_LOCAL_TIMEOUT_MS = 300_000;
+
+function localFallbackTimeoutMs(env: NodeJS.ProcessEnv): number {
+  const parsed = Number.parseInt(env["AI_CODING_LOCAL_TIMEOUT_MS"] ?? "", 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_LOCAL_TIMEOUT_MS;
+  return Math.max(MIN_LOCAL_TIMEOUT_MS, Math.min(MAX_LOCAL_TIMEOUT_MS, parsed));
+}
 
 export interface PreferredCodingModelResolution {
   ok: true;
@@ -110,7 +119,7 @@ export async function resolveConfiguredCodingFallbackModel(
           capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
         },
         provider: { slug: "ollama", baseUrl: registeredWorker.endpointUrl },
-        timeoutMs: base.timeoutMs,
+        timeoutMs: localFallbackTimeoutMs(env),
         maxOutputTokens: base.maxOutputTokens,
         selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
       },
@@ -163,7 +172,7 @@ export async function resolveConfiguredCodingFallbackModel(
         slug: "ollama",
         baseUrl: local.baseUrl,
       },
-      timeoutMs: base.timeoutMs,
+      timeoutMs: localFallbackTimeoutMs(env),
       maxOutputTokens: base.maxOutputTokens,
       selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
     },
@@ -281,6 +290,7 @@ export function describePreferredCodingModelConfig(
       env["AI_CODING_FALLBACK_MODEL"] ||
       env["OLLAMA_MODEL"] ||
       DEFAULT_FALLBACK_MODEL,
+    localFallbackTimeoutMs: localFallbackTimeoutMs(env),
     fallbackPolicy:
       "Primary is preferred; bounded constrained planners may fail over to the configured local fallback, then to another allowed configured cloud coding model when local fallback is unavailable.",
     apiKeysExposed: false,
