@@ -20,7 +20,10 @@ import {
   CodingIntegrationGateError,
 } from "../services/localCodingMultiWorkerIntegrationGateService.js";
 import { dispatchReadyCodingWorkstreams } from "../services/localCodingMultiWorkerExecutionService.js";
-import { LocalCodingWorkstreamAiHandoffError } from "../services/localCodingWorkstreamAiHandoffService.js";
+import {
+  getLatestWorkstreamAiHandoff,
+  LocalCodingWorkstreamAiHandoffError,
+} from "../services/localCodingWorkstreamAiHandoffService.js";
 import {
   approveWorkstreamAiCandidatePatch,
   approveWorkstreamAiExecutionHandoff,
@@ -335,6 +338,48 @@ router.post(
         },
       );
       res.status(202).json(result);
+    } catch (error) {
+      if (sendKnownError(res, error)) return;
+      throw error;
+    }
+  },
+);
+
+router.get(
+  "/ai/coding/tasks/:id/task-graph/:graphId/workstreams/:workstreamId/ai-handoff",
+  async (req, res): Promise<void> => {
+    const params = workstreamParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+
+    try {
+      await requireWorkstreamForTaskGraph(
+        params.data.id,
+        params.data.graphId,
+        params.data.workstreamId,
+      );
+      const handoff = await getLatestWorkstreamAiHandoff(
+        params.data.workstreamId,
+      );
+      if (!handoff) {
+        res.status(404).json({ error: "Workstream AI handoff not found." });
+        return;
+      }
+      res.json({
+        handoffId: handoff.id,
+        workstreamId: handoff.workstreamId,
+        graphId: handoff.graphId,
+        claimAttempt: handoff.claimAttempt,
+        packageHash: handoff.packageHash,
+        status: handoff.status,
+        preparedAt: handoff.preparedAt?.toISOString() ?? null,
+        approvedAt: handoff.approvedAt?.toISOString() ?? null,
+        expiresAt: handoff.expiresAt?.toISOString() ?? null,
+        revokedAt: handoff.revokedAt?.toISOString() ?? null,
+        consumedAt: handoff.consumedAt?.toISOString() ?? null,
+      });
     } catch (error) {
       if (sendKnownError(res, error)) return;
       throw error;
