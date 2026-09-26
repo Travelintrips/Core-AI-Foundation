@@ -93,6 +93,16 @@ function envTrue(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }
 
+function assertTrustedModeEnabled(env: NodeJS.ProcessEnv = process.env): void {
+  assertRuntimeEnabled(env);
+  if (!envTrue(env["OLLAMA_WORKER_POWERSHELL_TRUSTED_MODE"])) {
+    throw new LocalCodingPowerShellError(
+      "Trusted local PowerShell mode is disabled. Set OLLAMA_WORKER_POWERSHELL_TRUSTED_MODE=true explicitly.",
+      "DISABLED",
+    );
+  }
+}
+
 function assertRuntimeEnabled(env: NodeJS.ProcessEnv = process.env): void {
   if (!envTrue(env["OLLAMA_WORKER_POWERSHELL_ENABLED"])) {
     throw new LocalCodingPowerShellError(
@@ -259,6 +269,8 @@ export function getPowerShellExecutorStatus(
   }).length;
   return {
     enabled,
+    trustedMode:
+      enabled && envTrue(env["OLLAMA_WORKER_POWERSHELL_TRUSTED_MODE"]),
     production: env["NODE_ENV"] === "production",
     workspace: basename(resolve(env["LOCAL_CODING_POWERSHELL_ROOT"] || process.cwd())),
     approvalTtlMs: DEFAULT_APPROVAL_TTL_MS,
@@ -590,4 +602,53 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
     item.status = "FAILED";
     throw error;
   }
+}
+
+
+export async function executeTrustedOllamaPowerShellCommands(input: {
+  taskId?: string | null;
+  requestedBy: string;
+  modelId: string;
+  commands: string[];
+  timeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
+  executor?: PowerShellExecutor;
+}): Promise<PreparedPowerShellExecution> {
+  const env = input.env ?? process.env;
+  assertTrustedModeEnabled(env);
+
+  const prepared = await prepareOllamaPowerShellExecution({
+    taskId: input.taskId,
+    requestedBy: input.requestedBy,
+    modelId: input.modelId,
+    commands: input.commands,
+    env,
+  });
+
+  await logAudit(
+    "ollama-worker",
+    "powershell_execution_trusted_policy_approved",
+    prepared.approvalId,
+    "coding_powershell_execution",
+    "success",
+    {
+      taskId: prepared.taskId,
+      modelId: prepared.modelId,
+      digest: prepared.digest,
+      policy: "OLLAMA_WORKER_POWERSHELL_TRUSTED_MODE",
+    },
+  ).catch(() => undefined);
+
+  await approveOllamaPowerShellExecution(
+    prepared.approvalId,
+    prepared.digest,
+  );
+
+  return executeApprovedOllamaPowerShellExecution({
+    approvalId: prepared.approvalId,
+    expectedDigest: prepared.digest,
+    timeoutMs: input.timeoutMs,
+    env,
+    executor: input.executor,
+  });
 }
