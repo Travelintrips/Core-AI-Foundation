@@ -1678,12 +1678,16 @@ async function runGit(
 }
 
 function patchContainsOnlyNewFiles(patch: string, changedFiles: string[]): boolean {
-  const headers = [...patch.matchAll(/^diff --git a\/(.+?) b\/(.+?)$/gm)];
+  // Persisted legacy candidates may contain CRLF diff metadata even though Git
+  // materializes the file content with LF. Normalize only for structural
+  // inspection; the original patch bytes remain protected by patchSha256.
+  const structuralPatch = patch.replace(/\r\n/g, "\n");
+  const headers = [...structuralPatch.matchAll(/^diff --git a\/(.+?) b\/([^\n]+)$/gm)];
   if (headers.length !== changedFiles.length) return false;
-  const patchFiles = headers.map((match) => match[2] ?? "").sort();
+  const patchFiles = headers.map((match) => (match[2] ?? "").trim()).sort();
   if (patchFiles.some((file, index) => file !== changedFiles[index])) return false;
-  const newFileMarkers = patch.match(/^new file mode /gm) ?? [];
-  const deletedMarkers = patch.match(/^deleted file mode /gm) ?? [];
+  const newFileMarkers = structuralPatch.match(/^new file mode /gm) ?? [];
+  const deletedMarkers = structuralPatch.match(/^deleted file mode /gm) ?? [];
   return newFileMarkers.length === changedFiles.length && deletedMarkers.length === 0;
 }
 
