@@ -27,6 +27,26 @@ jobs:
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
 
+      - name: Check production WhatsApp notifier config
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/wa-status.json -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/coding/bridge/whatsapp-status")
+          echo "whatsapp_status_http=$code"
+          cat /tmp/wa-status.json
+          test "$code" = "200"
+          node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/wa-status.json","utf8"));const c=v.configured||{};if(!(c.baseUrl&&c.apiKey&&c.to)){console.error("WhatsApp notifier config incomplete:",c);process.exit(2)};console.log("whatsapp_config=COMPLETE")'
+
+      - name: Send direct production WhatsApp diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/wa-test.json -w "%{http_code}"             --connect-timeout 15 --max-time 30             -X POST             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "content-type: application/json"             -d '{}'             "$API_BASE_URL/ai/coding/bridge/whatsapp-test")
+          echo "whatsapp_test_http=$code"
+          cat /tmp/wa-test.json
+          test "$code" = "200"
+          node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/wa-test.json","utf8"));if(!(v.ok&&v.result&&v.result.status==="queued")){console.error("WhatsApp diagnostic not queued:",v);process.exit(2)};console.log("whatsapp_gateway_dispatch=QUEUED")'
+
       - name: Create bridge command
         id: command
         shell: bash
@@ -73,6 +93,7 @@ jobs:
 
       - name: Summary
         run: |
+          echo "AI Core WhatsApp env config: PASS"
+          echo "Direct gateway diagnostic: PASS"
           echo "AI Core bridge command: PASS"
           echo "CHECKPOINT creation: PASS"
-          echo "WhatsApp notification dispatch: triggered asynchronously by AI Core"
