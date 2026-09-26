@@ -10,11 +10,17 @@ type IncomingEnvelope = {
   deviceId?: unknown;
   workerId?: unknown;
   receivedAt?: unknown;
+  senderPhone?: unknown;
+  senderPhoneJid?: unknown;
   message?: {
     key?: {
       id?: unknown;
       remoteJid?: unknown;
+      remoteJidAlt?: unknown;
       participant?: unknown;
+      participantAlt?: unknown;
+      senderPn?: unknown;
+      participantPn?: unknown;
       fromMe?: unknown;
     };
     message?: {
@@ -41,6 +47,12 @@ function allowedSenders(): Set<string> {
 
 function senderCandidates(payload: IncomingEnvelope): string[] {
   const values = [
+    payload.senderPhone,
+    payload.senderPhoneJid,
+    payload.message?.key?.remoteJidAlt,
+    payload.message?.key?.participantAlt,
+    payload.message?.key?.senderPn,
+    payload.message?.key?.participantPn,
     payload.message?.key?.remoteJid,
     payload.message?.key?.participant,
   ];
