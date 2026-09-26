@@ -36,7 +36,7 @@ jobs:
     environment: production
     timeout-minutes: 20
     env:
-      API_BASE_URL: ${{ vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
       ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
       CONFIRMATION: ${{ github.event_name == 'workflow_run' && 'RUN_CONTROL_PLANE_E2E' || inputs.confirmation }}
       BASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.base_sha }}
