@@ -64,6 +64,10 @@ export interface RegisterWorkerInput {
   maxConcurrentJobs?: number;
   leaseOwner: string;
   leaseTtlMs?: number;
+  providerSlug?: string | null;
+  modelId?: string | null;
+  endpointUrl?: string | null;
+  runtimeKind?: string | null;
 }
 
 export interface ClusterStatus {
@@ -92,6 +96,10 @@ export interface WorkerCapacityItem {
   maxConcurrentJobs: number;
   runningJobs: number;
   availableSlots: number;
+  providerSlug: string | null;
+  modelId: string | null;
+  endpointUrl: string | null;
+  runtimeKind: string | null;
   leaseValid: boolean;
   leaseExpiresAt: string | null;
   lastHeartbeat: string;
@@ -135,6 +143,10 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
       version:          input.version ?? "1.0.0",
       capabilities:     input.capabilities,
       maxConcurrentJobs: input.maxConcurrentJobs ?? 2,
+      providerSlug:     input.providerSlug ?? null,
+      modelId:          input.modelId ?? null,
+      endpointUrl:      input.endpointUrl ?? null,
+      runtimeKind:      input.runtimeKind ?? null,
       status:           "online",
       leaseOwner:       input.leaseOwner,
       leaseExpiresAt:   leaseExpires,
@@ -152,6 +164,10 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
         version:          input.version ?? "1.0.0",
         capabilities:     input.capabilities,
         maxConcurrentJobs: input.maxConcurrentJobs ?? 2,
+        providerSlug:     input.providerSlug ?? null,
+        modelId:          input.modelId ?? null,
+        endpointUrl:      input.endpointUrl ?? null,
+        runtimeKind:      input.runtimeKind ?? null,
         status:           "online",
         leaseOwner:       input.leaseOwner,
         leaseExpiresAt:   leaseExpires,
@@ -440,6 +456,10 @@ export async function getWorkerCapacity(): Promise<WorkerCapacityItem[]> {
     maxConcurrentJobs: w.maxConcurrentJobs,
     runningJobs:       w.runningJobs,
     availableSlots:    Math.max(0, w.maxConcurrentJobs - w.runningJobs),
+    providerSlug:      w.providerSlug ?? null,
+    modelId:           w.modelId ?? null,
+    endpointUrl:       w.endpointUrl ?? null,
+    runtimeKind:       w.runtimeKind ?? null,
     leaseValid:        !!(w.leaseExpiresAt && w.leaseExpiresAt > now),
     leaseExpiresAt:    w.leaseExpiresAt?.toISOString() ?? null,
     lastHeartbeat:     w.lastHeartbeat.toISOString(),

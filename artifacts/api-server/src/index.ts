@@ -45,6 +45,7 @@ const scheduler                     = await import("./services/aiSchedulerServic
 const sseManager                    = await import("./services/sseManager.js");
 const healthAlerts                  = await import("./services/providerHealthAlertService.js");
 const incidentWatcher                = await import("./services/incidentWatcherService.js");
+const ollamaWorkerRuntime             = await import("./services/ollamaWorkerRuntimeService.js");
 const { ensureObservabilityTables } = await import("./services/observabilityService.js");
 const { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } =
   await import("./domains/material-library/seed.js");
@@ -128,6 +129,13 @@ async function initializeRuntimeServices(): Promise<void> {
 
   const isProduction = process.env["NODE_ENV"] === "production";
 
+  if (process.env["OLLAMA_WORKER_RUNTIME_ENABLED"] === "true") {
+    await runStartupStep(
+      "[ollama-worker] Runtime start",
+      () => ollamaWorkerRuntime.startOllamaWorkerRuntime(),
+    );
+  }
+
   // Production workers fail closed: they only auto-start when explicitly enabled.
   // Development keeps the existing auto-start behavior for local workflows.
   const productionWorkersAllowed = process.env["AI_PRODUCTION_WORKERS_ALLOWED"] === "true";
@@ -209,7 +217,11 @@ function shutdown(signal: string): void {
   sseManager.shutdown();
   healthAlerts.shutdown();
   incidentWatcher.shutdown();
-  Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
+  Promise.all([
+    scheduler.shutdown(),
+    jobDispatcher.shutdown(),
+    ollamaWorkerRuntime.shutdownOllamaWorkerRuntime(),
+  ])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 }
