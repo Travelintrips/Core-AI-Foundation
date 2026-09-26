@@ -85,6 +85,7 @@ const mocks = vi.hoisted(() => {
     revokeAiHandoff: vi.fn(),
     enqueueAi: vi.fn(),
     approveAiPatch: vi.fn(),
+    materializeAiPatch: vi.fn(),
     buildIntegrationManifest: vi.fn(),
     MockIntegrationGateError,
     MockTaskGraphError,
@@ -131,6 +132,7 @@ vi.mock("../../services/localCodingWorkstreamAiExecutionService.js", () => ({
   revokeWorkstreamAiExecutionHandoff: mocks.revokeAiHandoff,
   enqueueWorkstreamAiExecution: mocks.enqueueAi,
   approveWorkstreamAiCandidatePatch: mocks.approveAiPatch,
+  materializeApprovedWorkstreamAiCandidate: mocks.materializeAiPatch,
   LocalCodingWorkstreamAiExecutionError: mocks.MockWorkstreamAiExecutionError,
 }));
 
@@ -235,6 +237,20 @@ describe("multi-worker coding task graph API", () => {
       id: 91,
       jobCode: "JOB-AI91",
       status: "queued",
+    });
+    mocks.materializeAiPatch.mockResolvedValue({
+      id: WS_ID,
+      status: "REVIEW_REQUIRED",
+      headSha: "d".repeat(40),
+      resultJson: {
+        workstreamAiExecution: {
+          status: "CANDIDATE_READY",
+          reviewStatus: "APPROVED",
+          commitCreated: true,
+          pushed: true,
+          headSha: "d".repeat(40),
+        },
+      },
     });
     mocks.approveAiPatch.mockResolvedValue({
       id: WS_ID,
@@ -449,7 +465,11 @@ describe("multi-worker coding task graph API", () => {
       );
 
     expect(response.status).toBe(200);
+    expect(mocks.materializeAiPatch).toHaveBeenCalledWith(WS_ID);
     expect(mocks.completeReviewed).toHaveBeenCalledWith(WS_ID);
+    expect(mocks.materializeAiPatch.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.completeReviewed.mock.invocationCallOrder[0],
+    );
   });
 
   it("does not allow cross-graph workstream completion", async () => {
@@ -464,6 +484,7 @@ describe("multi-worker coding task graph API", () => {
       );
 
     expect(response.status).toBe(404);
+    expect(mocks.materializeAiPatch).not.toHaveBeenCalled();
     expect(mocks.completeReviewed).not.toHaveBeenCalled();
   });
 

@@ -550,15 +550,26 @@ export async function completeReviewedCodingWorkstream(
       !Array.isArray(resultJson.workstreamAiExecution)
         ? (resultJson.workstreamAiExecution as Record<string, unknown>)
         : null;
-    if (
-      aiExecution?.status === "CANDIDATE_READY" &&
-      aiExecution.reviewStatus !== "APPROVED"
-    ) {
-      throw new LocalCodingMultiWorkerError(
-        "Workstream AI candidate must pass explicit REVIEW_AI_PATCH approval before completion.",
-        "NOT_READY",
-        { nextAction: "REVIEW_AI_PATCH" },
-      );
+    if (aiExecution?.status === "CANDIDATE_READY") {
+      if (aiExecution.reviewStatus !== "APPROVED") {
+        throw new LocalCodingMultiWorkerError(
+          "Workstream AI candidate must pass explicit REVIEW_AI_PATCH approval before completion.",
+          "NOT_READY",
+          { nextAction: "REVIEW_AI_PATCH" },
+        );
+      }
+      if (
+        aiExecution.commitCreated !== true ||
+        aiExecution.pushed !== true ||
+        typeof aiExecution.headSha !== "string" ||
+        !SHA_RE.test(aiExecution.headSha)
+      ) {
+        throw new LocalCodingMultiWorkerError(
+          "Approved AI candidate must be materialized, committed, and pushed before completion.",
+          "NOT_READY",
+          { nextAction: "MATERIALIZE_AI_PATCH" },
+        );
+      }
     }
 
     const [completed] = await tx

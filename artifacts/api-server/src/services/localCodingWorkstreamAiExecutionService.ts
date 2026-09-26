@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, readFile, realpath, rm } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
@@ -51,7 +52,11 @@ import {
   type ImportReference,
   type LocalSymbol,
 } from "./localCodingEngineService.js";
-import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
+import {
+  buildRepositoryCloneEnvironment,
+  prepareRepositoryWorkspace,
+} from "./repositoryAnalyzerService.js";
+import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -77,7 +82,8 @@ export type WorkstreamAiExecutionErrorCode =
   | "LEASE_LOST"
   | "MODEL_UNAVAILABLE"
   | "MODEL_FAILED"
-  | "POLICY_REJECTED";
+  | "POLICY_REJECTED"
+  | "MATERIALIZATION_FAILED";
 
 export class LocalCodingWorkstreamAiExecutionError extends Error {
   constructor(
@@ -141,8 +147,8 @@ function stableStringify(value: unknown): string {
   );
 }
 
-function sha256(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
+function sha256(value: string | Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 export function hashWorkstreamAnalyzerResult(value: unknown): string {
@@ -1642,3 +1648,375 @@ export async function approveWorkstreamAiCandidatePatch(
     return updated;
   });
 }
+
+function normalizedChangedFiles(value: unknown): string[] {
+  return [...new Set(strings(value).map((file) => file.replace(/\\/g, "/").replace(/^\.\//, "")))].sort();
+}
+
+function gitCommandEnvironment(repository: string): NodeJS.ProcessEnv {
+  return {
+    ...buildRepositoryCloneEnvironment(repository),
+    LANG: "C",
+    LC_ALL: "C",
+    GIT_TERMINAL_PROMPT: "0",
+  };
+}
+
+async function runGit(
+  root: string,
+  args: string[],
+  repository: string,
+  timeout = 30_000,
+): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, {
+    cwd: root,
+    timeout,
+    maxBuffer: 4 * 1024 * 1024,
+    env: gitCommandEnvironment(repository),
+  });
+  return stdout.trim();
+}
+
+function parseGitStatusPaths(raw: string): string[] {
+  const paths: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const value = line.length >= 4 ? line.slice(3).trim() : "";
+    const path = value.includes(" -> ") ? value.split(" -> ").at(-1)!.trim() : value;
+    if (path) paths.push(path.replace(/\\/g, "/"));
+  }
+  return [...new Set(paths)].sort();
+}
+
+export async function materializeApprovedWorkstreamAiCandidate(
+  workstreamId: string,
+): Promise<AiCodingWorkstream> {
+  const [current] = await db
+    .select()
+    .from(aiCodingWorkstreamsTable)
+    .where(eq(aiCodingWorkstreamsTable.id, workstreamId));
+  if (!current) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Coding workstream not found.",
+      "NOT_FOUND",
+    );
+  }
+  if (current.status !== "REVIEW_REQUIRED" || !isRecord(current.resultJson)) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Workstream is not awaiting approved AI patch materialization.",
+      "NOT_READY",
+    );
+  }
+
+  const execution = isRecord(current.resultJson.workstreamAiExecution)
+    ? current.resultJson.workstreamAiExecution
+    : null;
+  if (
+    !execution ||
+    execution.status !== "CANDIDATE_READY" ||
+    execution.reviewStatus !== "APPROVED"
+  ) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "AI candidate must receive explicit REVIEW_AI_PATCH approval before materialization.",
+      "NOT_READY",
+    );
+  }
+
+  if (
+    execution.commitCreated === true &&
+    execution.pushed === true &&
+    typeof execution.headSha === "string" &&
+    SHA40_RE.test(execution.headSha)
+  ) {
+    return current;
+  }
+
+  const patch = typeof execution.patch === "string" ? execution.patch : "";
+  const patchSha256 =
+    typeof execution.patchSha256 === "string" ? execution.patchSha256.toLowerCase() : "";
+  const resultSha256 =
+    typeof execution.resultSha256 === "string" ? execution.resultSha256.toLowerCase() : "";
+  const changedFiles = normalizedChangedFiles(execution.changedFiles);
+  const ownershipPaths = strings(current.ownershipPaths);
+  const branchName = current.branchName?.trim() ?? "";
+  const baseSha = current.baseSha?.trim().toLowerCase() ?? "";
+
+  if (
+    !patch ||
+    !SHA64_RE.test(patchSha256) ||
+    sha256(patch) !== patchSha256 ||
+    !SHA64_RE.test(resultSha256) ||
+    changedFiles.length === 0 ||
+    !SHA40_RE.test(baseSha) ||
+    !branchName ||
+    !/^[A-Za-z0-9._/-]+$/.test(branchName) ||
+    branchName.startsWith("-")
+  ) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Approved AI candidate materialization metadata is incomplete or invalid.",
+      "INVALID_CONTEXT",
+    );
+  }
+  const outsideOwnership = changedFiles.filter(
+    (file) => !codingWorkstreamOwnsFile(file, ownershipPaths),
+  );
+  if (outsideOwnership.length > 0) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Approved AI candidate contains files outside the workstream ownership boundary.",
+      "POLICY_REJECTED",
+      { outsideOwnership },
+    );
+  }
+  if (!current.childTaskId) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Workstream is missing its child coding task binding.",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  const [childTask] = await db
+    .select()
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, current.childTaskId));
+  if (!childTask) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Child coding task not found.",
+      "NOT_FOUND",
+    );
+  }
+
+  const workspace = await prepareRepositoryWorkspace(
+    childTask.repository,
+    childTask.branch,
+    {
+      isolatedBranchName: branchName,
+      expectedBaseSha: baseSha,
+    },
+  );
+  if (!workspace.cleanup) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Approved AI candidate materialization requires an isolated cloned workspace.",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  const patchFile = join(
+    tmpdir(),
+    `coding-ai-approved-${workstreamId}-${randomUUID()}.patch`,
+  );
+
+  try {
+    await writeFile(patchFile, patch, { encoding: "utf8", flag: "wx" });
+
+    await runGit(workspace.path, ["apply", "--check", "--whitespace=nowarn", patchFile], childTask.repository);
+    await runGit(workspace.path, ["apply", "--whitespace=nowarn", patchFile], childTask.repository);
+
+    const statusPaths = parseGitStatusPaths(
+      await runGit(
+        workspace.path,
+        ["status", "--porcelain=v1", "--untracked-files=normal"],
+        childTask.repository,
+      ),
+    );
+    if (
+      statusPaths.length !== changedFiles.length ||
+      statusPaths.some((file, index) => file !== changedFiles[index])
+    ) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Materialized patch changed files outside the stored candidate set.",
+        "POLICY_REJECTED",
+        { expected: changedFiles, actual: statusPaths },
+      );
+    }
+
+    const staticIssues = await verifyChangedFilesStatically(
+      workspace.path,
+      changedFiles,
+    );
+    if (staticIssues.length > 0) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Materialized patch failed bounded static verification.",
+        "MATERIALIZATION_FAILED",
+        { staticIssues },
+      );
+    }
+
+    const digests = await Promise.all(
+      changedFiles.map(async (file) => {
+        const content = await readFile(resolve(workspace.path, file));
+        return `${file}\0${sha256(content)}`;
+      }),
+    );
+    if (sha256(digests.join("\n")) !== resultSha256) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Materialized patch result hash does not match the reviewed AI candidate.",
+        "STALE_CONTEXT",
+      );
+    }
+
+    await runGit(workspace.path, ["add", "--", ...changedFiles], childTask.repository);
+    const stagedFiles = normalizedChangedFiles(
+      (
+        await runGit(
+          workspace.path,
+          ["diff", "--cached", "--name-only", "--", ...changedFiles],
+          childTask.repository,
+        )
+      ).split(/\r?\n/),
+    );
+    if (
+      stagedFiles.length !== changedFiles.length ||
+      stagedFiles.some((file, index) => file !== changedFiles[index])
+    ) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Staged candidate does not match the reviewed changed-file set.",
+        "POLICY_REJECTED",
+        { expected: changedFiles, actual: stagedFiles },
+      );
+    }
+
+    await runGit(workspace.path, ["config", "user.name", "CST AI Core"], childTask.repository);
+    await runGit(workspace.path, ["config", "user.email", "ai-core@cstlogistic.co.id"], childTask.repository);
+    await runGit(
+      workspace.path,
+      ["commit", "-m", `chore(coding): materialize approved ${current.workstreamKey} patch`],
+      childTask.repository,
+    );
+    const headSha = (await runGit(workspace.path, ["rev-parse", "HEAD"], childTask.repository)).toLowerCase();
+    if (!SHA40_RE.test(headSha)) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Materialized candidate commit SHA is invalid.",
+        "MATERIALIZATION_FAILED",
+      );
+    }
+
+    const remoteRef = `refs/heads/${branchName}`;
+    const remoteLine = await runGit(
+      workspace.path,
+      ["ls-remote", "--heads", "origin", remoteRef],
+      childTask.repository,
+    );
+    const remoteHead = remoteLine ? remoteLine.split(/\s+/)[0]?.toLowerCase() ?? "" : "";
+    if (remoteHead && remoteHead !== baseSha) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Remote workstream branch changed after candidate review.",
+        "STALE_CONTEXT",
+        { expected: baseSha, actual: remoteHead },
+      );
+    }
+
+    const pushArgs = remoteHead
+      ? [
+          "push",
+          `--force-with-lease=${remoteRef}:${remoteHead}`,
+          "origin",
+          `HEAD:${remoteRef}`,
+        ]
+      : ["push", "origin", `HEAD:${remoteRef}`];
+    await runGit(workspace.path, pushArgs, childTask.repository, 120_000);
+
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(aiCodingWorkstreamsTable)
+        .where(eq(aiCodingWorkstreamsTable.id, workstreamId))
+        .for("update");
+      const lockedResult = isRecord(locked?.resultJson) ? locked!.resultJson : null;
+      const lockedExecution = isRecord(lockedResult?.workstreamAiExecution)
+        ? lockedResult!.workstreamAiExecution
+        : null;
+      if (
+        !locked ||
+        locked.status !== "REVIEW_REQUIRED" ||
+        !lockedResult ||
+        !lockedExecution ||
+        lockedExecution.reviewStatus !== "APPROVED" ||
+        lockedExecution.patchSha256 !== patchSha256
+      ) {
+        throw new LocalCodingWorkstreamAiExecutionError(
+          "Approved AI candidate changed before materialization could be persisted.",
+          "STALE_CONTEXT",
+        );
+      }
+
+      const [saved] = await tx
+        .update(aiCodingWorkstreamsTable)
+        .set({
+          headSha,
+          heartbeatAt: now,
+          resultJson: {
+            ...lockedResult,
+            workstreamAiExecution: {
+              ...lockedExecution,
+              nextAction: "REVIEW_WORKSTREAM",
+              materializationStatus: "PUSHED",
+              materializedAt: now.toISOString(),
+              staticVerification: "PASSED",
+              commitCreated: true,
+              pushed: true,
+              headSha,
+            },
+          },
+          errorMessage: null,
+        })
+        .where(
+          and(
+            eq(aiCodingWorkstreamsTable.id, workstreamId),
+            eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"),
+          ),
+        )
+        .returning();
+
+      if (!saved) {
+        throw new LocalCodingWorkstreamAiExecutionError(
+          "Materialized AI candidate persistence lost a concurrent update.",
+          "LEASE_LOST",
+        );
+      }
+
+      await tx
+        .update(aiCodingTasksTable)
+        .set({
+          commitSha: headSha,
+          resultSummary:
+            "Approved constrained AI candidate was materialized, statically verified, committed, and pushed to its isolated workstream branch.",
+        })
+        .where(eq(aiCodingTasksTable.id, current.childTaskId!));
+
+      return saved;
+    });
+
+    await logAudit(
+      "coding-multi-worker",
+      "workstream_ai_candidate_materialized",
+      workstreamId,
+      "coding_workstream",
+      "success",
+      {
+        graphId: current.graphId,
+        claimAttempt: current.attemptCount,
+        branchName,
+        baseSha,
+        headSha,
+        changedFiles,
+        patchSha256,
+        commitCreated: true,
+        pushed: true,
+      },
+    ).catch(() => undefined);
+
+    return updated;
+  } catch (error) {
+    if (error instanceof LocalCodingWorkstreamAiExecutionError) throw error;
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Approved AI candidate materialization failed: " +
+        (error instanceof Error ? error.message.slice(0, 1_000) : String(error)),
+      "MATERIALIZATION_FAILED",
+    );
+  } finally {
+    await unlink(patchFile).catch(() => undefined);
+    await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
