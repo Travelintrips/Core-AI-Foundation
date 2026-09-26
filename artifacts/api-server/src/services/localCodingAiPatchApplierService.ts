@@ -202,6 +202,9 @@ async function git(root: string, args: string[], trim = true): Promise<string> {
   return trim ? stdout.trim() : stdout;
 }
 function executorOp(op: ProposalOperation): LocalEditOperation {
+  if (op.kind === "create_file") {
+    throw new GuardError("create_file must be handled before existing-file execution.", "INVALID_PROPOSAL");
+  }
   if (op.kind !== "typescript_replace_identifier_at_position") return op;
   return { kind: op.kind, path: op.path, line: op.line, column: op.column, from: op.from, to: op.to };
 }
