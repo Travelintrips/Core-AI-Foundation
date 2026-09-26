@@ -10,6 +10,7 @@ vi.mock("../aiAuditService.js", () => ({
 import {
   approveOllamaPowerShellExecution,
   executeApprovedOllamaPowerShellExecution,
+  executeTrustedOllamaPowerShellCommands,
   LocalCodingPowerShellError,
   parseAllowlistedPowerShellCommand,
   prepareOllamaPowerShellExecution,
@@ -163,6 +164,46 @@ describe("Ollama PowerShell approval gate", () => {
       }),
     );
     expect(executor.mock.calls[0]?.[2]?.env).not.toHaveProperty("ADMIN_API_KEY");
+  });
+
+  it("runs without per-command approval when persistent trusted mode is enabled", async () => {
+    const root = await workspace();
+    const env = {
+      OLLAMA_WORKER_POWERSHELL_ENABLED: "true",
+      OLLAMA_WORKER_POWERSHELL_TRUSTED_MODE: "true",
+      LOCAL_CODING_POWERSHELL_ROOT: root,
+      LOCAL_CODING_POWERSHELL_BIN: "powershell.exe",
+      PATH: "fixture-path",
+    } as NodeJS.ProcessEnv;
+    const executor = vi.fn(async () => ({ stdout: "ok\n", stderr: "" }));
+
+    const result = await executeTrustedOllamaPowerShellCommands({
+      requestedBy: "trusted-test",
+      modelId: "qwen2.5-coder:7b",
+      commands: ["git status --short"],
+      env,
+      executor,
+    });
+
+    expect(result.status).toBe("COMPLETED");
+    expect(result.approvedAt).not.toBeNull();
+    expect(executor).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not bypass approval when trusted mode is not explicitly enabled", async () => {
+    const root = await workspace();
+    await expect(
+      executeTrustedOllamaPowerShellCommands({
+        requestedBy: "trusted-test",
+        modelId: "qwen2.5-coder:7b",
+        commands: ["git status --short"],
+        env: {
+          OLLAMA_WORKER_POWERSHELL_ENABLED: "true",
+          LOCAL_CODING_POWERSHELL_ROOT: root,
+        } as NodeJS.ProcessEnv,
+        executor: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ code: "DISABLED" });
   });
 
   it("rejects a non-allowlisted command during preparation", async () => {
