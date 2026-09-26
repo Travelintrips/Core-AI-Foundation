@@ -62,15 +62,15 @@ describe("scheduled Ollama constrained provider", () => {
               total_tokens: 14,
             },
           }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
-            },
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
           },
-        ),
+        },
       ),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     const provider =
       createScheduledOllamaProviderAdapter({
@@ -120,12 +120,10 @@ describe("scheduled Ollama constrained provider", () => {
       reservedAt: new Date().toISOString(),
     });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            id: "ollama-request-structured",
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
+      new Response(
+        JSON.stringify({
+          id: "ollama-request-structured",
             choices: [
               {
                 message: {
@@ -184,6 +182,18 @@ describe("scheduled Ollama constrained provider", () => {
         taskId: "task-1",
         objective: "Create the requested file.",
         workstreams: [],
+      },
+    });
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body),
+    ) as Record<string, any>;
+    expect(requestBody.response_format).toEqual({
+      type: "json_schema",
+      json_schema: {
+        name: "coding_multi_task_plan_v1",
+        strict: true,
+        schema: { type: "object" },
       },
     });
 
