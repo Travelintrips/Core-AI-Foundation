@@ -91,6 +91,27 @@ describe("Local Coding AI Proposal Contract V1", () => {
     ]);
   });
 
+  it("accepts a bounded create_file operation for an allowed path", () => {
+    const expected = binding();
+    const value = proposal();
+    value.allowedFiles = ["docs/ollama-local-smoke-test-8b.md"];
+    value.proposal.operations = [
+      {
+        type: "create_file",
+        file: "docs/ollama-local-smoke-test-8b.md",
+        content:
+          "Created to verify the local Ollama coding worker, multi-worker dispatcher, and planner authority lease.\n",
+      },
+    ] as never;
+
+    const parsed = validateLocalCodingAiProposalV1(
+      value,
+      { ...expected, allowedFiles: ["docs/ollama-local-smoke-test-8b.md"] },
+    );
+
+    expect(parsed.proposal.operations).toEqual(value.proposal.operations);
+  });
+
   it("rejects malformed, prose-wrapped, and markdown/code-fenced output", () => {
     expectContractKind(
       () => parseLocalCodingAiProposalV1('{"version":1', binding()),

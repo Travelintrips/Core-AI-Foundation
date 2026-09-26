@@ -855,6 +855,19 @@ export function selectWorkstreamAiAllowedFiles(
   const plan = isRecord(result.localExecutionPlan) ? result.localExecutionPlan : {};
   const candidates: string[] = [];
 
+  // Exact ownership paths may intentionally point at files that do not exist yet.
+  // Include those first so create-file workstreams stay bounded to the approved path.
+  for (const raw of ownershipPaths) {
+    const portable = raw.trim().replace(/\\/g, "/");
+    if (
+      portable &&
+      !portable.endsWith("/") &&
+      !/[?*\[\]{}]/.test(portable)
+    ) {
+      candidates.push(portable);
+    }
+  }
+
   candidates.push(...strings(context.affectedFiles));
   const relevant = Array.isArray(context.relevantFiles) ? context.relevantFiles : [];
   for (const item of relevant) {
@@ -989,11 +1002,17 @@ async function buildSyntheticContextLease(
   }
 
   const snippets: AiHandoffSnippet[] = [];
+  const newAuthorizedTargets: string[] = [];
   for (const file of allowedFiles.slice(0, MAX_SNIPPETS)) {
     const snippet = await safeSnippet(repositoryRoot, file);
-    if (snippet) snippets.push(snippet);
+    if (snippet) {
+      snippets.push(snippet);
+      continue;
+    }
+    const entry = await lstat(resolve(repositoryRoot, file)).catch(() => null);
+    if (!entry) newAuthorizedTargets.push(file);
   }
-  if (snippets.length === 0) {
+  if (snippets.length === 0 && newAuthorizedTargets.length === 0) {
     throw new LocalCodingWorkstreamAiExecutionError(
       "No safe source snippets could be prepared for the workstream AI context.",
       "INVALID_CONTEXT",
@@ -1002,10 +1021,18 @@ async function buildSyntheticContextLease(
 
   const allowed = new Set(allowedFiles);
   const findings = Array.isArray(analyzer.findings) ? analyzer.findings : [];
-  const diagnostics = findings
-    .filter((item) => isRecord(item))
-    .slice(0, 24)
-    .map((item) => ({
+  const diagnostics = [
+    ...newAuthorizedTargets.map((file) => ({
+      command: "repository-analyzer",
+      kind: "info",
+      file,
+      message:
+        "Authorized target does not exist at the approved base SHA; create_file is permitted only for this exact allowed path.",
+    })),
+    ...findings
+      .filter((item) => isRecord(item))
+      .slice(0, Math.max(0, 24 - newAuthorizedTargets.length))
+      .map((item) => ({
       command: "repository-analyzer",
       kind: typeof item.severity === "string" ? item.severity : "info",
       ...(typeof item.file === "string" && allowed.has(item.file)
@@ -1017,7 +1044,8 @@ async function buildSyntheticContextLease(
           : typeof item.title === "string"
             ? item.title.slice(0, 1_000)
             : "Analyzer finding",
-    }));
+      })),
+  ];
 
   const pkg: AiHandoffPackage = {
     version: 1,

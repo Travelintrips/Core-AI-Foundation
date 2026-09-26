@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat, readFile, realpath, stat, unlink, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import {
   executeLocalCodingPlan,
@@ -50,6 +50,7 @@ export interface AiPatchApplyResult {
   warnings: string[];
 }
 type ProposalOperation =
+  | { kind: "create_file"; path: string; content: string }
   | { kind: "replace_text"; path: string; search: string; replacement: string; expectedOccurrences: number }
   | { kind: "delete_text"; path: string; search: string; expectedOccurrences: number }
   | { kind: "insert_after"; path: string; anchor: string; content: string; expectedOccurrences: 1 }
@@ -102,6 +103,9 @@ function parseOperation(raw: unknown): ProposalOperation {
   const op = record(raw);
   const path = safePath(op.path);
   switch (op.kind) {
+    case "create_file":
+      onlyKeys(op, ["kind", "path", "content"]);
+      return { kind: op.kind, path, content: text(op.content, "content") };
     case "replace_text":
       onlyKeys(op, ["kind", "path", "search", "replacement", "expectedOccurrences"]);
       return { kind: op.kind, path, search: text(op.search, "search"), replacement: text(op.replacement, "replacement", true), expectedOccurrences: positive(op.expectedOccurrences, "expectedOccurrences", 100) };
@@ -139,6 +143,43 @@ function parseProposal(input: unknown): ProposalOperation[] {
 function inside(root: string, candidate: string): boolean {
   const rel = relative(root, candidate); return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`));
 }
+async function safeNewFileTarget(root: string, file: string): Promise<string> {
+  const absoluteRoot = resolve(root);
+  const candidate = resolve(absoluteRoot, file);
+  if (!inside(absoluteRoot, candidate)) throw new GuardError(`Create target escapes workspace: ${file}`, "UNSAFE_PATH");
+  if (await lstat(candidate).catch(() => null)) throw new GuardError(`Create target already exists: ${file}`, "APPLY_FAILED");
+
+  let current = absoluteRoot;
+  for (const segment of file.split("/").slice(0, -1)) {
+    current = resolve(current, segment);
+    const info = await lstat(current).catch(() => null);
+    if (!info) throw new GuardError(`Create target parent does not exist: ${file}`, "APPLY_FAILED");
+    if (info.isSymbolicLink()) throw new GuardError(`Create target parent contains a symlink: ${file}`, "SYMLINK_BLOCKED");
+    if (!info.isDirectory()) throw new GuardError(`Create target parent is not a directory: ${file}`, "APPLY_FAILED");
+  }
+
+  const [realRoot, realParent] = await Promise.all([
+    realpath(absoluteRoot),
+    realpath(dirname(candidate)),
+  ]);
+  if (!inside(realRoot, realParent)) throw new GuardError(`Create target parent resolves outside workspace: ${file}`, "SYMLINK_BLOCKED");
+  return candidate;
+}
+
+function createFilePatch(file: string, content: string): string {
+  const normalized = content.endsWith("\n") ? content : content + "\n";
+  const lines = normalized.slice(0, -1).split("\n");
+  return [
+    `diff --git a/${file} b/${file}`,
+    "new file mode 100644",
+    "--- /dev/null",
+    `+++ b/${file}`,
+    `@@ -0,0 +1,${lines.length} @@`,
+    ...lines.map((line) => "+" + line),
+    "",
+  ].join("\n");
+}
+
 async function snapshot(root: string, file: string): Promise<Snapshot> {
   const absoluteRoot = resolve(root); let current = absoluteRoot;
   for (const segment of file.split("/")) {
@@ -161,6 +202,9 @@ async function git(root: string, args: string[], trim = true): Promise<string> {
   return trim ? stdout.trim() : stdout;
 }
 function executorOp(op: ProposalOperation): LocalEditOperation {
+  if (op.kind === "create_file") {
+    throw new GuardError("create_file must be handled before existing-file execution.", "INVALID_PROPOSAL");
+  }
   if (op.kind !== "typescript_replace_identifier_at_position") return op;
   return { kind: op.kind, path: op.path, line: op.line, column: op.column, from: op.from, to: op.to };
 }
@@ -181,6 +225,13 @@ export async function applyAiProposalPatch(root: string, proposalInput: unknown,
     allowed = new Set(approved.allowedFiles.map(safePath)); expectedHeadSha = approved.expectedHeadSha.toLowerCase();
   } catch (error) { return error instanceof GuardError ? result("BLOCKED", error.code, error.message) : result("FAILED", "APPLY_FAILED", String(error)); }
   const files = [...new Set(operations.map((op) => op.path))].sort();
+  const createOperations = operations.filter((op): op is Extract<ProposalOperation, { kind: "create_file" }> => op.kind === "create_file");
+  if (createOperations.length > 0 && createOperations.length !== operations.length) {
+    return result("BLOCKED", "INVALID_PROPOSAL", "create_file operations cannot be mixed with edits to existing files.");
+  }
+  if (createOperations.length > 0 && new Set(createOperations.map((op) => op.path)).size !== createOperations.length) {
+    return result("BLOCKED", "INVALID_PROPOSAL", "create_file targets must be unique.");
+  }
   if (files.length > AI_PATCH_APPLIER_LIMITS.maxChangedFiles) return result("BLOCKED", "TOO_MANY_FILES", "Proposal targets too many files.");
   const disallowed = files.find((file) => !allowed.has(file));
   if (disallowed) return result("BLOCKED", "FILE_NOT_ALLOWED", `File is not allowed by approved handoff: ${disallowed}`);
@@ -190,6 +241,48 @@ export async function applyAiProposalPatch(root: string, proposalInput: unknown,
     const head = (await git(absoluteRoot, ["rev-parse", "HEAD"])).toLowerCase();
     if (head !== expectedHeadSha) return result("BLOCKED", "STALE_HEAD", "Approved handoff HEAD is stale.");
     if ((await git(absoluteRoot, ["status", "--porcelain=v1", "--untracked-files=normal"], false)).trim()) return result("BLOCKED", "WORKTREE_NOT_CLEAN", "Isolated workspace must be clean.");
+
+    if (createOperations.length > 0) {
+      const created: string[] = [];
+      try {
+        for (const operation of createOperations) {
+          const absolute = await safeNewFileTarget(absoluteRoot, operation.path);
+          await writeFile(absolute, operation.content, { encoding: "utf8", flag: "wx" });
+          created.push(absolute);
+        }
+        const rawPatch = createOperations.map((operation) => createFilePatch(operation.path, operation.content)).join("");
+        if (Buffer.byteLength(rawPatch, "utf8") > AI_PATCH_APPLIER_LIMITS.maxPatchBytes) {
+          await Promise.all(created.map((file) => unlink(file).catch(() => undefined)));
+          return result("BLOCKED", "PATCH_TOO_LARGE", "Unified patch exceeded the bounded patch size and was rolled back.", true);
+        }
+        const digests = await Promise.all(
+          [...createOperations]
+            .sort((a, b) => a.path.localeCompare(b.path))
+            .map(async (operation) => `${operation.path}\0${sha256(await readFile(resolve(absoluteRoot, operation.path)))}`),
+        );
+        return {
+          status: "APPLIED",
+          code: null,
+          reason: "Structured AI proposal created bounded authorized file(s) deterministically.",
+          changedFiles: files,
+          patch: rawPatch,
+          patchSha256: sha256(rawPatch),
+          resultSha256: sha256(digests.join("\n")),
+          scriptsExecuted: false,
+          networkUsed: false,
+          commitCreated: false,
+          pushed: false,
+          rolledBack: false,
+          warnings: [],
+        };
+      } catch (error) {
+        await Promise.all(created.map((file) => unlink(file).catch(() => undefined)));
+        return error instanceof GuardError
+          ? result("BLOCKED", error.code, error.message, created.length > 0)
+          : result("FAILED", "APPLY_FAILED", error instanceof Error ? error.message : String(error), created.length > 0);
+      }
+    }
+
     snapshots = await Promise.all(files.map((file) => snapshot(absoluteRoot, file)));
     const plan: LocalCodingExecutionPlan = { status: "EXECUTABLE", reason: "Validated structured AI proposal.", operations: operations.map(executorOp), verificationCommands: [], targetFiles: files, warnings: [] };
     const applied = await executeLocalCodingPlan(absoluteRoot, plan, { trustedWorkspace: true, expectedHeadSha, runVerification: false, trustedVerificationScripts: false, requireCleanWorktree: true, maxVerificationAttempts: 1 });

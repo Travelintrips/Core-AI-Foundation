@@ -133,11 +133,20 @@ const deleteTextOperationSchema = z
   })
   .strict();
 
+const createFileOperationSchema = z
+  .object({
+    type: z.literal("create_file"),
+    file: repositoryPathSchema,
+    content: z.string().min(1).max(MAX_CONTENT_CHARS),
+  })
+  .strict();
+
 export const localCodingAiProposalOperationSchema = z.discriminatedUnion("type", [
   replaceTextOperationSchema,
   insertBeforeOperationSchema,
   insertAfterOperationSchema,
   deleteTextOperationSchema,
+  createFileOperationSchema,
 ]);
 
 const capabilitiesSchema = z
@@ -183,8 +192,10 @@ const proposalBodySchema = z
         operation.type === "insert_after"
       ) {
         totalChars += operation.anchor.length + operation.content.length;
-      } else {
+      } else if (operation.type === "delete_text") {
         totalChars += operation.text.length;
+      } else {
+        totalChars += operation.content.length;
       }
     }
 
