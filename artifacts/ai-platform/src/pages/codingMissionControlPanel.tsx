@@ -74,6 +74,20 @@ type TaskGraphSnapshot = {
   workstreams: TaskGraphWorkstream[];
 };
 
+type WorkstreamAiHandoffState = {
+  handoffId: string;
+  workstreamId: string;
+  graphId: string;
+  claimAttempt: number;
+  packageHash: string;
+  status: "PREPARED" | "APPROVED" | "CONSUMED" | "REVOKED" | string;
+  preparedAt: string | null;
+  approvedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  consumedAt: string | null;
+};
+
 type IntegrationManifest = {
   version: number;
   taskId: string;
@@ -92,6 +106,12 @@ const SHA40_RE = /^[0-9a-f]{40}$/i;
 
 function shortHash(value: string): string {
   return value ? value.slice(0, 12) : "—";
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function statusTone(status: string): string {
@@ -127,6 +147,10 @@ export function CodingMissionControlPanel({
     null,
   );
   const [manifest, setManifest] = useState<IntegrationManifest | null>(null);
+  const [handoffsByWorkstream, setHandoffsByWorkstream] = useState<
+    Record<string, WorkstreamAiHandoffState>
+  >({});
+
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
@@ -163,7 +187,33 @@ export function CodingMissionControlPanel({
         },
       );
       if (graphResponse.ok) {
-        setGraphSnapshot((await graphResponse.json()) as TaskGraphSnapshot);
+        const graphBody = (await graphResponse.json()) as TaskGraphSnapshot;
+        setGraphSnapshot(graphBody);
+
+        const handoffEntries = await Promise.all(
+          graphBody.workstreams.map(async (workstream) => {
+            const response = await fetch(
+              `/api/ai/coding/tasks/${taskId}/task-graph/${graphBody.graph.id}/workstreams/${workstream.id}/ai-handoff`,
+              {
+                credentials: "include",
+                headers: { Accept: "application/json" },
+              },
+            );
+            if (!response.ok) return null;
+            return [
+              workstream.id,
+              (await response.json()) as WorkstreamAiHandoffState,
+            ] as const;
+          }),
+        );
+        setHandoffsByWorkstream(
+          Object.fromEntries(
+            handoffEntries.filter(
+              (entry): entry is readonly [string, WorkstreamAiHandoffState] =>
+                entry !== null,
+            ),
+          ),
+        );
       }
     } finally {
       setLoading(false);
@@ -528,6 +578,33 @@ export function CodingMissionControlPanel({
               const reviewModel = buildCodingWorkstreamReviewModel(
                 persisted?.resultJson,
               );
+              const resultJson = record(persisted?.resultJson);
+              const localPlan = record(resultJson?.localExecutionPlan);
+              const aiExecution = record(resultJson?.workstreamAiExecution);
+              const requiresAi =
+                localPlan?.status === "AI_REQUIRED" ||
+                aiExecution?.status === "CANDIDATE_READY" ||
+                aiExecution?.status === "FAILED";
+              const handoff = handoffsByWorkstream[item.id];
+              const handoffExpiry = handoff?.expiresAt
+                ? Date.parse(handoff.expiresAt)
+                : Number.NaN;
+              const handoffExpired =
+                Number.isFinite(handoffExpiry) && handoffExpiry <= Date.now();
+              const canPrepareWorkstreamAi =
+                item.status === "REVIEW_REQUIRED" &&
+                localPlan?.status === "AI_REQUIRED" &&
+                !handoff &&
+                aiExecution?.status !== "CANDIDATE_READY";
+              const canApproveWorkstreamAiHandoff =
+                Boolean(handoff) &&
+                handoff?.status === "PREPARED" &&
+                ["CLAIMED", "RUNNING"].includes(item.status);
+              const canRunWorkstreamAi =
+                Boolean(handoff) &&
+                handoff?.status === "APPROVED" &&
+                !handoffExpired &&
+                ["CLAIMED", "RUNNING"].includes(item.status);
               const needsAiPatchApproval =
                 item.status === "REVIEW_REQUIRED" &&
                 codingWorkstreamReviewCanApproveAiPatch(reviewModel);
@@ -538,6 +615,10 @@ export function CodingMissionControlPanel({
                 !reviewModel.completeForReview;
               const canCompleteReviewed =
                 item.status === "REVIEW_REQUIRED" &&
+                !(
+                  requiresAi &&
+                  reviewModel?.kind !== "AI_CANDIDATE"
+                ) &&
                 (!reviewModel ||
                   reviewModel.kind !== "AI_CANDIDATE" ||
                   reviewModel.reviewStatus === "APPROVED");
@@ -584,6 +665,105 @@ export function CodingMissionControlPanel({
                       deps {item.dependencies.length > 0 ? item.dependencies.join(", ") : "none"}
                     </div>
                   </div>
+
+                  {requiresAi && (
+                    <div
+                      className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.025] p-3"
+                      data-testid={`panel-workstream-ai-control-${item.key}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-300">
+                          <Workflow className="size-3" />
+                          Constrained AI workstream
+                        </div>
+                        <div className="font-mono text-[9px] text-slate-500">
+                          {handoff
+                            ? `${handoff.status} · ${shortHash(handoff.packageHash)}`
+                            : aiExecution?.status === "CANDIDATE_READY"
+                              ? "CANDIDATE_READY"
+                              : "AI_REQUIRED"}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {canPrepareWorkstreamAi && (
+                          <button
+                            type="button"
+                            disabled={actionBusy !== null}
+                            onClick={() =>
+                              void postAction(
+                                `prepare-ai-${item.id}`,
+                                `/api/ai/coding/tasks/${taskId}/task-graph/${snapshot.graphId}/workstreams/${item.id}/prepare-ai-handoff`,
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 rounded border border-amber-300/20 bg-amber-300/[0.05] px-2 py-1 text-[9px] text-amber-200 disabled:opacity-40"
+                            data-testid={`button-prepare-workstream-ai-${item.key}`}
+                          >
+                            {actionBusy === `prepare-ai-${item.id}`
+                              ? <Loader2 className="size-3 animate-spin" />
+                              : <Workflow className="size-3" />}
+                            Prepare AI handoff
+                          </button>
+                        )}
+
+                        {canApproveWorkstreamAiHandoff && handoff && (
+                          <button
+                            type="button"
+                            disabled={actionBusy !== null}
+                            onClick={() =>
+                              void postAction(
+                                `approve-handoff-${item.id}`,
+                                `/api/ai/coding/tasks/${taskId}/task-graph/${snapshot.graphId}/workstreams/${item.id}/ai-handoff/${handoff.handoffId}/approve`,
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 rounded border border-emerald-300/20 bg-emerald-300/[0.05] px-2 py-1 text-[9px] text-emerald-200 disabled:opacity-40"
+                            data-testid={`button-approve-workstream-ai-handoff-${item.key}`}
+                          >
+                            {actionBusy === `approve-handoff-${item.id}`
+                              ? <Loader2 className="size-3 animate-spin" />
+                              : <ShieldCheck className="size-3" />}
+                            Approve AI handoff
+                          </button>
+                        )}
+
+                        {canRunWorkstreamAi && handoff && (
+                          <button
+                            type="button"
+                            disabled={actionBusy !== null}
+                            onClick={() =>
+                              void postAction(
+                                `run-ai-${item.id}`,
+                                `/api/ai/coding/tasks/${taskId}/task-graph/${snapshot.graphId}/workstreams/${item.id}/run-ai-execution`,
+                                {
+                                  expectedPackageHash: handoff.packageHash,
+                                  requestedBy: "coding-mission-control",
+                                },
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-1 text-[9px] text-cyan-200 disabled:opacity-40"
+                            data-testid={`button-run-workstream-ai-${item.key}`}
+                          >
+                            {actionBusy === `run-ai-${item.id}`
+                              ? <Loader2 className="size-3 animate-spin" />
+                              : <Play className="size-3" />}
+                            Run constrained AI
+                          </button>
+                        )}
+                      </div>
+
+                      {handoffExpired && handoff?.status === "APPROVED" && (
+                        <div className="mt-2 text-[9px] text-rose-300">
+                          Approved handoff expired. Revoke it and prepare a fresh handoff before running AI.
+                        </div>
+                      )}
+                      {handoff?.status === "CONSUMED" && aiExecution?.status !== "CANDIDATE_READY" && (
+                        <div className="mt-2 flex items-center gap-1.5 text-[9px] text-cyan-200">
+                          <Loader2 className="size-3 animate-spin" />
+                          AI execution consumed the one-shot handoff; waiting for candidate result.
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {item.status === "REVIEW_REQUIRED" && reviewModel && (
                     <div
