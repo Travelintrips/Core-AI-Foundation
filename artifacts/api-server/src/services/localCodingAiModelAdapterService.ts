@@ -3,6 +3,7 @@ const MAX_SCHEMA_CHARS = 32_000;
 const MAX_OUTPUT_CHARS = 256_000;
 const MIN_TIMEOUT_MS = 10;
 const MAX_TIMEOUT_MS = 60_000;
+const MAX_LOCAL_TIMEOUT_MS = 300_000;
 const MAX_OUTPUT_TOKENS = 8_192;
 
 export const MODEL_INVOCATION_LIMITS = Object.freeze({
@@ -11,6 +12,7 @@ export const MODEL_INVOCATION_LIMITS = Object.freeze({
   maxOutputChars: MAX_OUTPUT_CHARS,
   minTimeoutMs: MIN_TIMEOUT_MS,
   maxTimeoutMs: MAX_TIMEOUT_MS,
+  maxLocalTimeoutMs: MAX_LOCAL_TIMEOUT_MS,
   maxOutputTokens: MAX_OUTPUT_TOKENS,
 });
 
@@ -368,10 +370,14 @@ function validateRequest(request: ModelRequest): ModelResponseFormat {
       { retryable: false },
     );
   }
+  const timeoutUpperBound =
+    request.target.provider.trim().toLowerCase() === "ollama"
+      ? MAX_LOCAL_TIMEOUT_MS
+      : MAX_TIMEOUT_MS;
   if (
     !Number.isInteger(request.timeoutMs) ||
     request.timeoutMs < MIN_TIMEOUT_MS ||
-    request.timeoutMs > MAX_TIMEOUT_MS
+    request.timeoutMs > timeoutUpperBound
   ) {
     throw new ModelInvocationError(
       "timeoutMs is outside the allowed bound",

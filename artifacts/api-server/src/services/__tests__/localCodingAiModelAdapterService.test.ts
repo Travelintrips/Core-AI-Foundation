@@ -252,6 +252,40 @@ describe("ConstrainedModelInvocationAdapter", () => {
     expect(provider.calls).toHaveLength(0);
   });
 
+  it("allows Ollama to use the bounded local timeout while keeping cloud limits unchanged", async () => {
+    const provider = new FakeProvider(async () => okTextResult());
+    const ollamaProvider = provider as unknown as ConstrainedModelProvider & {
+      provider: string;
+      model: string;
+    };
+    Object.defineProperty(ollamaProvider, "provider", { value: "ollama" });
+    Object.defineProperty(ollamaProvider, "model", { value: "qwen2.5-coder:7b" });
+
+    const adapter = new ConstrainedModelInvocationAdapter(ollamaProvider);
+
+    await expect(
+      adapter.invoke(
+        textRequest({
+          target: { provider: "ollama", model: "qwen2.5-coder:7b" },
+          timeoutMs: 180_000,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      metadata: { timeoutMs: 180_000 },
+    });
+
+    await expect(
+      adapter.invoke(
+        textRequest({
+          target: { provider: "ollama", model: "qwen2.5-coder:7b" },
+          timeoutMs: MODEL_INVOCATION_LIMITS.maxLocalTimeoutMs + 1,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_REQUEST",
+    });
+  });
+
   it("aborts and returns TIMEOUT when the provider exceeds the bounded timeout", async () => {
     vi.useFakeTimers();
     let providerSignal: AbortSignal | undefined;
