@@ -13,6 +13,7 @@ import {
   ModelInvocationError,
   type ModelInvocationMetadata,
 } from "./localCodingAiModelAdapterService.js";
+import { createScheduledOllamaProviderAdapter } from "./localCodingOllamaWorkerProviderService.js";
 import {
   createConstrainedCodingProviderAdapter,
 } from "./localCodingAiExecutionGateService.js";
@@ -153,6 +154,40 @@ function immediateParentDirectory(path: string): string | null {
   return parts.slice(0, -1).join("/");
 }
 
+export function explicitRequestedPlannerPaths(
+  instruction: string,
+): string[] {
+  const candidates = instruction.match(/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+/g) ?? [];
+  const safe = new Set<string>();
+
+  for (const raw of candidates) {
+    const value = raw.replace(/^\/+|\/+$/g, "");
+    if (
+      !value ||
+      value.length > 240 ||
+      value.includes("\\") ||
+      value.includes("..") ||
+      /[?*{\[]/.test(value) ||
+      /^[A-Za-z]:/.test(value) ||
+      !/\.[A-Za-z0-9]{1,12}$/.test(value)
+    ) {
+      continue;
+    }
+    safe.add(value);
+  }
+
+  return [...safe].sort();
+}
+
+export function allowedPlannerOwnershipPaths(
+  context: AutomatedPlannerContext,
+): string[] {
+  return [...new Set([
+    ...groundedPlannerPaths(context),
+    ...explicitRequestedPlannerPaths(context.instruction),
+  ])].sort();
+}
+
 export function groundedPlannerPaths(
   context: AutomatedPlannerContext,
 ): string[] {
@@ -175,7 +210,7 @@ export function assertGeneratedPlanOwnershipGrounded(
   plan: CodingMultiTaskPlanV1,
   context: AutomatedPlannerContext,
 ): void {
-  const grounded = groundedPlannerPaths(context);
+  const grounded = allowedPlannerOwnershipPaths(context);
 
   for (const workstream of plan.workstreams) {
     if (workstream.ownershipPaths.length === 0) {
@@ -231,13 +266,15 @@ export function buildAutomatedMultiTaskPlannerPrompt(
     "verificationProfiles must be an array containing only allowed values.",
     "priority must be an integer from 0 through 100.",
     "Do not add any extra fields at plan or workstream level.",
-    "Ownership paths must be grounded in the supplied analyzed path universe. Existing directories may be used to cover new files under those directories.",
+    "Ownership paths must be grounded in the supplied analyzed path universe or match an explicit repository-relative new-file path from the task instruction.",
+    "When the task explicitly names a new file path, use that exact file path as ownership; do not widen it to a parent-directory glob.",
     "Parallel workstreams must never overlap ownership. If two workstreams need the same path, order them with a dependency instead.",
     "Do not include commands, credentials, environment variables, URLs, or secret values.",
     "Do not claim that code was changed or verified. This output is planning-only and still requires explicit human approval before dispatch.",
   ].join(" ");
 
   const groundedPaths = groundedPlannerPaths(context);
+  const explicitRequestedPaths = explicitRequestedPlannerPaths(context.instruction);
   const user = JSON.stringify(
     {
       task: {
@@ -255,6 +292,7 @@ export function buildAutomatedMultiTaskPlannerPrompt(
         verificationCommands: context.verificationCommands,
         filesInspected: context.filesInspected,
         groundedOwnershipPaths: groundedPaths,
+        explicitRequestedPaths,
       },
       requiredTaskId: context.taskId,
       maxWorkstreams: MAX_PLANNER_WORKSTREAMS,
@@ -575,6 +613,24 @@ function mapAuthorityError(error: PlannerAuthorityError): AutomatedMultiTaskPlan
   );
 }
 
+function createPlannerProviderAdapter(input: {
+  providerSlug: string;
+  modelId: string;
+  baseUrl?: string | null;
+  observability: {
+    conversationId: string;
+    agentName: string;
+    providerName: string;
+    modelName: string;
+    requestType: string;
+    createdBy: string;
+  };
+}) {
+  return input.providerSlug === "ollama" && !input.baseUrl
+    ? createScheduledOllamaProviderAdapter({ modelId: input.modelId })
+    : createConstrainedCodingProviderAdapter(input);
+}
+
 export async function generateAndPersistCodingMultiTaskPlan(
   taskId: string,
 ): Promise<AutomatedMultiTaskPlanGenerationResult> {
@@ -635,7 +691,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
     );
   }
 
-  const provider = createConstrainedCodingProviderAdapter({
+  const provider = createPlannerProviderAdapter({
     providerSlug,
     modelId,
     baseUrl:
@@ -691,7 +747,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
         (fallbackProviderSlug !== providerSlug || fallbackModelId !== modelId);
 
       if (fallbackIsDifferent && fallback.ok) {
-          const fallbackProvider = createConstrainedCodingProviderAdapter({
+          const fallbackProvider = createPlannerProviderAdapter({
             providerSlug: fallbackProviderSlug,
             modelId: fallbackModelId,
             baseUrl:
@@ -772,7 +828,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
             );
             if (!cloudProviderSlug || !cloudModelId) continue;
 
-            const cloudProvider = createConstrainedCodingProviderAdapter({
+            const cloudProvider = createPlannerProviderAdapter({
               providerSlug: cloudProviderSlug,
               modelId: cloudModelId,
               baseUrl:

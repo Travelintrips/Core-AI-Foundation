@@ -10,6 +10,7 @@ import {
 import {
   assertGeneratedPlanOwnershipGrounded,
   buildAutomatedMultiTaskPlannerPrompt,
+  explicitRequestedPlannerPaths,
   generateCodingMultiTaskPlanWithAdapter,
   groundedPlannerPaths,
   parseGeneratedCodingMultiTaskPlan,
@@ -173,6 +174,39 @@ describe("automated multi-task planner", () => {
       "artifacts/api-server/src/services/paymentService.ts",
     );
     expect(paths).not.toContain("secrets");
+  });
+
+  it("accepts an exact explicitly requested new-file ownership path without widening it", () => {
+    const explicit = context({
+      instruction:
+        "Create only docs/ollama-local-smoke-test-4.md and do not modify any other files.",
+    });
+    const plan = {
+      version: 1,
+      taskId: TASK_ID,
+      objective: "Create the requested smoke-test note.",
+      workstreams: [
+        {
+          id: "WS-001",
+          title: "Create smoke-test documentation",
+          role: "documentation",
+          instruction: "Create only the explicitly requested documentation file.",
+          dependencies: [],
+          ownershipPaths: ["docs/ollama-local-smoke-test-4.md"],
+          acceptanceCriteria: ["The requested documentation file exists."],
+          verificationProfiles: [],
+          priority: 50,
+        },
+      ],
+    };
+
+    expect(explicitRequestedPlannerPaths(explicit.instruction)).toEqual([
+      "docs/ollama-local-smoke-test-4.md",
+    ]);
+    expect(
+      parseGeneratedCodingMultiTaskPlan(JSON.stringify(plan), explicit)
+        .workstreams[0]?.ownershipPaths,
+    ).toEqual(["docs/ollama-local-smoke-test-4.md"]);
   });
 
   it("accepts a strict Plan V1 whose ownership is grounded by repository analysis", () => {
