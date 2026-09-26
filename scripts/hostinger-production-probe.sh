@@ -35,7 +35,7 @@ for attempt in $(seq 1 "$max_attempts"); do
   fi
 
   rm -f /tmp/headers /tmp/body /tmp/curl-error
-  code=$(curl -L -sS -D /tmp/headers -o /tmp/body -w "%{http_code}" \
+  code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -D /tmp/headers -o /tmp/body -w "%{http_code}" \
     --connect-timeout 15 --max-time 30 "$health_url" 2>/tmp/curl-error || true)
 
   live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
