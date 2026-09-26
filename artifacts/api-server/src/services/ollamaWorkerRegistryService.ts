@@ -13,6 +13,7 @@ export const OLLAMA_WORKER_PROVIDER = "ollama";
 export const OLLAMA_WORKER_RUNTIME_KIND = "ollama_worker";
 export const OLLAMA_INFERENCE_CAPABILITY = "ollama_inference";
 export const OLLAMA_CODING_CAPABILITY = "coding_ai_execution";
+export const OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 
 const DEFAULT_MODEL = "qwen2.5-coder:7b";
 const DEFAULT_MAX_CONCURRENCY = 2;
@@ -28,6 +29,7 @@ export interface RegisterOllamaWorkerInput {
   maxConcurrentJobs?: number;
   leaseOwner?: string;
   leaseTtlMs?: number;
+  powershellExecution?: boolean;
 }
 
 export interface OllamaWorkerAvailability {
@@ -152,7 +154,11 @@ export async function registerOllamaWorker(
     nodeId: input.nodeId.trim(),
     region: input.region ?? "local",
     version: input.version ?? "1.0.0",
-    capabilities: [OLLAMA_INFERENCE_CAPABILITY, OLLAMA_CODING_CAPABILITY],
+    capabilities: [
+      OLLAMA_INFERENCE_CAPABILITY,
+      OLLAMA_CODING_CAPABILITY,
+      ...(input.powershellExecution ? [OLLAMA_POWERSHELL_CAPABILITY] : []),
+    ],
     maxConcurrentJobs: clampConcurrency(input.maxConcurrentJobs),
     leaseOwner: input.leaseOwner ?? "ollama:" + input.nodeId.trim(),
     leaseTtlMs: input.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS,
@@ -173,6 +179,7 @@ export async function registerOllamaWorker(
       modelId,
       endpointUrl,
       maxConcurrentJobs: worker.maxConcurrentJobs,
+      powershellExecution: input.powershellExecution === true,
     },
   ).catch(() => undefined);
 
