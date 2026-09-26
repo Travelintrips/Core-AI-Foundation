@@ -1028,7 +1028,7 @@ async function buildSyntheticContextLease(
     },
     repository: {
       repository: context.childTask.repository,
-      branch: context.childTask.branch,
+      branch: authorization.package.workstream.branchName,
       baseHeadSha: expectedHead,
     },
     reason:
@@ -1300,7 +1300,7 @@ export async function executeCodingWorkstreamAiJob(
 
     const workspace = await prepareRepositoryWorkspace(
       loaded.childTask.repository,
-      loaded.childTask.branch,
+      authorization.package.workstream.branchName,
     );
     if (!workspace.cleanup) {
       throw new LocalCodingWorkstreamAiExecutionError(
