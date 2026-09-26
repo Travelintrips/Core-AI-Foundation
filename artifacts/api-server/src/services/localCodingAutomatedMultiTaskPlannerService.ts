@@ -517,6 +517,7 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
 
 async function loadAutomatedPlannerContext(
   taskId: string,
+  analysisOverride?: Record<string, unknown>,
 ): Promise<{ task: AiCodingTask; context: AutomatedPlannerContext }> {
   const [task] = await db
     .select()
@@ -528,6 +529,48 @@ async function loadAutomatedPlannerContext(
       "Coding task not found.",
       "NOT_FOUND",
     );
+  }
+
+  if (analysisOverride) {
+    const packageValue = isRecord(analysisOverride.contextPackage)
+      ? analysisOverride.contextPackage
+      : null;
+    const headSha =
+      packageValue && typeof packageValue.headSha === "string"
+        ? packageValue.headSha.trim().toLowerCase()
+        : "";
+    if (!packageValue || !/^[0-9a-f]{40}$/.test(headSha)) {
+      throw new AutomatedMultiTaskPlannerError(
+        "In-memory repository analysis does not contain a valid bounded context package.",
+        "ANALYSIS_REQUIRED",
+      );
+    }
+
+    const context: AutomatedPlannerContext = {
+      taskId: task.id,
+      repository: task.repository,
+      branch: task.branch,
+      instruction: task.instruction.slice(0, 8_000),
+      headSha,
+      summary:
+        typeof analysisOverride.summary === "string"
+          ? analysisOverride.summary.slice(0, 4_000)
+          : "Repository analysis completed.",
+      relevantFiles: stringList(
+        analysisOverride.relevantFiles ?? packageValue.relevantFiles,
+      ),
+      affectedFiles: stringList(packageValue.affectedFiles),
+      relatedTests: stringList(packageValue.relatedTests),
+      verificationCommands: stringList(packageValue.verificationCommands, 40),
+      filesInspected: stringList(analysisOverride.filesInspected),
+    };
+    if (groundedPlannerPaths(context).length === 0) {
+      throw new AutomatedMultiTaskPlannerError(
+        "Repository analysis did not produce grounded files for ownership planning.",
+        "ANALYSIS_REQUIRED",
+      );
+    }
+    return { task, context };
   }
 
   const runs = await db
@@ -692,6 +735,7 @@ async function waitForPreparedPlannerResult(
 
 export async function generateAndPersistCodingMultiTaskPlan(
   taskId: string,
+  analysisOverride?: Record<string, unknown>,
 ): Promise<AutomatedMultiTaskPlanGenerationResult> {
   const latest = await getLatestCodingTaskGraph(taskId);
   if (latest?.graph.status === "PREPARED") {
@@ -709,7 +753,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
     );
   }
 
-  const { task, context } = await loadAutomatedPlannerContext(taskId);
+  const { task, context } = await loadAutomatedPlannerContext(taskId, analysisOverride);
   const scope = `coding-task:${taskId}`;
   // Each planner invocation needs a distinct holder identity. Reusing the same
   // holder across overlapping HTTP retries lets one invocation release the
