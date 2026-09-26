@@ -162,7 +162,30 @@ describe("Preferred constrained coding model routing", () => {
           baseUrl: "http://127.0.0.1:11434/v1",
         },
         model: { modelId: "qwen2.5-coder:7b" },
+        timeoutMs: 180_000,
       },
+    });
+  });
+
+  it("allows a bounded local coding timeout override", async () => {
+    await expect(
+      resolveConfiguredCodingFallbackModel({
+        AI_CODING_LOCAL_TIMEOUT_MS: "240000",
+      } as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      selection: { timeoutMs: 240_000 },
+    });
+  });
+
+  it("caps the local coding timeout override at five minutes", async () => {
+    await expect(
+      resolveConfiguredCodingFallbackModel({
+        AI_CODING_LOCAL_TIMEOUT_MS: "999999",
+      } as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      selection: { timeoutMs: 300_000 },
     });
   });
 
