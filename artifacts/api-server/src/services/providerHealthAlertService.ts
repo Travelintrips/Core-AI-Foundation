@@ -98,10 +98,34 @@ const _alertedProviders = new Set<number>();
 
 // ── Alert delivery ────────────────────────────────────────────────────────────
 
-async function fireAlert(providerId: number, slug: string, consecutiveFailures: number, error: string | null): Promise<void> {
+async function fireAlert(
+  providerId: number,
+  slug: string,
+  consecutiveFailures: number,
+  httpStatus: number | null,
+  keyConfigured: boolean,
+  error: string | null,
+): Promise<void> {
   if (_alertedProviders.has(providerId)) return; // already alerted successfully, don't spam
 
-  logger.warn({ providerId, slug, consecutiveFailures, error }, "[health-alerts] Provider alert threshold reached — attempting delivery");
+  const emailList = await getSetting("provider_alert.email");
+  const webhookUrl = await getSetting("provider_alert.webhook_url");
+  const emailConfigured = Boolean(emailList.trim());
+  const webhookConfigured = Boolean(webhookUrl.trim());
+
+  logger.warn(
+    {
+      providerId,
+      slug,
+      consecutiveFailures,
+      httpStatus,
+      keyConfigured,
+      error,
+      emailConfigured,
+      webhookConfigured,
+    },
+    `[health-alerts] Provider alert threshold reached: provider=${slug} failures=${consecutiveFailures} httpStatus=${httpStatus ?? "none"} keyConfigured=${keyConfigured} emailConfigured=${emailConfigured} webhookConfigured=${webhookConfigured} error=${error ?? "none"}`,
+  );
 
   const subject = `⚠️ AI Provider Down: ${slug}`;
   const html = `
@@ -111,9 +135,6 @@ async function fireAlert(providerId: number, slug: string, consecutiveFailures: 
     <p>Please check the <a href="#">AI Platform dashboard</a> for details.</p>
     <p>This alert will auto-clear when the provider recovers.</p>
   `;
-
-  const emailList = await getSetting("provider_alert.email");
-  const webhookUrl = await getSetting("provider_alert.webhook_url");
 
   // Track whether at least one channel delivered successfully.
   // We only mark this provider as "alerted" if a delivery succeeds so that
@@ -167,12 +188,17 @@ async function fireAlert(providerId: number, slug: string, consecutiveFailures: 
     // At least one channel confirmed delivery — suppress duplicate alerts
     // until the provider recovers (clearAlert will remove from this set).
     _alertedProviders.add(providerId);
-    logger.info({ providerId, slug }, "[health-alerts] Alert delivered and suppression activated");
+    logger.info(
+      { providerId, slug, emailConfigured, webhookConfigured },
+      `[health-alerts] Alert delivered: provider=${slug} emailConfigured=${emailConfigured} webhookConfigured=${webhookConfigured}; duplicate suppression activated`,
+    );
   } else {
     // No channel configured or all deliveries failed — do NOT mark as alerted
     // so the next poll cycle retries when config is fixed or delivery recovers.
-    logger.warn({ providerId, slug, emailConfigured: !!emailList.trim(), webhookConfigured: !!webhookUrl.trim() },
-      "[health-alerts] Alert delivery failed or no channels configured — will retry next cycle");
+    logger.warn(
+      { providerId, slug, emailConfigured, webhookConfigured },
+      `[health-alerts] Alert delivery failed or no channels configured: provider=${slug} emailConfigured=${emailConfigured} webhookConfigured=${webhookConfigured}; will retry next cycle`,
+    );
   }
 }
 
@@ -243,10 +269,24 @@ export async function pollOnce(): Promise<void> {
 
   for (const result of results) {
     if ("notFound" in result) continue;
-    const { providerId, slug, consecutiveFailures, pingOk } = result;
+    const {
+      providerId,
+      slug,
+      consecutiveFailures,
+      pingOk,
+      httpStatus,
+      keyConfigured,
+    } = result;
 
     if (consecutiveFailures >= threshold && !pingOk) {
-      await fireAlert(providerId, slug, consecutiveFailures, result.error);
+      await fireAlert(
+        providerId,
+        slug,
+        consecutiveFailures,
+        httpStatus,
+        keyConfigured,
+        result.error,
+      );
     } else if (pingOk && consecutiveFailures === 0) {
       await clearAlert(providerId, slug);
     }
