@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { startCodingOrchestration } from "./codingOrchestratorService.js";
 import {
+  getAccessibleCodingRepository,
   listAccessibleCodingRepositories,
   type CodingGitHubRepository,
 } from "./localCodingGitHubDiscoveryService.js";
@@ -50,15 +51,14 @@ function repoMentionScore(instruction: string, repo: CodingGitHubRepository): nu
 async function resolveRepository(instruction: string): Promise<CodingGitHubRepository> {
   const explicit = explicitRepository(instruction);
   if (explicit) {
-    const rows = await listAccessibleCodingRepositories({ query: explicit });
-    const exact = rows.find((row) => row.fullName.toLowerCase() === explicit.toLowerCase());
-    if (!exact) {
+    try {
+      return await getAccessibleCodingRepository(explicit);
+    } catch {
       throw new CodingWhatsappTaskRuntimeError(
         `Repository ${explicit} tidak ditemukan atau tidak dapat diakses AI Core.`,
         "REPOSITORY_NOT_FOUND",
       );
     }
-    return exact;
   }
 
   const rows = await listAccessibleCodingRepositories();
