@@ -78,6 +78,28 @@ export async function assertPlannerAuthority(input: {
   return row;
 }
 
+
+export async function releasePlannerAuthority(input: {
+  scope?: string;
+  holderId: string;
+  leaseToken: string;
+  fencingGeneration: number;
+}): Promise<void> {
+  const scope = input.scope ?? "global";
+  await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(aiCodingPlannerAuthorityTable)
+      .where(eq(aiCodingPlannerAuthorityTable.scope, scope)).for("update");
+    if (!row || row.holderId !== input.holderId || row.leaseToken !== input.leaseToken) {
+      throw new PlannerAuthorityError("NOT_HOLDER");
+    }
+    if (row.fencingGeneration !== input.fencingGeneration) {
+      throw new PlannerAuthorityError("STALE_FENCE");
+    }
+    await tx.delete(aiCodingPlannerAuthorityTable)
+      .where(eq(aiCodingPlannerAuthorityTable.scope, scope));
+  });
+}
+
 export async function getPlannerAuthority(scope = "global") {
   const [row] = await db.select().from(aiCodingPlannerAuthorityTable).where(eq(aiCodingPlannerAuthorityTable.scope, scope)).limit(1);
   if (!row) return { scope, state: "UNCLAIMED" as const };
