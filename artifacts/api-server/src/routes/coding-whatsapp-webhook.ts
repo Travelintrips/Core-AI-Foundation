@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import { Router, raw } from "express";
 import { appendCodingBridgeResponse, submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 import { logger } from "../lib/logger.js";
+import {
+  CodingWhatsappTaskRuntimeError,
+  createAndStartWhatsappCodingTask,
+} from "../services/codingWhatsappTaskRuntimeService.js";
 
 const router = Router();
 
@@ -168,24 +172,59 @@ router.post(
       },
     });
 
+    let codingTaskId = result.command.taskId ?? null;
+
     if (result.created) {
-      await appendCodingBridgeResponse({
-        commandId: result.command.id,
-        taskId: result.command.taskId,
-        kind: "CHECKPOINT",
-        message:
-          "Perintah coding dari WhatsApp sudah diterima AI Core. Perintah tersimpan dengan mode aman: belum ada write/deploy sebelum approval.",
-        checkpoint: {
-          status: "WHATSAPP_COMMAND_RECEIVED",
-          source: "whatsapp",
-        },
-      });
+      try {
+        const started = await createAndStartWhatsappCodingTask({
+          commandId: result.command.id,
+          instruction,
+        });
+        codingTaskId = started.task.id;
+
+        await appendCodingBridgeResponse({
+          commandId: result.command.id,
+          taskId: started.task.id,
+          kind: "CHECKPOINT",
+          message:
+            `Perintah WhatsApp sudah dibuat menjadi Coding Workspace task ${started.task.taskNumber} untuk ${started.repository.fullName} branch ${started.branch}. Analisis aman sudah dimulai. Write, commit, PR, merge, dan deploy tetap memerlukan gate/approval yang berlaku.`,
+          checkpoint: {
+            status: "WHATSAPP_TASK_STARTED",
+            source: "whatsapp",
+            taskId: started.task.id,
+            taskNumber: started.task.taskNumber,
+            repository: started.repository.fullName,
+            branch: started.branch,
+            sessionId: started.sessionId,
+          },
+        });
+      } catch (error) {
+        const message =
+          error instanceof CodingWhatsappTaskRuntimeError
+            ? error.message
+            : `Gagal membuat Coding Workspace task: ${error instanceof Error ? error.message : String(error)}`;
+
+        await appendCodingBridgeResponse({
+          commandId: result.command.id,
+          taskId: null,
+          kind: "BLOCKER",
+          message,
+          checkpoint: {
+            status:
+              error instanceof CodingWhatsappTaskRuntimeError
+                ? error.kind
+                : "WHATSAPP_TASK_CREATION_FAILED",
+            source: "whatsapp",
+          },
+        });
+      }
     }
 
     res.status(result.created ? 201 : 200).json({
       accepted: true,
       duplicate: !result.created,
       commandId: result.command.id,
+      taskId: codingTaskId,
       status: result.command.status,
     });
   },
