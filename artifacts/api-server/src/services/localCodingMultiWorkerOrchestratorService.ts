@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
+  aiCodingRunsTable,
+  aiCodingTasksTable,
   aiCodingTaskGraphsTable,
   aiCodingWorkstreamDependenciesTable,
   aiCodingWorkstreamsTable,
@@ -481,35 +483,65 @@ export async function markCodingWorkstreamReviewRequired(
   const baseSha =
     result.baseSha == null ? null : validateBaseSha(result.baseSha);
 
-  const [updated] = await db
-    .update(aiCodingWorkstreamsTable)
-    .set({
-      status: "REVIEW_REQUIRED",
-      ...(baseSha ? { baseSha } : {}),
-      resultJson: result.resultJson ?? null,
-      heartbeatAt: now,
-      leaseToken: null,
-      leaseExpiresAt: null,
-      errorMessage: null,
-    })
-    .where(
-      and(
-        eq(aiCodingWorkstreamsTable.id, workstreamId),
-        inArray(aiCodingWorkstreamsTable.status, ["CLAIMED", "RUNNING"]),
-        eq(aiCodingWorkstreamsTable.leaseToken, leaseToken),
-        sql`${aiCodingWorkstreamsTable.leaseExpiresAt} > ${now}`,
-      ),
-    )
-    .returning();
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(aiCodingWorkstreamsTable)
+      .set({
+        status: "REVIEW_REQUIRED",
+        ...(baseSha ? { baseSha } : {}),
+        resultJson: result.resultJson ?? null,
+        heartbeatAt: now,
+        leaseToken: null,
+        leaseExpiresAt: null,
+        errorMessage: null,
+      })
+      .where(
+        and(
+          eq(aiCodingWorkstreamsTable.id, workstreamId),
+          inArray(aiCodingWorkstreamsTable.status, ["CLAIMED", "RUNNING"]),
+          eq(aiCodingWorkstreamsTable.leaseToken, leaseToken),
+          sql`${aiCodingWorkstreamsTable.leaseExpiresAt} > ${now}`,
+        ),
+      )
+      .returning();
 
-  if (!updated) {
-    throw new LocalCodingMultiWorkerError(
-      "Workstream review handoff rejected because the lease was lost or expired.",
-      "LEASE_LOST",
-    );
-  }
+    if (!updated) {
+      throw new LocalCodingMultiWorkerError(
+        "Workstream review handoff rejected because the lease was lost or expired.",
+        "LEASE_LOST",
+      );
+    }
 
-  return updated;
+    // Close the child lifecycle in the same transaction as the workstream
+    // handoff so recovery never observes a terminal workstream with an orphan
+    // RUNNING coding run.
+    if (updated.childRunId) {
+      await tx
+        .update(aiCodingRunsTable)
+        .set({
+          status: "COMPLETED",
+          finishedAt: now,
+          errorMessage: null,
+        })
+        .where(
+          and(
+            eq(aiCodingRunsTable.id, updated.childRunId),
+            eq(aiCodingRunsTable.status, "RUNNING"),
+          ),
+        );
+    }
+    if (updated.childTaskId) {
+      await tx
+        .update(aiCodingTasksTable)
+        .set({
+          status: "READY_REVIEW",
+          resultSummary: "Repository analysis completed; workstream is ready for review.",
+        })
+        .where(eq(aiCodingTasksTable.id, updated.childTaskId));
+    }
+
+    return updated;
+  });
 }
 
 export async function completeReviewedCodingWorkstream(
