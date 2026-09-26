@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
       PUBLIC_SITEMAP_URL: https://aifront.cstlogistic.co.id/sitemap.xml
       LEGACY_SITEMAP_URL: https://aicore.cstlogistic.co.id/sitemap.xml
 
