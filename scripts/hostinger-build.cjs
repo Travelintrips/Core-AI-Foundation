@@ -56,4 +56,22 @@ if (process.platform === "linux" && fs.existsSync(pnpmStore)) {
 }
 
 run("pnpm", ["run", "build:workspace"], env);
-run(process.execPath, [path.join(process.cwd(), "scripts", "zerollm-bootstrap.cjs")], env);
+
+const zerollmEnabled =
+  String(env.ZEROLLM_ENABLED || "").toLowerCase() === "true";
+const zerollmRequired =
+  String(env.ZEROLLM_REQUIRED || "").toLowerCase() === "true";
+const zerollmExplicitProvider =
+  String(env.AI_CODING_PROVIDER || "").toLowerCase() === "zerollm";
+
+if (zerollmEnabled || zerollmRequired || zerollmExplicitProvider) {
+  run(
+    process.execPath,
+    [path.join(process.cwd(), "scripts", "zerollm-bootstrap.cjs")],
+    env,
+  );
+} else {
+  console.log(
+    "[hostinger-build] ZeroLLM disabled; skipping optional Python bootstrap.",
+  );
+}
