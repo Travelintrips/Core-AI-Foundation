@@ -16,6 +16,7 @@ import {
 } from "./middleware/securityHardening.js";
 import { requestCounterMiddleware } from "./routes/metrics.js";
 import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
+import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
 
 const app: Express = express();
 
@@ -111,8 +112,9 @@ app.use(
   }),
 );
 
-// GitHub webhook must see exact raw bytes before the global JSON parser.
+// Webhooks that verify signatures must see exact raw bytes before the global JSON parser.
 app.use("/api", codingGithubWebhookRouter);
+app.use("/api", codingWhatsappWebhookRouter);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
