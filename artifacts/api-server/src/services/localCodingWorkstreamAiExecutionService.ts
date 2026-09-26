@@ -676,10 +676,10 @@ async function loadExecutionContext(
   if (
     analyzerResult.codingTaskId !== childTask.id ||
     analyzerResult.sourceTarget !== childTask.repository ||
-    analyzerResult.branch !== expectedAnalyzerBranch ||
+    !isAnalyzerBranchFromPriorWorkstreamAttempt(graph.taskId, workstream.workstreamKey, String(analyzerResult.branch ?? ""), payload.claimAttempt) ||
     !analyzerContext ||
     analyzerContext.repository !== childTask.repository ||
-    analyzerContext.branch !== expectedAnalyzerBranch
+    analyzerContext.branch !== analyzerResult.branch
   ) {
     throw new LocalCodingWorkstreamAiExecutionError(
       "Analyzer result no longer matches the bound child task repository/isolated branch.",
