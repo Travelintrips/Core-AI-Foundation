@@ -3194,8 +3194,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   )}
                                 </div>
                               )}
-                              <CodingAiObservabilityPanel taskId={task.id} />
-                              <CodingMissionControlPanel taskId={task.id} dispatchBaseSha={analyzerResult?.contextPackage?.headSha} />
                               {analyzerResult.failureRecoveryContext.warnings.length > 0 && (
                                 <p className="mt-2 text-[10px] leading-4 text-slate-500">
                                   {analyzerResult.failureRecoveryContext.warnings.join(" ")}
@@ -3210,6 +3208,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                           )}
                         </div>
                       )}
+                      <CodingAiObservabilityPanel taskId={task.id} />
+                      <CodingMissionControlPanel taskId={task.id} dispatchBaseSha={analyzerResult?.contextPackage?.headSha} />
+
                       {analyzerResult.localCommitApproval?.status === "PUBLISHED" && (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="panel-local-commit-published">
                           <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
