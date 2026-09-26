@@ -369,6 +369,13 @@ export function buildAiPatchApplierProposal(
 ): { operations: Array<Record<string, unknown>> } {
   return {
     operations: proposal.proposal.operations.map((operation) => {
+      if (operation.type === "create_file") {
+        return {
+          kind: "create_file",
+          path: operation.file,
+          content: operation.content,
+        };
+      }
       if (operation.type === "replace_text") {
         return {
           kind: "replace_text",
