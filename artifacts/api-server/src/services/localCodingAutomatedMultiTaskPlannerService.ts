@@ -30,6 +30,7 @@ import {
 import {
   assertPlannerAuthority,
   acquirePlannerAuthority,
+  releasePlannerAuthority,
   PlannerAuthorityError,
 } from "./localCodingPlannerAuthorityService.js";
 import {
@@ -885,6 +886,21 @@ export async function generateAndPersistCodingMultiTaskPlan(
   }
 
   const persisted = await persistCodingTaskGraph(taskId, generated.plan);
+
+  await releasePlannerAuthority({
+    scope,
+    holderId: AUTO_PLANNER_HOLDER_ID,
+    leaseToken: authority.leaseToken,
+    fencingGeneration: authority.fencingGeneration,
+  }).catch((error) => {
+    if (
+      error instanceof PlannerAuthorityError &&
+      ["NOT_HOLDER", "STALE_FENCE", "LEASE_EXPIRED"].includes(error.code)
+    ) {
+      return;
+    }
+    throw error;
+  });
 
   await logAudit(
     "automated-multi-task-planner",
