@@ -56,6 +56,7 @@ export type ProductionCodingModelUnavailableReason =
   | "EXPLICIT_PROVIDER_NOT_AVAILABLE"
   | "EXPLICIT_MODEL_NOT_AVAILABLE"
   | "NO_CODING_CAPABLE_MODEL"
+  | "PROVIDER_UNHEALTHY"
   | "LOCAL_PROVIDER_UNAVAILABLE";
 
 export interface ProductionCodingModelResolution {
@@ -156,6 +157,12 @@ function codingCapabilityScore(row: ModelWithProvider): number {
 
 function isCodingCapable(row: ModelWithProvider): boolean {
   return codingCapabilityScore(row) > 0;
+}
+
+
+export function isProviderHealthyForCoding(row: ModelWithProvider): boolean {
+  const failures = Number(row.provider.consecutiveFailures ?? 0);
+  return !Number.isFinite(failures) || failures <= 0;
 }
 
 function deterministicSort(
@@ -272,8 +279,16 @@ export async function resolveProductionCodingModel(
     );
   }
 
+  const healthyProviders = withKeys.filter(isProviderHealthyForCoding);
+  if (healthyProviders.length === 0) {
+    return failure(
+      "PROVIDER_UNHEALTHY",
+      "All configured cloud coding providers currently have an active health-check failure.",
+    );
+  }
+
   const providerAllowed = new Set(config.providerAllowlist.map(normalizeSlug));
-  const allowedProviders = withKeys.filter((row) =>
+  const allowedProviders = healthyProviders.filter((row) =>
     providerAllowed.has(normalizeSlug(String(row.provider.slug))),
   );
   if (allowedProviders.length === 0) {
@@ -389,6 +404,7 @@ export async function resolveAlternativeCloudCodingModels(input: {
     if (localProviders.has(provider)) return false;
     if (!providerAllowed.has(provider)) return false;
     if (!getProviderApiKey(String(row.provider.slug))) return false;
+    if (!isProviderHealthyForCoding(row)) return false;
     if (modelAllowed.size > 0 && !modelAllowed.has(model)) return false;
     if (!isCodingCapable(row)) return false;
     if (excluded.has(provider + "\n" + model)) return false;
