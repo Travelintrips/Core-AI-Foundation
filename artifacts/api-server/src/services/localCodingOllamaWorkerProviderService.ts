@@ -133,6 +133,18 @@ export function createScheduledOllamaProviderAdapter(input: {
               stream: false,
               temperature: 0,
               max_tokens: request.maxOutputTokens,
+              ...(request.responseFormat.type === "structured"
+                ? {
+                    response_format: {
+                      type: "json_schema",
+                      json_schema: {
+                        name: request.responseFormat.schemaName,
+                        strict: true,
+                        schema: request.responseFormat.jsonSchema,
+                      },
+                    },
+                  }
+                : {}),
             }),
             signal: context.signal,
           },
