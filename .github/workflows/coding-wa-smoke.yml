@@ -1,0 +1,78 @@
+name: Coding WA Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/coding-wa-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Verify AI Core coding notification to WhatsApp
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+
+    steps:
+      - name: Verify admin secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+      - name: Create bridge command
+        id: command
+        shell: bash
+        run: |
+          set -euo pipefail
+          external_id="wa-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          payload=$(node -e 'console.log(JSON.stringify({
+            externalCommandId: process.argv[1],
+            instruction: "Production WhatsApp notification smoke test. No source code changes are requested.",
+            source: "github-actions",
+            commandType: "SMOKE_TEST",
+            authority: {readOnly:true, sourceWrite:false, deploy:false},
+            metadata: {workflow:"Coding WA Smoke", runId:process.env.GITHUB_RUN_ID}
+          }))' "$external_id")
+
+          code=$(curl -sS -o /tmp/bridge-command.json -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "content-type: application/json"             -d "$payload"             "$API_BASE_URL/ai/coding/bridge/commands")
+
+          echo "bridge_command_http=$code"
+          cat /tmp/bridge-command.json
+          test "$code" = "201" -o "$code" = "200"
+
+          command_id=$(node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/bridge-command.json","utf8"));const id=v.command&&v.command.id;if(!id)process.exit(2);process.stdout.write(id)')
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+
+      - name: Emit WhatsApp-notifiable checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=$(node -e 'console.log(JSON.stringify({
+            commandId: process.argv[1],
+            kind: "CHECKPOINT",
+            message: "AI Core production WhatsApp integration smoke test berhasil. Coding notification bridge aktif.",
+            checkpoint: {status:"SMOKE_TEST_PASSED", source:"github-actions"},
+            metadata: {workflow:"Coding WA Smoke", runId:process.env.GITHUB_RUN_ID}
+          }))' "${{ steps.command.outputs.command_id }}")
+
+          code=$(curl -sS -o /tmp/bridge-response.json -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "content-type: application/json"             -d "$payload"             "$API_BASE_URL/ai/coding/bridge/responses")
+
+          echo "bridge_response_http=$code"
+          cat /tmp/bridge-response.json
+          test "$code" = "201"
+
+          node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/bridge-response.json","utf8"));if(v.kind!=="CHECKPOINT"||!v.id)throw new Error("Unexpected bridge response");console.log("coding_wa_checkpoint=QUEUED_BY_AI_CORE response_id="+v.id)'
+
+      - name: Summary
+        run: |
+          echo "AI Core bridge command: PASS"
+          echo "CHECKPOINT creation: PASS"
+          echo "WhatsApp notification dispatch: triggered asynchronously by AI Core"
