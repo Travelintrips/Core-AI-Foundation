@@ -1677,6 +1677,30 @@ async function runGit(
   return stdout.trim();
 }
 
+function patchContainsOnlyNewFiles(patch: string, changedFiles: string[]): boolean {
+  const headers = [...patch.matchAll(/^diff --git a\/(.+?) b\/(.+?)$/gm)];
+  if (headers.length !== changedFiles.length) return false;
+  const patchFiles = headers.map((match) => match[2] ?? "").sort();
+  if (patchFiles.some((file, index) => file !== changedFiles[index])) return false;
+  const newFileMarkers = patch.match(/^new file mode /gm) ?? [];
+  const deletedMarkers = patch.match(/^deleted file mode /gm) ?? [];
+  return newFileMarkers.length === changedFiles.length && deletedMarkers.length === 0;
+}
+
+async function legacyCreateFileResultHash(
+  root: string,
+  changedFiles: string[],
+): Promise<string | null> {
+  const digests: string[] = [];
+  for (const file of changedFiles) {
+    const content = await readFile(resolve(root, file));
+    if (content.length === 0 || content[content.length - 1] !== 0x0a) return null;
+    const legacyContent = content.subarray(0, content.length - 1);
+    digests.push(`${file}\0${sha256(legacyContent)}`);
+  }
+  return sha256(digests.join("\n"));
+}
+
 function parseGitStatusPaths(raw: string): string[] {
   const paths: string[] = [];
   for (const line of raw.split(/\r?\n/)) {
@@ -1852,11 +1876,19 @@ export async function materializeApprovedWorkstreamAiCandidate(
         return `${file}\0${sha256(content)}`;
       }),
     );
-    if (sha256(digests.join("\n")) !== resultSha256) {
-      throw new LocalCodingWorkstreamAiExecutionError(
-        "Materialized patch result hash does not match the reviewed AI candidate.",
-        "STALE_CONTEXT",
-      );
+    const materializedResultSha256 = sha256(digests.join("\n"));
+    let legacyResultHashNormalized = false;
+    if (materializedResultSha256 !== resultSha256) {
+      const legacyHash = patchContainsOnlyNewFiles(patch, changedFiles)
+        ? await legacyCreateFileResultHash(workspace.path, changedFiles)
+        : null;
+      if (legacyHash !== resultSha256) {
+        throw new LocalCodingWorkstreamAiExecutionError(
+          "Materialized patch result hash does not match the reviewed AI candidate.",
+          "STALE_CONTEXT",
+        );
+      }
+      legacyResultHashNormalized = true;
     }
 
     await runGit(workspace.path, ["add", "--", ...changedFiles], childTask.repository);
@@ -1958,6 +1990,12 @@ export async function materializeApprovedWorkstreamAiCandidate(
               materializationStatus: "PUSHED",
               materializedAt: now.toISOString(),
               staticVerification: "PASSED",
+              ...(legacyResultHashNormalized
+                ? {
+                    legacyResultHashNormalized: true,
+                    materializedResultSha256,
+                  }
+                : {}),
               commitCreated: true,
               pushed: true,
               headSha,
