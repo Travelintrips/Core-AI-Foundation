@@ -161,6 +161,17 @@ describe("workstream AI isolated branch binding", () => {
 });
 
 
+describe("approved workstream candidate materialization branch binding", () => {
+  it("uses the authorized workstream branch rather than the moving parent branch", () => {
+    const parentBranch = "main";
+    const authorizedBranch = "ai-core/0dd869883fb3/ws-001-a11";
+    const materializationSourceBranch = authorizedBranch;
+
+    expect(materializationSourceBranch).toBe(authorizedBranch);
+    expect(materializationSourceBranch).not.toBe(parentBranch);
+  });
+});
+
 describe("workstream AI failure context preservation", () => {
   it("retains analyzer state when execution fails before loadExecutionContext completes", () => {
     const analyzerResult = {

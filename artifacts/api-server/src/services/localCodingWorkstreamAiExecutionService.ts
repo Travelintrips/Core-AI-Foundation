@@ -1787,16 +1787,21 @@ export async function materializeApprovedWorkstreamAiCandidate(
 
   const workspace = await prepareRepositoryWorkspace(
     childTask.repository,
-    childTask.branch,
-    {
-      isolatedBranchName: branchName,
-      expectedBaseSha: baseSha,
-    },
+    branchName,
   );
   if (!workspace.cleanup) {
     throw new LocalCodingWorkstreamAiExecutionError(
       "Approved AI candidate materialization requires an isolated cloned workspace.",
       "INVALID_CONTEXT",
+    );
+  }
+  const workspaceHead = await gitHead(workspace.path);
+  if (workspaceHead !== baseSha) {
+    await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Authorized workstream branch HEAD changed before candidate materialization.",
+      "STALE_CONTEXT",
+      { expected: baseSha, actual: workspaceHead },
     );
   }
 
