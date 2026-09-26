@@ -266,6 +266,49 @@ export async function listAccessibleCodingRepositories(
   return filtered.slice(0, 250);
 }
 
+
+export async function getAccessibleCodingRepository(
+  repository: string,
+  options: {
+    client?: GitHubApiClient;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+): Promise<CodingGitHubRepository> {
+  const env = options.env ?? process.env;
+  const resolved = resolveDiscoveryClient(env, options.client);
+  const { owner, repo } = parseGitHubRepository(repository);
+
+  if (
+    resolved.mode === "public" &&
+    !getCodingGitHubPublicOwners(env).some(
+      (allowedOwner) => allowedOwner.toLowerCase() === owner.toLowerCase(),
+    )
+  ) {
+    throw new GitHubPublisherError(
+      "Private or external repository lookup requires AI_CODING_GITHUB_TOKEN.",
+      "AUTH_REQUIRED",
+      403,
+    );
+  }
+
+  const payload = await resolved.client.request<unknown>(
+    "GET",
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+  );
+
+  const collected: CodingGitHubRepository[] = [];
+  pushRepository(collected, payload);
+  const match = collected[0];
+  if (!match) {
+    throw new GitHubPublisherError(
+      `Repository ${repository} was not returned by GitHub.`,
+      "API_FAILED",
+      404,
+    );
+  }
+  return match;
+}
+
 export async function listCodingRepositoryBranches(
   repository: string,
   options: {
