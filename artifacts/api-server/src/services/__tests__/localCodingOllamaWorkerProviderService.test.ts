@@ -187,19 +187,93 @@ describe("scheduled Ollama constrained provider", () => {
       String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body),
     ) as Record<string, unknown>;
     expect(requestBody.response_format).toEqual({
-      type: "json_schema",
-      json_schema: {
-        name: "coding_multi_task_plan_v1",
-        strict: true,
-        schema: { type: "object" },
-      },
+      type: "json_object",
     });
+    expect(
+      String(
+        (
+          requestBody.messages as Array<{ role: string; content: string }>
+        )[0]?.content,
+      ),
+    ).toContain('{"type":"object"}');
 
     expect(mocks.release).toHaveBeenCalledWith(
       10,
       "success",
       expect.any(Number),
     );
+  });
+
+  it("accepts fenced JSON from Ollama structured responses", async () => {
+    mocks.reserve.mockResolvedValue({
+      id: 11,
+      workerName: "ollama-gpu-03",
+      modelId: "qwen2.5-coder:7b",
+      endpointUrl: "http://10.10.0.23:11434/v1",
+      availableSlots: 0,
+      reservedAt: new Date().toISOString(),
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: "ollama-request-fenced",
+            choices: [
+              {
+                message: {
+                  content:
+                    "```json\n{\"commands\":[\"git status --short\"],\"reason\":\"Check repo status\"}\n```",
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 15,
+              completion_tokens: 10,
+              total_tokens: 25,
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        ),
+      ),
+    );
+
+    const provider = createScheduledOllamaProviderAdapter({
+      modelId: "qwen2.5-coder:7b",
+    });
+
+    const result = await provider.invoke(
+      {
+        requestId: "req-fenced",
+        input: JSON.stringify({
+          version: 1,
+          system: "Return JSON.",
+          user: "Check status.",
+        }),
+        responseFormat: {
+          type: "structured",
+          schemaName: "trusted_powershell_plan",
+          jsonSchema: { type: "object" },
+        },
+        maxOutputTokens: 256,
+        capabilities: provider.capabilities,
+      },
+      { signal: new AbortController().signal },
+    );
+
+    expect(result.output).toEqual({
+      type: "structured",
+      value: {
+        commands: ["git status --short"],
+        reason: "Check repo status",
+      },
+    });
   });
 
   it("fails when no worker has capacity", async () => {

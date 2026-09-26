@@ -52,6 +52,27 @@ function parseBoundedPrompt(
   };
 }
 
+function parseStructuredJsonText(text: string): unknown {
+  const trimmed = text.trim();
+  const candidates = [trimmed];
+  const fenced = trimmed.match(/^\`\`\`(?:json)?\s*([\s\S]*?)\s*\`\`\`$/i);
+  if (fenced?.[1]) candidates.push(fenced[1].trim());
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as unknown;
+    } catch {
+      // try next bounded candidate
+    }
+  }
+
+  throw new ProviderInvocationError(
+    "Ollama worker returned malformed structured JSON: " +
+      trimmed.slice(0, 500),
+    "UNKNOWN",
+  );
+}
+
 function mapHttpFailure(status: number): ProviderInvocationError {
   if (status === 429) {
     return new ProviderInvocationError(
@@ -123,7 +144,16 @@ export function createScheduledOllamaProviderAdapter(input: {
               messages: [
                 {
                   role: "system",
-                  content: bounded.system,
+                  content:
+                    request.responseFormat.type === "structured"
+                      ? [
+                          bounded.system,
+                          "",
+                          "Return exactly one JSON object and no Markdown.",
+                          "The JSON object must satisfy this schema:",
+                          JSON.stringify(request.responseFormat.jsonSchema),
+                        ].join("\n")
+                      : bounded.system,
                 },
                 {
                   role: "user",
@@ -136,12 +166,7 @@ export function createScheduledOllamaProviderAdapter(input: {
               ...(request.responseFormat.type === "structured"
                 ? {
                     response_format: {
-                      type: "json_schema",
-                      json_schema: {
-                        name: request.responseFormat.schemaName,
-                        strict: true,
-                        schema: request.responseFormat.jsonSchema,
-                      },
+                      type: "json_object",
                     },
                   }
                 : {}),
@@ -181,17 +206,10 @@ export function createScheduledOllamaProviderAdapter(input: {
           | { type: "structured"; value: unknown };
 
         if (request.responseFormat.type === "structured") {
-          try {
-            output = {
-              type: "structured",
-              value: JSON.parse(text) as unknown,
-            };
-          } catch {
-            throw new ProviderInvocationError(
-              "Ollama worker returned malformed structured JSON",
-              "UNKNOWN",
-            );
-          }
+          output = {
+            type: "structured",
+            value: parseStructuredJsonText(text),
+          };
         } else {
           output = {
             type: "text",
