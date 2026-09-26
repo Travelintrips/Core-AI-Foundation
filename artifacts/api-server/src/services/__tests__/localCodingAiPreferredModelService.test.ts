@@ -12,6 +12,13 @@ const mocks = vi.hoisted(() => ({
   cloudFallback: {
     ok: false as boolean,
   },
+  registeredWorker: null as null | {
+    id: number;
+    workerName: string;
+    modelId: string;
+    endpointUrl: string;
+    availableSlots: number;
+  },
 }));
 
 vi.mock("../localCodingAiProductionModelService.js", async () => {
@@ -82,6 +89,10 @@ vi.mock("../ollamaLocalService.js", () => ({
   })),
 }));
 
+vi.mock("../ollamaWorkerRegistryService.js", () => ({
+  getOllamaWorkerAvailability: vi.fn(async () => mocks.registeredWorker),
+}));
+
 import {
   describePreferredCodingModelConfig,
   resolveConfiguredCodingFallbackModel,
@@ -95,6 +106,7 @@ describe("Preferred constrained coding model routing", () => {
     mocks.health.status = "ok";
     mocks.health.detail = undefined;
     mocks.cloudFallback.ok = false;
+    mocks.registeredWorker = null;
   });
 
   it("defaults to GPT-5.6 Sol primary and Ollama qwen coder fallback", () => {
@@ -110,6 +122,30 @@ describe("Preferred constrained coding model routing", () => {
     });
   });
 
+
+  it("prefers a healthy registered Ollama worker pool over loopback runtime", async () => {
+    mocks.registeredWorker = {
+      id: 7,
+      workerName: "ollama-gpu-01",
+      modelId: "qwen2.5-coder:7b",
+      endpointUrl: "http://10.10.0.21:11434/v1",
+      availableSlots: 1,
+    };
+
+    await expect(
+      resolveConfiguredCodingFallbackModel({} as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      fallback: { provider: "ollama", model: "qwen2.5-coder:7b" },
+      selection: {
+        provider: { slug: "ollama" },
+        model: {
+          modelId: "qwen2.5-coder:7b",
+          capabilities: expect.arrayContaining(["worker_pool"]),
+        },
+      },
+    });
+  });
 
   it("resolves healthy Ollama as an explicit runtime fallback target", async () => {
     await expect(
