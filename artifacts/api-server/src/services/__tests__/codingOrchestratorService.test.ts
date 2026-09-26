@@ -189,7 +189,7 @@ describe("Coding Orchestrator", () => {
     expect(started.sessionId).toBe(`coding-${run.id}`);
     expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
       jobType: "coding_repository_analyzer",
-      requiredCapability: "coding_repository_analyzer",
+      requiredCapability: "coding_repository_analyzer_on_demand",
       payloadJson: expect.objectContaining({
         orchestratorSessionId: `coding-${run.id}`,
         codingTaskId: task.id,
