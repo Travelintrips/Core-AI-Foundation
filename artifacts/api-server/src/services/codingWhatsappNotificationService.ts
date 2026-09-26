@@ -22,17 +22,37 @@ function config() {
   return { baseUrl, apiKey, to };
 }
 
+export type CodingWhatsappNotifyResult =
+  | { status: "skipped"; reason: "kind_not_notifiable" | "missing_config"; configured: { baseUrl: boolean; apiKey: boolean; to: boolean } }
+  | { status: "queued"; gatewayStatus: number }
+  | { status: "rejected"; gatewayStatus: number; body: string }
+  | { status: "failed"; error: string };
+
+export function getCodingWhatsappConfigStatus() {
+  const { baseUrl, apiKey, to } = config();
+  return {
+    baseUrl: Boolean(baseUrl),
+    apiKey: Boolean(apiKey),
+    to: Boolean(to),
+  };
+}
+
 export async function notifyCodingBridgeResponse(input: {
   responseId: string;
   commandId: string;
   taskId?: string | null;
   kind: CodingBridgeKind;
   message: string;
-}): Promise<void> {
-  if (!NOTIFIABLE_KINDS.has(input.kind)) return;
+}): Promise<CodingWhatsappNotifyResult> {
+  const configured = getCodingWhatsappConfigStatus();
+  if (!NOTIFIABLE_KINDS.has(input.kind)) {
+    return { status: "skipped", reason: "kind_not_notifiable", configured };
+  }
 
   const { baseUrl, apiKey, to } = config();
-  if (!baseUrl || !apiKey || !to) return;
+  if (!baseUrl || !apiKey || !to) {
+    return { status: "skipped", reason: "missing_config", configured };
+  }
 
   const taskLine = input.taskId ? `Task: ${input.taskId}\n` : "";
   const text = [
@@ -71,7 +91,7 @@ export async function notifyCodingBridgeResponse(input: {
         },
         "[coding-wa] CST WA Gateway rejected coding notification",
       );
-      return;
+      return { status: "rejected", gatewayStatus: response.status, body: body.slice(0, 500) };
     }
 
     logger.info(
@@ -82,6 +102,7 @@ export async function notifyCodingBridgeResponse(input: {
       },
       "[coding-wa] coding notification queued",
     );
+    return { status: "queued", gatewayStatus: response.status };
   } catch (error) {
     logger.warn(
       {
@@ -91,5 +112,9 @@ export async function notifyCodingBridgeResponse(input: {
       },
       "[coding-wa] coding notification failed",
     );
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
