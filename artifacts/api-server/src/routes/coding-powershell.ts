@@ -8,6 +8,7 @@ import {
   LocalCodingPowerShellError,
   prepareOllamaPowerShellExecution,
 } from "../services/localCodingPowerShellExecutorService.js";
+import { runTrustedOllamaPowerShellTask } from "../services/localCodingTrustedPowerShellTaskService.js";
 
 const router = Router();
 
@@ -17,6 +18,14 @@ const prepareSchema = z.object({
   modelId: z.string().min(1).max(300),
   commands: z.array(z.string().min(1).max(300)).min(1).max(6),
   approvalTtlMs: z.number().int().min(60_000).max(900_000).optional(),
+}).strict();
+
+const trustedTaskSchema = z.object({
+  instruction: z.string().min(1).max(4_000),
+  taskId: z.string().uuid().nullable().optional(),
+  requestedBy: z.string().min(1).max(200).optional(),
+  modelId: z.string().min(1).max(300).optional(),
+  timeoutMs: z.number().int().min(15_000).max(180_000).optional(),
 }).strict();
 
 const digestSchema = z.object({
@@ -43,6 +52,21 @@ function sendKnownError(res: Response, error: unknown): boolean {
 
 router.get("/ai/coding/powershell/status", (_req, res) => {
   res.json(getPowerShellExecutorStatus());
+});
+
+router.post("/ai/coding/powershell/run-trusted-task", async (req, res): Promise<void> => {
+  const body = trustedTaskSchema.safeParse(req.body ?? {});
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  try {
+    const result = await runTrustedOllamaPowerShellTask(body.data);
+    res.json(result);
+  } catch (error) {
+    if (sendKnownError(res, error)) return;
+    throw error;
+  }
 });
 
 router.post("/ai/coding/powershell/prepare", async (req, res): Promise<void> => {
