@@ -74,6 +74,20 @@ type TaskGraphSnapshot = {
   workstreams: TaskGraphWorkstream[];
 };
 
+type WorkstreamAiHandoffState = {
+  handoffId: string;
+  workstreamId: string;
+  graphId: string;
+  claimAttempt: number;
+  packageHash: string;
+  status: "PREPARED" | "APPROVED" | "CONSUMED" | "REVOKED" | string;
+  preparedAt: string | null;
+  approvedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  consumedAt: string | null;
+};
+
 type IntegrationManifest = {
   version: number;
   taskId: string;
@@ -127,6 +141,10 @@ export function CodingMissionControlPanel({
     null,
   );
   const [manifest, setManifest] = useState<IntegrationManifest | null>(null);
+  const [handoffsByWorkstream, setHandoffsByWorkstream] = useState<
+    Record<string, WorkstreamAiHandoffState>
+  >({});
+
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
@@ -163,7 +181,33 @@ export function CodingMissionControlPanel({
         },
       );
       if (graphResponse.ok) {
-        setGraphSnapshot((await graphResponse.json()) as TaskGraphSnapshot);
+        const graphBody = (await graphResponse.json()) as TaskGraphSnapshot;
+        setGraphSnapshot(graphBody);
+
+        const handoffEntries = await Promise.all(
+          graphBody.workstreams.map(async (workstream) => {
+            const response = await fetch(
+              `/api/ai/coding/tasks/${taskId}/task-graph/${graphBody.graph.id}/workstreams/${workstream.id}/ai-handoff`,
+              {
+                credentials: "include",
+                headers: { Accept: "application/json" },
+              },
+            );
+            if (!response.ok) return null;
+            return [
+              workstream.id,
+              (await response.json()) as WorkstreamAiHandoffState,
+            ] as const;
+          }),
+        );
+        setHandoffsByWorkstream(
+          Object.fromEntries(
+            handoffEntries.filter(
+              (entry): entry is readonly [string, WorkstreamAiHandoffState] =>
+                entry !== null,
+            ),
+          ),
+        );
       }
     } finally {
       setLoading(false);
