@@ -105,7 +105,11 @@ export function buildCodingWorkstreamBranchBinding(
   expectedBaseSha: string;
 } {
   return {
-    childTaskBranch: claim.branchName,
+    // Child tasks must keep the real remote source branch. Synthetic ai-core/*
+    // names exist only inside the disposable cloned workspace; storing one as
+    // ai_coding_tasks.branch makes generic/retry analyzers try to clone a
+    // branch that does not exist on origin.
+    childTaskBranch: parentBranch,
     analyzerSourceBranch: parentBranch,
     isolatedBranchName: claim.branchName,
     expectedBaseSha: claim.baseSha,
