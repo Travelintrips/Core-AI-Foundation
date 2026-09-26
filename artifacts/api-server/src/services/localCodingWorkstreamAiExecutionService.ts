@@ -1244,6 +1244,13 @@ export async function executeCodingWorkstreamAiJob(
   job: AiJob,
 ): Promise<Record<string, unknown>> {
   const payload = parseWorkstreamAiJobPayload(job.payloadJson);
+  const [initialWorkstream] = await db
+    .select({ resultJson: aiCodingWorkstreamsTable.resultJson })
+    .from(aiCodingWorkstreamsTable)
+    .where(eq(aiCodingWorkstreamsTable.id, payload.workstreamId));
+  const failureSourceResult = isRecord(initialWorkstream?.resultJson)
+    ? initialWorkstream.resultJson
+    : null;
   let loaded: LoadedExecutionContext | null = null;
   let consumed = false;
   let workspacePath: string | null = null;
@@ -1443,7 +1450,7 @@ export async function executeCodingWorkstreamAiJob(
     }
     await persistExecutionFailure(
       payload,
-      loaded?.analyzerResult ?? null,
+      loaded?.analyzerResult ?? failureSourceResult,
       error,
       consumed,
     ).catch(() => undefined);
