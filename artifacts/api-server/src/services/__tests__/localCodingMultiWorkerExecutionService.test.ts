@@ -98,7 +98,7 @@ describe("multi-worker execution branch isolation", () => {
         baseSha: "b".repeat(40),
       }),
     ).toEqual({
-      childTaskBranch: "ai-core/111111111111/ws-001-a2",
+      childTaskBranch: "main",
       analyzerSourceBranch: "main",
       isolatedBranchName: "ai-core/111111111111/ws-001-a2",
       expectedBaseSha: "b".repeat(40),
