@@ -676,7 +676,8 @@ export async function generateAndPersistCodingMultiTaskPlan(
     throw error;
   }
 
-  try {\n    const resolved = await resolvePreferredCodingModel();
+  try {
+    const resolved = await resolvePreferredCodingModel();
   if (!resolved.ok) {
     throw new AutomatedMultiTaskPlannerError(
       resolved.message,
