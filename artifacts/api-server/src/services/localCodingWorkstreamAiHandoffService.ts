@@ -573,6 +573,18 @@ export async function approveWorkstreamAiHandoff(
   });
 }
 
+export async function getLatestWorkstreamAiHandoff(
+  workstreamId: string,
+): Promise<AiCodingWorkstreamAiHandoff | null> {
+  const [handoff] = await db
+    .select()
+    .from(aiCodingWorkstreamAiHandoffsTable)
+    .where(eq(aiCodingWorkstreamAiHandoffsTable.workstreamId, workstreamId))
+    .orderBy(desc(aiCodingWorkstreamAiHandoffsTable.claimAttempt))
+    .limit(1);
+  return handoff ?? null;
+}
+
 export async function assertApprovedWorkstreamAiHandoffFresh(
   workstreamId: string,
   now = new Date(),
