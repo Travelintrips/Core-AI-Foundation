@@ -138,7 +138,10 @@ describe("Preferred constrained coding model routing", () => {
       ok: true,
       fallback: { provider: "ollama", model: "qwen2.5-coder:7b" },
       selection: {
-        provider: { slug: "ollama" },
+        provider: {
+          slug: "ollama",
+          baseUrl: "http://10.10.0.21:11434/v1",
+        },
         model: {
           modelId: "qwen2.5-coder:7b",
           capabilities: expect.arrayContaining(["worker_pool"]),
