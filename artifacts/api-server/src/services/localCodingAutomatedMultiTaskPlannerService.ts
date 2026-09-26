@@ -40,7 +40,9 @@ import {
 } from "./localCodingTaskGraphService.js";
 
 const AUTO_PLANNER_HOLDER_ID = "ai-core:auto-multi-task-planner";
-// Local Ollama planning can legitimately span multiple bounded 45s attempts plus backoff.\n// Use the authority service maximum so a valid in-flight plan is not fenced before persistence.\nconst AUTO_PLANNER_LEASE_SECONDS = 300;
+// Local Ollama planning can legitimately span multiple bounded 45s attempts plus backoff.
+// Use the authority service maximum so a valid in-flight plan is not fenced before persistence.
+const AUTO_PLANNER_LEASE_SECONDS = 300;
 const MAX_PLANNER_WORKSTREAMS = 8;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const PLANNER_MODEL_MAX_ATTEMPTS = 3;
