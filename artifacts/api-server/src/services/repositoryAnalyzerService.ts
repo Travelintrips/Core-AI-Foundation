@@ -235,6 +235,33 @@ async function cloneRepository(
   );
 }
 
+async function resolveWorkspaceHead(
+  workspace: string,
+  repository: string,
+): Promise<string> {
+  const result = await execFileAsync("git", ["rev-parse", "HEAD"], {
+    cwd: workspace,
+    timeout: 15_000,
+    maxBuffer: 64 * 1024,
+    env: buildRepositoryCloneEnvironment(repository),
+  });
+  const raw =
+    typeof result === "string" || Buffer.isBuffer(result)
+      ? result
+      : (result as { stdout?: unknown } | null | undefined)?.stdout;
+  const head = Buffer.isBuffer(raw)
+    ? raw.toString("utf8").trim().toLowerCase()
+    : raw instanceof Uint8Array
+      ? Buffer.from(raw).toString("utf8").trim().toLowerCase()
+      : typeof raw === "string"
+        ? raw.trim().toLowerCase()
+        : "";
+  if (!/^[0-9a-f]{40}$/.test(head)) {
+    throw new Error("Repository HEAD could not be resolved after clone");
+  }
+  return head;
+}
+
 export async function configureIsolatedRepositoryWorkspace(
   workspace: string,
   expectedBaseSha: string,
@@ -478,25 +505,38 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
     isolatedBranchName: input.isolatedBranchName,
     expectedBaseSha: input.expectedBaseSha,
   });
-  let phase = "build_local_context";
+  let phase = "resolve_workspace_head";
   try {
+    const authoritativeWorkspaceHead = await resolveWorkspaceHead(
+      workspace.path,
+      input.repository,
+    );
+
+    phase = "build_local_context";
     const contextPackage = await buildLocalCodingContextPackage({
       root: workspace.path,
       repository: input.repository,
       requestedBranch: input.isolatedBranchName ?? input.branch,
       task: `${input.title}\n${input.description}`,
     });
+
+    if (
+      contextPackage.headSha !== "unknown" &&
+      contextPackage.headSha !== authoritativeWorkspaceHead
+    ) {
+      throw new Error(
+        `Repository context HEAD mismatch: workspace ${authoritativeWorkspaceHead}, context ${contextPackage.headSha}`,
+      );
+    }
+    contextPackage.headSha = authoritativeWorkspaceHead;
+
     if (input.expectedBaseSha) {
       const expectedHeadSha = input.expectedBaseSha.trim().toLowerCase();
-      if (
-        contextPackage.headSha !== "unknown" &&
-        contextPackage.headSha !== expectedHeadSha
-      ) {
+      if (authoritativeWorkspaceHead !== expectedHeadSha) {
         throw new Error(
-          `Repository context HEAD mismatch: expected ${expectedHeadSha}, got ${contextPackage.headSha}`,
+          `Repository context HEAD mismatch: expected ${expectedHeadSha}, got ${authoritativeWorkspaceHead}`,
         );
       }
-      contextPackage.headSha = expectedHeadSha;
     }
 
     phase = "plan_local_execution";
