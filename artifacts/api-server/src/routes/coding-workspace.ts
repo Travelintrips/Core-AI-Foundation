@@ -58,6 +58,7 @@ import {
   approveAndValidateAiPatch,
   LocalAiPatchApprovalError,
 } from "../services/localCodingAiPatchApprovalService.js";
+import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorkerRecoveryService.js";
 
 const router = Router();
 
@@ -170,6 +171,8 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+
+  await reconcileStaleMultiWorkerRuns({ taskId: params.data.id }).catch(() => undefined);
 
   const [task] = await db
     .select()
