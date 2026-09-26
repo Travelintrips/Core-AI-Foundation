@@ -36,13 +36,19 @@ for attempt in $(seq 1 36); do
 
   live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
   marker=$(awk -F': ' 'tolower($1)=="x-cst-release-marker" {gsub("\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
+  server=$(awk -F': ' 'tolower($1)=="server" {gsub("\\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
+  content_type=$(awk -F': ' 'tolower($1)=="content-type" {gsub("\\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
+  location=$(awk -F': ' 'tolower($1)=="location" {gsub("\\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
+  via=$(awk -F': ' 'tolower($1)=="via" {gsub("\\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
+  request_id=$(awk -F': ' 'tolower($1)=="x-request-id" || tolower($1)=="x-hostinger-request-id" || tolower($1)=="cf-ray" {gsub("\\r","",$2); print $2}' /tmp/headers 2>/dev/null | tail -n1)
   curl_error=$(tr '\n' ' ' </tmp/curl-error 2>/dev/null | sed 's/[[:space:]]\+/ /g' | cut -c1-240 || true)
+  body_excerpt=$(tr '\\n' ' ' </tmp/body 2>/dev/null | sed 's/<[^>]*>/ /g; s/[[:space:]]\\+/ /g' | cut -c1-240 || true)
 
   if [ "$code" = "000" ]; then
     echo "attempt=$attempt phase=https status=fail http=000 dns=$dns_addresses live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA marker=${marker:-missing} error=${curl_error:-none}"
     stable_successes=0
   elif [ "$code" != "200" ]; then
-    echo "attempt=$attempt phase=http status=fail http=$code dns=$dns_addresses live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA marker=${marker:-missing}"
+    echo "attempt=$attempt phase=http status=fail http=$code dns=$dns_addresses live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA marker=${marker:-missing} server=${server:-missing} content_type=${content_type:-missing} location=${location:-missing} via=${via:-missing} request_id=${request_id:-missing} body=${body_excerpt:-empty}"
     stable_successes=0
   elif [ "$live_sha" != "$EXPECTED_SHA" ]; then
     echo "attempt=$attempt phase=sha status=waiting http=$code dns=$dns_addresses live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA marker=${marker:-missing}"
