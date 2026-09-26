@@ -175,6 +175,7 @@ describe("Ollama PowerShell approval gate", () => {
       Path: "C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs",
       SystemRoot: "C:\\Windows",
       ComSpec: "C:\\Windows\\System32\\cmd.exe",
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
     } as NodeJS.ProcessEnv;
 
     const prepared = await prepareOllamaPowerShellExecution({
@@ -202,6 +203,7 @@ describe("Ollama PowerShell approval gate", () => {
         PATH: "C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs",
         SystemRoot: "C:\\Windows",
         ComSpec: "C:\\Windows\\System32\\cmd.exe",
+        PATHEXT: ".COM;.EXE;.BAT;.CMD",
       }),
     );
   });
