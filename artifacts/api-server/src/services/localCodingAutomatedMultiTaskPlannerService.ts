@@ -536,36 +536,54 @@ async function loadAutomatedPlannerContext(
     .where(eq(aiCodingRunsTable.taskId, taskId))
     .orderBy(desc(aiCodingRunsTable.startedAt));
 
-  const sourceRun = runs.find(
+  const sourceRuns = runs.filter(
     (run) =>
       ["Coding Orchestrator", "Repository Analyzer"].includes(run.agentName) &&
       run.status === "COMPLETED" &&
       typeof run.logs === "string" &&
       run.logs.length > 0,
   );
-  if (!sourceRun?.logs) {
+  if (sourceRuns.length === 0) {
     throw new AutomatedMultiTaskPlannerError(
       "Repository analysis must complete before automated multi-task planning.",
       "ANALYSIS_REQUIRED",
     );
   }
 
+  // A newer completed orchestration/recovery run may contain only lifecycle
+  // metadata and no repository context. Walk completed analyzer candidates in
+  // recency order and use the newest one that actually carries a valid bounded
+  // context package instead of failing on the first completed run.
   let payload: Record<string, unknown> | null = null;
-  try {
-    const parsed = JSON.parse(sourceRun.logs) as unknown;
-    payload = isRecord(parsed) ? parsed : null;
-  } catch {
-    payload = null;
+  let packageValue: Record<string, unknown> | null = null;
+  let headSha = "";
+
+  for (const sourceRun of sourceRuns) {
+    try {
+      const parsed = JSON.parse(sourceRun.logs as string) as unknown;
+      const candidatePayload = isRecord(parsed) ? parsed : null;
+      const candidatePackage =
+        candidatePayload && isRecord(candidatePayload.contextPackage)
+          ? candidatePayload.contextPackage
+          : null;
+      const candidateHeadSha =
+        candidatePackage && typeof candidatePackage.headSha === "string"
+          ? candidatePackage.headSha.trim().toLowerCase()
+          : "";
+
+      if (candidatePackage && /^[0-9a-f]{40}$/.test(candidateHeadSha)) {
+        payload = candidatePayload;
+        packageValue = candidatePackage;
+        headSha = candidateHeadSha;
+        break;
+      }
+    } catch {
+      // Ignore malformed/stale completed run logs and continue to the next
+      // completed analyzer candidate.
+    }
   }
 
-  const packageValue = payload && isRecord(payload.contextPackage)
-    ? payload.contextPackage
-    : null;
-  const headSha =
-    packageValue && typeof packageValue.headSha === "string"
-      ? packageValue.headSha.trim().toLowerCase()
-      : "";
-  if (!packageValue || !/^[0-9a-f]{40}$/.test(headSha)) {
+  if (!payload || !packageValue || !/^[0-9a-f]{40}$/.test(headSha)) {
     throw new AutomatedMultiTaskPlannerError(
       "Repository analysis does not contain a valid bounded context package.",
       "ANALYSIS_REQUIRED",
