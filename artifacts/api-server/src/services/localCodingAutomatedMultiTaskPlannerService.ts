@@ -47,6 +47,8 @@ const MAX_PLANNER_WORKSTREAMS = 8;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const PLANNER_MODEL_MAX_ATTEMPTS = 3;
 const PLANNER_MODEL_BACKOFF_MS = [750, 1_500] as const;
+const PLANNER_AUTHORITY_WAIT_MS = 30_000;
+const PLANNER_AUTHORITY_POLL_MS = 1_000;
 
 export type AutomatedMultiTaskPlannerErrorCode =
   | "NOT_FOUND"
@@ -633,10 +635,50 @@ function createPlannerProviderAdapter(input: {
     : createConstrainedCodingProviderAdapter(input);
 }
 
+function existingPreparedGraphResult(
+  snapshot: NonNullable<Awaited<ReturnType<typeof getLatestCodingTaskGraph>>>,
+): AutomatedMultiTaskPlanGenerationResult {
+  const plan = validateCodingMultiTaskPlanV1(snapshot.graph.planJson);
+  return {
+    created: false,
+    graphId: snapshot.graph.id,
+    graphVersion: snapshot.graph.version,
+    planHash: snapshot.graph.planHash,
+    graphStatus: snapshot.graph.status,
+    plan,
+    model: {
+      provider: "existing",
+      model: "persisted-task-graph",
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      latencyMs: 0,
+    },
+    nextAction: "APPROVE_TASK_GRAPH",
+  };
+}
+
+async function waitForPreparedPlannerResult(
+  taskId: string,
+): Promise<AutomatedMultiTaskPlanGenerationResult | null> {
+  const deadline = Date.now() + PLANNER_AUTHORITY_WAIT_MS;
+  while (Date.now() < deadline) {
+    const snapshot = await getLatestCodingTaskGraph(taskId);
+    if (snapshot?.graph.status === "PREPARED") {
+      return existingPreparedGraphResult(snapshot);
+    }
+    await sleep(PLANNER_AUTHORITY_POLL_MS);
+  }
+  return null;
+}
+
 export async function generateAndPersistCodingMultiTaskPlan(
   taskId: string,
 ): Promise<AutomatedMultiTaskPlanGenerationResult> {
   const latest = await getLatestCodingTaskGraph(taskId);
+  if (latest?.graph.status === "PREPARED") {
+    return existingPreparedGraphResult(latest);
+  }
   if (latest && ["APPROVED", "RUNNING"].includes(latest.graph.status)) {
     throw new AutomatedMultiTaskPlannerError(
       "An approved or running task graph already exists; finish or cancel it before generating another plan.",
@@ -672,7 +714,13 @@ export async function generateAndPersistCodingMultiTaskPlan(
       },
     });
   } catch (error) {
-    if (error instanceof PlannerAuthorityError) throw mapAuthorityError(error);
+    if (error instanceof PlannerAuthorityError) {
+      if (error.code === "AUTHORITY_HELD") {
+        const existing = await waitForPreparedPlannerResult(taskId);
+        if (existing) return existing;
+      }
+      throw mapAuthorityError(error);
+    }
     throw error;
   }
 
