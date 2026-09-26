@@ -42,7 +42,7 @@ import {
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { createConstrainedModelInvocationAdapter } from "./localCodingAiModelAdapterService.js";
-import { resolveProductionCodingModel } from "./localCodingAiProductionModelService.js";
+import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
 import {
@@ -1356,12 +1356,16 @@ export async function executeCodingWorkstreamAiJob(
     );
     const prompt = buildLocalCodingAiPrompt(contextLease);
 
-    const resolved = await resolveProductionCodingModel();
+    const resolved = await resolvePreferredCodingModel();
     if (!resolved.ok) {
       throw new LocalCodingWorkstreamAiExecutionError(
         resolved.message,
         "MODEL_UNAVAILABLE",
-        { reason: resolved.reason },
+        {
+          reason: resolved.reason,
+          primaryFailure: resolved.primaryFailure,
+          fallbackFailure: resolved.fallbackFailure ?? null,
+        },
       );
     }
 

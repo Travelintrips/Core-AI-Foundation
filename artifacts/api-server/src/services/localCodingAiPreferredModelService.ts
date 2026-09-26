@@ -109,7 +109,7 @@ export async function resolveConfiguredCodingFallbackModel(
           maxOutputTokens: base.maxOutputTokens,
           capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
         },
-        provider: { slug: "ollama" },
+        provider: { slug: "ollama", baseUrl: registeredWorker.endpointUrl },
         timeoutMs: base.timeoutMs,
         maxOutputTokens: base.maxOutputTokens,
         selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
