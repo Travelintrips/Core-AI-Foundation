@@ -31,6 +31,39 @@ describe("Local Coding AI Patch Applier", () => {
     expect(git(root, ["rev-parse", "HEAD"])).toBe(head);
   });
 
+  it("creates a new authorized file without shell, network, commit, or push", async () => {
+    const root = await workspace();
+    const out = await applyAiProposalPatch(
+      root,
+      {
+        operations: [
+          {
+            kind: "create_file",
+            path: "docs/ollama-local-smoke-test-8b.md",
+            content:
+              "Created to verify the local Ollama coding worker, multi-worker dispatcher, and planner authority lease.\n",
+          },
+        ],
+      },
+      context(root, ["docs/ollama-local-smoke-test-8b.md"]),
+    );
+
+    expect(out.status).toBe("APPLIED");
+    expect(out.changedFiles).toEqual(["docs/ollama-local-smoke-test-8b.md"]);
+    expect(out.patch).toContain("new file mode 100644");
+    expect(out.patch).toContain("+++ b/docs/ollama-local-smoke-test-8b.md");
+    expect(await readFile(join(root, "docs/ollama-local-smoke-test-8b.md"), "utf8")).toContain(
+      "local Ollama coding worker",
+    );
+    expect(out).toMatchObject({
+      scriptsExecuted: false,
+      networkUsed: false,
+      commitCreated: false,
+      pushed: false,
+      rolledBack: false,
+    });
+  });
+
   it("fails closed for disallowed, traversal, absolute, sensitive, shell, and hidden command fields", async () => {
     const root = await workspace();
     expect(await applyAiProposalPatch(root, replace(), context(root, ["package.json"]))).toMatchObject({ status: "BLOCKED", code: "FILE_NOT_ALLOWED" });
