@@ -651,12 +651,17 @@ export async function generateAndPersistCodingMultiTaskPlan(
 
   const { task, context } = await loadAutomatedPlannerContext(taskId);
   const scope = `coding-task:${taskId}`;
+  // Each planner invocation needs a distinct holder identity. Reusing the same
+  // holder across overlapping HTTP retries lets one invocation release the
+  // shared lease while another is still generating, which surfaces as
+  // AUTHORITY_LOST/NOT_HOLDER immediately before persistence.
+  const plannerHolderId = `${AUTO_PLANNER_HOLDER_ID}:${randomUUID()}`;
 
   let authority;
   try {
     authority = await acquirePlannerAuthority({
       scope,
-      holderId: AUTO_PLANNER_HOLDER_ID,
+      holderId: plannerHolderId,
       holderType: "fallback",
       leaseSeconds: AUTO_PLANNER_LEASE_SECONDS,
       metadata: {
@@ -934,7 +939,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
   try {
     await assertPlannerAuthority({
       scope,
-      holderId: AUTO_PLANNER_HOLDER_ID,
+      holderId: plannerHolderId,
       leaseToken: authority.leaseToken,
       fencingGeneration: authority.fencingGeneration,
     });
@@ -947,7 +952,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
 
   await releasePlannerAuthority({
     scope,
-    holderId: AUTO_PLANNER_HOLDER_ID,
+    holderId: plannerHolderId,
     leaseToken: authority.leaseToken,
     fencingGeneration: authority.fencingGeneration,
   }).catch((error) => {
