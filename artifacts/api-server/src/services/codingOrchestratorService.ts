@@ -654,7 +654,10 @@ export async function startCodingOrchestration(
   try {
     queuedJob = await enqueue({
       jobType: "coding_repository_analyzer",
-      requiredCapability: "coding_repository_analyzer",
+      // Reserve this analyzer job for the explicit in-process orchestrator path.
+      // Dispatcher text workers intentionally do not advertise this capability,
+      // preventing them from stealing the queued row before on-demand claim.
+      requiredCapability: "coding_repository_analyzer_on_demand",
       priority: input.task.priority,
       maxRetry: 0,
       retryStrategy: "manual",
