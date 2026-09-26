@@ -81,6 +81,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/storage/objects", // serves back the same public brief uploads for preview/generation
   "/ai/catalog/public", // customer-facing catalog — must never require the admin key
   "/internal/auth/login", // internal staff login — must be reachable before a session exists
+  "/internal/auth/dev-login", // non-production only; route handler also requires LOCAL_DEV_AUTH_ENABLED=true
   "/internal/auth/request-magic-link", // passwordless login request — email ownership verified by magic link
   "/internal/auth/magic-login", // signed short-lived magic link callback
   "/internal/auth/request-password-reset", // password recovery request
