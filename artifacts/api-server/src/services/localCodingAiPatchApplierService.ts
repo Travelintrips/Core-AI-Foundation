@@ -166,8 +166,12 @@ async function safeNewFileTarget(root: string, file: string): Promise<string> {
   return candidate;
 }
 
+function normalizeCreatedFileContent(content: string): string {
+  return content.endsWith("\n") ? content : content + "\n";
+}
+
 function createFilePatch(file: string, content: string): string {
-  const normalized = content.endsWith("\n") ? content : content + "\n";
+  const normalized = normalizeCreatedFileContent(content);
   const lines = normalized.slice(0, -1).split("\n");
   return [
     `diff --git a/${file} b/${file}`,
@@ -247,7 +251,8 @@ export async function applyAiProposalPatch(root: string, proposalInput: unknown,
       try {
         for (const operation of createOperations) {
           const absolute = await safeNewFileTarget(absoluteRoot, operation.path);
-          await writeFile(absolute, operation.content, { encoding: "utf8", flag: "wx" });
+          const normalizedContent = normalizeCreatedFileContent(operation.content);
+          await writeFile(absolute, normalizedContent, { encoding: "utf8", flag: "wx" });
           created.push(absolute);
         }
         const rawPatch = createOperations.map((operation) => createFilePatch(operation.path, operation.content)).join("");
