@@ -32,7 +32,7 @@ describe("Local Coding AI Patch Applier", () => {
   });
 
   it("creates a new authorized file without shell, network, commit, or push", async () => {
-    const root = await workspace();
+    const root = await workspace({ "docs/.keep": "" });
     const out = await applyAiProposalPatch(
       root,
       {
