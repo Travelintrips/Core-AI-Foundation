@@ -7,8 +7,12 @@ set -euo pipefail
 health_url="${API_BASE_URL%/}/healthz"
 stable_successes=0
 required_successes=3
+max_attempts=42
 
-for attempt in $(seq 1 36); do
+# Hostinger rolling deploys can expose the expected commit only near the end of
+# the normal propagation window. Keep enough tail room to collect all required
+# consecutive stability samples after the new SHA first appears.
+for attempt in $(seq 1 "$max_attempts"); do
   host=$(node -e 'const u=new URL(process.argv[1]); process.stdout.write(u.hostname)' "$health_url")
 
   dns_addresses=$(getent ahosts "$host" 2>/dev/null | awk '{print $1}' | sort -u | paste -sd, - || true)
