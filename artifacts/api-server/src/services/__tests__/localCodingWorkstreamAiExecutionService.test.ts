@@ -147,3 +147,22 @@ describe("workstream AI isolated branch binding", () => {
   });
 
 });
+
+
+describe("workstream AI failure context preservation", () => {
+  it("retains analyzer state when execution fails before loadExecutionContext completes", () => {
+    const analyzerResult = {
+      codingTaskId: "child-task",
+      localExecutionPlan: { status: "AI_REQUIRED" },
+      contextPackage: { branch: "ai-core/task/ws-001-a3" },
+    };
+    const persisted = {
+      ...analyzerResult,
+      workstreamAiExecution: { status: "FAILED", nextAction: "AI_REQUIRED" },
+    };
+
+    expect(persisted.localExecutionPlan).toEqual({ status: "AI_REQUIRED" });
+    expect(persisted.contextPackage).toEqual({ branch: "ai-core/task/ws-001-a3" });
+    expect(persisted.workstreamAiExecution).toMatchObject({ status: "FAILED" });
+  });
+});
