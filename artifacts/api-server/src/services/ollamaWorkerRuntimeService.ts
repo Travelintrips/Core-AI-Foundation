@@ -22,6 +22,7 @@ export interface OllamaWorkerRuntimeConfig {
   localBaseUrl: string;
   advertiseBaseUrl: string;
   maxConcurrentJobs: number;
+  powershellEnabled: boolean;
   heartbeatMs: number;
   clusterId: string;
   region: string;
@@ -115,6 +116,7 @@ export function readOllamaWorkerRuntimeConfig(
       1,
       32,
     ),
+    powershellEnabled: envTrue(env["OLLAMA_WORKER_POWERSHELL_ENABLED"]),
     heartbeatMs: boundedInt(
       env["OLLAMA_WORKER_HEARTBEAT_MS"],
       DEFAULT_HEARTBEAT_MS,
@@ -181,6 +183,7 @@ async function registerRuntime(
     maxConcurrentJobs: config.maxConcurrentJobs,
     leaseOwner: "ollama-runtime:" + config.nodeId,
     leaseTtlMs: DEFAULT_LEASE_TTL_MS,
+    powershellExecution: config.powershellEnabled,
   });
 
   if (!worker.heartbeatToken) {
@@ -247,6 +250,7 @@ export async function startOllamaWorkerRuntime(
       modelId: config.modelId,
       advertiseBaseUrl: config.advertiseBaseUrl,
       maxConcurrentJobs: config.maxConcurrentJobs,
+      powershellEnabled: config.powershellEnabled,
     },
     "[ollama-worker] Runtime started",
   );
@@ -269,6 +273,7 @@ export function getOllamaWorkerRuntimeStatus(): Record<string, unknown> {
     localBaseUrl: state.config.localBaseUrl,
     advertiseBaseUrl: state.config.advertiseBaseUrl,
     maxConcurrentJobs: state.config.maxConcurrentJobs,
+    powershellEnabled: state.config.powershellEnabled,
     heartbeatMs: state.config.heartbeatMs,
     startedAt: state.startedAt,
   };

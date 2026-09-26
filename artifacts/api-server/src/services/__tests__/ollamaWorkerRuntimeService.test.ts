@@ -16,6 +16,7 @@ describe("Ollama worker runtime configuration", () => {
       OLLAMA_WORKER_ADVERTISE_URL:
         "http://10.10.0.21:11434/v1",
       OLLAMA_WORKER_MAX_CONCURRENCY: "4",
+      OLLAMA_WORKER_POWERSHELL_ENABLED: "true",
       OLLAMA_WORKER_HEARTBEAT_MS: "10000",
     } as NodeJS.ProcessEnv);
 
@@ -29,6 +30,7 @@ describe("Ollama worker runtime configuration", () => {
       advertiseBaseUrl:
         "http://10.10.0.21:11434/v1",
       maxConcurrentJobs: 4,
+      powershellEnabled: true,
       heartbeatMs: 10000,
     });
   });
