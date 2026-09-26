@@ -120,6 +120,18 @@ describe("per-workstream constrained AI execution contract", () => {
     ]);
   });
 
+  it("includes an exact owned target even when the analyzer has no concrete file yet", () => {
+    const selected = selectWorkstreamAiAllowedFiles(
+      {
+        contextPackage: { affectedFiles: [], relevantFiles: [] },
+        localExecutionPlan: { targetFiles: [] },
+      },
+      ["docs/ollama-local-smoke-test-8b.md"],
+    );
+
+    expect(selected).toEqual(["docs/ollama-local-smoke-test-8b.md"]);
+  });
+
   it("caps the model-edit allowlist at twelve files", () => {
     const affectedFiles = Array.from(
       { length: 30 },
