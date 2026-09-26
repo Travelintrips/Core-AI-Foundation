@@ -176,6 +176,7 @@ import codingMissionControlRouter from "./coding-mission-control.js";
 import codingPlannerAuthorityRouter from "./coding-planner-authority.js";
 import codingControlBridgeRouter from "./coding-control-bridge.js";
 import codingLocalModelRouter from "./coding-local-model.js";
+import codingPowerShellRouter from "./coding-powershell.js";
 import incidentsRouter from "./incidents.js";
 
 const router: IRouter = Router();
@@ -190,6 +191,7 @@ router.use(codingMissionControlRouter);
 router.use(codingPlannerAuthorityRouter);
 router.use(codingControlBridgeRouter);
 router.use(codingLocalModelRouter);
+router.use(codingPowerShellRouter);
 router.use(incidentsRouter);
 router.use(internalAuthRouter);
 router.use(internalCatalogRouter);
