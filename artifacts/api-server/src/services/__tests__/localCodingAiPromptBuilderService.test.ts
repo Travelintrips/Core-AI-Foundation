@@ -130,7 +130,7 @@ describe("Local Coding AI Prompt Builder", () => {
     expect(prompt.system).toMatch(/outside allowedFiles/i);
     expect(prompt.system).toMatch(/Proposal Contract V1/i);
     expect(prompt.system).toMatch(/capabilities\.shellCommand/i);
-    expect(prompt.system).toMatch(/replace_text, insert_before, insert_after, and delete_text/i);
+    expect(prompt.system).toMatch(/replace_text, insert_before, insert_after, delete_text, and create_file/i);
   });
 
   it("keeps prompt injection in source text as quoted data rather than system instruction", () => {
