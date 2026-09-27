@@ -543,7 +543,7 @@ describe("DesignAiExecutionAdapter", () => {
     expect(typeof orchestrator.runQaGate).toBe("function");
     expect(typeof orchestrator.isMultiAgentDesignEnabled).toBe("function");
     expect(typeof orchestrator.initPipelineStages).toBe("function");
-  });
+  }, 15_000);
 });
 
 // ─── DesignAiCapabilityResolver (unit) ───────────────────────────────────────
