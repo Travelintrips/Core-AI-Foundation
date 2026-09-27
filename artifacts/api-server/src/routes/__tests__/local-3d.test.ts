@@ -4,6 +4,7 @@ import request from "supertest";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { IncomingMessage } from "node:http";
 
 const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(),
@@ -47,6 +48,18 @@ import local3dRouter from "../local-3d.js";
 const app = express();
 app.use(express.json());
 app.use(local3dRouter);
+
+function binaryParser(
+  res: IncomingMessage,
+  callback: (error: Error | null, body?: Buffer) => void,
+): void {
+  const chunks: Buffer[] = [];
+  res.on("data", (chunk: Buffer | string) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  });
+  res.on("end", () => callback(null, Buffer.concat(chunks)));
+  res.on("error", (error) => callback(error));
+}
 
 describe("local 3D route contract", () => {
   beforeEach(() => {
@@ -182,11 +195,15 @@ describe("local 3D route contract", () => {
       completedAt: new Date(),
     }]);
 
-    const res = await request(app).get("/ai/local-3d/jobs/42/artifacts/glb");
+    const res = await request(app)
+      .get("/ai/local-3d/jobs/42/artifacts/glb")
+      .buffer(true)
+      .parse(binaryParser);
 
     expect(res.status).toBe(200);
     expect(res.headers["cache-control"]).toContain("private");
-    expect(Buffer.from(res.body).toString()).toBe("glTF-test");
+    expect(Buffer.isBuffer(res.body)).toBe(true);
+    expect((res.body as Buffer).toString()).toBe("glTF-test");
   });
 
   it("blocks artifact download while job is still running", async () => {
