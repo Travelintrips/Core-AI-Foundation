@@ -275,11 +275,14 @@ async function processTaskGraph(
   }
 
   if (["APPROVED", "RUNNING"].includes(snapshot.graph.status)) {
-    if (
-      snapshot.workstreams.some((item) =>
-        ["CLAIMED", "RUNNING"].includes(item.status)
-      )
-    ) {
+    const now = Date.now();
+    const hasLiveClaim = snapshot.workstreams.some((item) => {
+      if (!["CLAIMED", "RUNNING"].includes(item.status)) return false;
+      if (!item.leaseExpiresAt) return true;
+      return new Date(item.leaseExpiresAt).getTime() > now;
+    });
+
+    if (hasLiveClaim) {
       return {
         handled: true,
         action: "WAIT_WORKSTREAM_EXECUTION",
