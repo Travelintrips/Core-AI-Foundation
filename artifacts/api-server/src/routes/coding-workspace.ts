@@ -59,6 +59,8 @@ import {
   LocalAiPatchApprovalError,
 } from "../services/localCodingAiPatchApprovalService.js";
 import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorkerRecoveryService.js";
+import { runTrustedOllamaRepairTask } from "../services/localCodingTrustedRepairService.js";
+import { LocalCodingPowerShellError } from "../services/localCodingPowerShellExecutorService.js";
 
 const router = Router();
 
@@ -334,6 +336,73 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
     }
     if (error instanceof CodingRunAlreadyActiveError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.post("/ai/coding/tasks/:id/run-trusted-repair", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [task] = await db
+    .select()
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, params.data.id));
+  if (!task) {
+    res.status(404).json({ error: "Coding task not found" });
+    return;
+  }
+
+  const [activeRun] = await db
+    .select({ id: aiCodingRunsTable.id })
+    .from(aiCodingRunsTable)
+    .where(
+      and(
+        eq(aiCodingRunsTable.taskId, task.id),
+        eq(aiCodingRunsTable.status, "RUNNING"),
+      ),
+    )
+    .limit(1);
+
+  if (activeRun) {
+    res.status(409).json({ error: "Coding task already has an active run" });
+    return;
+  }
+
+  if (!["READY_REVIEW", "FAILED"].includes(task.status)) {
+    res.status(409).json({
+      error: "Trusted Ollama repair is available only for ready-for-review or failed tasks.",
+    });
+    return;
+  }
+
+  try {
+    const result = await runTrustedOllamaRepairTask({
+      taskId: task.id,
+      instruction:
+        "Run pnpm --filter @workspace/api-server test then pnpm --filter @workspace/api-server typecheck. If verification fails, use the diagnostics to repair this coding task safely. Do not commit, push, merge, or modify files outside the task's explicit allowed files.",
+      requestedBy: "coding-workspace",
+      modelId: process.env["OLLAMA_WORKER_MODEL"] || process.env["OLLAMA_MODEL"] || "qwen2.5-coder:7b",
+      timeoutMs: 180_000,
+    });
+
+    res.json(result);
+  } catch (error) {
+    if (error instanceof LocalCodingPowerShellError) {
+      const status =
+        error.code === "NOT_FOUND"
+          ? 404
+          : error.code === "DISABLED"
+            ? 503
+            : ["NOT_READY", "EXPIRED", "DIGEST_MISMATCH", "WORKSPACE_INVALID"].includes(error.code)
+              ? 409
+              : 422;
+      res.status(status).json({ error: error.message, code: error.code });
       return;
     }
     throw error;
