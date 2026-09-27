@@ -59,6 +59,7 @@ import {
   LocalAiPatchApprovalError,
 } from "../services/localCodingAiPatchApprovalService.js";
 import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorkerRecoveryService.js";
+import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
 
 const router = Router();
 
@@ -174,10 +175,12 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
 
   await reconcileStaleMultiWorkerRuns({ taskId: params.data.id }).catch(() => undefined);
 
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, params.data.id));
+  const [task] = await withCodingWorkspaceReadRetry(() =>
+    db
+      .select()
+      .from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, params.data.id)),
+  );
 
   if (!task) {
     res.status(404).json({ error: "Coding task not found" });
@@ -185,16 +188,20 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   }
 
   const [runs, changes] = await Promise.all([
-    db
-      .select()
-      .from(aiCodingRunsTable)
-      .where(eq(aiCodingRunsTable.taskId, task.id))
-      .orderBy(desc(aiCodingRunsTable.startedAt)),
-    db
-      .select()
-      .from(aiCodeChangesTable)
-      .where(eq(aiCodeChangesTable.taskId, task.id))
-      .orderBy(desc(aiCodeChangesTable.createdAt)),
+    withCodingWorkspaceReadRetry(() =>
+      db
+        .select()
+        .from(aiCodingRunsTable)
+        .where(eq(aiCodingRunsTable.taskId, task.id))
+        .orderBy(desc(aiCodingRunsTable.startedAt)),
+    ),
+    withCodingWorkspaceReadRetry(() =>
+      db
+        .select()
+        .from(aiCodeChangesTable)
+        .where(eq(aiCodeChangesTable.taskId, task.id))
+        .orderBy(desc(aiCodeChangesTable.createdAt)),
+    ),
   ]);
 
   res.json(GetCodingTaskResponse.parse({ task, runs, changes }));
