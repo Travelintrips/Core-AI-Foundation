@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 const apiBase = (process.env["AICORE_REMOTE_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
 const enrollmentSecret = (process.env["OLLAMA_REMOTE_ENROLLMENT_SECRET"] ?? "").trim();
 const ollamaBase = (process.env["OLLAMA_BASE_URL"] ?? "http://127.0.0.1:11434/v1").replace(/\/$/, "");
@@ -5,6 +7,10 @@ const modelId = (process.env["OLLAMA_WORKER_MODEL"] ?? "qwen2.5-coder:7b").trim(
 const workerName = (process.env["OLLAMA_WORKER_NAME"] ?? "ollama-windows-worker").trim();
 const nodeId = (process.env["OLLAMA_WORKER_NODE_ID"] ?? workerName).trim();
 const pollMs = Math.max(500, Number(process.env["OLLAMA_REMOTE_POLL_MS"] ?? 1000));
+const execFileAsync = promisify(execFile);
+const powershellRoot = (process.env["LOCAL_CODING_POWERSHELL_ROOT"] ?? process.cwd()).trim();
+const allowedScripts = new Set(["test", "typecheck", "lint", "build"]);
+const forbiddenShellMeta = /[;&|><\x60\r\n\0]/;
 
 if (!enrollmentSecret) throw new Error("OLLAMA_REMOTE_ENROLLMENT_SECRET is required");
 
@@ -62,6 +68,97 @@ function parseBoundedInput(value: unknown): { system: string; user: string } {
     throw new Error("Remote invocation bounded input is invalid");
   }
   return { system: parsed["system"], user: parsed["user"] };
+}
+
+
+function safeFilterName(value: string): boolean {
+  return /^[@A-Za-z0-9._/*-]+$/.test(value) && !value.includes("..") && value.length <= 160;
+}
+
+function parseAllowlistedCommand(command: unknown): string | null {
+  if (typeof command !== "string") return null;
+  const normalized = command.trim().replace(/\s+/g, " ");
+  if (!normalized || normalized.length > 300 || forbiddenShellMeta.test(normalized)) return null;
+
+  if (["Get-Location", "Get-ChildItem", "Get-ChildItem -Name"].includes(normalized)) return normalized;
+  if ([
+    "git status --short",
+    "git diff --check",
+    "git diff --name-only",
+    "git rev-parse HEAD",
+    "node --version",
+    "pnpm --version",
+  ].includes(normalized)) return "& " + normalized;
+
+  const parts = normalized.split(" ");
+  if (parts[0] === "pnpm") {
+    let script: string | undefined;
+    if (parts.length === 2) script = parts[1];
+    else if (parts.length === 3 && parts[1] === "run") script = parts[2];
+    else if (parts.length === 4 && parts[1] === "--filter" && safeFilterName(parts[2] ?? "")) script = parts[3];
+    else if (parts.length === 5 && parts[1] === "--filter" && safeFilterName(parts[2] ?? "") && parts[3] === "run") script = parts[4];
+    if (script && allowedScripts.has(script)) return "& " + normalized;
+  }
+
+  if (parts[0] === "npm" && parts.length === 3 && parts[1] === "run" && allowedScripts.has(parts[2] ?? "")) {
+    return "& " + normalized;
+  }
+
+  return null;
+}
+
+async function executePowerShell(payload: Record<string, any>): Promise<Record<string, unknown>> {
+  const commands = Array.isArray(payload["commands"]) ? payload["commands"] : [];
+  if (commands.length < 1 || commands.length > 6) throw new Error("Remote PowerShell command set is invalid");
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const raw of commands) {
+    const script = parseAllowlistedCommand(raw);
+    if (!script) throw new Error("Remote PowerShell command is outside the trusted allowlist");
+    const started = Date.now();
+    try {
+      const output = await execFileAsync(
+        process.platform === "win32" ? "powershell.exe" : "pwsh",
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+        {
+          cwd: powershellRoot,
+          timeout: 180_000,
+          maxBuffer: 2 * 1024 * 1024,
+          env: { ...process.env, CI: "1", NO_COLOR: "1" },
+        },
+      );
+      results.push({
+        command: raw,
+        status: "PASSED",
+        exitCode: 0,
+        stdout: String(output.stdout ?? "").slice(0, 200_000),
+        stderr: String(output.stderr ?? "").slice(0, 100_000),
+        durationMs: Date.now() - started,
+      });
+    } catch (error) {
+      const typed = error as Error & { code?: number | string; stdout?: string; stderr?: string };
+      results.push({
+        command: raw,
+        status: "FAILED",
+        exitCode: typeof typed.code === "number" ? typed.code : null,
+        stdout: String(typed.stdout ?? "").slice(0, 200_000),
+        stderr: String(typed.stderr ?? typed.message ?? "").slice(0, 100_000),
+        durationMs: Date.now() - started,
+      });
+      break;
+    }
+  }
+
+  return {
+    requestedBy: payload["requestedBy"] ?? null,
+    modelId: payload["modelId"] ?? modelId,
+    reason: payload["reason"] ?? null,
+    status:
+      results.length === commands.length && results.every((item) => item["status"] === "PASSED")
+        ? "COMPLETED"
+        : "FAILED",
+    results,
+  };
 }
 
 async function invoke(payload: Record<string, any>): Promise<Record<string, unknown>> {
@@ -136,7 +233,10 @@ async function main(): Promise<void> {
       }, 20_000);
       heartbeatTimer.unref?.();
       try {
-        const result = await invoke(job["payload"] ?? {});
+        const result =
+          job["jobType"] === "ollama_powershell_execution"
+            ? await executePowerShell(job["payload"] ?? {})
+            : await invoke(job["payload"] ?? {});
         await complete(registration.workerId, registration.token, jobId, result);
         console.log(`Completed remote Ollama job ${jobId}`);
       } catch (error) {

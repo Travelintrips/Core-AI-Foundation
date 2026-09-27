@@ -114,7 +114,7 @@ router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Pro
   }
   const payload = { ...((job.payloadJson ?? {}) as Record<string, unknown>) };
   delete payload["_claimedByWorkerId"];
-  res.json({ jobId: job.id, jobCode: job.jobCode, payload });
+  res.json({ jobId: job.id, jobCode: job.jobCode, jobType: job.jobType, payload });
 });
 
 router.post("/ai/ollama-workers/:id/jobs/:jobId/complete", requireWorker, async (req, res): Promise<void> => {
