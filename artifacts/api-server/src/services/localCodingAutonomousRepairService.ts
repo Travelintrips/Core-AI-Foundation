@@ -158,10 +158,33 @@ async function loadTaskState(taskId: string) {
   ) ?? null;
   const payload = orchestrator ? parseJson(orchestrator.logs) : {};
   const orchestration = isRecord(payload.orchestration) ? payload.orchestration : {};
-  const nextAction =
+  const orchestratorNextAction =
     typeof orchestration.nextAction === "string" ? orchestration.nextAction : null;
 
-  return { task, runs, activeRun, orchestrator, payload, nextAction };
+  const latestTransition = runs.find((run) => {
+    if (run.status !== "COMPLETED" || !run.logs || run === orchestrator) return false;
+    const parsed = parseJson(run.logs);
+    return typeof parsed.nextAction === "string";
+  }) ?? null;
+  const latestTransitionPayload = latestTransition
+    ? parseJson(latestTransition.logs)
+    : {};
+  const latestTransitionNextAction =
+    typeof latestTransitionPayload.nextAction === "string"
+      ? latestTransitionPayload.nextAction
+      : null;
+
+  const nextAction = latestTransitionNextAction ?? orchestratorNextAction;
+
+  return {
+    task,
+    runs,
+    activeRun,
+    orchestrator,
+    payload,
+    nextAction,
+    latestTransition,
+  };
 }
 
 function contextHeadSha(payload: Record<string, unknown>): string | null {
