@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -176,13 +176,7 @@ async function restoreAllowedFiles(
   snapshots: Map<string, string>,
 ): Promise<void> {
   for (const [file, content] of snapshots) {
-    await copyFile(resolve(root, file), resolve(root, file)).catch(() => undefined);
-    const absolute = resolve(root, file);
-    const original = snapshots.get(file);
-    if (original !== undefined) {
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(absolute, original, "utf8");
-    }
+    await writeFile(resolve(root, file), content, "utf8");
   }
 }
 
