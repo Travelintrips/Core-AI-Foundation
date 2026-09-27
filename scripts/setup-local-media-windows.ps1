@@ -12,6 +12,29 @@ function Assert-Command {
   }
 }
 
+function Invoke-GitChecked {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string[]]$Arguments
+  )
+
+  $previousPreference = $ErrorActionPreference
+  try {
+    # Native Git writes ordinary progress messages to stderr. PowerShell can
+    # surface those as NativeCommandError when ErrorActionPreference=Stop.
+    $global:ErrorActionPreference = "Continue"
+    & git @Arguments
+    $exitCode = $LASTEXITCODE
+  }
+  finally {
+    $global:ErrorActionPreference = $previousPreference
+  }
+
+  if ($exitCode -ne 0) {
+    throw "git $($Arguments -join ' ') failed with exit code $exitCode"
+  }
+}
+
 Write-Host ""
 Write-Host "=== Core AI Local Media Setup (Windows / CPU-safe) ==="
 Write-Host "ComfyUI path: $InstallRoot"
@@ -45,7 +68,7 @@ if (-not $SkipFfmpeg) {
 
 if (-not (Test-Path $InstallRoot)) {
   Write-Host "[2/6] Cloning ComfyUI..."
-  git clone https://github.com/comfyanonymous/ComfyUI.git $InstallRoot
+  Invoke-GitChecked -Arguments @("clone", "https://github.com/comfyanonymous/ComfyUI.git", $InstallRoot)
 } else {
   Write-Host "[2/6] ComfyUI folder already exists."
 }
