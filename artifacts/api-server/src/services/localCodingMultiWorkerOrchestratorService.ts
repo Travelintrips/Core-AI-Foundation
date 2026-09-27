@@ -239,6 +239,12 @@ export async function claimReadyCodingWorkstreams(
         attempt,
       );
 
+      const reclaimingExpiredExecution =
+        (candidate.status === "CLAIMED" || candidate.status === "RUNNING") &&
+        Boolean(candidate.leaseToken) &&
+        Boolean(candidate.leaseExpiresAt) &&
+        candidate.leaseExpiresAt!.getTime() <= now.getTime();
+
       const [claimed] = await tx
         .update(aiCodingWorkstreamsTable)
         .set({
@@ -253,6 +259,13 @@ export async function claimReadyCodingWorkstreams(
           headSha: null,
           attemptCount: attempt,
           errorMessage: null,
+          ...(reclaimingExpiredExecution
+            ? {
+                childTaskId: null,
+                childRunId: null,
+                jobId: null,
+              }
+            : {}),
         })
         .where(claimCondition(candidate, now))
         .returning();
