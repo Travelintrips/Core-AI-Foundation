@@ -209,12 +209,24 @@ async function retry(workerId: number, token: string, jobId: number, error: unkn
   }));
 }
 
+async function registerWithRetry(): Promise<{ workerId: number; token: string }> {
+  for (;;) {
+    try {
+      const registration = await register();
+      console.log(`Remote Ollama worker registered: ${registration.workerId} (${modelId})`);
+      return registration;
+    } catch (error) {
+      console.error("Remote Ollama registration failed; retrying in 5s:", error);
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+  }
+}
+
 async function main(): Promise<void> {
   await verifyLocalOllama();
-  let registration = await register();
-  console.log(`Remote Ollama worker registered: ${registration.workerId} (${modelId})`);
+  let registration = await registerWithRetry();
 
-  let lastHeartbeat = 0;
+  let lastHeartbeat = Date.now();
   for (;;) {
     try {
       if (Date.now() - lastHeartbeat >= 20_000) {
@@ -248,12 +260,8 @@ async function main(): Promise<void> {
     } catch (error) {
       console.error("Remote Ollama worker loop error:", error);
       await new Promise((resolve) => setTimeout(resolve, 5_000));
-      try {
-        registration = await register();
-        lastHeartbeat = Date.now();
-      } catch {
-        // Retry registration on the next loop.
-      }
+      registration = await registerWithRetry();
+      lastHeartbeat = Date.now();
     }
   }
 }
