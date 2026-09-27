@@ -232,6 +232,17 @@ describe("Coding Orchestrator", () => {
       }),
     ]));
 
+    const completedRunSnapshots = runUpdates.filter(
+      (value) => (value as { status?: string }).status === "COMPLETED",
+    );
+    expect(completedRunSnapshots).toHaveLength(1);
+    expect(
+      completedRunSnapshots.some((value) => {
+        const logs = (value as { logs?: string }).logs;
+        return typeof logs === "string" && logs.includes('"nextAction": "AI_REQUIRED"');
+      }),
+    ).toBe(false);
+
     const finalLogs = runUpdates
       .map((value) => (value as { logs?: string }).logs)
       .find((value): value is string =>
