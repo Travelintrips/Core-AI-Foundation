@@ -79,3 +79,103 @@ export async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> 
 
   return res.json() as Promise<T>;
 }
+
+export type ApiEventStreamMessage<T = unknown> = {
+  event: string;
+  data: T;
+};
+
+/**
+ * apiEventStream — authenticated POST/GET fetch that incrementally parses
+ * text/event-stream responses. This is intentionally fetch-based (rather than
+ * EventSource) so Ask Mode can stream a POST body while keeping session-cookie
+ * authentication and the same 401/403 semantics as apiFetch.
+ */
+export async function apiEventStream(
+  path: string,
+  opts: RequestInit,
+  onEvent: (message: ApiEventStreamMessage) => void,
+): Promise<void> {
+  const headers = new Headers(opts.headers ?? {});
+  const hasBody = opts.body != null && !(opts.body instanceof FormData);
+  if (hasBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.set("Accept", "text/event-stream");
+
+  const res = await fetch(path, {
+    ...opts,
+    credentials: "include",
+    headers,
+  });
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (typeof body?.error === "string") {
+        msg = body.error;
+      } else if (body?.error && typeof body.error.message === "string") {
+        msg = body.error.message;
+      }
+    } catch {
+      // keep generic status
+    }
+    throw new HttpError(res.status, msg);
+  }
+
+  if (!res.body) {
+    throw new HttpError(502, "Streaming response body is unavailable.");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const consumeBlock = (block: string) => {
+    const lines = block.replace(/\r/g, "").split("\n");
+    let event = "message";
+    const dataLines: string[] = [];
+
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        event = line.slice(6).trim() || "message";
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart());
+      }
+    }
+
+    if (dataLines.length === 0) return;
+    const raw = dataLines.join("\n");
+    let data: unknown = raw;
+    try {
+      data = JSON.parse(raw) as unknown;
+    } catch {
+      // Plain-text SSE data is valid; surface it as-is.
+    }
+    onEvent({ event, data });
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      let boundary = buffer.indexOf("\n\n");
+
+      while (boundary >= 0) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        consumeBlock(block);
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) consumeBlock(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
