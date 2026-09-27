@@ -94,6 +94,35 @@ describe("summarizeCodingMissionControl", () => {
     expect(result.nextActions).not.toContain("DISPATCH_READY_WORKSTREAMS");
   });
 
+  it("surfaces CI self-repair progress and retry metadata", () => {
+    const snapshot = graph("RUNNING");
+    snapshot.workstreams[2].resultJson = {
+      ciSelfRepair: {
+        status: "WAITING_CI",
+        attempt: 2,
+        maxAttempts: 3,
+        checkName: "CI Verify",
+        failureSummary: "Typecheck failed in worker service",
+        repairCommitSha: "b".repeat(40),
+      },
+    };
+
+    const result = summarizeCodingMissionControl(
+      "22222222-2222-4222-8222-222222222222",
+      snapshot,
+    );
+
+    expect(result.nextActions).toContain("MONITOR_CI_SELF_REPAIR");
+    expect(result.active.find((item) => item.key === "T03")?.ciSelfRepair).toEqual({
+      status: "WAITING_CI",
+      attempt: 2,
+      maxAttempts: 3,
+      checkName: "CI Verify",
+      failureSummary: "Typecheck failed in worker service",
+      repairCommitSha: "b".repeat(40),
+    });
+  });
+
   it("routes a fully completed graph to explicit integration manifest review", () => {
     const snapshot = graph("COMPLETED");
     for (const workstream of snapshot.workstreams) {

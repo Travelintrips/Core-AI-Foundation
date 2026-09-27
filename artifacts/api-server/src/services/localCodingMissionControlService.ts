@@ -31,6 +31,14 @@ export interface CodingMissionControlSnapshot {
     attemptCount: number;
     dependencies: string[];
     errorMessage: string | null;
+    ciSelfRepair: {
+      status: string;
+      attempt: number | null;
+      maxAttempts: number | null;
+      checkName: string | null;
+      failureSummary: string | null;
+      repairCommitSha: string | null;
+    } | null;
   }>;
   blockers: Array<{
     key: string;
@@ -47,6 +55,28 @@ const WAITING = new Set(["PENDING"]);
 const READY = new Set(["READY"]);
 const REVIEW = new Set(["REVIEW_REQUIRED"]);
 const FAILED = new Set(["FAILED"]);
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function ciSelfRepairSummary(resultJson: Record<string, unknown> | null) {
+  const repair = record(resultJson?.ciSelfRepair);
+  if (!repair) return null;
+  return {
+    status: typeof repair.status === "string" ? repair.status : "UNKNOWN",
+    attempt: typeof repair.attempt === "number" ? repair.attempt : null,
+    maxAttempts: typeof repair.maxAttempts === "number" ? repair.maxAttempts : null,
+    checkName: typeof repair.checkName === "string" ? repair.checkName : null,
+    failureSummary:
+      typeof repair.failureSummary === "string" ? repair.failureSummary : null,
+    repairCommitSha:
+      typeof repair.repairCommitSha === "string" ? repair.repairCommitSha : null,
+  };
+}
+
 
 export function summarizeCodingMissionControl(
   taskId: string,
@@ -76,6 +106,7 @@ export function summarizeCodingMissionControl(
       attemptCount: item.attemptCount,
       dependencies: item.dependencies,
       errorMessage: item.errorMessage,
+      ciSelfRepair: ciSelfRepairSummary(item.resultJson),
     }));
 
   const blockers = workstreams
@@ -93,6 +124,11 @@ export function summarizeCodingMissionControl(
     nextActions.push("APPROVE_TASK_GRAPH");
   } else {
     if (failed > 0) nextActions.push("RESOLVE_FAILED_WORKSTREAMS");
+    const repairing = workstreams.some((item) => {
+      const repair = ciSelfRepairSummary(item.resultJson);
+      return repair && ["REPAIR_REQUIRED", "SCHEDULED", "WAITING_CI"].includes(repair.status);
+    });
+    if (repairing) nextActions.push("MONITOR_CI_SELF_REPAIR");
     if (reviewRequired > 0) nextActions.push("REVIEW_WORKSTREAMS");
     if (
       ready > 0 &&
