@@ -343,20 +343,27 @@ export async function runTrustedOllamaRepairTask(input: {
   const changedFiles = applied.applyResult.changedFiles ?? [];
   const unexpected = changedFiles.filter((file) => !allowedFiles.includes(file));
   if (unexpected.length > 0) {
+    await restoreAllowedFiles(root, snapshots);
     throw new LocalCodingPowerShellError(
       "Trusted repair changed a file outside the explicit allowlist.",
       "WORKSPACE_INVALID",
     );
   }
 
-  const verification = await executeTrustedOllamaPowerShellCommands({
-    taskId: input.taskId,
-    requestedBy: input.requestedBy || "trusted-local-repair",
-    modelId,
-    commands: initial.plannedCommands,
-    timeoutMs: input.timeoutMs,
-    env,
-  });
+  let verification: TrustedPowerShellTaskResult["execution"];
+  try {
+    verification = await executeTrustedOllamaPowerShellCommands({
+      taskId: input.taskId,
+      requestedBy: input.requestedBy || "trusted-local-repair",
+      modelId,
+      commands: initial.plannedCommands,
+      timeoutMs: input.timeoutMs,
+      env,
+    });
+  } catch (error) {
+    await restoreAllowedFiles(root, snapshots);
+    throw error;
+  }
 
   if (verification.status !== "COMPLETED") {
     await restoreAllowedFiles(root, snapshots);
