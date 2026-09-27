@@ -101,8 +101,12 @@ function estimateSelectionCostUsd(
   const provider = String(selection.provider.slug).trim().toLowerCase();
   if (["ollama", "zerollm"].includes(provider)) return 0;
 
-  const inputUnit = numericCost(selection.model.costPerInputToken);
-  const outputUnit = numericCost(selection.model.costPerOutputToken);
+  const pricedModel = selection.model as typeof selection.model & {
+    costPerInputToken?: unknown;
+    costPerOutputToken?: unknown;
+  };
+  const inputUnit = numericCost(pricedModel.costPerInputToken);
+  const outputUnit = numericCost(pricedModel.costPerOutputToken);
   if (inputUnit == null || outputUnit == null) return null;
 
   const estimated =
