@@ -118,7 +118,7 @@ const REVIEW_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|test|ci|log|konfigurasi|config|security|arsitektur|architecture)\b/i;
 
 const DETERMINISTIC =
-  /^(?:\/)?(?:status|health|healthz|model|routing|cost|help|worker(?:\s+status)?|status\s+worker|build\s+status|status\s+build|deploy\s+status|status\s+deploy|readiness|cek\s+status|cek\s+health|cek\s+model|cek\s+worker)$/i;
+  /^(?:\/)?(?:status|health|healthz|model|routing|cost|help|biaya|bantuan|cek\s+status|cek\s+health|cek\s+model|routing\s+biaya)$/i;
 
 export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
   const text = normalize(message);
