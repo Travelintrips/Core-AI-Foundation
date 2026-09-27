@@ -252,9 +252,9 @@ describe("Full constrained AI coding pipeline E2E", () => {
 
     expect(await verifyChangedFilesStatically(reviewRepo.root, ["example.ts"]))
       .toEqual([]);
-    expect(await readFile(join(reviewRepo.root, "example.ts"), "utf8")).toBe(
-      "export const value = 2;\n",
-    );
+    expect(
+      (await readFile(join(reviewRepo.root, "example.ts"), "utf8")).replace(/\r\n/g, "\n"),
+    ).toBe("export const value = 2;\n");
     expect(await git(reviewRepo.root, ["rev-parse", "HEAD"])).toBe(reviewRepo.head);
     expect(await git(reviewRepo.root, ["diff", "--name-only", "--"])).toBe(
       "example.ts",
