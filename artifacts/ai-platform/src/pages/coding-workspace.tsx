@@ -1805,6 +1805,14 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const [commitPending, setCommitPending] = useState(false);
   const [prVerifyPending, setPrVerifyPending] = useState(false);
   const [mergePending, setMergePending] = useState(false);
+  const [trustedRepairPending, setTrustedRepairPending] = useState(false);
+  const [trustedRepairResult, setTrustedRepairResult] = useState<{
+    repaired?: boolean;
+    allowedFiles?: string[];
+    changedFiles?: string[];
+    proposalSummary?: string | null;
+    verification?: { status?: string };
+  } | null>(null);
 
   useEffect(() => {
     if (detail?.task) {
@@ -1858,6 +1866,10 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const activeRunProgressDetail =
     activeOrchestrationStage?.detail ??
     "The run is active in the background. This panel refreshes automatically.";
+  const canRunTrustedRepair =
+    !hasActiveRun &&
+    [CodingTaskStatus.READY_REVIEW, CodingTaskStatus.FAILED].includes(task.status);
+
   const canApprovePlan =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
@@ -2021,6 +2033,48 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
         },
       },
     );
+  };
+
+  const runTrustedRepair = async () => {
+    if (!canRunTrustedRepair) return;
+    setTrustedRepairPending(true);
+    setTrustedRepairResult(null);
+    try {
+      const response = await fetch(`/api/ai/coding/tasks/${task.id}/run-trusted-repair`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const body = await response.json().catch(() => null) as {
+        error?: string;
+        code?: string;
+        repaired?: boolean;
+        allowedFiles?: string[];
+        changedFiles?: string[];
+        proposalSummary?: string | null;
+        verification?: { status?: string };
+      } | null;
+      if (!response.ok) {
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+      setTrustedRepairResult(body);
+      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
+      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
+      toast({
+        title: body?.repaired ? "Ollama repair verified" : "Ollama verification completed",
+        description: body?.repaired
+          ? `${body.changedFiles?.length ?? 0} authorized file(s) repaired and verification passed.`
+          : "No verified repair was applied. Check the repair result for details.",
+      });
+    } catch (error) {
+      toast({
+        title: "Ollama repair could not run",
+        description: error instanceof Error ? error.message : "Trusted repair failed",
+        variant: "destructive",
+      });
+    } finally {
+      setTrustedRepairPending(false);
+    }
   };
 
   const approvePlan = async () => {
@@ -2720,6 +2774,60 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   )}
                                 </div>
                               ))}
+                            </div>
+                          )}
+                          {canRunTrustedRepair && (
+                            <div className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.025] p-3" data-testid="panel-trusted-ollama-repair">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-300">
+                                    <TerminalSquare className="size-3.5" />
+                                    Ollama trusted repair
+                                  </div>
+                                  <p className="mt-1 max-w-2xl text-[10px] leading-4 text-slate-500">
+                                    Jalankan verification → Ollama proposal → policy validation → bounded patch → re-test langsung dari Workspace Coding AI. Commit, push, merge, dan file di luar allowlist tetap diblokir.
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={runTrustedRepair}
+                                  disabled={trustedRepairPending}
+                                  className="h-8 bg-cyan-300 px-3 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
+                                  data-testid="button-run-trusted-ollama-repair"
+                                >
+                                  {trustedRepairPending
+                                    ? <><Loader2 className="size-3 animate-spin" />Ollama running</>
+                                    : <><Bot className="size-3" />Jalankan Ollama Repair</>}
+                                </Button>
+                              </div>
+                              {trustedRepairResult && (
+                                <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-trusted-ollama-repair-result">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="text-[9px] uppercase tracking-wider text-slate-600">Latest local result</span>
+                                    <span className={cn(
+                                      "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                                      trustedRepairResult.repaired
+                                        ? "bg-emerald-300/10 text-emerald-300"
+                                        : "bg-amber-300/10 text-amber-300",
+                                    )}>
+                                      {trustedRepairResult.repaired
+                                        ? "REPAIRED + VERIFIED"
+                                        : trustedRepairResult.verification?.status ?? "NO REPAIR"}
+                                    </span>
+                                  </div>
+                                  {trustedRepairResult.proposalSummary && (
+                                    <p className="mt-2 text-[10px] leading-4 text-slate-400">{trustedRepairResult.proposalSummary}</p>
+                                  )}
+                                  {(trustedRepairResult.changedFiles?.length ?? 0) > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {trustedRepairResult.changedFiles?.map((file) => (
+                                        <code key={file} className="rounded border border-white/[0.06] px-2 py-1 text-[9px] text-emerald-300">{file}</code>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                           {analyzerResult.failureRecoveryContext && (
