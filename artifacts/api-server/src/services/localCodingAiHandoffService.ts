@@ -833,6 +833,44 @@ async function executePrepareHandoff(
       );
     }
 
+    if (context.localRecovery.directFromInitialAnalysis === true) {
+      const missingTargets: string[] = [];
+      for (const file of context.recoveryContext.focusFiles.slice(0, MAX_ALLOWED_FILES)) {
+        const normalized = normalizeRepoPath(file);
+        if (!normalized) continue;
+        const absolute = resolve(workspacePath, normalized);
+        const rel = relative(workspacePath, absolute);
+        if (rel.startsWith("..") || rel.includes(`..${sep}`)) continue;
+        const info = await lstat(absolute).catch(() => null);
+        if (!info) missingTargets.push(normalized);
+      }
+
+      if (missingTargets.length > 0) {
+        const missing = new Set(missingTargets);
+        context.failureContexts = context.failureContexts.map((failure) => ({
+          ...failure,
+          diagnostics: failure.diagnostics.map((diagnostic) =>
+            diagnostic.file && missing.has(diagnostic.file)
+              ? {
+                  ...diagnostic,
+                  code: "TARGET_NOT_PRESENT",
+                  message:
+                    `The exact approved target '${diagnostic.file}' does not exist at base SHA ${context.baseHeadSha}; create_file is permitted only for this approved missing target.`,
+                }
+              : diagnostic,
+          ),
+          errorCodes: [
+            ...new Set([
+              ...failure.errorCodes,
+              ...(failure.primaryFiles.some((file) => missing.has(file))
+                ? ["TARGET_NOT_PRESENT"]
+                : []),
+            ]),
+          ],
+        }));
+      }
+    }
+
     if (context.currentPatch) {
       patchFile = resolve(tmpdir(), `ai-handoff-${randomUUID()}.diff`);
       await writeFile(patchFile, context.currentPatch, "utf8");
