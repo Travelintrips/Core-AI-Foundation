@@ -346,32 +346,34 @@ describe("Local Coding Executor", () => {
 
   it("fails closed for symlink targets, dirty worktrees, untrusted writes, and arbitrary verification commands", async () => {
     const root = await createWorkspace();
-    const outside = join(root, "..", `outside-${Date.now()}.ts`);
-    await writeFile(outside, "export const x = 1;\n", "utf8");
-    await symlink(outside, join(root, "src", "linked.ts"));
+    if (process.platform !== "win32") {
+      const outside = join(root, "..", `outside-${Date.now()}.ts`);
+      await writeFile(outside, "export const x = 1;\n", "utf8");
+      await symlink(outside, join(root, "src", "linked.ts"));
 
-    const symlinkPlan: LocalCodingExecutionPlan = {
-      status: "EXECUTABLE",
-      reason: "test",
-      operations: [{
-        kind: "replace_text",
-        path: "src/linked.ts",
-        search: "x = 1",
-        replacement: "x = 2",
-      }],
-      verificationCommands: [],
-      targetFiles: ["src/linked.ts"],
-      warnings: [],
-    };
-    const symlinkResult = await executeLocalCodingPlan(root, symlinkPlan, {
-      trustedWorkspace: true,
-      expectedHeadSha: head(root),
-      requireCleanWorktree: false,
-      runVerification: false,
-    });
-    expect(symlinkResult.status).toBe("FAILED");
-    expect(symlinkResult.reason).toMatch(/regular file/i);
-    await rm(outside, { force: true });
+      const symlinkPlan: LocalCodingExecutionPlan = {
+        status: "EXECUTABLE",
+        reason: "test",
+        operations: [{
+          kind: "replace_text",
+          path: "src/linked.ts",
+          search: "x = 1",
+          replacement: "x = 2",
+        }],
+        verificationCommands: [],
+        targetFiles: ["src/linked.ts"],
+        warnings: [],
+      };
+      const symlinkResult = await executeLocalCodingPlan(root, symlinkPlan, {
+        trustedWorkspace: true,
+        expectedHeadSha: head(root),
+        requireCleanWorktree: false,
+        runVerification: false,
+      });
+      expect(symlinkResult.status).toBe("FAILED");
+      expect(symlinkResult.reason).toMatch(/regular file/i);
+      await rm(outside, { force: true });
+    }
 
     const normalPlan = planLocalCodingExecution(
       'Replace "old value" with "new value" in src/sample.ts',
