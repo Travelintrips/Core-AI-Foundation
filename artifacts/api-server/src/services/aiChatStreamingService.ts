@@ -124,7 +124,10 @@ async function readSse(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      buffer += decoder.decode(value, { stream: true });
+      // Normalize the accumulated buffer, not only the latest chunk. A CRLF
+      // pair may itself be split across network chunks.
+      buffer = buffer.replace(/\r\n/g, "\n");
 
       let boundary = buffer.indexOf("\n\n");
       while (boundary >= 0) {
@@ -136,6 +139,7 @@ async function readSse(
     }
 
     buffer += decoder.decode();
+    buffer = buffer.replace(/\r\n/g, "\n");
     if (buffer.trim()) consumeBlock(buffer);
   } finally {
     reader.releaseLock();
