@@ -650,7 +650,7 @@ export async function startCodingOrchestration(
     { sessionId, codingRunId: input.run.id },
   );
 
-  let queuedJob: AiJob;
+  let queuedJob: AiJob | null = null;
   try {
     let lastEnqueueError: unknown = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -687,7 +687,7 @@ export async function startCodingOrchestration(
         }
       }
     }
-    if (!queuedJob!) {
+    if (!queuedJob) {
       throw lastEnqueueError ?? new Error("Coding Orchestrator queue enqueue failed");
     }
   } catch (error) {
