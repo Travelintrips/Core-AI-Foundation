@@ -30,13 +30,20 @@ import {
   getAutonomousCodingTaskStatus,
   getAutonomousRuntimeStatus,
 } from "../services/localCodingAutonomousRepairService.js";
+import {
+  classifyAiCoreWorkload,
+  describeAiCoreWorkloadRouting,
+  selectCloudModelForWorkload,
+  type AiCoreWorkload,
+  type AiCoreWorkloadRoute,
+} from "../services/aiCoreWorkloadRouterService.js";
 
 const router = Router();
 
 const ChatRequest = z.object({
   message: z.string().trim().min(1).max(50_000),
   mode: z.enum(["ask", "agent"]).default("ask"),
-  modelPolicy: z.enum(["economy", "auto", "cloud"]).default("economy"),
+  modelPolicy: z.enum(["economy", "smart", "auto", "cloud"]).default("smart"),
   projectName: z.string().trim().min(1).max(200).optional(),
   repository: z.string().trim().min(1).max(500).optional(),
   branch: z.string().trim().min(1).max(200).optional(),
@@ -165,10 +172,25 @@ async function resolveLocalSelection(): Promise<
   return { ok: true, selection: local.selection };
 }
 
-async function resolveCloudSelection(): Promise<
+async function resolveCloudSelection(workload: AiCoreWorkload): Promise<
   | { ok: true; selection: ProductionCodingModelSelection }
   | { ok: false; message: string }
 > {
+  const workloadModel = await selectCloudModelForWorkload(workload).catch(() => null);
+  if (workloadModel) {
+    const baseConfig = readProductionCodingModelConfig();
+    return {
+      ok: true,
+      selection: {
+        model: workloadModel.model,
+        provider: workloadModel.provider,
+        timeoutMs: baseConfig.timeoutMs,
+        maxOutputTokens: workloadModel.maxOutputTokens,
+        selectionReason: "AUTO_CODING_CAPABILITY",
+      },
+    };
+  }
+
   const base = readProductionCodingModelConfig();
   const provider = (
     process.env["AI_CODING_PRIMARY_PROVIDER"] ||
@@ -200,8 +222,15 @@ async function resolveCloudSelection(): Promise<
   return { ok: true, selection: resolved.selection };
 }
 
-async function deterministicReply(message: string): Promise<Record<string, unknown> | null> {
+async function deterministicReply(
+  message: string,
+  workload: AiCoreWorkloadRoute,
+): Promise<Record<string, unknown> | null> {
   const command = message.trim().toLowerCase();
+  const routingMeta = {
+    workload: workload.workload,
+    costClass: workload.costClass,
+  };
 
   if (["hello", "hi", "halo", "hai", "hey"].includes(command)) {
     return {
@@ -210,6 +239,7 @@ async function deterministicReply(message: string): Promise<Record<string, unkno
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...routingMeta,
       reply:
         "Halo. AI Core Chat aktif. Gunakan Ask untuk bertanya atau Agent untuk menjalankan coding task. Sapaan ini memakai 0 token LLM.",
     };
@@ -222,8 +252,9 @@ async function deterministicReply(message: string): Promise<Record<string, unkno
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...routingMeta,
       reply:
-        "Perintah cepat: /status untuk runtime AI Core, /model untuk routing model, Ask Mode untuk tanya jawab, dan Agent Mode untuk membuat serta menjalankan coding task melalui policy gate.",
+        "Perintah cepat: /status untuk runtime AI Core, /model untuk model coding, /routing untuk kebijakan biaya/model, Ask Smart untuk chat cepat hemat biaya, dan Agent Mode untuk coding melalui policy gate.",
     };
   }
 
@@ -239,6 +270,7 @@ async function deterministicReply(message: string): Promise<Record<string, unkno
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...routingMeta,
       reply:
         `AI Core runtime: autonomous ${runtime.running ? "RUNNING" : "STOPPED"}; local AI ${local.ok ? "READY" : "UNAVAILABLE"}. Perintah ini memakai 0 token LLM.`,
       status: {
@@ -254,6 +286,20 @@ async function deterministicReply(message: string): Promise<Record<string, unkno
     };
   }
 
+  if (["/routing", "routing", "routing biaya", "/cost", "cost", "biaya"].includes(command)) {
+    return {
+      kind: "answer",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...routingMeta,
+      reply:
+        "Routing biaya aktif: status/perintah deterministic = 0 token; chat dan review = LOW; reasoning = MEDIUM; coding = Coding Orchestrator; tindakan production = explicit approval gate.",
+      routingPolicy: describeAiCoreWorkloadRouting(),
+    };
+  }
+
   if (["/model", "model", "model status", "routing model"].includes(command)) {
     const config = describePreferredCodingModelConfig();
     return {
@@ -262,6 +308,7 @@ async function deterministicReply(message: string): Promise<Record<string, unkno
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...routingMeta,
       reply:
         `Routing coding saat ini: primary ${String(config["primaryProvider"])} / ${String(config["primaryModel"])}, fallback ${String(config["fallbackProvider"])} / ${String(config["fallbackModel"])}. Ask Mode Economy tetap memprioritaskan local AI tanpa cloud.`,
       modelConfig: config,
@@ -275,8 +322,96 @@ async function answerAskMode(
   message: string,
   policy: ChatPolicy,
 ): Promise<Record<string, unknown>> {
-  const deterministic = await deterministicReply(message);
+  const workload = classifyAiCoreWorkload(message);
+  const routingMeta = {
+    workload: workload.workload,
+    costClass: workload.costClass,
+  };
+  const deterministic = await deterministicReply(message, workload);
   if (deterministic) return deterministic;
+
+  if (workload.workload === "CRITICAL_ACTION") {
+    return {
+      kind: "answer",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...routingMeta,
+      reply:
+        "Tindakan production/kritis tidak dijalankan sebagai chat. Gunakan Agent Mode; AI Core akan menjalankannya melalui control plane dan berhenti pada explicit approval gate. Klasifikasi ini memakai 0 token LLM.",
+      requiresApproval: true,
+    };
+  }
+
+  if (workload.workload === "CODING") {
+    return {
+      kind: "answer",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...routingMeta,
+      reply:
+        "Instruksi ini terdeteksi sebagai pekerjaan coding yang mengubah repository. Gunakan Agent Mode agar masuk Coding Orchestrator, test, review, dan approval gate. Routing ini memakai 0 token LLM.",
+      requiresAgent: true,
+    };
+  }
+
+  if (policy === "smart") {
+    const cloud = await resolveCloudSelection(workload.workload);
+    if (cloud.ok) {
+      try {
+        const result = await invokeChatModel(cloud.selection, message);
+        return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
+      } catch (cloudError) {
+        const local = await resolveLocalSelection();
+        if (local.ok) {
+          try {
+            const result = await invokeChatModel(local.selection, message);
+            return {
+              kind: "answer",
+              route: "LOCAL",
+              ...routingMeta,
+              ...result,
+              warning:
+                "Smart cloud route gagal, jadi AI Core memakai local fallback: " +
+                safeProviderFailure(cloudError),
+            };
+          } catch (localError) {
+            return unavailableAskReply(
+              "Smart cloud dan local fallback sama-sama gagal menjawab.",
+              [safeProviderFailure(cloudError), safeProviderFailure(localError)]
+                .filter(Boolean)
+                .join(" | "),
+            );
+          }
+        }
+        return unavailableAskReply(
+          "Smart cloud gagal dan local fallback tidak tersedia.",
+          [safeProviderFailure(cloudError), local.message].filter(Boolean).join(" | "),
+        );
+      }
+    }
+
+    const local = await resolveLocalSelection();
+    if (local.ok) {
+      try {
+        const result = await invokeChatModel(local.selection, message);
+        return { kind: "answer", route: "LOCAL", ...routingMeta, ...result };
+      } catch (error) {
+        return unavailableAskReply(
+          "Tidak ada cloud model hemat yang tersedia dan local AI juga gagal menjawab.",
+          safeProviderFailure(error) || "Local AI invocation failed.",
+        );
+      }
+    }
+
+    return unavailableAskReply(
+      "Tidak ada cloud model yang sesuai maupun local AI yang tersedia.",
+      cloud.message + " | " + local.message,
+    );
+  }
 
   if (policy === "economy") {
     const local = await resolveLocalSelection();
@@ -294,7 +429,7 @@ async function answerAskMode(
     }
     try {
       const result = await invokeChatModel(local.selection, message);
-      return { kind: "answer", route: "LOCAL", ...result };
+      return { kind: "answer", route: "LOCAL", ...routingMeta, ...result };
     } catch (error) {
       return unavailableAskReply(
         "Local AI terdeteksi tetapi gagal menjawab. Economy tidak akan memakai OpenAI secara otomatis. Pastikan Ollama worker online, atau pilih Auto untuk mengizinkan fallback cloud.",
@@ -304,7 +439,7 @@ async function answerAskMode(
   }
 
   if (policy === "cloud") {
-    const cloud = await resolveCloudSelection();
+    const cloud = await resolveCloudSelection(workload.workload);
     if (!cloud.ok) {
       return {
         kind: "answer",
@@ -318,7 +453,7 @@ async function answerAskMode(
     }
     try {
       const result = await invokeChatModel(cloud.selection, message);
-      return { kind: "answer", route: "CLOUD", ...result };
+      return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
     } catch (error) {
       return unavailableAskReply(
         "Cloud AI sedang tidak dapat menjawab. Tidak ada tindakan sistem yang dijalankan.",
@@ -332,14 +467,14 @@ async function answerAskMode(
   if (local.ok) {
     try {
       const result = await invokeChatModel(local.selection, message);
-      return { kind: "answer", route: "LOCAL", ...result };
+      return { kind: "answer", route: "LOCAL", ...routingMeta, ...result };
     } catch (error) {
       // Auto mode is explicitly allowed to fall through to the configured cloud target.
       localFailure = safeProviderFailure(error) || "Local AI invocation failed.";
     }
   }
 
-  const cloud = await resolveCloudSelection();
+  const cloud = await resolveCloudSelection(workload.workload);
   if (!cloud.ok) {
     return unavailableAskReply(
       "Local AI gagal dan cloud fallback juga tidak tersedia.",
@@ -349,7 +484,7 @@ async function answerAskMode(
 
   try {
     const result = await invokeChatModel(cloud.selection, message);
-    return { kind: "answer", route: "CLOUD_FALLBACK", ...result };
+    return { kind: "answer", route: "CLOUD_FALLBACK", ...routingMeta, ...result };
   } catch (error) {
     return unavailableAskReply(
       "Local AI dan cloud fallback sama-sama gagal menjawab. Coba lagi setelah provider pulih.",
@@ -452,8 +587,9 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
 
   res.json({
     defaultMode: "ask",
-    defaultModelPolicy: "economy",
-    routing: ["NO_LLM", "LOCAL", "CLOUD"],
+    defaultModelPolicy: "smart",
+    routing: ["NO_LLM", "SMART_CLOUD", "LOCAL", "CLOUD"],
+    workloadRouting: describeAiCoreWorkloadRouting(),
     local: local.ok
       ? {
           ready: true,
