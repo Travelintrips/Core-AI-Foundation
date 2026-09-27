@@ -530,6 +530,109 @@ function parseFailureContexts(value: unknown): LocalFailureContext[] {
     : [];
 }
 
+function explicitInstructionPaths(instruction: string): string[] {
+  const matches = instruction.match(/[A-Za-z0-9_.@/-]+\.[A-Za-z0-9]{1,12}/g) ?? [];
+  const output: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of matches) {
+    const normalized = normalizeRepoPath(raw);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push(normalized);
+    if (output.length >= MAX_ALLOWED_FILES) break;
+  }
+  return output;
+}
+
+function buildDirectAiRequiredContext(input: {
+  task: AiCodingTask;
+  contextPackage: LocalCodingContextPackage;
+}): {
+  recoveryContext: LocalFailureRecoveryContext;
+  failureContexts: LocalFailureContext[];
+  localRecovery: Record<string, unknown>;
+  currentPatch: string;
+} {
+  const explicitPaths = explicitInstructionPaths(input.task.instruction);
+  const rankedContextPaths = input.contextPackage.relevantFiles
+    .map((item) => normalizeRepoPath(item.path))
+    .filter((item): item is string => Boolean(item));
+  const affectedPaths = input.contextPackage.affectedFiles
+    .map(normalizeRepoPath)
+    .filter((item): item is string => Boolean(item));
+
+  const focusFiles = [
+    ...new Set([...explicitPaths, ...rankedContextPaths, ...affectedPaths]),
+  ].slice(0, MAX_ALLOWED_FILES);
+
+  if (focusFiles.length === 0) {
+    throw new LocalAiHandoffError(
+      "Direct AI_REQUIRED handoff has no bounded file scope.",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  const explicitSet = new Set(explicitPaths);
+  const syntheticDiagnostics = focusFiles.slice(0, MAX_FAILURE_CONTEXTS).map((file) => ({
+    command: "local-coding-analysis",
+    status: "failed" as const,
+    exitCode: null,
+    kind: "unknown" as const,
+    diagnostics: [
+      {
+        kind: "unknown" as const,
+        file,
+        message: explicitSet.has(file)
+          ? `Approved instruction explicitly references '${file}'. If it does not exist at the approved base SHA, create_file is permitted for exactly this target.`
+          : `Local Coding Engine classified the semantic task as AI_REQUIRED with '${file}' inside the bounded approved context.`,
+      },
+    ],
+    primaryFiles: [file],
+    errorCodes: explicitSet.has(file) ? ["TARGET_NOT_PRESENT_OR_EXPLICIT"] : ["AI_REQUIRED"],
+    retry: {
+      allowed: false,
+      reason: "Deterministic executor declined semantic guessing.",
+    },
+    warnings: [],
+  })) as LocalFailureContext[];
+
+  const recoveryContext = {
+    status: "CONTEXT_REFINED" as const,
+    nextAction: "LOCAL_RECOVERY_REQUIRED" as const,
+    failureCommands: ["local-coding-analysis"],
+    failureKinds: ["unknown"],
+    errorCodes: explicitPaths.length > 0 ? ["AI_REQUIRED", "EXPLICIT_TARGET"] : ["AI_REQUIRED"],
+    focusFiles,
+    focusSymbols: input.contextPackage.symbols
+      .filter((item) => focusFiles.includes(item.file))
+      .slice(0, MAX_SYMBOLS),
+    dependencies: input.contextPackage.dependencies.slice(0, MAX_DEPENDENCIES),
+    relatedTests: input.contextPackage.relatedTests.slice(0, MAX_TESTS),
+    recentCommits: input.contextPackage.recentCommits.slice(0, MAX_COMMITS),
+    verificationCommands: input.contextPackage.verificationCommands.slice(0, 6),
+    deterministicRetry: {
+      attempted: true,
+      exhausted: true,
+      commands: [],
+    },
+    warnings: [
+      "Direct AI_REQUIRED handoff synthesized from bounded Local Coding Engine context; no failing patch exists.",
+    ],
+  } satisfies LocalFailureRecoveryContext;
+
+  return {
+    recoveryContext,
+    failureContexts: syntheticDiagnostics,
+    localRecovery: {
+      status: "AI_REQUIRED",
+      reason: "Local Coding Engine classified the task as AI_REQUIRED without producing a deterministic patch.",
+      aiInvoked: false,
+      directFromInitialAnalysis: true,
+    },
+    currentPatch: "",
+  };
+}
+
 async function latestAiRequiredContext(
   taskId: string,
   expectedAction: "AI_REQUIRED" | "APPROVE_AI_HANDOFF" | "AI_HANDOFF_APPROVED",
@@ -582,10 +685,10 @@ async function latestAiRequiredContext(
   const contextPackage = isRecord(payload.contextPackage)
     ? payload.contextPackage as unknown as LocalCodingContextPackage
     : null;
-  const recoveryContext = isRecord(payload.failureRecoveryContext)
+  const persistedRecoveryContext = isRecord(payload.failureRecoveryContext)
     ? payload.failureRecoveryContext as unknown as LocalFailureRecoveryContext
     : null;
-  const localRecovery = isRecord(payload.localRecovery) ? payload.localRecovery : null;
+  const persistedLocalRecovery = isRecord(payload.localRecovery) ? payload.localRecovery : null;
   const localExecution = isRecord(payload.localExecution) ? payload.localExecution : null;
   const sandbox = isRecord(payload.sandboxVerification) ? payload.sandboxVerification : null;
 
@@ -595,13 +698,7 @@ async function latestAiRequiredContext(
       "NOT_READY",
     );
   }
-  if (!localRecovery || localRecovery.status !== "AI_REQUIRED" || localRecovery.aiInvoked === true) {
-    throw new LocalAiHandoffError(
-      "Deterministic recovery has not cleanly stopped at AI_REQUIRED",
-      "NOT_READY",
-    );
-  }
-  if (!contextPackage || !recoveryContext) {
+  if (!contextPackage) {
     throw new LocalAiHandoffError(
       "AI handoff is missing bounded local context",
       "INVALID_CONTEXT",
@@ -613,22 +710,49 @@ async function latestAiRequiredContext(
     throw new LocalAiHandoffError("AI handoff base HEAD is invalid", "INVALID_CONTEXT");
   }
 
-  const currentPatch = typeof localExecution?.patch === "string" ? localExecution.patch : "";
-  if (
-    !currentPatch ||
-    currentPatch.includes("GIT binary patch") ||
-    /(?:^|\n)Binary files /.test(currentPatch)
-  ) {
+  const directInitialAiRequired =
+    expectedAction === "AI_REQUIRED" &&
+    !persistedRecoveryContext &&
+    !persistedLocalRecovery;
+
+  const direct = directInitialAiRequired
+    ? buildDirectAiRequiredContext({ task, contextPackage })
+    : null;
+
+  const recoveryContext = direct?.recoveryContext ?? persistedRecoveryContext;
+  const localRecovery = direct?.localRecovery ?? persistedLocalRecovery;
+  if (!localRecovery || localRecovery.status !== "AI_REQUIRED" || localRecovery.aiInvoked === true) {
     throw new LocalAiHandoffError(
-      "AI handoff requires a bounded textual failing patch",
+      "Deterministic recovery has not cleanly stopped at AI_REQUIRED",
+      "NOT_READY",
+    );
+  }
+  if (!recoveryContext) {
+    throw new LocalAiHandoffError(
+      "AI handoff is missing bounded recovery context",
       "INVALID_CONTEXT",
     );
   }
 
-  const failureContexts = parseFailureContexts(sandbox?.failureContexts);
+  const currentPatch =
+    direct?.currentPatch ??
+    (typeof localExecution?.patch === "string" ? localExecution.patch : "");
+  if (
+    currentPatch.includes("GIT binary patch") ||
+    /(?:^|\n)Binary files /.test(currentPatch)
+  ) {
+    throw new LocalAiHandoffError(
+      "AI handoff contains an unsupported binary patch",
+      "INVALID_CONTEXT",
+    );
+  }
+
+  const failureContexts =
+    direct?.failureContexts ??
+    parseFailureContexts(sandbox?.failureContexts);
   if (failureContexts.length === 0) {
     throw new LocalAiHandoffError(
-      "AI handoff requires structured sanitized failure diagnostics",
+      "AI handoff requires structured sanitized diagnostics",
       "INVALID_CONTEXT",
     );
   }
@@ -705,18 +829,20 @@ async function executePrepareHandoff(
       );
     }
 
-    patchFile = resolve(tmpdir(), `ai-handoff-${randomUUID()}.diff`);
-    await writeFile(patchFile, context.currentPatch, "utf8");
-    try {
-      await git(workspacePath, ["apply", "--check", "--whitespace=error-all", patchFile]);
-      await git(workspacePath, ["apply", "--whitespace=nowarn", patchFile]);
-      await git(workspacePath, ["diff", "--check"]);
-    } catch (error) {
-      throw new LocalAiHandoffError(
-        "Failing patch no longer applies cleanly while preparing AI handoff: " +
-          (error instanceof Error ? error.message.slice(0, 700) : String(error)),
-        "INVALID_CONTEXT",
-      );
+    if (context.currentPatch) {
+      patchFile = resolve(tmpdir(), `ai-handoff-${randomUUID()}.diff`);
+      await writeFile(patchFile, context.currentPatch, "utf8");
+      try {
+        await git(workspacePath, ["apply", "--check", "--whitespace=error-all", patchFile]);
+        await git(workspacePath, ["apply", "--whitespace=nowarn", patchFile]);
+        await git(workspacePath, ["diff", "--check"]);
+      } catch (error) {
+        throw new LocalAiHandoffError(
+          "Failing patch no longer applies cleanly while preparing AI handoff: " +
+            (error instanceof Error ? error.message.slice(0, 700) : String(error)),
+          "INVALID_CONTEXT",
+        );
+      }
     }
 
     const snippets = await createSnippets(workspacePath, context);
