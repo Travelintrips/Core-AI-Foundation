@@ -220,6 +220,13 @@ function classify(reason: string): AiPatchApplierErrorCode {
   return "APPLY_FAILED";
 }
 function sha256(value: string | Buffer): string { return createHash("sha256").update(value).digest("hex"); }
+function canonicalTextBytes(value: string | Buffer): Buffer {
+  const text = Buffer.isBuffer(value) ? value.toString("utf8") : value;
+  return Buffer.from(text.replace(/\r\n/g, "\n").replace(/\r/g, "\n"), "utf8");
+}
+function sha256CanonicalText(value: string | Buffer): string {
+  return sha256(canonicalTextBytes(value));
+}
 
 export async function applyAiProposalPatch(root: string, proposalInput: unknown, approved: ApprovedAiPatchHandoffContext): Promise<AiPatchApplyResult> {
   let operations: ProposalOperation[]; let allowed: Set<string>; let expectedHeadSha: string;
@@ -263,7 +270,7 @@ export async function applyAiProposalPatch(root: string, proposalInput: unknown,
         const digests = await Promise.all(
           [...createOperations]
             .sort((a, b) => a.path.localeCompare(b.path))
-            .map(async (operation) => `${operation.path}\0${sha256(await readFile(resolve(absoluteRoot, operation.path)))}`),
+            .map(async (operation) => `${operation.path}\0${sha256CanonicalText(await readFile(resolve(absoluteRoot, operation.path)))}`),
         );
         return {
           status: "APPLIED",
@@ -296,7 +303,7 @@ export async function applyAiProposalPatch(root: string, proposalInput: unknown,
     if (applied.scriptsExecuted === true || applied.changedFiles.some((file) => !allowed.has(file))) { await restore(snapshots); return result("FAILED", "APPLY_FAILED", "Patch applier invariant failed.", true); }
     const rawPatch = await git(absoluteRoot, ["diff", "--no-ext-diff", "--unified=2", "--", ...applied.changedFiles], false);
     if (Buffer.byteLength(rawPatch, "utf8") > AI_PATCH_APPLIER_LIMITS.maxPatchBytes) { await restore(snapshots); return result("BLOCKED", "PATCH_TOO_LARGE", "Unified patch exceeded the bounded patch size and was rolled back.", true); }
-    const digests = await Promise.all([...applied.changedFiles].sort().map(async (file) => `${file}\0${sha256(await readFile(resolve(absoluteRoot, file)))}`));
+    const digests = await Promise.all([...applied.changedFiles].sort().map(async (file) => `${file}\0${sha256CanonicalText(await readFile(resolve(absoluteRoot, file)))}`));
     return { status: "APPLIED", code: null, reason: "Structured AI proposal applied deterministically.", changedFiles: [...applied.changedFiles].sort(), patch: rawPatch,
       patchSha256: sha256(rawPatch), resultSha256: sha256(digests.join("\n")), scriptsExecuted: false, networkUsed: false, commitCreated: false, pushed: false, rolledBack: false, warnings: applied.warnings };
   } catch (error) {
