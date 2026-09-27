@@ -18,6 +18,7 @@ import { dispatchReadyCodingWorkstreams } from "./localCodingMultiWorkerExecutio
 import {
   approveWorkstreamAiCandidatePatch,
   approveWorkstreamAiExecutionHandoff,
+  manualAiPatchReviewReason,
   enqueueWorkstreamAiExecution,
   materializeApprovedWorkstreamAiCandidate,
   prepareWorkstreamAiExecutionHandoff,
@@ -224,9 +225,36 @@ async function processTaskGraph(
         execution?.status === "CANDIDATE_READY" &&
         execution.reviewStatus === "PENDING"
       ) {
+        const changedFiles = Array.isArray(execution.changedFiles)
+          ? execution.changedFiles.filter(
+              (item): item is string => typeof item === "string",
+            )
+          : [];
+        const warnings = Array.isArray(execution.warnings)
+          ? execution.warnings.filter(
+              (item): item is string => typeof item === "string",
+            )
+          : [];
+        const manualReviewReason = manualAiPatchReviewReason(
+          changedFiles,
+          warnings,
+        );
+
+        if (manualReviewReason) {
+          return {
+            handled: true,
+            blocker:
+              `Workstream ${review.key} membutuhkan review manual: ${manualReviewReason}`,
+          };
+        }
+
         await approveWorkstreamAiCandidatePatch(review.id);
         await materializeApprovedWorkstreamAiCandidate(review.id);
-        await completeReviewedCodingWorkstream(review.id);
+        await completeReviewedCodingWorkstream(review.id, {
+          completeChildTask: true,
+          childTaskResultSummary:
+            "Safe constrained AI candidate was recovered and completed automatically by the autonomous repair loop.",
+        });
         return {
           handled: true,
           action: `AUTO_APPROVE_MATERIALIZE_WORKSTREAM:${review.key}`,
@@ -238,7 +266,11 @@ async function processTaskGraph(
         execution.reviewStatus === "APPROVED"
       ) {
         await materializeApprovedWorkstreamAiCandidate(review.id);
-        await completeReviewedCodingWorkstream(review.id);
+        await completeReviewedCodingWorkstream(review.id, {
+          completeChildTask: true,
+          childTaskResultSummary:
+            "Approved constrained AI candidate was materialized and completed by the autonomous repair loop.",
+        });
         return {
           handled: true,
           action: `AUTO_MATERIALIZE_WORKSTREAM:${review.key}`,
