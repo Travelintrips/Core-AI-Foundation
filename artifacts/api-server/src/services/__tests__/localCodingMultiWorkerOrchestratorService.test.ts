@@ -263,6 +263,50 @@ describe("multi-worker coding claim runtime", () => {
     );
   });
 
+  it("clears stale child bindings when reclaiming an expired execution", async () => {
+    const expired = ws({
+      status: "RUNNING",
+      leaseToken: "expired-lease-token",
+      leaseExpiresAt: new Date(Date.now() - 60_000),
+      childTaskId: "33333333-3333-4333-8333-333333333333",
+      childRunId: "44444444-4444-4444-8444-444444444444",
+      jobId: 269,
+      attemptCount: 1,
+    });
+    mocks.workstreamWhere.mockResolvedValueOnce([expired]);
+    mocks.claimReturning.mockResolvedValueOnce([
+      ws({
+        status: "CLAIMED",
+        workerId: "worker-1",
+        attemptCount: 2,
+        childTaskId: null,
+        childRunId: null,
+        jobId: null,
+      }),
+    ]);
+
+    const claims = await claimReadyCodingWorkstreams(
+      GRAPH_ID,
+      "worker-1",
+      {
+        maxClaims: 1,
+        leaseSeconds: 120,
+        baseSha: BASE_SHA,
+      },
+    );
+
+    expect(mocks.claimSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "CLAIMED",
+        childTaskId: null,
+        childRunId: null,
+        jobId: null,
+        attemptCount: 2,
+      }),
+    );
+    expect(claims[0]).toMatchObject({ attempt: 2 });
+  });
+
   it("refuses claims until the graph is explicitly approved", async () => {
     mocks.graphFor.mockResolvedValueOnce([{
       id: GRAPH_ID,
