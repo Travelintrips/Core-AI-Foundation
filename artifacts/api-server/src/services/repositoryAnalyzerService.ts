@@ -29,6 +29,9 @@ const MAX_FILES = 120;
 const MAX_READ_BYTES = 400_000;
 const MAX_FILE_BYTES = 80_000;
 const CLONE_TIMEOUT_MS = 120_000;
+const DEFAULT_ANALYZER_TIMEOUT_MS = 180_000;
+const MIN_ANALYZER_TIMEOUT_MS = 30_000;
+const MAX_ANALYZER_TIMEOUT_MS = 600_000;
 const PRIMARY_CLONE_DEPTH = 20;
 const FALLBACK_CLONE_DEPTH = 1;
 let cloneQueueTail: Promise<void> = Promise.resolve();
@@ -747,6 +750,41 @@ function serializeResult(result: Record<string, unknown>): string {
   return JSON.stringify(result, null, 2);
 }
 
+export function resolveRepositoryAnalyzerTimeoutMs(
+  value = process.env["AI_CODING_REPOSITORY_ANALYZER_TIMEOUT_MS"],
+): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_ANALYZER_TIMEOUT_MS;
+  return Math.max(
+    MIN_ANALYZER_TIMEOUT_MS,
+    Math.min(MAX_ANALYZER_TIMEOUT_MS, parsed),
+  );
+}
+
+async function withRepositoryAnalyzerDeadline<T>(
+  operation: Promise<T>,
+  timeoutMs = resolveRepositoryAnalyzerTimeoutMs(),
+): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new Error(
+              `Repository Analyzer exceeded the end-to-end deadline of ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
  * Execute exactly one queued Repository Analyzer job inside the API process.
  *
@@ -783,7 +821,9 @@ export async function executeRepositoryAnalyzerJobOnDemand(
   }
 
   try {
-    const result = await executeRepositoryAnalyzerJob(claimed);
+    const result = await withRepositoryAnalyzerDeadline(
+      executeRepositoryAnalyzerJob(claimed),
+    );
 
     // Legacy direct execution finalizes the Coding Workspace run here. The
     // Coding Orchestrator disables this so it can continue into Planner before
