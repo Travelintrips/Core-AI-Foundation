@@ -116,7 +116,7 @@ describe("Local Coding AI Patch Applier", () => {
     expect(git(root, ["status", "--porcelain"])).toBe("");
   });
 
-  it("blocks symlink files and symlinked parent directories", async () => {
+  it.skipIf(process.platform === "win32")("blocks symlink files and symlinked parent directories", async () => {
     const root = await workspace(); const outside = await mkdtemp(join(tmpdir(), "ai-patch-outside-")); roots.push(outside); await put(outside, "x.ts", "export const value = 1;\n");
     await symlink(join(outside, "x.ts"), join(root, "linked.ts")); await symlink(outside, join(root, "linked-dir")); execFileSync("git", ["add", "linked.ts", "linked-dir"], { cwd: root }); execFileSync("git", ["commit", "-m", "links"], { cwd: root });
     for (const path of ["linked.ts", "linked-dir/x.ts"]) {
