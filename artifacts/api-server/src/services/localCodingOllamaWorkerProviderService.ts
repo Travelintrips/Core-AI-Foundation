@@ -8,6 +8,11 @@ import {
   releaseOllamaWorkerReservation,
   reserveOllamaWorker,
 } from "./ollamaWorkerRegistryService.js";
+import {
+  enqueueRemoteOllamaInvocation,
+  hasRemoteOllamaWorker,
+  waitForRemoteOllamaInvocation,
+} from "./remoteOllamaWorkerService.js";
 
 function parseBoundedPrompt(
   input: string,
@@ -118,6 +123,29 @@ export function createScheduledOllamaProviderAdapter(input: {
 
     async invoke(request, context) {
       const bounded = parseBoundedPrompt(request.input);
+
+      // Remote pull workers connect outbound to AI Core. Prefer them when
+      // available so Ollama itself never needs a publicly reachable endpoint.
+      if (await hasRemoteOllamaWorker(input.modelId)) {
+        const job = await enqueueRemoteOllamaInvocation({
+          requestId: request.requestId,
+          modelId: input.modelId,
+          input: request.input,
+          responseFormat: request.responseFormat as unknown as Record<string, unknown>,
+          maxOutputTokens: request.maxOutputTokens,
+        });
+        return await waitForRemoteOllamaInvocation(
+          job.id,
+          context.signal,
+        ) as {
+          providerRequestId?: string;
+          output:
+            | { type: "text"; text: string }
+            | { type: "structured"; value: unknown };
+          usage: { inputTokens: number; outputTokens: number; totalTokens: number };
+        };
+      }
+
       const reservation = await reserveOllamaWorker(input.modelId);
 
       if (!reservation) {
