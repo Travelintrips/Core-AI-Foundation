@@ -59,6 +59,10 @@ import {
   LocalAiPatchApprovalError,
 } from "../services/localCodingAiPatchApprovalService.js";
 import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorkerRecoveryService.js";
+import {
+  getCodingWhatsappConfigStatus,
+  sendCodingTaskStatusNotification,
+} from "../services/codingWhatsappNotificationService.js";
 import { runTrustedOllamaRepairTask } from "../services/localCodingTrustedRepairService.js";
 import { LocalCodingPowerShellError } from "../services/localCodingPowerShellExecutorService.js";
 
@@ -134,6 +138,54 @@ router.get(
     }
   },
 );
+
+router.get("/ai/coding/whatsapp/status", async (_req, res): Promise<void> => {
+  res.json(getCodingWhatsappConfigStatus());
+});
+
+router.post("/ai/coding/whatsapp/test", async (_req, res): Promise<void> => {
+  const configured = getCodingWhatsappConfigStatus();
+  if (!configured.baseUrl || !configured.apiKey || !configured.to) {
+    res.status(503).json({
+      error: "WhatsApp coding notification is not fully configured.",
+      configured,
+    });
+    return;
+  }
+
+  const result = await sendCodingTaskStatusNotification({
+    taskId: "connectivity-test",
+    taskNumber: "WA-TEST",
+    projectName: "AI Core",
+    repository: "Travelintrips/Core-AI-Foundation",
+    branch: "test/autonomous-repair-live-smoke",
+    status: "COMPLETED",
+    verificationStatus: "CONNECTED",
+    message:
+      "Test koneksi AI Core → CST-WA-GATEWAY berhasil diproses oleh notification service. Pesan ini menggunakan nomor tujuan yang sudah dikonfigurasi di AI_CODING_WA_NOTIFY_TO.",
+  });
+
+  if (result.status === "queued") {
+    res.status(202).json({
+      ok: true,
+      result,
+      configured,
+    });
+    return;
+  }
+
+  const status =
+    result.status === "skipped"
+      ? 503
+      : result.status === "rejected"
+        ? 502
+        : 500;
+  res.status(status).json({
+    ok: false,
+    result,
+    configured,
+  });
+});
 
 router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
   const tasks = await db
