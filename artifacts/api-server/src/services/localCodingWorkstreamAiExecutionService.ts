@@ -209,8 +209,9 @@ function pendingAiCandidate(result: Record<string, unknown>): boolean {
 }
 
 const MANUAL_AI_PATCH_REVIEW_PATTERNS = [
-  /^scripts\/migrations\//i,
+  /(^|\/)migrations?(\/|$)/i,
   /^\.github\/workflows\//i,
+  /(^|\/)[^/]*(auth|security)[^/]*\.[^/]+$/i,
   /(^|\/)(auth|security)(\/|$)/i,
   /(^|\/)(deploy|deployment|infrastructure|infra)(\/|$)/i,
   /(^|\/)(dockerfile|docker-compose(?:\.[^/]+)?\.ya?ml)$/i,
@@ -1492,15 +1493,11 @@ export async function executeCodingWorkstreamAiJob(
       try {
         await approveWorkstreamAiCandidatePatch(payload.workstreamId);
         await materializeApprovedWorkstreamAiCandidate(payload.workstreamId);
-        await completeReviewedCodingWorkstream(payload.workstreamId);
-        await db
-          .update(aiCodingTasksTable)
-          .set({
-            status: "COMPLETED",
-            resultSummary:
-              "Constrained AI patch passed policy and bounded static verification, was auto-approved, committed, pushed, and completed without a manual review gate.",
-          })
-          .where(eq(aiCodingTasksTable.id, payload.childTaskId));
+        await completeReviewedCodingWorkstream(payload.workstreamId, {
+          completeChildTask: true,
+          childTaskResultSummary:
+            "Constrained AI patch passed policy and bounded static verification, was auto-approved, committed, pushed, and completed without a manual review gate.",
+        });
         nextAction = "COMPLETED";
         autoAdvanced = true;
       } catch (autoAdvanceError) {
