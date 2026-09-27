@@ -71,13 +71,18 @@ function safeProviderFailure(error: unknown): string {
     .slice(0, 500);
 }
 
-function unavailableAskReply(reply: string, warning: string): Record<string, unknown> {
+function unavailableAskReply(
+  reply: string,
+  warning: string,
+  metadata: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     kind: "answer",
     route: "NO_LLM",
     provider: null,
     model: null,
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    ...metadata,
     reply,
     warning,
   };
@@ -146,7 +151,7 @@ async function invokeChatModel(
       user: message,
     }),
     responseFormat: { type: "text" },
-    maxOutputTokens: Math.min(1_600, selection.maxOutputTokens || 1_600),
+    maxOutputTokens: Math.min(4_096, selection.maxOutputTokens || 1_600),
     timeoutMs: selection.timeoutMs,
   });
 
@@ -258,7 +263,7 @@ async function deterministicReply(
     };
   }
 
-  if (["/status", "status", "cek status", "status ai core"].includes(command)) {
+  if (["/status", "status", "cek status", "status ai core", "health", "/health", "healthz", "/healthz", "cek health"].includes(command)) {
     const local = await resolveLocalSelection().catch((error: unknown) => ({
       ok: false as const,
       message: error instanceof Error ? error.message : String(error),
@@ -384,12 +389,14 @@ async function answerAskMode(
               [safeProviderFailure(cloudError), safeProviderFailure(localError)]
                 .filter(Boolean)
                 .join(" | "),
+              routingMeta,
             );
           }
         }
         return unavailableAskReply(
           "Smart cloud gagal dan local fallback tidak tersedia.",
           [safeProviderFailure(cloudError), local.message].filter(Boolean).join(" | "),
+          routingMeta,
         );
       }
     }
@@ -403,6 +410,7 @@ async function answerAskMode(
         return unavailableAskReply(
           "Tidak ada cloud model hemat yang tersedia dan local AI juga gagal menjawab.",
           safeProviderFailure(error) || "Local AI invocation failed.",
+          routingMeta,
         );
       }
     }
@@ -410,6 +418,7 @@ async function answerAskMode(
     return unavailableAskReply(
       "Tidak ada cloud model yang sesuai maupun local AI yang tersedia.",
       cloud.message + " | " + local.message,
+      routingMeta,
     );
   }
 
@@ -434,6 +443,7 @@ async function answerAskMode(
       return unavailableAskReply(
         "Local AI terdeteksi tetapi gagal menjawab. Economy tidak akan memakai OpenAI secara otomatis. Pastikan Ollama worker online, atau pilih Auto untuk mengizinkan fallback cloud.",
         safeProviderFailure(error) || "Local AI invocation failed.",
+        routingMeta,
       );
     }
   }
@@ -458,6 +468,7 @@ async function answerAskMode(
       return unavailableAskReply(
         "Cloud AI sedang tidak dapat menjawab. Tidak ada tindakan sistem yang dijalankan.",
         safeProviderFailure(error) || "Cloud AI invocation failed.",
+        routingMeta,
       );
     }
   }
@@ -479,6 +490,7 @@ async function answerAskMode(
     return unavailableAskReply(
       "Local AI gagal dan cloud fallback juga tidak tersedia.",
       [localFailure, cloud.message].filter(Boolean).join(" | "),
+      routingMeta,
     );
   }
 
@@ -489,6 +501,7 @@ async function answerAskMode(
     return unavailableAskReply(
       "Local AI dan cloud fallback sama-sama gagal menjawab. Coba lagi setelah provider pulih.",
       [localFailure, safeProviderFailure(error)].filter(Boolean).join(" | "),
+      routingMeta,
     );
   }
 }
