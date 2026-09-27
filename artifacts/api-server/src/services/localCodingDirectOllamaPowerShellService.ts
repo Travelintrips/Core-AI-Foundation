@@ -4,6 +4,7 @@ import {
   LocalCodingPowerShellError,
   parseAllowlistedPowerShellCommand,
   type PreparedPowerShellExecution,
+  type PowerShellExecutor,
 } from "./localCodingPowerShellExecutorService.js";
 import {
   readOllamaLocalConfig,
@@ -129,6 +130,7 @@ export async function runDirectLocalOllamaPowerShellTask(input: {
   modelId?: string;
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  executor?: PowerShellExecutor;
 }): Promise<DirectTrustedPowerShellTaskResult> {
   const env = input.env ?? process.env;
   const instruction = input.instruction.trim();
@@ -235,6 +237,7 @@ export async function runDirectLocalOllamaPowerShellTask(input: {
     commands: plan.commands,
     timeoutMs,
     env,
+    executor: input.executor,
   });
 
   return {
