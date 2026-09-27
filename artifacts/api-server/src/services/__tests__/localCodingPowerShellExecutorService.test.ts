@@ -99,6 +99,9 @@ describe("Ollama PowerShell approval gate", () => {
       LOCAL_CODING_POWERSHELL_ROOT: root,
       LOCAL_CODING_POWERSHELL_BIN: "powershell.exe",
       PATH: "fixture-path",
+      NODE_ENV: "development",
+      SUPABASE_DEV_DATABASE_URL: "postgresql://fixture.invalid/dev",
+      ADMIN_API_KEY: "must-not-leak",
     } as NodeJS.ProcessEnv;
 
     const prepared = await prepareOllamaPowerShellExecution({
@@ -159,6 +162,8 @@ describe("Ollama PowerShell approval gate", () => {
     expect(executor.mock.calls[0]?.[2]?.env).toEqual(
       expect.objectContaining({
         PATH: "fixture-path",
+        NODE_ENV: "development",
+        SUPABASE_DEV_DATABASE_URL: "postgresql://fixture.invalid/dev",
         CI: "1",
         NO_COLOR: "1",
       }),
