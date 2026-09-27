@@ -574,20 +574,48 @@ async function continueCodingOrchestration(
       );
     }
 
-    // Persist the completed bounded repository analysis before invoking the
-    // automated multi-task planner. The planner deliberately reads only a
-    // COMPLETED Coding Orchestrator/Repository Analyzer run, so invoking it
-    // while this run is still RUNNING creates a circular ANALYSIS_REQUIRED
-    // failure even though repository_analyzer has already completed.
+    let aiEscalation:
+      | Awaited<ReturnType<typeof generateAndPersistCodingMultiTaskPlan>>
+      | undefined;
+
     if (localPlan?.status === "AI_REQUIRED") {
-      await completeLocalAnalysis(input, sessionId, stages, analysis);
+      try {
+        aiEscalation = await generateAndPersistCodingMultiTaskPlan(
+          input.task.id,
+          analysis,
+        );
+      } catch (plannerError) {
+        logger.warn(
+          {
+            err: plannerError,
+            taskId: input.task.id,
+            codingRunId: input.run.id,
+            sessionId,
+          },
+          "[coding-orchestrator] Multi-task planner failed; preserving bounded AI_REQUIRED fallback",
+        );
+        await logAudit(
+          "coding-orchestrator",
+          "multi_task_planner_failed_fallback_ai_required",
+          input.task.id,
+          "coding_task",
+          "failure",
+          {
+            sessionId,
+            codingRunId: input.run.id,
+            error:
+              plannerError instanceof Error
+                ? plannerError.message.slice(0, 500)
+                : String(plannerError).slice(0, 500),
+            fallbackNextAction: "AI_REQUIRED",
+          },
+        ).catch(() => undefined);
+      }
     }
 
-    const aiEscalation =
-      localPlan?.status === "AI_REQUIRED"
-        ? await generateAndPersistCodingMultiTaskPlan(input.task.id, analysis)
-        : undefined;
-
+    // Publish exactly one final orchestrator state. Autonomous repair must
+    // never observe an intermediate AI_REQUIRED while the task-graph planner
+    // is still running, otherwise it can race into AI Handoff Gate.
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
     logger.info(
