@@ -3,9 +3,7 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
 const cwd = process.cwd();
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-
-const build = spawnSync(pnpmCommand, ["run", "build"], {
+const build = spawnSync(process.execPath, ["./build.mjs"], {
   cwd,
   env: { ...process.env, NODE_ENV: "development" },
   stdio: "inherit",
@@ -13,7 +11,7 @@ const build = spawnSync(pnpmCommand, ["run", "build"], {
 });
 
 if (build.error) {
-  console.error("[dev] Failed to start build:", build.error);
+  console.error("[dev] Failed to start API build:", build.error);
   process.exit(1);
 }
 
