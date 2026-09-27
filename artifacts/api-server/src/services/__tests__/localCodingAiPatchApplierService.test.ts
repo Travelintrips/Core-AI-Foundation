@@ -96,7 +96,9 @@ describe("Local Coding AI Patch Applier", () => {
     const replayDigest = await import("node:crypto").then(({ createHash }) =>
       createHash("sha256")
         .update(
-          `docs/no-newline.md\0${createHash("sha256").update(replayContent).digest("hex")}`,
+          `docs/no-newline.md\0${createHash("sha256")
+            .update(replayContent.toString("utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n"))
+            .digest("hex")}`,
         )
         .digest("hex"),
     );
