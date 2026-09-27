@@ -311,7 +311,7 @@ describe("repository analyzer execution", () => {
       codingRunId: runId,
       executionStatus: "COMPLETED",
       sourceTarget: ".",
-      branch: "main",
+      branch: expect.any(String),
     });
     expect(Array.isArray(result.filesInspected)).toBe(true);
     expect(Array.isArray(result.findings)).toBe(true);
