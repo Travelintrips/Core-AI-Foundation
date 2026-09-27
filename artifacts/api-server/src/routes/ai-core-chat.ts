@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -38,6 +38,7 @@ import {
   type AiCoreWorkloadRoute,
 } from "../services/aiCoreWorkloadRouterService.js";
 import { tryRunAiCoreDataTool } from "../services/aiCoreDataToolService.js";
+import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
 
 const router = Router();
 
@@ -54,6 +55,15 @@ const ChatRequest = z.object({
 const TaskId = z.string().uuid();
 
 type ChatPolicy = z.infer<typeof ChatRequest>["modelPolicy"];
+
+const ASK_SYSTEM_PROMPT = [
+  "You are AI Core Chat, the internal assistant for the AI Core control plane.",
+  "Answer the user's question directly and concisely.",
+  "This is ASK MODE: you have no tools and must never claim that code, shell commands, deployments, merges, database changes, or external actions were executed.",
+  "If the user requests an action that changes a repository or system, explain that Agent Mode should be used.",
+  "Never reveal or request secret values, API keys, passwords, tokens, or private credentials.",
+  "Prefer Indonesian when the user writes Indonesian; otherwise follow the user's language.",
+].join(" ");
 
 function createTaskNumber(): string {
   return `CWS-${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -141,14 +151,7 @@ async function invokeChatModel(
     target: { provider, model },
     input: JSON.stringify({
       version: 1,
-      system: [
-        "You are AI Core Chat, the internal assistant for the AI Core control plane.",
-        "Answer the user's question directly and concisely.",
-        "This is ASK MODE: you have no tools and must never claim that code, shell commands, deployments, merges, database changes, or external actions were executed.",
-        "If the user requests an action that changes a repository or system, explain that Agent Mode should be used.",
-        "Never reveal or request secret values, API keys, passwords, tokens, or private credentials.",
-        "Prefer Indonesian when the user writes Indonesian; otherwise follow the user's language.",
-      ].join(" "),
+      system: ASK_SYSTEM_PROMPT,
       user: message,
     }),
     responseFormat: { type: "text" },
@@ -526,6 +529,217 @@ async function answerAskMode(
   }
 }
 
+function writeStreamEvent(
+  res: Response,
+  event: "meta" | "delta" | "done" | "error",
+  data: Record<string, unknown>,
+): void {
+  if (res.writableEnded) return;
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function writeBufferedChatStream(
+  res: Response,
+  result: Record<string, unknown>,
+): void {
+  writeStreamEvent(res, "meta", {
+    route: result["route"] ?? null,
+    provider: result["provider"] ?? null,
+    model: result["model"] ?? null,
+    workload: result["workload"] ?? null,
+    costClass: result["costClass"] ?? null,
+  });
+
+  const reply = typeof result["reply"] === "string" ? result["reply"] : "";
+  if (reply) {
+    writeStreamEvent(res, "delta", { text: reply });
+  }
+
+  writeStreamEvent(res, "done", {
+    usage: result["usage"] ?? null,
+    warning: result["warning"] ?? null,
+    taskId: result["taskId"] ?? null,
+    taskNumber: result["taskNumber"] ?? null,
+    status: result["status"] ?? null,
+    workspaceUrl: result["workspaceUrl"] ?? null,
+    incomplete: false,
+  });
+}
+
+async function streamAskMode(
+  message: string,
+  policy: ChatPolicy,
+  res: Response,
+  signal: AbortSignal,
+): Promise<void> {
+  const workload = classifyAiCoreWorkload(message);
+  const routingMeta = {
+    workload: workload.workload,
+    costClass: workload.costClass,
+  };
+
+  const deterministic = await deterministicReply(message, workload);
+  if (deterministic) {
+    writeBufferedChatStream(res, deterministic);
+    return;
+  }
+
+  const dataTool = await tryRunAiCoreDataTool(message);
+  if (dataTool.matched) {
+    writeBufferedChatStream(res, {
+      kind: "answer",
+      route: "DATA_TOOL",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: dataTool.reply,
+      dataTool: dataTool.tool,
+      data: dataTool.data,
+      ...(dataTool.warning ? { warning: dataTool.warning } : {}),
+    });
+    return;
+  }
+
+  if (
+    workload.workload === "CRITICAL_ACTION" ||
+    workload.workload === "CODING" ||
+    (policy !== "smart" && policy !== "cloud")
+  ) {
+    writeBufferedChatStream(res, await answerAskMode(message, policy));
+    return;
+  }
+
+  const cloud = await resolveCloudSelection(workload.workload);
+  if (!cloud.ok) {
+    writeBufferedChatStream(res, await answerAskMode(message, policy));
+    return;
+  }
+
+  const provider = String(cloud.selection.provider.slug).trim().toLowerCase();
+  const model = String(cloud.selection.model.modelId).trim();
+  let emittedText = false;
+
+  writeStreamEvent(res, "meta", {
+    route: "CLOUD",
+    provider,
+    model,
+    ...routingMeta,
+    streaming: true,
+  });
+
+  try {
+    const result = await streamCloudChatNoFallback({
+      providerSlug: provider,
+      modelId: model,
+      baseUrl:
+        typeof cloud.selection.provider.baseUrl === "string"
+          ? cloud.selection.provider.baseUrl
+          : null,
+      systemPrompt: ASK_SYSTEM_PROMPT,
+      prompt: message,
+      maxOutputTokens: Math.min(
+        4_096,
+        cloud.selection.maxOutputTokens || 1_600,
+      ),
+      temperature: 0,
+      signal,
+      observability: {
+        conversationId: randomUUID(),
+        agentName: "AI Core Chat",
+        providerName: provider,
+        modelName: model,
+        requestType: "chat-stream",
+        createdBy: "ai-core-chat",
+      },
+      onDelta: (text) => {
+        if (!text || signal.aborted || res.writableEnded) return;
+        emittedText = true;
+        writeStreamEvent(res, "delta", { text });
+      },
+    });
+
+    if (signal.aborted || res.writableEnded) return;
+
+    writeStreamEvent(res, "done", {
+      usage: result.usage,
+      latencyMs: result.latencyMs,
+      providerRequestId: result.providerRequestId ?? null,
+      incomplete: false,
+    });
+  } catch (error) {
+    if (signal.aborted || res.writableEnded) return;
+
+    const failure =
+      safeProviderFailure(error) || "Cloud streaming invocation failed.";
+
+    if (!emittedText && policy === "smart") {
+      const local = await resolveLocalSelection();
+      if (local.ok) {
+        try {
+          const result = await invokeChatModel(local.selection, message);
+          writeBufferedChatStream(res, {
+            kind: "answer",
+            route: "LOCAL",
+            ...routingMeta,
+            ...result,
+            warning:
+              "Cloud streaming gagal sebelum menghasilkan teks; AI Core memakai local fallback: " +
+              failure,
+          });
+          return;
+        } catch (localError) {
+          writeBufferedChatStream(
+            res,
+            unavailableAskReply(
+              "Cloud streaming dan local fallback sama-sama gagal menjawab.",
+              [failure, safeProviderFailure(localError)]
+                .filter(Boolean)
+                .join(" | "),
+              routingMeta,
+            ),
+          );
+          return;
+        }
+      }
+
+      writeBufferedChatStream(
+        res,
+        unavailableAskReply(
+          "Cloud streaming gagal dan local fallback tidak tersedia.",
+          [failure, local.message].filter(Boolean).join(" | "),
+          routingMeta,
+        ),
+      );
+      return;
+    }
+
+    if (!emittedText) {
+      writeBufferedChatStream(
+        res,
+        unavailableAskReply(
+          "Cloud AI sedang tidak dapat menjawab. Tidak ada tindakan sistem yang dijalankan.",
+          failure,
+          routingMeta,
+        ),
+      );
+      return;
+    }
+
+    writeStreamEvent(res, "error", {
+      message:
+        "Streaming terhenti setelah sebagian jawaban diterima. Respons parsial dipertahankan.",
+      warning: failure,
+    });
+    writeStreamEvent(res, "done", {
+      usage: null,
+      incomplete: true,
+      warning: failure,
+    });
+  }
+}
+
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
   if (!input.projectName || !input.repository || !input.branch) {
     return {
@@ -622,6 +836,12 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     defaultMode: "ask",
     defaultModelPolicy: "smart",
     routing: ["NO_LLM", "DATA_TOOL", "SMART_CLOUD", "LOCAL", "CLOUD"],
+    streaming: {
+      enabled: true,
+      endpoint: "/api/ai/core-chat/messages/stream",
+      defaultPolicy: "smart",
+      cloudProviders: ["openai", "anthropic", "gemini", "mistral"],
+    },
     workloadRouting: describeAiCoreWorkloadRouting(),
     local: local.ok
       ? {
@@ -634,6 +854,58 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     codingModel: modelConfig,
     secretsExposed: false,
   });
+});
+
+router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => {
+  const parsed = ChatRequest.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  if (parsed.data.mode !== "ask") {
+    res.status(400).json({
+      error: "Streaming endpoint is Ask Mode only; Agent Mode uses the control-plane endpoint.",
+    });
+    return;
+  }
+
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  res.once("close", abort);
+
+  try {
+    await streamAskMode(
+      parsed.data.message,
+      parsed.data.modelPolicy,
+      res,
+      controller.signal,
+    );
+  } catch (error) {
+    if (!controller.signal.aborted && !res.writableEnded) {
+      writeStreamEvent(res, "error", {
+        message: "AI Core Chat streaming request failed.",
+        warning:
+          error instanceof Error
+            ? safeProviderFailure(error)
+            : "Unknown streaming failure.",
+      });
+      writeStreamEvent(res, "done", {
+        usage: null,
+        incomplete: true,
+      });
+    }
+  } finally {
+    res.removeListener("close", abort);
+    if (!res.writableEnded) res.end();
+  }
 });
 
 router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
