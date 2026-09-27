@@ -1402,11 +1402,16 @@ export async function executeCodingWorkstreamAiJob(
       typeof ciRepair?.headBranch === "string" && ciRepair.headBranch.trim()
         ? ciRepair.headBranch.trim()
         : loaded.childTask.branch;
+    const authorizedBranch = authorization.package.workstream.branchName;
+    const localIsolatedBranch =
+      sourceBranch === authorizedBranch
+        ? `${authorizedBranch}-local-${payload.claimAttempt}`
+        : authorizedBranch;
     const workspace = await prepareRepositoryWorkspace(
       loaded.childTask.repository,
       sourceBranch,
       {
-        isolatedBranchName: authorization.package.workstream.branchName,
+        isolatedBranchName: localIsolatedBranch,
         expectedBaseSha: authorization.package.workstream.baseSha,
       },
     );
