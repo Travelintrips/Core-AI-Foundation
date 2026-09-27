@@ -50,6 +50,12 @@ export interface PreparedPowerShellExecution {
   expiresAt: string;
   executedAt: string | null;
   results: PowerShellCommandResult[];
+  progressPercent: number;
+  currentStep: string;
+  currentCommand: string | null;
+  completedCommands: number;
+  totalCommands: number;
+  lastProgressAt: string;
 }
 
 interface ParsedPowerShellCommand {
@@ -384,6 +390,12 @@ export async function prepareOllamaPowerShellExecution(input: {
     expiresAt: new Date(now + boundedTtl(input.approvalTtlMs)).toISOString(),
     executedAt: null,
     results: [],
+    progressPercent: 0,
+    currentStep: "PREPARED",
+    currentCommand: null,
+    completedCommands: 0,
+    totalCommands: commands.length,
+    lastProgressAt: new Date(now).toISOString(),
   };
   approvals.set(item.approvalId, item);
 
@@ -433,6 +445,9 @@ export async function approveOllamaPowerShellExecution(
 
   item.status = "APPROVED";
   item.approvedAt = new Date().toISOString();
+  item.progressPercent = 5;
+  item.currentStep = "APPROVED";
+  item.lastProgressAt = item.approvedAt;
 
   await logAudit(
     "ollama-worker",
@@ -519,6 +534,9 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
   });
 
   item.status = "EXECUTING";
+  item.progressPercent = 10;
+  item.currentStep = "EXECUTING";
+  item.lastProgressAt = new Date().toISOString();
   const timeout = boundedTimeout(input.timeoutMs);
   const shell =
     env["LOCAL_CODING_POWERSHELL_BIN"]?.trim() ||
@@ -530,7 +548,12 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
 
   const results: PowerShellCommandResult[] = [];
   try {
-    for (const command of parsed) {
+    for (let commandIndex = 0; commandIndex < parsed.length; commandIndex += 1) {
+      const command = parsed[commandIndex]!;
+      item.currentCommand = command.display;
+      item.currentStep = "RUNNING_COMMAND";
+      item.progressPercent = Math.min(95, 10 + Math.floor((commandIndex / parsed.length) * 85));
+      item.lastProgressAt = new Date().toISOString();
       const started = Date.now();
       try {
         const output = await executor(
@@ -562,6 +585,10 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
           stderr: (output.stderr ?? "").slice(0, MAX_STDERR_CHARS),
           durationMs: Date.now() - started,
         });
+        item.results = results.map((result) => ({ ...result }));
+        item.completedCommands = results.length;
+        item.progressPercent = Math.min(95, 10 + Math.floor((results.length / parsed.length) * 85));
+        item.lastProgressAt = new Date().toISOString();
       } catch (error) {
         const typed = error as Error & {
           code?: number | string;
@@ -582,6 +609,9 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
           stderr: (typed.stderr ?? typed.message ?? "").slice(0, MAX_STDERR_CHARS),
           durationMs: Date.now() - started,
         });
+        item.results = results.map((result) => ({ ...result }));
+        item.completedCommands = results.length;
+        item.lastProgressAt = new Date().toISOString();
         break;
       }
     }
@@ -593,6 +623,11 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
       results.every((result) => result.status === "PASSED")
         ? "COMPLETED"
         : "FAILED";
+    item.currentCommand = null;
+    item.currentStep = item.status;
+    item.progressPercent = item.status === "COMPLETED" ? 100 : Math.max(item.progressPercent, 95);
+    item.completedCommands = results.length;
+    item.lastProgressAt = item.executedAt;
 
     await logAudit(
       "ollama-worker",
@@ -619,6 +654,11 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
     item.results = results;
     item.executedAt = new Date().toISOString();
     item.status = "FAILED";
+    item.currentCommand = null;
+    item.currentStep = "FAILED";
+    item.progressPercent = Math.max(item.progressPercent, 95);
+    item.completedCommands = results.length;
+    item.lastProgressAt = item.executedAt;
     throw error;
   }
 }
@@ -670,4 +710,15 @@ export async function executeTrustedOllamaPowerShellCommands(input: {
     env,
     executor: input.executor,
   });
+}
+
+
+export function listOllamaPowerShellExecutions(): PreparedPowerShellExecution[] {
+  return [...approvals.values()]
+    .map(publicSnapshot)
+    .sort((a, b) => Date.parse(b.lastProgressAt) - Date.parse(a.lastProgressAt));
+}
+
+export function getLatestOllamaPowerShellExecution(): PreparedPowerShellExecution | null {
+  return listOllamaPowerShellExecutions()[0] ?? null;
 }
