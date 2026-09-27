@@ -109,6 +109,7 @@ function loadHistory(): ChatMessage[] {
 
 function routeLabel(route?: string | null): string {
   if (route === "NO_LLM") return "0 token";
+  if (route === "DATA_TOOL") return "Data Tool · 0 token";
   if (route === "LOCAL") return "Local AI";
   if (route === "CLOUD") return "Cloud";
   if (route === "CLOUD_FALLBACK") return "Cloud fallback";
@@ -343,7 +344,7 @@ export default function AiCoreChat() {
                     Ask Mode untuk tanya jawab hemat token. Agent Mode untuk coding task melalui analyzer, policy gate, testing, dan approval flow.
                   </p>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    {["/status", "/routing", "/model", "Kenapa build ini gagal?"].map((sample) => (
+                    {["/status", "Cek booking SC-0992", "Berapa outstanding tenant sekarang?", "Kenapa build ini gagal?"].map((sample) => (
                       <button key={sample} onClick={() => setInput(sample)} className="text-xs px-3 py-2 rounded-lg" style={{ background: "#0A1327", border: "1px solid #1E3057", color: "#8DA1C8" }}>
                         {sample}
                       </button>
@@ -512,7 +513,7 @@ export default function AiCoreChat() {
           <div className="text-[10px] uppercase tracking-widest mb-3" style={{ color: "#586E98" }}>Routing</div>
           <div className="space-y-2">
             {[
-              { icon: Zap, title: "Tier 0 · No LLM", text: "Status dan deterministic commands", badge: "0 token" },
+              { icon: Zap, title: "Tier 0 · No LLM", text: "Status, deterministic commands, dan read-only Data Tools", badge: "0 token" },
               { icon: Cpu, title: "Tier 1 · Local AI", text: config?.local.model || "Ollama / local worker", badge: localReady ? "ready" : "offline" },
               { icon: Cloud, title: "Tier 2 · Cloud", text: String(config?.codingModel?.["primaryModel"] || "configured primary"), badge: "on demand" },
             ].map((item) => (
