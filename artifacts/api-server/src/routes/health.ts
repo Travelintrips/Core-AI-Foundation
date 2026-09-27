@@ -14,6 +14,8 @@ import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "../services/zeroLlmLocalService.js";
+import { getAutonomousRuntimeStatus } from "../services/localCodingAutonomousRepairService.js";
+import { getCodingWhatsappConfigStatus } from "../services/codingWhatsappNotificationService.js";
 
 const router: IRouter = Router();
 
@@ -135,7 +137,45 @@ router.get("/healthz/full", async (_req, res) => {
     }
   }
 
-  // ── 5. Process metrics ────────────────────────────────────────────────────
+  // ── 5. Autonomous Coding readiness ────────────────────────────────────────
+  const autonomous = getAutonomousRuntimeStatus();
+  const whatsapp = getCodingWhatsappConfigStatus();
+  const autonomousDependencies = {
+    githubConfigured: Boolean(process.env["AI_CODING_GITHUB_TOKEN"]?.trim()),
+    whatsapp,
+    incomingSecretConfigured: Boolean(process.env["AI_CODING_WA_INCOMING_SECRET"]?.trim()),
+    allowedSendersConfigured: Boolean(process.env["AI_CODING_WA_ALLOWED_SENDERS"]?.trim()),
+  };
+  const autonomousDependenciesReady =
+    autonomousDependencies.githubConfigured &&
+    autonomousDependencies.whatsapp.baseUrl &&
+    autonomousDependencies.whatsapp.apiKey &&
+    autonomousDependencies.whatsapp.to &&
+    autonomousDependencies.incomingSecretConfigured &&
+    autonomousDependencies.allowedSendersConfigured;
+
+  if (!autonomous.configured) {
+    checks["coding-autonomous"] = { status: "ok", detail: "disabled" };
+  } else if (!autonomous.running) {
+    checks["coding-autonomous"] = {
+      status: "fail",
+      detail: "configured but runtime timer is not running",
+    };
+    overallStatus = "fail";
+  } else if (!autonomousDependenciesReady) {
+    checks["coding-autonomous"] = {
+      status: "fail",
+      detail: "runtime active but one or more GitHub/WhatsApp approval dependencies are not configured",
+    };
+    overallStatus = "fail";
+  } else {
+    checks["coding-autonomous"] = {
+      status: "ok",
+      detail: `running; poll=${autonomous.pollIntervalMs}ms; maxTasksPerTick=${autonomous.maxTasksPerTick}`,
+    };
+  }
+
+  // ── 6. Process metrics ────────────────────────────────────────────────────
   const uptimeMs = Date.now() - startedAt;
   const memUsage = process.memoryUsage();
 
