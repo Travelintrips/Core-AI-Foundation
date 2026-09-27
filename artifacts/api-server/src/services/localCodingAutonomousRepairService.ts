@@ -36,6 +36,7 @@ import { approveCommitAndCreatePullRequest } from "./localCodingCommitApprovalSe
 import { startPullRequestVerification } from "./localCodingPullRequestGateService.js";
 import { requestCodingCriticalApproval } from "./codingCriticalApprovalService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
+import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
 
 const DEFAULT_INTERVAL_MS = 8_000;
 const MIN_INTERVAL_MS = 2_000;
@@ -254,10 +255,11 @@ async function processTaskGraph(
   }
 
   if (snapshot.graph.status === "COMPLETED") {
+    const finalized = await finalizeCodingTaskGraphIntegration(taskId);
     return {
       handled: true,
-      blocker:
-        "Semua workstream selesai, tetapi integrasi antar branch masih memerlukan integration-manifest adapter sebelum task boleh dinyatakan COMPLETE.",
+      action: `AUTO_PUBLISH_INTEGRATION_PR:#${finalized.pullRequestNumber}`,
+      waiting: true,
     };
   }
 
