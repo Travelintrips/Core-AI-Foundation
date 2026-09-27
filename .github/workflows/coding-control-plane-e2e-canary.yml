@@ -179,30 +179,33 @@ jobs:
           [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]
           echo "graph_id=$graph_id" >> "$GITHUB_OUTPUT"
 
-      - name: Acquire and assert Planner Authority
+      - name: Read and assert Planner Authority
         id: authority
         shell: bash
         run: |
           set -euo pipefail
-          holder="gha-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          body=$(jq -nc --arg scope "${{ steps.task.outputs.scope }}" --arg holder "$holder" '{
-            scope:$scope,holderId:$holder,holderType:"chatgpt",leaseSeconds:300,
-            metadata:{purpose:"production-control-plane-e2e-canary"}
-          }')
-          code=$(curl -sS -o /tmp/authority.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/acquire"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
-          if [ "$code" != "201" ]; then
-            echo "::error::Acquire planner authority failed with HTTP $code"
+          scope="${{ steps.task.outputs.scope }}"
+          code=$(curl -sS -G -o /tmp/authority.json -w "%{http_code}"             "$API_BASE_URL/ai/coding/planner-authority"             -H "x-admin-api-key: $ADMIN_API_KEY"             --data-urlencode "scope=$scope")
+          if [ "$code" != "200" ]; then
+            echo "::error::Read planner authority failed with HTTP $code"
             cat /tmp/authority.json
             exit 1
           fi
+          holder=$(jq -r '.holderId // empty' /tmp/authority.json)
           token=$(jq -r '.leaseToken // empty' /tmp/authority.json)
           generation=$(jq -r '.fencingGeneration // empty' /tmp/authority.json)
-          if [ -z "$token" ] || [ -z "$generation" ]; then
-            echo "::error::Planner authority response missing leaseToken or fencingGeneration"
+          state=$(jq -r '.state // empty' /tmp/authority.json)
+          if [ -z "$holder" ] || [ -z "$token" ] || [ -z "$generation" ]; then
+            echo "::error::Planner authority response missing holderId, leaseToken, or fencingGeneration"
             cat /tmp/authority.json
             exit 1
           fi
-          assert=$(jq -nc --arg scope "${{ steps.task.outputs.scope }}" --arg holder "$holder" --arg token "$token" --argjson generation "$generation"             '{scope:$scope,holderId:$holder,leaseToken:$token,fencingGeneration:$generation}')
+          if [[ "$state" != "PRIMARY_ACTIVE" && "$state" != "FALLBACK_ACTIVE" ]]; then
+            echo "::error::Planner authority is not active: state=${state:-missing}"
+            cat /tmp/authority.json
+            exit 1
+          fi
+          assert=$(jq -nc --arg scope "$scope" --arg holder "$holder" --arg token "$token" --argjson generation "$generation"             '{scope:$scope,holderId:$holder,leaseToken:$token,fencingGeneration:$generation}')
           code=$(curl -sS -o /tmp/assert.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/assert"             -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$assert")
           if [ "$code" != "200" ]; then
             echo "::error::Assert planner authority failed with HTTP $code"
