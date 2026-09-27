@@ -310,7 +310,7 @@ describe("Proposal policy adversarial boundary", () => {
     });
   });
 
-  it("rejects a symlink escape from an approved repository-relative path", async () => {
+  it.skipIf(process.platform === "win32")("rejects a symlink escape from an approved repository-relative path", async () => {
     const root = await mkdtemp(join(tmpdir(), "ai-policy-root-"));
     const outside = await mkdtemp(join(tmpdir(), "ai-policy-outside-"));
     roots.push(root, outside);
