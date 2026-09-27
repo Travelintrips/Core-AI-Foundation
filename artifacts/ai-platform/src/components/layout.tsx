@@ -39,6 +39,7 @@ import {
   History,
   LogOut,
   Code2,
+  MessageSquareText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -94,6 +95,7 @@ const NAV_SECTIONS_DEF = [
       { href: "/queue",        tKey: "nav.items.queueCenter", icon: ListOrdered },
       { href: "/human-tasks",  tKey: "nav.items.humanTasks",  icon: ClipboardCheck },
       { href: "/registry",     tKey: "nav.items.registry",    icon: Box },
+      { href: "/ai-core-chat", tKey: "nav.items.aiCoreChat", icon: MessageSquareText },
       { href: "/coding-workspace", tKey: "nav.items.codingWorkspace", icon: Code2 },
     ],
   },
