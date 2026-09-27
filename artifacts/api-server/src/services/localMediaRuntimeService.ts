@@ -194,3 +194,194 @@ export async function getComfyWorkflowHistory(
   }
   return body as Record<string, unknown>;
 }
+
+
+export interface LocalImageGenerationRequest {
+  prompt: string;
+  negativePrompt?: string;
+  checkpoint?: string;
+  width?: number;
+  height?: number;
+  steps?: number;
+  cfg?: number;
+  seed?: number;
+  filenamePrefix?: string;
+}
+
+export interface LocalImageGenerationQueuedResult {
+  promptId: string;
+  number?: number;
+  nodeErrors?: unknown;
+}
+
+export interface LocalImageOutputDescriptor {
+  filename: string;
+  subfolder: string;
+  type: string;
+  viewUrl: string;
+}
+
+function clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(value as number)));
+}
+
+function clampNumber(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value as number));
+}
+
+function cleanPrompt(value: string, field: string): string {
+  const text = value.trim();
+  if (!text) throw new Error(`${field} must not be empty.`);
+  if (text.length > 4000) throw new Error(`${field} is too long.`);
+  return text;
+}
+
+function cleanCheckpoint(value: string | undefined): string {
+  const checkpoint = (value || "v1-5-pruned-emaonly.safetensors").trim();
+  if (!/^[a-zA-Z0-9._ -]{1,180}$/.test(checkpoint) || checkpoint.includes("..")) {
+    throw new Error("Invalid checkpoint name.");
+  }
+  return checkpoint;
+}
+
+export function buildSd15ImageWorkflow(
+  request: LocalImageGenerationRequest,
+): Record<string, unknown> {
+  const prompt = cleanPrompt(request.prompt, "prompt");
+  const negativePrompt = request.negativePrompt?.trim() ||
+    "blurry, low quality, distorted, deformed, artifacts";
+  const checkpoint = cleanCheckpoint(request.checkpoint);
+  const width = clampInteger(request.width, 512, 256, 768);
+  const height = clampInteger(request.height, 512, 256, 768);
+  const steps = clampInteger(request.steps, 12, 4, 30);
+  const cfg = clampNumber(request.cfg, 6.5, 1, 15);
+  const seed = clampInteger(request.seed, Math.floor(Math.random() * 2_147_483_647), 0, 2_147_483_647);
+  const filenamePrefix = (request.filenamePrefix || "core-ai-local")
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .slice(0, 80) || "core-ai-local";
+
+  return {
+    "1": {
+      class_type: "CheckpointLoaderSimple",
+      inputs: { ckpt_name: checkpoint },
+    },
+    "2": {
+      class_type: "CLIPTextEncode",
+      inputs: { text: prompt, clip: ["1", 1] },
+    },
+    "3": {
+      class_type: "CLIPTextEncode",
+      inputs: { text: negativePrompt, clip: ["1", 1] },
+    },
+    "4": {
+      class_type: "EmptyLatentImage",
+      inputs: { width, height, batch_size: 1 },
+    },
+    "5": {
+      class_type: "KSampler",
+      inputs: {
+        seed,
+        steps,
+        cfg,
+        sampler_name: "euler",
+        scheduler: "normal",
+        denoise: 1.0,
+        model: ["1", 0],
+        positive: ["2", 0],
+        negative: ["3", 0],
+        latent_image: ["4", 0],
+      },
+    },
+    "6": {
+      class_type: "VAEDecode",
+      inputs: { samples: ["5", 0], vae: ["1", 2] },
+    },
+    "7": {
+      class_type: "SaveImage",
+      inputs: { filename_prefix: filenamePrefix, images: ["6", 0] },
+    },
+  };
+}
+
+export async function queueLocalImageGeneration(
+  request: LocalImageGenerationRequest,
+): Promise<LocalImageGenerationQueuedResult> {
+  const workflow = buildSd15ImageWorkflow(request);
+  const queued = await submitComfyWorkflow(workflow, "core-ai-local-image");
+  const promptId = typeof queued["prompt_id"] === "string" ? queued["prompt_id"] : "";
+
+  if (!promptId) {
+    throw new Error("ComfyUI did not return a prompt_id.");
+  }
+
+  return {
+    promptId,
+    number: typeof queued["number"] === "number" ? queued["number"] : undefined,
+    nodeErrors: queued["node_errors"],
+  };
+}
+
+export function extractLocalImageOutputs(
+  promptId: string,
+  history: Record<string, unknown>,
+): LocalImageOutputDescriptor[] {
+  const entry = history[promptId];
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+
+  const outputs = (entry as Record<string, unknown>)["outputs"];
+  if (!outputs || typeof outputs !== "object" || Array.isArray(outputs)) return [];
+
+  const config = readLocalMediaRuntimeConfig();
+  const found: LocalImageOutputDescriptor[] = [];
+
+  for (const value of Object.values(outputs as Record<string, unknown>)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const images = (value as Record<string, unknown>)["images"];
+    if (!Array.isArray(images)) continue;
+
+    for (const image of images) {
+      if (!image || typeof image !== "object" || Array.isArray(image)) continue;
+      const item = image as Record<string, unknown>;
+      const filename = typeof item["filename"] === "string" ? item["filename"] : "";
+      const subfolder = typeof item["subfolder"] === "string" ? item["subfolder"] : "";
+      const type = typeof item["type"] === "string" ? item["type"] : "output";
+      if (!filename) continue;
+
+      const params = new URLSearchParams({ filename, subfolder, type });
+      found.push({
+        filename,
+        subfolder,
+        type,
+        viewUrl: `${config.comfyUiBaseUrl}/view?${params.toString()}`,
+      });
+    }
+  }
+
+  return found;
+}
+
+export async function waitForLocalImageGeneration(
+  promptId: string,
+  options?: { timeoutMs?: number; pollMs?: number },
+): Promise<{
+  promptId: string;
+  status: "completed" | "timeout";
+  outputs: LocalImageOutputDescriptor[];
+}> {
+  const timeoutMs = clampInteger(options?.timeoutMs, 180_000, 5_000, 600_000);
+  const pollMs = clampInteger(options?.pollMs, 1_500, 250, 10_000);
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const history = await getComfyWorkflowHistory(promptId);
+    const outputs = extractLocalImageOutputs(promptId, history);
+    if (outputs.length > 0) {
+      return { promptId, status: "completed", outputs };
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  return { promptId, status: "timeout", outputs: [] };
+}
