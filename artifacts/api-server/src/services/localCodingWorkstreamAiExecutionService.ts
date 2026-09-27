@@ -33,6 +33,7 @@ import {
 } from "./localCodingWorkstreamAiHandoffService.js";
 import {
   buildCodingWorkstreamBranchName,
+  completeReviewedCodingWorkstream,
   heartbeatCodingWorkstreamClaim,
   startCodingWorkstreamClaim,
 } from "./localCodingMultiWorkerOrchestratorService.js";
@@ -205,6 +206,31 @@ function pendingAiCandidate(result: Record<string, unknown>): boolean {
     execution?.nextAction === "REVIEW_AI_PATCH" &&
     execution?.reviewStatus !== "APPROVED"
   );
+}
+
+const MANUAL_AI_PATCH_REVIEW_PATTERNS = [
+  /(^|\/)migrations?(\/|$)/i,
+  /^\.github\/workflows\//i,
+  /(^|\/)[^/]*(auth|security)[^/]*\.[^/]+$/i,
+  /(^|\/)(auth|security)(\/|$)/i,
+  /(^|\/)(deploy|deployment|infrastructure|infra)(\/|$)/i,
+  /(^|\/)(dockerfile|docker-compose(?:\.[^/]+)?\.ya?ml)$/i,
+  /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i,
+];
+
+export function manualAiPatchReviewReason(
+  changedFiles: string[],
+  warnings: string[],
+): string | null {
+  if (warnings.length > 0) {
+    return "AI candidate contains verification/policy warnings.";
+  }
+  const highRiskFile = changedFiles.find((file) =>
+    MANUAL_AI_PATCH_REVIEW_PATTERNS.some((pattern) => pattern.test(file)),
+  );
+  return highRiskFile
+    ? `AI candidate touches a high-risk path: ${highRiskFile}`
+    : null;
 }
 
 async function recoverExpiredAiControlClaim(workstreamId: string): Promise<void> {
@@ -1456,6 +1482,45 @@ export async function executeCodingWorkstreamAiJob(
       executionId,
     });
 
+    const manualReviewReason = manualAiPatchReviewReason(
+      candidate.applyResult.changedFiles,
+      candidate.applyResult.warnings,
+    );
+    let nextAction = "REVIEW_AI_PATCH";
+    let autoAdvanced = false;
+
+    if (!manualReviewReason) {
+      try {
+        await approveWorkstreamAiCandidatePatch(payload.workstreamId);
+        await materializeApprovedWorkstreamAiCandidate(payload.workstreamId);
+        await completeReviewedCodingWorkstream(payload.workstreamId, {
+          completeChildTask: true,
+          childTaskResultSummary:
+            "Constrained AI patch passed policy and bounded static verification, was auto-approved, committed, pushed, and completed without a manual review gate.",
+        });
+        nextAction = "COMPLETED";
+        autoAdvanced = true;
+      } catch (autoAdvanceError) {
+        nextAction = "REVIEW_AI_PATCH";
+        await logAudit(
+          "coding-multi-worker",
+          "workstream_ai_auto_advance_failed",
+          payload.workstreamId,
+          "coding_workstream",
+          "failure",
+          {
+            jobId: job.id,
+            graphId: payload.graphId,
+            claimAttempt: payload.claimAttempt,
+            error:
+              autoAdvanceError instanceof Error
+                ? autoAdvanceError.message.slice(0, 700)
+                : String(autoAdvanceError),
+          },
+        ).catch(() => undefined);
+      }
+    }
+
     await logAudit(
       "coding-multi-worker",
       "workstream_ai_candidate_ready",
@@ -1475,7 +1540,9 @@ export async function executeCodingWorkstreamAiJob(
         patchSha256: candidate.applyResult.patchSha256,
         modelInvoked: true,
         privilegeEnded: true,
-        nextAction: "REVIEW_AI_PATCH",
+        nextAction,
+        autoAdvanced,
+        manualReviewReason,
       },
     ).catch(() => undefined);
 
@@ -1493,7 +1560,9 @@ export async function executeCodingWorkstreamAiJob(
       patchSha256: candidate.applyResult.patchSha256,
       modelInvoked: true,
       privilegeEnded: true,
-      nextAction: "REVIEW_AI_PATCH",
+      nextAction,
+      autoAdvanced,
+      manualReviewReason,
     };
   } catch (error) {
     if (!consumed) {

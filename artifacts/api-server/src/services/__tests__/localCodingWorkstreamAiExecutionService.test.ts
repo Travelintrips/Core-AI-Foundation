@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hashWorkstreamAnalyzerResult,
+  manualAiPatchReviewReason,
   parseWorkstreamAiJobPayload,
   selectWorkstreamAiAllowedFiles,
 } from "../localCodingWorkstreamAiExecutionService.js";
@@ -144,6 +145,70 @@ describe("per-workstream constrained AI execution contract", () => {
 
     expect(selected).toHaveLength(12);
     expect(new Set(selected).size).toBe(12);
+  });
+
+
+  it("auto-advances ordinary warning-free AI patches", () => {
+    expect(
+      manualAiPatchReviewReason(
+        [
+          "artifacts/api-server/src/services/exampleService.ts",
+          "artifacts/api-server/src/routes/example.ts",
+        ],
+        [],
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps high-risk or warned AI patches behind manual review", () => {
+    expect(
+      manualAiPatchReviewReason(
+        ["scripts/migrations/001-risky.sql"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["artifacts/api-server/src/services/auth/tokenService.ts"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["artifacts/api-server/src/middleware/adminAuth.ts"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["artifacts/api-server/src/middleware/securityHardening.ts"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["integration/migrations/team-07.sql"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["lib/db/migrations/add-observability-tables.sql"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["artifacts/api-server/src/services/exampleService.ts"],
+        ["verification warning"],
+      ),
+    ).toMatch(/warnings/i);
   });
 });
 
