@@ -349,39 +349,72 @@ router.post("/ai/coding/tasks/:id/run-trusted-repair", async (req, res): Promise
     return;
   }
 
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, params.data.id));
-  if (!task) {
-    res.status(404).json({ error: "Coding task not found" });
-    return;
-  }
-
-  const [activeRun] = await db
-    .select({ id: aiCodingRunsTable.id })
-    .from(aiCodingRunsTable)
-    .where(
-      and(
-        eq(aiCodingRunsTable.taskId, task.id),
-        eq(aiCodingRunsTable.status, "RUNNING"),
-      ),
-    )
-    .limit(1);
-
-  if (activeRun) {
-    res.status(409).json({ error: "Coding task already has an active run" });
-    return;
-  }
-
-  if (!["READY_REVIEW", "FAILED"].includes(task.status)) {
-    res.status(409).json({
-      error: "Trusted Ollama repair is available only for ready-for-review or failed tasks.",
-    });
-    return;
-  }
+  let taskForFailure: typeof aiCodingTasksTable.$inferSelect | null = null;
+  let repairRunId: string | null = null;
 
   try {
+    const { task, repairRun } = await db.transaction(async (tx) => {
+      const [task] = await tx
+        .select()
+        .from(aiCodingTasksTable)
+        .where(eq(aiCodingTasksTable.id, params.data.id))
+        .for("update");
+
+      if (!task) throw new CodingTaskNotFoundError("Coding task not found");
+
+      const [activeRun] = await tx
+        .select({ id: aiCodingRunsTable.id })
+        .from(aiCodingRunsTable)
+        .where(
+          and(
+            eq(aiCodingRunsTable.taskId, task.id),
+            eq(aiCodingRunsTable.status, "RUNNING"),
+          ),
+        )
+        .limit(1);
+
+      if (activeRun) {
+        throw new CodingRunAlreadyActiveError("Coding task already has an active run");
+      }
+
+      if (!["READY_REVIEW", "FAILED"].includes(task.status)) {
+        throw new Error(
+          "Trusted Ollama repair is available only for ready-for-review or failed tasks.",
+        );
+      }
+
+      const [repairRun] = await tx
+        .insert(aiCodingRunsTable)
+        .values({
+          taskId: task.id,
+          agentName: "Ollama Trusted Repair",
+          status: "RUNNING",
+          startedAt: new Date(),
+          logs: JSON.stringify({
+            status: "RUNNING",
+            stage: "STARTING",
+            model: process.env["OLLAMA_WORKER_MODEL"] || process.env["OLLAMA_MODEL"] || "qwen2.5-coder:7b",
+            message: "Trusted verification and Ollama repair started.",
+          }),
+        })
+        .returning();
+
+      if (!repairRun) throw new Error("Failed to create Ollama repair run");
+
+      await tx
+        .update(aiCodingTasksTable)
+        .set({
+          status: "TESTING",
+          resultSummary: "Ollama Trusted Repair sedang menjalankan verification dan bounded repair.",
+        })
+        .where(eq(aiCodingTasksTable.id, task.id));
+
+      return { task, repairRun };
+    });
+
+    taskForFailure = task;
+    repairRunId = repairRun.id;
+
     const result = await runTrustedOllamaRepairTask({
       taskId: task.id,
       instruction:
@@ -391,8 +424,83 @@ router.post("/ai/coding/tasks/:id/run-trusted-repair", async (req, res): Promise
       timeoutMs: 180_000,
     });
 
+    const finalStatus = result.repaired || result.verification?.status === "COMPLETED"
+      ? "READY_REVIEW"
+      : "FAILED";
+    const summary = result.repaired
+      ? `Ollama Trusted Repair selesai dan verification hijau. File berubah: ${result.changedFiles.length}.`
+      : result.verification?.status === "COMPLETED"
+        ? "Verification hijau; tidak ada repair yang perlu diterapkan."
+        : "Ollama Trusted Repair selesai tetapi verification belum hijau.";
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(aiCodingRunsTable)
+        .set({
+          status: result.repaired || result.verification?.status === "COMPLETED" ? "COMPLETED" : "FAILED",
+          finishedAt: new Date(),
+          logs: JSON.stringify({
+            status: result.repaired ? "REPAIRED_VERIFIED" : result.verification?.status ?? "FAILED",
+            stage: "FINISHED",
+            repaired: result.repaired,
+            proposalSummary: result.proposalSummary,
+            allowedFiles: result.allowedFiles,
+            changedFiles: result.changedFiles,
+            verificationStatus: result.verification?.status ?? null,
+          }),
+          errorMessage:
+            result.repaired || result.verification?.status === "COMPLETED"
+              ? null
+              : "Trusted Ollama repair verification did not complete successfully.",
+        })
+        .where(eq(aiCodingRunsTable.id, repairRun.id));
+
+      await tx
+        .update(aiCodingTasksTable)
+        .set({
+          status: finalStatus,
+          resultSummary: summary,
+        })
+        .where(eq(aiCodingTasksTable.id, task.id));
+    });
+
     res.json(result);
   } catch (error) {
+    if (repairRunId && taskForFailure) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(aiCodingRunsTable)
+          .set({
+            status: "FAILED",
+            finishedAt: new Date(),
+            errorMessage: error instanceof Error ? error.message.slice(0, 1000) : String(error).slice(0, 1000),
+            logs: JSON.stringify({
+              status: "FAILED",
+              stage: "FAILED",
+              message: error instanceof Error ? error.message.slice(0, 1000) : String(error).slice(0, 1000),
+            }),
+          })
+          .where(eq(aiCodingRunsTable.id, repairRunId!));
+
+        await tx
+          .update(aiCodingTasksTable)
+          .set({
+            status: "FAILED",
+            resultSummary: "Ollama Trusted Repair gagal: " +
+              (error instanceof Error ? error.message.slice(0, 700) : String(error).slice(0, 700)),
+          })
+          .where(eq(aiCodingTasksTable.id, taskForFailure!.id));
+      }).catch(() => undefined);
+    }
+
+    if (error instanceof CodingTaskNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof CodingRunAlreadyActiveError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     if (error instanceof LocalCodingPowerShellError) {
       const status =
         error.code === "NOT_FOUND"
@@ -403,6 +511,13 @@ router.post("/ai/coding/tasks/:id/run-trusted-repair", async (req, res): Promise
               ? 409
               : 422;
       res.status(status).json({ error: error.message, code: error.code });
+      return;
+    }
+    if (
+      error instanceof Error &&
+      error.message.includes("available only for ready-for-review or failed tasks")
+    ) {
+      res.status(409).json({ error: error.message });
       return;
     }
     throw error;
