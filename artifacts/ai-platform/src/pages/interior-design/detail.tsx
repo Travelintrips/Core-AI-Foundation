@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PlacementCanvas, type CanvasPlacement, type ConstraintEvaluation, type PlacementCandidate } from "@/components/interior-design/PlacementCanvas";
 import { Design3DViewer } from "@/components/design-studio/Design3DViewer";
 import { interiorOutputToDesignScene } from "@/lib/ai-design-scene-adapters";
+import type { DesignScene } from "@/lib/ai-design-core";
 
 const API_BASE = "";
 
@@ -153,6 +154,8 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [canvasDirty, setCanvasDirty] = useState(false);
   const [constraintEvaluation, setConstraintEvaluation] = useState<ConstraintEvaluation | null>(null);
+  const [designScene, setDesignScene] = useState<DesignScene | null>(null);
+  const [designWorkspaceId, setDesignWorkspaceId] = useState<number | null>(null);
 
   const projectId = params.id;
 
@@ -289,6 +292,59 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
     }
   }, [canvasSession]);
 
+  useEffect(() => {
+    const project = data?.project;
+    const output = data?.output;
+    if (!project || !output) {
+      setDesignScene(null);
+      setDesignWorkspaceId(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const workspace = await apiFetch<{ id: number }>("/api/ai/design/workspaces/resolve", {
+          method: "POST",
+          body: JSON.stringify({
+            sourceType: "interior",
+            sourceId: project.id,
+            name: project.title,
+          }),
+        });
+        if (cancelled) return;
+        setDesignWorkspaceId(workspace.id);
+
+        try {
+          const persisted = await apiFetch<{ scene: DesignScene }>(`/api/ai/design/projects/${workspace.id}/scene`);
+          if (!cancelled) setDesignScene(persisted.scene);
+        } catch {
+          const initial = interiorOutputToDesignScene({
+            projectId: project.id,
+            furniturePlacement: output.furniturePlacement,
+            materialRecommendations: output.materialRecommendations,
+            output: output as unknown as Record<string, unknown>,
+          });
+          await apiFetch(`/api/ai/design/projects/${workspace.id}/scene`, {
+            method: "PUT",
+            body: JSON.stringify({ scene: initial, label: "Initialize interior 3D scene" }),
+          });
+          if (!cancelled) setDesignScene(initial);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast({
+            title: "3D workspace gagal dimuat",
+            description: error instanceof Error ? error.message : String(error),
+            variant: "destructive",
+          });
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [data?.project?.id, data?.project?.title, data?.output?.id, toast]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -321,13 +377,6 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
   const canGenerate = !!brief && !["completed"].includes(project.status) && !generateMutation.isPending;
   const canvasPlacements = placementData?.data ?? [];
   const canvasReadOnly = canvasSession?.metadata?.["approvedForRendering"] === true;
-  const designScene = output ? interiorOutputToDesignScene({
-    projectId,
-    furniturePlacement: output.furniturePlacement,
-    materialRecommendations: output.materialRecommendations,
-    output: output as unknown as Record<string, unknown>,
-  }) : null;
-
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -530,7 +579,26 @@ export default function InteriorDesignDetailPage({ params }: { params: { id: str
             </div>
           )}
 
-          {designScene && <Design3DViewer scene={designScene} />}
+          {designScene && (
+            <Design3DViewer
+              scene={designScene}
+              onSceneChange={(nextScene) => {
+                setDesignScene(nextScene);
+                if (!designWorkspaceId) return;
+                void apiFetch(`/api/ai/design/projects/${designWorkspaceId}/scene`, {
+                  method: "PUT",
+                  body: JSON.stringify({ scene: nextScene, label: "Interior generated 3D asset" }),
+                }).then(
+                  () => toast({ title: "Asset 3D interior tersimpan" }),
+                  (error: Error) => toast({
+                    title: "Gagal menyimpan asset 3D",
+                    description: error.message,
+                    variant: "destructive",
+                  }),
+                );
+              }}
+            />
+          )}
 
           {/* Moodboard */}
           {output.moodboard && (
