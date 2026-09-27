@@ -37,7 +37,10 @@ import {
   type AiCoreWorkload,
   type AiCoreWorkloadRoute,
 } from "../services/aiCoreWorkloadRouterService.js";
-import { tryRunAiCoreDataTool } from "../services/aiCoreDataToolService.js";
+import {
+  getAiCoreDataToolReadiness,
+  tryRunAiCoreDataTool,
+} from "../services/aiCoreDataToolService.js";
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
 
 const router = Router();
@@ -73,6 +76,42 @@ function isLocalProvider(provider: string): boolean {
   return ["ollama", "zerollm"].includes(provider.trim().toLowerCase());
 }
 
+type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+function numericCost(value: unknown): number | null {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseFloat(value)
+        : Number.NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function estimateSelectionCostUsd(
+  selection: ProductionCodingModelSelection,
+  usage: TokenUsage | null,
+): number | null {
+  if (!usage) return null;
+
+  const provider = String(selection.provider.slug).trim().toLowerCase();
+  if (["ollama", "zerollm"].includes(provider)) return 0;
+
+  const inputUnit = numericCost(selection.model.costPerInputToken);
+  const outputUnit = numericCost(selection.model.costPerOutputToken);
+  if (inputUnit == null || outputUnit == null) return null;
+
+  const estimated =
+    usage.inputTokens * inputUnit + usage.outputTokens * outputUnit;
+  return Number.isFinite(estimated)
+    ? Number(estimated.toFixed(8))
+    : null;
+}
+
 function safeProviderFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message
@@ -93,6 +132,7 @@ function unavailableAskReply(
     provider: null,
     model: null,
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    estimatedCostUsd: 0,
     ...metadata,
     reply,
     warning,
@@ -136,8 +176,9 @@ async function invokeChatModel(
   reply: string;
   provider: string;
   model: string;
-  usage: { inputTokens: number; outputTokens: number; totalTokens: number };
+  usage: TokenUsage;
   latencyMs: number;
+  estimatedCostUsd: number | null;
 }> {
   const requestId = randomUUID();
   const provider = String(selection.provider.slug).trim().toLowerCase();
@@ -169,6 +210,10 @@ async function invokeChatModel(
     model,
     usage: response.metadata.usage,
     latencyMs: response.metadata.latencyMs,
+    estimatedCostUsd: estimateSelectionCostUsd(
+      selection,
+      response.metadata.usage,
+    ),
   };
 }
 
@@ -248,6 +293,7 @@ async function deterministicReply(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       ...routingMeta,
       reply:
         "Halo. AI Core Chat aktif. Gunakan Ask untuk bertanya atau Agent untuk menjalankan coding task. Sapaan ini memakai 0 token LLM.",
@@ -261,6 +307,7 @@ async function deterministicReply(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       ...routingMeta,
       reply:
         "Perintah cepat: /status untuk runtime AI Core, /model untuk model coding, /routing untuk kebijakan biaya/model, Ask Smart untuk chat cepat hemat biaya, dan Agent Mode untuk coding melalui policy gate.",
@@ -279,6 +326,7 @@ async function deterministicReply(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       ...routingMeta,
       reply:
         `AI Core runtime: autonomous ${runtime.running ? "RUNNING" : "STOPPED"}; local AI ${local.ok ? "READY" : "UNAVAILABLE"}. Perintah ini memakai 0 token LLM.`,
@@ -302,6 +350,7 @@ async function deterministicReply(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       ...routingMeta,
       reply:
         "Routing biaya aktif: status/perintah deterministic = 0 token; chat dan review = LOW; reasoning = MEDIUM; coding = Coding Orchestrator; tindakan production = explicit approval gate.",
@@ -317,6 +366,7 @@ async function deterministicReply(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       ...routingMeta,
       reply:
         `Routing coding saat ini: primary ${String(config["primaryProvider"])} / ${String(config["primaryModel"])}, fallback ${String(config["fallbackProvider"])} / ${String(config["fallbackModel"])}. Ask Mode Economy tetap memprioritaskan local AI tanpa cloud.`,
@@ -349,6 +399,7 @@ async function answerAskMode(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       workload: "DATA_LOOKUP",
       costClass: "ZERO",
       reply: dataTool.reply,
@@ -365,6 +416,7 @@ async function answerAskMode(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       ...routingMeta,
       reply:
         "Tindakan production/kritis tidak dijalankan sebagai chat. Gunakan Agent Mode; AI Core akan menjalankannya melalui control plane dan berhenti pada explicit approval gate. Klasifikasi ini memakai 0 token LLM.",
@@ -379,6 +431,7 @@ async function answerAskMode(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       ...routingMeta,
       reply:
         "Instruksi ini terdeteksi sebagai pekerjaan coding yang mengubah repository. Gunakan Agent Mode agar masuk Coding Orchestrator, test, review, dan approval gate. Routing ini memakai 0 token LLM.",
@@ -557,6 +610,7 @@ function writeBufferedChatStream(
 
   writeStreamEvent(res, "done", {
     usage: result["usage"] ?? null,
+    estimatedCostUsd: result["estimatedCostUsd"] ?? null,
     warning: result["warning"] ?? null,
     taskId: result["taskId"] ?? null,
     taskNumber: result["taskNumber"] ?? null,
@@ -592,6 +646,7 @@ async function streamAskMode(
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
       workload: "DATA_LOOKUP",
       costClass: "ZERO",
       reply: dataTool.reply,
@@ -664,6 +719,10 @@ async function streamAskMode(
 
     writeStreamEvent(res, "done", {
       usage: result.usage,
+      estimatedCostUsd: estimateSelectionCostUsd(
+        cloud.selection,
+        result.usage,
+      ),
       latencyMs: result.latencyMs,
       providerRequestId: result.providerRequestId ?? null,
       incomplete: false,
@@ -854,6 +913,28 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     codingModel: modelConfig,
     secretsExposed: false,
   });
+});
+
+router.get("/ai/core-chat/data-tools/readiness", async (_req, res): Promise<void> => {
+  try {
+    const readiness = await getAiCoreDataToolReadiness();
+    res.status(200).json(readiness);
+  } catch (error) {
+    res.status(200).json({
+      status: "degraded",
+      tools: {
+        sportCenterBookingLookup: {
+          ready: false,
+          missing: ["readiness_query_failed"],
+        },
+        tenantOutstandingSummary: {
+          ready: false,
+          missing: ["readiness_query_failed"],
+        },
+      },
+      warning: safeProviderFailure(error),
+    });
+  }
 });
 
 router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => {
