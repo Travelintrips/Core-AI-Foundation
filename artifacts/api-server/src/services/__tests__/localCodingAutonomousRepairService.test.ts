@@ -33,6 +33,43 @@ vi.mock("../localCodingPullRequestGateService.js", () => ({ startPullRequestVeri
 vi.mock("../codingCriticalApprovalService.js", () => ({ requestCodingCriticalApproval: vi.fn() }));
 vi.mock("../codingControlBridgeSchemaService.js", () => ({ ensureCodingControlBridgeTables: vi.fn() }));
 
+describe("autonomous coding workstream lease handling", () => {
+  it("waits only for live claims and lets expired claims be reclaimed", async () => {
+    const { hasLiveCodingWorkstreamClaim } = await import("../localCodingAutonomousRepairService.js");
+    const now = new Date("2026-09-27T07:23:50.000Z");
+
+    expect(
+      hasLiveCodingWorkstreamClaim(
+        [{
+          status: "CLAIMED",
+          leaseExpiresAt: "2026-09-27T07:22:41.522Z",
+        }],
+        now,
+      ),
+    ).toBe(false);
+
+    expect(
+      hasLiveCodingWorkstreamClaim(
+        [{
+          status: "RUNNING",
+          leaseExpiresAt: "2026-09-27T07:24:41.522Z",
+        }],
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("fails closed and waits when an active claim has no lease expiry", async () => {
+    const { hasLiveCodingWorkstreamClaim } = await import("../localCodingAutonomousRepairService.js");
+    expect(
+      hasLiveCodingWorkstreamClaim(
+        [{ status: "CLAIMED", leaseExpiresAt: null }],
+        new Date("2026-09-27T07:23:50.000Z"),
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("autonomous coding repair runtime contract", () => {
   it("exports bounded lifecycle controls", async () => {
     const service = await import("../localCodingAutonomousRepairService.js");
