@@ -605,6 +605,18 @@ async function autonomousTick(): Promise<void> {
   }
 }
 
+
+export function getAutonomousRuntimeStatus() {
+  return {
+    configured: envTrue(process.env["AI_CODING_AUTONOMOUS_ENABLED"]),
+    running: Boolean(timer),
+    pollIntervalMs: pollInterval(),
+    tickRunning,
+    maxTasksPerTick: MAX_TASKS_PER_TICK,
+    defaultMaxCycles: DEFAULT_MAX_CYCLES,
+  };
+}
+
 export async function startAutonomousCodingRuntime(): Promise<void> {
   if (timer) return;
   if (!envTrue(process.env["AI_CODING_AUTONOMOUS_ENABLED"])) {
