@@ -195,6 +195,38 @@ jobs:
           console.log("ai_core_data_tools_readiness=PASS");
           NODE
 
+      - name: Verify AI Core Data Tool execution
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          payload='{"message":"cek booking SC-0992","mode":"ask","modelPolicy":"smart"}'
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS \
+            -o /tmp/ai-core-data-tool-execution -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/core-chat/messages")
+          echo "ai_core_data_tool_execution_http=$code"
+          test "$code" = "200"
+
+          # Do not print the response: it may contain customer/business data.
+          node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
+          if (value.route !== "DATA_TOOL") throw new Error("Expected DATA_TOOL route");
+          if (value.dataTool !== "SPORT_CENTER_BOOKING_LOOKUP") throw new Error("Expected Sport Center booking tool");
+          if (value.usage?.totalTokens !== 0) throw new Error("Data Tool execution must use 0 tokens");
+          if (value.estimatedCostUsd !== 0) throw new Error("Data Tool execution must cost 0 USD");
+          if (value.data?.failed === true) throw new Error("Sport Center Data Tool query failed");
+          if (value.data?.found !== true) throw new Error("Expected production smoke booking SC-0992 to exist");
+          console.log("ai_core_data_tool_execution=PASS");
+          NODE
+
       - name: Inspect ZeroLLM host readiness
         shell: bash
         env:
