@@ -38,6 +38,38 @@ export async function registerRemoteOllamaWorker(input: {
   region?: string;
   version?: string;
 }): Promise<AiWorker> {
+  // Re-enrollment must be idempotent. A second copy of the same outbound
+  // agent can overlap briefly during restart/reconnect; rotating the shared
+  // heartbeat token on every registration makes both copies invalidate each
+  // other forever. Reuse the existing credential for the exact same remote
+  // worker identity and only create/rotate when no reusable identity exists.
+  const [existing] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.workerName, input.workerName));
+  if (existing) {
+    const sameIdentity =
+      existing.providerSlug === PROVIDER &&
+      existing.runtimeKind === REMOTE_OLLAMA_RUNTIME_KIND &&
+      existing.nodeId === input.nodeId &&
+      existing.modelId === input.modelId;
+
+    if (!sameIdentity) throw new Error("REMOTE_OLLAMA_IDENTITY_CONFLICT");
+
+    if (existing.heartbeatToken) {
+      const renewed = await renewLease(existing.id, existing.heartbeatToken, DEFAULT_LEASE_TTL_MS);
+      if (renewed) {
+        const [reactivated] = await db.update(aiWorkersTable).set({
+          status: existing.runningJobs > 0 ? "busy" : "online",
+          region: input.region ?? "remote",
+          version: input.version ?? "1.0.0",
+          capabilities: [REMOTE_OLLAMA_CAPABILITY],
+          maxConcurrentJobs: Math.max(1, Math.min(8, input.maxConcurrentJobs ?? 1)),
+          leaseOwner: "ollama-remote:" + input.nodeId,
+          updatedAt: new Date(),
+        }).where(eq(aiWorkersTable.id, existing.id)).returning();
+        if (reactivated) return reactivated;
+      }
+    }
+  }
+
   return registerWorker({
     workerName: input.workerName,
     workerType: "coding_worker",
