@@ -45,6 +45,7 @@ import {
 } from "./localCodingAiExecutionGateService.js";
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { logAudit } from "./aiAuditService.js";
+import { sendCodingTaskStatusNotification } from "./codingWhatsappNotificationService.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_ALLOWED_FILES = 6;
@@ -302,6 +303,16 @@ export async function runTrustedOllamaRepairTask(input: {
     };
   }
 
+  await sendCodingTaskStatusNotification({
+    taskId: task.id,
+    taskNumber: task.taskNumber,
+    projectName: task.projectName,
+    repository: task.repository,
+    branch: task.branch,
+    status: "RUNNING",
+    message: "Verification gagal. Ollama trusted repair dimulai dengan policy allowlist dan workspace terisolasi.",
+  }).catch(() => undefined);
+
   const sourceSnapshots = await snapshotAllowedFiles(sourceRoot, allowedFiles);
   const isolated = await createIsolatedRepairWorkspace(sourceRoot, task.branch);
   try {
@@ -441,6 +452,18 @@ export async function runTrustedOllamaRepairTask(input: {
         },
       ).catch(() => undefined);
 
+      await sendCodingTaskStatusNotification({
+        taskId: task.id,
+        taskNumber: task.taskNumber,
+        projectName: task.projectName,
+        repository: task.repository,
+        branch: task.branch,
+        status: "FAILED",
+        verificationStatus: verification.status,
+        changedFiles,
+        message: "Ollama membuat proposal repair, tetapi verification ulang belum hijau. Perubahan target sudah di-rollback.",
+      }).catch(() => undefined);
+
       return {
         initial,
         repaired: false,
@@ -470,6 +493,18 @@ export async function runTrustedOllamaRepairTask(input: {
       await copyFile(resolve(root, file), resolve(sourceRoot, file));
     }
 
+    await sendCodingTaskStatusNotification({
+      taskId: task.id,
+      taskNumber: task.taskNumber,
+      projectName: task.projectName,
+      repository: task.repository,
+      branch: task.branch,
+      status: "COMPLETED",
+      verificationStatus: verification.status,
+      changedFiles,
+      message: "Ollama trusted repair selesai. Test/typecheck yang direncanakan lulus. Commit, push, dan merge tidak dilakukan.",
+    }).catch(() => undefined);
+
     await logAudit(
       "ollama-worker",
       "trusted_repair_completed",
@@ -494,6 +529,18 @@ export async function runTrustedOllamaRepairTask(input: {
       changedFiles,
       verification,
     };
+  } catch (error) {
+    await restoreAllowedFiles(sourceRoot, sourceSnapshots).catch(() => undefined);
+    await sendCodingTaskStatusNotification({
+      taskId: task.id,
+      taskNumber: task.taskNumber,
+      projectName: task.projectName,
+      repository: task.repository,
+      branch: task.branch,
+      status: "FAILED",
+      message: `Trusted Ollama repair berhenti: ${error instanceof Error ? error.message.slice(0, 700) : String(error).slice(0, 700)}`,
+    }).catch(() => undefined);
+    throw error;
   } finally {
     await isolated.cleanup().catch(() => undefined);
   }
