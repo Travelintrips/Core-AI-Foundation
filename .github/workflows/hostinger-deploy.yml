@@ -195,6 +195,46 @@ jobs:
           console.log("ai_core_data_tools_readiness=PASS");
           NODE
 
+      - name: Verify AI Core Data Tool read-only queries
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          smoke_data_tool() {
+            local message="$1"
+            local expected_tool="$2"
+            local output="$3"
+            local payload
+            payload=$(node -e 'console.log(JSON.stringify({message:process.argv[1],mode:"ask",modelPolicy:"smart"}))' "$message")
+            code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS \
+              -o "$output" -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 \
+              -H "Content-Type: application/json" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              -d "$payload" \
+              "$API_BASE_URL/ai/core-chat/messages")
+            echo "ai_core_data_tool_smoke_http=$code tool=$expected_tool"
+            test "$code" = "200"
+            node - "$output" "$expected_tool" <<'NODE'
+          const fs = require("fs");
+          const [path, expectedTool] = process.argv.slice(2);
+          const value = JSON.parse(fs.readFileSync(path, "utf8"));
+          if (value.route !== "DATA_TOOL") throw new Error("Expected DATA_TOOL route");
+          if (value.dataTool !== expectedTool) throw new Error("Unexpected Data Tool");
+          if (value.usage?.totalTokens !== 0) throw new Error("Data Tool smoke must use 0 LLM tokens");
+          if (value.estimatedCostUsd !== 0) throw new Error("Data Tool smoke must cost 0 USD");
+          if (value.data?.failed === true) throw new Error("Data Tool query failed");
+          console.log("ai_core_data_tool_query=PASS tool=" + expectedTool);
+          NODE
+          }
+
+          # Do not print payloads: these responses can contain business/customer data.
+          smoke_data_tool "cek booking SC-0992" "SPORT_CENTER_BOOKING_LOOKUP" /tmp/ai-core-data-tool-sport
+          smoke_data_tool "berapa outstanding tenant sekarang?" "TENANT_OUTSTANDING_SUMMARY" /tmp/ai-core-data-tool-tenant
+
       - name: Inspect ZeroLLM host readiness
         shell: bash
         env:
