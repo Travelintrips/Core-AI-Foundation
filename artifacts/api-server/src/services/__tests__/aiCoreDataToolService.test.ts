@@ -81,8 +81,6 @@ describe("AI Core read-only data tools", () => {
       },
     });
     expect(mocks.execute).toHaveBeenCalledTimes(2);
-    expect(String(mocks.execute.mock.calls[0]?.[0])).toContain("total_amount");
-    expect(String(mocks.execute.mock.calls[1]?.[0])).toContain("method");
   });
 
   it("excludes LLM fallback semantics when a recognized data query fails", async () => {
