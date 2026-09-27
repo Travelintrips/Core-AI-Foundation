@@ -180,6 +180,7 @@ import codingPowerShellRouter from "./coding-powershell.js";
 import aiCoreChatRouter from "./ai-core-chat.js";
 import incidentsRouter from "./incidents.js";
 import localMediaRouter from "./local-media.js";
+import local3dRouter from "./local-3d.js";
 
 const router: IRouter = Router();
 
@@ -197,6 +198,7 @@ router.use(codingPowerShellRouter);
 router.use(aiCoreChatRouter);
 router.use(incidentsRouter);
 router.use(localMediaRouter);
+router.use(local3dRouter);
 router.use(internalAuthRouter);
 router.use(internalCatalogRouter);
 router.use(agentsRouter);
