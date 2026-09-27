@@ -255,6 +255,17 @@ async function processTaskGraph(
   }
 
   if (snapshot.graph.status === "COMPLETED") {
+    const existingFinalizer = isRecord(payload.integrationFinalizer)
+      ? payload.integrationFinalizer
+      : null;
+    if (
+      existingFinalizer &&
+      typeof existingFinalizer.pullRequestNumber === "number" &&
+      existingFinalizer.nextAction === "REVIEW_PR"
+    ) {
+      return { handled: false };
+    }
+
     const finalized = await finalizeCodingTaskGraphIntegration(taskId);
     return {
       handled: true,
