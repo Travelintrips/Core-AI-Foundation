@@ -177,6 +177,34 @@ describe("per-workstream constrained AI execution contract", () => {
 
     expect(
       manualAiPatchReviewReason(
+        ["artifacts/api-server/src/middleware/adminAuth.ts"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["artifacts/api-server/src/middleware/securityHardening.ts"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["integration/migrations/team-07.sql"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
+        ["lib/db/migrations/add-observability-tables.sql"],
+        [],
+      ),
+    ).toMatch(/high-risk path/i);
+
+    expect(
+      manualAiPatchReviewReason(
         ["artifacts/api-server/src/services/exampleService.ts"],
         ["verification warning"],
       ),
