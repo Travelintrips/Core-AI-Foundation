@@ -62,6 +62,7 @@ const {
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
   prepareRepositoryWorkspace,
+  resolveRepositoryAnalyzerTimeoutMs,
 } = await import("../repositoryAnalyzerService.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -279,6 +280,15 @@ describe("repository analyzer GitHub clone authentication", () => {
         "fatal: Remote branch missing does not exist",
       ),
     ).toBe(false);
+  });
+});
+
+describe("repository analyzer runtime bounds", () => {
+  it("uses a bounded end-to-end analyzer timeout", () => {
+    expect(resolveRepositoryAnalyzerTimeoutMs(undefined)).toBe(180_000);
+    expect(resolveRepositoryAnalyzerTimeoutMs("1000")).toBe(30_000);
+    expect(resolveRepositoryAnalyzerTimeoutMs("900000")).toBe(600_000);
+    expect(resolveRepositoryAnalyzerTimeoutMs("45000")).toBe(45_000);
   });
 });
 
