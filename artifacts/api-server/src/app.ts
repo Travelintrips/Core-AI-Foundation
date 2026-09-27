@@ -17,6 +17,7 @@ import {
 import { requestCounterMiddleware } from "./routes/metrics.js";
 import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
 import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
+import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 
 const app: Express = express();
 
@@ -146,6 +147,10 @@ app.use("/api", optionalSessionAuth);
 // Individual sensitive routes apply stricter per-route limits on top of this.
 // Session-authenticated admin requests are skipped by isAdminRequest above.
 app.use("/api", globalLimiter);
+
+// Remote Ollama workers authenticate with dedicated enrollment/lease credentials.
+// Mount before admin auth so worker credentials never need ADMIN_API_KEY.
+app.use("/api", remoteOllamaWorkerRouter);
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,
