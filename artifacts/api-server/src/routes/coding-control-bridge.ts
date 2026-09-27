@@ -3,6 +3,10 @@ import { z } from "zod";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, renewCodingBridgePresence, submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 import { getCodingWhatsappConfigStatus, notifyCodingBridgeResponse } from "../services/codingWhatsappNotificationService.js";
 import { randomUUID } from "crypto";
+import {
+  getCriticalApproval,
+  requestCodingCriticalApproval,
+} from "../services/codingCriticalApprovalService.js";
 const router=Router(); const Uuid=z.string().uuid();
 router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{const p=z.object({externalCommandId:z.string().min(1).max(200),instruction:z.string().min(1).max(50000),taskId:Uuid.nullish(),source:z.string().min(1).max(50).optional(),commandType:z.string().min(1).max(50).optional(),authority:z.record(z.string(),z.unknown()).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await submitCodingBridgeCommand(p.data);res.status(x.created?201:200).json(x);});
 router.get("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.coerce.number().int().min(1).max(100).optional().safeParse(req.query["limit"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const responses=await listPendingCodingBridgeResponses(p.data??50);res.json({responses,total:responses.length});});
@@ -10,6 +14,32 @@ router.post("/ai/coding/bridge/responses/:id/ack",async(req,res):Promise<void>=>
 router.post("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.object({commandId:Uuid,taskId:Uuid.nullish(),kind:z.enum(["ACK","PROGRESS","CHECKPOINT","BLOCKER","COMPLETED","FAILED"]),message:z.string().min(1).max(50000),checkpoint:z.record(z.string(),z.unknown()).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}res.status(201).json(await appendCodingBridgeResponse(p.data));});
 router.post("/ai/coding/bridge/presence/:clientId/heartbeat",async(req,res):Promise<void>=>{const p=z.object({clientId:z.string().min(1).max(200),source:z.string().min(1).max(50).optional(),leaseSeconds:z.number().int().min(30).max(300).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse({...req.body,clientId:req.params["clientId"]});if(!p.success){res.status(400).json({error:p.error.message});return;}res.json(await renewCodingBridgePresence(p.data));});
 router.get("/ai/coding/bridge/presence/:clientId",async(req,res):Promise<void>=>{const clientId=req.params["clientId"];if(!clientId||clientId.length>200){res.status(400).json({error:"Invalid clientId"});return;}res.json(await getCodingBridgeAvailability(clientId));});
+
+
+router.post("/ai/coding/bridge/critical-approvals",async(req,res):Promise<void>=>{
+ const p=z.object({
+  taskId:Uuid.nullish(),
+  commandId:Uuid.nullish(),
+  actionType:z.enum(["MERGE_PR","PRODUCTION_DEPLOY","PRODUCTION_DB_MIGRATION","DESTRUCTIVE_DB_CHANGE","SECURITY_CHANGE","PRODUCTION_SERVICE_RESTART"]),
+  summary:z.string().min(1).max(4000),
+  metadata:z.record(z.string(),z.unknown()).optional(),
+  ttlMinutes:z.number().int().min(2).max(30).optional()
+ }).strict().safeParse(req.body);
+ if(!p.success){res.status(400).json({error:p.error.message});return;}
+ const result=await requestCodingCriticalApproval(p.data);
+ res.status(result.reused?200:201).json({
+  approval:result.approval,
+  reused:result.reused,
+  notificationTokenReturned:!result.reused&&Boolean(result.token)
+ });
+});
+router.get("/ai/coding/bridge/critical-approvals/:id",async(req,res):Promise<void>=>{
+ const p=Uuid.safeParse(req.params["id"]);
+ if(!p.success){res.status(400).json({error:"Invalid approval id"});return;}
+ const approval=await getCriticalApproval(p.data);
+ if(!approval){res.status(404).json({error:"Critical approval not found"});return;}
+ res.json(approval);
+});
 
 router.get("/ai/coding/bridge/whatsapp-status",async(_req,res):Promise<void>=>{res.json({configured:getCodingWhatsappConfigStatus()});});
 router.post("/ai/coding/bridge/whatsapp-test",async(_req,res):Promise<void>=>{const id=randomUUID();const result=await notifyCodingBridgeResponse({responseId:id,commandId:id,kind:"CHECKPOINT",message:"AI Core production WhatsApp diagnostic test."});const ok=result.status==="queued";res.status(ok?200:503).json({ok,result});});
