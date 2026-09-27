@@ -16,7 +16,7 @@ const MAX_APPROVAL_TTL_MS = 15 * 60_000;
 const MAX_STDOUT_CHARS = 200_000;
 const MAX_STDERR_CHARS = 100_000;
 
-const ALLOWED_SCRIPTS = new Set(["test", "typecheck", "lint", "build"]);
+const ALLOWED_SCRIPTS = new Set(["test", "typecheck", "lint", "build", "ci:test", "ci:verify", "ci:build"]);
 const FORBIDDEN_SHELL_META = /[;&|><\x60\r\n\0]/;
 
 export type PowerShellExecutionStatus =
@@ -303,7 +303,7 @@ export function getPowerShellExecutorStatus(
       "git rev-parse HEAD",
       "node --version",
       "pnpm --version",
-      "pnpm [--filter <package>] [run] <test|typecheck|lint|build>",
+      "pnpm [--filter <package>] [run] <test|typecheck|lint|build|ci:test|ci:verify|ci:build>",
       "npm run <test|typecheck|lint|build>",
     ],
   };
