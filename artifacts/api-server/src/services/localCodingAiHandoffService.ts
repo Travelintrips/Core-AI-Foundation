@@ -691,6 +691,7 @@ async function latestAiRequiredContext(
   const persistedLocalRecovery = isRecord(payload.localRecovery) ? payload.localRecovery : null;
   const localExecution = isRecord(payload.localExecution) ? payload.localExecution : null;
   const sandbox = isRecord(payload.sandboxVerification) ? payload.sandboxVerification : null;
+  const directAiContext = isRecord(payload.aiDirectContext) ? payload.aiDirectContext : null;
 
   if (orchestration?.nextAction !== expectedAction) {
     throw new LocalAiHandoffError(
@@ -747,9 +748,12 @@ async function latestAiRequiredContext(
     );
   }
 
+  const sandboxFailureContexts = parseFailureContexts(sandbox?.failureContexts);
   const failureContexts =
     direct?.failureContexts ??
-    parseFailureContexts(sandbox?.failureContexts);
+    (sandboxFailureContexts.length > 0
+      ? sandboxFailureContexts
+      : parseFailureContexts(directAiContext?.failureContexts));
   if (failureContexts.length === 0) {
     throw new LocalAiHandoffError(
       "AI handoff requires structured sanitized diagnostics",
@@ -865,6 +869,11 @@ async function executePrepareHandoff(
       : {};
     const payload = {
       ...context.orchestratorPayload,
+      failureRecoveryContext: context.recoveryContext,
+      localRecovery: context.localRecovery,
+      aiDirectContext: {
+        failureContexts: context.failureContexts,
+      },
       aiHandoff: {
         status: "PREPARED",
         gateStatus: "AWAITING_EXPLICIT_APPROVAL",
