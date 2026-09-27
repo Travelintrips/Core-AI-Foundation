@@ -19,7 +19,10 @@ import {
   type PullRequestVerificationInput,
   type PullRequestVerificationResult,
 } from "./localCodingGitHubPullRequestService.js";
-import { requestCodingCriticalApproval } from "./codingCriticalApprovalService.js";
+import {
+  finalizeCodingCriticalApproval,
+  requestCodingCriticalApproval,
+} from "./codingCriticalApprovalService.js";
 
 export class LocalPullRequestGateError extends Error {
   constructor(
@@ -573,6 +576,14 @@ async function executeExplicitMerge(
         autoMerged: false,
       },
     );
+
+    await finalizeCodingCriticalApproval({
+      taskId: context.task.id,
+      actionType: "MERGE_PR",
+      status: "COMPLETED",
+      message:
+        `PR #${merged.pullRequestNumber} berhasil di-merge. Merge commit ${merged.mergeCommitSha.slice(0, 12)}.`,
+    }).catch(() => undefined);
   } catch (error) {
     const normalized =
       error instanceof GitHubPublisherError
@@ -648,6 +659,13 @@ async function executeExplicitMerge(
         error: normalized.message.slice(0, 700),
       },
     ).catch(() => undefined);
+
+    await finalizeCodingCriticalApproval({
+      taskId: context.task.id,
+      actionType: "MERGE_PR",
+      status: "FAILED",
+      message: `Merge gagal: ${normalized.message.slice(0, 1000)}`,
+    }).catch(() => undefined);
   }
 }
 
