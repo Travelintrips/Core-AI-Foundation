@@ -19,6 +19,10 @@ import {
   type PullRequestVerificationInput,
   type PullRequestVerificationResult,
 } from "./localCodingGitHubPullRequestService.js";
+import {
+  finalizeCodingCriticalApproval,
+  requestCodingCriticalApproval,
+} from "./codingCriticalApprovalService.js";
 
 export class LocalPullRequestGateError extends Error {
   constructor(
@@ -360,6 +364,38 @@ async function executePullRequestVerification(
         })),
       },
     );
+
+    if (verification.status === "PASSED") {
+      await requestCodingCriticalApproval({
+        taskId: context.task.id,
+        actionType: "MERGE_PR",
+        summary:
+          `PR #${verification.pullRequestNumber} sudah PASS integrity + CI. Merge ke ${context.verificationInput.baseBranch} memerlukan persetujuan Anda.`,
+        metadata: {
+          repository: context.task.repository,
+          pullRequestNumber: verification.pullRequestNumber,
+          pullRequestUrl: verification.pullRequestUrl,
+          baseBranch: context.verificationInput.baseBranch,
+          baseSha: verification.baseSha,
+          headSha: verification.headSha,
+        },
+      }).catch(async (approvalError) => {
+        await logAudit(
+          "coding-orchestrator",
+          "critical_approval_notification_failed",
+          context.task.id,
+          "coding_task",
+          "failure",
+          {
+            actionType: "MERGE_PR",
+            error:
+              approvalError instanceof Error
+                ? approvalError.message.slice(0, 700)
+                : String(approvalError).slice(0, 700),
+          },
+        ).catch(() => undefined);
+      });
+    }
   } catch (error) {
     const normalized = error instanceof Error ? error : new Error(String(error));
     await markReviewRunFailed(context, run, normalized);
@@ -540,6 +576,14 @@ async function executeExplicitMerge(
         autoMerged: false,
       },
     );
+
+    await finalizeCodingCriticalApproval({
+      taskId: context.task.id,
+      actionType: "MERGE_PR",
+      status: "COMPLETED",
+      message:
+        `PR #${merged.pullRequestNumber} berhasil di-merge. Merge commit ${merged.mergeCommitSha.slice(0, 12)}.`,
+    }).catch(() => undefined);
   } catch (error) {
     const normalized =
       error instanceof GitHubPublisherError
@@ -615,6 +659,13 @@ async function executeExplicitMerge(
         error: normalized.message.slice(0, 700),
       },
     ).catch(() => undefined);
+
+    await finalizeCodingCriticalApproval({
+      taskId: context.task.id,
+      actionType: "MERGE_PR",
+      status: "FAILED",
+      message: `Merge gagal: ${normalized.message.slice(0, 1000)}`,
+    }).catch(() => undefined);
   }
 }
 

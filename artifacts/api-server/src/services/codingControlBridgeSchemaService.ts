@@ -84,6 +84,42 @@ async function ensureTablesInternal(): Promise<void> {
       ON ai_platform.ai_coding_bridge_presence(lease_expires_at)
   `);
 
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ai_platform.ai_coding_critical_approvals (
+      id UUID PRIMARY KEY,
+      task_id UUID REFERENCES ai_platform.ai_coding_tasks(id) ON DELETE SET NULL,
+      command_id UUID REFERENCES ai_platform.ai_coding_bridge_commands(id) ON DELETE SET NULL,
+      action_type TEXT NOT NULL,
+      action_digest TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      decided_at TIMESTAMPTZ,
+      decided_by_suffix TEXT,
+      execution_started_at TIMESTAMPTZ,
+      execution_error TEXT,
+      CONSTRAINT ai_coding_critical_approvals_status_check
+        CHECK (status IN ('PENDING','APPROVED','REJECTED','EXPIRED','EXECUTING','COMPLETED','FAILED'))
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS ai_coding_critical_approvals_task_idx
+      ON ai_platform.ai_coding_critical_approvals(task_id)
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS ai_coding_critical_approvals_status_idx
+      ON ai_platform.ai_coding_critical_approvals(status, expires_at)
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_coding_critical_approvals_pending_digest_uidx
+      ON ai_platform.ai_coding_critical_approvals(action_digest)
+      WHERE status IN ('PENDING','APPROVED','EXECUTING')
+  `);
+
   logger.info("[coding-bridge] Control bridge tables ensured");
 }
 

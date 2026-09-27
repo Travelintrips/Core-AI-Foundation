@@ -6,6 +6,10 @@ import {
   CodingWhatsappTaskRuntimeError,
   createAndStartWhatsappCodingTask,
 } from "../services/codingWhatsappTaskRuntimeService.js";
+import {
+  decideCodingCriticalApproval,
+  parseCriticalApprovalCommand,
+} from "../services/codingCriticalApprovalService.js";
 
 const router = Router();
 
@@ -138,6 +142,37 @@ router.post(
     }
 
     const text = extractText(payload);
+
+    const approvalCommand = parseCriticalApprovalCommand(text);
+    if (approvalCommand) {
+      try {
+        const approval = await decideCodingCriticalApproval({
+          token: approvalCommand.token,
+          decision: approvalCommand.decision,
+          senderDigits: sender,
+        });
+        res.status(200).json({
+          accepted: true,
+          kind: "CRITICAL_APPROVAL",
+          decision: approvalCommand.decision,
+          approvalId: approval.id,
+          taskId: approval.taskId,
+          actionType: approval.actionType,
+          status: approval.status,
+        });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : String(error);
+        const status =
+          code === "APPROVAL_NOT_FOUND"
+            ? 404
+            : ["APPROVAL_EXPIRED", "APPROVAL_NOT_PENDING", "APPROVAL_RACE_LOST"].includes(code)
+              ? 409
+              : 500;
+        res.status(status).json({ error: code });
+      }
+      return;
+    }
+
     if (!/^coding(?:\s|:)/i.test(text)) {
       res.status(202).json({ accepted: false, reason: "NOT_A_CODING_COMMAND" });
       return;
