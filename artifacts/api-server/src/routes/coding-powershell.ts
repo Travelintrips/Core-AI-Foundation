@@ -4,6 +4,8 @@ import {
   approveOllamaPowerShellExecution,
   executeApprovedOllamaPowerShellExecution,
   getOllamaPowerShellExecution,
+  getLatestOllamaPowerShellExecution,
+  listOllamaPowerShellExecutions,
   getPowerShellExecutorStatus,
   LocalCodingPowerShellError,
   prepareOllamaPowerShellExecution,
@@ -52,6 +54,19 @@ function sendKnownError(res: Response, error: unknown): boolean {
 
 router.get("/ai/coding/powershell/status", (_req, res) => {
   res.json(getPowerShellExecutorStatus());
+});
+
+router.get("/ai/coding/powershell/progress/latest", (_req, res) => {
+  const latest = getLatestOllamaPowerShellExecution();
+  if (!latest) {
+    res.status(404).json({ error: "No Ollama PowerShell task progress is available." });
+    return;
+  }
+  res.json(latest);
+});
+
+router.get("/ai/coding/powershell/progress", (_req, res) => {
+  res.json({ value: listOllamaPowerShellExecutions() });
 });
 
 router.post("/ai/coding/powershell/run-trusted-task", async (req, res): Promise<void> => {

@@ -110,6 +110,9 @@ describe("Ollama PowerShell approval gate", () => {
     });
 
     expect(prepared.status).toBe("PREPARED");
+    expect(prepared.progressPercent).toBe(0);
+    expect(prepared.currentStep).toBe("PREPARED");
+    expect(prepared.totalCommands).toBe(2);
 
     await expect(
       executeApprovedOllamaPowerShellExecution({
@@ -132,6 +135,8 @@ describe("Ollama PowerShell approval gate", () => {
       prepared.digest,
     );
     expect(approved.status).toBe("APPROVED");
+    expect(approved.progressPercent).toBe(5);
+    expect(approved.currentStep).toBe("APPROVED");
 
     const executor = vi.fn(async () => ({ stdout: "ok\n", stderr: "" }));
     const completed = await executeApprovedOllamaPowerShellExecution({
@@ -142,6 +147,10 @@ describe("Ollama PowerShell approval gate", () => {
     });
 
     expect(completed.status).toBe("COMPLETED");
+    expect(completed.progressPercent).toBe(100);
+    expect(completed.currentStep).toBe("COMPLETED");
+    expect(completed.currentCommand).toBeNull();
+    expect(completed.completedCommands).toBe(2);
     expect(completed.results.map((result) => result.status)).toEqual([
       "PASSED",
       "PASSED",
