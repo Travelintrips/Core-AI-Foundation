@@ -153,6 +153,59 @@ describe("autonomous coding repair runtime contract", () => {
     expect(service).toHaveProperty("stopAutonomousCodingRuntime");
   });
 
+  it("prefers the newest completed transition nextAction over a stale orchestrator action", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+
+    mocks.dbSelect
+      .mockImplementationOnce(() => ({
+        from: () => ({
+          where: async () => [{
+            id: taskId,
+            status: "READY_REVIEW",
+            resultSummary: null,
+          }],
+        }),
+      }))
+      .mockImplementationOnce(() => ({
+        from: () => ({
+          where: () => ({
+            orderBy: async () => [
+              {
+                id: "handoff-run",
+                taskId,
+                agentName: "AI Handoff Gate",
+                status: "COMPLETED",
+                startedAt: new Date("2026-09-27T00:00:02.000Z"),
+                logs: JSON.stringify({
+                  executionStatus: "COMPLETED",
+                  nextAction: "APPROVE_AI_HANDOFF",
+                }),
+              },
+              {
+                id: "orchestrator-run",
+                taskId,
+                agentName: "Coding Orchestrator",
+                status: "COMPLETED",
+                startedAt: new Date("2026-09-27T00:00:00.000Z"),
+                logs: JSON.stringify({
+                  orchestration: { nextAction: "AI_REQUIRED" },
+                  contextPackage: { headSha: "a".repeat(40) },
+                }),
+              },
+            ],
+          }),
+        }),
+      }));
+
+    mocks.getLatestCodingTaskGraph.mockResolvedValueOnce(null);
+
+    await expect(runAutonomousCodingCycle(taskId)).resolves.toMatchObject({
+      status: "ACTIVE",
+      action: "AUTO_APPROVE_AI_HANDOFF",
+    });
+    expect(mocks.approveAiHandoff).toHaveBeenCalledWith(taskId);
+  });
+
   it("smoke-tests the bounded AI repair sequence without shell or merge authority", async () => {
     const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
 
