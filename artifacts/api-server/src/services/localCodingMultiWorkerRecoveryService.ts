@@ -106,17 +106,23 @@ export async function reconcileStaleMultiWorkerRuns(
 
       let effectiveWorkstreamStatus = current.status;
       if (expiredLease) {
+        // An expired lease is a recoverable execution loss, not a terminal
+        // workstream failure. Close the stale child lifecycle, clear its
+        // bindings, and put the workstream back in READY so the autonomous
+        // dispatcher can create a fresh attempt.
         effectiveWorkstreamStatus = "FAILED";
         const [updatedWorkstream] = await tx
           .update(aiCodingWorkstreamsTable)
           .set({
-            status: "FAILED",
-            errorMessage:
-              "Multi-worker lease expired before the child execution completed; stale execution recovered.",
-            completedAt: now,
+            status: "READY",
+            errorMessage: null,
+            completedAt: null,
             heartbeatAt: now,
             leaseToken: null,
             leaseExpiresAt: null,
+            childTaskId: null,
+            childRunId: null,
+            jobId: null,
           })
           .where(
             and(
@@ -130,7 +136,7 @@ export async function reconcileStaleMultiWorkerRuns(
           result.recoveredWorkstreams += 1;
           await tx
             .update(aiCodingTaskGraphsTable)
-            .set({ status: "FAILED", completedAt: now })
+            .set({ status: "RUNNING", completedAt: null })
             .where(eq(aiCodingTaskGraphsTable.id, current.graphId));
         }
 
@@ -141,7 +147,7 @@ export async function reconcileStaleMultiWorkerRuns(
               status: "failed",
               completedAt: now,
               errorMessage:
-                "Coding workstream lease expired before execution completed.",
+                "Coding workstream lease expired before execution completed; workstream requeued for a fresh attempt.",
             })
             .where(
               and(
