@@ -1,0 +1,46 @@
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@workspace/db", () => ({
+  db: {},
+  aiCodingBridgeCommandsTable: {},
+  aiCodingRunsTable: {},
+  aiCodingTasksTable: {},
+}));
+vi.mock("../aiAuditService.js", () => ({ logAudit: vi.fn() }));
+vi.mock("../localCodingControlBridgeService.js", () => ({ appendCodingBridgeResponse: vi.fn() }));
+vi.mock("../localCodingTaskGraphService.js", () => ({ approveCodingTaskGraph: vi.fn(), getLatestCodingTaskGraph: vi.fn() }));
+vi.mock("../localCodingMultiWorkerExecutionService.js", () => ({ dispatchReadyCodingWorkstreams: vi.fn() }));
+vi.mock("../localCodingWorkstreamAiExecutionService.js", () => ({
+  approveWorkstreamAiCandidatePatch: vi.fn(),
+  approveWorkstreamAiExecutionHandoff: vi.fn(),
+  enqueueWorkstreamAiExecution: vi.fn(),
+  materializeApprovedWorkstreamAiCandidate: vi.fn(),
+  prepareWorkstreamAiExecutionHandoff: vi.fn(),
+}));
+vi.mock("../localCodingMultiWorkerOrchestratorService.js", () => ({ completeReviewedCodingWorkstream: vi.fn() }));
+vi.mock("../localCodingPatchApprovalService.js", () => ({ approveAndValidateLocalPatch: vi.fn() }));
+vi.mock("../localCodingSandboxGateService.js", () => ({ startSandboxVerification: vi.fn() }));
+vi.mock("../localCodingDeterministicRecoveryService.js", () => ({ startDeterministicLocalRecovery: vi.fn() }));
+vi.mock("../localCodingAiHandoffService.js", () => ({
+  approveAiHandoff: vi.fn(),
+  assertApprovedAiHandoffFresh: vi.fn(),
+  startAiHandoffPreparation: vi.fn(),
+}));
+vi.mock("../localCodingAiQueueRuntimeService.js", () => ({ enqueueCodingAiExecution: vi.fn() }));
+vi.mock("../localCodingAiPatchApprovalService.js", () => ({ approveAndValidateAiPatch: vi.fn() }));
+vi.mock("../localCodingCommitApprovalService.js", () => ({ approveCommitAndCreatePullRequest: vi.fn() }));
+vi.mock("../localCodingPullRequestGateService.js", () => ({ startPullRequestVerification: vi.fn() }));
+vi.mock("../codingCriticalApprovalService.js", () => ({ requestCodingCriticalApproval: vi.fn() }));
+vi.mock("../codingControlBridgeSchemaService.js", () => ({ ensureCodingControlBridgeTables: vi.fn() }));
+
+describe("autonomous coding repair runtime contract", () => {
+  it("exports bounded lifecycle controls", async () => {
+    const service = await import("../localCodingAutonomousRepairService.js");
+    expect(service).toHaveProperty("enableAutonomousCodingTask");
+    expect(service).toHaveProperty("disableAutonomousCodingTask");
+    expect(service).toHaveProperty("runAutonomousCodingCycle");
+    expect(service).toHaveProperty("getAutonomousCodingTaskStatus");
+    expect(service).toHaveProperty("startAutonomousCodingRuntime");
+    expect(service).toHaveProperty("stopAutonomousCodingRuntime");
+  });
+});
