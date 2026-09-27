@@ -85,12 +85,12 @@ describe("AI Core cloud chat streaming", () => {
       "fetch",
       vi.fn(async () =>
         sseResponse([
-          'data: {"id":"chatcmpl-split","choices":[{"delta":{"content":"A"}}]}\\r',
-          '\\n\\r',
-          '\\ndata: {"id":"chatcmpl-split","choices":[{"delta":{"content":"B"}}]}\\r',
-          '\\n\\r',
-          '\\ndata: {"id":"chatcmpl-split","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}}\\r\\n\\r\\n',
-          "data: [DONE]\\r\\n\\r\\n",
+          'data: {"id":"chatcmpl-split","choices":[{"delta":{"content":"A"}}]}\r',
+          '\n\r',
+          '\ndata: {"id":"chatcmpl-split","choices":[{"delta":{"content":"B"}}]}\r',
+          '\n\r',
+          '\ndata: {"id":"chatcmpl-split","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}}\r\n\r\n',
+          "data: [DONE]\r\n\r\n",
         ]),
       ),
     );
