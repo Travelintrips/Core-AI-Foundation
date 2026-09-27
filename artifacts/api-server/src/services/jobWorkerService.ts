@@ -1034,11 +1034,14 @@ export async function releaseJob(jobId: number, workerId: number): Promise<AiJob
       and(
         eq(aiJobsTable.id, jobId),
         eq(aiJobsTable.status, "running"),
+        workerOwnsRunningJob(jobId, workerId),
       ),
     )
     .returning();
 
-  if (!released) throw new Error(`Job ${jobId} is not running`);
+  if (!released) {
+    throw new JobOwnershipLostError(jobId, workerId);
+  }
 
   await db
     .update(aiWorkersTable)
