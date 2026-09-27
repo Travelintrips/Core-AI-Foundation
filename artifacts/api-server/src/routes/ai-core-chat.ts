@@ -37,6 +37,7 @@ import {
   type AiCoreWorkload,
   type AiCoreWorkloadRoute,
 } from "../services/aiCoreWorkloadRouterService.js";
+import { tryRunAiCoreDataTool } from "../services/aiCoreDataToolService.js";
 
 const router = Router();
 
@@ -335,6 +336,25 @@ async function answerAskMode(
   const deterministic = await deterministicReply(message, workload);
   if (deterministic) return deterministic;
 
+  // Read-only data tools run before any LLM. They never accept mutation verbs and
+  // only execute parameterized SELECT queries against known business tables.
+  const dataTool = await tryRunAiCoreDataTool(message);
+  if (dataTool.matched) {
+    return {
+      kind: "answer",
+      route: "DATA_TOOL",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: dataTool.reply,
+      dataTool: dataTool.tool,
+      data: dataTool.data,
+      ...(dataTool.warning ? { warning: dataTool.warning } : {}),
+    };
+  }
+
   if (workload.workload === "CRITICAL_ACTION") {
     return {
       kind: "answer",
@@ -601,7 +621,7 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
   res.json({
     defaultMode: "ask",
     defaultModelPolicy: "smart",
-    routing: ["NO_LLM", "SMART_CLOUD", "LOCAL", "CLOUD"],
+    routing: ["NO_LLM", "DATA_TOOL", "SMART_CLOUD", "LOCAL", "CLOUD"],
     workloadRouting: describeAiCoreWorkloadRouting(),
     local: local.ok
       ? {
