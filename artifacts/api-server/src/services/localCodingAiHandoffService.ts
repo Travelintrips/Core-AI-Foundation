@@ -144,7 +144,8 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-function normalizeRepoPath(value: string): string | null {
+function normalizeRepoPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
   const normalized = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
   if (
     !normalized ||

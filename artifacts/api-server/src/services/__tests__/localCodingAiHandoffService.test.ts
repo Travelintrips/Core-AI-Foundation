@@ -152,6 +152,35 @@ describe("Local Coding AI Handoff Package", () => {
     expect(pkg.dependencies).toHaveLength(1);
   });
 
+  it("ignores malformed non-string repository paths instead of crashing the handoff gate", () => {
+    const malformed = recoveryContext() as any;
+    malformed.focusFiles = [undefined, null, 42, "src/payment.ts"];
+    malformed.relatedTests = [undefined, "src/__tests__/payment.test.ts"];
+    malformed.dependencies = [
+      { file: undefined, specifier: "./payment", resolvedFile: "src/payment.ts", kind: "import" },
+    ];
+
+    const pkg = buildAiHandoffPackage({
+      task: {
+        id: "55555555-5555-4555-8555-555555555555",
+        projectName: "Malformed context",
+        instruction: "Fix payment",
+        repository: "owner/repo",
+        branch: "main",
+      },
+      baseHeadSha: "e".repeat(40),
+      reason: "AI required",
+      recoveryContext: malformed,
+      failureContexts: failureContexts(),
+      snippets: [],
+      currentPatch: "",
+    });
+
+    expect(pkg.allowedFiles).toEqual(["src/payment.ts"]);
+    expect(pkg.relatedTests).toEqual(["src/__tests__/payment.test.ts"]);
+    expect(pkg.dependencies).toHaveLength(1);
+  });
+
   it("supports an empty current patch for direct initial AI_REQUIRED handoff", () => {
     const pkg = buildAiHandoffPackage({
       task: {
