@@ -42,6 +42,7 @@ import {
   tryRunAiCoreDataTool,
 } from "../services/aiCoreDataToolService.js";
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
+import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
 
 const router = Router();
 
@@ -803,6 +804,70 @@ async function streamAskMode(
   }
 }
 
+
+type RemoteWorkerPreset = "check" | "build" | "test" | "review";
+
+function detectRemoteWorkerPreset(message: string): RemoteWorkerPreset | null {
+  const value = message.trim().toLowerCase();
+  const mutating = /\b(fix|perbaiki|ubah|edit|patch|deploy|merge|commit|push|hapus|delete|create|buat|tambah|add)\b/i.test(value);
+  if (mutating) return null;
+
+  if (/\b(review|tinjau|audit diff|cek diff)\b/i.test(value)) return "review";
+  if (/\b(build|compile)\b/i.test(value)) return "build";
+  if (/\b(test|testing|uji)\b/i.test(value)) return "test";
+  if (/\b(cek|check|verify|validasi|status repository|status repo)\b/i.test(value)) return "check";
+  return null;
+}
+
+function remotePresetInstruction(preset: RemoteWorkerPreset): string {
+  switch (preset) {
+    case "build":
+      return "Periksa repository lokal, tampilkan git status singkat dan commit HEAD, lalu jalankan build API server. Jangan mengubah atau menghapus file.";
+    case "test":
+      return "Periksa repository lokal, tampilkan git status singkat dan commit HEAD, lalu jalankan test API server. Jangan mengubah atau menghapus file.";
+    case "review":
+      return "Review perubahan repository lokal secara read-only dengan git status --short, git diff --name-only, dan git diff --check. Jangan mengubah atau menghapus file.";
+    default:
+      return "Periksa repository lokal secara read-only dengan git status --short, git rev-parse HEAD, node --version, dan pnpm --version. Jangan mengubah atau menghapus file.";
+  }
+}
+
+async function maybeRunRemoteWorkerPreset(
+  input: z.infer<typeof ChatRequest>,
+): Promise<Record<string, unknown> | null> {
+  const preset = detectRemoteWorkerPreset(input.message);
+  if (!preset) return null;
+
+  if (
+    input.repository &&
+    !/^(travelintrips\/)?core-ai-foundation$/i.test(input.repository.trim())
+  ) {
+    return null;
+  }
+
+  const result = await runRemoteTrustedPowerShellTask({
+    instruction: remotePresetInstruction(preset),
+    requestedBy: "ai-core-chat-agent",
+    modelId: "qwen2.5-coder:7b",
+    timeoutMs: 180_000,
+  });
+
+  const execution = result["execution"] as Record<string, unknown> | undefined;
+  return {
+    kind: "agent_execution",
+    route: "REMOTE_OLLAMA_POWERSHELL",
+    provider: "ollama",
+    model: "qwen2.5-coder:7b",
+    usage: null,
+    estimatedCostUsd: 0,
+    preset,
+    reply:
+      `Remote worker operation '${preset}' selesai melalui trusted PowerShell policy.`,
+    ...result,
+    status: execution?.["status"] ?? null,
+  };
+}
+
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
   if (!input.projectName || !input.repository || !input.branch) {
     return {
@@ -1003,7 +1068,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   try {
     const result =
       parsed.data.mode === "agent"
-        ? await startAgentTask(parsed.data)
+        ? (await maybeRunRemoteWorkerPreset(parsed.data)) ?? await startAgentTask(parsed.data)
         : await answerAskMode(parsed.data.message, parsed.data.modelPolicy);
 
     res.status(result["kind"] === "agent" ? 202 : 200).json(result);
