@@ -36,6 +36,16 @@ function taskTerminalStatus(workstreamStatus: string): "READY_REVIEW" | "FAILED"
     : "FAILED";
 }
 
+export function expiredLeaseRecoveryDisposition() {
+  return {
+    workstreamStatus: "READY" as const,
+    graphStatus: "RUNNING" as const,
+    staleRunStatus: "FAILED" as const,
+    staleTaskStatus: "FAILED" as const,
+    clearExecutionBindings: true as const,
+  };
+}
+
 export async function reconcileStaleMultiWorkerRuns(
   options: { taskId?: string; now?: Date } = {},
 ): Promise<MultiWorkerRecoveryResult> {
