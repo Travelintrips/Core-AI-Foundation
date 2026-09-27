@@ -111,8 +111,43 @@ describe("repository analyzer isolated multi-worker workspace", () => {
     }
   });
 
-  it("fails closed before branch creation when the cloned HEAD no longer matches approved base SHA", async () => {
+  it("checks out the approved base SHA when the remote branch tip has advanced", async () => {
     const root = await mkdtemp(join(tmpdir(), "coding-analyzer-stale-"));
+    try {
+      await execFileAsync("git", ["init", "-b", "main"], { cwd: root });
+      await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: root });
+      await execFileAsync("git", ["config", "user.name", "Isolation Test"], { cwd: root });
+      await writeFile(join(root, "fixture.ts"), "export const value = 1;\n", "utf8");
+      await execFileAsync("git", ["add", "fixture.ts"], { cwd: root });
+      await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root });
+      const first = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root });
+      const approvedBase = first.stdout.trim();
+
+      await writeFile(join(root, "fixture.ts"), "export const value = 2;\n", "utf8");
+      await execFileAsync("git", ["add", "fixture.ts"], { cwd: root });
+      await execFileAsync("git", ["commit", "-m", "branch advanced"], { cwd: root });
+
+      await configureIsolatedRepositoryWorkspace(
+        root,
+        approvedBase,
+        "ai-core/111111111111/ws-001-a1",
+      );
+
+      const branch = await execFileAsync(
+        "git",
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        { cwd: root },
+      );
+      const head = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root });
+      expect(branch.stdout.trim()).toBe("ai-core/111111111111/ws-001-a1");
+      expect(head.stdout.trim()).toBe(approvedBase);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when the approved base SHA is not present in the cloned history", async () => {
+    const root = await mkdtemp(join(tmpdir(), "coding-analyzer-missing-base-"));
     try {
       await execFileAsync("git", ["init", "-b", "main"], { cwd: root });
       await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: root });
@@ -127,14 +162,7 @@ describe("repository analyzer isolated multi-worker workspace", () => {
           "f".repeat(40),
           "ai-core/111111111111/ws-001-a1",
         ),
-      ).rejects.toThrow(/HEAD changed before isolated worker execution/);
-
-      const branch = await execFileAsync(
-        "git",
-        ["rev-parse", "--abbrev-ref", "HEAD"],
-        { cwd: root },
-      );
-      expect(branch.stdout.trim()).toBe("main");
+      ).rejects.toThrow(/Approved repository base SHA is unavailable/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
