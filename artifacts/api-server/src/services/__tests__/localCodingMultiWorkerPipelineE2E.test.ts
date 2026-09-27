@@ -10,6 +10,7 @@ import {
 import {
   codingWorkstreamOwnsFile,
 } from "../localCodingMultiWorkerExecutionService.js";
+import { expiredLeaseRecoveryDisposition } from "../localCodingMultiWorkerRecoveryService.js";
 import {
   buildCodingIntegrationManifest,
   CodingIntegrationGateError,
@@ -231,6 +232,18 @@ function completedSnapshot(reviewStatus = "APPROVED") {
     ],
   } as any;
 }
+
+describe("multi-worker expired lease recovery contract", () => {
+  it("requeues the workstream while terminating only the stale child lifecycle", () => {
+    expect(expiredLeaseRecoveryDisposition()).toEqual({
+      workstreamStatus: "READY",
+      graphStatus: "RUNNING",
+      staleRunStatus: "FAILED",
+      staleTaskStatus: "FAILED",
+      clearExecutionBindings: true,
+    });
+  });
+});
 
 describe("multi-worker coding orchestration E2E contract", () => {
   it("runs parallel roots, unlocks dependent integration, enforces ownership, and produces a review-only manifest", () => {
