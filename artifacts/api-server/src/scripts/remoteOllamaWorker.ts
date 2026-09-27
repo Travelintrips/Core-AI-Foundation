@@ -7,6 +7,7 @@ const modelId = (process.env["OLLAMA_WORKER_MODEL"] ?? "qwen2.5-coder:7b").trim(
 const workerName = (process.env["OLLAMA_WORKER_NAME"] ?? "ollama-windows-worker").trim();
 const nodeId = (process.env["OLLAMA_WORKER_NODE_ID"] ?? workerName).trim();
 const pollMs = Math.max(500, Number(process.env["OLLAMA_REMOTE_POLL_MS"] ?? 1000));
+const runSelfTest = process.argv.includes("--self-test");
 const execFileAsync = promisify(execFile);
 const powershellRoot = (process.env["LOCAL_CODING_POWERSHELL_ROOT"] ?? process.cwd()).trim();
 const allowedScripts = new Set(["test", "typecheck", "lint", "build"]);
@@ -45,6 +46,16 @@ async function register(): Promise<{ workerId: number; token: string }> {
 
 function workerHeaders(token: string): Record<string, string> {
   return { "content-type": "application/json", "x-ollama-worker-token": token };
+}
+
+
+async function queueSelfTest(workerId: number, token: string): Promise<void> {
+  const data = await json(await fetch(apiBase + `/api/ai/ollama-workers/${workerId}/self-test`, {
+    method: "POST",
+    headers: workerHeaders(token),
+    body: "{}",
+  }));
+  console.log(`Remote Ollama self-test queued: ${data["jobId"] ?? "unknown"} (${data["jobCode"] ?? "unknown"})`);
 }
 
 async function heartbeat(workerId: number, token: string): Promise<void> {
@@ -232,6 +243,10 @@ async function registerWithRetry(): Promise<{ workerId: number; token: string }>
 async function main(): Promise<void> {
   await verifyLocalOllama();
   let registration = await registerWithRetry();
+
+  if (runSelfTest) {
+    await queueSelfTest(registration.workerId, registration.token);
+  }
 
   let lastHeartbeat = Date.now();
   for (;;) {
