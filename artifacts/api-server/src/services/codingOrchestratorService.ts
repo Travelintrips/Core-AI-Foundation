@@ -652,26 +652,44 @@ export async function startCodingOrchestration(
 
   let queuedJob: AiJob;
   try {
-    queuedJob = await enqueue({
-      jobType: "coding_repository_analyzer",
-      // Reserve this analyzer job for the explicit in-process orchestrator path.
-      // Dispatcher text workers intentionally do not advertise this capability,
-      // preventing them from stealing the queued row before on-demand claim.
-      requiredCapability: "coding_repository_analyzer_on_demand",
-      priority: input.task.priority,
-      maxRetry: 0,
-      retryStrategy: "manual",
-      payloadJson: {
-        codingTaskId: input.task.id,
-        codingRunId: input.run.id,
-        orchestratorSessionId: sessionId,
-        repository: input.task.repository,
-        branch: input.task.branch,
-        expectedBaseSha: input.task.instruction.match(/\bbase-sha:([0-9a-f]{40})\b/i)?.[1]?.toLowerCase(),
-        title: input.task.projectName,
-        description: input.task.instruction,
-      },
-    });
+    let lastEnqueueError: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        queuedJob = await enqueue({
+          jobType: "coding_repository_analyzer",
+          // Stable idempotency makes bounded retry safe even if Postgres accepted
+          // the first insert but the client lost the acknowledgement.
+          idempotencyKey: `coding-repository-analyzer:${input.run.id}`,
+          // Reserve this analyzer job for the explicit in-process orchestrator path.
+          // Dispatcher text workers intentionally do not advertise this capability,
+          // preventing them from stealing the queued row before on-demand claim.
+          requiredCapability: "coding_repository_analyzer_on_demand",
+          priority: input.task.priority,
+          maxRetry: 0,
+          retryStrategy: "manual",
+          payloadJson: {
+            codingTaskId: input.task.id,
+            codingRunId: input.run.id,
+            orchestratorSessionId: sessionId,
+            repository: input.task.repository,
+            branch: input.task.branch,
+            expectedBaseSha: input.task.instruction.match(/\bbase-sha:([0-9a-f]{40})\b/i)?.[1]?.toLowerCase(),
+            title: input.task.projectName,
+            description: input.task.instruction,
+          },
+        });
+        lastEnqueueError = null;
+        break;
+      } catch (error) {
+        lastEnqueueError = error;
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+        }
+      }
+    }
+    if (!queuedJob!) {
+      throw lastEnqueueError ?? new Error("Coding Orchestrator queue enqueue failed");
+    }
   } catch (error) {
     const failedStages = updateStage(
       stages,
