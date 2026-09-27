@@ -62,7 +62,13 @@ jobs:
             metadata: {workflow:"Coding WA Smoke", runId:process.env.GITHUB_RUN_ID}
           }))' "$external_id")
 
-          code=$(curl -sS -o /tmp/bridge-command.json -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "content-type: application/json"             -d "$payload"             "$API_BASE_URL/ai/coding/bridge/commands")
+          code=$(curl -sS -o /tmp/bridge-command.json -w "%{http_code}" \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 60 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "content-type: application/json" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/coding/bridge/commands")
 
           echo "bridge_command_http=$code"
           cat /tmp/bridge-command.json
@@ -83,7 +89,13 @@ jobs:
             metadata: {workflow:"Coding WA Smoke", runId:process.env.GITHUB_RUN_ID}
           }))' "${{ steps.command.outputs.command_id }}")
 
-          code=$(curl -sS -o /tmp/bridge-response.json -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "content-type: application/json"             -d "$payload"             "$API_BASE_URL/ai/coding/bridge/responses")
+          code=$(curl -sS -o /tmp/bridge-response.json -w "%{http_code}" \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 60 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "content-type: application/json" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/coding/bridge/responses")
 
           echo "bridge_response_http=$code"
           cat /tmp/bridge-response.json
