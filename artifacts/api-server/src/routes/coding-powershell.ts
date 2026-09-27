@@ -9,6 +9,7 @@ import {
   prepareOllamaPowerShellExecution,
 } from "../services/localCodingPowerShellExecutorService.js";
 import { runTrustedOllamaPowerShellTask } from "../services/localCodingTrustedPowerShellTaskService.js";
+import { runTrustedOllamaRepairTask } from "../services/localCodingTrustedRepairService.js";
 
 const router = Router();
 
@@ -23,6 +24,14 @@ const prepareSchema = z.object({
 const trustedTaskSchema = z.object({
   instruction: z.string().min(1).max(4_000),
   taskId: z.string().uuid().nullable().optional(),
+  requestedBy: z.string().min(1).max(200).optional(),
+  modelId: z.string().min(1).max(300).optional(),
+  timeoutMs: z.number().int().min(15_000).max(180_000).optional(),
+}).strict();
+
+const trustedRepairSchema = z.object({
+  instruction: z.string().min(1).max(4_000),
+  taskId: z.string().uuid(),
   requestedBy: z.string().min(1).max(200).optional(),
   modelId: z.string().min(1).max(300).optional(),
   timeoutMs: z.number().int().min(15_000).max(180_000).optional(),
@@ -62,6 +71,21 @@ router.post("/ai/coding/powershell/run-trusted-task", async (req, res): Promise<
   }
   try {
     const result = await runTrustedOllamaPowerShellTask(body.data);
+    res.json(result);
+  } catch (error) {
+    if (sendKnownError(res, error)) return;
+    throw error;
+  }
+});
+
+router.post("/ai/coding/powershell/run-trusted-repair", async (req, res): Promise<void> => {
+  const body = trustedRepairSchema.safeParse(req.body ?? {});
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  try {
+    const result = await runTrustedOllamaRepairTask(body.data);
     res.json(result);
   } catch (error) {
     if (sendKnownError(res, error)) return;
