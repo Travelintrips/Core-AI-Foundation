@@ -11,6 +11,7 @@ import {
   prepareOllamaPowerShellExecution,
 } from "../services/localCodingPowerShellExecutorService.js";
 import { runTrustedOllamaPowerShellTask } from "../services/localCodingTrustedPowerShellTaskService.js";
+import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
 
 const router = Router();
 
@@ -67,6 +68,21 @@ router.get("/ai/coding/powershell/progress/latest", (_req, res) => {
 
 router.get("/ai/coding/powershell/progress", (_req, res) => {
   res.json({ value: listOllamaPowerShellExecutions() });
+});
+
+router.post("/ai/coding/powershell/run-remote-trusted-task", async (req, res): Promise<void> => {
+  const body = trustedTaskSchema.safeParse(req.body ?? {});
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  try {
+    const result = await runRemoteTrustedPowerShellTask(body.data);
+    res.json(result);
+  } catch (error) {
+    if (sendKnownError(res, error)) return;
+    throw error;
+  }
 });
 
 router.post("/ai/coding/powershell/run-trusted-task", async (req, res): Promise<void> => {
