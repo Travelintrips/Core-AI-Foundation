@@ -7,6 +7,7 @@ import {
 } from "./localCodingAiProductionModelService.js";
 import { checkOllamaHealth, readOllamaLocalConfig } from "./ollamaLocalService.js";
 import { getOllamaWorkerAvailability } from "./ollamaWorkerRegistryService.js";
+import { hasRemoteOllamaWorker } from "./remoteOllamaWorkerService.js";
 
 const DEFAULT_PRIMARY_PROVIDER = "openai";
 const DEFAULT_PRIMARY_MODEL = "gpt-5.6-sol";
@@ -102,6 +103,29 @@ export async function resolveConfiguredCodingFallbackModel(
       ok: false,
       reason: "FALLBACK_MODEL_NOT_ALLOWED",
       message: "Fallback model is not present in AI_CODING_MODEL_ALLOWLIST.",
+    };
+  }
+
+  const remoteWorkerAvailable = await hasRemoteOllamaWorker(fallbackModel)
+    .catch(() => false);
+
+  if (remoteWorkerAvailable) {
+    return {
+      ok: true,
+      fallback: { provider: "ollama", model: fallbackModel },
+      selection: {
+        model: {
+          modelId: fallbackModel,
+          maxOutputTokens: base.maxOutputTokens,
+          capabilities: ["code", "reasoning", "text", "local", "remote_worker_pool"],
+        },
+        // No baseUrl on purpose: the scheduled Ollama adapter will dispatch
+        // through the authenticated outbound remote-pull worker queue.
+        provider: { slug: "ollama" },
+        timeoutMs: localFallbackTimeoutMs(env),
+        maxOutputTokens: base.maxOutputTokens,
+        selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
+      },
     };
   }
 
