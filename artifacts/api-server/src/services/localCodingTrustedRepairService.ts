@@ -160,6 +160,32 @@ async function createIsolatedRepairWorkspace(
   }
 }
 
+async function snapshotAllowedFiles(
+  root: string,
+  files: string[],
+): Promise<Map<string, string>> {
+  const snapshots = new Map<string, string>();
+  for (const file of files) {
+    snapshots.set(file, await readFile(resolve(root, file), "utf8"));
+  }
+  return snapshots;
+}
+
+async function restoreAllowedFiles(
+  root: string,
+  snapshots: Map<string, string>,
+): Promise<void> {
+  for (const [file, content] of snapshots) {
+    await copyFile(resolve(root, file), resolve(root, file)).catch(() => undefined);
+    const absolute = resolve(root, file);
+    const original = snapshots.get(file);
+    if (original !== undefined) {
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(absolute, original, "utf8");
+    }
+  }
+}
+
 async function buildAllowedSnippets(
   root: string,
   files: string[],
@@ -263,29 +289,29 @@ export async function runTrustedOllamaRepairTask(input: {
     );
   }
 
+  const initial = await runTrustedOllamaPowerShellTask({
+    ...input,
+    env: {
+      ...env,
+      LOCAL_CODING_POWERSHELL_ROOT: sourceRoot,
+    },
+  });
+
+  if (initial.execution.status === "COMPLETED") {
+    return {
+      initial,
+      repaired: false,
+      allowedFiles,
+      proposalSummary: null,
+      changedFiles: [],
+      verification: initial.execution,
+    };
+  }
+
+  const sourceSnapshots = await snapshotAllowedFiles(sourceRoot, allowedFiles);
   const isolated = await createIsolatedRepairWorkspace(sourceRoot, task.branch);
   try {
     const root = isolated.root;
-    const repairEnv: NodeJS.ProcessEnv = {
-      ...env,
-      LOCAL_CODING_POWERSHELL_ROOT: root,
-    };
-
-    const initial = await runTrustedOllamaPowerShellTask({
-      ...input,
-      env: repairEnv,
-    });
-
-    if (initial.execution.status === "COMPLETED") {
-      return {
-        initial,
-        repaired: false,
-        allowedFiles,
-        proposalSummary: null,
-        changedFiles: [],
-        verification: initial.execution,
-      };
-    }
 
     const baseHeadSha = (await git(root, ["rev-parse", "HEAD"])).toLowerCase();
     if (!/^[0-9a-f]{40}$/.test(baseHeadSha)) {
@@ -382,16 +408,26 @@ export async function runTrustedOllamaRepairTask(input: {
       );
     }
 
-    const verification = await executeTrustedOllamaPowerShellCommands({
-      taskId: input.taskId,
-      requestedBy: input.requestedBy || "trusted-local-repair",
-      modelId,
-      commands: initial.plannedCommands,
-      timeoutMs: input.timeoutMs,
-      env: repairEnv,
-    });
+    let verification: TrustedPowerShellTaskResult["execution"];
+    try {
+      verification = await executeTrustedOllamaPowerShellCommands({
+        taskId: input.taskId,
+        requestedBy: input.requestedBy || "trusted-local-repair",
+        modelId,
+        commands: initial.plannedCommands,
+        timeoutMs: input.timeoutMs,
+        env: {
+          ...env,
+          LOCAL_CODING_POWERSHELL_ROOT: sourceRoot,
+        },
+      });
+    } catch (error) {
+      await restoreAllowedFiles(sourceRoot, sourceSnapshots);
+      throw error;
+    }
 
     if (verification.status !== "COMPLETED") {
+      await restoreAllowedFiles(sourceRoot, sourceSnapshots);
       await logAudit(
         "ollama-worker",
         "trusted_repair_verification_failed",
