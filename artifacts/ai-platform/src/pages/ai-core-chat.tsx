@@ -20,7 +20,7 @@ import {
 import { apiFetch } from "@/lib/apiFetch";
 
 type ChatMode = "ask" | "agent";
-type ModelPolicy = "economy" | "auto" | "cloud";
+type ModelPolicy = "economy" | "smart" | "auto" | "cloud";
 type TokenUsage = { inputTokens: number; outputTokens: number; totalTokens: number };
 
 type ChatMessage = {
@@ -34,6 +34,8 @@ type ChatMessage = {
     provider?: string | null;
     model?: string | null;
     usage?: TokenUsage | null;
+    workload?: string | null;
+    costClass?: string | null;
     taskNumber?: string;
     workspaceUrl?: string;
   };
@@ -46,6 +48,8 @@ type ChatResponse = {
   provider?: string | null;
   model?: string | null;
   usage?: TokenUsage | null;
+  workload?: string | null;
+  costClass?: string | null;
   taskId?: string;
   taskNumber?: string;
   status?: string;
@@ -126,7 +130,7 @@ function StatusDot({ ok }: { ok: boolean }) {
 
 export default function AiCoreChat() {
   const [mode, setMode] = useState<ChatMode>("ask");
-  const [policy, setPolicy] = useState<ModelPolicy>("economy");
+  const [policy, setPolicy] = useState<ModelPolicy>("smart");
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -238,6 +242,8 @@ export default function AiCoreChat() {
           provider: response.provider,
           model: response.model,
           usage: response.usage,
+          workload: response.workload,
+          costClass: response.costClass,
           ...(response.taskNumber ? { taskNumber: response.taskNumber } : {}),
           ...(response.workspaceUrl ? { workspaceUrl: response.workspaceUrl } : {}),
         },
@@ -298,7 +304,7 @@ export default function AiCoreChat() {
               </span>
             </div>
             <p className="text-xs mt-0.5" style={{ color: "#6B82B0" }}>
-              No-LLM → Local AI → Cloud, critical approval tetap terkunci.
+              0 token → Smart routing → Cloud/Local, critical approval tetap terkunci.
             </p>
           </div>
         </div>
@@ -337,7 +343,7 @@ export default function AiCoreChat() {
                     Ask Mode untuk tanya jawab hemat token. Agent Mode untuk coding task melalui analyzer, policy gate, testing, dan approval flow.
                   </p>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    {["/status", "/model", "Cek worker dan jelaskan statusnya"].map((sample) => (
+                    {["/status", "/routing", "/model", "Kenapa build ini gagal?"].map((sample) => (
                       <button key={sample} onClick={() => setInput(sample)} className="text-xs px-3 py-2 rounded-lg" style={{ background: "#0A1327", border: "1px solid #1E3057", color: "#8DA1C8" }}>
                         {sample}
                       </button>
@@ -371,6 +377,8 @@ export default function AiCoreChat() {
                         <span>{routeLabel(message.meta.route)}</span>
                         {message.meta.provider && <span>• {message.meta.provider}</span>}
                         {message.meta.model && <span>• {message.meta.model}</span>}
+                        {message.meta.workload && <span>• {message.meta.workload}</span>}
+                        {message.meta.costClass && <span>• cost {message.meta.costClass}</span>}
                         {message.meta.usage && <span>• {message.meta.usage.totalTokens.toLocaleString()} tokens</span>}
                         {message.meta.taskNumber && <span>• {message.meta.taskNumber}</span>}
                         {message.meta.workspaceUrl && (
@@ -455,9 +463,9 @@ export default function AiCoreChat() {
                 </div>
                 {mode === "ask" && (
                   <div className="flex rounded-lg p-1" style={{ background: "#0A1327", border: "1px solid #1E3057" }}>
-                    {(["economy", "auto", "cloud"] as ModelPolicy[]).map((value) => (
+                    {(["economy", "smart", "auto", "cloud"] as ModelPolicy[]).map((value) => (
                       <button key={value} onClick={() => setPolicy(value)} className="px-2.5 py-1.5 rounded-md text-[11px]" style={policy === value ? { background: "#19234A", color: "#B6ADFF" } : { color: "#63779E" }}>
-                        {value === "economy" ? "Economy" : value === "auto" ? "Auto" : "Cloud"}
+                        {value === "economy" ? "Economy" : value === "smart" ? "Smart" : value === "auto" ? "Auto" : "Cloud"}
                       </button>
                     ))}
                   </div>
@@ -483,10 +491,12 @@ export default function AiCoreChat() {
                   <div className="text-[10px]" style={{ color: "#536A94" }}>
                     {mode === "ask"
                       ? policy === "economy"
-                        ? "Economy: local only, tidak fallback ke OpenAI."
-                        : policy === "auto"
-                          ? "Auto: local dulu, cloud hanya bila local gagal."
-                          : "Cloud: gunakan primary cloud model."
+                        ? "Economy: local only, tanpa biaya cloud."
+                        : policy === "smart"
+                          ? "Smart: pilih model cloud sesuai tugas & biaya; local menjadi fallback."
+                          : policy === "auto"
+                            ? "Auto: local dulu, cloud hanya bila local gagal."
+                            : "Cloud: gunakan cloud route sesuai workload."
                       : "Agent: analyzer → policy gates → workers; critical action tetap approval."}
                   </div>
                   <button type="submit" disabled={busy || !input.trim()} className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40" style={{ background: "#675ADB", color: "white" }}>
