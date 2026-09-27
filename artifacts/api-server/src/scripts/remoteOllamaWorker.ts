@@ -54,10 +54,17 @@ async function heartbeat(workerId: number, token: string): Promise<void> {
 }
 
 async function claim(workerId: number, token: string): Promise<Record<string, any> | null> {
-  const response = await fetch(apiBase + `/api/ai/ollama-workers/${workerId}/claim`, {
+  const url = apiBase + `/api/ai/ollama-workers/${workerId}/claim`;
+  const response = await fetch(url, {
     method: "POST", headers: workerHeaders(token), body: "{}",
   });
   if (response.status === 204) return null;
+  if (response.status === 503) {
+    const body = await response.text();
+    const error = new Error(`CLAIM_TEMPORARILY_UNAVAILABLE: HTTP 503 from ${url}: ${body.slice(0, 240)}`);
+    (error as Error & { code?: string }).code = "CLAIM_TEMPORARILY_UNAVAILABLE";
+    throw error;
+  }
   return json(response);
 }
 
@@ -233,7 +240,18 @@ async function main(): Promise<void> {
         await heartbeat(registration.workerId, registration.token);
         lastHeartbeat = Date.now();
       }
-      const job = await claim(registration.workerId, registration.token);
+      let job: Record<string, any> | null;
+      try {
+        job = await claim(registration.workerId, registration.token);
+      } catch (error) {
+        const code = (error as Error & { code?: string }).code;
+        if (code === "CLAIM_TEMPORARILY_UNAVAILABLE") {
+          console.error("Remote Ollama claim temporarily unavailable; keeping worker registration and retrying in 5s:", error);
+          await new Promise((resolve) => setTimeout(resolve, 5_000));
+          continue;
+        }
+        throw error;
+      }
       if (!job) {
         await new Promise((resolve) => setTimeout(resolve, pollMs));
         continue;
