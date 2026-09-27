@@ -81,10 +81,9 @@ async function lookupSportCenterBooking(
       b.booking_date,
       b.start_time::text AS start_time,
       b.end_time::text AS end_time,
-      b.total_price,
+      b.total_amount AS total_price,
       b.payment_status,
-      b.status,
-      b.payment_method
+      b.status
     FROM public.sport_bookings b
     LEFT JOIN public.sport_facilities f ON f.id = b.facility_id
     WHERE upper(b.booking_number) = upper(${bookingNumber})
@@ -105,7 +104,7 @@ async function lookupSportCenterBooking(
     SELECT
       payment_number,
       amount,
-      payment_method,
+      method AS payment_method,
       status,
       paid_at
     FROM public.sport_payments
@@ -229,10 +228,9 @@ const DATA_TOOL_SCHEMA_REQUIREMENTS = {
       "booking_date",
       "start_time",
       "end_time",
-      "total_price",
+      "total_amount",
       "payment_status",
       "status",
-      "payment_method",
     ],
     sport_facilities: ["id", "name"],
     sport_payments: [
@@ -240,7 +238,7 @@ const DATA_TOOL_SCHEMA_REQUIREMENTS = {
       "booking_id",
       "payment_number",
       "amount",
-      "payment_method",
+      "method",
       "status",
       "paid_at",
     ],
