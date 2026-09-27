@@ -176,6 +176,19 @@ function workstreamAiRequired(result: Record<string, unknown> | null): boolean {
   return plan?.status === "AI_REQUIRED";
 }
 
+export function hasLiveCodingWorkstreamClaim(
+  workstreams: Array<{ status: string; leaseExpiresAt: Date | string | null }>,
+  now = new Date(),
+): boolean {
+  const nowMs = now.getTime();
+  return workstreams.some((item) => {
+    if (!["CLAIMED", "RUNNING"].includes(item.status)) return false;
+    if (!item.leaseExpiresAt) return true;
+    const expiresAt = new Date(item.leaseExpiresAt).getTime();
+    return !Number.isFinite(expiresAt) || expiresAt > nowMs;
+  });
+}
+
 async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
@@ -275,11 +288,7 @@ async function processTaskGraph(
   }
 
   if (["APPROVED", "RUNNING"].includes(snapshot.graph.status)) {
-    if (
-      snapshot.workstreams.some((item) =>
-        ["CLAIMED", "RUNNING"].includes(item.status)
-      )
-    ) {
+    if (hasLiveCodingWorkstreamClaim(snapshot.workstreams)) {
       return {
         handled: true,
         action: "WAIT_WORKSTREAM_EXECUTION",
