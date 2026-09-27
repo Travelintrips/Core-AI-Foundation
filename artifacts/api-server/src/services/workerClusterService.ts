@@ -36,7 +36,7 @@ export const WORKER_TYPE_CAPABILITIES: Record<string, string[]> = {
   text_worker:   ["llm_inference", "creative_text", "qc_review", "creative_brief", "coding_repository_analyzer"],
   coding_worker: ["coding_ai_execution", "coding_workstream"],
   image_worker:  ["image_generation", "image_qc", "image_upscale", "universal_render"],
-  3d_worker:     ["3d_scene_build", "3d_render", "3d_turntable", "3d_export_glb", "3d_export_gltf", "3d_material_apply", "3d_camera_render"],
+  "3d_worker":     ["3d_scene_build", "3d_render", "3d_turntable", "3d_export_glb", "3d_export_gltf", "3d_material_apply", "3d_camera_render"],
   export_worker: ["pdf_export", "pptx_export", "csv_export", "report_generation", "image_batch_export"],
   system_worker: ["analytics", "cleanup", "custom", "scoring", "notification"],
   // Sprint P2.1.1 — dedicated storage/archive worker so archiving/thumbnailing

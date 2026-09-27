@@ -6,6 +6,8 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  aiCodingCiBindingsTable,
+  aiCodingRunsTable,
   aiCodingTaskGraphsTable,
   aiCodingTasksTable,
   aiCodingWorkstreamAiHandoffsTable,
@@ -197,6 +199,12 @@ function localExecutionPlanRequiresAi(result: Record<string, unknown>): boolean 
   return plan?.status === "AI_REQUIRED";
 }
 
+function ciSelfRepairContext(result: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!result) return null;
+  const repair = isRecord(result.ciSelfRepair) ? result.ciSelfRepair : null;
+  return repair?.status === "REPAIR_REQUIRED" ? repair : null;
+}
+
 function pendingAiCandidate(result: Record<string, unknown>): boolean {
   const execution = isRecord(result.workstreamAiExecution)
     ? result.workstreamAiExecution
@@ -354,11 +362,19 @@ async function claimWorkstreamForAi(
 
     const attempt = workstream.attemptCount + 1;
     const leaseToken = randomUUID();
-    const branchName = buildCodingWorkstreamBranchName(
-      graph.taskId,
-      workstream.workstreamKey,
-      attempt,
-    );
+    const ciRepair = ciSelfRepairContext(result);
+    const repairBranch =
+      typeof ciRepair?.headBranch === "string" ? ciRepair.headBranch.trim() : "";
+    const branchName =
+      repairBranch &&
+      /^[A-Za-z0-9._/-]+$/.test(repairBranch) &&
+      !repairBranch.startsWith("-")
+        ? repairBranch
+        : buildCodingWorkstreamBranchName(
+            graph.taskId,
+            workstream.workstreamKey,
+            attempt,
+          );
 
     const [claimed] = await tx
       .update(aiCodingWorkstreamsTable)
@@ -705,10 +721,22 @@ async function loadExecutionContext(
     typeof workstream.branchName === "string" && workstream.branchName.trim()
       ? workstream.branchName
       : childTask.branch;
+  const ciRepair = ciSelfRepairContext(analyzerResult);
+  const analyzerBranch = String(analyzerResult.branch ?? "");
+  const ciRepairBranch =
+    typeof ciRepair?.headBranch === "string" ? ciRepair.headBranch : "";
+  const analyzerBranchIsAllowed =
+    (ciRepairBranch && analyzerBranch === ciRepairBranch) ||
+    isAnalyzerBranchFromPriorWorkstreamAttempt(
+      graph.taskId,
+      workstream.workstreamKey,
+      analyzerBranch,
+      payload.claimAttempt,
+    );
   if (
     analyzerResult.codingTaskId !== childTask.id ||
     analyzerResult.sourceTarget !== childTask.repository ||
-    !isAnalyzerBranchFromPriorWorkstreamAttempt(graph.taskId, workstream.workstreamKey, String(analyzerResult.branch ?? ""), payload.claimAttempt) ||
+    !analyzerBranchIsAllowed ||
     !analyzerContext ||
     analyzerContext.repository !== childTask.repository ||
     analyzerContext.branch !== analyzerResult.branch
@@ -1053,7 +1081,18 @@ async function buildSyntheticContextLease(
 
   const allowed = new Set(allowedFiles);
   const findings = Array.isArray(analyzer.findings) ? analyzer.findings : [];
+  const ciRepair = ciSelfRepairContext(analyzer);
   const diagnostics = [
+    ...(ciRepair
+      ? [{
+          command: "github-ci",
+          kind: "ci_failure",
+          message:
+            typeof ciRepair.failureSummary === "string"
+              ? ciRepair.failureSummary.slice(0, 1_000)
+              : "GitHub CI failed on the current pull-request head.",
+        }]
+      : []),
     ...newAuthorizedTargets.map((file) => ({
       command: "repository-analyzer",
       kind: "info",
@@ -1358,9 +1397,23 @@ export async function executeCodingWorkstreamAiJob(
       );
     }
 
+    const ciRepair = ciSelfRepairContext(loaded.analyzerResult);
+    const sourceBranch =
+      typeof ciRepair?.headBranch === "string" && ciRepair.headBranch.trim()
+        ? ciRepair.headBranch.trim()
+        : loaded.childTask.branch;
+    const authorizedBranch = authorization.package.workstream.branchName;
+    const localIsolatedBranch =
+      sourceBranch === authorizedBranch
+        ? `${authorizedBranch}-local-${payload.claimAttempt}`
+        : authorizedBranch;
     const workspace = await prepareRepositoryWorkspace(
       loaded.childTask.repository,
-      authorization.package.workstream.branchName,
+      sourceBranch,
+      {
+        isolatedBranchName: localIsolatedBranch,
+        expectedBaseSha: authorization.package.workstream.baseSha,
+      },
     );
     if (!workspace.cleanup) {
       throw new LocalCodingWorkstreamAiExecutionError(
@@ -2096,9 +2149,138 @@ export async function materializeApprovedWorkstreamAiCandidate(
         .set({
           commitSha: headSha,
           resultSummary:
-            "Approved constrained AI candidate was materialized, statically verified, committed, and pushed to its isolated workstream branch.",
+            "Approved constrained AI candidate was materialized, statically verified, committed, and pushed.",
         })
         .where(eq(aiCodingTasksTable.id, current.childTaskId!));
+
+      const ciRepair = ciSelfRepairContext(lockedResult);
+      if (ciRepair) {
+        const [binding] = await tx
+          .select()
+          .from(aiCodingCiBindingsTable)
+          .where(eq(aiCodingCiBindingsTable.workstreamId, workstreamId))
+          .for("update");
+
+        if (binding) {
+          const priorCheckpoint = isRecord(binding.lastCheckpointJson)
+            ? binding.lastCheckpointJson
+            : {};
+          const priorRepair = isRecord(priorCheckpoint.ciSelfRepair)
+            ? priorCheckpoint.ciSelfRepair
+            : {};
+          await tx
+            .update(aiCodingCiBindingsTable)
+            .set({
+              headSha,
+              state: "WAITING",
+              lastCheckpointJson: {
+                ...priorCheckpoint,
+                nextAction: "WAIT_FOR_REQUIRED_CHECKS",
+                ciSelfRepair: {
+                  ...priorRepair,
+                  status: "WAITING_CI",
+                  repairCommitSha: headSha,
+                  pushedAt: now.toISOString(),
+                },
+              },
+            })
+            .where(eq(aiCodingCiBindingsTable.id, binding.id));
+        }
+
+        const [graph] = await tx
+          .select()
+          .from(aiCodingTaskGraphsTable)
+          .where(eq(aiCodingTaskGraphsTable.id, current.graphId));
+        if (graph) {
+          const parentRuns = await tx
+            .select()
+            .from(aiCodingRunsTable)
+            .where(eq(aiCodingRunsTable.taskId, graph.taskId))
+            .orderBy(desc(aiCodingRunsTable.startedAt));
+          const orchestratorRun = parentRuns.find(
+            (run) =>
+              run.agentName === "Coding Orchestrator" &&
+              run.status === "COMPLETED" &&
+              typeof run.logs === "string" &&
+              run.logs.length > 0,
+          );
+          if (orchestratorRun?.logs) {
+            try {
+              const payload = JSON.parse(orchestratorRun.logs) as Record<string, unknown>;
+              const commit = isRecord(payload.localCommitApproval)
+                ? payload.localCommitApproval
+                : {};
+              const finalizer = isRecord(payload.integrationFinalizer)
+                ? payload.integrationFinalizer
+                : {};
+              const patchApproval = isRecord(payload.localPatchApproval)
+                ? payload.localPatchApproval
+                : {};
+              const integrationManifest = isRecord(payload.integrationManifest)
+                ? payload.integrationManifest
+                : {};
+              const orchestration = isRecord(payload.orchestration)
+                ? payload.orchestration
+                : {};
+              const unionFiles = [
+                ...new Set([
+                  ...strings(patchApproval.changedFiles),
+                  ...strings(integrationManifest.changedFiles),
+                  ...changedFiles,
+                ]),
+              ].sort();
+              const nextPayload = {
+                ...payload,
+                localPatchApproval: {
+                  ...patchApproval,
+                  changedFiles: unionFiles,
+                },
+                integrationManifest: {
+                  ...integrationManifest,
+                  changedFiles: unionFiles,
+                },
+                localCommitApproval: {
+                  ...commit,
+                  commitSha: headSha,
+                },
+                integrationFinalizer: {
+                  ...finalizer,
+                  commitSha: headSha,
+                  changedFiles: unionFiles,
+                },
+                prVerification: null,
+                ciSelfRepair: {
+                  ...ciRepair,
+                  status: "WAITING_CI",
+                  repairCommitSha: headSha,
+                  pushedAt: now.toISOString(),
+                },
+                orchestration: {
+                  ...orchestration,
+                  status: "PR_CREATED",
+                  nextAction: "REVIEW_PR",
+                },
+              };
+              await tx
+                .update(aiCodingRunsTable)
+                .set({ logs: JSON.stringify(nextPayload, null, 2) })
+                .where(eq(aiCodingRunsTable.id, orchestratorRun.id));
+              await tx
+                .update(aiCodingTasksTable)
+                .set({
+                  status: "PR_CREATED",
+                  commitSha: headSha,
+                  resultSummary:
+                    "CI self-repair commit pushed to the existing pull-request branch. Waiting for CI to run again.",
+                })
+                .where(eq(aiCodingTasksTable.id, graph.taskId));
+            } catch {
+              // Fail closed: CI binding still points at the new head; PR verification
+              // will remain locked if parent metadata cannot be refreshed.
+            }
+          }
+        }
+      }
 
       return saved;
     });
