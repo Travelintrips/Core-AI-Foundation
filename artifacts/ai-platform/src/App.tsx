@@ -113,6 +113,7 @@ import CustomsTariff from "@/pages/customs-tariff";
 import TarifKalkulator from "@/pages/tarif-kalkulator";
 import PricingCalculator from "@/pages/pricing-calculator";
 import CodingWorkspace from "@/pages/coding-workspace";
+import AiCoreChat from "@/pages/ai-core-chat";
 
 const queryClient = new QueryClient();
 
@@ -218,6 +219,7 @@ function AdminRouter() {
         <Route path="/customs-tariff" component={CustomsTariff} />
         <Route path="/tarif-kalkulator" component={TarifKalkulator} />
         <Route path="/pricing-calculator" component={PricingCalculator} />
+        <Route path="/ai-core-chat" component={AiCoreChat} />
         <Route path="/coding-workspace/:id" component={CodingWorkspace} />
         <Route path="/coding-workspace" component={CodingWorkspace} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />

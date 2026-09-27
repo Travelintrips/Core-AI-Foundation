@@ -64,6 +64,7 @@ export const en = {
       observability:        "Observability",
       auditLog:             "Audit Log",
       settings:             "Settings",
+      aiCoreChat:          "AI Core Chat",
       codingWorkspace:     "AI Coding Workspace",
     },
   },

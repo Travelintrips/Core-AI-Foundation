@@ -177,6 +177,7 @@ import codingPlannerAuthorityRouter from "./coding-planner-authority.js";
 import codingControlBridgeRouter from "./coding-control-bridge.js";
 import codingLocalModelRouter from "./coding-local-model.js";
 import codingPowerShellRouter from "./coding-powershell.js";
+import aiCoreChatRouter from "./ai-core-chat.js";
 import incidentsRouter from "./incidents.js";
 import localMediaRouter from "./local-media.js";
 
@@ -193,6 +194,7 @@ router.use(codingPlannerAuthorityRouter);
 router.use(codingControlBridgeRouter);
 router.use(codingLocalModelRouter);
 router.use(codingPowerShellRouter);
+router.use(aiCoreChatRouter);
 router.use(incidentsRouter);
 router.use(localMediaRouter);
 router.use(internalAuthRouter);
