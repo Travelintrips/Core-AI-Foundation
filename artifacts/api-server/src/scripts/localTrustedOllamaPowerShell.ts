@@ -1,9 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  runDirectLocalOllamaPowerShellTask,
-} from "../services/localCodingDirectOllamaPowerShellService.js";
-
 function loadEnvText(text: string): void {
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -38,6 +34,10 @@ async function main(): Promise<void> {
   process.env.LOCAL_CODING_POWERSHELL_ROOT ||= repoRoot;
   process.env.OLLAMA_WORKER_POWERSHELL_ENABLED ||= "true";
   process.env.OLLAMA_WORKER_POWERSHELL_TRUSTED_MODE ||= "true";
+
+  const { runDirectLocalOllamaPowerShellTask } = await import(
+    "../services/localCodingDirectOllamaPowerShellService.js"
+  );
 
   const result = await runDirectLocalOllamaPowerShellTask({
     instruction,
