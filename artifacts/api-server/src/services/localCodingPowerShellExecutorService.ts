@@ -549,6 +549,8 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
               SystemRoot: readEnvCaseInsensitive(env, "SystemRoot"),
               ComSpec: readEnvCaseInsensitive(env, "ComSpec"),
               PATHEXT: readEnvCaseInsensitive(env, "PATHEXT"),
+              NODE_ENV: env["NODE_ENV"],
+              SUPABASE_DEV_DATABASE_URL: env["SUPABASE_DEV_DATABASE_URL"],
               CI: "1",
               NO_COLOR: "1",
             },
