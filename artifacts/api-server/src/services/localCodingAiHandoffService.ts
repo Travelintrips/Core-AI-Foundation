@@ -575,7 +575,7 @@ function buildDirectAiRequiredContext(input: {
   const explicitSet = new Set(explicitPaths);
   const syntheticDiagnostics = focusFiles.slice(0, MAX_FAILURE_CONTEXTS).map((file) => ({
     command: "local-coding-analysis",
-    status: "failed" as const,
+    status: "FAILED" as const,
     exitCode: null,
     kind: "unknown" as const,
     diagnostics: [
