@@ -12,6 +12,7 @@ vi.mock("@workspace/db", () => ({
 
 import {
   detectAiCoreDataTool,
+  getAiCoreDataToolReadiness,
   tryRunAiCoreDataTool,
 } from "../aiCoreDataToolService.js";
 
@@ -94,4 +95,79 @@ describe("AI Core read-only data tools", () => {
       warning: "relation unavailable",
     });
   });
+
+  it("reports data tools ready only when all required production columns exist", async () => {
+    const rows = [
+      ...[
+        "id",
+        "booking_number",
+        "customer_name",
+        "facility_id",
+        "booking_date",
+        "start_time",
+        "end_time",
+        "total_price",
+        "payment_status",
+        "status",
+        "payment_method",
+      ].map((column_name) => ({ table_name: "sport_bookings", column_name })),
+      ...["id", "name"].map((column_name) => ({ table_name: "sport_facilities", column_name })),
+      ...[
+        "id",
+        "booking_id",
+        "payment_number",
+        "amount",
+        "payment_method",
+        "status",
+        "paid_at",
+      ].map((column_name) => ({ table_name: "sport_payments", column_name })),
+      ...[
+        "tenant_id",
+        "outstanding_amount",
+        "total_amount",
+        "paid_amount",
+        "status",
+        "period_start",
+        "issued_date",
+        "created_at",
+      ].map((column_name) => ({ table_name: "tenant_invoices", column_name })),
+      ...["id", "business_name"].map((column_name) => ({ table_name: "tenants", column_name })),
+    ];
+    mocks.execute.mockResolvedValueOnce({ rows });
+
+    await expect(getAiCoreDataToolReadiness()).resolves.toEqual({
+      status: "ok",
+      tools: {
+        sportCenterBookingLookup: { ready: true, missing: [] },
+        tenantOutstandingSummary: { ready: true, missing: [] },
+      },
+    });
+  });
+
+  it("reports exactly which table or column blocks a data tool", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        { table_name: "sport_bookings", column_name: "id" },
+        { table_name: "tenants", column_name: "id" },
+      ],
+    });
+
+    const result = await getAiCoreDataToolReadiness();
+
+    expect(result.status).toBe("degraded");
+    expect(result.tools.sportCenterBookingLookup.ready).toBe(false);
+    expect(result.tools.sportCenterBookingLookup.missing).toContain(
+      "public.sport_bookings.booking_number",
+    );
+    expect(result.tools.sportCenterBookingLookup.missing).toContain(
+      "public.sport_payments",
+    );
+    expect(result.tools.tenantOutstandingSummary.missing).toContain(
+      "public.tenant_invoices",
+    );
+    expect(result.tools.tenantOutstandingSummary.missing).toContain(
+      "public.tenants.business_name",
+    );
+  });
+
 });
