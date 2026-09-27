@@ -6,6 +6,7 @@ import {
   claimRemoteOllamaInvocation,
   completeRemoteOllamaInvocation,
   heartbeatRemoteOllamaWorker,
+  enqueueRemotePowerShellSelfTest,
   registerRemoteOllamaWorker,
   retryRemoteOllamaInvocation,
   JobOwnershipLostError,
@@ -91,6 +92,18 @@ router.post("/ai/ollama-workers/register", async (req, res): Promise<void> => {
   } catch (error) {
     logger.error({ err: error }, "[remote-ollama] registration failed");
     res.status(500).json({ error: "Remote Ollama registration failed" });
+  }
+});
+
+
+router.post("/ai/ollama-workers/:id/self-test", requireWorker, async (req, res): Promise<void> => {
+  const workerId = Number.parseInt(routeParam(req, "id"), 10);
+  try {
+    const job = await enqueueRemotePowerShellSelfTest(workerId);
+    res.status(202).json({ jobId: job.id, jobCode: job.jobCode, status: job.status });
+  } catch (error) {
+    logger.error({ err: error, workerId }, "[remote-ollama] self-test enqueue failed");
+    res.status(503).json({ error: "Remote Ollama self-test could not be queued" });
   }
 });
 

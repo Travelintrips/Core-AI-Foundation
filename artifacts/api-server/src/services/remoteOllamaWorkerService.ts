@@ -232,6 +232,24 @@ export async function waitForRemoteOllamaInvocation(
   throw new Error("Remote Ollama invocation cancelled");
 }
 
+export async function enqueueRemotePowerShellSelfTest(workerId: number): Promise<AiJob> {
+  const [worker] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
+  if (
+    !worker ||
+    worker.providerSlug !== PROVIDER ||
+    worker.runtimeKind !== REMOTE_OLLAMA_RUNTIME_KIND
+  ) {
+    throw new Error("REMOTE_OLLAMA_SELF_TEST_WORKER_INVALID");
+  }
+
+  return enqueueRemotePowerShellExecution({
+    commands: ["git rev-parse HEAD", "pnpm --version"],
+    requestedBy: `worker-self-test:${workerId}`,
+    modelId: worker.modelId ?? "qwen2.5-coder:7b",
+    reason: "Verify production queue to registered Windows worker trusted PowerShell execution.",
+  });
+}
+
 export async function enqueueRemotePowerShellExecution(input: {
   commands: string[];
   requestedBy: string;
