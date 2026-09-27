@@ -109,6 +109,7 @@ function loadHistory(): ChatMessage[] {
 }
 
 function routeLabel(route?: string | null): string {
+  if (route === "STREAMING") return "Streaming…";
   if (route === "NO_LLM") return "0 token";
   if (route === "DATA_TOOL") return "Data Tool · 0 token";
   if (route === "LOCAL") return "Local AI";
