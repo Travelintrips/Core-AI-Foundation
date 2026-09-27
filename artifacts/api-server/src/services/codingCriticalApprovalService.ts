@@ -349,3 +349,60 @@ export async function decideCodingCriticalApproval(input: {
     throw error;
   }
 }
+
+
+export async function finalizeCodingCriticalApproval(input: {
+  taskId: string;
+  actionType: CriticalApprovalActionType;
+  status: "COMPLETED" | "FAILED";
+  message: string;
+}): Promise<CriticalApprovalRow | null> {
+  await ensureCodingControlBridgeTables();
+
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_critical_approvals
+    SET status = ${input.status},
+        execution_error = CASE
+          WHEN ${input.status} = 'FAILED' THEN ${input.message.slice(0, 2000)}
+          ELSE NULL
+        END
+    WHERE id = (
+      SELECT id
+      FROM ai_platform.ai_coding_critical_approvals
+      WHERE task_id = ${input.taskId}::uuid
+        AND action_type = ${input.actionType}
+        AND status IN ('APPROVED','EXECUTING')
+      ORDER BY requested_at DESC
+      LIMIT 1
+    )
+    RETURNING *
+  `);
+
+  if (!Array.isArray(result.rows) || result.rows.length === 0) return null;
+  const approval = normalizeRow(result.rows[0] as Record<string, unknown>);
+
+  await sendCodingApprovalResult({
+    approvalId: approval.id,
+    taskId: approval.taskId,
+    status: input.status,
+    actionType: approval.actionType,
+    message: input.message,
+  }).catch(() => undefined);
+
+  await logAudit(
+    "coding-orchestrator",
+    input.status === "COMPLETED"
+      ? "critical_approval_action_completed"
+      : "critical_approval_action_failed",
+    approval.id,
+    "coding_critical_approval",
+    input.status === "COMPLETED" ? "success" : "failure",
+    {
+      taskId: approval.taskId,
+      actionType: approval.actionType,
+      message: input.message.slice(0, 700),
+    },
+  ).catch(() => undefined);
+
+  return approval;
+}
