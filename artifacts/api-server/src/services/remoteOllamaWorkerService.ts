@@ -6,7 +6,9 @@ import { completeJob, retryJob, JobOwnershipLostError } from "./jobWorkerService
 
 export const REMOTE_OLLAMA_RUNTIME_KIND = "ollama_remote_pull";
 export const REMOTE_OLLAMA_JOB_TYPE = "ollama_model_invocation";
+export const REMOTE_OLLAMA_POWERSHELL_JOB_TYPE = "ollama_powershell_execution";
 export const REMOTE_OLLAMA_CAPABILITY = "ollama_inference";
+export const REMOTE_OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 const PROVIDER = "ollama";
 const MAX_RESULT_CHARS = 256_000;
 
@@ -60,7 +62,7 @@ export async function registerRemoteOllamaWorker(input: {
           status: existing.runningJobs > 0 ? "busy" : "online",
           region: input.region ?? "remote",
           version: input.version ?? "1.0.0",
-          capabilities: [REMOTE_OLLAMA_CAPABILITY],
+          capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
           maxConcurrentJobs: Math.max(1, Math.min(8, input.maxConcurrentJobs ?? 1)),
           leaseOwner: "ollama-remote:" + input.nodeId,
           updatedAt: new Date(),
@@ -77,7 +79,7 @@ export async function registerRemoteOllamaWorker(input: {
     nodeId: input.nodeId,
     region: input.region ?? "remote",
     version: input.version ?? "1.0.0",
-    capabilities: [REMOTE_OLLAMA_CAPABILITY],
+    capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
     maxConcurrentJobs: Math.max(1, Math.min(8, input.maxConcurrentJobs ?? 1)),
     leaseOwner: "ollama-remote:" + input.nodeId,
     leaseTtlMs: DEFAULT_LEASE_TTL_MS,
@@ -161,13 +163,16 @@ export async function claimRemoteOllamaInvocation(workerId: number): Promise<AiJ
   return db.transaction(async (tx) => {
     const raw = await tx.execute(sql`
       SELECT * FROM ai_platform.ai_jobs
-      WHERE job_type = ${REMOTE_OLLAMA_JOB_TYPE}
-        AND required_capability = ${REMOTE_OLLAMA_CAPABILITY}
+      WHERE job_type IN (${REMOTE_OLLAMA_JOB_TYPE}, ${REMOTE_OLLAMA_POWERSHELL_JOB_TYPE})
+        AND required_capability IN (${REMOTE_OLLAMA_CAPABILITY}, ${REMOTE_OLLAMA_POWERSHELL_CAPABILITY})
         AND (
           (status = 'queued' AND (scheduled_at IS NULL OR scheduled_at <= NOW()))
           OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at <= NOW())
         )
-        AND payload_json->>'modelId' = ${worker.modelId ?? ""}
+        AND (
+          (job_type = ${REMOTE_OLLAMA_JOB_TYPE} AND payload_json->>'modelId' = ${worker.modelId ?? ""})
+          OR job_type = ${REMOTE_OLLAMA_POWERSHELL_JOB_TYPE}
+        )
       ORDER BY priority_score DESC, created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
@@ -225,6 +230,43 @@ export async function waitForRemoteOllamaInvocation(
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error("Remote Ollama invocation cancelled");
+}
+
+export async function enqueueRemotePowerShellExecution(input: {
+  commands: string[];
+  requestedBy: string;
+  modelId: string;
+  reason: string;
+}): Promise<AiJob> {
+  const now = new Date();
+  const [job] = await db.insert(aiJobsTable).values({
+    jobCode: "PS-" + randomUUID().slice(0, 8).toUpperCase(),
+    jobType: REMOTE_OLLAMA_POWERSHELL_JOB_TYPE,
+    requiredCapability: REMOTE_OLLAMA_POWERSHELL_CAPABILITY,
+    payloadJson: {
+      commands: input.commands,
+      requestedBy: input.requestedBy,
+      modelId: input.modelId,
+      reason: input.reason,
+    },
+    priority: 85,
+    priorityScore: "85",
+    status: "queued",
+    retryCount: 0,
+    maxRetry: 0,
+    retryStrategy: "immediate",
+    createdAt: now,
+    updatedAt: now,
+  }).returning();
+  if (!job) throw new Error("Failed to enqueue remote PowerShell execution");
+  return job;
+}
+
+export async function waitForRemotePowerShellExecution(
+  jobId: number,
+  signal: AbortSignal,
+): Promise<Record<string, unknown>> {
+  return waitForRemoteOllamaInvocation(jobId, signal);
 }
 
 export { JobOwnershipLostError };
