@@ -43,12 +43,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors --silent --show-error \
-            -o /tmp/full -w "%{http_code}" "$API_BASE_URL/healthz/full")
-          echo "readiness_http=$code"
-          cat /tmp/full
-          test "$code" = "200"
-          grep -q '"status":"ok"' /tmp/full
+
+          # Hostinger starts accepting traffic before all sequential runtime
+          # initializers have necessarily finished. Keep readiness strict, but
+          # allow the autonomous runtime a bounded startup grace period.
+          max_attempts=12
+          for attempt in $(seq 1 "$max_attempts"); do
+            code=$(curl --http1.1 --retry 2 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 30 -L --silent --show-error \
+              -o /tmp/full -w "%{http_code}" "$API_BASE_URL/healthz/full" || true)
+
+            echo "readiness_attempt=$attempt/$max_attempts http=$code"
+            cat /tmp/full 2>/dev/null || true
+            echo
+
+            if [ "$code" = "200" ] && grep -q '"status":"ok"' /tmp/full; then
+              echo "readiness=PASS"
+              break
+            fi
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "Readiness did not become healthy within the bounded startup grace period."
+              exit 1
+            fi
+
+            sleep 10
+          done
 
       - name: Verify admin auth guard
         shell: bash
