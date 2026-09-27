@@ -10,6 +10,15 @@ import {
 const mocks = vi.hoisted(() => ({
   reserve: vi.fn(),
   release: vi.fn(),
+  hasRemote: vi.fn(),
+  enqueueRemote: vi.fn(),
+  waitRemote: vi.fn(),
+}));
+
+vi.mock("../remoteOllamaWorkerService.js", () => ({
+  hasRemoteOllamaWorker: mocks.hasRemote,
+  enqueueRemoteOllamaInvocation: mocks.enqueueRemote,
+  waitForRemoteOllamaInvocation: mocks.waitRemote,
 }));
 
 vi.mock("../ollamaWorkerRegistryService.js", () => ({
@@ -24,11 +33,45 @@ import {
 describe("scheduled Ollama constrained provider", () => {
   beforeEach(() => {
     mocks.release.mockResolvedValue(undefined);
+    mocks.hasRemote.mockResolvedValue(false);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it("uses a healthy remote pull worker without exposing its Ollama endpoint", async () => {
+    mocks.hasRemote.mockResolvedValue(true);
+    mocks.enqueueRemote.mockResolvedValue({ id: 77 });
+    mocks.waitRemote.mockResolvedValue({
+      providerRequestId: "remote-1",
+      output: { type: "text", text: "remote result" },
+      usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
+    });
+
+    const provider = createScheduledOllamaProviderAdapter({
+      modelId: "qwen2.5-coder:7b",
+    });
+    const signal = new AbortController().signal;
+    const result = await provider.invoke(
+      {
+        requestId: "req-remote",
+        input: JSON.stringify({ version: 1, system: "system", user: "user" }),
+        responseFormat: { type: "text" },
+        maxOutputTokens: 256,
+        capabilities: provider.capabilities,
+      },
+      { signal },
+    );
+
+    expect(result.output).toEqual({ type: "text", text: "remote result" });
+    expect(mocks.enqueueRemote).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: "req-remote",
+      modelId: "qwen2.5-coder:7b",
+    }));
+    expect(mocks.waitRemote).toHaveBeenCalledWith(77, signal);
+    expect(mocks.reserve).not.toHaveBeenCalled();
   });
 
   it("reserves a worker, invokes it, and releases capacity", async () => {
