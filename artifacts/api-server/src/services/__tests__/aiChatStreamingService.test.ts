@@ -80,6 +80,38 @@ describe("AI Core cloud chat streaming", () => {
     expect(body.temperature).toBeUndefined();
   });
 
+  it("keeps streaming when CRLF separators are split across network chunks", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse([
+          'data: {"id":"chatcmpl-split","choices":[{"delta":{"content":"A"}}]}\\r',
+          '\\n\\r',
+          '\\ndata: {"id":"chatcmpl-split","choices":[{"delta":{"content":"B"}}]}\\r',
+          '\\n\\r',
+          '\\ndata: {"id":"chatcmpl-split","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}}\\r\\n\\r\\n',
+          "data: [DONE]\\r\\n\\r\\n",
+        ]),
+      ),
+    );
+
+    const deltas: string[] = [];
+    const result = await streamCloudChatNoFallback({
+      providerSlug: "openai",
+      modelId: "gpt-5.6-sol",
+      prompt: "hello",
+      maxOutputTokens: 100,
+      onDelta: (value) => deltas.push(value),
+    });
+
+    expect(deltas.join("")).toBe("AB");
+    expect(result.usage).toEqual({
+      inputTokens: 2,
+      outputTokens: 2,
+      totalTokens: 4,
+    });
+  });
+
   it("streams Anthropic text deltas and usage", async () => {
     vi.stubGlobal(
       "fetch",
