@@ -422,7 +422,7 @@ describe("Local Coding AI Proposal Policy", () => {
     expect(codes(result)).toContain("SYMLINK_ESCAPE");
   });
 
-  it("rejects a symlink escape outside the repository", async () => {
+  it.skipIf(process.platform === "win32")("rejects a symlink escape outside the repository", async () => {
     const outside = await mkdtemp(join(tmpdir(), "ai-proposal-outside-"));
     try {
       await writeFile(join(outside, "owned.ts"), "x", "utf8");
@@ -438,7 +438,7 @@ describe("Local Coding AI Proposal Policy", () => {
     }
   });
 
-  it("allows a symlink that resolves to a location inside the repository", async () => {
+  it.skipIf(process.platform === "win32")("allows a symlink that resolves to a location inside the repository", async () => {
     await mkdir(join(root, "real"), { recursive: true });
     await writeFile(join(root, "real/payment.ts"), "x", "utf8");
     await symlink(join(root, "real"), join(root, "src/link"), "dir");
