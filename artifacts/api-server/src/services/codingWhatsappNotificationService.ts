@@ -24,7 +24,7 @@ function config() {
 
 export type CodingWhatsappNotifyResult =
   | { status: "skipped"; reason: "kind_not_notifiable" | "missing_config"; configured: { baseUrl: boolean; apiKey: boolean; to: boolean } }
-  | { status: "queued"; gatewayStatus: number }
+  | { status: "queued"; gatewayStatus: number; messageId: string | null }
   | { status: "rejected"; gatewayStatus: number; body: string }
   | { status: "failed"; error: string };
 
@@ -64,13 +64,98 @@ async function sendGatewayMessage(input: {
       };
     }
 
-    return { status: "queued", gatewayStatus: response.status };
+    const body = await response.json().catch(() => null) as { messageId?: unknown } | null;
+    return {
+      status: "queued",
+      gatewayStatus: response.status,
+      messageId: typeof body?.messageId === "string" ? body.messageId : null,
+    };
   } catch (error) {
     return {
       status: "failed",
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+export type CodingWhatsappDeliveryResult =
+  | { status: "sent"; messageId: string; gatewayStatus: number; sentAt?: string; waMessageId?: string | null }
+  | { status: "failed"; messageId: string; reason: string; attemptsMade?: number }
+  | { status: "timeout"; messageId: string; lastStatus: string | null }
+  | { status: "unavailable"; reason: string };
+
+export async function waitForCodingWhatsappDelivery(
+  messageId: string | null,
+  options?: { timeoutMs?: number; pollIntervalMs?: number },
+): Promise<CodingWhatsappDeliveryResult> {
+  if (!messageId) {
+    return { status: "unavailable", reason: "Gateway did not return a messageId." };
+  }
+
+  const { baseUrl, apiKey } = config();
+  if (!baseUrl || !apiKey) {
+    return { status: "unavailable", reason: "WhatsApp gateway configuration is incomplete." };
+  }
+
+  const timeoutMs = Math.max(1_000, Math.min(options?.timeoutMs ?? 30_000, 60_000));
+  const pollIntervalMs = Math.max(250, Math.min(options?.pollIntervalMs ?? 1_000, 5_000));
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus: string | null = null;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${baseUrl}/v1/messages/${encodeURIComponent(messageId)}`, {
+        headers: { authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (response.ok) {
+        const body = await response.json().catch(() => null) as {
+          status?: unknown;
+          sentAt?: unknown;
+          waMessageId?: unknown;
+          failedReason?: unknown;
+          attemptsMade?: unknown;
+        } | null;
+
+        lastStatus = typeof body?.status === "string" ? body.status : null;
+        if (lastStatus === "sent") {
+          return {
+            status: "sent",
+            messageId,
+            gatewayStatus: response.status,
+            ...(typeof body?.sentAt === "string" ? { sentAt: body.sentAt } : {}),
+            waMessageId:
+              typeof body?.waMessageId === "string" || body?.waMessageId === null
+                ? body.waMessageId
+                : null,
+          };
+        }
+        if (lastStatus === "failed") {
+          return {
+            status: "failed",
+            messageId,
+            reason:
+              typeof body?.failedReason === "string"
+                ? body.failedReason
+                : "WhatsApp worker reported a failed send.",
+            ...(typeof body?.attemptsMade === "number"
+              ? { attemptsMade: body.attemptsMade }
+              : {}),
+          };
+        }
+      }
+    } catch (error) {
+      logger.warn(
+        { messageId, err: error },
+        "[coding-wa] delivery status poll failed",
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  return { status: "timeout", messageId, lastStatus };
 }
 
 export function getCodingWhatsappConfigStatus() {
