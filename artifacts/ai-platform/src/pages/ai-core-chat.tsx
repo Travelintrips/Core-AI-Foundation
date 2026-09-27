@@ -17,7 +17,7 @@ import {
   User,
   Zap,
 } from "lucide-react";
-import { apiFetch } from "@/lib/apiFetch";
+import { apiEventStream, apiFetch } from "@/lib/apiFetch";
 
 type ChatMode = "ask" | "agent";
 type ModelPolicy = "economy" | "smart" | "auto" | "cloud";
@@ -61,6 +61,7 @@ type CoreConfig = {
   local: { ready: boolean; provider?: string; model?: string; error?: string };
   autonomous: { configured: boolean; running: boolean; pollIntervalMs: number };
   codingModel: Record<string, unknown>;
+  streaming?: { enabled: boolean; endpoint?: string; defaultPolicy?: string };
 };
 
 type TaskProgress = {
@@ -108,6 +109,7 @@ function loadHistory(): ChatMessage[] {
 }
 
 function routeLabel(route?: string | null): string {
+  if (route === "STREAMING") return "Streaming…";
   if (route === "NO_LLM") return "0 token";
   if (route === "DATA_TOOL") return "Data Tool · 0 token";
   if (route === "LOCAL") return "Local AI";
@@ -143,6 +145,7 @@ export default function AiCoreChat() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [progress, setProgress] = useState<TaskProgress | null>(null);
   const [progressError, setProgressError] = useState("");
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -195,6 +198,15 @@ export default function AiCoreChat() {
     setMessages((current) => [...current, item].slice(-MAX_MESSAGES));
   }
 
+  function updateMessage(
+    id: string,
+    updater: (message: ChatMessage) => ChatMessage,
+  ) {
+    setMessages((current) =>
+      current.map((message) => (message.id === id ? updater(message) : message)),
+    );
+  }
+
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     const text = input.trim();
@@ -215,6 +227,151 @@ export default function AiCoreChat() {
     setInput("");
     setBusy(true);
 
+    if (mode === "ask") {
+      const assistantId = messageId();
+      append({
+        id: assistantId,
+        role: "assistant",
+        text: "",
+        createdAt: new Date().toISOString(),
+        meta: { route: "STREAMING" },
+      });
+      setStreamingMessageId(assistantId);
+
+      try {
+        await apiEventStream(
+          "/api/ai/core-chat/messages/stream",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              message: text,
+              mode: "ask",
+              modelPolicy: policy,
+            }),
+          },
+          ({ event: streamEvent, data }) => {
+            const value =
+              data && typeof data === "object" && !Array.isArray(data)
+                ? (data as Record<string, unknown>)
+                : {};
+
+            if (streamEvent === "meta") {
+              updateMessage(assistantId, (message) => ({
+                ...message,
+                meta: {
+                  ...message.meta,
+                  route:
+                    typeof value.route === "string"
+                      ? value.route
+                      : message.meta?.route,
+                  provider:
+                    typeof value.provider === "string"
+                      ? value.provider
+                      : value.provider === null
+                        ? null
+                        : message.meta?.provider,
+                  model:
+                    typeof value.model === "string"
+                      ? value.model
+                      : value.model === null
+                        ? null
+                        : message.meta?.model,
+                  workload:
+                    typeof value.workload === "string"
+                      ? value.workload
+                      : message.meta?.workload,
+                  costClass:
+                    typeof value.costClass === "string"
+                      ? value.costClass
+                      : message.meta?.costClass,
+                },
+              }));
+              return;
+            }
+
+            if (streamEvent === "delta" && typeof value.text === "string") {
+              updateMessage(assistantId, (message) => ({
+                ...message,
+                text: message.text + value.text,
+              }));
+              return;
+            }
+
+            if (streamEvent === "error") {
+              const warning =
+                typeof value.warning === "string"
+                  ? value.warning
+                  : typeof value.message === "string"
+                    ? value.message
+                    : "Streaming terhenti.";
+              updateMessage(assistantId, (message) => ({
+                ...message,
+                text:
+                  message.text +
+                  (message.text ? "\n\n" : "") +
+                  "Catatan: " +
+                  warning,
+                error: !message.text,
+              }));
+              return;
+            }
+
+            if (streamEvent === "done") {
+              const usage =
+                value.usage &&
+                typeof value.usage === "object" &&
+                !Array.isArray(value.usage)
+                  ? (value.usage as TokenUsage)
+                  : null;
+              const warning =
+                typeof value.warning === "string" && value.warning
+                  ? value.warning
+                  : null;
+
+              updateMessage(assistantId, (message) => ({
+                ...message,
+                text:
+                  warning && !message.text.includes(warning)
+                    ? message.text +
+                      (message.text ? "\n\n" : "") +
+                      "Catatan: " +
+                      warning
+                    : message.text,
+                meta: {
+                  ...message.meta,
+                  usage,
+                  ...(typeof value.taskNumber === "string"
+                    ? { taskNumber: value.taskNumber }
+                    : {}),
+                  ...(typeof value.workspaceUrl === "string"
+                    ? { workspaceUrl: value.workspaceUrl }
+                    : {}),
+                },
+              }));
+
+              if (typeof value.taskId === "string" && value.taskId) {
+                setActiveTaskId(value.taskId);
+                setProgress(null);
+              }
+            }
+          },
+        );
+      } catch (error) {
+        updateMessage(assistantId, (message) => ({
+          ...message,
+          text:
+            message.text ||
+            "Permintaan gagal: " +
+              (error instanceof Error ? error.message : String(error)),
+          error: !message.text,
+        }));
+      } finally {
+        setStreamingMessageId(null);
+        setBusy(false);
+      }
+      return;
+    }
+
     try {
       const response = await apiFetch<ChatResponse>("/api/ai/core-chat/messages", {
         method: "POST",
@@ -222,14 +379,10 @@ export default function AiCoreChat() {
           message: text,
           mode,
           modelPolicy: policy,
-          ...(mode === "agent"
-            ? {
-                projectName: projectName.trim(),
-                repository: repository.trim(),
-                branch: branch.trim(),
-                priority,
-              }
-            : {}),
+          projectName: projectName.trim(),
+          repository: repository.trim(),
+          branch: branch.trim(),
+          priority,
         }),
       });
 
@@ -271,6 +424,7 @@ export default function AiCoreChat() {
     setMessages([]);
     setProgress(null);
     setActiveTaskId(null);
+    setStreamingMessageId(null);
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -305,7 +459,7 @@ export default function AiCoreChat() {
               </span>
             </div>
             <p className="text-xs mt-0.5" style={{ color: "#6B82B0" }}>
-              0 token → Smart routing → Cloud/Local, critical approval tetap terkunci.
+              0 token → Smart routing → streaming Cloud/Local, critical approval tetap terkunci.
             </p>
           </div>
         </div>
@@ -371,7 +525,10 @@ export default function AiCoreChat() {
                             : { background: "#0C152A", color: "#DCE5F7", border: "1px solid #1E3057", borderBottomLeftRadius: 5 }
                       }
                     >
-                      {message.text}
+                      {message.text || (streamingMessageId === message.id ? "AI Core mulai menjawab…" : "")}
+                      {streamingMessageId === message.id && message.text && (
+                        <span className="inline-block ml-1 w-1.5 h-4 align-middle animate-pulse" style={{ background: "#9D91FB" }} />
+                      )}
                     </div>
                     {message.role === "assistant" && message.meta && (
                       <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px]" style={{ color: "#61749E" }}>
@@ -400,7 +557,7 @@ export default function AiCoreChat() {
                 </div>
               ))}
 
-              {busy && (
+              {busy && !streamingMessageId && (
                 <div className="flex items-center gap-3">
                   <div className="size-8 rounded-lg flex items-center justify-center" style={{ background: "#171F3F", border: "1px solid #2B3971" }}>
                     <Bot className="size-4" style={{ color: "#9D91FB" }} />
@@ -494,7 +651,7 @@ export default function AiCoreChat() {
                       ? policy === "economy"
                         ? "Economy: local only, tanpa biaya cloud."
                         : policy === "smart"
-                          ? "Smart: pilih model cloud sesuai tugas & biaya; local menjadi fallback."
+                          ? "Smart: streaming cloud sesuai tugas & biaya; local menjadi fallback."
                           : policy === "auto"
                             ? "Auto: local dulu, cloud hanya bila local gagal."
                             : "Cloud: gunakan cloud route sesuai workload."
