@@ -11,7 +11,7 @@
  */
 
 import { eq, and, or, inArray, desc, sql } from "drizzle-orm";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { db, aiJobsTable, aiExecutionPlansTable, aiDepartmentsTable } from "@workspace/db";
 import type { InsertAiJob } from "@workspace/db";
 import { computePriorityScore } from "./priorityEngine.js";
@@ -24,6 +24,8 @@ export interface EnqueueJobInput {
   payloadJson?: Record<string, unknown>;
   /** Canonical worker capability persisted on ai_jobs.required_capability. */
   requiredCapability?: string;
+  /** Stable caller key used to make enqueue retry-safe after ambiguous DB/network failures. */
+  idempotencyKey?: string;
   priority?: number;
   executionPlanId?: number | null;
   departmentId?: number | null;
@@ -90,7 +92,9 @@ export async function enqueue(input: EnqueueJobInput) {
     managerOverride:       input.managerOverride,
   });
 
-  const jobCode = `JOB-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const jobCode = input.idempotencyKey
+    ? `JOB-I-${createHash("sha256").update(input.idempotencyKey, "utf8").digest("hex").slice(0, 20).toUpperCase()}`
+    : `JOB-${randomUUID().slice(0, 8).toUpperCase()}`;
 
   // WP-06 — Stamp server-resolved tenantId into payloadJson so workers can
   // reconstruct RequestContext without a DB round-trip. The reserved key
@@ -120,7 +124,29 @@ export async function enqueue(input: EnqueueJobInput) {
     retryCount:        0,
   };
 
-  const [job] = await db.insert(aiJobsTable).values(insert).returning();
+  let job;
+  if (input.idempotencyKey) {
+    const [inserted] = await db
+      .insert(aiJobsTable)
+      .values(insert)
+      .onConflictDoNothing({ target: aiJobsTable.jobCode })
+      .returning();
+    if (inserted) {
+      job = inserted;
+    } else {
+      const [existing] = await db
+        .select()
+        .from(aiJobsTable)
+        .where(eq(aiJobsTable.jobCode, jobCode))
+        .limit(1);
+      if (!existing) {
+        throw new Error(`Idempotent queue insert for ${jobCode} conflicted but the existing job could not be loaded`);
+      }
+      job = existing;
+    }
+  } else {
+    [job] = await db.insert(aiJobsTable).values(insert).returning();
+  }
 
   await logAudit(
     "job-engine",
@@ -128,7 +154,7 @@ export async function enqueue(input: EnqueueJobInput) {
     String(job.id),
     "ai_job",
     "success",
-    { jobCode, jobType: input.jobType, score },
+    { jobCode, jobType: input.jobType, score, idempotent: Boolean(input.idempotencyKey) },
   );
 
   return job;
