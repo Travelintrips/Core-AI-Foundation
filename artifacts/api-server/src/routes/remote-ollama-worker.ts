@@ -24,6 +24,11 @@ const registerSchema = z.object({
 const resultSchema = z.object({ result: z.record(z.string(), z.unknown()) }).strict();
 const retrySchema = z.object({ error: z.string().min(1).max(2_000) }).strict();
 
+function routeParam(req: Request, key: string): string {
+  const value = req.params[key];
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+}
+
 function workerToken(req: Request): string | undefined {
   const direct = req.headers["x-ollama-worker-token"];
   if (typeof direct === "string" && direct.trim()) return direct.trim();
@@ -32,7 +37,7 @@ function workerToken(req: Request): string | undefined {
 }
 
 async function requireWorker(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const workerId = Number.parseInt(req.params["id"] ?? "", 10);
+  const workerId = Number.parseInt(routeParam(req, "id"), 10);
   if (!Number.isInteger(workerId) || workerId <= 0) {
     res.status(400).json({ error: "Invalid worker id" });
     return;
@@ -90,7 +95,7 @@ router.post("/ai/ollama-workers/register", async (req, res): Promise<void> => {
 });
 
 router.post("/ai/ollama-workers/:id/heartbeat", requireWorker, async (req, res): Promise<void> => {
-  const workerId = Number.parseInt(req.params["id"]!, 10);
+  const workerId = Number.parseInt(routeParam(req, "id"), 10);
   const token = workerToken(req)!;
   const worker = await heartbeatRemoteOllamaWorker(workerId, token);
   if (!worker) {
@@ -101,7 +106,7 @@ router.post("/ai/ollama-workers/:id/heartbeat", requireWorker, async (req, res):
 });
 
 router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Promise<void> => {
-  const workerId = Number.parseInt(req.params["id"]!, 10);
+  const workerId = Number.parseInt(routeParam(req, "id"), 10);
   const job = await claimRemoteOllamaInvocation(workerId);
   if (!job) {
     res.status(204).end();
@@ -118,8 +123,8 @@ router.post("/ai/ollama-workers/:id/jobs/:jobId/complete", requireWorker, async 
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const workerId = Number.parseInt(req.params["id"]!, 10);
-  const jobId = Number.parseInt(req.params["jobId"] ?? "", 10);
+  const workerId = Number.parseInt(routeParam(req, "id"), 10);
+  const jobId = Number.parseInt(routeParam(req, "jobId"), 10);
   if (!Number.isInteger(jobId) || jobId <= 0) {
     res.status(400).json({ error: "Invalid job id" });
     return;
@@ -146,8 +151,8 @@ router.post("/ai/ollama-workers/:id/jobs/:jobId/retry", requireWorker, async (re
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const workerId = Number.parseInt(req.params["id"]!, 10);
-  const jobId = Number.parseInt(req.params["jobId"] ?? "", 10);
+  const workerId = Number.parseInt(routeParam(req, "id"), 10);
+  const jobId = Number.parseInt(routeParam(req, "jobId"), 10);
   if (!Number.isInteger(jobId) || jobId <= 0) {
     res.status(400).json({ error: "Invalid job id" });
     return;
