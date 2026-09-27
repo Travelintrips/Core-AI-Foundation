@@ -157,8 +157,16 @@ router.post("/ai/ollama-workers/:id/jobs/:jobId/retry", requireWorker, async (re
     res.status(400).json({ error: "Invalid job id" });
     return;
   }
-  const job = await retryRemoteOllamaInvocation(workerId, jobId, body.data.error);
-  res.json({ jobId: job.id, status: job.status, retryCount: job.retryCount });
+  try {
+    const job = await retryRemoteOllamaInvocation(workerId, jobId, body.data.error);
+    res.json({ jobId: job.id, status: job.status, retryCount: job.retryCount });
+  } catch (error) {
+    if (error instanceof JobOwnershipLostError) {
+      res.status(409).json({ error: "Worker no longer owns this job" });
+      return;
+    }
+    throw error;
+  }
 });
 
 export default router;
