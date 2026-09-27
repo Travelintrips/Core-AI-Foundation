@@ -146,18 +146,27 @@ jobs:
 
           run_status=""
           for attempt in $(seq 1 60); do
-            code=$(curl -sS -o /tmp/task-status.json -w "%{http_code}" "$API_BASE_URL/ai/coding/tasks/$task" \
-              -H "x-admin-api-key: $ADMIN_API_KEY")
-            if [ "$code" != "200" ]; then
-              echo "::error::Read coding task during analysis failed with HTTP $code"
-              cat /tmp/task-status.json
-              exit 1
+            rm -f /tmp/task-status.json /tmp/task-status.headers
+            code=$(curl -sS -D /tmp/task-status.headers -o /tmp/task-status.json -w "%{http_code}"               --connect-timeout 15 --max-time 30               "$API_BASE_URL/ai/coding/tasks/$task"               -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+
+            if [ "$code" = "200" ]; then
+              run_status=$(jq -r --arg run "$run_id" '.runs[]? | select(.id == $run) | .status' /tmp/task-status.json | head -1)
+              if [[ "$run_status" == "COMPLETED" || "$run_status" == "FAILED" || "$run_status" == "CANCELLED" ]]; then
+                break
+              fi
+              sleep 5
+              continue
             fi
-            run_status=$(jq -r --arg run "$run_id" '.runs[]? | select(.id == $run) | .status' /tmp/task-status.json | head -1)
-            if [[ "$run_status" == "COMPLETED" || "$run_status" == "FAILED" || "$run_status" == "CANCELLED" ]]; then
-              break
+
+            if [[ "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" || "$code" = "000" ]]; then
+              echo "Read coding task transient HTTP ${code:-curl-error} (attempt $attempt/60); retrying in 5s..."
+              sleep 5
+              continue
             fi
-            sleep 5
+
+            echo "::error::Read coding task during analysis failed with HTTP $code"
+            cat /tmp/task-status.json 2>/dev/null || true
+            exit 1
           done
           if [ "$run_status" != "COMPLETED" ]; then
             echo "::error::Repository analysis run $run_id ended without COMPLETED status: ${run_status:-missing}"
