@@ -103,6 +103,7 @@ describe("AI Core read-only data tools", () => {
         "booking_number",
         "customer_name",
         "facility_id",
+        "facility_name",
         "booking_date",
         "start_time",
         "end_time",
