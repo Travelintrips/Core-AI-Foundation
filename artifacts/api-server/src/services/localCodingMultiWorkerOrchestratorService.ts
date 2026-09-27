@@ -480,6 +480,31 @@ export async function completeCodingWorkstreamClaim(
         .where(eq(aiCodingTaskGraphsTable.id, completed.graphId));
     }
 
+    if (options?.completeChildTask) {
+      if (!completed.childTaskId) {
+        throw new LocalCodingMultiWorkerError(
+          "Completed workstream is missing its child coding task binding.",
+          "NOT_READY",
+        );
+      }
+      const [childTask] = await tx
+        .update(aiCodingTasksTable)
+        .set({
+          status: "COMPLETED",
+          resultSummary:
+            options.childTaskResultSummary ??
+            "Reviewed coding workstream completed successfully.",
+        })
+        .where(eq(aiCodingTasksTable.id, completed.childTaskId))
+        .returning();
+      if (!childTask) {
+        throw new LocalCodingMultiWorkerError(
+          "Child coding task completion update was lost.",
+          "CLAIM_FAILED",
+        );
+      }
+    }
+
     return completed;
   });
 }
@@ -559,6 +584,10 @@ export async function markCodingWorkstreamReviewRequired(
 
 export async function completeReviewedCodingWorkstream(
   workstreamId: string,
+  options?: {
+    completeChildTask?: boolean;
+    childTaskResultSummary?: string;
+  },
 ): Promise<AiCodingWorkstream> {
   const now = new Date();
 
