@@ -597,6 +597,11 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       return executeInteriorRenderVariant(job);
     }
 
+    case "blender_3d_scene": {
+      const { executeBlender3dJob } = await import("./blenderLocal3dWorkerService.js");
+      return executeBlender3dJob(job);
+    }
+
     case "image_qc":
       throw new WorkerNotImplementedError("image_qc");
 
