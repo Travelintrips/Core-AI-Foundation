@@ -152,6 +152,53 @@ describe("Local Coding AI Handoff Package", () => {
     expect(pkg.dependencies).toHaveLength(1);
   });
 
+  it("supports an empty current patch for direct initial AI_REQUIRED handoff", () => {
+    const pkg = buildAiHandoffPackage({
+      task: {
+        id: "44444444-4444-4444-8444-444444444444",
+        projectName: "Direct AI required",
+        instruction: "Create exactly one new file docs/direct-smoke.md",
+        repository: "owner/repo",
+        branch: "main",
+      },
+      baseHeadSha: "d".repeat(40),
+      reason: "Deterministic executor classified the task as AI_REQUIRED.",
+      recoveryContext: {
+        ...recoveryContext(),
+        focusFiles: ["docs/direct-smoke.md"],
+        focusSymbols: [],
+        dependencies: [],
+        relatedTests: [],
+      },
+      failureContexts: [{
+        command: "local-coding-analysis",
+        status: "FAILED",
+        exitCode: null,
+        kind: "unknown",
+        diagnostics: [{
+          kind: "unknown",
+          file: "docs/direct-smoke.md",
+          code: "TARGET_NOT_PRESENT",
+          message: "The exact approved target does not exist at the approved base SHA.",
+        }],
+        primaryFiles: ["docs/direct-smoke.md"],
+        errorCodes: ["TARGET_NOT_PRESENT"],
+        retry: { allowed: false, reason: "AI reasoning required" },
+        warnings: [],
+      }],
+      snippets: [],
+      currentPatch: "",
+    });
+
+    expect(pkg.allowedFiles).toEqual(["docs/direct-smoke.md"]);
+    expect(pkg.currentPatch.excerpt).toBe("");
+    expect(pkg.currentPatch.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(pkg.diagnostics[0]).toMatchObject({
+      file: "docs/direct-smoke.md",
+      code: "TARGET_NOT_PRESENT",
+    });
+  });
+
   it("keeps snippets and allowed files bounded", () => {
     const snippets: AiHandoffSnippet[] = Array.from({ length: 20 }, (_, index) => ({
       file: index === 0 ? "src/payment.ts" : "src/reconcile.ts",
