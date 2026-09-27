@@ -23,6 +23,7 @@
     "migrate:tkl-v50": "tsx --tsconfig tsconfig.json src/migrate-tkl-v50.ts",
     "migrate:catalog-ux": "tsx --tsconfig tsconfig.json src/migrate-catalog-ux.ts",
     "worker:ollama-remote": "tsx --tsconfig tsconfig.json src/scripts/remoteOllamaWorker.ts",
+    "worker:ollama-remote:self-test": "tsx --tsconfig tsconfig.json src/scripts/remoteOllamaWorker.ts --self-test",
     "powershell:ollama": "tsx --tsconfig tsconfig.json src/scripts/localTrustedOllamaPowerShell.ts"
   },
   "dependencies": {
