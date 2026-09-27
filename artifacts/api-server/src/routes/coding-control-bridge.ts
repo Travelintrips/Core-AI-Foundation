@@ -11,6 +11,7 @@ import {
   disableAutonomousCodingTask,
   enableAutonomousCodingTask,
   getAutonomousCodingTaskStatus,
+  getAutonomousRuntimeStatus,
   runAutonomousCodingCycle,
 } from "../services/localCodingAutonomousRepairService.js";
 const router=Router(); const Uuid=z.string().uuid();
@@ -77,6 +78,36 @@ router.get("/ai/coding/bridge/critical-approvals/:id",async(req,res):Promise<voi
  res.json(approval);
 });
 
+router.get("/ai/coding/bridge/runtime-status",async(_req,res):Promise<void>=>{
+ const autonomous=getAutonomousRuntimeStatus();
+ const whatsapp=getCodingWhatsappConfigStatus();
+ const githubConfigured=Boolean(process.env["AI_CODING_GITHUB_TOKEN"]?.trim());
+ const incomingSecretConfigured=Boolean(process.env["AI_CODING_WA_INCOMING_SECRET"]?.trim());
+ const allowedSendersConfigured=Boolean(process.env["AI_CODING_WA_ALLOWED_SENDERS"]?.trim());
+ const buildCommitSha=(process.env["CST_BUILD_COMMIT_SHA"]??"unknown").trim()||"unknown";
+ const production=process.env["NODE_ENV"]==="production";
+ const ready=
+  autonomous.configured&&
+  autonomous.running&&
+  whatsapp.baseUrl&&
+  whatsapp.apiKey&&
+  whatsapp.to&&
+  githubConfigured&&
+  incomingSecretConfigured&&
+  allowedSendersConfigured;
+ res.status(ready?200:503).json({
+  ready,
+  production,
+  buildCommitSha,
+  autonomous,
+  dependencies:{
+   githubConfigured,
+   whatsapp,
+   incomingSecretConfigured,
+   allowedSendersConfigured
+  }
+ });
+});
 router.get("/ai/coding/bridge/whatsapp-status",async(_req,res):Promise<void>=>{res.json({configured:getCodingWhatsappConfigStatus()});});
 router.post("/ai/coding/bridge/whatsapp-test",async(_req,res):Promise<void>=>{const id=randomUUID();const result=await notifyCodingBridgeResponse({responseId:id,commandId:id,kind:"CHECKPOINT",message:"AI Core production WhatsApp diagnostic test."});const ok=result.status==="queued";res.status(ok?200:503).json({ok,result});});
 export default router;
