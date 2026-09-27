@@ -45,6 +45,14 @@ type MissionControlSnapshot = {
     attemptCount: number;
     dependencies: string[];
     errorMessage: string | null;
+    ciSelfRepair: {
+      status: string;
+      attempt: number | null;
+      maxAttempts: number | null;
+      checkName: string | null;
+      failureSummary: string | null;
+      repairCommitSha: string | null;
+    } | null;
   }>;
   blockers: Array<{
     key: string;
@@ -924,6 +932,60 @@ export function CodingMissionControlPanel({
                             : "Complete reviewed workstream"}
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {item.ciSelfRepair && (
+                    <div
+                      className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.03] p-3"
+                      data-testid={`panel-ci-self-repair-${item.key}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-300">
+                          {item.ciSelfRepair.status === "WAITING_CI"
+                            ? <Loader2 className="size-3 animate-spin" />
+                            : <RefreshCw className="size-3" />}
+                          CI self-repair
+                        </div>
+                        <span className="font-mono text-[9px] text-cyan-200">
+                          {item.ciSelfRepair.status}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                        <div className="rounded border border-white/[0.06] bg-black/10 p-2">
+                          <div className="text-[8px] uppercase text-slate-600">attempt</div>
+                          <div className="mt-1 font-mono text-[9px] text-slate-200">
+                            {item.ciSelfRepair.attempt ?? "—"} / {item.ciSelfRepair.maxAttempts ?? "—"}
+                          </div>
+                        </div>
+                        <div className="rounded border border-white/[0.06] bg-black/10 p-2">
+                          <div className="text-[8px] uppercase text-slate-600">check</div>
+                          <div className="mt-1 truncate font-mono text-[9px] text-slate-200">
+                            {item.ciSelfRepair.checkName ?? "GitHub CI"}
+                          </div>
+                        </div>
+                        <div className="rounded border border-white/[0.06] bg-black/10 p-2">
+                          <div className="text-[8px] uppercase text-slate-600">repair commit</div>
+                          <div className="mt-1 font-mono text-[9px] text-slate-200" title={item.ciSelfRepair.repairCommitSha ?? undefined}>
+                            {item.ciSelfRepair.repairCommitSha
+                              ? shortHash(item.ciSelfRepair.repairCommitSha)
+                              : "pending"}
+                          </div>
+                        </div>
+                      </div>
+                      {item.ciSelfRepair.failureSummary && (
+                        <div className="mt-2 rounded border border-rose-300/10 bg-rose-300/[0.025] p-2 text-[9px] leading-4 text-rose-100/90">
+                          <span className="text-rose-300">CI error · </span>
+                          {item.ciSelfRepair.failureSummary}
+                        </div>
+                      )}
+                      <div className="mt-2 text-[9px] text-slate-500">
+                        {item.ciSelfRepair.status === "WAITING_CI"
+                          ? "Repair commit sudah dipush. Menunggu GitHub CI menjalankan verifikasi ulang."
+                          : item.ciSelfRepair.status === "EXHAUSTED"
+                            ? "Batas retry tercapai. Review manual diperlukan."
+                            : "AI Core sedang menangani kegagalan CI secara otomatis."}
+                      </div>
                     </div>
                   )}
 
