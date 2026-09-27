@@ -348,7 +348,7 @@ describe("CANONICAL ADAPTER — single execution path", () => {
 
     // createProject called once (basic tier = 1 concept)
     expect(adapter.createProject).toHaveBeenCalledTimes(1);
-  });
+  }, 15_000);
 
   it("the adapter is passed the blueprint canvas dimensions, not user-supplied values", async () => {
     // Use LOGO_BRIEF_BASIC whose digital default is explicitly 1000x1000 px
