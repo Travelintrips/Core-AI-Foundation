@@ -204,6 +204,135 @@ async function tenantOutstandingSummary(): Promise<AiCoreDataToolResult> {
   };
 }
 
+
+export type AiCoreDataToolReadiness = {
+  status: "ok" | "degraded";
+  tools: {
+    sportCenterBookingLookup: {
+      ready: boolean;
+      missing: string[];
+    };
+    tenantOutstandingSummary: {
+      ready: boolean;
+      missing: string[];
+    };
+  };
+};
+
+const DATA_TOOL_SCHEMA_REQUIREMENTS = {
+  sportCenterBookingLookup: {
+    sport_bookings: [
+      "id",
+      "booking_number",
+      "customer_name",
+      "facility_id",
+      "booking_date",
+      "start_time",
+      "end_time",
+      "total_price",
+      "payment_status",
+      "status",
+      "payment_method",
+    ],
+    sport_facilities: ["id", "name"],
+    sport_payments: [
+      "id",
+      "booking_id",
+      "payment_number",
+      "amount",
+      "payment_method",
+      "status",
+      "paid_at",
+    ],
+  },
+  tenantOutstandingSummary: {
+    tenant_invoices: [
+      "tenant_id",
+      "outstanding_amount",
+      "total_amount",
+      "paid_amount",
+      "status",
+      "period_start",
+      "issued_date",
+      "created_at",
+    ],
+    tenants: ["id", "business_name"],
+  },
+} as const;
+
+function readinessForRequirements(
+  available: Map<string, Set<string>>,
+  requirements: Record<string, readonly string[]>,
+): { ready: boolean; missing: string[] } {
+  const missing: string[] = [];
+  for (const [table, columns] of Object.entries(requirements)) {
+    const present = available.get(table);
+    if (!present) {
+      missing.push(`public.${table}`);
+      continue;
+    }
+    for (const column of columns) {
+      if (!present.has(column)) {
+        missing.push(`public.${table}.${column}`);
+      }
+    }
+  }
+  return { ready: missing.length === 0, missing };
+}
+
+export async function getAiCoreDataToolReadiness(): Promise<AiCoreDataToolReadiness> {
+  const tableNames = [
+    "sport_bookings",
+    "sport_facilities",
+    "sport_payments",
+    "tenant_invoices",
+    "tenants",
+  ];
+
+  const result = await db.execute(sql`
+    SELECT table_name, column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name IN (
+        'sport_bookings',
+        'sport_facilities',
+        'sport_payments',
+        'tenant_invoices',
+        'tenants'
+      )
+  `);
+
+  const available = new Map<string, Set<string>>();
+  for (const row of rowsOf<Record<string, unknown>>(result)) {
+    const table = typeof row.table_name === "string" ? row.table_name : "";
+    const column = typeof row.column_name === "string" ? row.column_name : "";
+    if (!table || !column || !tableNames.includes(table)) continue;
+    const set = available.get(table) ?? new Set<string>();
+    set.add(column);
+    available.set(table, set);
+  }
+
+  const sportCenterBookingLookup = readinessForRequirements(
+    available,
+    DATA_TOOL_SCHEMA_REQUIREMENTS.sportCenterBookingLookup,
+  );
+  const tenantOutstandingSummary = readinessForRequirements(
+    available,
+    DATA_TOOL_SCHEMA_REQUIREMENTS.tenantOutstandingSummary,
+  );
+
+  return {
+    status:
+      sportCenterBookingLookup.ready && tenantOutstandingSummary.ready
+        ? "ok"
+        : "degraded",
+    tools: {
+      sportCenterBookingLookup,
+      tenantOutstandingSummary,
+    },
+  };
+}
+
 export async function tryRunAiCoreDataTool(
   message: string,
 ): Promise<AiCoreDataToolResult> {

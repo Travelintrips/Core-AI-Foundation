@@ -36,6 +36,7 @@ type ChatMessage = {
     usage?: TokenUsage | null;
     workload?: string | null;
     costClass?: string | null;
+    estimatedCostUsd?: number | null;
     taskNumber?: string;
     workspaceUrl?: string;
   };
@@ -50,6 +51,7 @@ type ChatResponse = {
   usage?: TokenUsage | null;
   workload?: string | null;
   costClass?: string | null;
+  estimatedCostUsd?: number | null;
   taskId?: string;
   taskNumber?: string;
   status?: string;
@@ -191,6 +193,14 @@ export default function AiCoreChat() {
 
   const totalTokens = useMemo(
     () => messages.reduce((sum, item) => sum + (item.meta?.usage?.totalTokens ?? 0), 0),
+    [messages],
+  );
+  const totalEstimatedCostUsd = useMemo(
+    () =>
+      messages.reduce(
+        (sum, item) => sum + (item.meta?.estimatedCostUsd ?? 0),
+        0,
+      ),
     [messages],
   );
 
@@ -340,6 +350,10 @@ export default function AiCoreChat() {
                 meta: {
                   ...message.meta,
                   usage,
+                  estimatedCostUsd:
+                    typeof value.estimatedCostUsd === "number"
+                      ? value.estimatedCostUsd
+                      : message.meta?.estimatedCostUsd ?? null,
                   ...(typeof value.taskNumber === "string"
                     ? { taskNumber: value.taskNumber }
                     : {}),
@@ -398,6 +412,7 @@ export default function AiCoreChat() {
           usage: response.usage,
           workload: response.workload,
           costClass: response.costClass,
+          estimatedCostUsd: response.estimatedCostUsd,
           ...(response.taskNumber ? { taskNumber: response.taskNumber } : {}),
           ...(response.workspaceUrl ? { workspaceUrl: response.workspaceUrl } : {}),
         },
@@ -478,6 +493,9 @@ export default function AiCoreChat() {
           <div className="px-3 py-2 rounded-lg font-mono" style={{ background: "#0A1327", border: "1px solid #1E3057", color: "#7F91B8" }}>
             {totalTokens.toLocaleString()} tokens
           </div>
+          <div className="px-3 py-2 rounded-lg font-mono" style={{ background: "#0A1327", border: "1px solid #1E3057", color: "#7F91B8" }}>
+            ${totalEstimatedCostUsd.toFixed(6)}
+          </div>
           <button onClick={clearChat} className="p-2 rounded-lg hover:bg-white/5" style={{ color: "#6B82B0", border: "1px solid #1E3057" }} title="Hapus riwayat chat lokal">
             <Trash2 className="size-4" />
           </button>
@@ -538,6 +556,9 @@ export default function AiCoreChat() {
                         {message.meta.workload && <span>• {message.meta.workload}</span>}
                         {message.meta.costClass && <span>• cost {message.meta.costClass}</span>}
                         {message.meta.usage && <span>• {message.meta.usage.totalTokens.toLocaleString()} tokens</span>}
+                        {typeof message.meta.estimatedCostUsd === "number" && (
+                          <span>• ${message.meta.estimatedCostUsd.toFixed(6)}</span>
+                        )}
                         {message.meta.taskNumber && <span>• {message.meta.taskNumber}</span>}
                         {message.meta.workspaceUrl && (
                           <Link href={message.meta.workspaceUrl}>
