@@ -130,6 +130,40 @@ jobs:
           smoke_chat "hello" /tmp/ai-core-chat-hello
           smoke_chat "/routing" /tmp/ai-core-chat-routing
 
+          stream_payload='{"message":"hello","mode":"ask","modelPolicy":"smart"}'
+          stream_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -N -sS \
+            -o /tmp/ai-core-chat-stream -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "Content-Type: application/json" \
+            -H "Accept: text/event-stream" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$stream_payload" \
+            "$API_BASE_URL/ai/core-chat/messages/stream")
+          echo "ai_core_chat_stream_smoke_http=$stream_code"
+          cat /tmp/ai-core-chat-stream
+          test "$stream_code" = "200"
+          grep -q '^event: meta' /tmp/ai-core-chat-stream
+          grep -q '^event: delta' /tmp/ai-core-chat-stream
+          grep -q '^event: done' /tmp/ai-core-chat-stream
+          node - <<'NODE'
+          const fs = require("fs");
+          const raw = fs.readFileSync("/tmp/ai-core-chat-stream", "utf8").replace(/\r/g, "");
+          const blocks = raw.split("\n\n").filter(Boolean);
+          const events = blocks.map((block) => {
+            const lines = block.split("\n");
+            const event = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
+            const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+            return { event, data: data ? JSON.parse(data) : null };
+          });
+          const meta = events.find((item) => item.event === "meta")?.data;
+          const delta = events.find((item) => item.event === "delta")?.data;
+          const done = events.find((item) => item.event === "done")?.data;
+          if (meta?.route !== "NO_LLM") throw new Error("Expected streamed deterministic NO_LLM route");
+          if (typeof delta?.text !== "string" || !delta.text.includes("Halo")) throw new Error("Expected streamed greeting delta");
+          if (done?.usage?.totalTokens !== 0) throw new Error("Streamed deterministic smoke must use 0 tokens");
+          console.log("ai_core_chat_stream_smoke=PASS");
+          NODE
+
       - name: Inspect ZeroLLM host readiness
         shell: bash
         env:
