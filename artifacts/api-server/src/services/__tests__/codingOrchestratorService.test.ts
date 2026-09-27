@@ -247,6 +247,39 @@ describe("Coding Orchestrator", () => {
     expect(finalLogs).not.toContain('"implementationPlan"');
   });
 
+  it("falls back to one final AI_REQUIRED state when the multi-task planner fails", async () => {
+    mockGenerateAndPersistCodingMultiTaskPlan.mockRejectedValueOnce(
+      new Error("Constrained multi-task planner model invocation failed."),
+    );
+
+    await startCodingOrchestration({ task: task as never, run: run as never });
+
+    await vi.waitFor(() => {
+      const values = mockUpdateSet.mock.calls
+        .map(([value]) => value)
+        .filter((value) => value && typeof value === "object");
+
+      const finalReadyReview = values.find((value) =>
+        (value as { status?: string; resultSummary?: string }).status === "READY_REVIEW" &&
+        (value as { resultSummary?: string }).resultSummary?.includes("AI reasoning is required"),
+      );
+      expect(finalReadyReview).toBeTruthy();
+
+      const failedTaskUpdate = values.find((value) =>
+        (value as { status?: string; resultSummary?: string }).status === "FAILED" &&
+        (value as { resultSummary?: string }).resultSummary?.includes("Coding Orchestrator failed"),
+      );
+      expect(failedTaskUpdate).toBeUndefined();
+
+      const aiRequiredLogs = values
+        .map((value) => (value as { logs?: string }).logs)
+        .filter((value): value is string => typeof value === "string")
+        .filter((value) => value.includes('"nextAction": "AI_REQUIRED"'));
+
+      expect(aiRequiredLogs).toHaveLength(1);
+    });
+  });
+
   it("surfaces a deterministic review-only patch before any AI fallback", async () => {
     mockExecuteRepositoryAnalyzerJobOnDemand.mockResolvedValueOnce({
       codingTaskId: task.id,
