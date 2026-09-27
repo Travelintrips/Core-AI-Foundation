@@ -247,6 +247,43 @@ describe("Coding Orchestrator", () => {
     expect(finalLogs).not.toContain('"implementationPlan"');
   });
 
+  it("retries ambiguous analyzer enqueue failures with one stable idempotency key", async () => {
+    mockEnqueue
+      .mockRejectedValueOnce(new Error("transient db timeout"))
+      .mockRejectedValueOnce(new Error("connection reset"))
+      .mockResolvedValueOnce({
+        id: 702,
+        jobType: "coding_repository_analyzer",
+        status: "queued",
+        payloadJson: {
+          codingTaskId: task.id,
+          codingRunId: run.id,
+        },
+      });
+
+    const started = await startCodingOrchestration({
+      task: task as never,
+      run: run as never,
+    });
+
+    expect(started.sessionId).toBe(`coding-${run.id}`);
+    expect(mockEnqueue).toHaveBeenCalledTimes(3);
+    for (const [input] of mockEnqueue.mock.calls) {
+      expect(input).toMatchObject({
+        idempotencyKey: `coding-repository-analyzer:${run.id}`,
+        jobType: "coding_repository_analyzer",
+        requiredCapability: "coding_repository_analyzer_on_demand",
+      });
+    }
+
+    await vi.waitFor(() => {
+      expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 702 }),
+        { finalizeCodingRun: false },
+      );
+    });
+  });
+
   it("surfaces a deterministic review-only patch before any AI fallback", async () => {
     mockExecuteRepositoryAnalyzerJobOnDemand.mockResolvedValueOnce({
       codingTaskId: task.id,
