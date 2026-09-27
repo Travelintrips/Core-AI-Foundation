@@ -668,7 +668,13 @@ export default function FashionDesignAdminPage() {
 
                 {fashionScene && (
                   <div className="space-y-4">
-                    <Design3DViewer scene={fashionScene} />
+                    <Design3DViewer
+                      scene={fashionScene}
+                      onSceneChange={(nextScene) => {
+                        setFashionScene(nextScene);
+                        saveFashionSceneMutation.mutate(nextScene);
+                      }}
+                    />
                     <FashionEmbellishmentEditor
                       scene={fashionScene}
                       onChange={(embellishments) => setFashionScene(current => {
