@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { logger } from "../lib/logger.js";
 
 type CodingBridgeKind =
@@ -177,6 +178,50 @@ export async function sendCodingApprovalResult(input: {
   return sendGatewayMessage({
     idempotencyKey: `ai-core-approval-result-${input.approvalId}-${input.status}`,
     clientMessageId: `${input.approvalId}-${input.status.toLowerCase()}`,
+    text,
+  });
+}
+
+
+export async function sendCodingTaskStatusNotification(input: {
+  taskId: string;
+  taskNumber?: string | null;
+  projectName?: string | null;
+  repository?: string | null;
+  branch?: string | null;
+  status: "RUNNING" | "COMPLETED" | "FAILED";
+  message: string;
+  changedFiles?: string[];
+  verificationStatus?: string | null;
+}): Promise<CodingWhatsappNotifyResult> {
+  const text = [
+    input.status === "COMPLETED"
+      ? "✅ AI Core Coding Selesai"
+      : input.status === "FAILED"
+        ? "❌ AI Core Coding Gagal"
+        : "🤖 AI Core Coding Berjalan",
+    input.projectName ? `Project: ${input.projectName}` : "",
+    input.taskNumber ? `Task: ${input.taskNumber}` : `Task ID: ${input.taskId}`,
+    input.repository ? `Repository: ${input.repository}` : "",
+    input.branch ? `Branch: ${input.branch}` : "",
+    `Status: ${input.status}`,
+    input.verificationStatus
+      ? `Verification: ${input.verificationStatus}`
+      : "",
+    input.changedFiles?.length
+      ? `File berubah: ${input.changedFiles.length}\n${input.changedFiles
+          .slice(0, 8)
+          .map((file) => `- ${file}`)
+          .join("\n")}`
+      : "",
+    input.message.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return sendGatewayMessage({
+    idempotencyKey: `ai-core-task-${input.taskId}-${input.status.toLowerCase()}-${createHash("sha256").update(text).digest("hex").slice(0, 12)}`,
+    clientMessageId: `coding-${input.taskId}-${input.status.toLowerCase()}-${Date.now()}`,
     text,
   });
 }
