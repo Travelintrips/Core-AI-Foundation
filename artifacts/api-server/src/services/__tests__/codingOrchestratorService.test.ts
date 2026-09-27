@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockInsertValues = vi.hoisted(() => vi.fn());
+const mockInsertOnConflictDoNothing = vi.hoisted(() => vi.fn());
 const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTransaction = vi.hoisted(() => vi.fn());
@@ -14,6 +15,7 @@ const mockGenerateAndPersistCodingMultiTaskPlan = vi.hoisted(() => vi.fn());
 
 const insertBuilder = {
   values: mockInsertValues,
+  onConflictDoNothing: mockInsertOnConflictDoNothing,
 };
 const updateBuilder = {
   set: mockUpdateSet,
@@ -103,7 +105,8 @@ describe("Coding Orchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockInsertValues.mockResolvedValue([]);
+    mockInsertValues.mockReturnValue(insertBuilder);
+    mockInsertOnConflictDoNothing.mockResolvedValue([]);
     mockUpdateSet.mockReturnValue(updateBuilder);
     mockUpdateWhere.mockResolvedValue([]);
     mockTransaction.mockImplementation((callback: (executor: typeof tx) => unknown) => callback(tx));
@@ -245,6 +248,29 @@ describe("Coding Orchestrator", () => {
     expect(finalLogs).toContain('"graphVersion": 1');
     expect(finalLogs).toContain('"provider": "openai"');
     expect(finalLogs).not.toContain('"implementationPlan"');
+  });
+
+  it("retries transient orchestrator session bootstrap failures idempotently", async () => {
+    mockInsertOnConflictDoNothing
+      .mockRejectedValueOnce(new Error("session insert timeout"))
+      .mockRejectedValueOnce(new Error("connection reset"))
+      .mockResolvedValueOnce([]);
+
+    const started = await startCodingOrchestration({
+      task: task as never,
+      run: run as never,
+    });
+
+    expect(started.sessionId).toBe(`coding-${run.id}`);
+    expect(mockInsertOnConflictDoNothing).toHaveBeenCalledTimes(3);
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+
+    await vi.waitFor(() => {
+      expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 701 }),
+        { finalizeCodingRun: false },
+      );
+    });
   });
 
   it("retries ambiguous analyzer enqueue failures with one stable idempotency key", async () => {
