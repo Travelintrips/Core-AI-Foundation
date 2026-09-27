@@ -94,11 +94,6 @@ export async function notifyCodingBridgeResponse(input: {
     return { status: "skipped", reason: "kind_not_notifiable", configured };
   }
 
-  const { baseUrl, apiKey, to } = config();
-  if (!baseUrl || !apiKey || !to) {
-    return { status: "skipped", reason: "missing_config", configured };
-  }
-
   const taskLine = input.taskId ? `Task: ${input.taskId}\n` : "";
   const text = [
     "AI Core Coding Update",
