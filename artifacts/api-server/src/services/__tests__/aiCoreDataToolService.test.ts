@@ -81,6 +81,8 @@ describe("AI Core read-only data tools", () => {
       },
     });
     expect(mocks.execute).toHaveBeenCalledTimes(2);
+    expect(String(mocks.execute.mock.calls[0]?.[0])).toContain("total_amount");
+    expect(String(mocks.execute.mock.calls[1]?.[0])).toContain("method");
   });
 
   it("excludes LLM fallback semantics when a recognized data query fails", async () => {
@@ -106,10 +108,9 @@ describe("AI Core read-only data tools", () => {
         "booking_date",
         "start_time",
         "end_time",
-        "total_price",
+        "total_amount",
         "payment_status",
         "status",
-        "payment_method",
       ].map((column_name) => ({ table_name: "sport_bookings", column_name })),
       ...["id", "name"].map((column_name) => ({ table_name: "sport_facilities", column_name })),
       ...[
@@ -117,7 +118,7 @@ describe("AI Core read-only data tools", () => {
         "booking_id",
         "payment_number",
         "amount",
-        "payment_method",
+        "method",
         "status",
         "paid_at",
       ].map((column_name) => ({ table_name: "sport_payments", column_name })),
