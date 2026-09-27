@@ -12,6 +12,11 @@ import { logger } from "../lib/logger.js";
 const DEFAULT_HEARTBEAT_MS = 10_000;
 const MIN_HEARTBEAT_MS = 2_000;
 const MAX_HEARTBEAT_MS = 60_000;
+const DEFAULT_RECONNECT_MIN_MS = 2_000;
+const DEFAULT_RECONNECT_MAX_MS = 30_000;
+const MIN_RECONNECT_MS = 500;
+const MAX_RECONNECT_MS = 300_000;
+const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 2_500;
 const DEFAULT_MODEL = "qwen2.5-coder:7b";
 
 export interface OllamaWorkerRuntimeConfig {
@@ -24,6 +29,9 @@ export interface OllamaWorkerRuntimeConfig {
   maxConcurrentJobs: number;
   powershellEnabled: boolean;
   heartbeatMs: number;
+  reconnectMinMs: number;
+  reconnectMaxMs: number;
+  healthCheckTimeoutMs: number;
   clusterId: string;
   region: string;
   version: string;
@@ -31,13 +39,19 @@ export interface OllamaWorkerRuntimeConfig {
 
 interface RuntimeState {
   config: OllamaWorkerRuntimeConfig;
-  workerId: number;
-  heartbeatToken: string;
+  workerId: number | null;
+  heartbeatToken: string | null;
   startedAt: string;
+  connectedAt: string | null;
+  lastHeartbeatAt: string | null;
+  consecutiveFailures: number;
+  nextRetryAt: number;
+  lastError: string | null;
 }
 
 let state: RuntimeState | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
+let heartbeatInFlight = false;
 
 function envTrue(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
@@ -103,6 +117,22 @@ export function readOllamaWorkerRuntimeConfig(
     throw new Error("OLLAMA_WORKER_MODEL is invalid.");
   }
 
+  const reconnectMinMs = boundedInt(
+    env["OLLAMA_WORKER_RECONNECT_MIN_MS"],
+    DEFAULT_RECONNECT_MIN_MS,
+    MIN_RECONNECT_MS,
+    MAX_RECONNECT_MS,
+  );
+  const reconnectMaxMs = Math.max(
+    reconnectMinMs,
+    boundedInt(
+      env["OLLAMA_WORKER_RECONNECT_MAX_MS"],
+      DEFAULT_RECONNECT_MAX_MS,
+      MIN_RECONNECT_MS,
+      MAX_RECONNECT_MS,
+    ),
+  );
+
   return {
     enabled: envTrue(env["OLLAMA_WORKER_RUNTIME_ENABLED"]),
     workerName,
@@ -122,6 +152,14 @@ export function readOllamaWorkerRuntimeConfig(
       DEFAULT_HEARTBEAT_MS,
       MIN_HEARTBEAT_MS,
       MAX_HEARTBEAT_MS,
+    ),
+    reconnectMinMs,
+    reconnectMaxMs,
+    healthCheckTimeoutMs: boundedInt(
+      env["OLLAMA_WORKER_HEALTHCHECK_TIMEOUT_MS"],
+      DEFAULT_HEALTHCHECK_TIMEOUT_MS,
+      500,
+      30_000,
     ),
     clusterId: (env["OLLAMA_WORKER_CLUSTER_ID"] || "ollama").trim(),
     region: (env["OLLAMA_WORKER_REGION"] || "local").trim(),
@@ -167,10 +205,27 @@ export async function checkOllamaWorkerRuntimeHealth(
   }
 }
 
+interface RuntimeRegistration {
+  workerId: number;
+  heartbeatToken: string;
+}
+
+export function calculateOllamaWorkerReconnectDelay(
+  failures: number,
+  minMs: number,
+  maxMs: number,
+): number {
+  const exponent = Math.max(0, Math.min(12, failures - 1));
+  return Math.min(maxMs, minMs * 2 ** exponent);
+}
+
 async function registerRuntime(
   config: OllamaWorkerRuntimeConfig,
-): Promise<RuntimeState> {
-  await checkOllamaWorkerRuntimeHealth(config);
+): Promise<RuntimeRegistration> {
+  await checkOllamaWorkerRuntimeHealth(
+    config,
+    config.healthCheckTimeoutMs,
+  );
 
   const worker = await registerOllamaWorker({
     workerName: config.workerName,
@@ -193,30 +248,86 @@ async function registerRuntime(
   }
 
   return {
-    config,
     workerId: worker.id,
     heartbeatToken: worker.heartbeatToken,
-    startedAt: new Date().toISOString(),
   };
 }
 
-async function heartbeatTick(): Promise<void> {
+function markConnected(registration: RuntimeRegistration): void {
   if (!state) return;
+  const now = new Date().toISOString();
+  state.workerId = registration.workerId;
+  state.heartbeatToken = registration.heartbeatToken;
+  state.connectedAt = now;
+  state.lastHeartbeatAt = now;
+  state.consecutiveFailures = 0;
+  state.nextRetryAt = 0;
+  state.lastError = null;
+}
 
-  const renewed = await heartbeatOllamaWorker(
-    state.workerId,
-    state.heartbeatToken,
-    DEFAULT_LEASE_TTL_MS,
+function markFailure(error: unknown): void {
+  if (!state) return;
+  state.consecutiveFailures += 1;
+  state.workerId = null;
+  state.heartbeatToken = null;
+  state.lastError =
+    error instanceof Error ? error.message : "Unknown Ollama worker runtime error.";
+  const delay = calculateOllamaWorkerReconnectDelay(
+    state.consecutiveFailures,
+    state.config.reconnectMinMs,
+    state.config.reconnectMaxMs,
   );
+  state.nextRetryAt = Date.now() + delay;
+}
 
-  if (renewed) return;
+async function heartbeatTick(): Promise<void> {
+  if (!state || heartbeatInFlight || Date.now() < state.nextRetryAt) return;
 
-  logger.warn(
-    { workerId: state.workerId },
-    "[ollama-worker] Lease renewal failed; re-registering runtime",
-  );
+  heartbeatInFlight = true;
+  try {
+    if (state.workerId != null && state.heartbeatToken) {
+      const renewed = await heartbeatOllamaWorker(
+        state.workerId,
+        state.heartbeatToken,
+        DEFAULT_LEASE_TTL_MS,
+      );
 
-  state = await registerRuntime(state.config);
+      if (renewed) {
+        state.lastHeartbeatAt = new Date().toISOString();
+        state.consecutiveFailures = 0;
+        state.nextRetryAt = 0;
+        state.lastError = null;
+        return;
+      }
+
+      logger.warn(
+        { workerId: state.workerId },
+        "[ollama-worker] Lease renewal failed; reconnecting runtime",
+      );
+    }
+
+    const registration = await registerRuntime(state.config);
+    markConnected(registration);
+
+    logger.info(
+      { workerId: registration.workerId },
+      "[ollama-worker] Runtime connected",
+    );
+  } catch (error) {
+    markFailure(error);
+    logger.warn(
+      {
+        err: error,
+        consecutiveFailures: state?.consecutiveFailures,
+        nextRetryAt: state?.nextRetryAt
+          ? new Date(state.nextRetryAt).toISOString()
+          : null,
+      },
+      "[ollama-worker] Runtime disconnected; automatic reconnect scheduled",
+    );
+  } finally {
+    heartbeatInFlight = false;
+  }
 }
 
 export async function startOllamaWorkerRuntime(
@@ -230,15 +341,22 @@ export async function startOllamaWorkerRuntime(
     return getOllamaWorkerRuntimeStatus();
   }
 
-  state = await registerRuntime(config);
+  state = {
+    config,
+    workerId: null,
+    heartbeatToken: null,
+    startedAt: new Date().toISOString(),
+    connectedAt: null,
+    lastHeartbeatAt: null,
+    consecutiveFailures: 0,
+    nextRetryAt: 0,
+    lastError: null,
+  };
+
+  await heartbeatTick();
 
   heartbeatTimer = setInterval(() => {
-    void heartbeatTick().catch((error) => {
-      logger.error(
-        { err: error },
-        "[ollama-worker] Heartbeat failed",
-      );
-    });
+    void heartbeatTick();
   }, config.heartbeatMs);
 
   heartbeatTimer.unref?.();
@@ -246,6 +364,7 @@ export async function startOllamaWorkerRuntime(
   logger.info(
     {
       workerId: state.workerId,
+      connected: state.workerId != null,
       workerName: config.workerName,
       modelId: config.modelId,
       advertiseBaseUrl: config.advertiseBaseUrl,
@@ -267,6 +386,7 @@ export function getOllamaWorkerRuntimeStatus(): Record<string, unknown> {
     enabled: true,
     running: true,
     workerId: state.workerId,
+    connected: state.workerId != null,
     workerName: state.config.workerName,
     nodeId: state.config.nodeId,
     modelId: state.config.modelId,
@@ -275,6 +395,17 @@ export function getOllamaWorkerRuntimeStatus(): Record<string, unknown> {
     maxConcurrentJobs: state.config.maxConcurrentJobs,
     powershellEnabled: state.config.powershellEnabled,
     heartbeatMs: state.config.heartbeatMs,
+    reconnectMinMs: state.config.reconnectMinMs,
+    reconnectMaxMs: state.config.reconnectMaxMs,
+    healthCheckTimeoutMs: state.config.healthCheckTimeoutMs,
+    consecutiveFailures: state.consecutiveFailures,
+    connectedAt: state.connectedAt,
+    lastHeartbeatAt: state.lastHeartbeatAt,
+    nextRetryAt:
+      state.nextRetryAt > 0
+        ? new Date(state.nextRetryAt).toISOString()
+        : null,
+    lastError: state.lastError,
     startedAt: state.startedAt,
   };
 }
@@ -289,10 +420,12 @@ export async function shutdownOllamaWorkerRuntime(): Promise<void> {
   state = null;
   if (!current) return;
 
-  await shutdownOllamaWorker(
-    current.workerId,
-    current.heartbeatToken,
-  ).catch(() => undefined);
+  if (current.workerId != null && current.heartbeatToken) {
+    await shutdownOllamaWorker(
+      current.workerId,
+      current.heartbeatToken,
+    ).catch(() => undefined);
+  }
 
   logger.info(
     { workerId: current.workerId },
