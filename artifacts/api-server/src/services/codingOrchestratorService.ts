@@ -633,25 +633,45 @@ export async function startCodingOrchestration(
   const sessionId = `coding-${input.run.id}`;
   const stages = initStages();
 
-  await db.insert(aiOrchestratorSessionsTable).values({
-    sessionId,
-    agentId: "coding-orchestrator",
-    totalTokens: 0,
-    totalRequests: 0,
-    lastModelUsed: null,
-  });
-
-  await logAudit(
-    "coding-orchestrator",
-    "pipeline_started",
-    input.task.id,
-    "coding_task",
-    "success",
-    { sessionId, codingRunId: input.run.id },
-  );
-
   let queuedJob: AiJob | null = null;
   try {
+    let lastSessionError: unknown = null;
+    let sessionReady = false;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await db
+          .insert(aiOrchestratorSessionsTable)
+          .values({
+            sessionId,
+            agentId: "coding-orchestrator",
+            totalTokens: 0,
+            totalRequests: 0,
+            lastModelUsed: null,
+          })
+          .onConflictDoNothing({ target: aiOrchestratorSessionsTable.sessionId });
+        sessionReady = true;
+        lastSessionError = null;
+        break;
+      } catch (error) {
+        lastSessionError = error;
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+        }
+      }
+    }
+    if (!sessionReady) {
+      throw lastSessionError ?? new Error("Coding Orchestrator session bootstrap failed");
+    }
+
+    await logAudit(
+      "coding-orchestrator",
+      "pipeline_started",
+      input.task.id,
+      "coding_task",
+      "success",
+      { sessionId, codingRunId: input.run.id },
+    );
+
     let lastEnqueueError: unknown = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
