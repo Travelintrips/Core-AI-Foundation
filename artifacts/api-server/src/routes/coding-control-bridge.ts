@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, renewCodingBridgePresence, submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
-import { getCodingWhatsappConfigStatus, notifyCodingBridgeResponse } from "../services/codingWhatsappNotificationService.js";
+import {
+  getCodingWhatsappConfigStatus,
+  notifyCodingBridgeResponse,
+  waitForCodingWhatsappDelivery,
+} from "../services/codingWhatsappNotificationService.js";
 import { randomUUID } from "crypto";
 import {
   getCriticalApproval,
@@ -109,5 +113,23 @@ router.get("/ai/coding/bridge/runtime-status",async(_req,res):Promise<void>=>{
  });
 });
 router.get("/ai/coding/bridge/whatsapp-status",async(_req,res):Promise<void>=>{res.json({configured:getCodingWhatsappConfigStatus()});});
-router.post("/ai/coding/bridge/whatsapp-test",async(_req,res):Promise<void>=>{const id=randomUUID();const result=await notifyCodingBridgeResponse({responseId:id,commandId:id,kind:"CHECKPOINT",message:"AI Core production WhatsApp diagnostic test."});const ok=result.status==="queued";res.status(ok?200:503).json({ok,result});});
+router.post("/ai/coding/bridge/whatsapp-test",async(_req,res):Promise<void>=>{
+ const id=randomUUID();
+ const result=await notifyCodingBridgeResponse({
+  responseId:id,
+  commandId:id,
+  kind:"CHECKPOINT",
+  message:"AI Core production WhatsApp diagnostic test."
+ });
+ if(result.status!=="queued"){
+  res.status(503).json({ok:false,result});
+  return;
+ }
+ const delivery=await waitForCodingWhatsappDelivery(result.messageId,{
+  timeoutMs:30000,
+  pollIntervalMs:1000
+ });
+ const ok=delivery.status==="sent";
+ res.status(ok?200:503).json({ok,result,delivery});
+});
 export default router;
