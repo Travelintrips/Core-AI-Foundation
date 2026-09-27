@@ -97,24 +97,34 @@ router.post("/ai/ollama-workers/register", async (req, res): Promise<void> => {
 router.post("/ai/ollama-workers/:id/heartbeat", requireWorker, async (req, res): Promise<void> => {
   const workerId = Number.parseInt(routeParam(req, "id"), 10);
   const token = workerToken(req)!;
-  const worker = await heartbeatRemoteOllamaWorker(workerId, token);
-  if (!worker) {
-    res.status(409).json({ error: "Worker lease was not renewed" });
-    return;
+  try {
+    const worker = await heartbeatRemoteOllamaWorker(workerId, token);
+    if (!worker) {
+      res.status(409).json({ error: "Worker lease was not renewed" });
+      return;
+    }
+    res.json({ ok: true, leaseExpiresAt: worker.leaseExpiresAt?.toISOString() ?? null });
+  } catch (error) {
+    logger.error({ err: error, workerId }, "[remote-ollama] heartbeat failed");
+    res.status(503).json({ error: "Remote Ollama heartbeat temporarily unavailable" });
   }
-  res.json({ ok: true, leaseExpiresAt: worker.leaseExpiresAt?.toISOString() ?? null });
 });
 
 router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Promise<void> => {
   const workerId = Number.parseInt(routeParam(req, "id"), 10);
-  const job = await claimRemoteOllamaInvocation(workerId);
-  if (!job) {
-    res.status(204).end();
-    return;
+  try {
+    const job = await claimRemoteOllamaInvocation(workerId);
+    if (!job) {
+      res.status(204).end();
+      return;
+    }
+    const payload = { ...((job.payloadJson ?? {}) as Record<string, unknown>) };
+    delete payload["_claimedByWorkerId"];
+    res.json({ jobId: job.id, jobCode: job.jobCode, jobType: job.jobType, payload });
+  } catch (error) {
+    logger.error({ err: error, workerId }, "[remote-ollama] claim failed");
+    res.status(503).json({ error: "Remote Ollama claim temporarily unavailable" });
   }
-  const payload = { ...((job.payloadJson ?? {}) as Record<string, unknown>) };
-  delete payload["_claimedByWorkerId"];
-  res.json({ jobId: job.id, jobCode: job.jobCode, jobType: job.jobType, payload });
 });
 
 router.post("/ai/ollama-workers/:id/jobs/:jobId/complete", requireWorker, async (req, res): Promise<void> => {
