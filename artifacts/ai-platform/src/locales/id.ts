@@ -64,6 +64,7 @@ export const id = {
       observability:        "Observabilitas",
       auditLog:             "Log Audit",
       settings:             "Pengaturan",
+      aiCoreChat:          "Chat AI Core",
       codingWorkspace:     "Workspace Coding AI",
     },
   },
