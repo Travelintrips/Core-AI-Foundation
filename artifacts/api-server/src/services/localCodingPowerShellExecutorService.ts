@@ -548,6 +548,7 @@ export async function executeApprovedOllamaPowerShellExecution(input: {
               TMP: readEnvCaseInsensitive(env, "TMP"),
               SystemRoot: readEnvCaseInsensitive(env, "SystemRoot"),
               ComSpec: readEnvCaseInsensitive(env, "ComSpec"),
+              PATHEXT: readEnvCaseInsensitive(env, "PATHEXT"),
               CI: "1",
               NO_COLOR: "1",
             },
