@@ -11,6 +11,7 @@ import {
   listAccessibleCodingRepositories,
   type CodingGitHubRepository,
 } from "./localCodingGitHubDiscoveryService.js";
+import { enableAutonomousCodingTask } from "./localCodingAutonomousRepairService.js";
 
 export class CodingWhatsappTaskRuntimeError extends Error {
   constructor(
@@ -131,6 +132,7 @@ export async function createAndStartWhatsappCodingTask(input: {
 
   try {
     const orchestration = await startCodingOrchestration({ task, run });
+    await enableAutonomousCodingTask(task.id).catch(() => undefined);
     return {
       task,
       run,

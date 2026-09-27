@@ -7,6 +7,12 @@ import {
   getCriticalApproval,
   requestCodingCriticalApproval,
 } from "../services/codingCriticalApprovalService.js";
+import {
+  disableAutonomousCodingTask,
+  enableAutonomousCodingTask,
+  getAutonomousCodingTaskStatus,
+  runAutonomousCodingCycle,
+} from "../services/localCodingAutonomousRepairService.js";
 const router=Router(); const Uuid=z.string().uuid();
 router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{const p=z.object({externalCommandId:z.string().min(1).max(200),instruction:z.string().min(1).max(50000),taskId:Uuid.nullish(),source:z.string().min(1).max(50).optional(),commandType:z.string().min(1).max(50).optional(),authority:z.record(z.string(),z.unknown()).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await submitCodingBridgeCommand(p.data);res.status(x.created?201:200).json(x);});
 router.get("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.coerce.number().int().min(1).max(100).optional().safeParse(req.query["limit"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const responses=await listPendingCodingBridgeResponses(p.data??50);res.json({responses,total:responses.length});});
@@ -15,6 +21,36 @@ router.post("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p
 router.post("/ai/coding/bridge/presence/:clientId/heartbeat",async(req,res):Promise<void>=>{const p=z.object({clientId:z.string().min(1).max(200),source:z.string().min(1).max(50).optional(),leaseSeconds:z.number().int().min(30).max(300).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse({...req.body,clientId:req.params["clientId"]});if(!p.success){res.status(400).json({error:p.error.message});return;}res.json(await renewCodingBridgePresence(p.data));});
 router.get("/ai/coding/bridge/presence/:clientId",async(req,res):Promise<void>=>{const clientId=req.params["clientId"];if(!clientId||clientId.length>200){res.status(400).json({error:"Invalid clientId"});return;}res.json(await getCodingBridgeAvailability(clientId));});
 
+
+
+router.post("/ai/coding/tasks/:id/autonomous/start",async(req,res):Promise<void>=>{
+ const id=Uuid.safeParse(req.params["id"]);
+ const body=z.object({maxCycles:z.number().int().min(5).max(100).optional()}).strict().safeParse(req.body??{});
+ if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
+ if(!body.success){res.status(400).json({error:body.error.message});return;}
+ await enableAutonomousCodingTask(id.data,body.data.maxCycles);
+ const cycle=await runAutonomousCodingCycle(id.data);
+ res.status(202).json({enabled:true,cycle});
+});
+router.post("/ai/coding/tasks/:id/autonomous/stop",async(req,res):Promise<void>=>{
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
+ await disableAutonomousCodingTask(id.data);
+ res.json({enabled:false,taskId:id.data});
+});
+router.post("/ai/coding/tasks/:id/autonomous/run-once",async(req,res):Promise<void>=>{
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
+ const cycle=await runAutonomousCodingCycle(id.data);
+ res.json(cycle);
+});
+router.get("/ai/coding/tasks/:id/autonomous",async(req,res):Promise<void>=>{
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
+ const status=await getAutonomousCodingTaskStatus(id.data);
+ if(!status){res.status(404).json({error:"Autonomous task state not found"});return;}
+ res.json(status);
+});
 
 router.post("/ai/coding/bridge/critical-approvals",async(req,res):Promise<void>=>{
  const p=z.object({

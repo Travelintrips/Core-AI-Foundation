@@ -120,6 +120,29 @@ async function ensureTablesInternal(): Promise<void> {
       WHERE status IN ('PENDING','APPROVED','EXECUTING')
   `);
 
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ai_platform.ai_coding_autonomous_tasks (
+      task_id UUID PRIMARY KEY REFERENCES ai_platform.ai_coding_tasks(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      status TEXT NOT NULL DEFAULT 'ACTIVE',
+      cycle_count INTEGER NOT NULL DEFAULT 0,
+      max_cycles INTEGER NOT NULL DEFAULT 40,
+      last_action TEXT,
+      last_error TEXT,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_cycle_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT ai_coding_autonomous_tasks_status_check
+        CHECK (status IN ('ACTIVE','WAITING','APPROVAL_REQUIRED','COMPLETED','BLOCKED','FAILED','DISABLED'))
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS ai_coding_autonomous_tasks_active_idx
+      ON ai_platform.ai_coding_autonomous_tasks(status, enabled, updated_at)
+  `);
+
   logger.info("[coding-bridge] Control bridge tables ensured");
 }
 

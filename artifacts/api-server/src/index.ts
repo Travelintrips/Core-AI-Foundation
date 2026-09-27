@@ -62,6 +62,8 @@ const { reconcileStaleMultiWorkerRuns } =
   await import("./services/localCodingMultiWorkerRecoveryService.js");
 const { ensureCodingControlBridgeTables } =
   await import("./services/codingControlBridgeSchemaService.js");
+const codingAutonomous =
+  await import("./services/localCodingAutonomousRepairService.js");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 let _designBatchRecoveryStarted = false;
@@ -138,6 +140,11 @@ async function initializeRuntimeServices(): Promise<void> {
       () => ollamaWorkerRuntime.startOllamaWorkerRuntime(),
     );
   }
+
+  await runStartupStep(
+    "[coding-autonomous] Runtime start",
+    () => codingAutonomous.startAutonomousCodingRuntime(),
+  );
 
   // Production workers fail closed: they only auto-start when explicitly enabled.
   // Development keeps the existing auto-start behavior for local workflows.
@@ -224,6 +231,7 @@ function shutdown(signal: string): void {
     scheduler.shutdown(),
     jobDispatcher.shutdown(),
     ollamaWorkerRuntime.shutdownOllamaWorkerRuntime(),
+    Promise.resolve(codingAutonomous.stopAutonomousCodingRuntime()),
   ])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
