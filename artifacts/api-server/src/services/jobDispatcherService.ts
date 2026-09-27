@@ -119,6 +119,15 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
   },
 ];
 
+if (process.env["BLENDER_WORKER_RUNTIME_ENABLED"] === "true") {
+  DISPATCHER_WORKERS.push({
+    suffix: "5",
+    workerType: "3d_worker",
+    capabilities: WORKER_TYPE_CAPABILITIES["3d_worker"]!,
+    maxConcurrentJobs: 1,
+  });
+}
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 const _settings: DispatcherSettings = {
