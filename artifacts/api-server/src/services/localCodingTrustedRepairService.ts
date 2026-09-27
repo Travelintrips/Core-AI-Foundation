@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, realpath, stat } from "node:fs/promises";
+import { readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
@@ -123,6 +123,26 @@ async function git(root: string, args: string[]): Promise<string> {
     },
   });
   return output.stdout.trim();
+}
+
+async function snapshotAllowedFiles(
+  root: string,
+  files: string[],
+): Promise<Map<string, string>> {
+  const snapshots = new Map<string, string>();
+  for (const file of files) {
+    snapshots.set(file, await readFile(resolve(root, file), "utf8"));
+  }
+  return snapshots;
+}
+
+async function restoreAllowedFiles(
+  root: string,
+  snapshots: Map<string, string>,
+): Promise<void> {
+  for (const [file, content] of snapshots) {
+    await writeFile(resolve(root, file), content, "utf8");
+  }
 }
 
 async function buildAllowedSnippets(
@@ -273,6 +293,7 @@ export async function runTrustedOllamaRepairTask(input: {
     ].slice(0, 6),
   };
 
+  const snapshots = await snapshotAllowedFiles(root, allowedFiles);
   const snippets = await buildAllowedSnippets(root, allowedFiles);
   const currentPatch = await git(root, ["diff", "--no-ext-diff", "--"]);
   const pkg = buildAiHandoffPackage({
@@ -338,6 +359,7 @@ export async function runTrustedOllamaRepairTask(input: {
   });
 
   if (verification.status !== "COMPLETED") {
+    await restoreAllowedFiles(root, snapshots);
     await logAudit(
       "ollama-worker",
       "trusted_repair_verification_failed",
