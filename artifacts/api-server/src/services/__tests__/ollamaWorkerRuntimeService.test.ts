@@ -1,6 +1,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  calculateOllamaWorkerReconnectDelay,
   readOllamaWorkerRuntimeConfig,
 } from "../ollamaWorkerRuntimeService.js";
 
@@ -18,6 +19,9 @@ describe("Ollama worker runtime configuration", () => {
       OLLAMA_WORKER_MAX_CONCURRENCY: "4",
       OLLAMA_WORKER_POWERSHELL_ENABLED: "true",
       OLLAMA_WORKER_HEARTBEAT_MS: "10000",
+      OLLAMA_WORKER_RECONNECT_MIN_MS: "1500",
+      OLLAMA_WORKER_RECONNECT_MAX_MS: "12000",
+      OLLAMA_WORKER_HEALTHCHECK_TIMEOUT_MS: "3000",
     } as NodeJS.ProcessEnv);
 
     expect(config).toMatchObject({
@@ -32,6 +36,9 @@ describe("Ollama worker runtime configuration", () => {
       maxConcurrentJobs: 4,
       powershellEnabled: true,
       heartbeatMs: 10000,
+      reconnectMinMs: 1500,
+      reconnectMaxMs: 12000,
+      healthCheckTimeoutMs: 3000,
     });
   });
 
@@ -43,5 +50,20 @@ describe("Ollama worker runtime configuration", () => {
 
     expect(config.maxConcurrentJobs).toBe(32);
     expect(config.heartbeatMs).toBe(2000);
+  });
+
+  it("keeps reconnect bounds valid and uses exponential backoff", () => {
+    const config = readOllamaWorkerRuntimeConfig({
+      OLLAMA_WORKER_RECONNECT_MIN_MS: "5000",
+      OLLAMA_WORKER_RECONNECT_MAX_MS: "1000",
+      OLLAMA_WORKER_HEALTHCHECK_TIMEOUT_MS: "999999",
+    } as NodeJS.ProcessEnv);
+
+    expect(config.reconnectMinMs).toBe(5000);
+    expect(config.reconnectMaxMs).toBe(5000);
+    expect(config.healthCheckTimeoutMs).toBe(30000);
+    expect(calculateOllamaWorkerReconnectDelay(1, 2000, 30000)).toBe(2000);
+    expect(calculateOllamaWorkerReconnectDelay(2, 2000, 30000)).toBe(4000);
+    expect(calculateOllamaWorkerReconnectDelay(5, 2000, 30000)).toBe(30000);
   });
 });
