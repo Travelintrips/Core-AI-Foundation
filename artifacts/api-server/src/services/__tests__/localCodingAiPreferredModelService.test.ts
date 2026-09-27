@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     endpointUrl: string;
     availableSlots: number;
   },
+  remoteWorkerAvailable: false,
 }));
 
 vi.mock("../localCodingAiProductionModelService.js", async () => {
@@ -93,6 +94,10 @@ vi.mock("../ollamaWorkerRegistryService.js", () => ({
   getOllamaWorkerAvailability: vi.fn(async () => mocks.registeredWorker),
 }));
 
+vi.mock("../remoteOllamaWorkerService.js", () => ({
+  hasRemoteOllamaWorker: vi.fn(async () => mocks.remoteWorkerAvailable),
+}));
+
 import {
   describePreferredCodingModelConfig,
   resolveConfiguredCodingFallbackModel,
@@ -107,6 +112,7 @@ describe("Preferred constrained coding model routing", () => {
     mocks.health.detail = undefined;
     mocks.cloudFallback.ok = false;
     mocks.registeredWorker = null;
+    mocks.remoteWorkerAvailable = false;
   });
 
   it("defaults to GPT-5.6 Sol primary and Ollama qwen coder fallback", () => {
@@ -122,6 +128,24 @@ describe("Preferred constrained coding model routing", () => {
     });
   });
 
+
+  it("prefers a healthy remote-pull Ollama worker without exposing an endpoint", async () => {
+    mocks.remoteWorkerAvailable = true;
+
+    await expect(
+      resolveConfiguredCodingFallbackModel({} as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      fallback: { provider: "ollama", model: "qwen2.5-coder:7b" },
+      selection: {
+        provider: { slug: "ollama" },
+        model: {
+          modelId: "qwen2.5-coder:7b",
+          capabilities: expect.arrayContaining(["remote_worker_pool"]),
+        },
+      },
+    });
+  });
 
   it("prefers a healthy registered Ollama worker pool over loopback runtime", async () => {
     mocks.registeredWorker = {

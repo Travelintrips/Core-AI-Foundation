@@ -55,6 +55,27 @@ function isLocalProvider(provider: string): boolean {
   return ["ollama", "zerollm"].includes(provider.trim().toLowerCase());
 }
 
+function safeProviderFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+}
+
+function unavailableAskReply(reply: string, warning: string): Record<string, unknown> {
+  return {
+    kind: "answer",
+    route: "NO_LLM",
+    provider: null,
+    model: null,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    reply,
+    warning,
+  };
+}
+
 function buildChatProvider(
   selection: ProductionCodingModelSelection,
   requestId: string,
@@ -182,6 +203,18 @@ async function resolveCloudSelection(): Promise<
 async function deterministicReply(message: string): Promise<Record<string, unknown> | null> {
   const command = message.trim().toLowerCase();
 
+  if (["hello", "hi", "halo", "hai", "hey"].includes(command)) {
+    return {
+      kind: "answer",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      reply:
+        "Halo. AI Core Chat aktif. Gunakan Ask untuk bertanya atau Agent untuk menjalankan coding task. Sapaan ini memakai 0 token LLM.",
+    };
+  }
+
   if (["/help", "help", "bantuan"].includes(command)) {
     return {
       kind: "answer",
@@ -259,8 +292,15 @@ async function answerAskMode(
         warning: local.message,
       };
     }
-    const result = await invokeChatModel(local.selection, message);
-    return { kind: "answer", route: "LOCAL", ...result };
+    try {
+      const result = await invokeChatModel(local.selection, message);
+      return { kind: "answer", route: "LOCAL", ...result };
+    } catch (error) {
+      return unavailableAskReply(
+        "Local AI terdeteksi tetapi gagal menjawab. Economy tidak akan memakai OpenAI secara otomatis. Pastikan Ollama worker online, atau pilih Auto untuk mengizinkan fallback cloud.",
+        safeProviderFailure(error) || "Local AI invocation failed.",
+      );
+    }
   }
 
   if (policy === "cloud") {
@@ -276,34 +316,46 @@ async function answerAskMode(
         warning: cloud.message,
       };
     }
-    const result = await invokeChatModel(cloud.selection, message);
-    return { kind: "answer", route: "CLOUD", ...result };
+    try {
+      const result = await invokeChatModel(cloud.selection, message);
+      return { kind: "answer", route: "CLOUD", ...result };
+    } catch (error) {
+      return unavailableAskReply(
+        "Cloud AI sedang tidak dapat menjawab. Tidak ada tindakan sistem yang dijalankan.",
+        safeProviderFailure(error) || "Cloud AI invocation failed.",
+      );
+    }
   }
 
   const local = await resolveLocalSelection();
+  let localFailure = local.ok ? "" : local.message;
   if (local.ok) {
     try {
       const result = await invokeChatModel(local.selection, message);
       return { kind: "answer", route: "LOCAL", ...result };
-    } catch {
+    } catch (error) {
       // Auto mode is explicitly allowed to fall through to the configured cloud target.
+      localFailure = safeProviderFailure(error) || "Local AI invocation failed.";
     }
   }
 
   const cloud = await resolveCloudSelection();
   if (!cloud.ok) {
-    return {
-      kind: "answer",
-      route: "NO_LLM",
-      provider: null,
-      model: null,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      reply: "Local AI gagal dan cloud fallback juga tidak tersedia.",
-      warning: cloud.message,
-    };
+    return unavailableAskReply(
+      "Local AI gagal dan cloud fallback juga tidak tersedia.",
+      [localFailure, cloud.message].filter(Boolean).join(" | "),
+    );
   }
-  const result = await invokeChatModel(cloud.selection, message);
-  return { kind: "answer", route: "CLOUD_FALLBACK", ...result };
+
+  try {
+    const result = await invokeChatModel(cloud.selection, message);
+    return { kind: "answer", route: "CLOUD_FALLBACK", ...result };
+  } catch (error) {
+    return unavailableAskReply(
+      "Local AI dan cloud fallback sama-sama gagal menjawab. Coba lagi setelah provider pulih.",
+      [localFailure, safeProviderFailure(error)].filter(Boolean).join(" | "),
+    );
+  }
 }
 
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
