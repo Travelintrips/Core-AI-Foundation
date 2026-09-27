@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import type { Dirent } from "node:fs";
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, posix, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import * as ts from "typescript";
 
@@ -467,7 +467,9 @@ function resolveRelativeImport(
   fileSet: Set<string>,
 ): string | undefined {
   if (!specifier.startsWith(".")) return undefined;
-  const base = normalizeRepoPath(resolve("/repo", dirname(fromFile), specifier).replace(/^\/repo\/?/, ""));
+  const base = posix
+    .normalize(posix.join(posix.dirname(normalizeRepoPath(fromFile)), specifier.replaceAll("\\", "/")))
+    .replace(/^\/+/, "");
   const bases = [base];
   if (/\.(?:c|m)?js$/i.test(base)) {
     bases.push(base.replace(/\.(?:c|m)?js$/i, ""));
