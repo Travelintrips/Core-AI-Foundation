@@ -3,9 +3,24 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
 const cwd = process.cwd();
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const pnpmExecPath = process.env.npm_execpath;
 
-const build = spawnSync(pnpmCommand, ["run", "build"], {
+const buildCommand = pnpmExecPath
+  ? {
+      command: process.execPath,
+      args: [pnpmExecPath, "run", "build"],
+    }
+  : process.platform === "win32"
+    ? {
+        command: process.env.ComSpec ?? "cmd.exe",
+        args: ["/d", "/s", "/c", "pnpm run build"],
+      }
+    : {
+        command: "pnpm",
+        args: ["run", "build"],
+      };
+
+const build = spawnSync(buildCommand.command, buildCommand.args, {
   cwd,
   env: { ...process.env, NODE_ENV: "development" },
   stdio: "inherit",
