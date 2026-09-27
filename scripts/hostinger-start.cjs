@@ -53,37 +53,56 @@ process.on("SIGINT", () => terminate(0));
 
 try {
   if (enabled || explicitLocalProvider) {
-    runBootstrap();
-    if (!fs.existsSync(venvPython)) {
-      throw new Error("ZeroLLM virtualenv Python not found: " + venvPython);
-    }
+    try {
+      runBootstrap();
+      if (!fs.existsSync(venvPython)) {
+        throw new Error("ZeroLLM virtualenv Python not found: " + venvPython);
+      }
 
-    sidecar = spawn(venvPython, [sidecarScript], {
-      cwd: root,
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        ZEROLLM_HOST: "127.0.0.1",
-        ZEROLLM_PORT: port,
-        ZEROLLM_RUNTIME_OFFLINE:
-          process.env.ZEROLLM_RUNTIME_OFFLINE || "true",
-      },
-    });
+      sidecar = spawn(venvPython, [sidecarScript], {
+        cwd: root,
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          ZEROLLM_HOST: "127.0.0.1",
+          ZEROLLM_PORT: port,
+          ZEROLLM_RUNTIME_OFFLINE:
+            process.env.ZEROLLM_RUNTIME_OFFLINE || "true",
+        },
+      });
 
-    sidecar.on("exit", (code, signal) => {
-      console.error(
-        "[hostinger-start] ZeroLLM sidecar exited code=" +
-          code +
-          " signal=" +
-          (signal || "none"),
+      sidecar.on("exit", (code, signal) => {
+        console.error(
+          "[hostinger-start] ZeroLLM sidecar exited code=" +
+            code +
+            " signal=" +
+            (signal || "none"),
+        );
+        if (required) terminate(code || 1);
+      });
+
+      sidecar.on("error", (error) => {
+        console.error("[hostinger-start] ZeroLLM sidecar spawn failed:", error);
+        if (required) terminate(1);
+      });
+
+      process.env.ZEROLLM_BASE_URL = process.env.ZEROLLM_BASE_URL || baseUrl;
+      console.log(
+        "[hostinger-start] ZeroLLM sidecar enabled at " + process.env.ZEROLLM_BASE_URL,
       );
-      if (required) terminate(code || 1);
-    });
+    } catch (error) {
+      if (required) throw error;
+      console.error(
+        "[hostinger-start] Optional ZeroLLM startup failed; continuing with API-only runtime: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
+      sidecar = null;
+      delete process.env.ZEROLLM_BASE_URL;
+    }
+  }
 
-    process.env.ZEROLLM_BASE_URL = process.env.ZEROLLM_BASE_URL || baseUrl;
-    console.log(
-      "[hostinger-start] ZeroLLM sidecar enabled at " + process.env.ZEROLLM_BASE_URL,
-    );
+  if (!fs.existsSync(nodeEntry)) {
+    throw new Error("API build artifact not found: " + nodeEntry);
   }
 
   api = spawn(process.execPath, ["--enable-source-maps", nodeEntry], {
