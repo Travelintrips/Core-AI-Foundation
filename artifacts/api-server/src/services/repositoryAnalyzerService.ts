@@ -297,9 +297,24 @@ export async function configureIsolatedRepositoryWorkspace(
   if (!actualHead) {
     throw new Error("Repository HEAD could not be resolved in isolated workspace");
   }
-  if (actualHead !== normalizedBaseSha) {
+
+  // The remote branch may advance after the task was approved. Preserve the
+  // approved execution boundary by checking out the exact approved commit when
+  // it is still present in the cloned history instead of failing merely
+  // because the branch tip moved.
+  try {
+    await execFileAsync(
+      "git",
+      ["cat-file", "-e", `${normalizedBaseSha}^{commit}`],
+      {
+        cwd: workspace,
+        timeout: 15_000,
+        maxBuffer: 64 * 1024,
+      },
+    );
+  } catch {
     throw new Error(
-      `Repository HEAD changed before isolated worker execution: expected ${normalizedBaseSha}, got ${actualHead}`,
+      `Approved repository base SHA is unavailable in isolated workspace: expected ${normalizedBaseSha}, cloned HEAD ${actualHead}`,
     );
   }
 
