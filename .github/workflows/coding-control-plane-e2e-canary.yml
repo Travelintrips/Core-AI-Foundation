@@ -105,17 +105,42 @@ jobs:
         run: |
           set -euo pipefail
           task="${{ steps.task.outputs.task_id }}"
-          code=$(curl -sS -o /tmp/run.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/tasks/$task/run" \
-            -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY")
-          if [ "$code" != "201" ]; then
+          code=""
+          run_id=""
+          for attempt in $(seq 1 6); do
+            rm -f /tmp/run.json /tmp/run.headers
+            code=$(curl -sS -D /tmp/run.headers -o /tmp/run.json -w "%{http_code}"               --connect-timeout 15 --max-time 30               -X POST "$API_BASE_URL/ai/coding/tasks/$task/run"               -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+
+            if [ "$code" = "201" ]; then
+              run_id=$(jq -r '.id // empty' /tmp/run.json 2>/dev/null || true)
+              break
+            fi
+
+            if [ "$code" = "409" ]; then
+              status_code=$(curl -sS -o /tmp/task-after-start.json -w "%{http_code}"                 "$API_BASE_URL/ai/coding/tasks/$task" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+              if [ "$status_code" = "200" ]; then
+                run_id=$(jq -r '.runs[]? | select(.status == "RUNNING") | .id' /tmp/task-after-start.json | head -1)
+                if [[ "$run_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+                  echo "Repository analysis was already started; adopting active run $run_id"
+                  break
+                fi
+              fi
+            fi
+
+            if [[ "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" || "$code" = "000" ]]; then
+              echo "Start repository analysis transient HTTP ${code:-curl-error} (attempt $attempt/6); retrying in 5s..."
+              sleep 5
+              continue
+            fi
+
             echo "::error::Start repository analysis failed with HTTP $code"
-            cat /tmp/run.json
+            cat /tmp/run.json 2>/dev/null || true
             exit 1
-          fi
-          run_id=$(jq -r '.id // empty' /tmp/run.json)
+          done
+
           if [[ ! "$run_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-            echo "::error::Repository analysis response missing run id"
-            cat /tmp/run.json
+            echo "::error::Repository analysis did not start after bounded retries (last HTTP=${code:-curl-error})"
+            cat /tmp/run.json 2>/dev/null || true
             exit 1
           fi
 
