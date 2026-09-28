@@ -5,6 +5,7 @@ const mockInsertOnConflictDoNothing = vi.hoisted(() => vi.fn());
 const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTransaction = vi.hoisted(() => vi.fn());
+const mockSelectLimit = vi.hoisted(() => vi.fn());
 const mockEnqueue = vi.hoisted(() => vi.fn());
 const mockExecuteRepositoryAnalyzerJobOnDemand = vi.hoisted(() => vi.fn());
 const mockRouteToModel = vi.hoisted(() => vi.fn());
@@ -22,6 +23,11 @@ const updateBuilder = {
   set: mockUpdateSet,
   where: mockUpdateWhere,
 };
+const selectBuilder = {
+  from: vi.fn(() => selectBuilder),
+  where: vi.fn(() => selectBuilder),
+  limit: mockSelectLimit,
+};
 const tx = {
   update: vi.fn(() => updateBuilder),
 };
@@ -35,17 +41,21 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 vi.mock("drizzle-orm", () => ({
+  and: vi.fn((...args: unknown[]) => args),
   eq: vi.fn((...args: unknown[]) => args),
+  inArray: vi.fn((...args: unknown[]) => args),
 }));
 
 vi.mock("@workspace/db", () => ({
   db: {
     insert: vi.fn(() => insertBuilder),
+    select: vi.fn(() => selectBuilder),
     update: vi.fn(() => updateBuilder),
     transaction: mockTransaction,
   },
   aiCodingRunsTable: { id: "runs.id" },
   aiCodingTasksTable: { id: "tasks.id" },
+  aiJobsTable: { id: "jobs.id", jobType: "jobs.jobType", status: "jobs.status" },
   aiOrchestratorSessionsTable: { sessionId: "sessions.sessionId" },
 }));
 
@@ -119,6 +129,7 @@ describe("Coding Orchestrator", () => {
     mockUpdateSet.mockReturnValue(updateBuilder);
     mockUpdateWhere.mockResolvedValue([]);
     mockTransaction.mockImplementation((callback: (executor: typeof tx) => unknown) => callback(tx));
+    mockSelectLimit.mockResolvedValue([]);
     mockLogAudit.mockResolvedValue(undefined);
     mockSpawn.mockReturnValue({ unref: vi.fn(), once: vi.fn() });
 

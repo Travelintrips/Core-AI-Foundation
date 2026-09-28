@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   aiCodingRunsTable,
   aiCodingTasksTable,
+  aiJobsTable,
   aiOrchestratorSessionsTable,
   db,
   type AiCodingRun,
@@ -670,6 +671,34 @@ export async function startCodingOrchestration(
 ): Promise<{ sessionId: string }> {
   const sessionId = `coding-${input.run.id}`;
   const stages = initStages();
+
+  // Repository analysis is intentionally single-flight on this host. A second
+  // analyzer would compete for the same CPU/memory/DB resources and can starve
+  // the public API. Keep the durable job queue clean instead of spawning
+  // parallel analyzer child processes.
+  const [activeAnalyzer] = await db
+    .select({ id: aiJobsTable.id })
+    .from(aiJobsTable)
+    .where(
+      and(
+        eq(aiJobsTable.jobType, "coding_repository_analyzer"),
+        inArray(aiJobsTable.status, ["queued", "running", "retrying"]),
+      ),
+    )
+    .limit(1);
+
+  if (activeAnalyzer) {
+    const error = new Error(
+      `Repository Analyzer is busy with job ${activeAnalyzer.id}; concurrency is limited to 1`,
+    );
+    await failOrchestration(
+      input,
+      sessionId,
+      updateStage(stages, "repository_analyzer", "FAILED", error.message),
+      error,
+    );
+    throw error;
+  }
 
   let queuedJob: AiJob | null = null;
   try {
