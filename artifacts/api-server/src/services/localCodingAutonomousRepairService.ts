@@ -649,12 +649,39 @@ async function recoverOrphanedReadyReviewTasks(): Promise<void> {
     if (!state || !state.nextAction || !recoverable.has(state.nextAction)) continue;
 
     const existing = await db.execute(sql`
-      SELECT task_id, enabled, status
+      SELECT task_id, enabled, status, cycle_count, max_cycles
       FROM ai_platform.ai_coding_autonomous_tasks
       WHERE task_id = ${candidate.id}::uuid
       LIMIT 1
     `);
-    if (existing.rows?.length) continue;
+    const row = existing.rows?.[0] as
+      | { status?: string; cycle_count?: number; max_cycles?: number }
+      | undefined;
+
+    if (row) {
+      const cycleCount = Number(row.cycle_count ?? 0);
+      const maxCycles = Number(row.max_cycles ?? DEFAULT_MAX_CYCLES);
+      if (
+        ["FAILED", "BLOCKED", "DISABLED"].includes(String(row.status ?? "")) &&
+        cycleCount < maxCycles
+      ) {
+        await db.execute(sql`
+          UPDATE ai_platform.ai_coding_autonomous_tasks
+          SET enabled = TRUE,
+              status = 'ACTIVE',
+              last_error = NULL,
+              last_action = 'RECOVER_READY_REVIEW',
+              updated_at = NOW()
+          WHERE task_id = ${candidate.id}::uuid
+        `);
+
+        logger.info(
+          { taskId: candidate.id, nextAction: state.nextAction, previousStatus: row.status },
+          "[coding-autonomous] reactivated recoverable READY_REVIEW task",
+        );
+      }
+      continue;
+    }
 
     await db.execute(sql`
       INSERT INTO ai_platform.ai_coding_autonomous_tasks (
