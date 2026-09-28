@@ -24,6 +24,42 @@ const startedAt = Date.now();
 const RELEASE_MARKER = "phase7a12-workers-killswitch-20260924";
 const BUILD_COMMIT_SHA = process.env.CST_BUILD_COMMIT_SHA ?? "unknown";
 
+const DEFAULT_READINESS_DB_TIMEOUT_MS = 2_500;
+const MIN_READINESS_DB_TIMEOUT_MS = 250;
+const MAX_READINESS_DB_TIMEOUT_MS = 3_500;
+
+class ReadinessProbeTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`database readiness probe timed out after ${timeoutMs}ms`);
+    this.name = "ReadinessProbeTimeoutError";
+  }
+}
+
+function getReadinessDbTimeoutMs(): number {
+  const configured = Number(process.env["HEALTHZ_DB_TIMEOUT_MS"]);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_READINESS_DB_TIMEOUT_MS;
+  }
+  return Math.max(
+    MIN_READINESS_DB_TIMEOUT_MS,
+    Math.min(MAX_READINESS_DB_TIMEOUT_MS, Math.floor(configured)),
+  );
+}
+
+async function withReadinessTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new ReadinessProbeTimeoutError(timeoutMs)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // ── GET /healthz — liveness (no I/O) ─────────────────────────────────────────
 router.get("/healthz", (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
@@ -37,49 +73,47 @@ router.get("/healthz/full", async (_req, res) => {
   const checks: Record<string, { status: "ok" | "fail"; latencyMs?: number; detail?: string }> = {};
   let overallStatus: "ok" | "degraded" | "fail" = "ok";
 
-  // ── 1. DB connectivity ─────────────────────────────────────────────────────
+  // ── 1–2. DB connectivity + schema access (single bounded probe) ─────────────
+  // Hostinger may terminate upstream requests at roughly five seconds. Keep the
+  // readiness DB probe below that ceiling and avoid two serial pool acquisitions.
+  // A timeout is reported as degraded (HTTP 200) so the deployment gate receives
+  // structured diagnostics instead of a hosting-layer HTML 503. Explicit DB
+  // connection/query errors still fail readiness with HTTP 503.
   const dbStart = Date.now();
+  const dbTimeoutMs = getReadinessDbTimeoutMs();
   try {
-    const client = await pool.connect();
-    try {
-      await client.query("SELECT 1");
-      checks["db"] = { status: "ok", latencyMs: Date.now() - dbStart };
-    } finally {
-      client.release();
-    }
-  } catch (err: unknown) {
-    checks["db"] = {
-      status: "fail",
-      latencyMs: Date.now() - dbStart,
-      detail: err instanceof Error ? err.message : "connection failed",
-    };
-    overallStatus = "fail";
-  }
+    const result = await withReadinessTimeout(
+      pool.query<{ schema_ok: boolean }>(
+        "SELECT to_regclass('ai_platform.ai_audit_logs') IS NOT NULL AS schema_ok",
+      ),
+      dbTimeoutMs,
+    );
+    const latencyMs = Date.now() - dbStart;
+    checks["db"] = { status: "ok", latencyMs };
 
-  // ── 2. Schema access — verify search_path is correct ──────────────────────
-  if (checks["db"]?.status === "ok") {
-    const schemaStart = Date.now();
-    try {
-      const client = await pool.connect();
-      try {
-        const result = await client.query<{ count: string }>(
-          "SELECT COUNT(*)::text AS count FROM ai_platform.ai_audit_logs LIMIT 0",
-        );
-        void result; // we just need it not to throw
-        checks["schema"] = { status: "ok", latencyMs: Date.now() - schemaStart };
-      } finally {
-        client.release();
-      }
-    } catch (err: unknown) {
+    if (result.rows[0]?.schema_ok) {
+      checks["schema"] = { status: "ok", latencyMs };
+    } else {
       checks["schema"] = {
         status: "fail",
-        latencyMs: Date.now() - schemaStart,
-        detail: err instanceof Error ? err.message : "schema unreachable",
+        latencyMs,
+        detail: "ai_platform.ai_audit_logs is not accessible",
       };
-      if (overallStatus === "ok") overallStatus = "degraded";
+      overallStatus = "degraded";
     }
-  } else {
-    checks["schema"] = { status: "fail", detail: "skipped — db check failed" };
+  } catch (err: unknown) {
+    const latencyMs = Date.now() - dbStart;
+    const timedOut = err instanceof ReadinessProbeTimeoutError;
+    checks["db"] = {
+      status: "fail",
+      latencyMs,
+      detail: err instanceof Error ? err.message : "connection failed",
+    };
+    checks["schema"] = {
+      status: "fail",
+      detail: timedOut ? "skipped — db probe timed out" : "skipped — db check failed",
+    };
+    overallStatus = timedOut ? "degraded" : "fail";
   }
 
   // ── 3. Environment variable presence ──────────────────────────────────────
