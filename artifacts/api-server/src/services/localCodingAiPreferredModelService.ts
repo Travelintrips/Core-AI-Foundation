@@ -142,7 +142,10 @@ export async function resolveConfiguredCodingFallbackModel(
           maxOutputTokens: base.maxOutputTokens,
           capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
         },
-        provider: { slug: "ollama", baseUrl: registeredWorker.endpointUrl },
+        // Deliberately omit baseUrl for registered workers. A registered worker
+        // must be invoked through createScheduledOllamaProviderAdapter so the
+        // reservation path adds OLLAMA_WORKER_API_KEY and releases capacity.
+        provider: { slug: "ollama" },
         timeoutMs: localFallbackTimeoutMs(env),
         maxOutputTokens: base.maxOutputTokens,
         selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
