@@ -15,13 +15,12 @@ import healthRouter from "../health.js";
 
 // ── Mock @workspace/db pool ───────────────────────────────────────────────────
 vi.mock("@workspace/db", () => {
-  const mockConnect = vi.fn().mockResolvedValue({
-    query: vi.fn().mockResolvedValue({ rows: [] }),
-    release: vi.fn(),
+  const mockQuery = vi.fn().mockResolvedValue({
+    rows: [{ schema_ok: true }],
   });
   return {
     pool: {
-      connect: mockConnect,
+      query: mockQuery,
       totalCount: 2,
       idleCount: 1,
       waitingCount: 0,
@@ -95,13 +94,35 @@ describe("GET /healthz/full — readiness probe", () => {
 
   it("returns HTTP 503 when DB is unreachable", async () => {
     const { pool } = await import("@workspace/db");
-    const mockPool = pool as { connect: ReturnType<typeof vi.fn> };
-    mockPool.connect.mockRejectedValueOnce(new Error("connection refused"));
+    const mockPool = pool as { query: ReturnType<typeof vi.fn> };
+    mockPool.query.mockRejectedValueOnce(new Error("connection refused"));
 
     const res = await request(app).get("/healthz/full");
     expect(res.status).toBe(503);
     expect(res.body.status).toBe("fail");
     expect(res.body.checks.db.status).toBe("fail");
+  });
+
+  it("returns bounded degraded diagnostics when DB probe exceeds the hosting budget", async () => {
+    const { pool } = await import("@workspace/db");
+    const mockPool = pool as { query: ReturnType<typeof vi.fn> };
+    const previousTimeout = process.env["HEALTHZ_DB_TIMEOUT_MS"];
+    process.env["HEALTHZ_DB_TIMEOUT_MS"] = "250";
+    mockPool.query.mockImplementationOnce(() => new Promise(() => {}));
+
+    const started = Date.now();
+    const res = await request(app).get("/healthz/full");
+    const elapsedMs = Date.now() - started;
+
+    if (previousTimeout === undefined) delete process.env["HEALTHZ_DB_TIMEOUT_MS"];
+    else process.env["HEALTHZ_DB_TIMEOUT_MS"] = previousTimeout;
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("degraded");
+    expect(res.body.checks.db.status).toBe("fail");
+    expect(res.body.checks.db.detail).toContain("timed out");
+    expect(res.body.checks.schema.detail).toContain("timed out");
+    expect(elapsedMs).toBeLessThan(1_500);
   });
 
   it("uptime is a non-negative number", async () => {
