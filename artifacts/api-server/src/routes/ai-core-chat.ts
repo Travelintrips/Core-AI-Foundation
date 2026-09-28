@@ -21,6 +21,7 @@ import {
 } from "../services/localCodingAiPreferredModelService.js";
 import {
   readProductionCodingModelConfig,
+  resolveAlternativeCloudCodingModels,
   resolveProductionCodingModel,
   type ProductionCodingModelSelection,
 } from "../services/localCodingAiProductionModelService.js";
@@ -257,6 +258,59 @@ async function invokeChatModel(
   };
 }
 
+async function resolveCloudFallbackSelections(
+  primary: ProductionCodingModelSelection,
+): Promise<ProductionCodingModelSelection[]> {
+  const alternatives = await resolveAlternativeCloudCodingModels({
+    excludeTargets: [{
+      provider: String(primary.provider.slug),
+      model: String(primary.model.modelId),
+    }],
+    limit: 5,
+  });
+  if (!alternatives.ok) return [];
+
+  const primaryProvider = String(primary.provider.slug).trim().toLowerCase();
+  return [...alternatives.selections].sort((left, right) => {
+    const leftProvider = String(left.provider.slug).trim().toLowerCase();
+    const rightProvider = String(right.provider.slug).trim().toLowerCase();
+    const leftSame = leftProvider === primaryProvider ? 0 : 1;
+    const rightSame = rightProvider === primaryProvider ? 0 : 1;
+    if (leftSame !== rightSame) return leftSame - rightSame;
+
+    if (primaryProvider === "google" || primaryProvider === "gemini" || primaryProvider === "google-gemini") {
+      const leftGemini25 = String(left.model.modelId) === "gemini-2.5-pro" ? 0 : 1;
+      const rightGemini25 = String(right.model.modelId) === "gemini-2.5-pro" ? 0 : 1;
+      if (leftGemini25 !== rightGemini25) return leftGemini25 - rightGemini25;
+    }
+    return 0;
+  });
+}
+
+async function invokeCloudFallbackChain(
+  primary: ProductionCodingModelSelection,
+  message: string,
+): Promise<
+  | { ok: true; result: Awaited<ReturnType<typeof invokeChatModel>>; selection: ProductionCodingModelSelection }
+  | { ok: false; errors: string[] }
+> {
+  const selections = await resolveCloudFallbackSelections(primary);
+  const errors: string[] = [];
+  for (const selection of selections) {
+    try {
+      const result = await invokeChatModel(selection, message);
+      return { ok: true, result, selection };
+    } catch (error) {
+      await quarantineRetiredCloudModel(selection, error);
+      errors.push(
+        String(selection.provider.slug) + "/" + String(selection.model.modelId) + ": " +
+        (safeProviderFailure(error) || "provider failed"),
+      );
+    }
+  }
+  return { ok: false, errors };
+}
+
 async function resolveLocalSelection(): Promise<
   | { ok: true; selection: ProductionCodingModelSelection }
   | { ok: false; message: string }
@@ -487,6 +541,19 @@ async function answerAskMode(
         return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
       } catch (cloudError) {
         await quarantineRetiredCloudModel(cloud.selection, cloudError);
+        const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+        if (cloudFallback.ok) {
+          return {
+            kind: "answer",
+            route: "CLOUD_FALLBACK",
+            ...routingMeta,
+            ...cloudFallback.result,
+            warning:
+              "Cloud primary sedang tidak tersedia; AI Core memakai cloud fallback " +
+              String(cloudFallback.selection.provider.slug) + "/" +
+              String(cloudFallback.selection.model.modelId) + ".",
+          };
+        }
         const local = await resolveLocalSelection();
         if (local.ok) {
           try {
@@ -583,9 +650,22 @@ async function answerAskMode(
       return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
     } catch (error) {
       await quarantineRetiredCloudModel(cloud.selection, error);
+      const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+      if (cloudFallback.ok) {
+        return {
+          kind: "answer",
+          route: "CLOUD_FALLBACK",
+          ...routingMeta,
+          ...cloudFallback.result,
+          warning:
+            "Cloud primary sedang tidak tersedia; AI Core memakai cloud fallback " +
+            String(cloudFallback.selection.provider.slug) + "/" +
+            String(cloudFallback.selection.model.modelId) + ".",
+        };
+      }
       return unavailableAskReply(
-        "Cloud AI sedang tidak dapat menjawab. Tidak ada tindakan sistem yang dijalankan.",
-        safeProviderFailure(error) || "Cloud AI invocation failed.",
+        "Semua cloud route yang tersedia gagal menjawab. Tidak ada tindakan sistem yang dijalankan.",
+        [safeProviderFailure(error), ...cloudFallback.errors].filter(Boolean).join(" | "),
         routingMeta,
       );
     }
@@ -617,9 +697,22 @@ async function answerAskMode(
     return { kind: "answer", route: "CLOUD_FALLBACK", ...routingMeta, ...result };
   } catch (error) {
     await quarantineRetiredCloudModel(cloud.selection, error);
+    const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+    if (cloudFallback.ok) {
+      return {
+        kind: "answer",
+        route: "CLOUD_FALLBACK",
+        ...routingMeta,
+        ...cloudFallback.result,
+        warning:
+          "Local/primary cloud route tidak tersedia; AI Core memakai cloud fallback " +
+          String(cloudFallback.selection.provider.slug) + "/" +
+          String(cloudFallback.selection.model.modelId) + ".",
+      };
+    }
     return unavailableAskReply(
-      "Local AI dan cloud fallback sama-sama gagal menjawab. Coba lagi setelah provider pulih.",
-      [localFailure, safeProviderFailure(error)].filter(Boolean).join(" | "),
+      "Local AI dan seluruh cloud fallback sama-sama gagal menjawab. Coba lagi setelah provider pulih.",
+      [localFailure, safeProviderFailure(error), ...cloudFallback.errors].filter(Boolean).join(" | "),
       routingMeta,
     );
   }
@@ -793,6 +886,31 @@ async function streamAskMode(
             (typeof retry["warning"] === "string" && retry["warning"]
               ? " " + retry["warning"]
               : ""),
+        });
+        return;
+      }
+    }
+
+    if (!emittedText) {
+      const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+      if (cloudFallback.ok) {
+        writeStreamEvent(res, "meta", {
+          route: "CLOUD_FALLBACK",
+          provider: String(cloudFallback.selection.provider.slug),
+          model: String(cloudFallback.selection.model.modelId),
+          ...routingMeta,
+          streaming: false,
+          fallback: true,
+        });
+        writeBufferedChatStream(res, {
+          kind: "answer",
+          route: "CLOUD_FALLBACK",
+          ...routingMeta,
+          ...cloudFallback.result,
+          warning:
+            "Cloud primary sedang tidak tersedia; AI Core memakai cloud fallback " +
+            String(cloudFallback.selection.provider.slug) + "/" +
+            String(cloudFallback.selection.model.modelId) + ".",
         });
         return;
       }
