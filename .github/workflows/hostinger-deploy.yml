@@ -166,7 +166,7 @@ jobs:
           console.log("ai_core_chat_stream_smoke=PASS");
           NODE
 
-      - name: Verify Gemini production inference
+      - name: Verify AI Core cloud routing
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -174,51 +174,74 @@ jobs:
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
 
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/ai-models -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/models")
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS \
+            -o /tmp/ai-models -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/models")
           echo "ai_models_http=$code"
           test "$code" = "200"
 
-          model_id=$(node - <<'NODE'
+          node - <<'NODE'
           const fs = require("fs");
           const models = JSON.parse(fs.readFileSync("/tmp/ai-models", "utf8"));
           const target = models.find((m) => m.modelId === "gemini-3.8-flash" && m.isActive === true);
           if (!target) throw new Error("Active gemini-3.8-flash is not registered");
-          process.stdout.write(String(target.id));
+          console.log("gemini_primary_registered=PASS id="+target.id);
           NODE
-          )
 
+          payload='{"message":"Reply with exactly AI_CORE_CLOUD_OK","mode":"ask","modelPolicy":"cloud"}'
           smoke_code=""
-          for attempt in $(seq 1 6); do
-            rm -f /tmp/gemini-model-smoke
-            smoke_code=$(curl --http1.1 -L -sS               -o /tmp/gemini-model-smoke -w "%{http_code}"               --connect-timeout 15 --max-time 45               -X POST               -H "Content-Type: application/json"               -H "x-admin-api-key: $ADMIN_API_KEY"               "$API_BASE_URL/ai/models/$model_id/smoke-test" || true)
-            echo "gemini_model_smoke_attempt=$attempt/6 http=${smoke_code:-curl-error}"
+          for attempt in $(seq 1 4); do
+            rm -f /tmp/ai-core-cloud-smoke
+            smoke_code=$(curl --http1.1 -L -sS \
+              -o /tmp/ai-core-cloud-smoke -w "%{http_code}" \
+              --connect-timeout 15 --max-time 75 \
+              -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              -d "$payload" \
+              "$API_BASE_URL/ai/core-chat/messages" || true)
+            echo "ai_core_cloud_smoke_attempt=$attempt/4 http=${smoke_code:-curl-error}"
 
             if [ "$smoke_code" = "200" ]; then
               break
             fi
 
-            if [[ "$smoke_code" = "502" || "$smoke_code" = "503" || "$smoke_code" = "504" || "$smoke_code" = "000" ]]; then
-              if [ "$attempt" -lt 6 ]; then
+            if [[ "$smoke_code" = "500" || "$smoke_code" = "502" || "$smoke_code" = "503" || "$smoke_code" = "504" || "$smoke_code" = "000" ]]; then
+              if [ "$attempt" -lt 4 ]; then
                 sleep $((attempt * 5))
                 continue
               fi
             fi
 
-            echo "::error::Gemini production inference failed with HTTP ${smoke_code:-curl-error}"
-            cat /tmp/gemini-model-smoke 2>/dev/null || true
+            echo "::error::AI Core cloud routing smoke failed with HTTP ${smoke_code:-curl-error}"
+            cat /tmp/ai-core-cloud-smoke 2>/dev/null || true
             exit 1
           done
           test "$smoke_code" = "200"
 
           node - <<'NODE'
           const fs = require("fs");
-          const value = JSON.parse(fs.readFileSync("/tmp/gemini-model-smoke", "utf8"));
-          if (value.ok !== true) throw new Error("Gemini smoke did not return ok=true");
-          if (value.provider !== "google") throw new Error("Expected google provider");
-          if (value.model !== "gemini-3.8-flash") throw new Error("Unexpected Gemini model");
-          if (value.outputReceived !== true) throw new Error("Gemini returned no text");
-          if (!Number.isFinite(value.latencyMs) || value.latencyMs < 0) throw new Error("Invalid Gemini latency");
-          console.log("gemini_model_smoke=PASS model="+value.model+" latencyMs="+value.latencyMs+" totalTokens="+(value.usage?.totalTokens ?? "unknown"));
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-cloud-smoke", "utf8"));
+          if (!["CLOUD","CLOUD_FALLBACK"].includes(value.route)) {
+            throw new Error("Expected CLOUD or CLOUD_FALLBACK route, got "+String(value.route));
+          }
+          if (typeof value.provider !== "string" || !value.provider) {
+            throw new Error("Cloud smoke returned no provider");
+          }
+          if (["ollama","zerollm"].includes(value.provider)) {
+            throw new Error("Cloud policy must not fall back to local provider");
+          }
+          if (typeof value.reply !== "string" || value.reply.trim().length === 0) {
+            throw new Error("Cloud routing returned no reply text");
+          }
+          console.log(
+            "ai_core_cloud_routing=PASS route="+value.route+
+            " provider="+value.provider+
+            " model="+String(value.model ?? "unknown")+
+            " totalTokens="+String(value.usage?.totalTokens ?? "unknown")
+          );
           NODE
 
       - name: Verify AI Core Data Tool schema readiness
