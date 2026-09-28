@@ -115,6 +115,7 @@ function mapHttpFailure(status: number): ProviderInvocationError {
 
 export function createScheduledOllamaProviderAdapter(input: {
   modelId: string;
+  apiKey?: string;
 }): ConstrainedModelProvider {
   return {
     provider: "ollama",
@@ -159,6 +160,7 @@ export function createScheduledOllamaProviderAdapter(input: {
       let outcome: "success" | "failure" = "failure";
 
       try {
+        const apiKey = (input.apiKey ?? process.env["OLLAMA_WORKER_API_KEY"] ?? "").trim();
         const response = await fetch(
           reservation.endpointUrl + "/chat/completions",
           {
@@ -166,6 +168,7 @@ export function createScheduledOllamaProviderAdapter(input: {
             headers: {
               "content-type": "application/json",
               accept: "application/json",
+              ...(apiKey ? { "x-api-key": apiKey } : {}),
             },
             body: JSON.stringify({
               model: reservation.modelId,
