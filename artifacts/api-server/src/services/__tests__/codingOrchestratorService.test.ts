@@ -12,6 +12,7 @@ const mockGetFallbackModels = vi.hoisted(() => vi.fn());
 const mockExecuteAI = vi.hoisted(() => vi.fn());
 const mockLogAudit = vi.hoisted(() => vi.fn());
 const mockGenerateAndPersistCodingMultiTaskPlan = vi.hoisted(() => vi.fn());
+const mockSpawn = vi.hoisted(() => vi.fn());
 
 const insertBuilder = {
   values: mockInsertValues,
@@ -24,6 +25,14 @@ const updateBuilder = {
 const tx = {
   update: vi.fn(() => updateBuilder),
 };
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: mockSpawn,
+  };
+});
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((...args: unknown[]) => args),
@@ -111,6 +120,7 @@ describe("Coding Orchestrator", () => {
     mockUpdateWhere.mockResolvedValue([]);
     mockTransaction.mockImplementation((callback: (executor: typeof tx) => unknown) => callback(tx));
     mockLogAudit.mockResolvedValue(undefined);
+    mockSpawn.mockReturnValue({ unref: vi.fn(), once: vi.fn() });
 
     mockEnqueue.mockResolvedValue({
       id: 701,
@@ -200,54 +210,16 @@ describe("Coding Orchestrator", () => {
       }),
     }));
 
-    await vi.waitFor(() => {
-      expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 701 }),
-        { finalizeCodingRun: false },
-      );
-    });
-
-    expect(mockGenerateAndPersistCodingMultiTaskPlan).toHaveBeenCalledTimes(1);
-    expect(mockGenerateAndPersistCodingMultiTaskPlan).toHaveBeenCalledWith(
-      task.id,
-      expect.objectContaining({
-        codingTaskId: task.id,
-        codingRunId: run.id,
-        localExecutionPlan: expect.objectContaining({ status: "AI_REQUIRED" }),
-      }),
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(mockSpawn.mock.calls[0]?.[1]).toEqual(
+      expect.arrayContaining([expect.stringContaining("repository-analyzer-worker.mjs"), "701"]),
     );
+    // Heavy analysis/planning now belongs to the dedicated child process.
+    expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+    expect(mockGenerateAndPersistCodingMultiTaskPlan).not.toHaveBeenCalled();
     expect(mockRouteToModel).not.toHaveBeenCalled();
     expect(mockGetFallbackModels).not.toHaveBeenCalled();
     expect(mockExecuteAI).not.toHaveBeenCalled();
-
-    const runUpdates = mockUpdateSet.mock.calls
-      .map(([value]) => value)
-      .filter((value) => value && typeof value === "object");
-
-    expect(runUpdates).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        status: "COMPLETED",
-        logs: expect.stringContaining('"nextAction": "APPROVE_TASK_GRAPH"'),
-      }),
-      expect.objectContaining({
-        status: "READY_REVIEW",
-        resultSummary: expect.stringContaining("bounded AI planner generated a PREPARED task graph"),
-      }),
-    ]));
-
-    const finalLogs = runUpdates
-      .map((value) => (value as { logs?: string }).logs)
-      .find((value): value is string =>
-        typeof value === "string" && value.includes('"nextAction": "APPROVE_TASK_GRAPH"'),
-      );
-
-    expect(finalLogs).toContain('"Local Deterministic Planner"');
-    expect(finalLogs).toContain('"Local Coding Executor"');
-    expect(finalLogs).toContain('"status": "BLOCKED"');
-    expect(finalLogs).toContain('"graphStatus": "PREPARED"');
-    expect(finalLogs).toContain('"graphVersion": 1');
-    expect(finalLogs).toContain('"provider": "openai"');
-    expect(finalLogs).not.toContain('"implementationPlan"');
   });
 
   it("retries transient orchestrator session bootstrap failures idempotently", async () => {
@@ -265,12 +237,10 @@ describe("Coding Orchestrator", () => {
     expect(mockInsertOnConflictDoNothing).toHaveBeenCalledTimes(3);
     expect(mockEnqueue).toHaveBeenCalledTimes(1);
 
-    await vi.waitFor(() => {
-      expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 701 }),
-        { finalizeCodingRun: false },
-      );
-    });
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(mockSpawn.mock.calls[0]?.[1]).toEqual(
+      expect.arrayContaining([expect.stringContaining("repository-analyzer-worker.mjs"), "701"]),
+    );
   });
 
   it("retries ambiguous analyzer enqueue failures with one stable idempotency key", async () => {
@@ -302,64 +272,16 @@ describe("Coding Orchestrator", () => {
       });
     }
 
-    await vi.waitFor(() => {
-      expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 702 }),
-        { finalizeCodingRun: false },
-      );
-    });
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(mockSpawn.mock.calls[0]?.[1]).toEqual(
+      expect.arrayContaining([expect.stringContaining("repository-analyzer-worker.mjs"), "702"]),
+    );
   });
 
-  it("surfaces a deterministic review-only patch before any AI fallback", async () => {
-    mockExecuteRepositoryAnalyzerJobOnDemand.mockResolvedValueOnce({
-      codingTaskId: task.id,
-      codingRunId: run.id,
-      executionStatus: "COMPLETED",
-      summary: "Local Coding Executor produced a review-only patch.",
-      relevantFiles: ["src/index.ts"],
-      filesInspected: ["src/index.ts"],
-      findings: [],
-      recommendedChanges: ["Review the deterministic patch."],
-      localExecutionPlan: {
-        status: "EXECUTABLE",
-        reason: "Detected one deterministic local edit operation.",
-        operations: [{
-          kind: "replace_text",
-          path: "src/index.ts",
-          search: "old",
-          replacement: "new",
-        }],
-        verificationCommands: ["pnpm test"],
-        targetFiles: ["src/index.ts"],
-        warnings: [],
-      },
-      localExecution: {
-        status: "APPLIED",
-        reason: "Deterministic local patch was produced; verification was intentionally not executed.",
-        changedFiles: ["src/index.ts"],
-        patch: "diff --git a/src/index.ts b/src/index.ts",
-        verification: [],
-        rolledBack: false,
-        warnings: ["Verification was skipped; repository scripts were not executed."],
-      },
-    });
-
+  it("launches the dedicated analyzer without running heavy work in the API process", async () => {
     await startCodingOrchestration({ task: task as never, run: run as never });
 
-    await vi.waitFor(() => {
-      const logs = mockUpdateSet.mock.calls
-        .map(([value]) => (value as { logs?: string })?.logs)
-        .find((value): value is string =>
-          typeof value === "string" && value.includes('"nextAction": "REVIEW_LOCAL_PATCH"'),
-        );
-      expect(logs).toContain('"Local Deterministic Planner"');
-      expect(logs).toContain('"Local Coding Executor"');
-      expect(logs).toContain('"status": "COMPLETED"');
-    });
-
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
     expect(mockGenerateAndPersistCodingMultiTaskPlan).not.toHaveBeenCalled();
-    expect(mockRouteToModel).not.toHaveBeenCalled();
-    expect(mockGetFallbackModels).not.toHaveBeenCalled();
-    expect(mockExecuteAI).not.toHaveBeenCalled();
-  });
-});
+  });});
