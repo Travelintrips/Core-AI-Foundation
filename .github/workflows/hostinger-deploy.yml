@@ -197,7 +197,7 @@ jobs:
               break
             fi
 
-            if [[ "$smoke_code" = "502" || "$smoke_code" = "503" || "$smoke_code" = "504" || "$smoke_code" = "000" ]]; then
+            if [[ "$smoke_code" = "500" || "$smoke_code" = "502" || "$smoke_code" = "503" || "$smoke_code" = "504" || "$smoke_code" = "000" ]]; then
               if [ "$attempt" -lt 6 ]; then
                 sleep $((attempt * 5))
                 continue
