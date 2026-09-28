@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@workspace/db", () => ({
   db: {},
+  withTransientDatabaseRetry: vi.fn(async (operation: () => Promise<unknown>) => operation()),
   aiCodingBridgeCommandsTable: {},
   aiCodingRunsTable: {},
   aiCodingTasksTable: {},
