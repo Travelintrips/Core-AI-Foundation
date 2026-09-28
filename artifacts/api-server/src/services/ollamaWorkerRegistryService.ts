@@ -17,6 +17,8 @@ export const OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 
 const DEFAULT_MODEL = "qwen2.5-coder:7b";
 const DEFAULT_MAX_CONCURRENCY = 2;
+const OLLAMA_RESERVATION_STALE_MS = 360_000;
+const RELEASE_RETRY_DELAYS_MS = [0, 150, 500] as const;
 
 export interface RegisterOllamaWorkerInput {
   workerName: string;
@@ -260,7 +262,7 @@ export async function getOllamaWorkerAvailability(
   return row ? availabilityFromRow(row) : null;
 }
 
-export async function reserveOllamaWorker(
+async function attemptReserveOllamaWorker(
   modelId: string,
 ): Promise<OllamaWorkerReservation | null> {
   return db.transaction(async (tx) => {
@@ -312,6 +314,42 @@ export async function reserveOllamaWorker(
   });
 }
 
+export async function recoverStaleOllamaReservations(
+  modelId: string,
+  staleAfterMs = OLLAMA_RESERVATION_STALE_MS,
+): Promise<number> {
+  const boundedStaleMs = Math.max(300_000, Math.min(3_600_000, Math.floor(staleAfterMs)));
+  const raw = await db.execute(sql`
+    UPDATE ai_platform.ai_workers
+    SET
+      running_jobs = 0,
+      status = 'idle',
+      updated_at = NOW()
+    WHERE provider_slug = ${OLLAMA_WORKER_PROVIDER}
+      AND runtime_kind = ${OLLAMA_WORKER_RUNTIME_KIND}
+      AND model_id = ${modelId}
+      AND running_jobs > 0
+      AND lease_expires_at IS NOT NULL
+      AND lease_expires_at > NOW()
+      AND updated_at < NOW() - (${boundedStaleMs} * INTERVAL '1 millisecond')
+    RETURNING id
+  `);
+
+  return (raw as unknown as { rows?: Array<{ id?: unknown }> }).rows?.length ?? 0;
+}
+
+export async function reserveOllamaWorker(
+  modelId: string,
+): Promise<OllamaWorkerReservation | null> {
+  const first = await attemptReserveOllamaWorker(modelId);
+  if (first) return first;
+
+  const recovered = await recoverStaleOllamaReservations(modelId).catch(() => 0);
+  if (recovered <= 0) return null;
+
+  return attemptReserveOllamaWorker(modelId);
+}
+
 export async function releaseOllamaWorkerReservation(
   workerId: number,
   outcome: "success" | "failure",
@@ -322,23 +360,39 @@ export async function releaseOllamaWorkerReservation(
     Math.min(86_400_000, Math.floor(latencyMs)),
   );
 
-  await db.execute(sql`
-    UPDATE ai_platform.ai_workers
-    SET
-      running_jobs = GREATEST(running_jobs - 1, 0),
-      status = CASE
-        WHEN GREATEST(running_jobs - 1, 0) = 0 THEN 'idle'
-        ELSE 'busy'
-      END,
-      completed_today =
-        completed_today + ${outcome === "success" ? 1 : 0},
-      failed_today =
-        failed_today + ${outcome === "failure" ? 1 : 0},
-      average_latency = CASE
-        WHEN average_latency IS NULL THEN ${boundedLatency}
-        ELSE ROUND((average_latency::numeric + ${boundedLatency}) / 2, 2)
-      END,
-      updated_at = NOW()
-    WHERE id = ${workerId}
-  `);
+  let lastError: unknown;
+  for (const delayMs of RELEASE_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      await db.execute(sql`
+        UPDATE ai_platform.ai_workers
+        SET
+          running_jobs = GREATEST(running_jobs - 1, 0),
+          status = CASE
+            WHEN GREATEST(running_jobs - 1, 0) = 0 THEN 'idle'
+            ELSE 'busy'
+          END,
+          completed_today =
+            completed_today + ${outcome === "success" ? 1 : 0},
+          failed_today =
+            failed_today + ${outcome === "failure" ? 1 : 0},
+          average_latency = CASE
+            WHEN average_latency IS NULL THEN ${boundedLatency}
+            ELSE ROUND((average_latency::numeric + ${boundedLatency}) / 2, 2)
+          END,
+          updated_at = NOW()
+        WHERE id = ${workerId}
+      `);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Failed to release Ollama worker reservation after retries");
 }
