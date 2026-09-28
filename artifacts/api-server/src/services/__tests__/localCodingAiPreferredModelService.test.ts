@@ -147,7 +147,7 @@ describe("Preferred constrained coding model routing", () => {
     });
   });
 
-  it("prefers a healthy registered Ollama worker pool over loopback runtime", async () => {
+  it("routes a healthy registered Ollama worker through the scheduled adapter", async () => {
     mocks.registeredWorker = {
       id: 7,
       workerName: "ollama-gpu-01",
@@ -164,7 +164,6 @@ describe("Preferred constrained coding model routing", () => {
       selection: {
         provider: {
           slug: "ollama",
-          baseUrl: "http://10.10.0.21:11434/v1",
         },
         model: {
           modelId: "qwen2.5-coder:7b",
