@@ -23,6 +23,7 @@ import {
   WORKER_TYPE_CAPABILITIES,
 } from "../services/workerClusterService.js";
 import { logger } from "../lib/logger.js";
+import { getOllamaWorkerRuntimeStatus } from "../services/ollamaWorkerRuntimeService.js";
 
 const router = Router();
 
@@ -36,6 +37,12 @@ router.get("/ai/cluster/status", async (_req, res): Promise<void> => {
     logger.error({ err }, "[cluster] getClusterStatus failed");
     res.status(500).json({ error: "Failed to get cluster status" });
   }
+});
+
+// ── GET /api/ai/cluster/ollama-runtime ────────────────────────────────────────
+
+router.get("/ai/cluster/ollama-runtime", (_req, res): void => {
+  res.json(getOllamaWorkerRuntimeStatus());
 });
 
 // ── GET /api/ai/cluster/workers ────────────────────────────────────────────────
