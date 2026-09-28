@@ -35,11 +35,30 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Resolve production verification target
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          echo "latest_main_sha=$latest_main_sha"
+          echo "latest_main_sha=$latest_main_sha" >> "$GITHUB_OUTPUT"
+          echo "expected_sha=$EXPECTED_SHA"
+
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "$EXPECTED_SHA" != "$latest_main_sha" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping stale production verification trigger. expected_sha=$EXPECTED_SHA latest_main_sha=$latest_main_sha"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Wait for stable exact production commit
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: bash scripts/hostinger-production-probe.sh
 
       - name: Verify readiness
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -71,6 +90,7 @@ jobs:
           done
 
       - name: Verify admin auth guard
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/tasks -w "%{http_code}" \
@@ -79,6 +99,7 @@ jobs:
           test "$code" = "401"
 
       - name: Verify authenticated Coding Workspace
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -94,6 +115,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/tasks-auth","utf8")); if(!Array.isArray(v)) throw new Error("Expected coding tasks array"); console.log("coding_tasks_authenticated_payload=array");'
 
       - name: Verify deterministic AI Core Chat smoke
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -166,7 +188,91 @@ jobs:
           console.log("ai_core_chat_stream_smoke=PASS");
           NODE
 
+      - name: Verify GCP Ollama worker and Economy routing
+        if: steps.target.outputs.stale != 'true'
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          workers_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/ollama-workers -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/cluster/workers")
+          echo "ollama_worker_registry_http=$workers_code"
+          test "$workers_code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const workers = JSON.parse(fs.readFileSync("/tmp/ollama-workers", "utf8"));
+          if (!Array.isArray(workers)) throw new Error("Expected worker capacity array");
+          const worker = workers.find((w) => w.workerName === "gcp-ollama-01");
+          if (!worker) throw new Error("gcp-ollama-01 is not registered");
+          if (!["online", "idle", "busy"].includes(String(worker.status).toLowerCase())) {
+            throw new Error("gcp-ollama-01 is not online: " + String(worker.status));
+          }
+          if (worker.leaseValid !== true) throw new Error("gcp-ollama-01 lease is not valid");
+          if (worker.providerSlug !== "ollama") throw new Error("Unexpected provider: " + String(worker.providerSlug));
+          if (worker.modelId !== "qwen2.5-coder:7b") throw new Error("Unexpected model: " + String(worker.modelId));
+          if (worker.endpointUrl !== "https://ollama.cstlogistic.co.id/v1") {
+            throw new Error("Unexpected Ollama endpoint");
+          }
+          console.log(
+            "gcp_ollama_worker=PASS status="+worker.status+
+            " runningJobs="+String(worker.runningJobs)+
+            " availableSlots="+String(worker.availableSlots)+
+            " leaseValid="+String(worker.leaseValid)
+          );
+          NODE
+
+          payload='{"message":"Jawab tepat: GCP_OLLAMA_CI_OK","mode":"ask","modelPolicy":"economy"}'
+          economy_ok=false
+          for attempt in $(seq 1 3); do
+            started=$(date +%s)
+            code=$(curl --http1.1 -L -sS               -o /tmp/ai-core-ollama-smoke -w "%{http_code}"               --connect-timeout 15 --max-time 75               -H "Content-Type: application/json"               -H "x-admin-api-key: $ADMIN_API_KEY"               -d "$payload"               "$API_BASE_URL/ai/core-chat/messages" || true)
+            elapsed=$(( $(date +%s) - started ))
+            echo "ollama_economy_attempt=$attempt/3 http=${code:-curl-error} elapsed_s=$elapsed"
+
+            if [ "$code" = "200" ] && node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-ollama-smoke", "utf8"));
+          const ok =
+            value.route === "LOCAL" &&
+            value.provider === "ollama" &&
+            value.model === "qwen2.5-coder:7b" &&
+            value.reply?.trim() === "GCP_OLLAMA_CI_OK" &&
+            value.estimatedCostUsd === 0;
+          process.exit(ok ? 0 : 1);
+          NODE
+            then
+              economy_ok=true
+              break
+            fi
+
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 5)); fi
+          done
+
+          if [ "$economy_ok" != "true" ]; then
+            echo "::error::GCP Ollama Economy routing smoke failed after bounded retries"
+            cat /tmp/ai-core-ollama-smoke 2>/dev/null || true
+            exit 1
+          fi
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-ollama-smoke", "utf8"));
+          console.log(
+            "gcp_ollama_economy=PASS"+
+            " route="+value.route+
+            " provider="+value.provider+
+            " model="+value.model+
+            " latencyMs="+String(value.latencyMs ?? "unknown")+
+            " totalTokens="+String(value.usage?.totalTokens ?? "unknown")+
+            " estimatedCostUsd="+String(value.estimatedCostUsd)
+          );
+          NODE
+
       - name: Verify AI Core cloud routing
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -245,6 +351,7 @@ jobs:
           NODE
 
       - name: Verify AI Core Data Tool schema readiness
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -274,6 +381,7 @@ jobs:
           NODE
 
       - name: Verify AI Core Data Tool execution
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -336,6 +444,7 @@ jobs:
           NODE
 
       - name: Inspect ZeroLLM host readiness
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -349,6 +458,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/zerollm-readiness","utf8")); if(v.provider!=="zerollm"||v.loopbackOnly!==true) throw new Error("Invalid ZeroLLM readiness payload");'
 
       - name: Verify Coding Workspace GitHub repository discovery
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -364,6 +474,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/github-repositories","utf8")); if(!Array.isArray(v.repositories)) throw new Error("Expected repositories array"); if(!v.repositories.some(r=>r.fullName==="Travelintrips/Core-AI-Foundation")) throw new Error("Core-AI-Foundation not returned by GitHub discovery"); console.log("github_repository_discovery=PASS count="+v.repositories.length);'
 
       - name: Verify public sitemap for Googlebot
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -399,7 +510,7 @@ jobs:
           test "$legacy_location" = "$PUBLIC_SITEMAP_URL"
 
       - name: Report Hostinger verification failure
-        if: failure()
+        if: failure() && steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -426,9 +537,18 @@ jobs:
             "$API_BASE_URL/ai/incidents" || true
 
       - name: Verification summary
+        if: steps.target.outputs.stale != 'true'
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
           echo "Health/readiness: PASS"
           echo "Admin auth guard: PASS"
           echo "Authenticated Coding Workspace smoke: PASS"
+          echo "GCP Ollama worker + Economy routing: PASS"
           echo "Public sitemap Googlebot fetch: PASS"
+
+      - name: Stale trigger summary
+        if: steps.target.outputs.stale == 'true'
+        run: |
+          echo "Skipped stale production verification trigger."
+          echo "Triggered SHA: $EXPECTED_SHA"
+          echo "Current main SHA: ${{ steps.target.outputs.latest_main_sha }}"

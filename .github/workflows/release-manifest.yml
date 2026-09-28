@@ -19,7 +19,31 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
+      - name: Confirm exact production release SHA
+        id: production
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+        run: |
+          set -euo pipefail
+          rm -f /tmp/release-headers
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -sS             -D /tmp/release-headers -o /dev/null -w "%{http_code}"             --connect-timeout 15 --max-time 30 "$API_BASE_URL/healthz" || true)
+          live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/release-headers | tail -n1)
+
+          echo "release_sha=$RELEASE_SHA"
+          echo "live_sha=${live_sha:-missing}"
+          echo "http=$code"
+
+          if [ "$code" = "200" ] && [ "$live_sha" = "$RELEASE_SHA" ]; then
+            echo "record=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "record=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release manifest not recorded because production is not on the exact verified SHA."
+          fi
+
       - name: Prepare release manifest
+        if: steps.production.outputs.record == 'true'
         shell: bash
         env:
           RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
@@ -36,6 +60,7 @@ jobs:
           cat .release/release.json
 
       - name: Upload release manifest artifact
+        if: steps.production.outputs.record == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: production-release-manifest-${{ github.run_id }}
