@@ -7,10 +7,8 @@ import {
   LocalCodingTaskGraphError,
   persistCodingTaskGraph,
 } from "../services/localCodingTaskGraphService.js";
-import {
-  AutomatedMultiTaskPlannerError,
-  generateAndPersistCodingMultiTaskPlan,
-} from "../services/localCodingAutomatedMultiTaskPlannerService.js";
+import { AutomatedMultiTaskPlannerError } from "../services/localCodingAutomatedMultiTaskPlannerService.js";
+import { enqueueCodingMultiTaskPlanner } from "../services/localCodingPlannerQueueRuntimeService.js";
 import {
   completeReviewedCodingWorkstream,
   LocalCodingMultiWorkerError,
@@ -224,13 +222,19 @@ router.post(
     }
 
     try {
-      const result = await generateAndPersistCodingMultiTaskPlan(
-        params.data.id,
-      );
       const snapshot = await getLatestCodingTaskGraph(params.data.id);
-      res.status(result.created ? 201 : 200).json({
-        ...result,
-        snapshot,
+      if (snapshot?.graph.status === "PREPARED") {
+        res.status(200).json({ created: false, snapshot, nextAction: "APPROVE_TASK_GRAPH" });
+        return;
+      }
+      const queued = await enqueueCodingMultiTaskPlanner(params.data.id);
+      res.status(202).json({
+        queued: true,
+        created: queued.created,
+        jobId: queued.job.id,
+        jobCode: queued.job.jobCode,
+        status: queued.job.status,
+        nextAction: "WAIT_FOR_TASK_GRAPH",
       });
     } catch (error) {
       if (sendKnownError(res, error)) return;
