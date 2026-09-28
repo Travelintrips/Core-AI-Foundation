@@ -423,7 +423,7 @@ describe("AI coding workspace run endpoint", () => {
     const response = await request(app).post(`/ai/coding/tasks/${taskId}/run`);
 
     expect(response.status).toBe(409);
-    expect(response.body).toEqual({ error: "Coding task already has an active run" });
+    expect(response.body).toEqual({ error: "Coding task already has an active run", activeRunId: runId });
     expect(mockInsertValues).not.toHaveBeenCalled();
     expect(mockUpdateSet).not.toHaveBeenCalled();
     expect(mockStartCodingOrchestration).not.toHaveBeenCalled();
