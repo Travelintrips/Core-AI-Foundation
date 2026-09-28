@@ -78,6 +78,7 @@ const mocks = vi.hoisted(() => {
     latest: vi.fn(),
     approve: vi.fn(),
     generate: vi.fn(),
+    enqueuePlanner: vi.fn(),
     dispatch: vi.fn(),
     completeReviewed: vi.fn(),
     prepareAiHandoff: vi.fn(),
@@ -106,6 +107,10 @@ vi.mock("../../services/localCodingTaskGraphService.js", () => ({
 vi.mock("../../services/localCodingAutomatedMultiTaskPlannerService.js", () => ({
   generateAndPersistCodingMultiTaskPlan: mocks.generate,
   AutomatedMultiTaskPlannerError: mocks.MockAutomatedPlannerError,
+}));
+
+vi.mock("../../services/localCodingPlannerQueueRuntimeService.js", () => ({
+  enqueueCodingMultiTaskPlanner: mocks.enqueuePlanner,
 }));
 
 vi.mock("../../services/localCodingMultiWorkerOrchestratorService.js", () => ({
@@ -173,6 +178,10 @@ describe("multi-worker coding task graph API", () => {
         taskId: TASK_ID,
         status: "PREPARED",
       },
+    });
+    mocks.enqueuePlanner.mockResolvedValue({
+      created: true,
+      job: { id: 92, jobCode: "PLAN-TEST92", status: "queued" },
     });
     mocks.generate.mockResolvedValue({
       created: true,
@@ -281,39 +290,37 @@ describe("multi-worker coding task graph API", () => {
     });
   });
 
-  it("generates and persists a constrained PREPARED multi-task plan", async () => {
+  it("queues constrained multi-task planning without blocking the HTTP request", async () => {
+    mocks.latest.mockResolvedValueOnce(null);
     const response = await request(app)
       .post(`/ai/coding/tasks/${TASK_ID}/task-graph/generate`)
       .send({});
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(202);
     expect(response.body).toMatchObject({
+      queued: true,
       created: true,
-      graphId: GRAPH_ID,
-      graphStatus: "PREPARED",
-      nextAction: "APPROVE_TASK_GRAPH",
-      model: {
-        provider: "fake-provider",
-        model: "fake-model",
-      },
+      jobId: 92,
+      jobCode: "PLAN-TEST92",
+      status: "queued",
+      nextAction: "WAIT_FOR_TASK_GRAPH",
     });
-    expect(mocks.generate).toHaveBeenCalledWith(TASK_ID);
+    expect(mocks.enqueuePlanner).toHaveBeenCalledWith(TASK_ID);
+    expect(mocks.generate).not.toHaveBeenCalled();
   });
 
-  it("returns 409 when repository analysis is not ready for automated planning", async () => {
-    mocks.generate.mockRejectedValueOnce(
-      new mocks.MockAutomatedPlannerError(
-        "Repository analysis must complete first.",
-        "ANALYSIS_REQUIRED",
-      ),
-    );
-
+  it("returns the durable PREPARED graph idempotently without enqueueing another planner", async () => {
     const response = await request(app)
       .post(`/ai/coding/tasks/${TASK_ID}/task-graph/generate`)
       .send({});
 
-    expect(response.status).toBe(409);
-    expect(response.body.code).toBe("ANALYSIS_REQUIRED");
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      created: false,
+      nextAction: "APPROVE_TASK_GRAPH",
+      snapshot: { graph: { id: GRAPH_ID, status: "PREPARED" } },
+    });
+    expect(mocks.enqueuePlanner).not.toHaveBeenCalled();
   });
 
   it("persists a bounded planner contract and returns the durable snapshot", async () => {
