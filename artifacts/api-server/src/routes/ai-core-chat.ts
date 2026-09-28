@@ -42,6 +42,7 @@ import {
   tryRunAiCoreDataTool,
 } from "../services/aiCoreDataToolService.js";
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
+import { deactivateRegisteredModel } from "../services/aiModelService.js";
 import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
 
 const router = Router();
@@ -124,6 +125,40 @@ function safeProviderFailure(error: unknown): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
+}
+
+function isExplicitRetiredModelFailure(
+  providerSlug: string,
+  error: unknown,
+): boolean {
+  const provider = providerSlug.trim().toLowerCase();
+  if (!["google", "gemini", "google-gemini"].includes(provider)) return false;
+
+  const detail = safeProviderFailure(error).toLowerCase();
+  const explicitRetirement =
+    detail.includes("no longer available") ||
+    detail.includes("model is no longer available") ||
+    detail.includes("model has been retired") ||
+    detail.includes("model was retired");
+  const explicitModelNotFound =
+    detail.includes("http 404") &&
+    (detail.includes('"status":"not_found"') ||
+      detail.includes("status: not_found") ||
+      detail.includes("model") && detail.includes("not found"));
+
+  return explicitRetirement || explicitModelNotFound;
+}
+
+async function quarantineRetiredCloudModel(
+  selection: ProductionCodingModelSelection,
+  error: unknown,
+): Promise<boolean> {
+  const provider = String(selection.provider.slug).trim().toLowerCase();
+  const model = String(selection.model.modelId).trim();
+  if (!isExplicitRetiredModelFailure(provider, error)) return false;
+
+  await deactivateRegisteredModel(provider, model).catch(() => false);
+  return true;
 }
 
 function unavailableAskReply(
@@ -451,6 +486,7 @@ async function answerAskMode(
         const result = await invokeChatModel(cloud.selection, message);
         return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
       } catch (cloudError) {
+        await quarantineRetiredCloudModel(cloud.selection, cloudError);
         const local = await resolveLocalSelection();
         if (local.ok) {
           try {
@@ -546,6 +582,7 @@ async function answerAskMode(
       const result = await invokeChatModel(cloud.selection, message);
       return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
     } catch (error) {
+      await quarantineRetiredCloudModel(cloud.selection, error);
       return unavailableAskReply(
         "Cloud AI sedang tidak dapat menjawab. Tidak ada tindakan sistem yang dijalankan.",
         safeProviderFailure(error) || "Cloud AI invocation failed.",
@@ -579,6 +616,7 @@ async function answerAskMode(
     const result = await invokeChatModel(cloud.selection, message);
     return { kind: "answer", route: "CLOUD_FALLBACK", ...routingMeta, ...result };
   } catch (error) {
+    await quarantineRetiredCloudModel(cloud.selection, error);
     return unavailableAskReply(
       "Local AI dan cloud fallback sama-sama gagal menjawab. Coba lagi setelah provider pulih.",
       [localFailure, safeProviderFailure(error)].filter(Boolean).join(" | "),
@@ -735,8 +773,30 @@ async function streamAskMode(
   } catch (error) {
     if (signal.aborted || res.writableEnded) return;
 
+    const quarantined = await quarantineRetiredCloudModel(
+      cloud.selection,
+      error,
+    );
+
     const failure =
       safeProviderFailure(error) || "Cloud streaming invocation failed.";
+
+    if (!emittedText && quarantined) {
+      const retry = await answerAskMode(message, policy);
+      const retryModel =
+        typeof retry["model"] === "string" ? retry["model"] : null;
+      if (retryModel !== model || retry["route"] !== "CLOUD") {
+        writeBufferedChatStream(res, {
+          ...retry,
+          warning:
+            "Model cloud sebelumnya sudah retired/tidak tersedia dan telah dinonaktifkan otomatis. AI Core merutekan ulang request ini." +
+            (typeof retry["warning"] === "string" && retry["warning"]
+              ? " " + retry["warning"]
+              : ""),
+        });
+        return;
+      }
+    }
 
     if (!emittedText && policy === "smart") {
       const local = await resolveLocalSelection();
