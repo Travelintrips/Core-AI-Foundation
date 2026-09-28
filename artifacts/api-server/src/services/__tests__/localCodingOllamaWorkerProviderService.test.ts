@@ -38,6 +38,7 @@ describe("scheduled Ollama constrained provider", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
