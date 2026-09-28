@@ -26,9 +26,13 @@ const tx = {
   update: vi.fn(() => updateBuilder),
 };
 
-vi.mock("node:child_process", () => ({
-  spawn: mockSpawn,
-}));
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: mockSpawn,
+  };
+});
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((...args: unknown[]) => args),
