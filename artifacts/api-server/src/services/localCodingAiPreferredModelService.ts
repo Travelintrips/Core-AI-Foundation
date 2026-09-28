@@ -153,6 +153,38 @@ export async function resolveConfiguredCodingFallbackModel(
     };
   }
 
+  // When the hosted Ollama runtime is configured, never fall through to the
+  // legacy loopback health check just because the registry lookup is briefly
+  // empty or its DB query is transiently unavailable. Invocation will perform
+  // the authoritative reservation check and return a bounded UNAVAILABLE
+  // error if no worker can actually be reserved.
+  const hostedRuntimeEnabled = ["1", "true", "yes", "on"].includes(
+    (env["OLLAMA_WORKER_RUNTIME_ENABLED"] ?? "").trim().toLowerCase(),
+  );
+  const hostedRuntimeModel = (
+    env["OLLAMA_WORKER_MODEL"] ||
+    env["OLLAMA_MODEL"] ||
+    DEFAULT_FALLBACK_MODEL
+  ).trim();
+
+  if (hostedRuntimeEnabled && hostedRuntimeModel === fallbackModel) {
+    return {
+      ok: true,
+      fallback: { provider: "ollama", model: fallbackModel },
+      selection: {
+        model: {
+          modelId: fallbackModel,
+          maxOutputTokens: base.maxOutputTokens,
+          capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
+        },
+        provider: { slug: "ollama" },
+        timeoutMs: localFallbackTimeoutMs(env),
+        maxOutputTokens: base.maxOutputTokens,
+        selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
+      },
+    };
+  }
+
   let local;
   try {
     local = readOllamaLocalConfig({
