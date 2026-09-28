@@ -21,6 +21,8 @@ export interface CloudChatStreamInput {
   maxOutputTokens: number;
   temperature?: number | null;
   signal?: AbortSignal;
+  /** Maximum silence between provider SSE chunks before failing over. */
+  idleTimeoutMs?: number;
   observability?: ObservabilityContext;
   onDelta: (text: string) => void;
 }
@@ -101,6 +103,7 @@ function usageFrom(acc: StreamAccumulator): ChatStreamUsage | null {
 async function readSse(
   response: Response,
   onData: (data: string) => void,
+  idleTimeoutMs = 30_000,
 ): Promise<void> {
   if (!response.body) {
     throw new Error("Streaming provider returned an empty response body.");
@@ -122,9 +125,24 @@ async function readSse(
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const result = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`Streaming provider stalled for ${idleTimeoutMs}ms without data.`)),
+              idleTimeoutMs,
+            );
+          }),
+        ]);
+        const { done, value } = result;
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+
       // Normalize the accumulated buffer, not only the latest chunk. A CRLF
       // pair may itself be split across network chunks.
       buffer = buffer.replace(/\r\n/g, "\n");
@@ -141,6 +159,9 @@ async function readSse(
     buffer += decoder.decode();
     buffer = buffer.replace(/\r\n/g, "\n");
     if (buffer.trim()) consumeBlock(buffer);
+  } catch (error) {
+    await reader.cancel("provider stream ended").catch(() => undefined);
+    throw error;
   } finally {
     reader.releaseLock();
   }
@@ -240,7 +261,7 @@ async function streamOpenAiCompatible(
         : null;
     const text = typeof delta?.content === "string" ? delta.content : "";
     if (text) input.onDelta(text);
-  });
+  }, input.idleTimeoutMs);
 
   return {
     provider: input.providerSlug,
@@ -321,7 +342,7 @@ async function streamAnthropic(
         ? delta.text
         : "";
     if (text) input.onDelta(text);
-  });
+  }, input.idleTimeoutMs);
 
   return {
     provider: input.providerSlug,
@@ -399,7 +420,7 @@ async function streamGemini(
       )
       .join("");
     if (text) input.onDelta(text);
-  });
+  }, input.idleTimeoutMs);
 
   return {
     provider: input.providerSlug,
