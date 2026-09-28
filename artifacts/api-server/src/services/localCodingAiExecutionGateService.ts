@@ -309,37 +309,59 @@ export async function invokeConstrainedAiProposal(input: {
   maxOutputTokens?: number;
 }): Promise<ConstrainedAiProposalResult> {
   const prompt = input.prompt ?? buildLocalCodingAiPrompt(input.lease);
-  const response = await input.adapter.invoke({
-    requestId: input.requestId,
-    target: input.target,
-    input: serializeBoundedModelPrompt(prompt),
-    responseFormat: { type: "text" },
-    maxOutputTokens: input.maxOutputTokens ?? clampOutputTokens(),
-    timeoutMs: input.timeoutMs ?? clampTimeout(),
-  });
+  const binding = buildAiProposalBinding(input.lease);
+  const maxOutputTokens = input.maxOutputTokens ?? clampOutputTokens();
+  const timeoutMs = input.timeoutMs ?? clampTimeout();
+  let lastValidationError = "";
 
-  if (response.output.type !== "text") {
-    throw new LocalCodingAiExecutionGateError(
-      "Constrained model returned a non-text proposal",
-      "MODEL_FAILED",
-    );
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const repairSuffix = attempt === 1
+      ? ""
+      : "\n\nSCHEMA REPAIR REQUIRED: Your previous Proposal Contract V1 output was invalid: " +
+        lastValidationError.slice(0, 700) +
+        ". Return a completely corrected raw JSON object. proposal.operations MUST contain at least one real deterministic edit targeting allowedFiles. Do not return an empty operations array. Preserve all binding fields exactly.";
+
+    const attemptPrompt: LocalCodingAiPrompt = attempt === 1
+      ? prompt
+      : { ...prompt, user: prompt.user + repairSuffix };
+
+    const response = await input.adapter.invoke({
+      requestId: attempt === 1 ? input.requestId : input.requestId + "-schema-repair-1",
+      target: input.target,
+      input: serializeBoundedModelPrompt(attemptPrompt),
+      responseFormat: { type: "text" },
+      maxOutputTokens,
+      timeoutMs,
+    });
+
+    if (response.output.type !== "text") {
+      throw new LocalCodingAiExecutionGateError(
+        "Constrained model returned a non-text proposal",
+        "MODEL_FAILED",
+      );
+    }
+
+    try {
+      const proposal = parseLocalCodingAiProposalV1(response.output.text, binding);
+      return { proposal, metadata: response.metadata };
+    } catch (error) {
+      lastValidationError =
+        error instanceof Error ? error.message : String(error);
+      if (attempt === 2) {
+        throw new LocalCodingAiExecutionGateError(
+          "AI proposal failed Proposal Contract V1 validation after bounded schema repair: " +
+            lastValidationError.slice(0, 1_200),
+          "INVALID_PROPOSAL",
+          { schemaRepairAttempts: 1 },
+        );
+      }
+    }
   }
 
-  let proposal: LocalCodingAiProposalV1;
-  try {
-    proposal = parseLocalCodingAiProposalV1(
-      response.output.text,
-      buildAiProposalBinding(input.lease),
-    );
-  } catch (error) {
-    throw new LocalCodingAiExecutionGateError(
-      "AI proposal failed Proposal Contract V1 validation: " +
-        (error instanceof Error ? error.message.slice(0, 1_200) : String(error)),
-      "INVALID_PROPOSAL",
-    );
-  }
-
-  return { proposal, metadata: response.metadata };
+  throw new LocalCodingAiExecutionGateError(
+    "AI proposal failed Proposal Contract V1 validation",
+    "INVALID_PROPOSAL",
+  );
 }
 
 export function buildAiProposalPolicyEnvelope(
