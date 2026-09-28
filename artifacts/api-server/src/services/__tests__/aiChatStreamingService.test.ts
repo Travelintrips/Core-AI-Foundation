@@ -170,6 +170,36 @@ describe("AI Core cloud chat streaming", () => {
     });
   });
 
+  it("fails a provider stream that stays open without emitting data", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start() {
+              // Intentionally remain open and silent to simulate a stalled provider.
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        ),
+      ),
+    );
+
+    await expect(
+      streamCloudChatNoFallback({
+        providerSlug: "gemini",
+        modelId: "gemini-2.0-flash",
+        prompt: "cek apakah ollama aktif",
+        maxOutputTokens: 100,
+        idleTimeoutMs: 10,
+        onDelta: () => undefined,
+      }),
+    ).rejects.toThrow("Streaming provider stalled");
+  });
+
   it("rejects providers without a configured key before network access", async () => {
     mocks.keys = new Map();
     const fetchMock = vi.fn();
