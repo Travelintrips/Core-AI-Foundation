@@ -42,7 +42,8 @@ describe("scheduled Ollama constrained provider", () => {
     vi.clearAllMocks();
   });
 
-  it("uses a healthy remote pull worker without exposing its Ollama endpoint", async () => {
+  it("uses a healthy remote pull worker when no hosted worker can be reserved", async () => {
+    mocks.reserve.mockResolvedValue(null);
     mocks.hasRemote.mockResolvedValue(true);
     mocks.enqueueRemote.mockResolvedValue({ id: 77 });
     mocks.waitRemote.mockResolvedValue({
@@ -67,12 +68,66 @@ describe("scheduled Ollama constrained provider", () => {
     );
 
     expect(result.output).toEqual({ type: "text", text: "remote result" });
+    expect(mocks.reserve).toHaveBeenCalledWith("qwen2.5-coder:7b");
     expect(mocks.enqueueRemote).toHaveBeenCalledWith(expect.objectContaining({
       requestId: "req-remote",
       modelId: "qwen2.5-coder:7b",
     }));
     expect(mocks.waitRemote).toHaveBeenCalledWith(77, signal);
-    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
+  it("prefers a hosted worker even when a remote pull worker is also available", async () => {
+    mocks.hasRemote.mockResolvedValue(true);
+    mocks.reserve.mockResolvedValue({
+      id: 12,
+      workerName: "gcp-ollama-01",
+      modelId: "qwen2.5-coder:7b",
+      endpointUrl: "https://ollama.cstlogistic.co.id/v1",
+      availableSlots: 1,
+      reservedAt: new Date().toISOString(),
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: "hosted-1",
+            choices: [{ message: { content: "hosted result" } }],
+            usage: {
+              prompt_tokens: 4,
+              completion_tokens: 2,
+              total_tokens: 6,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+
+    const provider = createScheduledOllamaProviderAdapter({
+      modelId: "qwen2.5-coder:7b",
+    });
+    const result = await provider.invoke(
+      {
+        requestId: "req-hosted",
+        input: JSON.stringify({ version: 1, system: "system", user: "user" }),
+        responseFormat: { type: "text" },
+        maxOutputTokens: 256,
+        capabilities: provider.capabilities,
+      },
+      { signal: new AbortController().signal },
+    );
+
+    expect(result.output).toEqual({ type: "text", text: "hosted result" });
+    expect(mocks.reserve).toHaveBeenCalledWith("qwen2.5-coder:7b");
+    expect(mocks.hasRemote).not.toHaveBeenCalled();
+    expect(mocks.enqueueRemote).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledWith(
+      12,
+      "success",
+      expect.any(Number),
+    );
   });
 
   it("reserves a worker, invokes it, and releases capacity", async () => {
