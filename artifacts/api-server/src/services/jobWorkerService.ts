@@ -52,6 +52,7 @@ import {
   failRepositoryAnalyzerRun,
 } from "./repositoryAnalyzerService.js";
 import { executeCodingAiExecutionJob } from "./localCodingAiQueueRuntimeService.js";
+import { CODING_MULTI_TASK_PLANNER_JOB_TYPE, executeCodingMultiTaskPlannerJob } from "./localCodingPlannerQueueRuntimeService.js";
 import { executeCodingWorkstreamJob, recoverFailedCodingWorkstreamJob } from "./localCodingMultiWorkerExecutionService.js";
 import {
   CODING_WORKSTREAM_AI_JOB_TYPE,
@@ -582,6 +583,9 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
 
     case "coding_ai_execution":
       return executeCodingAiExecutionJob(job);
+
+    case CODING_MULTI_TASK_PLANNER_JOB_TYPE:
+      return executeCodingMultiTaskPlannerJob(job);
 
     case "coding_workstream_execution":
       return executeCodingWorkstreamJob(job);
