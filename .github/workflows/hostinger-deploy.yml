@@ -282,15 +282,46 @@ jobs:
           test -n "$ADMIN_API_KEY"
 
           payload='{"message":"cek booking SC-0992","mode":"ask","modelPolicy":"smart"}'
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS \
-            -o /tmp/ai-core-data-tool-execution -w "%{http_code}" \
-            --connect-timeout 15 --max-time 30 \
-            -H "Content-Type: application/json" \
-            -H "x-admin-api-key: $ADMIN_API_KEY" \
-            -d "$payload" \
-            "$API_BASE_URL/ai/core-chat/messages")
-          echo "ai_core_data_tool_execution_http=$code"
-          test "$code" = "200"
+          data_tool_ok=false
+          for attempt in $(seq 1 4); do
+            code=$(curl --http1.1 -L -sS \
+              -o /tmp/ai-core-data-tool-execution -w "%{http_code}" \
+              --connect-timeout 15 --max-time 45 \
+              -H "Content-Type: application/json" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              -d "$payload" \
+              "$API_BASE_URL/ai/core-chat/messages" || true)
+            echo "ai_core_data_tool_execution_attempt=$attempt/4 http=${code:-curl-error}"
+
+            if [ "$code" = "200" ] && node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
+          process.exit(value.data?.failed === true ? 1 : 0);
+          NODE
+            then
+              data_tool_ok=true
+              break
+            fi
+
+            # Print only the bounded server diagnostic, never booking/customer payload.
+            if [ "$code" = "200" ]; then
+              node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
+          const warning = typeof value.warning === "string"
+            ? value.warning.replace(/[\\r\\n\\t]+/g, " ").slice(0, 500)
+            : "no diagnostic returned";
+          console.error("::warning::Sport Center Data Tool attempt failed: " + warning);
+          NODE
+            fi
+
+            if [ "$attempt" -lt 4 ]; then sleep $((attempt * 5)); fi
+          done
+
+          if [ "$data_tool_ok" != "true" ]; then
+            echo "::error::Sport Center Data Tool query failed after bounded retries"
+            exit 1
+          fi
 
           # Do not print the response: it may contain customer/business data.
           node - <<'NODE'
@@ -300,7 +331,6 @@ jobs:
           if (value.dataTool !== "SPORT_CENTER_BOOKING_LOOKUP") throw new Error("Expected Sport Center booking tool");
           if (value.usage?.totalTokens !== 0) throw new Error("Data Tool execution must use 0 tokens");
           if (value.estimatedCostUsd !== 0) throw new Error("Data Tool execution must cost 0 USD");
-          if (value.data?.failed === true) throw new Error("Sport Center Data Tool query failed");
           if (value.data?.found !== true) throw new Error("Expected production smoke booking SC-0992 to exist");
           console.log("ai_core_data_tool_execution=PASS");
           NODE
