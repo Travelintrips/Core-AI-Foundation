@@ -276,6 +276,16 @@ describe("repository analyzer GitHub clone authentication", () => {
     ).toBe(true);
     expect(
       isRetryableRepositoryCloneResourceError(
+        "fatal: unable to access 'https://github.com/Travelintrips/Core-AI-Foundation.git/': timeout exceeded when trying to connect",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableRepositoryCloneResourceError(
+        "fatal: unable to access repository: Connection reset by peer",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableRepositoryCloneResourceError(
         "fatal: Remote branch missing does not exist",
       ),
     ).toBe(false);
