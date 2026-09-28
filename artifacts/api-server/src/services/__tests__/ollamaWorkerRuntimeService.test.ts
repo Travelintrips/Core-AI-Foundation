@@ -22,6 +22,7 @@ describe("Ollama worker runtime configuration", () => {
       OLLAMA_WORKER_RECONNECT_MIN_MS: "1500",
       OLLAMA_WORKER_RECONNECT_MAX_MS: "12000",
       OLLAMA_WORKER_HEALTHCHECK_TIMEOUT_MS: "3000",
+      OLLAMA_WORKER_API_KEY: "worker-secret",
     } as NodeJS.ProcessEnv);
 
     expect(config).toMatchObject({
@@ -33,6 +34,7 @@ describe("Ollama worker runtime configuration", () => {
         "http://127.0.0.1:11434/v1",
       advertiseBaseUrl:
         "http://10.10.0.21:11434/v1",
+      apiKey: "worker-secret",
       maxConcurrentJobs: 4,
       powershellEnabled: true,
       heartbeatMs: 10000,

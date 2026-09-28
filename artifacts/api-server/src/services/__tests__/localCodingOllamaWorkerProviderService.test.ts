@@ -38,6 +38,7 @@ describe("scheduled Ollama constrained provider", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
@@ -75,6 +76,7 @@ describe("scheduled Ollama constrained provider", () => {
   });
 
   it("reserves a worker, invokes it, and releases capacity", async () => {
+    vi.stubEnv("OLLAMA_WORKER_API_KEY", "worker-secret");
     mocks.reserve.mockResolvedValue({
       id: 9,
       workerName: "ollama-gpu-01",
@@ -142,6 +144,11 @@ describe("scheduled Ollama constrained provider", () => {
     expect(result.output).toEqual({
       type: "text",
       text: "{\"version\":1}",
+    });
+
+    const fetchInit = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(fetchInit?.headers).toMatchObject({
+      "x-api-key": "worker-secret",
     });
 
     expect(mocks.release).toHaveBeenCalledWith(

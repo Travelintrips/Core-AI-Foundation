@@ -26,6 +26,7 @@ export interface OllamaWorkerRuntimeConfig {
   modelId: string;
   localBaseUrl: string;
   advertiseBaseUrl: string;
+  apiKey: string;
   maxConcurrentJobs: number;
   powershellEnabled: boolean;
   heartbeatMs: number;
@@ -140,6 +141,7 @@ export function readOllamaWorkerRuntimeConfig(
     modelId,
     localBaseUrl,
     advertiseBaseUrl,
+    apiKey: (env["OLLAMA_WORKER_API_KEY"] ?? "").trim(),
     maxConcurrentJobs: boundedInt(
       env["OLLAMA_WORKER_MAX_CONCURRENCY"],
       2,
@@ -177,7 +179,10 @@ export async function checkOllamaWorkerRuntimeHealth(
 
   try {
     const response = await fetch(config.localBaseUrl + "/models", {
-      headers: { accept: "application/json" },
+      headers: {
+        accept: "application/json",
+        ...(config.apiKey ? { "x-api-key": config.apiKey } : {}),
+      },
       signal: controller.signal,
     });
 
@@ -392,6 +397,7 @@ export function getOllamaWorkerRuntimeStatus(): Record<string, unknown> {
     modelId: state.config.modelId,
     localBaseUrl: state.config.localBaseUrl,
     advertiseBaseUrl: state.config.advertiseBaseUrl,
+    apiKeyConfigured: Boolean(state.config.apiKey),
     maxConcurrentJobs: state.config.maxConcurrentJobs,
     powershellEnabled: state.config.powershellEnabled,
     heartbeatMs: state.config.heartbeatMs,
