@@ -526,7 +526,13 @@ async function buildRepositoryIndex(root: string): Promise<RepositoryIndex> {
     warnings.push(`Repository index stopped at ${MAX_INDEX_FILES} files to keep local analysis bounded.`);
   }
 
-  for (const file of listed.files) {
+  for (let fileIndex = 0; fileIndex < listed.files.length; fileIndex += 1) {
+    // AST parsing is CPU-bound. Yield periodically so production HTTP health,
+    // polling, and cancellation requests are not starved by a large analysis.
+    if (fileIndex > 0 && fileIndex % 20 === 0) {
+      await new Promise<void>((resolveYield) => setImmediate(resolveYield));
+    }
+    const file = listed.files[fileIndex]!;
     if (basename(file).toLowerCase() === "package.json") {
       const manifest = await readJsonManifest(root, file);
       if (manifest) manifests.push(manifest);
@@ -800,7 +806,14 @@ async function scoreCandidateFiles(
   }
 
   const scored: RelevantFile[] = [];
-  for (const file of [...candidates].slice(0, 500)) {
+  const boundedCandidates = [...candidates].slice(0, 500);
+  for (let candidateIndex = 0; candidateIndex < boundedCandidates.length; candidateIndex += 1) {
+    // Content scoring can inspect hundreds of files. Cooperatively yield to the
+    // API event loop so analyzer work cannot monopolize the production process.
+    if (candidateIndex > 0 && candidateIndex % 20 === 0) {
+      await new Promise<void>((resolveYield) => setImmediate(resolveYield));
+    }
+    const file = boundedCandidates[candidateIndex]!;
     if (!index.files.includes(file) || isSensitiveRepositoryPath(file)) continue;
     const reasons: string[] = [];
     let score = 0;
