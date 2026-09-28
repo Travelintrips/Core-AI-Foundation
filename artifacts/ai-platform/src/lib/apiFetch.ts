@@ -95,6 +95,7 @@ export async function apiEventStream(
   path: string,
   opts: RequestInit,
   onEvent: (message: ApiEventStreamMessage) => void,
+  idleTimeoutMs = 45_000,
 ): Promise<void> {
   const headers = new Headers(opts.headers ?? {});
   const hasBody = opts.body != null && !(opts.body instanceof FormData);
@@ -103,11 +104,40 @@ export async function apiEventStream(
   }
   headers.set("Accept", "text/event-stream");
 
-  const res = await fetch(path, {
-    ...opts,
-    credentials: "include",
-    headers,
-  });
+  const controller = new AbortController();
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(opts.signal?.reason);
+  if (opts.signal) {
+    if (opts.signal.aborted) abortFromCaller();
+    else opts.signal.addEventListener("abort", abortFromCaller, { once: true });
+  }
+  const armIdleTimeout = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, idleTimeoutMs);
+  };
+
+  armIdleTimeout();
+
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...opts,
+      credentials: "include",
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (opts.signal) opts.signal.removeEventListener("abort", abortFromCaller);
+    if (timedOut) {
+      throw new HttpError(504, "Streaming tidak menerima respons dalam batas waktu.");
+    }
+    throw error;
+  }
 
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
@@ -161,6 +191,7 @@ export async function apiEventStream(
       const { done, value } = await reader.read();
       if (done) break;
 
+      armIdleTimeout();
       buffer += decoder.decode(value, { stream: true });
       // Normalize the accumulated buffer, not only the latest chunk. A CRLF
       // pair may itself be split across network chunks.
@@ -178,7 +209,14 @@ export async function apiEventStream(
     buffer += decoder.decode();
     buffer = buffer.replace(/\r\n/g, "\n");
     if (buffer.trim()) consumeBlock(buffer);
+  } catch (error) {
+    if (timedOut) {
+      throw new HttpError(504, "Streaming berhenti terlalu lama tanpa data. Coba lagi atau gunakan Auto/Economy.");
+    }
+    throw error;
   } finally {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (opts.signal) opts.signal.removeEventListener("abort", abortFromCaller);
     reader.releaseLock();
   }
 }
