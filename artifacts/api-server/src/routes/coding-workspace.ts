@@ -208,7 +208,15 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
 });
 
 class CodingTaskNotFoundError extends Error {}
-class CodingRunAlreadyActiveError extends Error {}
+class CodingRunAlreadyActiveError extends Error {
+  constructor(
+    message: string,
+    readonly activeRunId?: string,
+  ) {
+    super(message);
+    this.name = "CodingRunAlreadyActiveError";
+  }
+}
 
 const DELETABLE_CODING_TASK_STATUSES = new Set(["PENDING", "FAILED", "READY_REVIEW", "COMPLETED"]);
 
@@ -305,7 +313,7 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
         .limit(1);
 
       if (activeRun) {
-        throw new CodingRunAlreadyActiveError("Coding task already has an active run");
+        throw new CodingRunAlreadyActiveError("Coding task already has an active run", activeRun.id);
       }
 
       const [createdRun] = await tx
@@ -340,7 +348,10 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
       return;
     }
     if (error instanceof CodingRunAlreadyActiveError) {
-      res.status(409).json({ error: error.message });
+      res.status(409).json({
+        error: error.message,
+        ...(error.activeRunId ? { activeRunId: error.activeRunId } : {}),
+      });
       return;
     }
     throw error;
