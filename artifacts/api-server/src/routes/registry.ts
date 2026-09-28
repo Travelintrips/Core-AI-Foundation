@@ -30,6 +30,7 @@ import {
 } from "@workspace/api-zod";
 import { aiAuditLogsTable } from "@workspace/db";
 import { runHealthCheck, runAllHealthChecks } from "../services/providerHealthService.js";
+import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
 
 const router = Router();
 
@@ -217,6 +218,110 @@ router.post("/ai/models", async (req, res): Promise<void> => {
   }).returning();
   await logAudit("registry", "create_model", String(model.id), "model");
   res.status(201).json(CreateModelResponse.parse({ ...model, costPerInputToken: model.costPerInputToken != null ? Number(model.costPerInputToken) : null, costPerOutputToken: model.costPerOutputToken != null ? Number(model.costPerOutputToken) : null, providerName: null }));
+});
+
+router.post("/ai/models/:id/smoke-test", async (req, res): Promise<void> => {
+  const id = Number.parseInt(req.params["id"] ?? "", 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid model id" });
+    return;
+  }
+
+  const [row] = await db
+    .select({ model: aiModelsTable, provider: aiProvidersTable })
+    .from(aiModelsTable)
+    .innerJoin(aiProvidersTable, eq(aiModelsTable.providerId, aiProvidersTable.id))
+    .where(eq(aiModelsTable.id, id))
+    .limit(1);
+
+  if (!row) {
+    res.status(404).json({ error: "Model not found" });
+    return;
+  }
+
+  if (!row.model.isActive || !row.provider.isActive) {
+    res.status(409).json({
+      error: "Model/provider is inactive",
+      provider: row.provider.slug,
+      model: row.model.modelId,
+    });
+    return;
+  }
+
+  let receivedText = false;
+  try {
+    const result = await streamCloudChatNoFallback({
+      providerSlug: row.provider.slug,
+      modelId: row.model.modelId,
+      baseUrl: row.provider.baseUrl,
+      systemPrompt:
+        "You are a production health-check. Follow the user instruction exactly and output only the requested token.",
+      prompt: "Reply with exactly: AI_CORE_MODEL_OK",
+      maxOutputTokens: 24,
+      temperature: 0,
+      onDelta: (text) => {
+        if (text.trim()) receivedText = true;
+      },
+    });
+
+    if (!receivedText) {
+      res.status(502).json({
+        ok: false,
+        provider: row.provider.slug,
+        model: row.model.modelId,
+        error: "Model returned no text.",
+      });
+      return;
+    }
+
+    await logAudit(
+      "registry",
+      "model_smoke_test",
+      String(row.model.id),
+      "model",
+      "success",
+      {
+        provider: row.provider.slug,
+        model: row.model.modelId,
+        latencyMs: result.latencyMs,
+        totalTokens: result.usage?.totalTokens ?? null,
+      },
+    );
+
+    res.json({
+      ok: true,
+      provider: row.provider.slug,
+      model: row.model.modelId,
+      latencyMs: result.latencyMs,
+      usage: result.usage,
+      outputReceived: true,
+    });
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? error.message.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 500)
+        : "Unknown model smoke-test failure.";
+
+    await logAudit(
+      "registry",
+      "model_smoke_test",
+      String(row.model.id),
+      "model",
+      "failure",
+      {
+        provider: row.provider.slug,
+        model: row.model.modelId,
+        error: detail,
+      },
+    ).catch(() => undefined);
+
+    res.status(502).json({
+      ok: false,
+      provider: row.provider.slug,
+      model: row.model.modelId,
+      error: detail,
+    });
+  }
 });
 
 router.get("/ai/models/:id", async (req, res): Promise<void> => {
