@@ -166,6 +166,42 @@ jobs:
           console.log("ai_core_chat_stream_smoke=PASS");
           NODE
 
+      - name: Verify Gemini production inference
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/ai-models -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/models")
+          echo "ai_models_http=$code"
+          test "$code" = "200"
+
+          model_id=$(node - <<'NODE'
+          const fs = require("fs");
+          const models = JSON.parse(fs.readFileSync("/tmp/ai-models", "utf8"));
+          const target = models.find((m) => m.modelId === "gemini-3.8-flash" && m.isActive === true);
+          if (!target) throw new Error("Active gemini-3.8-flash is not registered");
+          process.stdout.write(String(target.id));
+          NODE
+          )
+
+          smoke_code=$(curl --http1.1 --retry 2 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/gemini-model-smoke -w "%{http_code}"             --connect-timeout 15 --max-time 45             -X POST             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/models/$model_id/smoke-test")
+          echo "gemini_model_smoke_http=$smoke_code"
+          test "$smoke_code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/gemini-model-smoke", "utf8"));
+          if (value.ok !== true) throw new Error("Gemini smoke did not return ok=true");
+          if (value.provider !== "google") throw new Error("Expected google provider");
+          if (value.model !== "gemini-3.8-flash") throw new Error("Unexpected Gemini model");
+          if (value.outputReceived !== true) throw new Error("Gemini returned no text");
+          if (!Number.isFinite(value.latencyMs) || value.latencyMs < 0) throw new Error("Invalid Gemini latency");
+          console.log("gemini_model_smoke=PASS model="+value.model+" latencyMs="+value.latencyMs+" totalTokens="+(value.usage?.totalTokens ?? "unknown"));
+          NODE
+
       - name: Verify AI Core Data Tool schema readiness
         shell: bash
         env:
