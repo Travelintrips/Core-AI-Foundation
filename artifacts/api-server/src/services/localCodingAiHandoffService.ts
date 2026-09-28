@@ -354,7 +354,18 @@ async function git(root: string, args: string[]): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  return stdout.trim();
+  const text = typeof stdout === "string"
+    ? stdout
+    : Buffer.isBuffer(stdout)
+      ? stdout.toString("utf8")
+      : "";
+  if (!text.trim()) {
+    throw new LocalAiHandoffError(
+      `Git command returned empty output while preparing AI handoff: git ${args.join(" ")}`,
+      "INVALID_CONTEXT",
+    );
+  }
+  return text.trim();
 }
 
 function isInsideRoot(root: string, candidate: string): boolean {
