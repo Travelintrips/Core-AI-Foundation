@@ -584,10 +584,40 @@ async function continueCodingOrchestration(
       await completeLocalAnalysis(input, sessionId, stages, analysis);
     }
 
-    const aiEscalation =
-      localPlan?.status === "AI_REQUIRED"
-        ? await generateAndPersistCodingMultiTaskPlan(input.task.id, analysis)
-        : undefined;
+    let aiEscalation: Awaited<ReturnType<typeof generateAndPersistCodingMultiTaskPlan>> | undefined;
+    if (localPlan?.status === "AI_REQUIRED") {
+      try {
+        aiEscalation = await generateAndPersistCodingMultiTaskPlan(input.task.id, analysis);
+      } catch (plannerError) {
+        // Repository analysis is already a valid durable artifact at this point.
+        // A planner/provider/authority failure must never regress that completed
+        // run to FAILED: subsequent bounded retries need the persisted context.
+        logger.warn(
+          {
+            err: plannerError,
+            taskId: input.task.id,
+            codingRunId: input.run.id,
+            sessionId,
+          },
+          "[coding-orchestrator] Planner escalation deferred; preserving completed repository analysis",
+        );
+        await logAudit(
+          "coding-orchestrator",
+          "ai_planner_escalation_deferred",
+          input.task.id,
+          "coding_task",
+          "failure",
+          {
+            sessionId,
+            codingRunId: input.run.id,
+            error: plannerError instanceof Error
+              ? plannerError.message.slice(0, 500)
+              : String(plannerError).slice(0, 500),
+            repositoryAnalysisPreserved: true,
+          },
+        );
+      }
+    }
 
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
