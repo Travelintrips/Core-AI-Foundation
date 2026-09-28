@@ -173,6 +173,25 @@ describe("Preferred constrained coding model routing", () => {
     });
   });
 
+  it("uses scheduled Ollama routing when hosted worker runtime is enabled even if registry lookup is transiently empty", async () => {
+    await expect(
+      resolveConfiguredCodingFallbackModel({
+        OLLAMA_WORKER_RUNTIME_ENABLED: "true",
+        OLLAMA_WORKER_MODEL: "qwen2.5-coder:7b",
+      } as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      fallback: { provider: "ollama", model: "qwen2.5-coder:7b" },
+      selection: {
+        provider: { slug: "ollama" },
+        model: {
+          modelId: "qwen2.5-coder:7b",
+          capabilities: expect.arrayContaining(["worker_pool"]),
+        },
+      },
+    });
+  });
+
   it("resolves healthy Ollama as an explicit runtime fallback target", async () => {
     await expect(
       resolveConfiguredCodingFallbackModel({} as NodeJS.ProcessEnv),
