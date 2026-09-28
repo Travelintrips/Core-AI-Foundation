@@ -9,6 +9,7 @@ import {
   type AiJob,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { enableAutonomousCodingTask } from "./localCodingAutonomousRepairService.js";
 import { logAudit } from "./aiAuditService.js";
 import { executeAI, type ExecutionOutput } from "./aiExecutionService.js";
 import { getFallbackModels, routeToModel } from "./aiModelRouter.js";
@@ -589,6 +590,10 @@ async function continueCodingOrchestration(
         : undefined;
 
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
+
+    if (localPlan?.status === "AI_REQUIRED") {
+      await enableAutonomousCodingTask(input.task.id, 40);
+    }
 
     logger.info(
       {
