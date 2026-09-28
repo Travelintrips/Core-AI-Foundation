@@ -187,8 +187,27 @@ jobs:
           NODE
           )
 
-          smoke_code=$(curl --http1.1 --retry 2 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/gemini-model-smoke -w "%{http_code}"             --connect-timeout 15 --max-time 45             -X POST             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/models/$model_id/smoke-test")
-          echo "gemini_model_smoke_http=$smoke_code"
+          smoke_code=""
+          for attempt in $(seq 1 6); do
+            rm -f /tmp/gemini-model-smoke
+            smoke_code=$(curl --http1.1 -L -sS               -o /tmp/gemini-model-smoke -w "%{http_code}"               --connect-timeout 15 --max-time 45               -X POST               -H "Content-Type: application/json"               -H "x-admin-api-key: $ADMIN_API_KEY"               "$API_BASE_URL/ai/models/$model_id/smoke-test" || true)
+            echo "gemini_model_smoke_attempt=$attempt/6 http=${smoke_code:-curl-error}"
+
+            if [ "$smoke_code" = "200" ]; then
+              break
+            fi
+
+            if [[ "$smoke_code" = "502" || "$smoke_code" = "503" || "$smoke_code" = "504" || "$smoke_code" = "000" ]]; then
+              if [ "$attempt" -lt 6 ]; then
+                sleep $((attempt * 5))
+                continue
+              fi
+            fi
+
+            echo "::error::Gemini production inference failed with HTTP ${smoke_code:-curl-error}"
+            cat /tmp/gemini-model-smoke 2>/dev/null || true
+            exit 1
+          done
           test "$smoke_code" = "200"
 
           node - <<'NODE'
