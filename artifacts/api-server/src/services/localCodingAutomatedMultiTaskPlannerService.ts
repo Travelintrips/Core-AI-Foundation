@@ -755,11 +755,12 @@ export async function generateAndPersistCodingMultiTaskPlan(
 
   const { task, context } = await loadAutomatedPlannerContext(taskId, analysisOverride);
   const scope = `coding-task:${taskId}`;
-  // Each planner invocation needs a distinct holder identity. Reusing the same
-  // holder across overlapping HTTP retries lets one invocation release the
-  // shared lease while another is still generating, which surfaces as
-  // AUTHORITY_LOST/NOT_HOLDER immediately before persistence.
-  const plannerHolderId = `${AUTO_PLANNER_HOLDER_ID}:${randomUUID()}`;
+  // HTTP retries for the same coding task are one logical planner operation.
+  // Use a deterministic task-scoped holder so a client timeout does not create
+  // a second competing holder that remains blocked behind the original 300s
+  // lease. acquirePlannerAuthority() intentionally makes same-holder reacquire
+  // idempotent and preserves the fencing token/generation.
+  const plannerHolderId = `${AUTO_PLANNER_HOLDER_ID}:${taskId}`;
 
   let authority;
   const authorityDeadline = Date.now() + PLANNER_AUTHORITY_WAIT_MS;
