@@ -4,6 +4,7 @@ import { DEFAULT_LEASE_TTL_MS } from "./workerClusterService.js";
 import {
   heartbeatOllamaWorker,
   normalizeOllamaWorkerEndpoint,
+  recoverOllamaWorkerCapacityOnRuntimeStart,
   registerOllamaWorker,
   shutdownOllamaWorker,
 } from "./ollamaWorkerRegistryService.js";
@@ -357,6 +358,16 @@ export async function startOllamaWorkerRuntime(
     nextRetryAt: 0,
     lastError: null,
   };
+
+  // A new process cannot own reservations created by the previous process.
+  // Reset leaked hosted-worker capacity exactly once at runtime startup before
+  // the first registration. Reconnects inside the same process do not repeat it.
+  await recoverOllamaWorkerCapacityOnRuntimeStart(config.workerName).catch((error) => {
+    logger.warn(
+      { err: error, workerName: config.workerName },
+      "[ollama-worker] Runtime-start capacity recovery failed; continuing with normal registration",
+    );
+  });
 
   await heartbeatTick();
 
