@@ -247,27 +247,8 @@ jobs:
             fi
           fi
 
-          for attempt in $(seq 1 120); do
-            if [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-              break
-            fi
-
-            code=$(curl -sS -o /tmp/graph.json -w "%{http_code}" \
-              --connect-timeout 15 --max-time 30 \
-              "$API_BASE_URL/ai/coding/tasks/$task/task-graph" \
-              -H "x-admin-api-key: $ADMIN_API_KEY" || true)
-            if [ "$code" = "200" ]; then
-              graph_id=$(jq -r 'select(.graph.status == "PREPARED") | .graph.id // empty' /tmp/graph.json 2>/dev/null || true)
-              if [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-                break
-              fi
-            elif [[ "$code" != "404" && "$code" != "500" && "$code" != "502" && "$code" != "503" && "$code" != "504" && "$code" != "000" ]]; then
-              echo "::error::Planner graph poll failed with HTTP $code"
-              cat /tmp/graph.json 2>/dev/null || true
-              exit 1
-            fi
-
-            if [[ "$planner_job_id" =~ ^[0-9]+$ ]]; then
+          if [[ "$planner_job_id" =~ ^[0-9]+$ ]]; then
+            for attempt in $(seq 1 36); do
               job_code=$(curl -sS -o /tmp/planner-job.json -w "%{http_code}" \
                 --connect-timeout 15 --max-time 30 \
                 "$API_BASE_URL/ai/jobs/$planner_job_id" \
@@ -276,19 +257,19 @@ jobs:
               if [ "$job_code" = "200" ]; then
                 planner_status=$(jq -r '.status // empty' /tmp/planner-job.json 2>/dev/null || true)
                 case "$planner_status" in
+                  completed)
+                    break
+                    ;;
                   failed|cancelled|blocked)
-                    echo "::error::Planner job $planner_job_id ended as $planner_status before producing a PREPARED graph"
+                    echo "::error::Planner job $planner_job_id ended as $planner_status"
                     jq -c '{id,status,jobType,retryCount,maxRetry,errorMessage,startedAt,completedAt,updatedAt}' /tmp/planner-job.json 2>/dev/null || cat /tmp/planner-job.json
                     exit 1
                     ;;
-                  completed)
-                    echo "Planner job $planner_job_id completed; waiting for graph visibility (attempt $attempt/120)..."
-                    ;;
                   queued|waiting|running|retrying)
-                    echo "Planner job $planner_job_id status=$planner_status (attempt $attempt/120, graph HTTP=${code:-curl-error}); retrying in 5s..."
+                    echo "Planner job $planner_job_id status=$planner_status (attempt $attempt/36); retrying in 5s..."
                     ;;
                   *)
-                    echo "Planner job $planner_job_id returned unknown status=${planner_status:-missing} (attempt $attempt/120); retrying in 5s..."
+                    echo "Planner job $planner_job_id returned unknown status=${planner_status:-missing} (attempt $attempt/36); retrying in 5s..."
                     ;;
                 esac
               elif [[ "$job_code" != "404" && "$job_code" != "500" && "$job_code" != "502" && "$job_code" != "503" && "$job_code" != "504" && "$job_code" != "000" ]]; then
@@ -296,21 +277,31 @@ jobs:
                 cat /tmp/planner-job.json 2>/dev/null || true
                 exit 1
               else
-                echo "Planner job status temporarily unavailable (HTTP=${job_code:-curl-error}, attempt $attempt/120); retrying in 5s..."
+                echo "Planner job status temporarily unavailable (HTTP=${job_code:-curl-error}, attempt $attempt/36); retrying in 5s..."
               fi
-            else
-              echo "Planner graph pending (attempt $attempt/120, HTTP=${code:-curl-error}); retrying in 5s..."
-            fi
-            sleep 5
-          done
+              sleep 5
+            done
 
-          if [[ ! "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-            echo "::error::Planner job did not produce a PREPARED graph within the bounded wait"
-            if [[ "$planner_job_id" =~ ^[0-9]+$ ]]; then
-              curl -sS "$API_BASE_URL/ai/jobs/$planner_job_id" \
-                -H "x-admin-api-key: $ADMIN_API_KEY" 2>/dev/null | \
-                jq -c '{id,status,jobType,retryCount,maxRetry,errorMessage,startedAt,completedAt,updatedAt}' || true
+            planner_status=$(jq -r '.status // empty' /tmp/planner-job.json 2>/dev/null || true)
+            if [ "$planner_status" != "completed" ]; then
+              echo "::error::Planner job $planner_job_id exceeded the 180s canary execution budget"
+              jq -c '{id,status,jobType,retryCount,maxRetry,errorMessage,startedAt,completedAt,updatedAt}' /tmp/planner-job.json 2>/dev/null || true
+              exit 1
             fi
+          fi
+
+          code=$(curl -sS -o /tmp/graph.json -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            "$API_BASE_URL/ai/coding/tasks/$task/task-graph" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+          if [ "$code" != "200" ]; then
+            echo "::error::Planner job completed but task graph read failed with HTTP $code"
+            cat /tmp/graph.json 2>/dev/null || true
+            exit 1
+          fi
+          graph_id=$(jq -r 'select(.graph.status == "PREPARED") | .graph.id // empty' /tmp/graph.json 2>/dev/null || true)
+          if [[ ! "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::Planner job completed but no PREPARED task graph was persisted"
             cat /tmp/graph.json 2>/dev/null || true
             exit 1
           fi
