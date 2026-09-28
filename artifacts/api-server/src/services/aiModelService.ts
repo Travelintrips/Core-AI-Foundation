@@ -32,3 +32,41 @@ export async function getActiveModel(modelId: number): Promise<ModelWithProvider
 
   return row ? { model: row.model, provider: row.provider } : null;
 }
+
+
+/**
+ * Disable one exact registered model after the provider explicitly reports
+ * that the model is retired / no longer available. This is intentionally
+ * model-scoped: provider health remains independent so other models from the
+ * same provider can continue serving traffic.
+ */
+export async function deactivateRegisteredModel(
+  providerSlug: string,
+  modelId: string,
+): Promise<boolean> {
+  const normalizedProvider = providerSlug.trim().toLowerCase();
+  const normalizedModel = modelId.trim();
+  if (!normalizedProvider || !normalizedModel) return false;
+
+  const [provider] = await db
+    .select({ id: aiProvidersTable.id })
+    .from(aiProvidersTable)
+    .where(eq(aiProvidersTable.slug, normalizedProvider))
+    .limit(1);
+
+  if (!provider) return false;
+
+  const rows = await db
+    .update(aiModelsTable)
+    .set({ isActive: false })
+    .where(
+      and(
+        eq(aiModelsTable.providerId, provider.id),
+        eq(aiModelsTable.modelId, normalizedModel),
+        eq(aiModelsTable.isActive, true),
+      ),
+    )
+    .returning({ id: aiModelsTable.id });
+
+  return rows.length > 0;
+}
