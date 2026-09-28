@@ -131,10 +131,7 @@ async function readSse(
           reader.read(),
           new Promise<never>((_, reject) => {
             timer = setTimeout(
-              () => {
-                void reader.cancel("provider stream idle timeout").catch(() => undefined);
-                reject(new Error(`Streaming provider stalled for ${idleTimeoutMs}ms without data.`));
-              },
+              () => reject(new Error(`Streaming provider stalled for ${idleTimeoutMs}ms without data.`)),
               idleTimeoutMs,
             );
           }),
@@ -162,6 +159,9 @@ async function readSse(
     buffer += decoder.decode();
     buffer = buffer.replace(/\r\n/g, "\n");
     if (buffer.trim()) consumeBlock(buffer);
+  } catch (error) {
+    await reader.cancel("provider stream ended").catch(() => undefined);
+    throw error;
   } finally {
     reader.releaseLock();
   }
