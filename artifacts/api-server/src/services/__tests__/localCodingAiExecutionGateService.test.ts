@@ -244,6 +244,41 @@ describe("Local Coding AI Execution Gate integration", () => {
     });
   });
 
+  it("repairs an empty operations proposal once before accepting a valid Contract V1 proposal", async () => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const empty = JSON.parse(proposalJson(lease));
+    empty.proposal.operations = [];
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({
+        output: { type: "text" as const, text: JSON.stringify(empty) },
+        usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+      })
+      .mockResolvedValueOnce({
+        output: { type: "text" as const, text: proposalJson(lease) },
+        usage: { inputTokens: 20, outputTokens: 20, totalTokens: 40 },
+      });
+    const provider: ConstrainedModelProvider = {
+      provider: "fake",
+      model: "proposal-v1",
+      capabilities: CONSTRAINED_MODEL_CAPABILITIES,
+      invoke,
+    };
+
+    const result = await invokeConstrainedAiProposal({
+      lease,
+      adapter: createConstrainedModelInvocationAdapter(provider),
+      target: { provider: "fake", model: "proposal-v1" },
+      requestId: "execution-test-schema-repair",
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+    });
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke.mock.calls[1]?.[0].input).toContain("SCHEMA REPAIR REQUIRED");
+    expect(result.proposal.proposal.operations).toHaveLength(1);
+  });
+
   it("fails closed when the model returns fenced JSON instead of raw Contract V1 JSON", async () => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
