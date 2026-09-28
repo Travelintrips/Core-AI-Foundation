@@ -627,6 +627,50 @@ export async function getAutonomousCodingTaskStatus(taskId: string) {
   return result.rows?.[0] ?? null;
 }
 
+
+async function recoverOrphanedReadyReviewTasks(): Promise<void> {
+  const candidates = await db
+    .select({ id: aiCodingTasksTable.id })
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.status, "READY_REVIEW"))
+    .orderBy(desc(aiCodingTasksTable.updatedAt))
+    .limit(20);
+
+  const recoverable = new Set([
+    "AI_REQUIRED",
+    "APPROVE_TASK_GRAPH",
+    "APPROVE_AI_HANDOFF",
+    "AI_HANDOFF_APPROVED",
+    "REVIEW_AI_PATCH",
+  ]);
+
+  for (const candidate of candidates) {
+    const state = await loadTaskState(candidate.id).catch(() => null);
+    if (!state || !state.nextAction || !recoverable.has(state.nextAction)) continue;
+
+    const existing = await db.execute(sql`
+      SELECT task_id, enabled, status
+      FROM ai_platform.ai_coding_autonomous_tasks
+      WHERE task_id = ${candidate.id}::uuid
+      LIMIT 1
+    `);
+    if (existing.rows?.length) continue;
+
+    await db.execute(sql`
+      INSERT INTO ai_platform.ai_coding_autonomous_tasks (
+        task_id, enabled, status, max_cycles, updated_at
+      )
+      VALUES (${candidate.id}::uuid, TRUE, 'ACTIVE', ${DEFAULT_MAX_CYCLES}, NOW())
+      ON CONFLICT (task_id) DO NOTHING
+    `);
+
+    logger.info(
+      { taskId: candidate.id, nextAction: state.nextAction },
+      "[coding-autonomous] recovered orphaned READY_REVIEW task",
+    );
+  }
+}
+
 async function autonomousTick(): Promise<void> {
   if (tickRunning) return;
   tickRunning = true;
@@ -671,6 +715,9 @@ export async function startAutonomousCodingRuntime(): Promise<void> {
     return;
   }
   await ensureCodingControlBridgeTables();
+  await recoverOrphanedReadyReviewTasks().catch((error) => {
+    logger.warn({ err: error }, "[coding-autonomous] orphan recovery failed");
+  });
   const interval = pollInterval();
   timer = setInterval(() => void autonomousTick(), interval);
   timer.unref();
