@@ -873,6 +873,7 @@ export async function failStaleRepositoryAnalyzerRuns(
     .where(
       and(
         eq(aiCodingRunsTable.status, "RUNNING"),
+        eq(aiCodingRunsTable.agentName, "Repository Analyzer"),
         sql`${aiCodingRunsTable.startedAt} IS NOT NULL`,
         sql`${aiCodingRunsTable.startedAt} < ${cutoff}`,
       ),
