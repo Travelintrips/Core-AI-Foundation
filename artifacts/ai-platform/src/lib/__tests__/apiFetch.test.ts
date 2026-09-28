@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { apiFetch, HttpError, isUnauthorized, isForbidden } from "../apiFetch";
+import { apiEventStream, apiFetch, HttpError, isUnauthorized, isForbidden } from "../apiFetch";
 
 // ── Fetch mock helpers ────────────────────────────────────────────────────────
 
@@ -159,6 +159,44 @@ describe("apiFetch — B5B shared utility", () => {
     } catch (err) {
       expect((err as HttpError).message).toBe("Validation failed");
     }
+  });
+});
+
+describe("apiEventStream idle watchdog", () => {
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("fails instead of waiting forever when an SSE connection goes silent", async () => {
+    globalThis.fetch = vi.fn(async (_path: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal?.addEventListener(
+            "abort",
+            () => controller.error(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    }) as typeof globalThis.fetch;
+
+    await expect(
+      apiEventStream("/api/stream", { method: "POST", body: "{}" }, () => undefined, 10),
+    ).rejects.toMatchObject({
+      status: 504,
+    });
   });
 });
 
