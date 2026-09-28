@@ -35,11 +35,30 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Resolve production verification target
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          echo "latest_main_sha=$latest_main_sha"
+          echo "latest_main_sha=$latest_main_sha" >> "$GITHUB_OUTPUT"
+          echo "expected_sha=$EXPECTED_SHA"
+
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "$EXPECTED_SHA" != "$latest_main_sha" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping stale production verification trigger. expected_sha=$EXPECTED_SHA latest_main_sha=$latest_main_sha"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Wait for stable exact production commit
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: bash scripts/hostinger-production-probe.sh
 
       - name: Verify readiness
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -71,6 +90,7 @@ jobs:
           done
 
       - name: Verify admin auth guard
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/tasks -w "%{http_code}" \
@@ -79,6 +99,7 @@ jobs:
           test "$code" = "401"
 
       - name: Verify authenticated Coding Workspace
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -94,6 +115,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/tasks-auth","utf8")); if(!Array.isArray(v)) throw new Error("Expected coding tasks array"); console.log("coding_tasks_authenticated_payload=array");'
 
       - name: Verify deterministic AI Core Chat smoke
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -167,6 +189,7 @@ jobs:
           NODE
 
       - name: Verify GCP Ollama worker and Economy routing
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -249,6 +272,7 @@ jobs:
           NODE
 
       - name: Verify AI Core cloud routing
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -327,6 +351,7 @@ jobs:
           NODE
 
       - name: Verify AI Core Data Tool schema readiness
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -356,6 +381,7 @@ jobs:
           NODE
 
       - name: Verify AI Core Data Tool execution
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -418,6 +444,7 @@ jobs:
           NODE
 
       - name: Inspect ZeroLLM host readiness
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -431,6 +458,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/zerollm-readiness","utf8")); if(v.provider!=="zerollm"||v.loopbackOnly!==true) throw new Error("Invalid ZeroLLM readiness payload");'
 
       - name: Verify Coding Workspace GitHub repository discovery
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -446,6 +474,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/github-repositories","utf8")); if(!Array.isArray(v.repositories)) throw new Error("Expected repositories array"); if(!v.repositories.some(r=>r.fullName==="Travelintrips/Core-AI-Foundation")) throw new Error("Core-AI-Foundation not returned by GitHub discovery"); console.log("github_repository_discovery=PASS count="+v.repositories.length);'
 
       - name: Verify public sitemap for Googlebot
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -481,7 +510,7 @@ jobs:
           test "$legacy_location" = "$PUBLIC_SITEMAP_URL"
 
       - name: Report Hostinger verification failure
-        if: failure()
+        if: failure() && steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -508,6 +537,7 @@ jobs:
             "$API_BASE_URL/ai/incidents" || true
 
       - name: Verification summary
+        if: steps.target.outputs.stale != 'true'
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
           echo "Health/readiness: PASS"
@@ -515,3 +545,10 @@ jobs:
           echo "Authenticated Coding Workspace smoke: PASS"
           echo "GCP Ollama worker + Economy routing: PASS"
           echo "Public sitemap Googlebot fetch: PASS"
+
+      - name: Stale trigger summary
+        if: steps.target.outputs.stale == 'true'
+        run: |
+          echo "Skipped stale production verification trigger."
+          echo "Triggered SHA: $EXPECTED_SHA"
+          echo "Current main SHA: ${{ steps.target.outputs.latest_main_sha }}"
