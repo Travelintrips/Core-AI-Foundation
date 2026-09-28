@@ -354,11 +354,7 @@ async function git(root: string, args: string[]): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  const text = typeof stdout === "string"
-    ? stdout
-    : Buffer.isBuffer(stdout)
-      ? stdout.toString("utf8")
-      : "";
+  const text = stdout;
   if (!text.trim()) {
     throw new LocalAiHandoffError(
       `Git command returned empty output while preparing AI handoff: git ${args.join(" ")}`,
