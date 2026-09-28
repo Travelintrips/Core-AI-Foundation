@@ -668,15 +668,6 @@ export async function startCodingOrchestration(
       throw lastSessionError ?? new Error("Coding Orchestrator session bootstrap failed");
     }
 
-    await logAudit(
-      "coding-orchestrator",
-      "pipeline_started",
-      input.task.id,
-      "coding_task",
-      "success",
-      { sessionId, codingRunId: input.run.id },
-    );
-
     let lastEnqueueError: unknown = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
@@ -726,6 +717,25 @@ export async function startCodingOrchestration(
     throw error;
   }
 
+  // Start the critical analyzer continuation before non-critical audit I/O.
+  // This narrows the orphan window on hosts that can recycle the request process
+  // immediately after the HTTP response is committed.
   void continueCodingOrchestration(input, sessionId, queuedJob, stages);
+
+  // Audit telemetry must never block or prevent analyzer startup.
+  void logAudit(
+    "coding-orchestrator",
+    "pipeline_started",
+    input.task.id,
+    "coding_task",
+    "success",
+    { sessionId, codingRunId: input.run.id },
+  ).catch((error) => {
+    logger.warn(
+      { err: error, taskId: input.task.id, codingRunId: input.run.id, sessionId },
+      "[coding-orchestrator] Failed to persist non-critical pipeline_started audit",
+    );
+  });
+
   return { sessionId };
 }
