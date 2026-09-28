@@ -214,7 +214,6 @@ export async function renewLease(
       leaseExpiresAt: expires,
       lockVersion:    sql`lock_version + 1`,
       lastHeartbeat:  now,
-      updatedAt:      now,
     })
     .where(
       and(
