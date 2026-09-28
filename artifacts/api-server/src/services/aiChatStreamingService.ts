@@ -131,7 +131,10 @@ async function readSse(
           reader.read(),
           new Promise<never>((_, reject) => {
             timer = setTimeout(
-              () => reject(new Error(`Streaming provider stalled for ${idleTimeoutMs}ms without data.`)),
+              () => {
+                void reader.cancel("provider stream idle timeout").catch(() => undefined);
+                reject(new Error(`Streaming provider stalled for ${idleTimeoutMs}ms without data.`));
+              },
               idleTimeoutMs,
             );
           }),
