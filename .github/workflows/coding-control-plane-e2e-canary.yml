@@ -214,43 +214,27 @@ jobs:
             exit 1
           fi
 
-          code=""
-          for attempt in $(seq 1 18); do
-            code=$(curl --http1.1 -sS -D /tmp/graph-probe.headers -o /tmp/graph-probe.json -w "%{http_code}" \
-              --connect-timeout 15 --max-time 30 \
-              -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate" \
-              -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
-            planner_code=$(jq -r '.code // empty' /tmp/graph-probe.json 2>/dev/null || true)
-            if [[ "$code" = "200" || "$code" = "201" ]]; then
-              break
+          code=$(curl --http1.1 -sS -o /tmp/graph-probe.json -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate" \
+            -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+          if [[ "$code" != "200" && "$code" != "202" ]]; then
+            echo "::error::Planner enqueue failed with HTTP $code"; cat /tmp/graph-probe.json 2>/dev/null || true; exit 1
+          fi
+          graph_id=""
+          for attempt in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/graph.json -w "%{http_code}" --connect-timeout 15 --max-time 30 "$API_BASE_URL/ai/coding/tasks/$task/task-graph" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+            if [ "$code" = "200" ]; then
+              graph_id=$(jq -r 'select(.graph.status == "PREPARED") | .graph.id // empty' /tmp/graph.json 2>/dev/null || true)
+              if [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then break; fi
+            elif [[ "$code" != "404" && "$code" != "500" && "$code" != "502" && "$code" != "503" && "$code" != "504" && "$code" != "000" ]]; then
+              echo "::error::Planner graph poll failed with HTTP $code"; cat /tmp/graph.json 2>/dev/null || true; exit 1
             fi
-            if [[ "$code" = "409" && "$planner_code" = "AUTHORITY_HELD" ]] || \
-               [[ "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" || "$code" = "000" ]]; then
-              echo "Planner probe transient response HTTP $code code=${planner_code:-none} (attempt $attempt/18); retrying in 5s..."
-              sleep 5
-              continue
-            fi
-            break
+            echo "Planner job pending (attempt $attempt/120, HTTP=${code:-curl-error}); retrying in 5s..."; sleep 5
           done
-          if [ "$code" = "409" ] && [ "$(jq -r '.code // empty' /tmp/graph-probe.json 2>/dev/null)" = "ANALYSIS_REQUIRED" ]; then
-            echo "::error::Repository analysis did not produce a completed bounded context package within the canary timeout"
-            cat /tmp/graph-probe.json
-            exit 1
+          if [[ ! "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::Planner job did not produce a PREPARED graph within the bounded wait"; cat /tmp/graph.json 2>/dev/null || true; exit 1
           fi
-          if [[ "$code" != "200" && "$code" != "201" ]]; then
-            echo "::error::Post-analysis planner probe failed with HTTP $code"
-            if [[ "$code" = "307" || "$code" = "308" ]]; then
-              location=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' /tmp/graph-probe.headers)
-              if [ -n "$location" ]; then
-                echo "Production edge redirect location: $location"
-              fi
-            fi
-            cat /tmp/graph-probe.json
-            exit 1
-          fi
-          cp /tmp/graph-probe.json /tmp/graph.json
-          graph_id=$(jq -r '.snapshot.graph.id // .graph.id // empty' /tmp/graph.json)
-          [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]
           echo "graph_id=$graph_id" >> "$GITHUB_OUTPUT"
 
       - name: Read and assert Planner Authority
@@ -264,6 +248,12 @@ jobs:
             echo "::error::Read planner authority failed with HTTP $code"
             cat /tmp/authority.json
             exit 1
+          fi
+          if [ "$(jq -r '.state // empty' /tmp/authority.json)" = "UNCLAIMED" ]; then
+            holder="production-e2e-canary-$GITHUB_RUN_ID"
+            body=$(jq -nc --arg scope "$scope" --arg holder "$holder" '{scope:$scope,holderId:$holder,holderType:"chatgpt",leaseSeconds:300,metadata:{source:"production-e2e-canary"}}')
+            code=$(curl -sS -o /tmp/authority.json -w "%{http_code}" -X POST "$API_BASE_URL/ai/coding/planner-authority/acquire" -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
+            test "$code" = "201"
           fi
           holder=$(jq -r '.holderId // empty' /tmp/authority.json)
           token=$(jq -r '.leaseToken // empty' /tmp/authority.json)
