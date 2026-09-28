@@ -203,6 +203,45 @@ export async function shutdownOllamaWorker(
   await releaseLease(workerId, heartbeatToken);
 }
 
+export async function recoverOllamaWorkerCapacityOnRuntimeStart(
+  workerName: string,
+): Promise<number> {
+  const normalizedWorkerName = workerName.trim();
+  if (!normalizedWorkerName) return 0;
+
+  const raw = await db.execute(sql`
+    UPDATE ai_platform.ai_workers
+    SET
+      running_jobs = 0,
+      status = CASE
+        WHEN status IN ('online', 'idle', 'busy') THEN 'idle'
+        ELSE status
+      END,
+      updated_at = NOW()
+    WHERE worker_name = ${normalizedWorkerName}
+      AND provider_slug = ${OLLAMA_WORKER_PROVIDER}
+      AND runtime_kind = ${OLLAMA_WORKER_RUNTIME_KIND}
+      AND running_jobs > 0
+    RETURNING id
+  `);
+
+  const recovered =
+    (raw as unknown as { rows?: Array<{ id?: unknown }> }).rows?.length ?? 0;
+
+  if (recovered > 0) {
+    await logAudit(
+      "ollama-worker",
+      "ollama_worker_capacity_recovered_on_runtime_start",
+      normalizedWorkerName,
+      "ai_worker",
+      "success",
+      { recoveredWorkers: recovered },
+    ).catch(() => undefined);
+  }
+
+  return recovered;
+}
+
 function availabilityFromRow(
   row: Record<string, unknown>,
 ): OllamaWorkerAvailability | null {
