@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
     availableSlots: number;
   },
   remoteWorkerAvailable: false,
+  registeredLookupCalls: 0,
+  remoteLookupCalls: 0,
 }));
 
 vi.mock("../localCodingAiProductionModelService.js", async () => {
@@ -91,11 +93,17 @@ vi.mock("../ollamaLocalService.js", () => ({
 }));
 
 vi.mock("../ollamaWorkerRegistryService.js", () => ({
-  getOllamaWorkerAvailability: vi.fn(async () => mocks.registeredWorker),
+  getOllamaWorkerAvailability: vi.fn(async () => {
+    mocks.registeredLookupCalls += 1;
+    return mocks.registeredWorker;
+  }),
 }));
 
 vi.mock("../remoteOllamaWorkerService.js", () => ({
-  hasRemoteOllamaWorker: vi.fn(async () => mocks.remoteWorkerAvailable),
+  hasRemoteOllamaWorker: vi.fn(async () => {
+    mocks.remoteLookupCalls += 1;
+    return mocks.remoteWorkerAvailable;
+  }),
 }));
 
 import {
@@ -113,6 +121,8 @@ describe("Preferred constrained coding model routing", () => {
     mocks.cloudFallback.ok = false;
     mocks.registeredWorker = null;
     mocks.remoteWorkerAvailable = false;
+    mocks.registeredLookupCalls = 0;
+    mocks.remoteLookupCalls = 0;
   });
 
   it("defaults to GPT-5.6 Sol primary and Ollama qwen coder fallback", () => {
@@ -173,7 +183,7 @@ describe("Preferred constrained coding model routing", () => {
     });
   });
 
-  it("uses scheduled Ollama routing when hosted worker runtime is enabled even if registry lookup is transiently empty", async () => {
+  it("fast-paths the configured hosted Ollama runtime without preliminary DB lookups", async () => {
     await expect(
       resolveConfiguredCodingFallbackModel({
         OLLAMA_WORKER_RUNTIME_ENABLED: "true",
@@ -190,6 +200,9 @@ describe("Preferred constrained coding model routing", () => {
         },
       },
     });
+
+    expect(mocks.registeredLookupCalls).toBe(0);
+    expect(mocks.remoteLookupCalls).toBe(0);
   });
 
   it("resolves healthy Ollama as an explicit runtime fallback target", async () => {

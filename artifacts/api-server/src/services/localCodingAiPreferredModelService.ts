@@ -106,10 +106,21 @@ export async function resolveConfiguredCodingFallbackModel(
     };
   }
 
-  const remoteWorkerAvailable = await hasRemoteOllamaWorker(fallbackModel)
-    .catch(() => false);
+  // A configured hosted Ollama runtime is authoritative for this model.
+  // Select the scheduled adapter immediately and let invocation perform the
+  // single reservation check. Avoid preliminary registry/remote-worker DB
+  // lookups on every chat request; on production these duplicated round trips
+  // can dominate end-to-end latency when the DB pool is under pressure.
+  const hostedRuntimeEnabled = ["1", "true", "yes", "on"].includes(
+    (env["OLLAMA_WORKER_RUNTIME_ENABLED"] ?? "").trim().toLowerCase(),
+  );
+  const hostedRuntimeModel = (
+    env["OLLAMA_WORKER_MODEL"] ||
+    env["OLLAMA_MODEL"] ||
+    DEFAULT_FALLBACK_MODEL
+  ).trim();
 
-  if (remoteWorkerAvailable) {
+  if (hostedRuntimeEnabled && hostedRuntimeModel === fallbackModel) {
     return {
       ok: true,
       fallback: { provider: "ollama", model: fallbackModel },
@@ -117,10 +128,8 @@ export async function resolveConfiguredCodingFallbackModel(
         model: {
           modelId: fallbackModel,
           maxOutputTokens: base.maxOutputTokens,
-          capabilities: ["code", "reasoning", "text", "local", "remote_worker_pool"],
+          capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
         },
-        // No baseUrl on purpose: the scheduled Ollama adapter will dispatch
-        // through the authenticated outbound remote-pull worker queue.
         provider: { slug: "ollama" },
         timeoutMs: localFallbackTimeoutMs(env),
         maxOutputTokens: base.maxOutputTokens,
@@ -142,9 +151,6 @@ export async function resolveConfiguredCodingFallbackModel(
           maxOutputTokens: base.maxOutputTokens,
           capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
         },
-        // Deliberately omit baseUrl for registered workers. A registered worker
-        // must be invoked through createScheduledOllamaProviderAdapter so the
-        // reservation path adds OLLAMA_WORKER_API_KEY and releases capacity.
         provider: { slug: "ollama" },
         timeoutMs: localFallbackTimeoutMs(env),
         maxOutputTokens: base.maxOutputTokens,
@@ -153,21 +159,10 @@ export async function resolveConfiguredCodingFallbackModel(
     };
   }
 
-  // When the hosted Ollama runtime is configured, never fall through to the
-  // legacy loopback health check just because the registry lookup is briefly
-  // empty or its DB query is transiently unavailable. Invocation will perform
-  // the authoritative reservation check and return a bounded UNAVAILABLE
-  // error if no worker can actually be reserved.
-  const hostedRuntimeEnabled = ["1", "true", "yes", "on"].includes(
-    (env["OLLAMA_WORKER_RUNTIME_ENABLED"] ?? "").trim().toLowerCase(),
-  );
-  const hostedRuntimeModel = (
-    env["OLLAMA_WORKER_MODEL"] ||
-    env["OLLAMA_MODEL"] ||
-    DEFAULT_FALLBACK_MODEL
-  ).trim();
+  const remoteWorkerAvailable = await hasRemoteOllamaWorker(fallbackModel)
+    .catch(() => false);
 
-  if (hostedRuntimeEnabled && hostedRuntimeModel === fallbackModel) {
+  if (remoteWorkerAvailable) {
     return {
       ok: true,
       fallback: { provider: "ollama", model: fallbackModel },
@@ -175,7 +170,7 @@ export async function resolveConfiguredCodingFallbackModel(
         model: {
           modelId: fallbackModel,
           maxOutputTokens: base.maxOutputTokens,
-          capabilities: ["code", "reasoning", "text", "local", "worker_pool"],
+          capabilities: ["code", "reasoning", "text", "local", "remote_worker_pool"],
         },
         provider: { slug: "ollama" },
         timeoutMs: localFallbackTimeoutMs(env),
