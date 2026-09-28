@@ -742,6 +742,14 @@ async function streamAskMode(
       const local = await resolveLocalSelection();
       if (local.ok) {
         try {
+          writeStreamEvent(res, "meta", {
+            route: "LOCAL",
+            provider: String(local.selection.provider.slug),
+            model: String(local.selection.model.modelId),
+            ...routingMeta,
+            streaming: false,
+            fallback: true,
+          });
           const result = await invokeChatModel(local.selection, message);
           writeBufferedChatStream(res, {
             kind: "answer",
@@ -749,8 +757,7 @@ async function streamAskMode(
             ...routingMeta,
             ...result,
             warning:
-              "Cloud streaming gagal sebelum menghasilkan teks; AI Core memakai local fallback: " +
-              failure,
+              "Cloud route sedang tidak tersedia; AI Core memakai local fallback.",
           });
           return;
         } catch (localError) {
