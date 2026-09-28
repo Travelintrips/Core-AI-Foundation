@@ -5,6 +5,7 @@ import {
   aiCodingRunsTable,
   aiCodingTasksTable,
   db,
+  withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
@@ -589,7 +590,7 @@ export async function enableAutonomousCodingTask(
 ): Promise<void> {
   await ensureCodingControlBridgeTables();
   const bounded = Math.max(5, Math.min(100, Math.floor(maxCycles)));
-  await db.execute(sql`
+  await withTransientDatabaseRetry(() => db.execute(sql`
     INSERT INTO ai_platform.ai_coding_autonomous_tasks (
       task_id, enabled, status, max_cycles, updated_at
     )
@@ -604,7 +605,7 @@ export async function enableAutonomousCodingTask(
         max_cycles = ${bounded},
         last_error = NULL,
         updated_at = NOW()
-  `);
+  `), { attempts: 3, baseDelayMs: 250 });
 }
 
 export async function disableAutonomousCodingTask(taskId: string): Promise<void> {
