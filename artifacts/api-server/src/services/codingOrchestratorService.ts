@@ -1,4 +1,7 @@
 import { eq } from "drizzle-orm";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import {
   aiCodingRunsTable,
   aiCodingTasksTable,
@@ -486,7 +489,7 @@ async function failOrchestration(
   );
 }
 
-async function continueCodingOrchestration(
+export async function continueCodingOrchestration(
   input: CodingOrchestrationInput,
   sessionId: string,
   queuedJob: AiJob,
@@ -756,6 +759,30 @@ export async function startCodingOrchestration(
     throw error;
   }
 
-  void continueCodingOrchestration(input, sessionId, queuedJob, stages);
+  // Run the CPU-heavy repository analysis in a separate Node process. This
+  // keeps the HTTP API event loop responsive while clone/index/AST work runs.
+  // The child reconstructs the task/run from durable DB state and continues
+  // the same bounded orchestrator pipeline.
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const workerEntry = join(currentDir, "repository-analyzer-worker.mjs");
+  const child = spawn(process.execPath, [workerEntry, String(queuedJob.id)], {
+    env: process.env,
+    stdio: "ignore",
+    detached: false,
+  });
+  child.unref();
+  child.once("error", (error) => {
+    logger.error(
+      { err: error, jobId: queuedJob?.id, taskId: input.task.id, codingRunId: input.run.id },
+      "[coding-orchestrator] Failed to launch dedicated Repository Analyzer process",
+    );
+    void failOrchestration(
+      input,
+      sessionId,
+      updateStage(stages, "repository_analyzer", "FAILED", error.message),
+      error,
+    );
+  });
+
   return { sessionId };
 }
