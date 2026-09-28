@@ -184,8 +184,25 @@ jobs:
             if [[ "$code" = "200" || "$code" = "201" ]]; then
               break
             fi
-            if [[ "$code" = "409" && "$planner_code" = "AUTHORITY_HELD" ]] || \
-               [[ "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" || "$code" = "000" ]]; then
+            if [[ "$code" = "409" && "$planner_code" = "AUTHORITY_HELD" ]]; then
+              existing_code=$(curl --http1.1 -sS -o /tmp/existing-graph.json -w "%{http_code}" \
+                --connect-timeout 15 --max-time 30 \
+                "$API_BASE_URL/ai/coding/tasks/$task/task-graph" \
+                -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+              if [ "$existing_code" = "200" ]; then
+                existing_graph_id=$(jq -r '.graph.id // empty' /tmp/existing-graph.json 2>/dev/null || true)
+                if [[ "$existing_graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+                  echo "Planner authority is already held by the active planner; adopting existing graph $existing_graph_id"
+                  cp /tmp/existing-graph.json /tmp/graph-probe.json
+                  code="200"
+                  break
+                fi
+              fi
+              echo "Planner authority is held but no graph is readable yet (attempt $attempt/18); retrying in 5s..."
+              sleep 5
+              continue
+            fi
+            if [[ "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" || "$code" = "000" ]]; then
               echo "Planner probe transient response HTTP $code code=${planner_code:-none} (attempt $attempt/18); retrying in 5s..."
               sleep 5
               continue
