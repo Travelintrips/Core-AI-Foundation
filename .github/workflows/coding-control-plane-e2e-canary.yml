@@ -142,8 +142,17 @@ jobs:
             fi
 
             if [ "$code" = "409" ]; then
-              # A timed-out POST can still create the run server-side. The task
-              # projection may lag briefly, so poll before treating 409 as fatal.
+              # A timed-out POST can still create the run server-side. The API
+              # now returns the authoritative activeRunId directly on conflict,
+              # so adopt it before relying on the eventually-consistent task view.
+              run_id=$(jq -r '.activeRunId // empty' /tmp/run.json 2>/dev/null || true)
+              if [[ "$run_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+                echo "Repository analysis was already started; adopting active run $run_id from HTTP 409 response"
+                break
+              fi
+
+              # Backward-compatible fallback while older production instances
+              # may still be serving during a rolling deployment.
               for adopt_attempt in $(seq 1 12); do
                 status_code=$(curl -sS -o /tmp/task-after-start.json -w "%{http_code}" \
                   --connect-timeout 15 --max-time 30 \
@@ -152,7 +161,7 @@ jobs:
                 if [ "$status_code" = "200" ]; then
                   run_id=$(jq -r '.runs[]? | select(.status == "RUNNING") | .id' /tmp/task-after-start.json | head -1)
                   if [[ "$run_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-                    echo "Repository analysis was already started; adopting active run $run_id (attempt $adopt_attempt/12)"
+                    echo "Repository analysis was already started; adopting active run $run_id from task projection (attempt $adopt_attempt/12)"
                     break
                   fi
                 fi
