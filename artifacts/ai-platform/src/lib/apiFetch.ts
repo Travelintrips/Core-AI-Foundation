@@ -95,7 +95,7 @@ export async function apiEventStream(
   path: string,
   opts: RequestInit,
   onEvent: (message: ApiEventStreamMessage) => void,
-  idleTimeoutMs = 45_000,
+  idleTimeoutMs = 90_000,
 ): Promise<void> {
   const headers = new Headers(opts.headers ?? {});
   const hasBody = opts.body != null && !(opts.body instanceof FormData);
