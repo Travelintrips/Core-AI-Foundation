@@ -342,7 +342,7 @@ async function assertRemoteHeadCurrent(context: HandoffContext): Promise<void> {
 }
 
 async function git(root: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, {
+  const result = await execFileAsync("git", args, {
     cwd: root,
     timeout: 20_000,
     maxBuffer: 2 * 1024 * 1024,
@@ -354,11 +354,19 @@ async function git(root: string, args: string[]): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  const text = typeof stdout === "string"
-    ? stdout
-    : Buffer.isBuffer(stdout)
-      ? stdout.toString("utf8")
-      : "";
+  const raw =
+    typeof result === "string" || Buffer.isBuffer(result)
+      ? result
+      : result instanceof Uint8Array
+        ? result
+        : (result as { stdout?: unknown } | null | undefined)?.stdout;
+  const text = Buffer.isBuffer(raw)
+    ? raw.toString("utf8")
+    : raw instanceof Uint8Array
+      ? Buffer.from(raw).toString("utf8")
+      : typeof raw === "string"
+        ? raw
+        : "";
   if (!text.trim()) {
     throw new LocalAiHandoffError(
       `Git command returned empty output while preparing AI handoff: git ${args.join(" ")}`,
