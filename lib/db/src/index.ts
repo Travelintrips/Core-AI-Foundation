@@ -56,6 +56,38 @@ const poolConfig = {
 
 export const pool = new Pool(poolConfig);
 
+const TRANSIENT_DB_CODES = new Set([
+  "08000", "08001", "08003", "08004", "08006", "08007",
+  "57P01", "57P02", "57P03", "53300",
+]);
+
+export function isTransientDatabaseConnectionError(error: unknown): boolean {
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown } | null;
+  const code = typeof candidate?.code === "string" ? candidate.code : "";
+  const message = String(candidate?.message ?? error ?? "").toLowerCase();
+  return TRANSIENT_DB_CODES.has(code) ||
+    /timeout exceeded when trying to connect|connection terminated unexpectedly|connection reset|connection refused|connection timed out|server closed the connection unexpectedly|terminating connection due to administrator command|too many connections|remaining connection slots are reserved|econnreset|econnrefused|etimedout/.test(message);
+}
+
+export async function withTransientDatabaseRetry<T>(
+  operation: () => Promise<T>,
+  options: { attempts?: number; baseDelayMs?: number } = {},
+): Promise<T> {
+  const attempts = Math.max(1, Math.min(5, Math.floor(options.attempts ?? 3)));
+  const baseDelayMs = Math.max(25, Math.min(2_000, Math.floor(options.baseDelayMs ?? 200)));
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts || !isTransientDatabaseConnectionError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, baseDelayMs * attempt));
+    }
+  }
+  throw lastError;
+}
+
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
