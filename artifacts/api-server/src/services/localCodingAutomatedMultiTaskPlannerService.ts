@@ -45,11 +45,11 @@ const AUTO_PLANNER_HOLDER_ID = "ai-core:auto-multi-task-planner";
 const AUTO_PLANNER_LEASE_SECONDS = 300;
 const MAX_PLANNER_WORKSTREAMS = 8;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
-// Fail over across distinct providers/models instead of spending the entire HTTP
-// budget retrying one unhealthy target. The outer canary/request layer already
-// provides bounded whole-operation retries.
-const PLANNER_MODEL_MAX_ATTEMPTS = 1;
-const PLANNER_MODEL_BACKOFF_MS: readonly number[] = [];
+// Rate limits are often brief and deserve bounded retry. Timeouts/unavailable
+// providers must fail over immediately so one unhealthy target cannot consume
+// the entire HTTP/proxy budget.
+const PLANNER_MODEL_MAX_ATTEMPTS = 3;
+const PLANNER_MODEL_BACKOFF_MS = [750, 1_500] as const;
 const PLANNER_AUTHORITY_WAIT_MS = 10_000;
 const PLANNER_AUTHORITY_POLL_MS = 1_000;
 
@@ -352,7 +352,7 @@ function isRetryablePlannerModelError(error: unknown): error is ModelInvocationE
   return (
     error instanceof ModelInvocationError &&
     error.details.retryable === true &&
-    ["PROVIDER_RATE_LIMIT", "PROVIDER_UNAVAILABLE", "TIMEOUT"].includes(error.code)
+    error.code === "PROVIDER_RATE_LIMIT"
   );
 }
 
