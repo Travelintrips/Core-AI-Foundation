@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -671,6 +671,49 @@ export async function startCodingOrchestration(
 ): Promise<{ sessionId: string }> {
   const sessionId = `coding-${input.run.id}`;
   const stages = initStages();
+
+  // A previous process can die after creating/claiming an analyzer job while
+  // its linked coding run has already been failed/recovered. Such an orphaned
+  // queue row must never hold the host-wide single-flight lock forever.
+  //
+  // Reconcile only jobs whose payload-linked run is no longer RUNNING. A live
+  // analyzer remains untouched and still enforces the concurrency=1 boundary.
+  try {
+    const recovered = await db.execute(sql`
+      UPDATE ai_platform.ai_jobs AS j
+      SET status = 'failed',
+          completed_at = COALESCE(j.completed_at, NOW()),
+          error_message = COALESCE(
+            j.error_message,
+            'Orphaned Repository Analyzer job recovered before a new orchestration start'
+          ),
+          updated_at = NOW()
+      WHERE j.job_type = 'coding_repository_analyzer'
+        AND j.status IN ('queued', 'running', 'retrying')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_runs AS r
+          WHERE r.id::text = j.payload_json->>'codingRunId'
+            AND r.status = 'RUNNING'
+        )
+      RETURNING j.id
+    `);
+    const recoveredRows =
+      (recovered as unknown as { rows?: Array<{ id: number }> }).rows ?? [];
+    if (recoveredRows.length > 0) {
+      logger.warn(
+        { jobIds: recoveredRows.map((row) => row.id) },
+        "[coding-orchestrator] Recovered orphaned analyzer single-flight rows",
+      );
+    }
+  } catch (error) {
+    // Reconciliation is defensive. Do not mask the authoritative busy check
+    // below if the cleanup query itself encounters a transient DB failure.
+    logger.warn(
+      { err: error },
+      "[coding-orchestrator] Analyzer orphan reconciliation failed",
+    );
+  }
 
   // Repository analysis is intentionally single-flight on this host. A second
   // analyzer would compete for the same CPU/memory/DB resources and can starve
