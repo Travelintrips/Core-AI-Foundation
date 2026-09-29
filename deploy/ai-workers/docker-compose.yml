@@ -31,7 +31,6 @@ services:
       POSTGRES_USER: temporal
       POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD:?set TEMPORAL_POSTGRES_PASSWORD}
       POSTGRES_SEEDS: temporal-db
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
     ports:
       - "127.0.0.1:${TEMPORAL_GRPC_PORT:-7233}:7233"
     networks:
