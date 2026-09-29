@@ -80,8 +80,10 @@ will generate them.
 
 `AI_CORE_SCOPED_AGENT_TOKEN` is deliberately separate from `ADMIN_API_KEY`.
 When empty, the installer generates a dedicated random token and never prints
-it. AI Core stores only its SHA-256 hash and authorizes explicit scopes such as
-`model:chat`. Do **not** substitute `ADMIN_API_KEY`.
+it. AI Core stores only its SHA-256 hash and authorizes explicit scopes
+`model:chat` and `agent:presence`. The latter is restricted to the canonical
+OpenClaw/OpenHands/n8n registry IDs and cannot grant production deploy. Do
+**not** substitute `ADMIN_API_KEY`.
 
 When the scoped token is present, OpenHands is configured automatically with
 `openai/ai-core-agent` and an AI Core OpenAI-compatible base URL. OpenClaw gets

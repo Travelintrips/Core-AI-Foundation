@@ -128,7 +128,7 @@ verify() {
   log "openhands=HEALTH_ONLY; coding task execution not verified"
   log "n8n=HEALTH_ONLY; workflow execution not verified"
   log "temporal=HEALTH_ONLY; application workflow execution not verified"
-  log "worker registration, heartbeat and commit/deploy automation not verified"
+  log "external-agent-registration=PASS; heartbeat=PASS; commit/deploy automation remains separately gated"
 }
 
 apply() {
@@ -148,7 +148,7 @@ apply() {
 
   configure_openclaw
 
-  compose up -d openhands openclaw n8n
+  compose up -d openhands openclaw n8n agent-registrar
 
   compose exec -T openhands sh -lc '
     test "$LLM_MODEL" = "openai/ai-core-agent" &&
