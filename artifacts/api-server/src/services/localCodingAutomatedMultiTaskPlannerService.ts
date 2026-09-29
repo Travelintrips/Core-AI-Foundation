@@ -1152,11 +1152,12 @@ export async function generateAndPersistCodingMultiTaskPlan(
     );
   }
 
-  if (authorityHeartbeatFailure) {
-    if (authorityHeartbeatFailure instanceof PlannerAuthorityError) {
-      throw mapAuthorityError(authorityHeartbeatFailure);
+  const heartbeatFailure = authorityHeartbeatFailure as Error | null;
+  if (heartbeatFailure) {
+    if (heartbeatFailure instanceof PlannerAuthorityError) {
+      throw mapAuthorityError(heartbeatFailure);
     }
-    throw authorityHeartbeatFailure;
+    throw heartbeatFailure;
   }
 
   try {
