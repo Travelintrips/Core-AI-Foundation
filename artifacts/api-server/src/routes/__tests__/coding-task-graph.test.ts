@@ -79,6 +79,7 @@ const mocks = vi.hoisted(() => {
     approve: vi.fn(),
     generate: vi.fn(),
     enqueuePlanner: vi.fn(),
+    plannerAuthority: vi.fn(),
     dispatch: vi.fn(),
     completeReviewed: vi.fn(),
     prepareAiHandoff: vi.fn(),
@@ -111,6 +112,10 @@ vi.mock("../../services/localCodingAutomatedMultiTaskPlannerService.js", () => (
 
 vi.mock("../../services/localCodingPlannerQueueRuntimeService.js", () => ({
   enqueueCodingMultiTaskPlanner: mocks.enqueuePlanner,
+}));
+
+vi.mock("../../services/localCodingPlannerAuthorityService.js", () => ({
+  getPlannerAuthority: mocks.plannerAuthority,
 }));
 
 vi.mock("../../services/localCodingMultiWorkerOrchestratorService.js", () => ({
@@ -182,6 +187,10 @@ describe("multi-worker coding task graph API", () => {
     mocks.enqueuePlanner.mockResolvedValue({
       created: true,
       job: { id: 92, jobCode: "PLAN-TEST92", status: "queued" },
+    });
+    mocks.plannerAuthority.mockResolvedValue({
+      scope: `coding-task:${TASK_ID}`,
+      state: "UNCLAIMED",
     });
     mocks.generate.mockResolvedValue({
       created: true,
@@ -307,6 +316,31 @@ describe("multi-worker coding task graph API", () => {
     });
     expect(mocks.enqueuePlanner).toHaveBeenCalledWith(TASK_ID);
     expect(mocks.generate).not.toHaveBeenCalled();
+  });
+
+  it("adopts an active task-scoped planner instead of enqueueing a duplicate", async () => {
+    mocks.latest.mockResolvedValueOnce(null);
+    mocks.plannerAuthority.mockResolvedValueOnce({
+      scope: `coding-task:${TASK_ID}`,
+      state: "FALLBACK_ACTIVE",
+      holderType: "fallback",
+    });
+
+    const response = await request(app)
+      .post(`/ai/coding/tasks/${TASK_ID}/task-graph/generate`)
+      .send({});
+
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({
+      queued: false,
+      created: false,
+      jobId: null,
+      status: "running",
+      authorityHeld: true,
+      authorityState: "FALLBACK_ACTIVE",
+      nextAction: "WAIT_FOR_TASK_GRAPH",
+    });
+    expect(mocks.enqueuePlanner).not.toHaveBeenCalled();
   });
 
   it("returns the durable PREPARED graph idempotently without enqueueing another planner", async () => {

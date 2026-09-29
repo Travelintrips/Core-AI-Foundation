@@ -228,27 +228,106 @@ jobs:
             exit 1
           fi
 
-          code=$(curl --http1.1 -sS -o /tmp/graph-probe.json -w "%{http_code}" \
-            --connect-timeout 15 --max-time 30 \
-            -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate" \
-            -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
-          if [[ "$code" != "200" && "$code" != "202" ]]; then
-            echo "::error::Planner enqueue failed with HTTP $code"
-            cat /tmp/graph-probe.json 2>/dev/null || true
-            exit 1
-          fi
-
           graph_id=""
           planner_job_id=""
-          if [ "$code" = "200" ]; then
-            graph_id=$(jq -r '.snapshot.graph.id // empty' /tmp/graph-probe.json 2>/dev/null || true)
-          else
-            planner_job_id=$(jq -r '.jobId // empty' /tmp/graph-probe.json 2>/dev/null || true)
-            if ! [[ "$planner_job_id" =~ ^[0-9]+$ ]]; then
-              echo "::error::Planner enqueue response did not include a valid numeric jobId"
+          code=""
+          for planner_attempt in $(seq 1 36); do
+            rm -f /tmp/graph-probe.json /tmp/planner-authority-probe.json
+
+            graph_code=$(curl -sS -o /tmp/graph-probe.json -w "%{http_code}" \
+              --connect-timeout 10 --max-time 15 \
+              "$API_BASE_URL/ai/coding/tasks/$task/task-graph" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+            if [ "$graph_code" = "200" ]; then
+              graph_status=$(jq -r '.graph.status // empty' /tmp/graph-probe.json 2>/dev/null || true)
+              graph_id=$(jq -r 'select(.graph.status == "PREPARED") | .graph.id // empty' /tmp/graph-probe.json 2>/dev/null || true)
+              if [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+                echo "Adopting PREPARED task graph $graph_id produced by the in-flight planner."
+                break
+              fi
+              if [ -n "$graph_status" ]; then
+                echo "::error::Task graph already exists in unexpected status $graph_status before canary approval"
+                cat /tmp/graph-probe.json 2>/dev/null || true
+                exit 1
+              fi
+            elif [[ "$graph_code" != "404" && "$graph_code" != "307" && "$graph_code" != "308" && "$graph_code" != "500" && "$graph_code" != "502" && "$graph_code" != "503" && "$graph_code" != "504" && "$graph_code" != "000" ]]; then
+              echo "::error::Task graph probe failed with non-transient HTTP $graph_code"
               cat /tmp/graph-probe.json 2>/dev/null || true
               exit 1
             fi
+
+            authority_code=$(curl -sS -G -o /tmp/planner-authority-probe.json -w "%{http_code}" \
+              --connect-timeout 10 --max-time 15 \
+              "$API_BASE_URL/ai/coding/planner-authority" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              --data-urlencode "scope=coding-task:$task" || true)
+            if [ "$authority_code" = "200" ]; then
+              authority_state=$(jq -r '.state // empty' /tmp/planner-authority-probe.json 2>/dev/null || true)
+              if [[ "$authority_state" = "PRIMARY_ACTIVE" || "$authority_state" = "FALLBACK_ACTIVE" ]]; then
+                echo "Planner authority is already active for this task (state=$authority_state, attempt $planner_attempt/36); waiting for its graph."
+                sleep 5
+                continue
+              fi
+            elif [[ "$authority_code" != "500" && "$authority_code" != "502" && "$authority_code" != "503" && "$authority_code" != "504" && "$authority_code" != "000" ]]; then
+              echo "::error::Planner authority probe failed with non-transient HTTP $authority_code"
+              cat /tmp/planner-authority-probe.json 2>/dev/null || true
+              exit 1
+            fi
+
+            if [ "$planner_attempt" -le 2 ]; then
+              echo "No planner authority visible yet (attempt $planner_attempt/36); allowing the repository analyzer planner a short acquisition grace period."
+              sleep 2
+              continue
+            fi
+
+            code=$(curl --http1.1 -sS -o /tmp/graph-probe.json -w "%{http_code}" \
+              --connect-timeout 10 --max-time 20 \
+              -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/generate" \
+              -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+
+            if [ "$code" = "200" ]; then
+              graph_id=$(jq -r '.snapshot.graph.id // empty' /tmp/graph-probe.json 2>/dev/null || true)
+              if [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+                echo "Planner generate returned existing PREPARED graph $graph_id."
+                break
+              fi
+              echo "::error::Planner generate returned HTTP 200 without a valid graph id"
+              cat /tmp/graph-probe.json 2>/dev/null || true
+              exit 1
+            fi
+
+            if [ "$code" = "202" ]; then
+              planner_job_id=$(jq -r '.jobId // empty' /tmp/graph-probe.json 2>/dev/null || true)
+              if [[ "$planner_job_id" =~ ^[0-9]+$ ]]; then
+                echo "Planner job $planner_job_id accepted for bounded execution."
+                break
+              fi
+              authority_held=$(jq -r '.authorityHeld // false' /tmp/graph-probe.json 2>/dev/null || true)
+              if [ "$authority_held" = "true" ]; then
+                echo "Planner generate adopted an active planner (attempt $planner_attempt/36); waiting for its graph."
+                sleep 5
+                continue
+              fi
+              echo "::error::Planner enqueue response did not include a valid numeric jobId or active-authority marker"
+              cat /tmp/graph-probe.json 2>/dev/null || true
+              exit 1
+            fi
+
+            if [[ "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" || "$code" = "000" ]]; then
+              echo "Planner enqueue transient HTTP ${code:-curl-error} (attempt $planner_attempt/36); retrying in 5s..."
+              sleep 5
+              continue
+            fi
+
+            echo "::error::Planner enqueue failed with non-transient HTTP $code"
+            cat /tmp/graph-probe.json 2>/dev/null || true
+            exit 1
+          done
+
+          if [[ ! "$graph_id" =~ ^[0-9a-fA-F-]{36}$ && ! "$planner_job_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Planner graph/job was not obtained after bounded retries (last HTTP=${code:-missing})"
+            cat /tmp/graph-probe.json 2>/dev/null || true
+            exit 1
           fi
 
           if [[ "$planner_job_id" =~ ^[0-9]+$ ]]; then
@@ -464,3 +543,5 @@ jobs:
           echo "commit_created=false"
           echo "pushed=false"
           echo "merged=false"
+
+[executed on device: Travelintrips (17b5cc60-8249-4268-b114-a27bafd69faa)]
