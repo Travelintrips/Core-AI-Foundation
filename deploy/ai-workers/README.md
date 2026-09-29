@@ -26,7 +26,9 @@ production database credentials into agent containers.
   gRPC port and UI bind to loopback only.
 - **OpenHands** is the coding worker. It only sees
   `OPENHANDS_PROJECTS_PATH` (default `/opt/ai-workers/projects`) plus its own
-  state volume. A newly created default workspace is owned by UID/GID 1000 to match the official Agent Canvas image; an existing directory is never recursively re-owned.
+  state volume. A newly created default workspace is owned by UID/GID 1000 to
+  match the official Agent Canvas image; an existing directory is never
+  recursively re-owned.
 - **OpenClaw** is an operations/agent gateway. Its UI/API binds to loopback and
   runs without the host Docker socket.
 - **n8n** handles workflow automation with a dedicated Postgres database and
@@ -36,7 +38,7 @@ production database credentials into agent containers.
 
 All published ports use `127.0.0.1`. If a UI must be reachable remotely, put
 an authenticated HTTPS reverse proxy in front of it instead of changing the
-Compose bindings to `0.0.0.0).
+Compose bindings to `0.0.0.0`.
 
 ## One-command bootstrap
 
@@ -53,11 +55,12 @@ The installer is idempotent. On every run it:
 2. generates missing internal secrets without replacing existing values;
 3. creates the OpenHands project workspace;
 4. validates and pulls the pinned Compose stack;
-5. starts Temporal, n8n, and OpenHands;
-6. performs one-time OpenClaw onboarding when needed;
-7. starts OpenClaw;
-8. runs bounded health checks; and
-9. prints `READY` only after every required service is healthy.
+5. initializes Temporal PostgreSQL schemas and the default namespace;
+6. starts Temporal, n8n, and OpenHands;
+7. performs one-time OpenClaw provider onboarding when a provider key is available;
+8. otherwise starts the loopback-only OpenClaw gateway in provider-unconfigured mode;
+9. runs bounded health checks; and
+10. prints `READY` only after every required service endpoint is healthy.
 
 For a host-managed secret file:
 
@@ -72,8 +75,15 @@ The installer never prints generated secrets.
 
 Copy `.env.example` to the protected environment file if you want to prepare
 it manually. Internal database/API secrets may be left empty; the installer
-will generate them. For first-time unattended OpenClaw onboarding, provide
-`OPENAI_API_KEY` in the protected environment file.
+will generate them.
+
+If `OPENAI_API_KEY` is available on first boot, OpenClaw performs unattended
+provider onboarding using an environment SecretRef. If no provider key is
+present, OpenClaw still starts its loopback-only gateway with
+`--allow-unconfigured`. That keeps the infrastructure online without
+inventing a credential or injecting AI Core's broad admin key. Model/provider
+routing should be attached later through a least-privilege AI Core-compatible
+route.
 
 OpenHands provider configuration is optional at boot. Configure
 `OPENHANDS_LLM_MODEL`, `OPENHANDS_LLM_BASE_URL`, and
@@ -94,7 +104,7 @@ AI_WORKERS_ENV_FILE=/etc/ai-core/ai-workers.env \
 ```
 
 Checks cover Temporal, Temporal UI, n8n, OpenHands, and OpenClaw. The script
-exits non-zero if any required service is unhealthy.
+exits non-zero if any required service endpoint is unhealthy.
 
 Default local endpoints:
 
@@ -125,13 +135,14 @@ the idempotent installer, and finishes with the same health check.
 
 ## Production note
 
-The current Temporal container uses the official `auto-setup` distribution for
-a single-host bootstrap. This is suitable for bringing the durable worker stack
-online without exposing it publicly. Before turning Temporal into a multi-node
-or high-availability production cluster, migrate it to Temporal's production
-server/schema-management deployment pattern.
+Temporal uses the supported `temporalio/server` image with
+`temporalio/admin-tools` for PostgreSQL schema initialization and namespace
+creation. The database network is internal and the gRPC/UI ports remain
+loopback-only. This single-host Compose topology is suitable for the worker
+control plane, but a multi-node or high-availability deployment should move to
+Temporal's production clustering patterns.
 
-Destructive production operations are intentionally outside this stack. Database
-deletes, production shell access, deployments, and other high-risk actions
-should continue to pass through AI Core's policy/approval gates rather than
-being granted directly to OpenHands, OpenClaw, or n8n.
+Destructive production operations are intentionally outside this stack.
+Database deletes, production shell access, deployments, and other high-risk
+actions should continue to pass through AI Core's policy/approval gates rather
+than being granted directly to OpenHands, OpenClaw, or n8n.
