@@ -214,6 +214,10 @@ export async function renewLease(
       leaseExpiresAt: expires,
       lockVersion:    sql`lock_version + 1`,
       lastHeartbeat:  now,
+      // Keep updated_at as a state-transition/reservation timestamp. If a
+      // heartbeat refreshed it every few seconds, stale hosted-Ollama
+      // reservations could never age out in recoverStaleOllamaReservations().
+      updatedAt:      sql`updated_at`,
     })
     .where(
       and(

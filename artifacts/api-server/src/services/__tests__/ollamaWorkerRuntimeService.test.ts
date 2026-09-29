@@ -45,13 +45,17 @@ describe("Ollama worker runtime configuration", () => {
   });
 
   it("clamps concurrency and heartbeat values", () => {
-    const config = readOllamaWorkerRuntimeConfig({
+    const high = readOllamaWorkerRuntimeConfig({
       OLLAMA_WORKER_MAX_CONCURRENCY: "999",
       OLLAMA_WORKER_HEARTBEAT_MS: "1",
     } as NodeJS.ProcessEnv);
+    const low = readOllamaWorkerRuntimeConfig({
+      OLLAMA_WORKER_MAX_CONCURRENCY: "1",
+    } as NodeJS.ProcessEnv);
 
-    expect(config.maxConcurrentJobs).toBe(32);
-    expect(config.heartbeatMs).toBe(2000);
+    expect(high.maxConcurrentJobs).toBe(32);
+    expect(high.heartbeatMs).toBe(2000);
+    expect(low.maxConcurrentJobs).toBe(2);
   });
 
   it("keeps reconnect bounds valid and uses exponential backoff", () => {
