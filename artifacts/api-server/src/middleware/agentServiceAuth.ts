@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { Request, Response, NextFunction } from "express";
-import { aiAgentServiceTokensTable, db } from "@workspace/db";
+import { aiAgentServiceTokensTable, db, withTransientDatabaseRetry } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
 const MAX_TOKEN_LENGTH = 512;
@@ -32,14 +32,14 @@ export function requireAgentServiceScope(requiredScope: string) {
 
     try {
       const tokenHash = hashAgentServiceToken(token);
-      const [record] = await db
+      const [record] = await withTransientDatabaseRetry(() => db
         .select()
         .from(aiAgentServiceTokensTable)
         .where(and(
           eq(aiAgentServiceTokensTable.tokenHash, tokenHash),
           eq(aiAgentServiceTokensTable.isActive, true),
         ))
-        .limit(1);
+        .limit(1), { attempts: 4, baseDelayMs: 250 });
 
       if (!record) {
         res.status(401).json({ error: "Invalid or inactive AI agent service token" });
@@ -63,10 +63,21 @@ export function requireAgentServiceScope(requiredScope: string) {
         scopes,
       };
 
-      await db
+      // Usage telemetry must never turn an already-authenticated request into a
+      // 503 during a transient database write failure. Keep it best-effort.
+      void withTransientDatabaseRetry(() => db
         .update(aiAgentServiceTokensTable)
         .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-        .where(eq(aiAgentServiceTokensTable.id, record.id));
+        .where(eq(aiAgentServiceTokensTable.id, record.id)), {
+          attempts: 2,
+          baseDelayMs: 250,
+        })
+        .catch((error) => {
+          logger.warn(
+            { err: error, service: record.name },
+            "[agent-runtime] failed to update scoped token usage telemetry",
+          );
+        });
 
       next();
     } catch (error) {
