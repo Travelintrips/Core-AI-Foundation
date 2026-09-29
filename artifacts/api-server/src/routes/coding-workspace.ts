@@ -167,6 +167,45 @@ router.post("/ai/coding/tasks", async (req, res): Promise<void> => {
   res.status(201).json(CreateCodingTaskResponse.parse(task));
 });
 
+router.get("/ai/coding/tasks/:id/runs/:runId/status", async (req, res): Promise<void> => {
+  const params = GetCodingTaskParams.safeParse({ id: req.params.id });
+  const runId = typeof req.params.runId === "string" ? req.params.runId.trim() : "";
+  if (!params.success || !/^[0-9a-fA-F-]{36}$/.test(runId)) {
+    res.status(400).json({ error: "Invalid coding task or run id" });
+    return;
+  }
+
+  const [run] = await withCodingWorkspaceReadRetry(
+    () =>
+      db
+        .select({
+          id: aiCodingRunsTable.id,
+          taskId: aiCodingRunsTable.taskId,
+          agentName: aiCodingRunsTable.agentName,
+          status: aiCodingRunsTable.status,
+          startedAt: aiCodingRunsTable.startedAt,
+          finishedAt: aiCodingRunsTable.finishedAt,
+          errorMessage: aiCodingRunsTable.errorMessage,
+        })
+        .from(aiCodingRunsTable)
+        .where(
+          and(
+            eq(aiCodingRunsTable.id, runId),
+            eq(aiCodingRunsTable.taskId, params.data.id),
+          ),
+        )
+        .limit(1),
+    { attempts: 5, delayMs: 200 },
+  );
+
+  if (!run) {
+    res.status(404).json({ error: "Coding run not found" });
+    return;
+  }
+
+  res.json(run);
+});
+
 router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   const params = GetCodingTaskParams.safeParse(req.params);
   if (!params.success) {
