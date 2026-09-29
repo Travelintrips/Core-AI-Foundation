@@ -55,6 +55,76 @@ export async function verifyEmailTransport(): Promise<{ ok: boolean; error?: str
   }
 }
 
+export type EmailTransportDiagnosticCategory =
+  | "OK"
+  | "MISSING_CONFIG"
+  | "AUTH_FAILED"
+  | "CONNECTION_TIMEOUT"
+  | "CONNECTION_REFUSED"
+  | "TLS_ERROR"
+  | "DNS_ERROR"
+  | "UNKNOWN";
+
+export interface EmailTransportDiagnostic {
+  configured: boolean;
+  host: string | null;
+  port: number;
+  secure: boolean;
+  userConfigured: boolean;
+  fromConfigured: boolean;
+  ok: boolean;
+  category: EmailTransportDiagnosticCategory;
+}
+
+export function classifyEmailTransportError(error: string | undefined): EmailTransportDiagnosticCategory {
+  const value = (error ?? "").toLowerCase();
+  if (!value) return "UNKNOWN";
+  if (value.includes("smtp not configured") || value.includes("missing smtp_")) return "MISSING_CONFIG";
+  if (
+    value.includes("535") ||
+    value.includes("authentication failed") ||
+    value.includes("invalid login") ||
+    value.includes("bad credentials") ||
+    value.includes("auth failed")
+  ) return "AUTH_FAILED";
+  if (value.includes("timeout") || value.includes("etimedout")) return "CONNECTION_TIMEOUT";
+  if (value.includes("econnrefused") || value.includes("connection refused")) return "CONNECTION_REFUSED";
+  if (
+    value.includes("certificate") ||
+    value.includes("tls") ||
+    value.includes("ssl") ||
+    value.includes("self signed")
+  ) return "TLS_ERROR";
+  if (
+    value.includes("enotfound") ||
+    value.includes("eai_again") ||
+    value.includes("getaddrinfo") ||
+    value.includes("dns")
+  ) return "DNS_ERROR";
+  return "UNKNOWN";
+}
+
+export async function getEmailTransportDiagnostic(): Promise<EmailTransportDiagnostic> {
+  const host = process.env["SMTP_HOST"]?.trim() || null;
+  const port = Number(process.env["SMTP_PORT"] ?? 587);
+  const userConfigured = Boolean(process.env["SMTP_USER"]?.trim());
+  const passConfigured = Boolean(process.env["SMTP_PASS"]?.trim());
+  const fromConfigured = Boolean(process.env["SMTP_FROM"]?.trim());
+  const configured = Boolean(host && userConfigured && passConfigured);
+
+  const verified = await verifyEmailTransport();
+  return {
+    configured,
+    host,
+    port,
+    secure: port === 465,
+    userConfigured,
+    fromConfigured,
+    ok: verified.ok,
+    category: verified.ok ? "OK" : classifyEmailTransportError(verified.error),
+  };
+}
+
 export async function sendEmail(params: {
   to: string;
   subject: string;
