@@ -3,13 +3,13 @@ import { aiCodingRunsTable, aiCodingTasksTable, aiJobsTable, db } from "@workspa
 import { logger } from "../lib/logger.js";
 import { continueCodingOrchestration } from "../services/codingOrchestratorService.js";
 
-async function main(): Promise<void> {
-  const rawJobId = process.argv[2];
-  const jobId = Number(rawJobId);
-  if (!Number.isInteger(jobId) || jobId <= 0) {
-    throw new Error("Repository Analyzer worker requires a valid queued job id");
-  }
+const POLL_INTERVAL_MS = Math.max(500, Number.parseInt(process.env.REPOSITORY_ANALYZER_POLL_MS ?? "2000", 10) || 2000);
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function processJob(jobId: number): Promise<void> {
   const [job] = await db.select().from(aiJobsTable).where(eq(aiJobsTable.id, jobId));
   if (!job || job.jobType !== "coding_repository_analyzer" || job.status !== "queued") {
     throw new Error(`Repository Analyzer job ${jobId} is not an available queued analyzer job`);
@@ -64,6 +64,52 @@ async function main(): Promise<void> {
   ];
 
   await continueCodingOrchestration({ task, run }, sessionId, job, stages);
+}
+
+async function nextQueuedJobId(): Promise<number | null> {
+  const [job] = await db
+    .select({ id: aiJobsTable.id })
+    .from(aiJobsTable)
+    .where(and(
+      eq(aiJobsTable.jobType, "coding_repository_analyzer"),
+      eq(aiJobsTable.status, "queued"),
+    ))
+    .limit(1);
+  return job?.id ?? null;
+}
+
+async function main(): Promise<void> {
+  const rawJobId = process.argv[2];
+  if (rawJobId) {
+    const jobId = Number(rawJobId);
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      throw new Error("Repository Analyzer worker requires a valid queued job id");
+    }
+    await processJob(jobId);
+    return;
+  }
+
+  logger.info(
+    { pollIntervalMs: POLL_INTERVAL_MS },
+    "[repository-analyzer-worker] Remote durable worker started",
+  );
+
+  for (;;) {
+    const jobId = await nextQueuedJobId();
+    if (!jobId) {
+      await sleep(POLL_INTERVAL_MS);
+      continue;
+    }
+
+    try {
+      await processJob(jobId);
+    } catch (error) {
+      logger.error(
+        { err: error, jobId },
+        "[repository-analyzer-worker] Remote job failed; continuing poll loop",
+      );
+    }
+  }
 }
 
 main()
