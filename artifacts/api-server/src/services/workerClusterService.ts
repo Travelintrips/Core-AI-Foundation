@@ -13,7 +13,7 @@
 
 import { eq, and, inArray, sql, ne } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { db, aiWorkersTable, aiJobsTable } from "@workspace/db";
+import { db, aiWorkersTable, aiJobsTable, withTransientDatabaseRetry } from "@workspace/db";
 import type { AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { failRepositoryAnalyzerRun } from "./repositoryAnalyzerService.js";
@@ -133,7 +133,7 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
   const token = randomUUID();
   const leaseExpires = new Date(now.getTime() + (input.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS));
 
-  const [worker] = await db
+  const [worker] = await withTransientDatabaseRetry(() => db
     .insert(aiWorkersTable)
     .values({
       workerName:       input.workerName,
@@ -178,7 +178,7 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
         updatedAt:        now,
       },
     })
-    .returning();
+    .returning(), { attempts: 3, baseDelayMs: 250 });
 
   await logAudit(
     "worker-cluster",
@@ -208,7 +208,7 @@ export async function renewLease(
   const now = new Date();
   const expires = new Date(now.getTime() + leaseTtlMs);
 
-  const [worker] = await db
+  const [worker] = await withTransientDatabaseRetry(() => db
     .update(aiWorkersTable)
     .set({
       leaseExpiresAt: expires,
@@ -221,14 +221,12 @@ export async function renewLease(
         eq(aiWorkersTable.heartbeatToken, heartbeatToken),
       ),
     )
-    .returning();
+    .returning(), { attempts: 3, baseDelayMs: 200 });
 
-  if (worker) {
-    await logAudit("worker-cluster", "lease_renewed", String(workerId), "ai_worker", "success", {
-      expiresAt: expires.toISOString(),
-    });
-  }
-
+  // Successful lease heartbeats are high-frequency state maintenance, not
+  // business events. Do not emit an audit INSERT every 10 seconds per worker;
+  // that extra write amplified DB pressure and could destabilize the very lease
+  // we are trying to keep alive. Registration/stale/recovery events remain audited.
   return worker ?? null;
 }
 
