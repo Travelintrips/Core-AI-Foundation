@@ -703,14 +703,14 @@ async function autonomousTick(): Promise<void> {
   if (tickRunning) return;
   tickRunning = true;
   try {
-    const rows = await db.execute(sql`
+    const rows = await withTransientDatabaseRetry(() => db.execute(sql`
       SELECT task_id
       FROM ai_platform.ai_coding_autonomous_tasks
       WHERE enabled = TRUE
         AND status IN ('ACTIVE','WAITING')
       ORDER BY updated_at ASC
       LIMIT ${MAX_TASKS_PER_TICK}
-    `);
+    `), { attempts: 3, baseDelayMs: 250 });
 
     for (const item of rows.rows ?? []) {
       const taskId = String((item as Record<string, unknown>)["task_id"] ?? "");

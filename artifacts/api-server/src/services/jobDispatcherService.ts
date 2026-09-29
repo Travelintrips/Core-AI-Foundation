@@ -146,6 +146,8 @@ let _pollTimer: NodeJS.Timeout | null      = null;
 let _heartbeatTimer: NodeJS.Timeout | null = null;
 let _lastTick:        Date | null          = null;
 let _lastHeartbeat:   Date | null          = null;
+let _lastRecoveryAt: Date | null          = null;
+const RECOVERY_INTERVAL_MS = 30_000;
 let _processedToday  = 0;
 let _failedToday     = 0;
 
@@ -320,8 +322,14 @@ export async function tick(): Promise<TickResult> {
   const result: TickResult = { claimed: 0, completed: 0, failed: 0 };
 
   try {
-    // 1. Recovery (stale workers + stuck jobs) — always runs
-    await recover();
+    // 1. Recovery is intentionally lower-frequency than queue polling.
+    // Running stale-worker + stuck-job scans every 5s created avoidable DB load,
+    // especially during deploys when heartbeat/audit traffic is already high.
+    const nowMs = Date.now();
+    if (!_lastRecoveryAt || nowMs - _lastRecoveryAt.getTime() >= RECOVERY_INTERVAL_MS) {
+      _lastRecoveryAt = new Date(nowMs);
+      await recover();
+    }
 
     // 2. Skip claim/dispatch when paused
     if (_queuePaused) {
