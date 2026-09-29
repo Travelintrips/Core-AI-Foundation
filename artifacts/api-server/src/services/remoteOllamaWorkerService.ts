@@ -64,7 +64,7 @@ export async function registerRemoteOllamaWorker(input: {
           region: input.region ?? "remote",
           version: input.version ?? "1.0.0",
           capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
-          maxConcurrentJobs: Math.max(1, Math.min(8, input.maxConcurrentJobs ?? 1)),
+          maxConcurrentJobs: Math.max(2, Math.min(8, input.maxConcurrentJobs ?? 2)),
           leaseOwner: "ollama-remote:" + input.nodeId,
           updatedAt: new Date(),
         }).where(eq(aiWorkersTable.id, existing.id)).returning();
@@ -81,7 +81,7 @@ export async function registerRemoteOllamaWorker(input: {
     region: input.region ?? "remote",
     version: input.version ?? "1.0.0",
     capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
-    maxConcurrentJobs: Math.max(1, Math.min(8, input.maxConcurrentJobs ?? 1)),
+    maxConcurrentJobs: Math.max(2, Math.min(8, input.maxConcurrentJobs ?? 2)),
     leaseOwner: "ollama-remote:" + input.nodeId,
     leaseTtlMs: DEFAULT_LEASE_TTL_MS,
     providerSlug: PROVIDER,
