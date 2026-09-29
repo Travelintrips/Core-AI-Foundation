@@ -18,7 +18,10 @@ import { logAudit } from "./aiAuditService.js";
 import { executeAI, type ExecutionOutput } from "./aiExecutionService.js";
 import { getFallbackModels, routeToModel } from "./aiModelRouter.js";
 import { enqueue } from "./queueManagerService.js";
-import { executeRepositoryAnalyzerJobOnDemand } from "./repositoryAnalyzerService.js";
+import {
+  executeRepositoryAnalyzerJobOnDemand,
+  failStaleRepositoryAnalyzerRuns,
+} from "./repositoryAnalyzerService.js";
 import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
 
 type CodingStageId =
@@ -671,6 +674,20 @@ export async function startCodingOrchestration(
 ): Promise<{ sessionId: string }> {
   const sessionId = `coding-${input.run.id}`;
   const stages = initStages();
+
+  // Recover an analyzer run that has been RUNNING beyond the bounded analyzer
+  // lifetime before checking the host-wide single-flight lock. Without this,
+  // a crashed child process can leave both the run and queue row looking live
+  // forever, causing every later orchestration to fail with "Analyzer is busy".
+  //
+  // The analyzer's existing recovery routine only touches Repository Analyzer
+  // runs older than its stale threshold, so genuinely active work is preserved.
+  await failStaleRepositoryAnalyzerRuns().catch((error) => {
+    logger.warn(
+      { err: error },
+      "[coding-orchestrator] Stale analyzer run recovery failed",
+    );
+  });
 
   // A previous process can die after creating/claiming an analyzer job while
   // its linked coding run has already been failed/recovered. Such an orphaned
