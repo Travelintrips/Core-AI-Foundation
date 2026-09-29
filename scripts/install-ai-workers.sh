@@ -88,6 +88,7 @@ ensure_env_secret N8N_POSTGRES_PASSWORD 32
 ensure_env_secret N8N_ENCRYPTION_KEY 32
 ensure_env_secret OPENHANDS_LOCAL_BACKEND_API_KEY 32
 ensure_env_secret OPENCLAW_GATEWAY_TOKEN 32
+ensure_env_secret AI_CORE_SCOPED_AGENT_TOKEN 32
 
 scoped_agent_token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
 ai_core_base_url="$(env_value AI_CORE_BASE_URL)"
