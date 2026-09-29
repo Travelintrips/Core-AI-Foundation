@@ -676,10 +676,7 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
 
     return {
       plan: fallbackPlan,
-      metadata: {
-        ...response.metadata,
-        fallbackUsed: true,
-      },
+      metadata: response.metadata,
     };
   }
 }
