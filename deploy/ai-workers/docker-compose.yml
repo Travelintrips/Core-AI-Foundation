@@ -1,0 +1,189 @@
+name: ${COMPOSE_PROJECT_NAME:-ai-core-workers}
+
+services:
+  temporal-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_POSTGRES_PASSWORD:?set TEMPORAL_POSTGRES_PASSWORD}
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal-db-data:/var/lib/postgresql/data
+    networks:
+      - temporal-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  temporal:
+    image: temporalio/auto-setup:${TEMPORAL_VERSION:-1.32.0}
+    restart: unless-stopped
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD:?set TEMPORAL_POSTGRES_PASSWORD}
+      POSTGRES_SEEDS: temporal-db
+    ports:
+      - "127.0.0.1:${TEMPORAL_GRPC_PORT:-7233}:7233"
+    networks:
+      - temporal-data
+      - control
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator cluster health --address 127.0.0.1:7233 2>/dev/null | grep -q SERVING"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  temporal-ui:
+    image: temporalio/ui:${TEMPORAL_UI_VERSION:-2.54.1}
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: ${TEMPORAL_CORS_ORIGINS:-http://127.0.0.1:8233}
+    ports:
+      - "127.0.0.1:${TEMPORAL_UI_PORT:-8233}:8080"
+    networks:
+      - control
+
+  n8n-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD:?set N8N_POSTGRES_PASSWORD}
+      POSTGRES_DB: n8n
+    volumes:
+      - n8n-db-data:/var/lib/postgresql/data
+    networks:
+      - n8n-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n -d n8n"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.40.7}
+    restart: unless-stopped
+    depends_on:
+      n8n-db:
+        condition: service_healthy
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-db
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_POSTGRES_PASSWORD:?set N8N_POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      GENERIC_TIMEZONE: ${TZ:-Asia/Jakarta}
+      TZ: ${TZ:-Asia/Jakarta}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+    volumes:
+      - n8n-state:/home/node/.n8n
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    networks:
+      - n8n-data
+      - control
+    security_opt:
+      - no-new-privileges:true
+
+  openhands:
+    image: ghcr.io/openhands/agent-canvas:${OPENHANDS_VERSION:-1.24.0}
+    restart: unless-stopped
+    init: true
+    environment:
+      LOCAL_BACKEND_API_KEY: ${OPENHANDS_LOCAL_BACKEND_API_KEY:?set OPENHANDS_LOCAL_BACKEND_API_KEY}
+      LLM_MODEL: ${OPENHANDS_LLM_MODEL:-}
+      LLM_BASE_URL: ${OPENHANDS_LLM_BASE_URL:-}
+      LLM_API_KEY: ${OPENHANDS_LLM_API_KEY:-}
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - openhands-state:/home/openhands/.openhands
+      - "${OPENHANDS_PROJECTS_PATH:-/opt/ai-workers/projects}:/projects"
+    ports:
+      - "127.0.0.1:${OPENHANDS_PORT:-8000}:8000"
+    networks:
+      - control
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-2026.9.6}
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /home/node
+      OPENCLAW_HOME: /home/node
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+      OPENCLAW_CONFIG_DIR: /home/node/.openclaw
+      OPENCLAW_WORKSPACE_DIR: /home/node/.openclaw/workspace
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?set OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_DISABLE_BONJOUR: "1"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - openclaw-state:/home/node/.openclaw
+      - openclaw-auth:/home/node/.config/openclaw
+    ports:
+      - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - control
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+
+networks:
+  control:
+    driver: bridge
+  temporal-data:
+    driver: bridge
+    internal: true
+  n8n-data:
+    driver: bridge
+    internal: true
+
+volumes:
+  temporal-db-data:
+  n8n-db-data:
+  n8n-state:
+  openhands-state:
+  openclaw-state:
+  openclaw-auth:

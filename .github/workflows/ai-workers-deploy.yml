@@ -1,0 +1,161 @@
+name: AI Workers VPS Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-workers-vps-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ai-workers-vps
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+
+      - name: Resolve exact deployment commit
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying exact commit: $sha"
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AI_WORKERS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.AI_WORKERS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/ai-workers"
+          chmod 600 "$HOME/.ssh/ai-workers"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Prepare optional protected environment file
+        id: envfile
+        shell: bash
+        env:
+          AI_WORKERS_ENV_B64: ${{ secrets.AI_WORKERS_ENV_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "${AI_WORKERS_ENV_B64:-}" ]; then
+            umask 077
+            printf '%s' "$AI_WORKERS_ENV_B64" | base64 --decode > /tmp/ai-workers.env
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload protected environment file
+        if: steps.envfile.outputs.present == 'true'
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.AI_WORKERS_SSH_HOST }}
+          SSH_USER: ${{ secrets.AI_WORKERS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          scp \
+            -i "$HOME/.ssh/ai-workers" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            /tmp/ai-workers.env \
+            "$SSH_USER@$SSH_HOST:/tmp/ai-workers.env"
+
+      - name: Deploy exact commit and run installer
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.AI_WORKERS_SSH_HOST }}
+          SSH_USER: ${{ secrets.AI_WORKERS_SSH_USER }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          DEPLOY_PATH: ${{ vars.AI_WORKERS_DEPLOY_PATH || '/opt/core-ai-foundation' }}
+          REMOTE_ENV_FILE: ${{ vars.AI_WORKERS_REMOTE_ENV_FILE || '/etc/ai-core/ai-workers.env' }}
+          ENV_WAS_UPLOADED: ${{ steps.envfile.outputs.present }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$TARGET_SHA"
+
+          ssh \
+            -i "$HOME/.ssh/ai-workers" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            bash -s -- "$DEPLOY_PATH" "$TARGET_SHA" "$REMOTE_ENV_FILE" "$ENV_WAS_UPLOADED" <<'REMOTE'
+          set -euo pipefail
+
+          DEPLOY_PATH="$1"
+          TARGET_SHA="$2"
+          REMOTE_ENV_FILE="$3"
+          ENV_WAS_UPLOADED="$4"
+
+          if [ "$(id -u)" -eq 0 ]; then
+            SUDO=()
+          else
+            command -v sudo >/dev/null 2>&1 || {
+              echo "sudo is required for non-root deployment users" >&2
+              exit 1
+            }
+            SUDO=(sudo)
+          fi
+
+          if [ "$ENV_WAS_UPLOADED" = "true" ]; then
+            "${SUDO[@]}" install -d -m 700 "$(dirname "$REMOTE_ENV_FILE")"
+            "${SUDO[@]}" install -m 600 /tmp/ai-workers.env "$REMOTE_ENV_FILE"
+            rm -f /tmp/ai-workers.env
+          fi
+
+          "${SUDO[@]}" mkdir -p "$DEPLOY_PATH"
+          "${SUDO[@]}" chown "$(id -u):$(id -g)" "$DEPLOY_PATH"
+
+          if [ ! -d "$DEPLOY_PATH/.git" ]; then
+            git clone https://github.com/Travelintrips/Core-AI-Foundation.git "$DEPLOY_PATH"
+          fi
+
+          git -C "$DEPLOY_PATH" fetch --prune origin
+          git -C "$DEPLOY_PATH" checkout --detach "$TARGET_SHA"
+
+          cd "$DEPLOY_PATH"
+          "${SUDO[@]}" env AI_WORKERS_ENV_FILE="$REMOTE_ENV_FILE" \
+            bash scripts/install-ai-workers.sh
+
+          "${SUDO[@]}" env AI_WORKERS_ENV_FILE="$REMOTE_ENV_FILE" \
+            bash scripts/ai-workers-healthcheck.sh
+
+          echo "AI workers deployed and healthy at commit $TARGET_SHA"
+          REMOTE
+
+      - name: Remove local secret material
+        if: always()
+        shell: bash
+        run: |
+          rm -f /tmp/ai-workers.env "$HOME/.ssh/ai-workers"
+
+      - name: Deployment summary
+        run: |
+          echo "AI worker stack deployment: PASS"
+          echo "Commit: ${{ steps.target.outputs.sha }}"
+          echo "Health checks: PASS"
