@@ -39,6 +39,22 @@ export function isEmailConfigured(): boolean {
   return getTransporter() !== null;
 }
 
+export async function verifyEmailTransport(): Promise<{ ok: boolean; error?: string }> {
+  const t = getTransporter();
+  if (!t) {
+    return { ok: false, error: transporterError ?? "SMTP not configured" };
+  }
+
+  try {
+    await t.verify();
+    return { ok: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("[email] SMTP verification failed:", error);
+    return { ok: false, error };
+  }
+}
+
 export async function sendEmail(params: {
   to: string;
   subject: string;
