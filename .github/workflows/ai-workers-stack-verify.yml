@@ -56,6 +56,7 @@ jobs:
           sh -n deploy/ai-workers/temporal/scripts/setup-postgres.sh
           sh -n deploy/ai-workers/temporal/scripts/create-namespace.sh
           python3 -m py_compile deploy/ai-workers/temporal/coding-worker.py
+          python3 -m py_compile deploy/ai-workers/agent-registrar.py
 
       - name: Worker verification regression tests (offline)
         run: python3 -m unittest discover -s scripts/tests -p 'test_ai_workers_connect.py' -v
