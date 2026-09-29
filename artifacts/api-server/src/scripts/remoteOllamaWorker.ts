@@ -9,7 +9,7 @@ const nodeId = (process.env["OLLAMA_WORKER_NODE_ID"] ?? workerName).trim();
 const pollMs = Math.max(500, Number(process.env["OLLAMA_REMOTE_POLL_MS"] ?? 1000));
 const maxConcurrentJobs = Math.max(
   1,
-  Math.min(4, Number(process.env["OLLAMA_WORKER_MAX_CONCURRENCY"] ?? 2)),
+  Math.min(4, Number(process.env["OLLAMA_WORKER_MAX_CONCURRENCY"] ?? 1)),
 );
 const invocationTimeoutMs = Math.max(
   10_000,
