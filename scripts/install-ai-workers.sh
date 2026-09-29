@@ -12,6 +12,7 @@ log() { printf '[ai-workers] %s\n' "$*"; }
 fail() { printf '[ai-workers] ERROR: %s\n' "$*" >&2; exit 1; }
 
 command -v docker >/dev/null 2>&1 || fail "Docker Engine is required. Install Docker, then rerun this same command."
+command -v curl >/dev/null 2>&1 || fail "curl is required for bounded health checks."
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required (docker compose)."
 
 if ! docker info >/dev/null 2>&1; then
@@ -83,8 +84,19 @@ ensure_env_secret OPENCLAW_GATEWAY_TOKEN 32
 
 projects_path="$(env_value OPENHANDS_PROJECTS_PATH)"
 projects_path="${projects_path:-/opt/ai-workers/projects}"
-mkdir -p "$projects_path"
-chmod 750 "$projects_path"
+projects_uid="$(env_value OPENHANDS_PROJECTS_UID)"
+projects_uid="${projects_uid:-1000}"
+projects_gid="$(env_value OPENHANDS_PROJECTS_GID)"
+projects_gid="${projects_gid:-1000}"
+
+if [ ! -e "$projects_path" ]; then
+  mkdir -p "$projects_path"
+  chown "$projects_uid:$projects_gid" "$projects_path"
+  chmod 770 "$projects_path"
+  log "Created OpenHands workspace: $projects_path"
+elif [ ! -d "$projects_path" ]; then
+  fail "OPENHANDS_PROJECTS_PATH is not a directory: $projects_path"
+fi
 
 compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
@@ -95,6 +107,10 @@ compose config --quiet
 
 log "Pulling pinned worker images"
 compose pull
+
+if ! compose run -T --rm --no-deps --entrypoint sh openhands -lc 'test -w /projects'; then
+  fail "OpenHands cannot write $projects_path. Grant UID/GID $projects_uid:$projects_gid write access or change OPENHANDS_PROJECTS_PATH."
+fi
 
 log "Starting Temporal, n8n, and OpenHands"
 compose up -d --remove-orphans temporal-db temporal temporal-ui n8n-db n8n openhands
