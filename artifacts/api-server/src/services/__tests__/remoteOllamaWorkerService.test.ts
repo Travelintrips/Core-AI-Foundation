@@ -6,5 +6,6 @@ describe("remote Ollama worker service", () => {
     expect(REMOTE_OLLAMA_RUNTIME_KIND).toBe("ollama_remote_pull");
   });
 });
-// Registration is intentionally clamped to at least two slots server-side so
-// an old/outdated remote worker cannot collapse production Economy capacity to 1.
+// Remote workers default to one inference slot. A deployment may opt into higher
+// concurrency explicitly, but a single GPU must not be forced to execute two
+// generations concurrently; excess work stays in the durable queue.
