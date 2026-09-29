@@ -134,9 +134,28 @@ export async function execute(command, api) {
     // Reruns must not reset cycle budgets or restart completed/stopped tasks.
     return { action: 'submit', taskId: task.id, result: 'EXISTING_TASK_NOT_RESTARTED', status: state.value.status };
   }
-  await api(`/ai/coding/tasks/${task.id}/autonomous/start`, { method: 'POST', body: { maxCycles: command.maxCycles } });
+  const detail = await api(`/ai/coding/tasks/${task.id}`);
+  if (detail.value.task?.repository !== REPOSITORY || !Array.isArray(detail.value.runs)) {
+    throw new Error('Unexpected task detail; refusing to initialize execution.');
+  }
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(detail.value.task.status)) {
+    return { action: 'submit', taskId: task.id, result: 'TERMINAL_TASK_NOT_RESTARTED', status: detail.value.task.status };
+  }
+  // The autonomous runtime advances an existing analysis, but cannot bootstrap
+  // a fresh PENDING task. Start the analyzer first. Inspect persisted runs before
+  // retrying so an interrupted submission cannot blindly create another run.
+  if (detail.value.runs.length === 0) {
+    const run = await api(`/ai/coding/tasks/${task.id}/run`, { method: 'POST', body: {} });
+    if (!UUID.test(run.value?.id ?? '')) throw new Error('Analyzer did not return a run ID. Inspect task status before retrying.');
+  } else if (!detail.value.runs.some(run => run.status === 'RUNNING' ||
+      (run.agentName === 'Coding Orchestrator' && run.status === 'COMPLETED'))) {
+    throw new Error('Existing task has no active analysis or completed orchestration; refusing an automatic restart.');
+  }
+  const started = await api(`/ai/coding/tasks/${task.id}/autonomous/start`, { method: 'POST', body: { maxCycles: command.maxCycles } });
+  const blocked = ['BLOCKED', 'FAILED', 'DISABLED'].includes(started.value.cycle?.status);
   return { action: 'submit', taskId: task.id, maxCycles: command.maxCycles,
-    result: 'TASK_ACCEPTED_NOT_COMPLETED', productionApprovalRequired: true };
+    result: blocked ? 'TASK_BLOCKED' : 'TASK_ACCEPTED_NOT_COMPLETED',
+    initialStatus: started.value.cycle?.status ?? 'unknown', productionApprovalRequired: true };
 }
 
 export async function main(env = process.env, fetchImpl = fetch) {

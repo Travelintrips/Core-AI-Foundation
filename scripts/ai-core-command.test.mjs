@@ -9,7 +9,7 @@ const resolve = inputs => resolveCommand({ inputs }, env);
 const issue = { action: 'labeled', sender: { login: 'Travelintrips' }, label: { name: 'ai-audit' },
   issue: { number: 321, title: 'Audit trigger', body: 'Read-only test', user: { login: 'Travelintrips' } } };
 
-function fakeApi({ ready = true, tasks = [], state404 = true } = {}) {
+function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initialStatus = 'WAITING' } = {}) {
   const calls = [];
   const api = async (path, options = {}) => {
     calls.push({ path, ...options });
@@ -18,6 +18,9 @@ function fakeApi({ ready = true, tasks = [], state404 = true } = {}) {
     if (path.endsWith('/runtime-status')) return { status: 200, value: { ready, autonomous: { configured: true, running: true }, dependencies: { githubConfigured: true } } };
     if (path === '/ai/coding/tasks') return options.method === 'POST'
       ? { status: 201, value: { id, ...options.body } } : { status: 200, value: tasks };
+    if (path === `/ai/coding/tasks/${id}`) return { status: 200, value: { task: { id, repository: REPOSITORY, status: 'PENDING' }, runs } };
+    if (path.endsWith('/run')) return { status: 201, value: { id } };
+    if (path.endsWith('/start')) return { status: 202, value: { cycle: { status: initialStatus } } };
     if (path.endsWith('/autonomous')) return { status: state404 ? 404 : 200, value: { status: 'COMPLETED', enabled: false } };
     return { status: 202, value: {} };
   };
@@ -117,4 +120,29 @@ test('failed mutations are not retried and secret bodies are not logged', async 
 });
 test('missing admin credential is rejected before network use', () => {
   assert.throws(() => createApi(''), /not configured/);
+});
+
+test('a fresh task starts analysis before enabling the autonomous runtime', async () => {
+  const f = fakeApi();
+  await execute(resolve({ action: 'submit', instruction: 'Add test' }), f.api);
+  const analyzer = f.calls.findIndex(call => call.path.endsWith('/run'));
+  const autonomous = f.calls.findIndex(call => call.path.endsWith('/start'));
+  assert.ok(analyzer >= 0 && analyzer < autonomous);
+});
+test('interrupted submissions reuse running analysis instead of starting it again', async () => {
+  const f = fakeApi({ runs: [{ id, status: 'RUNNING', agentName: 'Repository Analyzer' }] });
+  await execute(resolve({ action: 'submit', instruction: 'Add test' }), f.api);
+  assert.ok(!f.calls.some(call => call.path.endsWith('/run')));
+  assert.ok(f.calls.some(call => call.path.endsWith('/start')));
+});
+test('failed analysis is not silently restarted', async () => {
+  const f = fakeApi({ runs: [{ id, status: 'FAILED', agentName: 'Repository Analyzer' }] });
+  await assert.rejects(execute(resolve({ action: 'submit', instruction: 'Add test' }), f.api), /no active analysis/);
+  assert.ok(!f.calls.some(call => call.path.endsWith('/run') || call.path.endsWith('/start')));
+});
+test('an immediately blocked autonomous cycle is not reported as accepted', async () => {
+  const f = fakeApi({ initialStatus: 'BLOCKED' });
+  const result = await execute(resolve({ action: 'submit', instruction: 'Add test' }), f.api);
+  assert.equal(result.result, 'TASK_BLOCKED');
+  assert.equal(result.initialStatus, 'BLOCKED');
 });
