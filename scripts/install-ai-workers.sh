@@ -113,27 +113,45 @@ if ! compose run -T --rm --no-deps --entrypoint sh openhands -lc 'test -w /proje
 fi
 
 log "Starting Temporal, n8n, and OpenHands"
-compose up -d --remove-orphans temporal-db temporal temporal-ui n8n-db n8n openhands
+compose up -d --remove-orphans \
+  temporal-db temporal-admin-tools temporal temporal-create-namespace temporal-ui \
+  n8n-db n8n openhands
 
 openclaw_initialized=false
-if compose run -T --rm --no-deps --entrypoint sh openclaw -lc   'test -s /home/node/.openclaw/openclaw.json' >/dev/null 2>&1; then
+openclaw_provider_mode=unconfigured
+if compose run -T --rm --no-deps --entrypoint sh openclaw -lc \
+  'test -s /home/node/.openclaw/openclaw.json' >/dev/null 2>&1; then
   openclaw_initialized=true
+  openclaw_provider_mode=configured
 fi
 
 if [ "$openclaw_initialized" != "true" ]; then
   openai_key="$(env_value OPENAI_API_KEY)"
-  if [ -z "$openai_key" ]; then
-    fail "OpenClaw first-run onboarding needs OPENAI_API_KEY in $ENV_FILE. Add the secret there and rerun; the already-started services are safe to leave running."
+  if [ -n "$openai_key" ]; then
+    log "Running one-time OpenClaw non-interactive onboarding"
+    compose run -T --rm --no-deps --entrypoint node openclaw \
+      dist/index.js onboard \
+      --non-interactive \
+      --accept-risk \
+      --skip-health \
+      --mode local \
+      --auth-choice openai-api-key \
+      --secret-input-mode ref \
+      --gateway-auth token \
+      --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN \
+      --skip-channels \
+      --no-install-daemon
+
+    log "Applying OpenClaw gateway policy"
+    openclaw_port="$(env_value OPENCLAW_PORT)"
+    openclaw_port="${openclaw_port:-18789}"
+    openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:%s","http://127.0.0.1:%s"]}]' "$openclaw_port" "$openclaw_port")"
+    compose run -T --rm --no-deps --entrypoint node openclaw \
+      dist/index.js config set --batch-json "$openclaw_policy"
+    openclaw_provider_mode=configured
+  else
+    log "OPENAI_API_KEY not present; starting OpenClaw gateway in provider-unconfigured mode"
   fi
-
-  log "Running one-time OpenClaw non-interactive onboarding"
-  compose run -T --rm --no-deps --entrypoint node openclaw     dist/index.js onboard     --non-interactive     --accept-risk     --skip-health     --mode local     --auth-choice openai-api-key     --secret-input-mode ref     --gateway-auth token     --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN     --skip-channels     --no-install-daemon
-
-  log "Applying OpenClaw gateway policy"
-  openclaw_port="$(env_value OPENCLAW_PORT)"
-  openclaw_port="${openclaw_port:-18789}"
-  openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:%s","http://127.0.0.1:%s"]}]' "$openclaw_port" "$openclaw_port")"
-  compose run -T --rm --no-deps --entrypoint node openclaw dist/index.js config set --batch-json "$openclaw_policy"
 fi
 
 log "Starting OpenClaw"
@@ -154,6 +172,7 @@ Loopback endpoints:
 
 Environment: $ENV_FILE
 Projects:    $projects_path
+OpenClaw provider mode: $openclaw_provider_mode
 
 No Docker socket, AI Core ADMIN_API_KEY, Supabase service key, or production
 database credential is mounted into these agent containers by this stack.
