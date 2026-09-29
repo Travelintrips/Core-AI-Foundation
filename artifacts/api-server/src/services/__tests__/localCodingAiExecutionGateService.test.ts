@@ -279,7 +279,38 @@ describe("Local Coding AI Execution Gate integration", () => {
     expect(result.proposal.proposal.operations).toHaveLength(1);
   });
 
-  it("fails closed when the model returns fenced JSON instead of raw Contract V1 JSON", async () => {
+  it("accepts an exact fenced JSON object only on the bounded schema-repair attempt", async () => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const fence = String.fromCharCode(96).repeat(3);
+    const invoke = vi.fn(async () => ({
+      output: {
+        type: "text" as const,
+        text: fence + "json\n" + proposalJson(lease) + "\n" + fence,
+      },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    }));
+    const provider: ConstrainedModelProvider = {
+      provider: "fake",
+      model: "proposal-v1",
+      capabilities: CONSTRAINED_MODEL_CAPABILITIES,
+      invoke,
+    };
+
+    const result = await invokeConstrainedAiProposal({
+      lease,
+      adapter: createConstrainedModelInvocationAdapter(provider),
+      target: { provider: "fake", model: "proposal-v1" },
+      requestId: "execution-test-fenced-json-repair",
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+    });
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(result.proposal.taskId).toBe(lease.package.task.id);
+  });
+
+  it("still fails closed when fenced JSON has surrounding prose", async () => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
     const fence = String.fromCharCode(96).repeat(3);
@@ -291,7 +322,7 @@ describe("Local Coding AI Execution Gate integration", () => {
         return {
           output: {
             type: "text",
-            text: fence + "json\n" + proposalJson(lease) + "\n" + fence,
+            text: "Here is the proposal:\n" + fence + "json\n" + proposalJson(lease) + "\n" + fence,
           },
           usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
         };
@@ -303,7 +334,7 @@ describe("Local Coding AI Execution Gate integration", () => {
         lease,
         adapter: createConstrainedModelInvocationAdapter(provider),
         target: { provider: "fake", model: "proposal-v1" },
-        requestId: "execution-test-invalid-json",
+        requestId: "execution-test-invalid-fenced-prose",
         timeoutMs: 5_000,
         maxOutputTokens: 512,
       }),
