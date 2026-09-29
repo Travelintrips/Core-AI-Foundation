@@ -28,6 +28,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify AI Core command trigger
+        run: node --test scripts/ai-core-command.test.mjs
       - name: Verify ZeroLLM deployment scripts
         run: |
           pnpm run zerollm:verify
