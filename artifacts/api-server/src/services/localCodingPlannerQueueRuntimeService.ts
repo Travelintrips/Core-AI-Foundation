@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { aiJobsTable, db, type AiJob } from "@workspace/db";
-import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
+import { logAudit } from "./aiAuditService.js";
+import { logger } from "../lib/logger.js";
+import { AutomatedMultiTaskPlannerError, generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
 
 export const CODING_MULTI_TASK_PLANNER_JOB_TYPE = "coding_multi_task_planner";
 
@@ -44,7 +46,64 @@ export async function enqueueCodingMultiTaskPlanner(taskId: string) {
 
 export async function executeCodingMultiTaskPlannerJob(job: AiJob): Promise<Record<string, unknown>> {
   const taskId = taskIdFrom(job);
-  const result = await generateAndPersistCodingMultiTaskPlan(taskId);
-  return { taskId, graphId: result.graphId, graphVersion: result.graphVersion,
-    graphStatus: result.graphStatus, planHash: result.planHash, nextAction: result.nextAction };
+  const startedAt = Date.now();
+  const stage = "planner_execution";
+
+  await logAudit("coding-multi-task-planner", "planner_job_started", String(job.id), "ai_job", "success", {
+    jobId: job.id,
+    taskId,
+    stage,
+    timeoutBudgetMs: 150_000,
+    retryCount: job.retryCount,
+    maxRetry: job.maxRetry,
+  }).catch(() => undefined);
+
+  try {
+    const result = await generateAndPersistCodingMultiTaskPlan(taskId);
+    await logAudit("coding-multi-task-planner", "planner_job_completed", String(job.id), "ai_job", "success", {
+      jobId: job.id,
+      taskId,
+      stage,
+      durationMs: Date.now() - startedAt,
+      graphId: result.graphId,
+      graphVersion: result.graphVersion,
+    }).catch(() => undefined);
+    return { taskId, graphId: result.graphId, graphVersion: result.graphVersion,
+      graphStatus: result.graphStatus, planHash: result.planHash, nextAction: result.nextAction };
+  } catch (error) {
+    const errorCode =
+      error instanceof AutomatedMultiTaskPlannerError
+        ? error.code
+        : error instanceof Error
+          ? error.name
+          : "UNKNOWN";
+    const errorMessage =
+      error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000);
+    const errorDetails =
+      error instanceof AutomatedMultiTaskPlannerError ? error.details : undefined;
+
+    logger.error({
+      jobId: job.id,
+      taskId,
+      stage,
+      durationMs: Date.now() - startedAt,
+      errorCode,
+      errorMessage,
+      errorDetails,
+    }, "[coding-multi-task-planner] planner execution failed");
+
+    await logAudit("coding-multi-task-planner", "planner_job_failed", String(job.id), "ai_job", "failure", {
+      jobId: job.id,
+      taskId,
+      stage,
+      durationMs: Date.now() - startedAt,
+      errorCode,
+      errorMessage,
+      errorDetails,
+      retryCount: job.retryCount,
+      maxRetry: job.maxRetry,
+    }).catch(() => undefined);
+
+    throw error;
+  }
 }
