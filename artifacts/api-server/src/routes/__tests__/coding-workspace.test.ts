@@ -194,6 +194,14 @@ vi.mock("../../services/codingOrchestratorService.js", () => ({
   startCodingOrchestration: mockStartCodingOrchestration,
 }));
 
+vi.mock("../../lib/logger.js", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 vi.mock("../../services/codingAgentService.js", () => ({
   approvePlanAndStartCoding: mockApprovePlanAndStartCoding,
 }));
@@ -429,13 +437,34 @@ describe("AI coding workspace run endpoint", () => {
     expect(mockStartCodingOrchestration).not.toHaveBeenCalled();
   });
 
-  it("returns 503 when the Coding Orchestrator cannot start", async () => {
+  it("returns the durable run immediately without waiting for orchestrator startup", async () => {
+    mockStartCodingOrchestration.mockReturnValueOnce(
+      new Promise<{ sessionId: string }>(() => undefined),
+    );
+
+    const response = await request(app).post(`/ai/coding/tasks/${taskId}/run`);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Coding Orchestrator",
+      status: "RUNNING",
+    });
+    expect(mockStartCodingOrchestration).toHaveBeenCalledWith({ task, run });
+  });
+
+  it("still returns the durable run when detached orchestrator startup later rejects", async () => {
     mockStartCodingOrchestration.mockRejectedValueOnce(new Error("queue unavailable"));
 
     const response = await request(app).post(`/ai/coding/tasks/${taskId}/run`);
 
-    expect(response.status).toBe(503);
-    expect(response.body).toEqual({ error: "Coding Orchestrator could not be started" });
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      status: "RUNNING",
+    });
   });
 });
 
