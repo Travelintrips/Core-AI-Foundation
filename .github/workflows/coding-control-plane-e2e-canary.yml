@@ -544,4 +544,3 @@ jobs:
           echo "pushed=false"
           echo "merged=false"
 
-[executed on device: Travelintrips (17b5cc60-8249-4268-b114-a27bafd69faa)]
