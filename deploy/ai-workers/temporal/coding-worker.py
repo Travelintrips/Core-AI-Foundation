@@ -8,7 +8,8 @@ from datetime import timedelta
 from typing import Any
 
 from temporalio import activity, workflow
-from temporalio.client import Client, WorkflowAlreadyStartedError
+from temporalio.client import Client
+from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.common import RetryPolicy
 from temporalio.worker import Worker
 
