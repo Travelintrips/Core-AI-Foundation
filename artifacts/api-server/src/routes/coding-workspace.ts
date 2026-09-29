@@ -18,6 +18,7 @@ import {
   UpdateCodingTaskResponse,
 } from "@workspace/api-zod";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
+import { logger } from "../lib/logger.js";
 import { approvePlanAndStartCoding } from "../services/codingAgentService.js";
 import {
   approveAndValidateLocalPatch,
@@ -334,12 +335,51 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
       return { run: createdRun, task };
     });
 
-    try {
-      await startCodingOrchestration({ task, run });
-    } catch {
-      res.status(503).json({ error: "Coding Orchestrator could not be started" });
-      return;
-    }
+    // The durable run already exists at this point. Do not keep the HTTP
+    // request open while the orchestrator performs DB bootstrap, queue setup,
+    // orphan reconciliation and process launch. On Hostinger those bounded
+    // startup operations can occasionally exceed the edge's ~30s request
+    // timeout even though the server continues successfully in the background.
+    //
+    // Return the authoritative run immediately and continue orchestration
+    // asynchronously. Any startup failure is persisted to the run/task so
+    // polling clients observe a terminal FAILED state instead of an ambiguous
+    // HTTP 503/000 retry loop.
+    void startCodingOrchestration({ task, run }).catch(async (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      const now = new Date();
+      logger.error(
+        { err: error, taskId: task.id, codingRunId: run.id },
+        "[coding-workspace] Detached orchestrator startup failed",
+      );
+
+      await db.transaction(async (tx) => {
+        const [updatedRun] = await tx
+          .update(aiCodingRunsTable)
+          .set({
+            status: "FAILED",
+            finishedAt: now,
+            errorMessage: message.slice(0, 2000),
+          })
+          .where(and(eq(aiCodingRunsTable.id, run.id), eq(aiCodingRunsTable.status, "RUNNING")))
+          .returning({ id: aiCodingRunsTable.id });
+
+        if (!updatedRun) return;
+
+        await tx
+          .update(aiCodingTasksTable)
+          .set({
+            status: "FAILED",
+            resultSummary: `Coding Orchestrator failed to start: ${message.slice(0, 500)}`,
+          })
+          .where(eq(aiCodingTasksTable.id, task.id));
+      }).catch((persistError) => {
+        logger.error(
+          { err: persistError, taskId: task.id, codingRunId: run.id },
+          "[coding-workspace] Failed to persist detached orchestrator startup failure",
+        );
+      });
+    });
 
     res.status(201).json(StartCodingRunResponse.parse(run));
   } catch (error) {
