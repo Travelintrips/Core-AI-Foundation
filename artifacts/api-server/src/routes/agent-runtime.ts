@@ -17,7 +17,7 @@ const ChatCompletionRequest = z.object({
 }).passthrough();
 
 interface AgentUpstream {
-  provider: "openai" | "gemini";
+  provider: "openai" | "gemini" | "mistral";
   model: string;
   url: string;
   apiKey: string;
@@ -46,6 +46,16 @@ function configuredUpstreams(): AgentUpstream[] {
     });
   }
 
+  const mistralKey = getProviderApiKey("mistral");
+  if (mistralKey) {
+    result.push({
+      provider: "mistral",
+      model: (process.env["AI_AGENT_RUNTIME_MISTRAL_MODEL"] ?? "mistral-small-latest").trim() || "mistral-small-latest",
+      url: "https://api.mistral.ai/v1/chat/completions",
+      apiKey: mistralKey,
+    });
+  }
+
   return result;
 }
 
@@ -62,7 +72,18 @@ function safeUpstreamFailure(status: number): Record<string, unknown> {
 }
 
 function shouldFallback(status: number): boolean {
-  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  return (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 408 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
 }
 
 async function proxyUpstream(
