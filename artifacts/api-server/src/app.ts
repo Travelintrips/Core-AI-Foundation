@@ -18,6 +18,7 @@ import { requestCounterMiddleware } from "./routes/metrics.js";
 import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
 import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
+import agentRuntimeRouter from "./routes/agent-runtime.js";
 
 const app: Express = express();
 
@@ -151,6 +152,11 @@ app.use("/api", globalLimiter);
 // Remote Ollama workers authenticate with dedicated enrollment/lease credentials.
 // Mount before admin auth so worker credentials never need ADMIN_API_KEY.
 app.use("/api", remoteOllamaWorkerRouter);
+
+// OpenHands/OpenClaw/n8n authenticate with a scoped service token stored as a
+// one-way hash in ai_platform. Mount before admin auth; these callers never
+// receive or need ADMIN_API_KEY.
+app.use("/api", agentRuntimeRouter);
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,
