@@ -32,6 +32,7 @@ import {
   assertPlannerAuthority,
   acquirePlannerAuthority,
   releasePlannerAuthority,
+  renewPlannerAuthority,
   PlannerAuthorityError,
 } from "./localCodingPlannerAuthorityService.js";
 import {
@@ -824,6 +825,31 @@ export async function generateAndPersistCodingMultiTaskPlan(
     }
   }
 
+  // Keep the fenced authority alive while provider/model calls are in flight.
+  // The lease itself remains bounded, and renewal can only succeed for the
+  // exact holder/token/generation that acquired it. If ownership is lost,
+  // persistence is still blocked by assertPlannerAuthority below.
+  const authorityHeartbeatMs = Math.max(
+    10_000,
+    Math.min(60_000, Math.floor((AUTO_PLANNER_LEASE_SECONDS * 1000) / 3)),
+  );
+  let authorityHeartbeatStopped = false;
+  let authorityHeartbeatFailure: PlannerAuthorityError | Error | null = null;
+  const authorityHeartbeat = setInterval(() => {
+    if (authorityHeartbeatStopped || authorityHeartbeatFailure) return;
+    void renewPlannerAuthority({
+      scope,
+      holderId: plannerHolderId,
+      leaseToken: authority.leaseToken,
+      fencingGeneration: authority.fencingGeneration,
+      leaseSeconds: AUTO_PLANNER_LEASE_SECONDS,
+    }).catch((error: unknown) => {
+      authorityHeartbeatFailure =
+        error instanceof Error ? error : new Error(String(error));
+    });
+  }, authorityHeartbeatMs);
+  authorityHeartbeat.unref?.();
+
   try {
     const resolved = await resolvePreferredCodingModel();
   if (!resolved.ok) {
@@ -1126,6 +1152,14 @@ export async function generateAndPersistCodingMultiTaskPlan(
     );
   }
 
+  const heartbeatFailure = authorityHeartbeatFailure as Error | null;
+  if (heartbeatFailure) {
+    if (heartbeatFailure instanceof PlannerAuthorityError) {
+      throw mapAuthorityError(heartbeatFailure);
+    }
+    throw heartbeatFailure;
+  }
+
   try {
     await assertPlannerAuthority({
       scope,
@@ -1185,6 +1219,8 @@ export async function generateAndPersistCodingMultiTaskPlan(
     nextAction: "APPROVE_TASK_GRAPH",
   };
   } finally {
+    authorityHeartbeatStopped = true;
+    clearInterval(authorityHeartbeat);
     await releasePlannerAuthority({
       scope,
       holderId: plannerHolderId,
