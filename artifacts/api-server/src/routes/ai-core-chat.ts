@@ -228,6 +228,18 @@ async function invokeChatModel(
     buildChatProvider(selection, requestId),
   );
 
+  const localProvider = isLocalProvider(provider);
+  // Interactive local chat must stay comfortably inside the remote Ollama
+  // worker's bounded invocation window (45s by default) and the Hostinger
+  // edge timeout. Coding/planner calls use their own model invocation paths
+  // and are not reduced by this chat-only budget.
+  const chatMaxOutputTokens = localProvider
+    ? Math.min(512, selection.maxOutputTokens || 512)
+    : Math.min(4_096, selection.maxOutputTokens || 1_600);
+  const chatTimeoutMs = localProvider
+    ? Math.min(50_000, selection.timeoutMs)
+    : selection.timeoutMs;
+
   const response = await adapter.invoke({
     requestId,
     target: { provider, model },
@@ -237,8 +249,8 @@ async function invokeChatModel(
       user: message,
     }),
     responseFormat: { type: "text" },
-    maxOutputTokens: Math.min(4_096, selection.maxOutputTokens || 1_600),
-    timeoutMs: selection.timeoutMs,
+    maxOutputTokens: chatMaxOutputTokens,
+    timeoutMs: chatTimeoutMs,
   });
 
   if (response.output.type !== "text") {
