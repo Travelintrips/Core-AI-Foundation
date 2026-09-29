@@ -7,6 +7,10 @@ const modelId = (process.env["OLLAMA_WORKER_MODEL"] ?? "qwen2.5-coder:7b").trim(
 const workerName = (process.env["OLLAMA_WORKER_NAME"] ?? "ollama-windows-worker").trim();
 const nodeId = (process.env["OLLAMA_WORKER_NODE_ID"] ?? workerName).trim();
 const pollMs = Math.max(500, Number(process.env["OLLAMA_REMOTE_POLL_MS"] ?? 1000));
+const invocationTimeoutMs = Math.max(
+  10_000,
+  Math.min(50_000, Number(process.env["OLLAMA_REMOTE_INVOCATION_TIMEOUT_MS"] ?? 45_000)),
+);
 const runSelfTest = process.argv.includes("--self-test");
 const execFileAsync = promisify(execFile);
 const powershellRoot = (process.env["LOCAL_CODING_POWERSHELL_ROOT"] ?? process.cwd()).trim();
@@ -198,6 +202,7 @@ async function invoke(payload: Record<string, any>): Promise<Record<string, unkn
       max_tokens: payload["maxOutputTokens"],
       ...(structured ? { response_format: { type: "json_object" } } : {}),
     }),
+    signal: AbortSignal.timeout(invocationTimeoutMs),
   }));
 
   const text = data["choices"]?.[0]?.["message"]?.["content"];
