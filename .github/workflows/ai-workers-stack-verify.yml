@@ -68,6 +68,12 @@ jobs:
             -f deploy/ai-workers/docker-compose.yml \
             config --quiet
 
+      - name: Verify Temporal coding worker runtime imports
+        run: |
+          set -euo pipefail
+          docker build             -t ai-core-temporal-coding-worker-ci             -f deploy/ai-workers/temporal/coding-worker.Dockerfile             deploy/ai-workers
+          docker run --rm --entrypoint python             ai-core-temporal-coding-worker-ci             -c 'import runpy; runpy.run_path("/app/coding-worker.py", run_name="ci_import")'
+
       - name: Verify Temporal image pins
         shell: bash
         run: |
