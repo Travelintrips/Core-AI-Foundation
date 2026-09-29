@@ -68,7 +68,7 @@ wait_temporal() {
   local delay="${AI_WORKERS_HEALTH_DELAY_SECONDS:-3}"
 
   for attempt in $(seq 1 "$attempts"); do
-    if compose exec -T temporal       tctl --address 127.0.0.1:7233 cluster health >/dev/null 2>&1; then
+    if compose exec -T temporal       temporal operator cluster health --address 127.0.0.1:7233 2>/dev/null | grep -q SERVING; then
       log "temporal=PASS"
       return 0
     fi
