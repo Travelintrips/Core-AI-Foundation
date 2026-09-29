@@ -114,7 +114,10 @@ if [ "$openclaw_initialized" != "true" ]; then
   compose run -T --rm --no-deps --entrypoint node openclaw     dist/index.js onboard     --non-interactive     --accept-risk     --skip-health     --mode local     --auth-choice openai-api-key     --secret-input-mode ref     --gateway-auth token     --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN     --skip-channels     --no-install-daemon
 
   log "Applying OpenClaw gateway policy"
-  compose run -T --rm --no-deps --entrypoint node openclaw     dist/index.js config set --batch-json     '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:18789","http://127.0.0.1:18789"]}]'
+  openclaw_port="$(env_value OPENCLAW_PORT)"
+  openclaw_port="${openclaw_port:-18789}"
+  openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:%s","http://127.0.0.1:%s"]}]' "$openclaw_port" "$openclaw_port")"
+  compose run -T --rm --no-deps --entrypoint node openclaw dist/index.js config set --batch-json "$openclaw_policy"
 fi
 
 log "Starting OpenClaw"
