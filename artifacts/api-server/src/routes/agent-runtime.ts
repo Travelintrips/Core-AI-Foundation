@@ -17,7 +17,7 @@ const ChatCompletionRequest = z.object({
 }).passthrough();
 
 interface AgentUpstream {
-  provider: "openai" | "gemini" | "mistral";
+  provider: "openai" | "gemini" | "mistral" | "anthropic";
   model: string;
   url: string;
   apiKey: string;
@@ -53,6 +53,20 @@ function configuredUpstreams(): AgentUpstream[] {
       model: (process.env["AI_AGENT_RUNTIME_MISTRAL_MODEL"] ?? "mistral-small-latest").trim() || "mistral-small-latest",
       url: "https://api.mistral.ai/v1/chat/completions",
       apiKey: mistralKey,
+    });
+  }
+
+  const anthropicKey = getProviderApiKey("anthropic");
+  if (anthropicKey) {
+    result.push({
+      provider: "anthropic",
+      model: (process.env["AI_AGENT_RUNTIME_ANTHROPIC_MODEL"] ?? "claude-opus-4-8").trim() || "claude-opus-4-8",
+      // Anthropic exposes an OpenAI-compatible chat/completions surface.
+      // Keeping the same wire format preserves streaming and tool-calling
+      // semantics expected by OpenClaw while giving the runtime another
+      // independent cloud fallback when OpenAI/Gemini/Mistral are limited.
+      url: "https://api.anthropic.com/v1/chat/completions",
+      apiKey: anthropicKey,
     });
   }
 
