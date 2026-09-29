@@ -3,6 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockTransaction = vi.hoisted(() => vi.fn());
+const mockDbSelect = vi.hoisted(() => vi.fn());
 const mockSelectFor = vi.hoisted(() => vi.fn());
 const mockSelectLimit = vi.hoisted(() => vi.fn());
 const mockInsertValues = vi.hoisted(() => vi.fn());
@@ -169,7 +170,7 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("@workspace/db", () => ({
   db: {
     transaction: mockTransaction,
-    select: vi.fn(),
+    select: mockDbSelect,
     insert: vi.fn(),
     update: vi.fn(),
   },
@@ -362,6 +363,7 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
 describe("AI coding workspace run status endpoint", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDbSelect.mockReturnValue(selectBuilder);
     mockSelectLimit.mockResolvedValue([run]);
   });
 
