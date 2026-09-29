@@ -863,6 +863,15 @@ export async function generateAndPersistCodingMultiTaskPlan(
     );
   }
 
+  await logAudit("automated-multi-task-planner", "model_target_selected", taskId, "coding_task", "success", {
+    stage: "model_invocation",
+    provider: providerSlug,
+    model: modelId,
+    timeoutMs: boundedPlannerTimeout(selection.timeoutMs),
+    totalBudgetMs: PLANNER_TOTAL_MODEL_BUDGET_MS,
+    fallbackUsed: resolved.route === "FALLBACK",
+  }).catch(() => undefined);
+
   const provider = createPlannerProviderAdapter({
     providerSlug,
     modelId,
@@ -899,6 +908,17 @@ export async function generateAndPersistCodingMultiTaskPlan(
     });
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
+
+    await logAudit("automated-multi-task-planner", "model_target_failed", taskId, "coding_task", "failure", {
+      stage: "model_invocation",
+      provider: providerSlug,
+      model: modelId,
+      errorCode: error instanceof ModelInvocationError ? error.code : error instanceof Error ? error.name : "UNKNOWN",
+      errorMessage: error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000),
+      errorDetails: error instanceof ModelInvocationError ? error.details : undefined,
+      elapsedMs: PLANNER_TOTAL_MODEL_BUDGET_MS - Math.max(0, plannerModelDeadline - Date.now()),
+      remainingBudgetMs: Math.max(0, plannerModelDeadline - Date.now()),
+    }).catch(() => undefined);
 
     // A provider/model invocation failure should fail over even when the
     // provider marks the error as non-retryable. "retryable" controls retries
