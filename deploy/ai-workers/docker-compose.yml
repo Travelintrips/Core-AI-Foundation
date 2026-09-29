@@ -98,7 +98,7 @@ services:
       - control
 
   temporal-coding-worker:
-    image: ai-core-temporal-coding-worker:1.0.0
+    image: ai-core-temporal-coding-worker:${TEMPORAL_CODING_WORKER_VERSION:-1.0.0}
     build:
       context: .
       dockerfile: temporal/coding-worker.Dockerfile
