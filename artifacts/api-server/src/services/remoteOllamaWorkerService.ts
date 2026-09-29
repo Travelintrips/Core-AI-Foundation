@@ -11,6 +11,7 @@ export const REMOTE_OLLAMA_CAPABILITY = "ollama_inference";
 export const REMOTE_OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 const PROVIDER = "ollama";
 const MAX_RESULT_CHARS = 256_000;
+const REMOTE_OLLAMA_STALE_RUNNING_MS = 120_000;
 
 export interface RemoteOllamaInvocationPayload {
   requestId: string;
@@ -112,7 +113,70 @@ export async function heartbeatRemoteOllamaWorker(workerId: number, token: strin
   return renewLease(workerId, token, DEFAULT_LEASE_TTL_MS);
 }
 
+export async function recoverStaleRemoteOllamaCapacity(
+  modelId: string,
+  staleAfterMs = REMOTE_OLLAMA_STALE_RUNNING_MS,
+): Promise<number> {
+  const boundedStaleMs = Math.max(60_000, Math.min(10 * 60_000, Math.floor(staleAfterMs)));
+
+  return db.transaction(async (tx) => {
+    const raw = await tx.execute(sql`
+      SELECT
+        id,
+        NULLIF(payload_json->>'_claimedByWorkerId', '')::int AS worker_id
+      FROM ai_platform.ai_jobs
+      WHERE job_type = ${REMOTE_OLLAMA_JOB_TYPE}
+        AND status = 'running'
+        AND payload_json->>'modelId' = ${modelId}
+        AND started_at IS NOT NULL
+        AND started_at < NOW() - (${boundedStaleMs} * INTERVAL '1 millisecond')
+      FOR UPDATE SKIP LOCKED
+    `);
+
+    const rows =
+      (raw as unknown as { rows?: Array<{ id?: unknown; worker_id?: unknown }> }).rows ?? [];
+    let recovered = 0;
+
+    for (const row of rows) {
+      const jobId = Number(row.id);
+      const workerId = Number(row.worker_id);
+      if (!Number.isInteger(jobId) || jobId <= 0) continue;
+
+      const [updated] = await tx
+        .update(aiJobsTable)
+        .set({
+          status: "failed",
+          completedAt: new Date(),
+          errorMessage: "Remote Ollama invocation exceeded the bounded runtime and was recovered.",
+          payloadJson: sql`COALESCE(payload_json, '{}'::jsonb) - '_claimedByWorkerId'`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(aiJobsTable.id, jobId), eq(aiJobsTable.status, "running")))
+        .returning({ id: aiJobsTable.id });
+
+      if (!updated) continue;
+      recovered += 1;
+
+      if (Number.isInteger(workerId) && workerId > 0) {
+        await tx
+          .update(aiWorkersTable)
+          .set({
+            runningJobs: sql`GREATEST(running_jobs - 1, 0)`,
+            currentJob: sql`CASE WHEN current_job = ${jobId} THEN NULL ELSE current_job END`,
+            status: sql`CASE WHEN GREATEST(running_jobs - 1, 0) = 0 THEN 'idle' ELSE 'busy' END`,
+            updatedAt: new Date(),
+          })
+          .where(eq(aiWorkersTable.id, workerId));
+      }
+    }
+
+    return recovered;
+  });
+}
+
 export async function hasRemoteOllamaWorker(modelId: string): Promise<boolean> {
+  await recoverStaleRemoteOllamaCapacity(modelId).catch(() => 0);
+
   const [row] = await db.select({ id: aiWorkersTable.id }).from(aiWorkersTable).where(
     and(
       eq(aiWorkersTable.providerSlug, PROVIDER),
@@ -120,6 +184,7 @@ export async function hasRemoteOllamaWorker(modelId: string): Promise<boolean> {
       eq(aiWorkersTable.modelId, modelId),
       inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
       sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
+      sql`${aiWorkersTable.runningJobs} < ${aiWorkersTable.maxConcurrentJobs}`,
     ),
   ).limit(1);
   return Boolean(row);
@@ -148,6 +213,11 @@ export async function enqueueRemoteOllamaInvocation(
 }
 
 export async function claimRemoteOllamaInvocation(workerId: number): Promise<AiJob | null> {
+  const [candidate] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
+  if (candidate?.modelId) {
+    await recoverStaleRemoteOllamaCapacity(candidate.modelId).catch(() => 0);
+  }
+
   const [worker] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
   if (
     !worker ||
