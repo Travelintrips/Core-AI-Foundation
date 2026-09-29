@@ -39,6 +39,24 @@ compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+agent_http_code() {
+  local token="$1" output="$2" url="$3" cfg code rc
+  cfg="$(mktemp)"
+  chmod 600 "$cfg"
+  printf 'header = "x-ai-agent-token: %s"\n' "$token" > "$cfg"
+  set +e
+  code="$(curl --config "$cfg" -sS -o "$output" -w '%{http_code}' \
+    --connect-timeout 15 --max-time 30 "$url")"
+  rc=$?
+  set -e
+  rm -f "$cfg"
+  if [ "$rc" -ne 0 ]; then
+    printf '000'
+  else
+    printf '%s' "$code"
+  fi
+}
+
 prepare() {
   local rotate="${1:-false}" token token_hash
   token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
@@ -80,11 +98,11 @@ apply() {
   api_base="$(env_value AI_CORE_BASE_URL)"
   api_base="${api_base:-https://aicore.cstlogistic.co.id/api}"
 
-  health_code="$(curl -sS -o /tmp/ai-agent-health.json -w '%{http_code}'     --connect-timeout 15 --max-time 30     -H "x-ai-agent-token: $token"     "$api_base/ai/agent-runtime/health" || true)"
+  health_code="$(agent_http_code "$token" /tmp/ai-agent-health.json "$api_base/ai/agent-runtime/health")"
   cat /tmp/ai-agent-health.json 2>/dev/null || true
   [ "$health_code" = "200" ] || fail "AI Core agent runtime health failed HTTP $health_code"
 
-  models_code="$(curl -sS -o /tmp/ai-agent-models.json -w '%{http_code}'     --connect-timeout 15 --max-time 30     -H "x-ai-agent-token: $token"     "$api_base/ai/agent-runtime/v1/models" || true)"
+  models_code="$(agent_http_code "$token" /tmp/ai-agent-models.json "$api_base/ai/agent-runtime/v1/models")"
   cat /tmp/ai-agent-models.json 2>/dev/null || true
   [ "$models_code" = "200" ] || fail "AI Core agent runtime models failed HTTP $models_code"
 
