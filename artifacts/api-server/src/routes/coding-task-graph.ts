@@ -9,6 +9,7 @@ import {
 } from "../services/localCodingTaskGraphService.js";
 import { AutomatedMultiTaskPlannerError } from "../services/localCodingAutomatedMultiTaskPlannerService.js";
 import { enqueueCodingMultiTaskPlanner } from "../services/localCodingPlannerQueueRuntimeService.js";
+import { getPlannerAuthority } from "../services/localCodingPlannerAuthorityService.js";
 import {
   completeReviewedCodingWorkstream,
   LocalCodingMultiWorkerError,
@@ -227,6 +228,21 @@ router.post(
         res.status(200).json({ created: false, snapshot, nextAction: "APPROVE_TASK_GRAPH" });
         return;
       }
+      const authority = await getPlannerAuthority(`coding-task:${params.data.id}`);
+      if (authority.state === "PRIMARY_ACTIVE" || authority.state === "FALLBACK_ACTIVE") {
+        res.status(202).json({
+          queued: false,
+          created: false,
+          jobId: null,
+          jobCode: null,
+          status: "running",
+          authorityHeld: true,
+          authorityState: authority.state,
+          nextAction: "WAIT_FOR_TASK_GRAPH",
+        });
+        return;
+      }
+
       const queued = await enqueueCodingMultiTaskPlanner(params.data.id);
       res.status(202).json({
         queued: true,
