@@ -91,6 +91,7 @@ ensure_env_secret OPENCLAW_GATEWAY_TOKEN 32
 ensure_env_secret AI_CORE_SCOPED_AGENT_TOKEN 32
 
 scoped_agent_token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
+temporal_coding_token="$(env_value AI_CORE_TEMPORAL_CODING_TOKEN)"
 ai_core_base_url="$(env_value AI_CORE_BASE_URL)"
 ai_core_base_url="${ai_core_base_url:-https://aicore.cstlogistic.co.id/api}"
 ai_core_agent_base_url="${ai_core_base_url%/}/ai/agent-runtime/v1"
@@ -115,7 +116,14 @@ log "Validating Compose configuration"
 compose config --quiet
 
 log "Pulling pinned worker images"
-compose pull
+compose pull --ignore-buildable
+
+if [ -n "$temporal_coding_token" ]; then
+  log "Building Temporal coding orchestrator image"
+  compose build temporal-coding-worker
+else
+  log "AI_CORE_TEMPORAL_CODING_TOKEN not present; Temporal coding orchestrator will remain disabled"
+fi
 
 projects_path="$(env_value OPENHANDS_PROJECTS_PATH)"
 projects_path="${projects_path:-/opt/ai-workers/projects}"
@@ -167,6 +175,11 @@ log "Starting Temporal, n8n, and OpenHands"
 compose up -d --remove-orphans \
   temporal-db temporal-admin-tools temporal temporal-create-namespace temporal-ui \
   n8n-db n8n openhands
+
+if [ -n "$temporal_coding_token" ]; then
+  log "Starting Temporal coding orchestrator"
+  compose up -d temporal-coding-worker
+fi
 
 openclaw_initialized=false
 openclaw_provider_mode=unconfigured
