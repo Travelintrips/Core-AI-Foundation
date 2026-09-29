@@ -349,6 +349,24 @@ async function main(): Promise<void> {
 
   for (;;) {
     try {
+      // Once a successful empty claim establishes that the worker is idle,
+      // transient control-plane failures must not erase that idle period.
+      // Otherwise recurring 5xx/503 heartbeat or claim errors can keep a GPU
+      // VM alive forever even though it has no local work.
+      if (
+        gcpAutoStopEnabled &&
+        idleSince !== null &&
+        activeJobs.size === 0 &&
+        Date.now() - idleSince >= gcpIdleStopMs
+      ) {
+        const requested = await requestGcpSelfStop();
+        idleSince = requested ? null : Date.now();
+        if (requested) {
+          await new Promise((resolve) => setTimeout(resolve, 30_000));
+          continue;
+        }
+      }
+
       if (Date.now() - lastHeartbeat >= 20_000) {
         await heartbeat(registration.workerId, registration.token);
         lastHeartbeat = Date.now();
@@ -364,7 +382,6 @@ async function main(): Promise<void> {
       try {
         job = await claim(registration.workerId, registration.token);
       } catch (error) {
-        idleSince = null;
         const code = (error as Error & { code?: string }).code;
         if (code === "CLAIM_TEMPORARILY_UNAVAILABLE") {
           console.error("Remote Ollama claim temporarily unavailable; keeping worker registration and retrying in 5s:", error);
@@ -401,7 +418,7 @@ async function main(): Promise<void> {
       });
       activeJobs.add(execution);
     } catch (error) {
-      idleSince = null;
+      if (activeJobs.size > 0) idleSince = null;
       console.error("Remote Ollama worker loop error:", error);
       await new Promise((resolve) => setTimeout(resolve, 5_000));
       registration = await registerWithRetry();
