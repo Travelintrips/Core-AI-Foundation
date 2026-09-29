@@ -13,6 +13,7 @@ import {
   hasRemoteOllamaWorker,
   waitForRemoteOllamaInvocation,
 } from "./remoteOllamaWorkerService.js";
+import { ensureGcpOllamaVmStarted } from "./gcpOllamaVmLifecycleService.js";
 
 function parseBoundedPrompt(
   input: string,
@@ -131,7 +132,13 @@ export function createScheduledOllamaProviderAdapter(input: {
       const reservation = await reserveOllamaWorker(input.modelId);
 
       if (!reservation) {
-        if (await hasRemoteOllamaWorker(input.modelId)) {
+        let remoteReady = await hasRemoteOllamaWorker(input.modelId);
+
+        if (!remoteReady) {
+          remoteReady = await ensureGcpOllamaVmStarted().catch(() => false);
+        }
+
+        if (remoteReady) {
           const job = await enqueueRemoteOllamaInvocation({
             requestId: request.requestId,
             modelId: input.modelId,
@@ -152,7 +159,7 @@ export function createScheduledOllamaProviderAdapter(input: {
         }
 
         throw new ProviderInvocationError(
-          "No healthy Ollama worker has available capacity for the requested model",
+          "No healthy Ollama worker has available capacity and GCP auto-start is unavailable",
           "UNAVAILABLE",
         );
       }
