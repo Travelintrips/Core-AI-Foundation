@@ -7,6 +7,8 @@ on:
       - "scripts/install-ai-workers.sh"
       - "scripts/ai-workers-healthcheck.sh"
       - "scripts/ai-workers-agent-token-hash.sh"
+      - "scripts/connect-ai-workers-to-aicore.sh"
+      - "scripts/tests/test_ai_workers_connect.py"
       - ".github/workflows/ai-workers-stack-verify.yml"
       - ".github/workflows/ai-workers-deploy.yml"
   push:
@@ -17,6 +19,8 @@ on:
       - "scripts/install-ai-workers.sh"
       - "scripts/ai-workers-healthcheck.sh"
       - "scripts/ai-workers-agent-token-hash.sh"
+      - "scripts/connect-ai-workers-to-aicore.sh"
+      - "scripts/tests/test_ai_workers_connect.py"
       - ".github/workflows/ai-workers-stack-verify.yml"
       - ".github/workflows/ai-workers-deploy.yml"
   workflow_dispatch:
@@ -48,8 +52,12 @@ jobs:
           bash -n scripts/install-ai-workers.sh
           bash -n scripts/ai-workers-healthcheck.sh
           bash -n scripts/ai-workers-agent-token-hash.sh
+          bash -n scripts/connect-ai-workers-to-aicore.sh
           sh -n deploy/ai-workers/temporal/scripts/setup-postgres.sh
           sh -n deploy/ai-workers/temporal/scripts/create-namespace.sh
+
+      - name: Worker verification regression tests (offline)
+        run: python3 -m unittest discover -s scripts/tests -p 'test_ai_workers_connect.py' -v
 
       - name: Validate Compose model
         run: |
