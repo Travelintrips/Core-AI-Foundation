@@ -144,24 +144,20 @@ app.use(requestCounterMiddleware);
 // allowing route handlers to do their own admin-branching (e.g. status=inactive).
 app.use("/api", optionalSessionAuth);
 
+// Machine-to-machine workers authenticate with dedicated scoped credentials.
+// Mount these routers before the public per-IP limiter: their heartbeat and
+// discovery loops are intentionally frequent, and sharing the Hostinger proxy IP
+// with unrelated traffic would otherwise create false 429s. Each matching route
+// still fails closed in its own worker/service-token middleware.
+app.use("/api", remoteOllamaWorkerRouter);
+app.use("/api", agentRuntimeRouter);
+app.use("/api", temporalCodingWorkerRouter);
+
 // ── Global rate limiting (P0-3) ───────────────────────────────────────────────
-// 200 requests per IP per 15 minutes on all /api routes.
+// 200 requests per IP per 15 minutes on all remaining /api routes.
 // Individual sensitive routes apply stricter per-route limits on top of this.
 // Session-authenticated admin requests are skipped by isAdminRequest above.
 app.use("/api", globalLimiter);
-
-// Remote Ollama workers authenticate with dedicated enrollment/lease credentials.
-// Mount before admin auth so worker credentials never need ADMIN_API_KEY.
-app.use("/api", remoteOllamaWorkerRouter);
-
-// OpenHands/OpenClaw/n8n authenticate with a scoped service token stored as a
-// one-way hash in ai_platform. Mount before admin auth; these callers never
-// receive or need ADMIN_API_KEY.
-app.use("/api", agentRuntimeRouter);
-
-// GCP Temporal coding orchestrator uses a dedicated scoped token. This route is
-// intentionally mounted before admin auth and accepts only coding:orchestrate.
-app.use("/api", temporalCodingWorkerRouter);
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,
