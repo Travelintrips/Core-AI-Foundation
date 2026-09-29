@@ -1,0 +1,61 @@
+name: AI Core Command Trigger
+run-name: AI Core ${{ inputs.action || github.event.label.name || 'audit' }} by ${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Audit readiness, submit a bounded task, inspect status, or stop a task
+        type: choice
+        options: [audit, submit, status, stop]
+        default: audit
+        required: true
+      instruction:
+        description: Coding instruction (required for submit; never executed by the shell)
+        type: string
+      request_id:
+        description: Stable request ID for safe reruns (letters, numbers, underscore, dot, hyphen)
+        type: string
+      task_id:
+        description: Existing AI Core task UUID (required for status or stop)
+        type: string
+      max_cycles:
+        description: Autonomous cycle budget, from 5 to 20
+        type: string
+        default: '5'
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ai-core-command-${{ github.event.issue.number || inputs.task_id || inputs.request_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: >-
+      github.repository == 'Travelintrips/Core-AI-Foundation' &&
+      github.actor == 'Travelintrips' &&
+      (github.event_name == 'workflow_dispatch' ||
+       ((github.event.label.name == 'ai-task' || github.event.label.name == 'ai-audit') &&
+        github.event.issue.user.login == 'Travelintrips'))
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Verify trigger safety tests
+        run: node --test scripts/ai-core-command.test.mjs
+      - name: Audit or dispatch to AI Core
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ai-core-command.mjs
