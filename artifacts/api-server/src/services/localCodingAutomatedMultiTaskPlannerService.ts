@@ -900,11 +900,16 @@ export async function generateAndPersistCodingMultiTaskPlan(
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
 
-    const retryableSelectedFailure =
-      error instanceof ModelInvocationError &&
-      error.details.retryable === true;
+    // A provider/model invocation failure should fail over even when the
+    // provider marks the error as non-retryable. "retryable" controls retries
+    // against the SAME target; it must not suppress fallback to a different
+    // configured model/provider. Otherwise auth/model/structured-output
+    // failures on the preferred target terminate the planner before the
+    // bounded fallback chain gets a chance to recover.
+    const selectedModelInvocationFailure =
+      error instanceof ModelInvocationError;
 
-    if (retryableSelectedFailure) {
+    if (selectedModelInvocationFailure) {
       const fallback = await resolveConfiguredCodingFallbackModel();
       const fallbackProviderSlug = fallback.ok
         ? String(fallback.selection.provider.slug ?? "").toLowerCase()
