@@ -886,7 +886,40 @@ export async function failStaleRepositoryAnalyzerRuns(
     );
   }
 
-  return staleRuns.length;
+  // Orchestrated runs use the "Coding Orchestrator" agent name. Recover their
+  // abandoned queue rows only while the analyzer job is still active; a slow
+  // planner must not cause a completed analysis to be failed retroactively.
+  const staleJobs = await db.execute(sql`
+    SELECT j.id, j.payload_json->>'codingRunId' AS run_id,
+           j.payload_json->>'codingTaskId' AS task_id
+    FROM ai_platform.ai_jobs AS j
+    JOIN ai_platform.ai_coding_runs AS r
+      ON r.id::text = j.payload_json->>'codingRunId'
+    WHERE j.job_type = 'coding_repository_analyzer'
+      AND j.status IN ('queued', 'running', 'retrying')
+      AND r.status = 'RUNNING'
+      AND r.agent_name = 'Coding Orchestrator'
+      AND COALESCE(j.started_at, j.created_at) < ${cutoff}
+  `);
+  const rows = (staleJobs as unknown as {
+    rows?: Array<{ id: number; run_id: string; task_id: string }>;
+  }).rows ?? [];
+  for (const job of rows) {
+    await failRepositoryAnalyzerRun(
+      { codingRunId: job.run_id, codingTaskId: job.task_id },
+      `Repository Analyzer job ${job.id} exceeded its bounded lifetime and was recovered.`,
+    );
+    await db.execute(sql`
+      UPDATE ai_platform.ai_jobs
+      SET status = 'failed', completed_at = COALESCE(completed_at, NOW()),
+          error_message = COALESCE(error_message, 'Stale Repository Analyzer job recovered'),
+          updated_at = NOW()
+      WHERE id = ${job.id} AND status IN ('queued', 'running', 'retrying')
+        AND COALESCE(started_at, created_at) < ${cutoff}
+    `);
+  }
+
+  return staleRuns.length + rows.length;
 }
 
 export async function completeRepositoryAnalyzerRun(
