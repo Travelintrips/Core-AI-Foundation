@@ -247,7 +247,7 @@ compose run -T --rm --no-deps --entrypoint node openclaw \
   dist/index.js config set --batch-json "$openclaw_policy"
 
 log "Starting OpenClaw"
-compose up -d openclaw
+compose up -d openclaw agent-registrar
 
 log "Running bounded health checks"
 AI_WORKERS_ENV_FILE="$ENV_FILE" bash "$SCRIPT_DIR/ai-workers-healthcheck.sh"

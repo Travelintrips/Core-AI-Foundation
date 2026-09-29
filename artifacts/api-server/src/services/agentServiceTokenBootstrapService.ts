@@ -59,7 +59,7 @@ async function ensureInternal(): Promise<void> {
     VALUES (
       ${WORKER_TOKEN_NAME},
       ${tokenHash},
-      ARRAY['model:chat']::text[],
+      ARRAY['model:chat','agent:presence']::text[],
       TRUE,
       '{"source":"gcp-ai-workers-bootstrap"}'::jsonb,
       NOW(),

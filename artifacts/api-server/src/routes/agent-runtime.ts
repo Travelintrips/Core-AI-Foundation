@@ -3,9 +3,15 @@ import { z } from "zod";
 import { getProviderApiKey } from "../services/aiSecretService.js";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logger } from "../lib/logger.js";
+import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
 
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
+const ExternalAgentHeartbeatRequest = z.object({
+  health: z.enum(["healthy", "degraded"]),
+  version: z.string().trim().min(1).max(100).nullable().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+}).strict();
 
 const ChatCompletionRequest = z.object({
   model: z.string().min(1).max(200),
@@ -117,6 +123,51 @@ async function proxyUpstream(
     signal: AbortSignal.timeout(180_000),
   });
 }
+
+router.post(
+  "/ai/agent-runtime/presence/:clientId/heartbeat",
+  requireAgentServiceScope("agent:presence"),
+  async (req, res): Promise<void> => {
+    const body = ExternalAgentHeartbeatRequest.safeParse(req.body ?? {});
+    const clientId = String(req.params["clientId"] ?? "").trim();
+    if (!body.success || !clientId) {
+      res.status(400).json({ error: body.success ? "Invalid clientId" : body.error.message });
+      return;
+    }
+    try {
+      res.json(await heartbeatExternalAgent({ clientId, ...body.data }));
+    } catch (error) {
+      if (error instanceof ExternalAgentRegistryError) {
+        res.status(error.code === "UNKNOWN_AGENT" ? 404 : 400).json({ error: error.message, code: error.code });
+        return;
+      }
+      throw error;
+    }
+  },
+);
+
+router.get(
+  "/ai/agent-runtime/registry",
+  requireAgentServiceScope("agent:presence"),
+  async (_req, res): Promise<void> => {
+    const agents = await getExternalAgentRegistrySnapshot();
+    res.json({ authority: "ai-core", policyVersion: 1, agents });
+  },
+);
+
+router.get(
+  "/ai/agent-runtime/registry/health",
+  requireAgentServiceScope("agent:presence"),
+  async (_req, res): Promise<void> => {
+    const agents = await getExternalAgentRegistrySnapshot();
+    const ready = agents.every((agent) => agent.eligible);
+    res.status(ready ? 200 : 503).json({
+      status: ready ? "ok" : "degraded",
+      authority: "ai-core",
+      agents,
+    });
+  },
+);
 
 router.get(
   "/ai/agent-runtime/health",

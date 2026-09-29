@@ -109,6 +109,8 @@ ai_core_base_url="$(env_default AI_CORE_BASE_URL https://aicore.cstlogistic.co.i
 if [ -n "$scoped_agent_token" ]; then
   wait_http "ai-core-agent-runtime" "${ai_core_base_url%/}/ai/agent-runtime/health" \
     "Authorization" "Bearer $scoped_agent_token" || status=1
+  wait_http "ai-core-agent-registry" "${ai_core_base_url%/}/ai/agent-runtime/registry/health" \
+    "Authorization" "Bearer $scoped_agent_token" || status=1
 fi
 
 if [ -n "$temporal_coding_token" ]; then

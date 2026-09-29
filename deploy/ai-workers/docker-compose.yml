@@ -237,6 +237,38 @@ services:
       - no-new-privileges:true
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
 
+  agent-registrar:
+    image: python:3.13-slim
+    restart: unless-stopped
+    depends_on:
+      openclaw:
+        condition: service_started
+      openhands:
+        condition: service_started
+      n8n:
+        condition: service_started
+    environment:
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      AI_CORE_AGENT_HEARTBEAT_SECONDS: ${AI_CORE_AGENT_HEARTBEAT_SECONDS:-20}
+      AI_CORE_AGENT_HEALTH_TIMEOUT_SECONDS: ${AI_CORE_AGENT_HEALTH_TIMEOUT_SECONDS:-5}
+      OPENHANDS_LOCAL_BACKEND_API_KEY: ${OPENHANDS_LOCAL_BACKEND_API_KEY:?set OPENHANDS_LOCAL_BACKEND_API_KEY}
+      OPENCLAW_VERSION: ${OPENCLAW_VERSION:-2026.9.6}
+      OPENHANDS_VERSION: ${OPENHANDS_VERSION:-1.24.0}
+      N8N_VERSION: ${N8N_VERSION:-2.40.7}
+    volumes:
+      - ./agent-registrar.py:/app/agent-registrar.py:ro
+    command: ["python", "/app/agent-registrar.py"]
+    networks:
+      - control
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
 networks:
   control:
     driver: bridge
