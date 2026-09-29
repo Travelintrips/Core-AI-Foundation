@@ -16,15 +16,44 @@ const ChatCompletionRequest = z.object({
   stream: z.boolean().optional(),
 }).passthrough();
 
-function upstreamModel(): string {
-  return (process.env["AI_AGENT_RUNTIME_OPENAI_MODEL"] ?? "gpt-4o").trim() || "gpt-4o";
+interface AgentUpstream {
+  provider: "openai" | "gemini";
+  model: string;
+  url: string;
+  apiKey: string;
+}
+
+function configuredUpstreams(): AgentUpstream[] {
+  const result: AgentUpstream[] = [];
+
+  const openaiKey = getProviderApiKey("openai");
+  if (openaiKey) {
+    result.push({
+      provider: "openai",
+      model: (process.env["AI_AGENT_RUNTIME_OPENAI_MODEL"] ?? "gpt-4o").trim() || "gpt-4o",
+      url: "https://api.openai.com/v1/chat/completions",
+      apiKey: openaiKey,
+    });
+  }
+
+  const geminiKey = getProviderApiKey("gemini");
+  if (geminiKey) {
+    result.push({
+      provider: "gemini",
+      model: (process.env["AI_AGENT_RUNTIME_GEMINI_MODEL"] ?? "gemini-3.8-flash").trim() || "gemini-3.8-flash",
+      url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      apiKey: geminiKey,
+    });
+  }
+
+  return result;
 }
 
 function safeUpstreamFailure(status: number): Record<string, unknown> {
   return {
     error: {
       message: status === 429
-        ? "AI Core agent runtime provider is rate limited."
+        ? "AI Core agent runtime providers are rate limited."
         : "AI Core agent runtime provider request failed.",
       type: "ai_core_agent_runtime_error",
       status,
@@ -32,16 +61,42 @@ function safeUpstreamFailure(status: number): Record<string, unknown> {
   };
 }
 
+function shouldFallback(status: number): boolean {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+async function proxyUpstream(
+  upstream: AgentUpstream,
+  requestBody: Record<string, unknown>,
+): Promise<Response> {
+  return fetch(upstream.url, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer " + upstream.apiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ...requestBody,
+      model: upstream.model,
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+}
+
 router.get(
   "/ai/agent-runtime/health",
   requireAgentServiceScope("model:chat"),
   (_req, res) => {
+    const upstreams = configuredUpstreams();
     res.json({
-      status: "ok",
+      status: upstreams.length > 0 ? "ok" : "degraded",
       service: "ai-core-agent-runtime",
-      provider: "openai",
       model: AGENT_MODEL_ID,
-      upstreamConfigured: Boolean(getProviderApiKey("openai")),
+      providers: upstreams.map((item) => ({
+        provider: item.provider,
+        model: item.model,
+      })),
+      upstreamConfigured: upstreams.length > 0,
     });
   },
 );
@@ -77,17 +132,6 @@ router.post(
       return;
     }
 
-    const providerKey = getProviderApiKey("openai");
-    if (!providerKey) {
-      res.status(503).json({
-        error: {
-          message: "AI Core OpenAI provider is not configured.",
-          type: "provider_unavailable",
-        },
-      });
-      return;
-    }
-
     const requestedModel = parsed.data.model.trim().toLowerCase();
     const allowedModelRefs = new Set([
       AGENT_MODEL_ID,
@@ -104,58 +148,83 @@ router.post(
       return;
     }
 
-    const body = {
-      ...(req.body as Record<string, unknown>),
-      model: upstreamModel(),
-    };
+    const upstreams = configuredUpstreams();
+    if (upstreams.length === 0) {
+      res.status(503).json({
+        error: {
+          message: "AI Core agent runtime has no configured provider.",
+          type: "provider_unavailable",
+        },
+      });
+      return;
+    }
+
+    let lastStatus = 503;
 
     try {
-      const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          authorization: "Bearer " + providerKey,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(180_000),
-      });
-
-      res.setHeader("x-ai-core-agent-runtime", "1");
-      res.setHeader("x-ai-core-provider", "openai");
-
-      if (!upstream.ok) {
-        logger.warn(
-          { status: upstream.status, service: res.locals["aiAgentService"]?.name },
-          "[agent-runtime] upstream provider request failed",
+      for (let index = 0; index < upstreams.length; index += 1) {
+        const upstreamConfig = upstreams[index]!;
+        const upstream = await proxyUpstream(
+          upstreamConfig,
+          req.body as Record<string, unknown>,
         );
-        res.status(upstream.status).json(safeUpstreamFailure(upstream.status));
-        return;
-      }
 
-      if (parsed.data.stream === true) {
-        res.status(200);
-        res.setHeader("content-type", upstream.headers.get("content-type") ?? "text/event-stream");
-        res.setHeader("cache-control", "no-cache");
-        if (!upstream.body) {
+        lastStatus = upstream.status;
+
+        if (!upstream.ok) {
+          logger.warn(
+            {
+              status: upstream.status,
+              provider: upstreamConfig.provider,
+              model: upstreamConfig.model,
+              service: res.locals["aiAgentService"]?.name,
+            },
+            "[agent-runtime] upstream provider request failed",
+          );
+
+          const hasFallback = index < upstreams.length - 1;
+          if (hasFallback && shouldFallback(upstream.status)) {
+            await upstream.body?.cancel().catch(() => undefined);
+            continue;
+          }
+
+          res.status(upstream.status).json(safeUpstreamFailure(upstream.status));
+          return;
+        }
+
+        res.setHeader("x-ai-core-agent-runtime", "1");
+        res.setHeader("x-ai-core-provider", upstreamConfig.provider);
+        res.setHeader("x-ai-core-model", upstreamConfig.model);
+
+        if (parsed.data.stream === true) {
+          res.status(200);
+          res.setHeader("content-type", upstream.headers.get("content-type") ?? "text/event-stream");
+          res.setHeader("cache-control", "no-cache");
+          if (!upstream.body) {
+            res.end();
+            return;
+          }
+
+          const reader = upstream.body.getReader();
+          try {
+            while (!res.writableEnded) {
+              const chunk = await reader.read();
+              if (chunk.done) break;
+              res.write(Buffer.from(chunk.value));
+            }
+          } finally {
+            reader.releaseLock();
+          }
           res.end();
           return;
         }
-        const reader = upstream.body.getReader();
-        try {
-          while (!res.writableEnded) {
-            const chunk = await reader.read();
-            if (chunk.done) break;
-            res.write(Buffer.from(chunk.value));
-          }
-        } finally {
-          reader.releaseLock();
-        }
-        res.end();
+
+        const payload = await upstream.json();
+        res.status(200).json(payload);
         return;
       }
 
-      const payload = await upstream.json();
-      res.status(200).json(payload);
+      res.status(lastStatus).json(safeUpstreamFailure(lastStatus));
     } catch (error) {
       logger.error(
         { err: error, service: res.locals["aiAgentService"]?.name },
