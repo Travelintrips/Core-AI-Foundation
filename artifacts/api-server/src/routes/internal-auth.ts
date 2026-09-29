@@ -25,7 +25,11 @@ import {
 import { requireAuth } from "../middleware/internalAuth.js";
 import { loginLimiter } from "../middleware/rateLimiter.js";
 import { logAudit } from "../services/aiAuditService.js";
-import { sendEmail, verifyEmailTransport } from "../services/emailService.js";
+import {
+  getEmailTransportDiagnostic,
+  sendEmail,
+  verifyEmailTransport,
+} from "../services/emailService.js";
 
 const router = Router();
 
@@ -114,6 +118,11 @@ router.post("/internal/auth/dev-login", loginLimiter, async (req, res): Promise<
     localOnly: true,
   });
   res.json({ user: toSafeInternalUser(user) });
+});
+
+router.get("/internal/auth/email-diagnostics", async (_req, res): Promise<void> => {
+  const diagnostic = await getEmailTransportDiagnostic();
+  res.status(diagnostic.ok ? 200 : 503).json(diagnostic);
 });
 
 router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res): Promise<void> => {
