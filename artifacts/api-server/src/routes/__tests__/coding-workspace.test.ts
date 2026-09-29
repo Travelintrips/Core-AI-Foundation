@@ -3,6 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockTransaction = vi.hoisted(() => vi.fn());
+const mockDbSelect = vi.hoisted(() => vi.fn());
 const mockSelectFor = vi.hoisted(() => vi.fn());
 const mockSelectLimit = vi.hoisted(() => vi.fn());
 const mockInsertValues = vi.hoisted(() => vi.fn());
@@ -169,7 +170,7 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("@workspace/db", () => ({
   db: {
     transaction: mockTransaction,
-    select: vi.fn(),
+    select: mockDbSelect,
     insert: vi.fn(),
     update: vi.fn(),
   },
@@ -356,6 +357,35 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
 
     expect(response.status).toBe(400);
     expect(mockListCodingRepositoryBranches).not.toHaveBeenCalled();
+  });
+});
+
+describe("AI coding workspace run status endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDbSelect.mockReturnValue(selectBuilder);
+    mockSelectLimit.mockResolvedValue([run]);
+  });
+
+  it("returns one bounded run status without loading the full task projection", async () => {
+    const response = await request(app).get(`/ai/coding/tasks/${taskId}/runs/${runId}/status`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Coding Orchestrator",
+      status: "RUNNING",
+    });
+  });
+
+  it("returns 404 when the run does not exist for the task", async () => {
+    mockSelectLimit.mockResolvedValueOnce([]);
+
+    const response = await request(app).get(`/ai/coding/tasks/${taskId}/runs/${runId}/status`);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "Coding run not found" });
   });
 });
 
