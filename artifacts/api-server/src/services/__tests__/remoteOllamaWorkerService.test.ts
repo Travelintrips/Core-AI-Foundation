@@ -6,3 +6,5 @@ describe("remote Ollama worker service", () => {
     expect(REMOTE_OLLAMA_RUNTIME_KIND).toBe("ollama_remote_pull");
   });
 });
+// Registration is intentionally clamped to at least two slots server-side so
+// an old/outdated remote worker cannot collapse production Economy capacity to 1.
