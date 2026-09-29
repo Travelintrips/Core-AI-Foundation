@@ -124,7 +124,7 @@ log "Starting OpenClaw"
 compose up -d openclaw
 
 log "Running bounded health checks"
-AI_WORKERS_ENV_FILE="$ENV_FILE" "$SCRIPT_DIR/ai-workers-healthcheck.sh"
+AI_WORKERS_ENV_FILE="$ENV_FILE" bash "$SCRIPT_DIR/ai-workers-healthcheck.sh"
 
 cat <<EOF
 
