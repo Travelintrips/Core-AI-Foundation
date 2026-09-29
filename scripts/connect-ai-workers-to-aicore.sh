@@ -40,12 +40,15 @@ compose() {
 }
 
 prepare() {
-  local token token_hash
+  local rotate="${1:-false}" token token_hash
   token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
+  if [ "$rotate" = "true" ]; then
+    token=""
+  fi
   if [ -z "$token" ]; then
     token="$(openssl rand -hex 32)"
     set_env_value AI_CORE_SCOPED_AGENT_TOKEN "$token"
-    log "Generated scoped AI Core agent token"
+    if [ "$rotate" = "true" ]; then log "Rotated scoped AI Core agent token"; else log "Generated scoped AI Core agent token"; fi
   fi
 
   set_env_value OPENHANDS_LLM_API_KEY "$token"
@@ -110,12 +113,13 @@ apply() {
 }
 
 case "$MODE" in
-  prepare) prepare ;;
+  prepare) prepare false ;;
+  rotate) prepare true ;;
   apply) apply ;;
   verify)
     apply
     ;;
   *)
-    fail "Usage: $0 [prepare|apply|verify]"
+    fail "Usage: $0 [prepare|rotate|apply|verify]"
     ;;
 esac
