@@ -143,10 +143,13 @@ export function readOllamaWorkerRuntimeConfig(
     localBaseUrl,
     advertiseBaseUrl,
     apiKey: (env["OLLAMA_WORKER_API_KEY"] ?? "").trim(),
+    // The hosted GCP Ollama path is a direct HTTP worker. Keep at least two
+    // slots so one slow/stale reservation cannot make Economy routing appear
+    // completely unavailable. Remote pull workers have their own 1..4 bound.
     maxConcurrentJobs: boundedInt(
       env["OLLAMA_WORKER_MAX_CONCURRENCY"],
       2,
-      1,
+      2,
       32,
     ),
     powershellEnabled: envTrue(env["OLLAMA_WORKER_POWERSHELL_ENABLED"]),
