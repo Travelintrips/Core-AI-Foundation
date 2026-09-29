@@ -26,7 +26,7 @@ production database credentials into agent containers.
   gRPC port and UI bind to loopback only.
 - **OpenHands** is the coding worker. It only sees
   `OPENHANDS_PROJECTS_PATH` (default `/opt/ai-workers/projects`) plus its own
-  state volume.
+  state volume. A newly created default workspace is owned by UID/GID 1000 to match the official Agent Canvas image; an existing directory is never recursively re-owned.
 - **OpenClaw** is an operations/agent gateway. Its UI/API binds to loopback and
   runs without the host Docker socket.
 - **n8n** handles workflow automation with a dedicated Postgres database and
