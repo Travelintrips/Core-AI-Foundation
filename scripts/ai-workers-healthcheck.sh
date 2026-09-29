@@ -45,11 +45,17 @@ wait_http() {
 
   for attempt in $(seq 1 "$attempts"); do
     if [ -n "$header_name" ]; then
-      if curl --fail --silent --show-error --max-time 5 \
-        -H "$header_name: $header_value" "$url" >/dev/null 2>&1; then
+      local curl_cfg
+      curl_cfg="$(mktemp)"
+      chmod 600 "$curl_cfg"
+      printf 'header = "%s: %s"\n' "$header_name" "$header_value" > "$curl_cfg"
+      if curl --config "$curl_cfg" --fail --silent --show-error --max-time 5 \
+        "$url" >/dev/null 2>&1; then
+        rm -f "$curl_cfg"
         log "$name=PASS"
         return 0
       fi
+      rm -f "$curl_cfg"
     elif curl --fail --silent --show-error --max-time 5 "$url" >/dev/null 2>&1; then
       log "$name=PASS"
       return 0
