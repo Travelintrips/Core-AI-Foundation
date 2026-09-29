@@ -299,6 +299,16 @@ export function createConstrainedCodingProviderAdapter(input: {
   };
 }
 
+function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
+  const trimmed = rawOutput.trim();
+  const match = /^\`\`\`(?:json)?[\\t ]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\`$/i.exec(trimmed);
+  if (!match) return rawOutput;
+
+  const body = (match[1] ?? "").trim();
+  if (!body.startsWith("{") || !body.endsWith("}")) return rawOutput;
+  return body;
+}
+
 export async function invokeConstrainedAiProposal(input: {
   lease: ApprovedAiHandoffLease;
   adapter: ConstrainedModelInvocationAdapter;
@@ -342,7 +352,12 @@ export async function invokeConstrainedAiProposal(input: {
     }
 
     try {
-      const proposal = parseLocalCodingAiProposalV1(response.output.text, binding);
+      const proposal = parseLocalCodingAiProposalV1(
+        attempt === 2
+          ? normalizeBoundedSchemaRepairOutput(response.output.text)
+          : response.output.text,
+        binding,
+      );
       return { proposal, metadata: response.metadata };
     } catch (error) {
       lastValidationError =
