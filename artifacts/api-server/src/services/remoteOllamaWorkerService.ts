@@ -285,6 +285,59 @@ export async function retryRemoteOllamaInvocation(
   return retryJob(jobId, workerId, errorMessage.slice(0, 2_000));
 }
 
+async function cancelRemoteOllamaInvocation(jobId: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [job] = await tx
+      .select()
+      .from(aiJobsTable)
+      .where(eq(aiJobsTable.id, jobId));
+
+    if (
+      !job ||
+      !["queued", "waiting", "retrying", "running"].includes(job.status)
+    ) {
+      return;
+    }
+
+    const payload = (job.payloadJson ?? {}) as Record<string, unknown>;
+    const claimedWorkerId = Number(payload["_claimedByWorkerId"]);
+
+    const [cancelled] = await tx
+      .update(aiJobsTable)
+      .set({
+        status: "cancelled",
+        completedAt: new Date(),
+        errorMessage: "Remote Ollama invocation cancelled because the caller deadline expired.",
+        payloadJson: sql`COALESCE(payload_json, '{}'::jsonb) - '_claimedByWorkerId'`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(aiJobsTable.id, jobId),
+          inArray(aiJobsTable.status, ["queued", "waiting", "retrying", "running"]),
+        ),
+      )
+      .returning({ id: aiJobsTable.id });
+
+    if (
+      cancelled &&
+      job.status === "running" &&
+      Number.isInteger(claimedWorkerId) &&
+      claimedWorkerId > 0
+    ) {
+      await tx
+        .update(aiWorkersTable)
+        .set({
+          runningJobs: sql`GREATEST(running_jobs - 1, 0)`,
+          currentJob: sql`CASE WHEN current_job = ${jobId} THEN NULL ELSE current_job END`,
+          status: sql`CASE WHEN GREATEST(running_jobs - 1, 0) = 0 THEN 'idle' ELSE 'busy' END`,
+          updatedAt: new Date(),
+        })
+        .where(eq(aiWorkersTable.id, claimedWorkerId));
+    }
+  });
+}
+
 export async function waitForRemoteOllamaInvocation(
   jobId: number,
   signal: AbortSignal,
@@ -298,6 +351,12 @@ export async function waitForRemoteOllamaInvocation(
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+
+  // The model adapter's bounded timeout previously abandoned the queue row.
+  // Repeated Economy retries could therefore occupy every remote worker slot
+  // even though their HTTP callers had already returned NO_LLM. Cancel the
+  // orphaned row and release only its claimed slot, preserving concurrent jobs.
+  await cancelRemoteOllamaInvocation(jobId).catch(() => undefined);
   throw new Error("Remote Ollama invocation cancelled");
 }
 
