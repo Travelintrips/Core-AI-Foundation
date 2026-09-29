@@ -104,6 +104,7 @@ export * from "./ai-coding-github-events";
 export * from "./ai-coding-ci-bindings";
 export * from "./ai-incidents";
 export * from "./ai-coding-planner-authority";
+export * from "./ai-agent-service-tokens";
 export * from "./material-library";
 export * from "./room-design-catalog";
 export * from "./furniture-library";
