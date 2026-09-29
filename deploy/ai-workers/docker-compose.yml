@@ -193,6 +193,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
       AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      CUSTOM_API_KEY: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
       TZ: ${TZ:-Asia/Jakarta}
     volumes:
       - openclaw-state:/home/node/.openclaw
