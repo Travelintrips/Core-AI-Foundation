@@ -113,28 +113,8 @@ jobs:
             grep -q "^$key=$" "$file"
           done
 
-          grep -q '^TEMPORAL_ADMINTOOLS_VERSION=1.32.0          ! grep -Eq '^(OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY)=.+$' "$file"
-
-      - name: Summary
-        run: |
-          echo "AI worker stack static verification: PASS"
-          echo "Current Temporal server/admin-tools manifests: PASS"
-          echo "Compose interpolation: PASS"
-          echo "Loopback-only published ports: PASS"
-          echo "No Docker socket mount: PASS"
-          echo "No AI Core ADMIN_API_KEY injection: PASS"
- "$file"
-          grep -q '^TEMPORAL_CODING_WORKER_VERSION=1.0.0          ! grep -Eq '^(OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY)=.+$' "$file"
-
-      - name: Summary
-        run: |
-          echo "AI worker stack static verification: PASS"
-          echo "Current Temporal server/admin-tools manifests: PASS"
-          echo "Compose interpolation: PASS"
-          echo "Loopback-only published ports: PASS"
-          echo "No Docker socket mount: PASS"
-          echo "No AI Core ADMIN_API_KEY injection: PASS"
- "$file"
+          grep -q '^TEMPORAL_ADMINTOOLS_VERSION=1.32.0$' "$file"
+          grep -q '^TEMPORAL_CODING_WORKER_VERSION=1.0.0$' "$file"
           ! grep -Eq '^(OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY)=.+$' "$file"
 
       - name: Summary
