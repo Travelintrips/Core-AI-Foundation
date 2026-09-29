@@ -1,0 +1,100 @@
+name: AI Workers Stack Verify
+
+on:
+  pull_request:
+    paths:
+      - "deploy/ai-workers/**"
+      - "scripts/install-ai-workers.sh"
+      - "scripts/ai-workers-healthcheck.sh"
+      - ".github/workflows/ai-workers-stack-verify.yml"
+      - ".github/workflows/ai-workers-deploy.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "deploy/ai-workers/**"
+      - "scripts/install-ai-workers.sh"
+      - "scripts/ai-workers-healthcheck.sh"
+      - ".github/workflows/ai-workers-stack-verify.yml"
+      - ".github/workflows/ai-workers-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-workers-stack-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TEMPORAL_POSTGRES_PASSWORD: ci-temporal-password
+      N8N_POSTGRES_PASSWORD: ci-n8n-password
+      N8N_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      OPENHANDS_LOCAL_BACKEND_API_KEY: ci-openhands-key
+      OPENCLAW_GATEWAY_TOKEN: ci-openclaw-token
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          bash -n scripts/install-ai-workers.sh
+          bash -n scripts/ai-workers-healthcheck.sh
+
+      - name: Validate Compose model
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file deploy/ai-workers/.env.example \
+            -f deploy/ai-workers/docker-compose.yml \
+            config --quiet
+
+      - name: Verify isolation invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=deploy/ai-workers/docker-compose.yml
+
+          # Every published service port must be loopback-bound.
+          published=$(grep -E '^[[:space:]]+- "127\.0\.0\.1:' "$file" | wc -l)
+          test "$published" -ge 5
+
+          # No agent gets direct control of the host Docker daemon.
+          ! grep -q '/var/run/docker.sock' "$file"
+
+          # AI Core's broad production admin credential must never enter this stack.
+          ! grep -q 'ADMIN_API_KEY' "$file"
+
+          # Database networks remain internal to their respective services.
+          grep -A3 '^  temporal-data:' "$file" | grep -q 'internal: true'
+          grep -A3 '^  n8n-data:' "$file" | grep -q 'internal: true'
+
+      - name: Verify secret template contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=deploy/ai-workers/.env.example
+          for key in \
+            TEMPORAL_POSTGRES_PASSWORD \
+            N8N_POSTGRES_PASSWORD \
+            N8N_ENCRYPTION_KEY \
+            OPENHANDS_LOCAL_BACKEND_API_KEY \
+            OPENCLAW_GATEWAY_TOKEN
+          do
+            grep -q "^$key=$" "$file"
+          done
+
+          ! grep -Eq '^(OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY)=.+$' "$file"
+
+      - name: Summary
+        run: |
+          echo "AI worker stack static verification: PASS"
+          echo "Compose interpolation: PASS"
+          echo "Loopback-only published ports: PASS"
+          echo "No Docker socket mount: PASS"
+          echo "No AI Core ADMIN_API_KEY injection: PASS"
