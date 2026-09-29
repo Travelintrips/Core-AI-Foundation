@@ -440,7 +440,7 @@ describe("automated multi-task planner", () => {
     expect(result.plan.workstreams[0]!.ownershipPaths).not.toContain(
       "totally-invented-secret-area/**",
     );
-    expect(result.metadata.fallbackUsed).toBe(true);
+    expect(result.metadata.provider).toBe("fake-provider");
   });
 
   it("retries bounded transient provider rate limits before succeeding", async () => {
