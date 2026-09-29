@@ -62,6 +62,8 @@ const { reconcileStaleMultiWorkerRuns } =
   await import("./services/localCodingMultiWorkerRecoveryService.js");
 const { ensureCodingControlBridgeTables } =
   await import("./services/codingControlBridgeSchemaService.js");
+const { ensureAgentServiceTokenBootstrap } =
+  await import("./services/agentServiceTokenBootstrapService.js");
 const codingAutonomous =
   await import("./services/localCodingAutonomousRepairService.js");
 
@@ -103,6 +105,7 @@ async function initializeRuntimeServices(): Promise<void> {
   await runStartupStep("[observability] Table init", () => ensureObservabilityTables());
   await runStartupStep("[submit-idempotency] Table init", () => ensureSubmitIdempotencyTable());
   await runStartupStep("[coding-bridge] Table init", () => ensureCodingControlBridgeTables());
+  await runStartupStep("[agent-runtime] Scoped token bootstrap", () => ensureAgentServiceTokenBootstrap());
   await runStartupStep("[material-library] Table/seed init", async () => {
     await ensureMaterialLibraryTables();
     await seedMaterialLibraryIfEmpty();
