@@ -82,7 +82,7 @@ prepare() {
 
 configure_openclaw() {
   local provider_json models_json
-  provider_json='{"baseUrl":"https://aicore.cstlogistic.co.id/api/ai/agent-runtime/v1","api":"openai-completions","models":[{"id":"ai-core-agent","name":"AI Core Agent","reasoning":false,"input":["text"],"contextWindow":128000,"maxTokens":8192}]}'
+  provider_json='{"baseUrl":"https://aicore.cstlogistic.co.id/api/ai/agent-runtime/v1","api":"openai-completions","authHeader":true,"models":[{"id":"ai-core-agent","name":"AI Core Agent","reasoning":false,"input":["text"],"contextWindow":128000,"maxTokens":8192}]}'
   models_json='{"ai-core/ai-core-agent":{"alias":"AI Core"}}'
 
   compose run -T --rm --no-deps --entrypoint node openclaw     dist/index.js config set models.providers.ai-core "$provider_json" --strict-json --merge
