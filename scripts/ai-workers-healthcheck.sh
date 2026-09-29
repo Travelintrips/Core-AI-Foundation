@@ -97,6 +97,13 @@ wait_http "openhands" "http://127.0.0.1:${openhands_port}/server_info" \
   "X-Session-API-Key" "$openhands_key" || status=1
 wait_http "openclaw" "http://127.0.0.1:${openclaw_port}/healthz" || status=1
 
+scoped_agent_token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
+ai_core_base_url="$(env_default AI_CORE_BASE_URL https://aicore.cstlogistic.co.id/api)"
+if [ -n "$scoped_agent_token" ]; then
+  wait_http "ai-core-agent-runtime" "${ai_core_base_url%/}/ai/agent-runtime/health" \
+    "Authorization" "Bearer $scoped_agent_token" || status=1
+fi
+
 if [ "$status" -ne 0 ]; then
   compose ps
   fail "One or more worker services are unhealthy."

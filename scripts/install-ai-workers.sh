@@ -88,7 +88,25 @@ ensure_env_secret N8N_POSTGRES_PASSWORD 32
 ensure_env_secret N8N_ENCRYPTION_KEY 32
 ensure_env_secret OPENHANDS_LOCAL_BACKEND_API_KEY 32
 ensure_env_secret OPENCLAW_GATEWAY_TOKEN 32
+ensure_env_secret AI_CORE_SCOPED_AGENT_TOKEN 32
 
+scoped_agent_token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
+ai_core_base_url="$(env_value AI_CORE_BASE_URL)"
+ai_core_base_url="${ai_core_base_url:-https://aicore.cstlogistic.co.id/api}"
+ai_core_agent_base_url="${ai_core_base_url%/}/ai/agent-runtime/v1"
+
+if [ -n "$scoped_agent_token" ]; then
+  if [ -z "$(env_value OPENHANDS_LLM_MODEL)" ]; then
+    set_env_value OPENHANDS_LLM_MODEL "openai/ai-core-agent"
+  fi
+  if [ -z "$(env_value OPENHANDS_LLM_BASE_URL)" ]; then
+    set_env_value OPENHANDS_LLM_BASE_URL "$ai_core_agent_base_url"
+  fi
+  if [ -z "$(env_value OPENHANDS_LLM_API_KEY)" ]; then
+    set_env_value OPENHANDS_LLM_API_KEY "$scoped_agent_token"
+  fi
+  log "Configured OpenHands to use AI Core scoped agent runtime"
+fi
 compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
@@ -158,7 +176,35 @@ if compose run -T --rm --no-deps --entrypoint sh openclaw -lc \
   openclaw_provider_mode=configured
 fi
 
-if [ "$openclaw_initialized" != "true" ]; then
+if [ -n "$scoped_agent_token" ]; then
+  if [ "$openclaw_initialized" != "true" ]; then
+    log "Running one-time OpenClaw onboarding for AI Core scoped provider"
+    compose run -T --rm --no-deps --entrypoint node openclaw \
+      dist/index.js onboard \
+      --non-interactive \
+      --accept-risk \
+      --skip-health \
+      --mode local \
+      --auth-choice custom-api-key \
+      --custom-base-url "$ai_core_agent_base_url" \
+      --custom-model-id ai-core-agent \
+      --custom-provider-id ai-core \
+      --custom-compatibility openai \
+      --secret-input-mode ref \
+      --gateway-auth token \
+      --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN \
+      --skip-channels \
+      --no-install-daemon
+  fi
+
+  log "Configuring OpenClaw AI Core provider"
+  ai_core_provider_json="$(printf '{"baseUrl":"%s","apiKey":"${CUSTOM_API_KEY}","api":"openai-completions","models":[{"id":"ai-core-agent","name":"AI Core Agent Runtime","input":["text"],"contextWindow":128000,"maxTokens":16384}]}' "$ai_core_agent_base_url")"
+  compose run -T --rm --no-deps --entrypoint node openclaw \
+    dist/index.js config set models.providers.ai-core "$ai_core_provider_json" --strict-json --replace
+  compose run -T --rm --no-deps --entrypoint node openclaw \
+    dist/index.js models set ai-core/ai-core-agent
+  openclaw_provider_mode=ai-core-scoped
+elif [ "$openclaw_initialized" != "true" ]; then
   openai_key="$(env_value OPENAI_API_KEY)"
   if [ -n "$openai_key" ]; then
     log "Running one-time OpenClaw non-interactive onboarding"
@@ -174,18 +220,18 @@ if [ "$openclaw_initialized" != "true" ]; then
       --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN \
       --skip-channels \
       --no-install-daemon
-
-    log "Applying OpenClaw gateway policy"
-    openclaw_port="$(env_value OPENCLAW_PORT)"
-    openclaw_port="${openclaw_port:-18789}"
-    openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:%s","http://127.0.0.1:%s"]}]' "$openclaw_port" "$openclaw_port")"
-    compose run -T --rm --no-deps --entrypoint node openclaw \
-      dist/index.js config set --batch-json "$openclaw_policy"
     openclaw_provider_mode=configured
   else
     log "OPENAI_API_KEY not present; starting OpenClaw gateway in provider-unconfigured mode"
   fi
 fi
+
+log "Applying OpenClaw gateway policy"
+openclaw_port="$(env_value OPENCLAW_PORT)"
+openclaw_port="${openclaw_port:-18789}"
+openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:%s","http://127.0.0.1:%s"]}]' "$openclaw_port" "$openclaw_port")"
+compose run -T --rm --no-deps --entrypoint node openclaw \
+  dist/index.js config set --batch-json "$openclaw_policy"
 
 log "Starting OpenClaw"
 compose up -d openclaw

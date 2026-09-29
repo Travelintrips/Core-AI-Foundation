@@ -57,10 +57,11 @@ The installer is idempotent. On every run it:
 4. validates and pulls the pinned Compose stack;
 5. initializes Temporal PostgreSQL schemas and the default namespace;
 6. starts Temporal, n8n, and OpenHands;
-7. performs one-time OpenClaw provider onboarding when a provider key is available;
-8. otherwise starts the loopback-only OpenClaw gateway in provider-unconfigured mode;
-9. runs bounded health checks; and
-10. prints `READY` only after every required service endpoint is healthy.
+7. generates a dedicated `AI_CORE_SCOPED_AGENT_TOKEN` when it is missing;
+8. configures OpenHands and OpenClaw to use the scoped AI Core agent runtime;
+9. falls back to direct OpenClaw provider onboarding only when no scoped runtime is available;
+10. runs bounded local and AI Core bridge health checks; and
+11. prints `READY` only after every required service endpoint is healthy.
 
 For a host-managed secret file:
 
@@ -77,22 +78,21 @@ Copy `.env.example` to the protected environment file if you want to prepare
 it manually. Internal database/API secrets may be left empty; the installer
 will generate them.
 
-If `OPENAI_API_KEY` is available on first boot, OpenClaw performs unattended
-provider onboarding using an environment SecretRef. If no provider key is
-present, OpenClaw still starts its loopback-only gateway with
-`--allow-unconfigured`. That keeps the infrastructure online without
-inventing a credential or injecting AI Core's broad admin key. Model/provider
-routing should be attached later through a least-privilege AI Core-compatible
-route.
+`AI_CORE_SCOPED_AGENT_TOKEN` is deliberately separate from `ADMIN_API_KEY`.
+When empty, the installer generates a dedicated random token and never prints
+it. AI Core stores only its SHA-256 hash and authorizes explicit scopes such as
+`model:chat`. Do **not** substitute `ADMIN_API_KEY`.
 
-OpenHands provider configuration is optional at boot. Configure
-`OPENHANDS_LLM_MODEL`, `OPENHANDS_LLM_BASE_URL`, and
-`OPENHANDS_LLM_API_KEY` only for the model path you explicitly want it to use.
+When the scoped token is present, OpenHands is configured automatically with
+`openai/ai-core-agent` and an AI Core OpenAI-compatible base URL. OpenClaw gets
+a custom `ai-core/ai-core-agent` provider whose API key is an environment
+reference to the same scoped token. Provider credentials such as OpenAI and
+Gemini keys stay inside AI Core production and are not mounted into the worker
+containers.
 
-`AI_CORE_SCOPED_AGENT_TOKEN` is deliberately separate from
-`ADMIN_API_KEY`. Leave it empty until AI Core exposes a least-privilege service
-token for the exact worker actions required. Do **not** substitute
-`ADMIN_API_KEY`.
+If the scoped route is deliberately disabled, direct OpenClaw provider
+onboarding remains available as a compatibility fallback. The gateway still
+binds only to loopback on the host.
 
 ## Health checks
 
@@ -103,8 +103,10 @@ AI_WORKERS_ENV_FILE=/etc/ai-core/ai-workers.env \
   bash scripts/ai-workers-healthcheck.sh
 ```
 
-Checks cover Temporal, Temporal UI, n8n, OpenHands, and OpenClaw. The script
-exits non-zero if any required service endpoint is unhealthy.
+Checks cover Temporal, Temporal UI, n8n, OpenHands, and OpenClaw. When a scoped
+agent token is configured, the script also verifies the authenticated AI Core
+agent-runtime bridge without spending model tokens. The script exits non-zero
+if any required service endpoint is unhealthy.
 
 Default local endpoints:
 

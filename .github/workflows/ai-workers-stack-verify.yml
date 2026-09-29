@@ -6,6 +6,7 @@ on:
       - "deploy/ai-workers/**"
       - "scripts/install-ai-workers.sh"
       - "scripts/ai-workers-healthcheck.sh"
+      - "scripts/ai-workers-agent-token-hash.sh"
       - ".github/workflows/ai-workers-stack-verify.yml"
       - ".github/workflows/ai-workers-deploy.yml"
   push:
@@ -15,6 +16,7 @@ on:
       - "deploy/ai-workers/**"
       - "scripts/install-ai-workers.sh"
       - "scripts/ai-workers-healthcheck.sh"
+      - "scripts/ai-workers-agent-token-hash.sh"
       - ".github/workflows/ai-workers-stack-verify.yml"
       - ".github/workflows/ai-workers-deploy.yml"
   workflow_dispatch:
@@ -45,6 +47,7 @@ jobs:
           set -euo pipefail
           bash -n scripts/install-ai-workers.sh
           bash -n scripts/ai-workers-healthcheck.sh
+          bash -n scripts/ai-workers-agent-token-hash.sh
           sh -n deploy/ai-workers/temporal/scripts/setup-postgres.sh
           sh -n deploy/ai-workers/temporal/scripts/create-namespace.sh
 
@@ -94,6 +97,7 @@ jobs:
             N8N_POSTGRES_PASSWORD \
             N8N_ENCRYPTION_KEY \
             OPENHANDS_LOCAL_BACKEND_API_KEY \
+            AI_CORE_SCOPED_AGENT_TOKEN \
             OPENCLAW_GATEWAY_TOKEN
           do
             grep -q "^$key=$" "$file"
