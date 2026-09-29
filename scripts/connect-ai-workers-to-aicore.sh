@@ -40,8 +40,11 @@ compose() {
 }
 
 prepare() {
-  local token token_hash
+  local rotate="${1:-false}" token token_hash
   token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
+  if [ "$rotate" = "true" ]; then
+    token=""
+  fi
   if [ -z "$token" ]; then
     token="$(openssl rand -hex 32)"
     set_env_value AI_CORE_SCOPED_AGENT_TOKEN "$token"
@@ -110,7 +113,8 @@ apply() {
 }
 
 case "$MODE" in
-  prepare) prepare ;;
+  prepare) prepare false ;;
+  rotate) prepare true ;;
   apply) apply ;;
   verify)
     apply
