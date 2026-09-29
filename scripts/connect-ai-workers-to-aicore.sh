@@ -91,6 +91,46 @@ configure_openclaw() {
   compose run -T --rm --no-deps --entrypoint node openclaw     dist/index.js config set agents.defaults.model.primary '"ai-core/ai-core-agent"' --strict-json
 }
 
+# Verification never prepares/rotates tokens, sets configuration, or restarts
+# containers. It does create one diagnostic gateway conversation and may consume
+# a small number of model tokens. No delivery channel is selected.
+verify() {
+  local smoke_timeout="${AI_WORKERS_SMOKE_TIMEOUT_SECONDS:-60}"
+  local smoke_session
+  command -v timeout >/dev/null 2>&1 || fail "GNU timeout is required for bounded model verification"
+  if [[ ! "$smoke_timeout" =~ ^[0-9]{1,3}$ ]]; then
+    fail "AI_WORKERS_SMOKE_TIMEOUT_SECONDS must be an integer from 5 to 120"
+  fi
+  smoke_timeout=$((10#$smoke_timeout))
+  if (( smoke_timeout < 5 || smoke_timeout > 120 )); then
+    fail "AI_WORKERS_SMOKE_TIMEOUT_SECONDS must be an integer from 5 to 120"
+  fi
+
+  AI_WORKERS_ENV_FILE="$ENV_FILE" bash "$SCRIPT_DIR/ai-workers-healthcheck.sh" || \
+    fail "Worker endpoint health failed; gateway model smoke was not run"
+  compose exec -T openclaw node dist/index.js config validate >/dev/null 2>&1 || \
+    fail "OpenClaw configuration validation failed"
+
+  smoke_session="aicore-verify-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 4)"
+  # Execute through the running gateway, not a fresh compose-run container or
+  # the host token. This detects host-health PASS / gateway-auth 401 mismatches.
+  # Discard provider output: it may contain sensitive diagnostic information.
+  if ! timeout --signal=TERM --kill-after=5s "$((smoke_timeout + 15))s" \
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+    exec -T openclaw node dist/index.js agent \
+    --agent main --session-id "$smoke_session" \
+    --message 'Connectivity check only. Reply exactly AICORE_SMOKE_OK. Do not use tools.' \
+    --thinking off --timeout "$smoke_timeout" --json >/dev/null 2>&1; then
+    fail "OpenClaw gateway model smoke failed. Endpoint health alone does not verify model execution. No configuration was changed by verify."
+  fi
+
+  log "openclaw-gateway-model=PASS"
+  log "openhands=HEALTH_ONLY; coding task execution not verified"
+  log "n8n=HEALTH_ONLY; workflow execution not verified"
+  log "temporal=HEALTH_ONLY; application workflow execution not verified"
+  log "worker registration, heartbeat and commit/deploy automation not verified"
+}
+
 apply() {
   local token api_base health_code models_code
   token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
@@ -122,21 +162,14 @@ apply() {
 
   compose run -T --rm --no-deps --entrypoint node openclaw     dist/index.js models list 2>/dev/null | grep -q 'ai-core/ai-core-agent'
 
-  AI_WORKERS_ENV_FILE="$ENV_FILE" bash "$SCRIPT_DIR/ai-workers-healthcheck.sh"
-
-  log "AI Core agent runtime connection=PASS"
-  log "OpenHands -> AI Core model runtime=PASS"
-  log "OpenClaw -> AI Core custom provider=PASS"
-  log "n8n -> AI Core scoped token=PASS"
+  verify
 }
 
 case "$MODE" in
   prepare) prepare false ;;
   rotate) prepare true ;;
   apply) apply ;;
-  verify)
-    apply
-    ;;
+  verify) verify ;;
   *)
     fail "Usage: $0 [prepare|rotate|apply|verify]"
     ;;
