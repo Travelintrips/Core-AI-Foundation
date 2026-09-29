@@ -328,14 +328,19 @@ function normalizePlannerStringList(value: unknown): unknown {
   return value;
 }
 
-function normalizePlannerWorkstreamId(value: unknown, index: number): unknown {
-  if (typeof value !== "string" || !value.trim()) {
-    return `WS-${String(index + 1).padStart(3, "0")}`;
-  }
+function normalizePlannerWorkstreamReference(value: unknown): unknown {
+  if (typeof value !== "string") return value;
   const trimmed = value.trim().toUpperCase();
   const match = /^WS-?([0-9]{1,3})$/.exec(trimmed);
   if (!match) return value;
   return `WS-${match[1]!.padStart(3, "0")}`;
+}
+
+function normalizePlannerWorkstreamId(value: unknown, index: number): unknown {
+  if (typeof value !== "string" || !value.trim()) {
+    return `WS-${String(index + 1).padStart(3, "0")}`;
+  }
+  return normalizePlannerWorkstreamReference(value);
 }
 
 function normalizeGeneratedPlanShape(
@@ -355,11 +360,10 @@ function normalizeGeneratedPlanShape(
         ? Number(item.priority.trim())
         : item.priority;
 
-    const dependencies = Array.isArray(item.dependencies)
-      ? item.dependencies.map((dependency) =>
-          normalizePlannerWorkstreamId(dependency, 0),
-        )
-      : normalizePlannerStringList(item.dependencies);
+    const rawDependencies = normalizePlannerStringList(item.dependencies);
+    const dependencies = Array.isArray(rawDependencies)
+      ? rawDependencies.map(normalizePlannerWorkstreamReference)
+      : rawDependencies;
 
     return {
       id: normalizePlannerWorkstreamId(item.id, index),
