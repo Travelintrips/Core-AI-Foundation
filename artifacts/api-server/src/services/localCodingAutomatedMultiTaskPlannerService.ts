@@ -45,6 +45,10 @@ const AUTO_PLANNER_HOLDER_ID = "ai-core:auto-multi-task-planner";
 const AUTO_PLANNER_LEASE_SECONDS = 300;
 const MAX_PLANNER_WORKSTREAMS = 8;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
+// Planner generations must never occupy a worker for the full generic local
+// coding timeout. A 90s per-target budget gives slow local models time to
+// answer while still allowing the bounded fallback chain to make progress.
+const PLANNER_TARGET_TIMEOUT_MS = 90_000;
 // Rate limits are often brief and deserve bounded retry. Timeouts/unavailable
 // providers must fail over immediately so one unhealthy target cannot consume
 // the entire HTTP/proxy budget.
@@ -870,7 +874,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
         provider: providerSlug,
         model: modelId,
       },
-      timeoutMs: selection.timeoutMs,
+      timeoutMs: Math.min(selection.timeoutMs, PLANNER_TARGET_TIMEOUT_MS),
       maxOutputTokens: selection.maxOutputTokens,
     });
   } catch (error) {
@@ -922,7 +926,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
                 provider: fallbackProviderSlug,
                 model: fallbackModelId,
               },
-              timeoutMs: fallback.selection.timeoutMs,
+              timeoutMs: Math.min(fallback.selection.timeoutMs, PLANNER_TARGET_TIMEOUT_MS),
               maxOutputTokens: fallback.selection.maxOutputTokens,
             });
             selection = fallback.selection;
@@ -1003,7 +1007,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
                   provider: cloudProviderSlug,
                   model: cloudModelId,
                 },
-                timeoutMs: cloudSelection.timeoutMs,
+                timeoutMs: Math.min(cloudSelection.timeoutMs, PLANNER_TARGET_TIMEOUT_MS),
                 maxOutputTokens: cloudSelection.maxOutputTokens,
               });
               selection = cloudSelection;
