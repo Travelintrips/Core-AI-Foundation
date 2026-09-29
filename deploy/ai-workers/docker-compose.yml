@@ -38,7 +38,7 @@ services:
       - temporal-data
       - control
     healthcheck:
-      test: ["CMD-SHELL", "tctl --address 127.0.0.1:7233 cluster health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "temporal operator cluster health --address 127.0.0.1:7233 2>/dev/null | grep -q SERVING"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -96,8 +96,8 @@ services:
       N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
       GENERIC_TIMEZONE: ${TZ:-Asia/Jakarta}
       TZ: ${TZ:-Asia/Jakarta}
-      N8N_HOST: ${N8N_HOST:-}
-      N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
       WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
       AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
       AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
