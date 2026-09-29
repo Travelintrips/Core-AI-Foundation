@@ -128,7 +128,7 @@ verify() {
   log "openhands=HEALTH_ONLY; coding task execution not verified"
   log "n8n=HEALTH_ONLY; workflow execution not verified"
   log "temporal=HEALTH_ONLY; application workflow execution not verified"
-  log "external-agent-registration=PASS; heartbeat=PASS; commit/deploy automation remains separately gated"
+  log "external-agent-registration=PASS; heartbeat=PASS; commit/deploy automation not verified"
 }
 
 apply() {
