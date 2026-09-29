@@ -320,13 +320,88 @@ export function buildAutomatedMultiTaskPlannerPrompt(
   return { system, user };
 }
 
+function normalizePlannerStringList(value: unknown): unknown {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  return value;
+}
+
+function normalizePlannerWorkstreamReference(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim().toUpperCase();
+  const match = /^WS-?([0-9]{1,3})$/.exec(trimmed);
+  if (!match) return value;
+  return `WS-${match[1]!.padStart(3, "0")}`;
+}
+
+function normalizePlannerWorkstreamId(value: unknown, index: number): unknown {
+  if (typeof value !== "string" || !value.trim()) {
+    return `WS-${String(index + 1).padStart(3, "0")}`;
+  }
+  return normalizePlannerWorkstreamReference(value);
+}
+
+function normalizeGeneratedPlanShape(
+  value: unknown,
+  context: AutomatedPlannerContext,
+): unknown {
+  if (!isRecord(value)) return value;
+
+  const rawWorkstreams = Array.isArray(value.workstreams)
+    ? value.workstreams
+    : [];
+  const workstreams = rawWorkstreams.map((item, index) => {
+    if (!isRecord(item)) return item;
+
+    const priority =
+      typeof item.priority === "string" && /^\d+$/.test(item.priority.trim())
+        ? Number(item.priority.trim())
+        : item.priority;
+
+    const rawDependencies = normalizePlannerStringList(item.dependencies);
+    const dependencies = Array.isArray(rawDependencies)
+      ? rawDependencies.map(normalizePlannerWorkstreamReference)
+      : rawDependencies;
+
+    return {
+      id: normalizePlannerWorkstreamId(item.id, index),
+      title: item.title,
+      role: item.role,
+      instruction: item.instruction,
+      dependencies,
+      ownershipPaths: normalizePlannerStringList(item.ownershipPaths),
+      acceptanceCriteria: normalizePlannerStringList(item.acceptanceCriteria),
+      verificationProfiles: normalizePlannerStringList(item.verificationProfiles),
+      priority,
+    };
+  });
+
+  return {
+    version: value.version === "1" ? 1 : value.version,
+    taskId:
+      typeof value.taskId === "string" && value.taskId.trim()
+        ? value.taskId.trim()
+        : context.taskId,
+    objective:
+      typeof value.objective === "string" && value.objective.trim()
+        ? value.objective.trim()
+        : context.instruction.slice(0, 8_000),
+    workstreams,
+  };
+}
+
 export function parseGeneratedCodingMultiTaskPlan(
   rawOutput: string,
   context: AutomatedPlannerContext,
 ): CodingMultiTaskPlanV1 {
   let plan: CodingMultiTaskPlanV1;
   try {
-    plan = validateCodingMultiTaskPlanV1(strictJsonObject(rawOutput));
+    const parsed = strictJsonObject(rawOutput);
+    plan = validateCodingMultiTaskPlanV1(
+      normalizeGeneratedPlanShape(parsed, context),
+    );
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
     throw new AutomatedMultiTaskPlannerError(

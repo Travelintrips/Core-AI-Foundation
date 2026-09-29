@@ -209,6 +209,42 @@ describe("automated multi-task planner", () => {
     ).toEqual(["docs/ollama-local-smoke-test-4.md"]);
   });
 
+  it("normalizes recoverable structured-output drift without weakening semantic validation", () => {
+    const plan = validPlan() as any;
+    plan.version = "1";
+    delete plan.taskId;
+    plan.notes = "model-added prose field";
+    plan.workstreams[0].id = "ws-1";
+    plan.workstreams[0].dependencies = "";
+    plan.workstreams[0].ownershipPaths =
+      "artifacts/api-server/src/services/paymentService.ts";
+    plan.workstreams[0].acceptanceCriteria = "Backend payment tests pass.";
+    plan.workstreams[0].verificationProfiles = "unit_tests";
+    plan.workstreams[0].priority = "90";
+    plan.workstreams[0].rationale = "extra model field";
+    plan.workstreams[1].id = "WS-2";
+
+    const parsed = parseGeneratedCodingMultiTaskPlan(
+      JSON.stringify(plan),
+      context(),
+    );
+
+    expect(parsed.version).toBe(1);
+    expect(parsed.taskId).toBe(TASK_ID);
+    expect(parsed.workstreams[0]).toMatchObject({
+      id: "WS-001",
+      dependencies: [],
+      ownershipPaths: [
+        "artifacts/api-server/src/services/paymentService.ts",
+      ],
+      acceptanceCriteria: ["Backend payment tests pass."],
+      verificationProfiles: ["unit_tests"],
+      priority: 90,
+    });
+    expect(parsed.workstreams[1]?.id).toBe("WS-002");
+    expect("rationale" in (parsed.workstreams[0] as Record<string, unknown>)).toBe(false);
+  });
+
   it("accepts a strict Plan V1 whose ownership is grounded by repository analysis", () => {
     const parsed = parseGeneratedCodingMultiTaskPlan(
       JSON.stringify(validPlan()),
