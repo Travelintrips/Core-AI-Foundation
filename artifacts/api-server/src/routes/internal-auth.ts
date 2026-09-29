@@ -25,7 +25,7 @@ import {
 import { requireAuth } from "../middleware/internalAuth.js";
 import { loginLimiter } from "../middleware/rateLimiter.js";
 import { logAudit } from "../services/aiAuditService.js";
-import { sendEmail } from "../services/emailService.js";
+import { sendEmail, verifyEmailTransport } from "../services/emailService.js";
 
 const router = Router();
 
@@ -120,17 +120,44 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   const generic = { ok: true, message: "Jika akun aktif terdaftar, link login akan dikirim ke email." };
   if (!email) { res.status(400).json({ error: "Email wajib diisi." }); return; }
+
+  // Check SMTP before looking up the account so an outage is reported
+  // consistently and does not disclose whether a particular email exists.
+  const smtp = await verifyEmailTransport();
+  if (!smtp.ok) {
+    await logAudit("internal_auth", "magic_login_email", "smtp", "email", "failure", {
+      reason: "smtp_unavailable",
+      error: smtp.error,
+      ip: clientIp(req),
+    });
+    res.status(503).json({
+      ok: false,
+      error: "Layanan email sedang bermasalah. Silakan coba lagi beberapa saat lagi.",
+    });
+    return;
+  }
+
   const user = await getInternalUserByEmail(email);
   if (!user || user.status !== "active") { res.json(generic); return; }
+
   const token = issueMagicLoginToken(user.id);
   const baseUrl = (process.env["PUBLIC_APP_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
   const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
-  await sendEmail({
+  const sent = await sendEmail({
     to: user.email,
     subject: "Link login Portal AI Internal",
     html: `<p>Klik link berikut untuk login tanpa password:</p><p><a href="${magicUrl}">Login ke Portal AI</a></p><p>Link berlaku 10 menit.</p>`,
     module: "internal_auth", action: "magic_login_email", resourceId: String(user.id),
   });
+
+  if (!sent.ok) {
+    res.status(503).json({
+      ok: false,
+      error: "Layanan email sedang bermasalah. Silakan coba lagi beberapa saat lagi.",
+    });
+    return;
+  }
+
   res.json(generic);
 });
 
