@@ -97,6 +97,32 @@ services:
     networks:
       - control
 
+  temporal-coding-worker:
+    image: ai-core-temporal-coding-worker:1.0.0
+    build:
+      context: .
+      dockerfile: temporal/coding-worker.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_TEMPORAL_CODING_TOKEN: ${AI_CORE_TEMPORAL_CODING_TOKEN:-}
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_CODING_TASK_QUEUE: ${TEMPORAL_CODING_TASK_QUEUE:-ai-core-coding-orchestrator}
+      TEMPORAL_CODING_DISCOVERY_SECONDS: ${TEMPORAL_CODING_DISCOVERY_SECONDS:-5}
+      TEMPORAL_CODING_CYCLE_SECONDS: ${TEMPORAL_CODING_CYCLE_SECONDS:-8}
+      TEMPORAL_CODING_LEASE_SECONDS: ${TEMPORAL_CODING_LEASE_SECONDS:-90}
+    networks:
+      - control
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+
   n8n-db:
     image: postgres:16-alpine
     restart: unless-stopped
