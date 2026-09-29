@@ -237,7 +237,7 @@ async function invokeChatModel(
     ? Math.min(512, selection.maxOutputTokens || 512)
     : Math.min(4_096, selection.maxOutputTokens || 1_600);
   const chatTimeoutMs = localProvider
-    ? Math.min(50_000, selection.timeoutMs)
+    ? Math.min(40_000, selection.timeoutMs)
     : selection.timeoutMs;
 
   const response = await adapter.invoke({

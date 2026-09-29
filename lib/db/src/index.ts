@@ -21,7 +21,7 @@ const poolMax =
   Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
     ? Math.max(1, Math.min(5, Math.floor(configuredPoolMax)))
     : isProduction
-      ? 1
+      ? 3
       : 5;
 
 const poolConfig = {
@@ -31,7 +31,7 @@ const poolConfig = {
   // Supabase's session-pool client limit immediately.
   max: poolMax,
   idleTimeoutMillis: isProduction ? 10_000 : 30_000,
-  connectionTimeoutMillis: 8_000,
+  connectionTimeoutMillis: isProduction ? 3_000 : 8_000,
   application_name: "core-ai-foundation",
   verify: (
     client: { query: (sql: string) => Promise<unknown> },
