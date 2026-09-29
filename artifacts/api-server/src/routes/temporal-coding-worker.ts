@@ -5,6 +5,7 @@ import { renewCodingBridgePresence } from "../services/localCodingControlBridgeS
 import {
   TEMPORAL_CODING_ORCHESTRATOR_CLIENT_ID,
   getAutonomousCodingTaskStatus,
+  getAutonomousRuntimeStatus,
   listActiveAutonomousCodingTasks,
   runAutonomousCodingCycle,
 } from "../services/localCodingAutonomousRepairService.js";
@@ -95,6 +96,11 @@ router.post(
     const id = Uuid.safeParse(req.params["id"]);
     if (!id.success) {
       res.status(400).json({ error: "Invalid task id" });
+      return;
+    }
+
+    if (getAutonomousRuntimeStatus().tickRunning) {
+      res.status(409).json({ error: "Local autonomous tick is still finishing" });
       return;
     }
 
