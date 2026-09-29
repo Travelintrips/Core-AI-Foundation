@@ -19,6 +19,7 @@ import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
 import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
+import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
 
 const app: Express = express();
 
@@ -157,6 +158,10 @@ app.use("/api", remoteOllamaWorkerRouter);
 // one-way hash in ai_platform. Mount before admin auth; these callers never
 // receive or need ADMIN_API_KEY.
 app.use("/api", agentRuntimeRouter);
+
+// GCP Temporal coding orchestrator uses a dedicated scoped token. This route is
+// intentionally mounted before admin auth and accepts only coding:orchestrate.
+app.use("/api", temporalCodingWorkerRouter);
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,

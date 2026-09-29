@@ -9,7 +9,7 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
-import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js";
+import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import { approvePlanAndStartCoding } from "./codingAgentService.js";
 import {
   approveCodingTaskGraph,
@@ -46,6 +46,7 @@ const MIN_INTERVAL_MS = 2_000;
 const MAX_INTERVAL_MS = 60_000;
 const DEFAULT_MAX_CYCLES = 40;
 const MAX_TASKS_PER_TICK = 8;
+export const TEMPORAL_CODING_ORCHESTRATOR_CLIENT_ID = "gcp-temporal-coding-orchestrator";
 
 type AutonomousStatus =
   | "ACTIVE"
@@ -628,6 +629,27 @@ export async function getAutonomousCodingTaskStatus(taskId: string) {
   return result.rows?.[0] ?? null;
 }
 
+export async function listActiveAutonomousCodingTasks(limit = MAX_TASKS_PER_TICK) {
+  await ensureCodingControlBridgeTables();
+  const bounded = Math.max(1, Math.min(50, Math.floor(limit)));
+  const result = await withTransientDatabaseRetry(() => db.execute(sql`
+    SELECT task_id, enabled, status, cycle_count, max_cycles, last_action, last_error, updated_at
+    FROM ai_platform.ai_coding_autonomous_tasks
+    WHERE enabled = TRUE
+      AND status IN ('ACTIVE','WAITING')
+    ORDER BY updated_at ASC
+    LIMIT ${bounded}
+  `), { attempts: 3, baseDelayMs: 250 });
+  return result.rows ?? [];
+}
+
+async function temporalOrchestratorActive(): Promise<boolean> {
+  const availability = await getCodingBridgeAvailability(
+    TEMPORAL_CODING_ORCHESTRATOR_CLIENT_ID,
+  ).catch(() => null);
+  return availability?.state === "ACTIVE";
+}
+
 
 async function recoverOrphanedReadyReviewTasks(): Promise<void> {
   const candidates = await db
@@ -703,6 +725,11 @@ async function autonomousTick(): Promise<void> {
   if (tickRunning) return;
   tickRunning = true;
   try {
+    if (await temporalOrchestratorActive()) {
+      logger.debug("[coding-autonomous] Temporal orchestrator lease active; local tick skipped");
+      return;
+    }
+
     const rows = await withTransientDatabaseRetry(() => db.execute(sql`
       SELECT task_id
       FROM ai_platform.ai_coding_autonomous_tasks
