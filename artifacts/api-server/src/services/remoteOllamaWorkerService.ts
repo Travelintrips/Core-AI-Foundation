@@ -184,7 +184,6 @@ export async function hasRemoteOllamaWorker(modelId: string): Promise<boolean> {
       eq(aiWorkersTable.modelId, modelId),
       inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
       sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
-      sql`${aiWorkersTable.runningJobs} < ${aiWorkersTable.maxConcurrentJobs}`,
     ),
   ).limit(1);
   return Boolean(row);
