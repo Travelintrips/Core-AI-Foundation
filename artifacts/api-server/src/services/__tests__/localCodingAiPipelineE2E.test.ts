@@ -261,17 +261,26 @@ describe("Full constrained AI coding pipeline E2E", () => {
     );
   });
 
-  it("fails closed on fenced or malformed model JSON before policy or patch application", async () => {
+  it("repairs exact fenced JSON but still fails closed on malformed or prose-wrapped JSON", async () => {
     const repo = await createRepositoryFixture();
     const lease = leaseFixture(repo.head);
     const fence = String.fromCharCode(96).repeat(3);
 
-    await expect(
-      runProposal(lease, `${fence}json\n${proposalJson(lease)}\n${fence}`),
-    ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    const repaired = await runProposal(
+      lease,
+      `${fence}json\n${proposalJson(lease)}\n${fence}`,
+    );
+    expect(repaired.proposal.taskId).toBe(lease.package.task.id);
 
     await expect(
       runProposal(lease, "{not-valid-json"),
+    ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+
+    await expect(
+      runProposal(
+        lease,
+        `Here is the proposal:\n${fence}json\n${proposalJson(lease)}\n${fence}`,
+      ),
     ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
 
     expect(await readFile(join(repo.root, "example.ts"), "utf8")).toBe(
