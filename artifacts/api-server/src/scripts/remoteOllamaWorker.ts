@@ -13,7 +13,7 @@ const maxConcurrentJobs = Math.max(
 );
 const invocationTimeoutMs = Math.max(
   10_000,
-  Math.min(50_000, Number(process.env["OLLAMA_REMOTE_INVOCATION_TIMEOUT_MS"] ?? 45_000)),
+  Math.min(300_000, Number(process.env["OLLAMA_REMOTE_INVOCATION_TIMEOUT_MS"] ?? 180_000)),
 );
 const gcpAutoStopEnabled =
   (process.env["GCP_GPU_AUTO_STOP_ENABLED"] ?? "false").trim().toLowerCase() === "true";
