@@ -848,10 +848,20 @@ export async function startCodingOrchestration(
     throw error;
   }
 
-  // Run the CPU-heavy repository analysis in a separate Node process. This
-  // keeps the HTTP API event loop responsive while clone/index/AST work runs.
-  // The child reconstructs the task/run from durable DB state and continues
-  // the same bounded orchestrator pipeline.
+  // In remote mode the API is enqueue-only. A separately supervised CPU worker
+  // polls the durable queue and executes Repository Analyzer work outside the
+  // production API host/resource pool.
+  const analyzerMode = process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase();
+  if (analyzerMode === "remote") {
+    logger.info(
+      { jobId: queuedJob.id, taskId: input.task.id, codingRunId: input.run.id },
+      "[coding-orchestrator] Repository Analyzer queued for remote worker",
+    );
+    return { sessionId };
+  }
+
+  // Backward-compatible local mode keeps existing deployments safe until the
+  // remote worker has been deployed and production explicitly opts in.
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const workerEntry = join(currentDir, "repository-analyzer-worker.mjs");
   const child = spawn(process.execPath, [workerEntry, String(queuedJob.id)], {
