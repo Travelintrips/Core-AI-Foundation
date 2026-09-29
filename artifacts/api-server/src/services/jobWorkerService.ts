@@ -783,8 +783,8 @@ export async function completeJob(
   await db
     .update(aiWorkersTable)
     .set({
-      status:          "idle",
-      currentJob:      null,
+      status:          sql`CASE WHEN GREATEST(running_jobs - 1, 0) = 0 THEN 'idle' ELSE 'busy' END`,
+      currentJob:      sql`CASE WHEN current_job = ${jobId} THEN NULL ELSE current_job END`,
       runningJobs:     sql`GREATEST(running_jobs - 1, 0)`,
       completedToday:  sql`completed_today + 1`,
       averageLatency:  newAvg != null ? String(newAvg) : null,
@@ -938,8 +938,8 @@ export async function retryJob(
   await db
     .update(aiWorkersTable)
     .set({
-      status:       "idle",
-      currentJob:   null,
+      status:       sql`CASE WHEN GREATEST(running_jobs - 1, 0) = 0 THEN 'idle' ELSE 'busy' END`,
+      currentJob:   sql`CASE WHEN current_job = ${jobId} THEN NULL ELSE current_job END`,
       runningJobs:  sql`GREATEST(running_jobs - 1, 0)`,
       failedToday:  sql`failed_today + 1`,
       lastHeartbeat: now,
