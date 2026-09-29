@@ -359,6 +359,34 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
   });
 });
 
+describe("AI coding workspace run status endpoint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSelectLimit.mockResolvedValue([run]);
+  });
+
+  it("returns one bounded run status without loading the full task projection", async () => {
+    const response = await request(app).get(`/ai/coding/tasks/${taskId}/runs/${runId}/status`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: runId,
+      taskId,
+      agentName: "Coding Orchestrator",
+      status: "RUNNING",
+    });
+  });
+
+  it("returns 404 when the run does not exist for the task", async () => {
+    mockSelectLimit.mockResolvedValueOnce([]);
+
+    const response = await request(app).get(`/ai/coding/tasks/${taskId}/runs/${runId}/status`);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "Coding run not found" });
+  });
+});
+
 describe("AI coding workspace run endpoint", () => {
   beforeEach(() => {
     vi.clearAllMocks();
