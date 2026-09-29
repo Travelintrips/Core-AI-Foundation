@@ -392,6 +392,57 @@ describe("automated multi-task planner", () => {
       fallbackUsed: false,
     });
   });
+  it("falls back to a deterministic grounded plan when structured model output is semantically invalid", async () => {
+    const provider = new FakeProvider(
+      JSON.stringify({
+        version: 1,
+        taskId: TASK_ID,
+        objective: "Invalid model plan",
+        workstreams: [
+          {
+            id: "WS-001",
+            title: "Invented ownership",
+            role: "backend",
+            instruction: "Change an ungrounded path.",
+            dependencies: [],
+            ownershipPaths: ["totally-invented-secret-area/**"],
+            acceptanceCriteria: ["Done."],
+            verificationProfiles: [],
+            priority: 50,
+          },
+        ],
+      }),
+    );
+    const adapter = new ConstrainedModelInvocationAdapter(provider);
+
+    const result = await generateCodingMultiTaskPlanWithAdapter({
+      context: context(),
+      adapter,
+      target: {
+        provider: "fake-provider",
+        model: "fake-model",
+      },
+      timeoutMs: 2_000,
+      maxOutputTokens: 2_048,
+      requestId: "planner-deterministic-fallback",
+    });
+
+    expect(result.plan.taskId).toBe(TASK_ID);
+    expect(result.plan.workstreams).toHaveLength(1);
+    expect(result.plan.workstreams[0]).toMatchObject({
+      id: "WS-001",
+      role: "custom",
+      dependencies: [],
+    });
+    expect(result.plan.workstreams[0]!.ownershipPaths).toContain(
+      "artifacts/api-server/src/services/paymentService.ts",
+    );
+    expect(result.plan.workstreams[0]!.ownershipPaths).not.toContain(
+      "totally-invented-secret-area/**",
+    );
+    expect(result.metadata.provider).toBe("fake-provider");
+  });
+
   it("retries bounded transient provider rate limits before succeeding", async () => {
     const provider = new FlakyRateLimitedProvider(JSON.stringify(validPlan()));
     const adapter = new ConstrainedModelInvocationAdapter(provider);

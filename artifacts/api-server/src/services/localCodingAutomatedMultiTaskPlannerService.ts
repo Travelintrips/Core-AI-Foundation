@@ -465,6 +465,53 @@ async function invokePlannerModelWithBoundedRetry(input: {
   throw lastError;
 }
 
+export function buildDeterministicPlannerFallbackPlan(
+  context: AutomatedPlannerContext,
+): CodingMultiTaskPlanV1 {
+  const exactOwnershipPaths = [...new Set([
+    ...explicitRequestedPlannerPaths(context.instruction),
+    ...context.affectedFiles,
+    ...context.relevantFiles,
+    ...context.relatedTests,
+    ...context.filesInspected,
+  ].map((item) => item.trim()).filter(Boolean))].slice(0, 40);
+
+  if (exactOwnershipPaths.length === 0) {
+    throw new AutomatedMultiTaskPlannerError(
+      "Deterministic planner fallback has no grounded ownership path.",
+      "ANALYSIS_REQUIRED",
+    );
+  }
+
+  const plan = validateCodingMultiTaskPlanV1({
+    version: 1,
+    taskId: context.taskId,
+    objective:
+      context.instruction.trim().slice(0, 8_000) ||
+      "Complete the bounded coding task from repository analysis.",
+    workstreams: [
+      {
+        id: "WS-001",
+        title: "Bounded implementation from repository analysis",
+        role: "custom",
+        instruction:
+          context.instruction.trim().slice(0, 6_000) ||
+          "Complete only the bounded change described by repository analysis.",
+        dependencies: [],
+        ownershipPaths: exactOwnershipPaths,
+        acceptanceCriteria: [
+          "Keep all changes inside the approved ownership paths and satisfy the task instruction.",
+        ],
+        verificationProfiles: [],
+        priority: 50,
+      },
+    ],
+  });
+
+  assertGeneratedPlanOwnershipGrounded(plan, context);
+  return plan;
+}
+
 export async function generateCodingMultiTaskPlanWithAdapter(input: {
   context: AutomatedPlannerContext;
   adapter: ConstrainedModelInvocationAdapter;
@@ -593,13 +640,45 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
     );
   }
 
-  return {
-    plan: parseGeneratedCodingMultiTaskPlan(
-      JSON.stringify(response.output.value),
-      input.context,
-    ),
-    metadata: response.metadata,
-  };
+  try {
+    return {
+      plan: parseGeneratedCodingMultiTaskPlan(
+        JSON.stringify(response.output.value),
+        input.context,
+      ),
+      metadata: response.metadata,
+    };
+  } catch (error) {
+    if (
+      !(error instanceof AutomatedMultiTaskPlannerError) ||
+      !["INVALID_PLAN", "UNGROUNDED_OWNERSHIP"].includes(error.code)
+    ) {
+      throw error;
+    }
+
+    const fallbackPlan = buildDeterministicPlannerFallbackPlan(input.context);
+    await logAudit(
+      "automated-multi-task-planner",
+      "structured_output_repaired_deterministically",
+      input.context.taskId,
+      "coding_task",
+      "success",
+      {
+        provider: input.target.provider,
+        model: input.target.model,
+        originalErrorCode: error.code,
+        originalError: error.message.slice(0, 1_000),
+        fallbackWorkstreams: fallbackPlan.workstreams.length,
+        fallbackOwnershipPaths:
+          fallbackPlan.workstreams[0]?.ownershipPaths.length ?? 0,
+      },
+    ).catch(() => undefined);
+
+    return {
+      plan: fallbackPlan,
+      metadata: response.metadata,
+    };
+  }
 }
 
 async function loadAutomatedPlannerContext(
