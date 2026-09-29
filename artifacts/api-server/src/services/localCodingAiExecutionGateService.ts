@@ -301,7 +301,7 @@ export function createConstrainedCodingProviderAdapter(input: {
 
 function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
   const trimmed = rawOutput.trim();
-  const match = /^\`\`\`(?:json)?[\\t ]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\`$/i.exec(trimmed);
+  const match = /^```(?:json)?[\t ]*\r?\n([\s\S]*?)\r?\n```$/i.exec(trimmed);
   if (!match) return rawOutput;
 
   const body = (match[1] ?? "").trim();
