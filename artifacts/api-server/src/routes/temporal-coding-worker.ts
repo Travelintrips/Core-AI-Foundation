@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
-import { renewCodingBridgePresence } from "../services/localCodingControlBridgeService.js";
+import { getCodingBridgeAvailability, renewCodingBridgePresence } from "../services/localCodingControlBridgeService.js";
 import {
   TEMPORAL_CODING_ORCHESTRATOR_CLIENT_ID,
   getAutonomousCodingTaskStatus,
@@ -16,11 +16,16 @@ const Uuid = z.string().uuid();
 router.get(
   "/ai/temporal-coding/health",
   requireAgentServiceScope("coding:orchestrate"),
-  (_req, res) => {
-    res.json({
-      status: "ok",
+  async (_req, res): Promise<void> => {
+    const presence = await getCodingBridgeAvailability(
+      TEMPORAL_CODING_ORCHESTRATOR_CLIENT_ID,
+    );
+    const active = presence.state === "ACTIVE";
+    res.status(active ? 200 : 503).json({
+      status: active ? "ok" : "degraded",
       service: "ai-core-temporal-coding",
       clientId: TEMPORAL_CODING_ORCHESTRATOR_CLIENT_ID,
+      presence,
     });
   },
 );
