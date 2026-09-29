@@ -29,8 +29,11 @@ export async function enqueueCodingMultiTaskPlanner(taskId: string) {
       payloadJson: { taskId },
       priority: 80,
       priorityScore: "80",
-      maxRetry: 1,
-      retryStrategy: "immediate",
+      // Planner execution already has bounded provider retry + fallback.
+      // A queue-level retry would restart the entire 150s planner budget and can
+      // leave production canaries observing a second long-running attempt.
+      maxRetry: 0,
+      retryStrategy: "manual",
       status: "queued",
       retryCount: 0,
     }).returning();

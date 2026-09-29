@@ -49,6 +49,10 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 // coding timeout. A 90s per-target budget gives slow local models time to
 // answer while still allowing the bounded fallback chain to make progress.
 const PLANNER_TARGET_TIMEOUT_MS = 90_000;
+// The complete model-selection/fallback chain must finish well inside the
+// production canary's 180s planner budget. This is a wall-clock budget across
+// primary + local fallback + cloud fallbacks, not a per-provider allowance.
+const PLANNER_TOTAL_MODEL_BUDGET_MS = 150_000;
 // Rate limits are often brief and deserve bounded retry. Timeouts/unavailable
 // providers must fail over immediately so one unhealthy target cannot consume
 // the entire HTTP/proxy budget.
@@ -833,6 +837,22 @@ export async function generateAndPersistCodingMultiTaskPlan(
     );
   }
 
+  const plannerModelDeadline = Date.now() + PLANNER_TOTAL_MODEL_BUDGET_MS;
+  const boundedPlannerTimeout = (configuredTimeoutMs: number): number => {
+    const remainingMs = plannerModelDeadline - Date.now();
+    if (remainingMs <= 0) {
+      throw new AutomatedMultiTaskPlannerError(
+        "Constrained multi-task planner exceeded its total model execution budget.",
+        "MODEL_FAILED",
+        { budgetMs: PLANNER_TOTAL_MODEL_BUDGET_MS },
+      );
+    }
+    return Math.max(
+      1,
+      Math.min(configuredTimeoutMs, PLANNER_TARGET_TIMEOUT_MS, remainingMs),
+    );
+  };
+
   let selection = resolved.selection;
   const providerSlug = String(selection.provider.slug ?? "").toLowerCase();
   const modelId = String(selection.model.modelId ?? "");
@@ -874,7 +894,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
         provider: providerSlug,
         model: modelId,
       },
-      timeoutMs: Math.min(selection.timeoutMs, PLANNER_TARGET_TIMEOUT_MS),
+      timeoutMs: boundedPlannerTimeout(selection.timeoutMs),
       maxOutputTokens: selection.maxOutputTokens,
     });
   } catch (error) {
@@ -926,7 +946,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
                 provider: fallbackProviderSlug,
                 model: fallbackModelId,
               },
-              timeoutMs: Math.min(fallback.selection.timeoutMs, PLANNER_TARGET_TIMEOUT_MS),
+              timeoutMs: boundedPlannerTimeout(fallback.selection.timeoutMs),
               maxOutputTokens: fallback.selection.maxOutputTokens,
             });
             selection = fallback.selection;
@@ -1007,7 +1027,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
                   provider: cloudProviderSlug,
                   model: cloudModelId,
                 },
-                timeoutMs: Math.min(cloudSelection.timeoutMs, PLANNER_TARGET_TIMEOUT_MS),
+                timeoutMs: boundedPlannerTimeout(cloudSelection.timeoutMs),
                 maxOutputTokens: cloudSelection.maxOutputTokens,
               });
               selection = cloudSelection;
