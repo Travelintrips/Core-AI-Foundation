@@ -57,7 +57,9 @@ jobs:
           code=""
           for attempt in $(seq 1 18); do
             rm -f /tmp/health.json /tmp/health.headers
-            code=$(curl --connect-timeout 10 --max-time 20 -sS -D /tmp/health.headers -o /tmp/health.json -w "%{http_code}" "$health_url" || true)
+            code=$(curl --http1.1 --retry 2 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 30 -L --silent --show-error \
+              -D /tmp/health.headers -o /tmp/health.json -w "%{http_code}" "$health_url" || true)
             if [ "$code" = "200" ]; then
               exit 0
             fi
