@@ -6,6 +6,7 @@ const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTransaction = vi.hoisted(() => vi.fn());
 const mockSelectLimit = vi.hoisted(() => vi.fn());
+const mockDbExecute = vi.hoisted(() => vi.fn());
 const mockEnqueue = vi.hoisted(() => vi.fn());
 const mockExecuteRepositoryAnalyzerJobOnDemand = vi.hoisted(() => vi.fn());
 const mockRouteToModel = vi.hoisted(() => vi.fn());
@@ -44,6 +45,7 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...args: unknown[]) => args),
   eq: vi.fn((...args: unknown[]) => args),
   inArray: vi.fn((...args: unknown[]) => args),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })),
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -51,6 +53,7 @@ vi.mock("@workspace/db", () => ({
     insert: vi.fn(() => insertBuilder),
     select: vi.fn(() => selectBuilder),
     update: vi.fn(() => updateBuilder),
+    execute: mockDbExecute,
     transaction: mockTransaction,
   },
   aiCodingRunsTable: { id: "runs.id" },
@@ -130,6 +133,7 @@ describe("Coding Orchestrator", () => {
     mockUpdateWhere.mockResolvedValue([]);
     mockTransaction.mockImplementation((callback: (executor: typeof tx) => unknown) => callback(tx));
     mockSelectLimit.mockResolvedValue([]);
+    mockDbExecute.mockResolvedValue({ rows: [] });
     mockLogAudit.mockResolvedValue(undefined);
     mockSpawn.mockReturnValue({ unref: vi.fn(), once: vi.fn() });
 
@@ -205,6 +209,20 @@ describe("Coding Orchestrator", () => {
       },
       nextAction: "APPROVE_TASK_GRAPH",
     });
+  });
+
+  it("reconciles orphaned analyzer queue rows before enforcing single-flight", async () => {
+    mockDbExecute.mockResolvedValueOnce({ rows: [{ id: 699 }] });
+
+    const started = await startCodingOrchestration({
+      task: task as never,
+      run: run as never,
+    });
+
+    expect(started.sessionId).toBe(`coding-${run.id}`);
+    expect(mockDbExecute).toHaveBeenCalledTimes(1);
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
   });
 
   it("escalates AI_REQUIRED into a PREPARED task graph without coding execution", async () => {
