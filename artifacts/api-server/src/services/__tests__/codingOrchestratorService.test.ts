@@ -9,6 +9,7 @@ const mockSelectLimit = vi.hoisted(() => vi.fn());
 const mockDbExecute = vi.hoisted(() => vi.fn());
 const mockEnqueue = vi.hoisted(() => vi.fn());
 const mockExecuteRepositoryAnalyzerJobOnDemand = vi.hoisted(() => vi.fn());
+const mockFailStaleRepositoryAnalyzerRuns = vi.hoisted(() => vi.fn());
 const mockRouteToModel = vi.hoisted(() => vi.fn());
 const mockGetFallbackModels = vi.hoisted(() => vi.fn());
 const mockExecuteAI = vi.hoisted(() => vi.fn());
@@ -80,6 +81,7 @@ vi.mock("../queueManagerService.js", () => ({
 
 vi.mock("../repositoryAnalyzerService.js", () => ({
   executeRepositoryAnalyzerJobOnDemand: mockExecuteRepositoryAnalyzerJobOnDemand,
+  failStaleRepositoryAnalyzerRuns: mockFailStaleRepositoryAnalyzerRuns,
 }));
 
 vi.mock("../aiModelRouter.js", () => ({
@@ -147,6 +149,7 @@ describe("Coding Orchestrator", () => {
       },
     });
 
+    mockFailStaleRepositoryAnalyzerRuns.mockResolvedValue(0);
     mockExecuteRepositoryAnalyzerJobOnDemand.mockResolvedValue({
       codingTaskId: task.id,
       codingRunId: run.id,
@@ -209,6 +212,19 @@ describe("Coding Orchestrator", () => {
       },
       nextAction: "APPROVE_TASK_GRAPH",
     });
+  });
+
+  it("recovers stale analyzer runs before enforcing single-flight", async () => {
+    mockFailStaleRepositoryAnalyzerRuns.mockResolvedValueOnce(1);
+
+    await startCodingOrchestration({
+      task: task as never,
+      run: run as never,
+    });
+
+    expect(mockFailStaleRepositoryAnalyzerRuns).toHaveBeenCalledTimes(1);
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
   });
 
   it("reconciles orphaned analyzer queue rows before enforcing single-flight", async () => {
