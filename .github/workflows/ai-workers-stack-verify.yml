@@ -29,7 +29,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       TEMPORAL_POSTGRES_PASSWORD: ci-temporal-password
       N8N_POSTGRES_PASSWORD: ci-n8n-password
@@ -45,6 +45,8 @@ jobs:
           set -euo pipefail
           bash -n scripts/install-ai-workers.sh
           bash -n scripts/ai-workers-healthcheck.sh
+          sh -n deploy/ai-workers/temporal/scripts/setup-postgres.sh
+          sh -n deploy/ai-workers/temporal/scripts/create-namespace.sh
 
       - name: Validate Compose model
         run: |
@@ -54,23 +56,31 @@ jobs:
             -f deploy/ai-workers/docker-compose.yml \
             config --quiet
 
+      - name: Verify Temporal image pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker manifest inspect temporalio/server:1.32.0 >/dev/null
+          docker manifest inspect temporalio/admin-tools:1.32.0 >/dev/null
+          docker manifest inspect temporalio/ui:2.54.1 >/dev/null
+
+          file=deploy/ai-workers/docker-compose.yml
+          grep -q 'temporalio/server:' "$file"
+          grep -q 'temporalio/admin-tools:' "$file"
+          ! grep -q 'temporalio/auto-setup:' "$file"
+
       - name: Verify isolation invariants
         shell: bash
         run: |
           set -euo pipefail
           file=deploy/ai-workers/docker-compose.yml
 
-          # Every published service port must be loopback-bound.
           published=$(grep -E '^[[:space:]]+- "127\.0\.0\.1:' "$file" | wc -l)
           test "$published" -ge 5
 
-          # No agent gets direct control of the host Docker daemon.
           ! grep -q '/var/run/docker.sock' "$file"
-
-          # AI Core's broad production admin credential must never enter this stack.
           ! grep -q 'ADMIN_API_KEY' "$file"
 
-          # Database networks remain internal to their respective services.
           grep -A3 '^  temporal-data:' "$file" | grep -q 'internal: true'
           grep -A3 '^  n8n-data:' "$file" | grep -q 'internal: true'
 
@@ -89,11 +99,13 @@ jobs:
             grep -q "^$key=$" "$file"
           done
 
+          grep -q '^TEMPORAL_ADMINTOOLS_VERSION=1.32.0$' "$file"
           ! grep -Eq '^(OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY)=.+$' "$file"
 
       - name: Summary
         run: |
           echo "AI worker stack static verification: PASS"
+          echo "Current Temporal server/admin-tools manifests: PASS"
           echo "Compose interpolation: PASS"
           echo "Loopback-only published ports: PASS"
           echo "No Docker socket mount: PASS"

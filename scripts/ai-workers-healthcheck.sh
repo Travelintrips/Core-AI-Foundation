@@ -45,7 +45,8 @@ wait_http() {
 
   for attempt in $(seq 1 "$attempts"); do
     if [ -n "$header_name" ]; then
-      if curl --fail --silent --show-error --max-time 5         -H "$header_name: $header_value" "$url" >/dev/null 2>&1; then
+      if curl --fail --silent --show-error --max-time 5 \
+        -H "$header_name: $header_value" "$url" >/dev/null 2>&1; then
         log "$name=PASS"
         return 0
       fi
@@ -68,7 +69,8 @@ wait_temporal() {
   local delay="${AI_WORKERS_HEALTH_DELAY_SECONDS:-3}"
 
   for attempt in $(seq 1 "$attempts"); do
-    if compose exec -T temporal       temporal operator cluster health --address 127.0.0.1:7233 2>/dev/null | grep -q SERVING; then
+    if compose run -T --rm --no-deps --entrypoint temporal temporal-admin-tools \
+      operator cluster health --address temporal:7233 2>/dev/null | grep -q SERVING; then
       log "temporal=PASS"
       return 0
     fi
@@ -91,7 +93,8 @@ status=0
 wait_temporal || status=1
 wait_http "temporal-ui" "http://127.0.0.1:${temporal_ui_port}/" || status=1
 wait_http "n8n" "http://127.0.0.1:${n8n_port}/healthz" || status=1
-wait_http "openhands" "http://127.0.0.1:${openhands_port}/server_info"   "X-Session-API-Key" "$openhands_key" || status=1
+wait_http "openhands" "http://127.0.0.1:${openhands_port}/server_info" \
+  "X-Session-API-Key" "$openhands_key" || status=1
 wait_http "openclaw" "http://127.0.0.1:${openclaw_port}/healthz" || status=1
 
 if [ "$status" -ne 0 ]; then
