@@ -11,7 +11,15 @@ export const REMOTE_OLLAMA_CAPABILITY = "ollama_inference";
 export const REMOTE_OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 const PROVIDER = "ollama";
 const MAX_RESULT_CHARS = 256_000;
-const REMOTE_OLLAMA_STALE_RUNNING_MS = 120_000;
+// Model invocations are bounded to 50s in the remote worker. Give completion
+// bookkeeping a small grace window, then recover capacity so abandoned work
+// cannot pin Economy slots indefinitely.
+export const REMOTE_OLLAMA_STALE_RUNNING_MS = 70_000;
+
+// Remote model calls are demand-driven. A failed invocation releases its slot
+// and a later caller creates a fresh job instead of an automatic retry
+// immediately reclaiming scarce GPU capacity.
+export const REMOTE_OLLAMA_MAX_RETRY = 0;
 
 export interface RemoteOllamaInvocationPayload {
   requestId: string;
@@ -202,7 +210,7 @@ export async function enqueueRemoteOllamaInvocation(
     priorityScore: "70",
     status: "queued",
     retryCount: 0,
-    maxRetry: 1,
+    maxRetry: REMOTE_OLLAMA_MAX_RETRY,
     retryStrategy: "immediate",
     createdAt: now,
     updatedAt: now,
@@ -249,20 +257,46 @@ export async function claimRemoteOllamaInvocation(workerId: number): Promise<AiJ
     const row = (raw as unknown as { rows?: Record<string, unknown>[] }).rows?.[0];
     if (!row) return null;
     const job = row as unknown as AiJob;
+    // Capacity admission must be atomic with the job claim. Pending jobs do
+    // not consume a slot; only a worker that still has room may transition a
+    // queued job to running. This also protects against overlapping claim
+    // requests during worker reconnect/restart.
+    const [capacity] = await tx
+      .update(aiWorkersTable)
+      .set({
+        status: "busy",
+        currentJob: job.id,
+        runningJobs: sql`running_jobs + 1`,
+        lastHeartbeat: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(aiWorkersTable.id, workerId),
+          eq(aiWorkersTable.providerSlug, PROVIDER),
+          eq(aiWorkersTable.runtimeKind, REMOTE_OLLAMA_RUNTIME_KIND),
+          inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
+          sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
+          sql`${aiWorkersTable.runningJobs} < ${aiWorkersTable.maxConcurrentJobs}`,
+        ),
+      )
+      .returning({ id: aiWorkersTable.id });
+
+    if (!capacity) return null;
+
     const [claimed] = await tx.update(aiJobsTable).set({
       status: "running",
       startedAt: new Date(),
       payloadJson: sql`jsonb_set(COALESCE(payload_json, '{}'::jsonb), '{_claimedByWorkerId}', to_jsonb(${workerId}::int), true)`,
       updatedAt: new Date(),
     }).where(and(eq(aiJobsTable.id, job.id), inArray(aiJobsTable.status, ["queued", "retrying"]))).returning();
-    if (!claimed) return null;
-    await tx.update(aiWorkersTable).set({
-      status: "busy",
-      currentJob: claimed.id,
-      runningJobs: sql`running_jobs + 1`,
-      lastHeartbeat: new Date(),
-      updatedAt: new Date(),
-    }).where(eq(aiWorkersTable.id, workerId));
+
+    if (!claimed) {
+      // The selected row is locked by this transaction, so this is defensive.
+      // Throwing rolls back the slot reservation rather than leaking capacity.
+      throw new Error("REMOTE_OLLAMA_CLAIM_RACE");
+    }
+
     return claimed;
   });
 }
