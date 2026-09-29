@@ -7,9 +7,19 @@ const modelId = (process.env["OLLAMA_WORKER_MODEL"] ?? "qwen2.5-coder:7b").trim(
 const workerName = (process.env["OLLAMA_WORKER_NAME"] ?? "ollama-windows-worker").trim();
 const nodeId = (process.env["OLLAMA_WORKER_NODE_ID"] ?? workerName).trim();
 const pollMs = Math.max(500, Number(process.env["OLLAMA_REMOTE_POLL_MS"] ?? 1000));
+const maxConcurrentJobs = Math.max(
+  1,
+  Math.min(4, Number(process.env["OLLAMA_WORKER_MAX_CONCURRENCY"] ?? 2)),
+);
 const invocationTimeoutMs = Math.max(
   10_000,
   Math.min(50_000, Number(process.env["OLLAMA_REMOTE_INVOCATION_TIMEOUT_MS"] ?? 45_000)),
+);
+const gcpAutoStopEnabled =
+  (process.env["GCP_GPU_AUTO_STOP_ENABLED"] ?? "false").trim().toLowerCase() === "true";
+const gcpIdleStopMs = Math.max(
+  60_000,
+  Math.min(30 * 60_000, Number(process.env["GCP_GPU_IDLE_STOP_MS"] ?? 300_000)),
 );
 const runSelfTest = process.argv.includes("--self-test");
 const execFileAsync = promisify(execFile);
@@ -40,7 +50,13 @@ async function register(): Promise<{ workerId: number; token: string }> {
       "content-type": "application/json",
       "x-ollama-enrollment-secret": enrollmentSecret,
     },
-    body: JSON.stringify({ workerName, nodeId, modelId, maxConcurrentJobs: 1, region: "windows-local" }),
+    body: JSON.stringify({
+      workerName,
+      nodeId,
+      modelId,
+      maxConcurrentJobs,
+      region: process.env["OLLAMA_WORKER_REGION"] ?? "remote",
+    }),
   }));
   if (!Number.isInteger(data["workerId"]) || typeof data["heartbeatToken"] !== "string") {
     throw new Error("AI Core returned an invalid worker registration");
@@ -245,6 +261,80 @@ async function registerWithRetry(): Promise<{ workerId: number; token: string }>
   }
 }
 
+async function requestGcpSelfStop(): Promise<boolean> {
+  if (!gcpAutoStopEnabled) return false;
+
+  const metadataHeaders = { "Metadata-Flavor": "Google" };
+  const metadataBase = "http://metadata.google.internal/computeMetadata/v1";
+
+  try {
+    const [projectRes, zoneRes, nameRes, tokenRes] = await Promise.all([
+      fetch(metadataBase + "/project/project-id", { headers: metadataHeaders }),
+      fetch(metadataBase + "/instance/zone", { headers: metadataHeaders }),
+      fetch(metadataBase + "/instance/name", { headers: metadataHeaders }),
+      fetch(metadataBase + "/instance/service-accounts/default/token", { headers: metadataHeaders }),
+    ]);
+
+    if (![projectRes, zoneRes, nameRes, tokenRes].every((response) => response.ok)) {
+      throw new Error("GCP metadata is unavailable for auto-stop");
+    }
+
+    const project = (await projectRes.text()).trim();
+    const zone = (await zoneRes.text()).trim().split("/").pop() ?? "";
+    const instance = (await nameRes.text()).trim();
+    const tokenData = await tokenRes.json() as { access_token?: unknown };
+    const token = typeof tokenData.access_token === "string" ? tokenData.access_token : "";
+
+    if (!project || !zone || !instance || !token) {
+      throw new Error("GCP metadata returned incomplete auto-stop identity");
+    }
+
+    const response = await fetch(
+      `https://compute.googleapis.com/compute/v1/projects/${encodeURIComponent(project)}/zones/${encodeURIComponent(zone)}/instances/${encodeURIComponent(instance)}/stop`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`GCP self-stop failed HTTP ${response.status}: ${body.slice(0, 240)}`);
+    }
+
+    console.log(`GCP auto-stop requested after ${Math.round(gcpIdleStopMs / 1000)}s idle`);
+    return true;
+  } catch (error) {
+    console.error("GCP auto-stop request failed:", error);
+    return false;
+  }
+}
+
+async function executeClaimedJob(
+  registration: { workerId: number; token: string },
+  job: Record<string, any>,
+): Promise<void> {
+  const jobId = Number(job["jobId"]);
+  const heartbeatTimer = setInterval(() => {
+    void heartbeat(registration.workerId, registration.token).catch(() => undefined);
+  }, 20_000);
+  heartbeatTimer.unref?.();
+
+  try {
+    const result =
+      job["jobType"] === "ollama_powershell_execution"
+        ? await executePowerShell(job["payload"] ?? {})
+        : await invoke(job["payload"] ?? {});
+    await complete(registration.workerId, registration.token, jobId, result);
+    console.log(`Completed remote Ollama job ${jobId}`);
+  } catch (error) {
+    await retry(registration.workerId, registration.token, jobId, error).catch(() => undefined);
+    console.error(`Remote Ollama job ${jobId} failed:`, error);
+  } finally {
+    clearInterval(heartbeatTimer);
+  }
+}
+
 async function main(): Promise<void> {
   await verifyLocalOllama();
   let registration = await registerWithRetry();
@@ -253,17 +343,28 @@ async function main(): Promise<void> {
     await queueSelfTest(registration.workerId, registration.token);
   }
 
+  const activeJobs = new Set<Promise<void>>();
   let lastHeartbeat = Date.now();
+  let idleSince: number | null = null;
+
   for (;;) {
     try {
       if (Date.now() - lastHeartbeat >= 20_000) {
         await heartbeat(registration.workerId, registration.token);
         lastHeartbeat = Date.now();
       }
+
+      if (activeJobs.size >= maxConcurrentJobs) {
+        idleSince = null;
+        await Promise.race(activeJobs);
+        continue;
+      }
+
       let job: Record<string, any> | null;
       try {
         job = await claim(registration.workerId, registration.token);
       } catch (error) {
+        idleSince = null;
         const code = (error as Error & { code?: string }).code;
         if (code === "CLAIM_TEMPORARILY_UNAVAILABLE") {
           console.error("Remote Ollama claim temporarily unavailable; keeping worker registration and retrying in 5s:", error);
@@ -272,30 +373,35 @@ async function main(): Promise<void> {
         }
         throw error;
       }
+
       if (!job) {
+        if (activeJobs.size === 0) {
+          idleSince ??= Date.now();
+          if (
+            gcpAutoStopEnabled &&
+            Date.now() - idleSince >= gcpIdleStopMs
+          ) {
+            const requested = await requestGcpSelfStop();
+            idleSince = requested ? null : Date.now();
+            if (requested) {
+              await new Promise((resolve) => setTimeout(resolve, 30_000));
+            }
+          }
+        } else {
+          idleSince = null;
+        }
         await new Promise((resolve) => setTimeout(resolve, pollMs));
         continue;
       }
 
-      const jobId = Number(job["jobId"]);
-      const heartbeatTimer = setInterval(() => {
-        void heartbeat(registration.workerId, registration.token).catch(() => undefined);
-      }, 20_000);
-      heartbeatTimer.unref?.();
-      try {
-        const result =
-          job["jobType"] === "ollama_powershell_execution"
-            ? await executePowerShell(job["payload"] ?? {})
-            : await invoke(job["payload"] ?? {});
-        await complete(registration.workerId, registration.token, jobId, result);
-        console.log(`Completed remote Ollama job ${jobId}`);
-      } catch (error) {
-        await retry(registration.workerId, registration.token, jobId, error).catch(() => undefined);
-        console.error(`Remote Ollama job ${jobId} failed:`, error);
-      } finally {
-        clearInterval(heartbeatTimer);
-      }
+      idleSince = null;
+      let execution!: Promise<void>;
+      execution = executeClaimedJob(registration, job).finally(() => {
+        activeJobs.delete(execution);
+      });
+      activeJobs.add(execution);
     } catch (error) {
+      idleSince = null;
       console.error("Remote Ollama worker loop error:", error);
       await new Promise((resolve) => setTimeout(resolve, 5_000));
       registration = await registerWithRetry();
@@ -303,7 +409,6 @@ async function main(): Promise<void> {
     }
   }
 }
-
 void main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
