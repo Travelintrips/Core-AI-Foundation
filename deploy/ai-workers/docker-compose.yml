@@ -114,6 +114,7 @@ services:
   openhands:
     image: ghcr.io/openhands/agent-canvas:${OPENHANDS_VERSION:-1.24.0}
     restart: unless-stopped
+    init: true
     environment:
       LOCAL_BACKEND_API_KEY: ${OPENHANDS_LOCAL_BACKEND_API_KEY:?set OPENHANDS_LOCAL_BACKEND_API_KEY}
       LLM_MODEL: ${OPENHANDS_LLM_MODEL:-}
