@@ -1,6 +1,13 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { aiJobsTable, aiWorkersTable, db, type AiJob, type AiWorker } from "@workspace/db";
+import {
+  aiJobsTable,
+  aiWorkersTable,
+  db,
+  withTransientDatabaseRetry,
+  type AiJob,
+  type AiWorker,
+} from "@workspace/db";
 import { registerWorker, renewLease, DEFAULT_LEASE_TTL_MS } from "./workerClusterService.js";
 import { completeJob, retryJob, JobOwnershipLostError } from "./jobWorkerService.js";
 
@@ -11,10 +18,10 @@ export const REMOTE_OLLAMA_CAPABILITY = "ollama_inference";
 export const REMOTE_OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 const PROVIDER = "ollama";
 const MAX_RESULT_CHARS = 256_000;
-// Model invocations are bounded to 50s in the remote worker. Give completion
-// bookkeeping a small grace window, then recover capacity so abandoned work
-// cannot pin Economy slots indefinitely.
-export const REMOTE_OLLAMA_STALE_RUNNING_MS = 70_000;
+// Remote model invocations can run for up to 300s. Give completion bookkeeping
+// an additional grace window before recovering capacity so healthy long-running
+// jobs are never reclaimed while the worker is still legitimately executing.
+export const REMOTE_OLLAMA_STALE_RUNNING_MS = 360_000;
 
 // Remote model calls are demand-driven. A failed invocation releases its slot
 // and a later caller creates a fresh job instead of an automatic retry
@@ -104,7 +111,10 @@ export async function authenticateRemoteOllamaWorker(
   token: string | undefined,
 ): Promise<AiWorker | null> {
   if (!token) return null;
-  const [worker] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
+  const [worker] = await withTransientDatabaseRetry(
+    () => db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId)),
+    { attempts: 3, baseDelayMs: 200 },
+  );
   if (
     !worker ||
     worker.providerSlug !== PROVIDER ||
