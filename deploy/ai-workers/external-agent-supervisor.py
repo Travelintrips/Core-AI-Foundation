@@ -106,9 +106,9 @@ def run_openhands(work):
                 "is_subscription": False,
             },
             "tools": [
-                {"name": "TerminalTool", "params": {}},
-                {"name": "FileEditorTool", "params": {}},
-                {"name": "TaskTrackerTool", "params": {}},
+                {"name": "terminal", "params": {}},
+                {"name": "file_editor", "params": {}},
+                {"name": "task_tracker", "params": {}},
             ],
             "agent_context": {
                 "system_message_suffix": (
