@@ -114,6 +114,7 @@ function routeLabel(route?: string | null): string {
   if (route === "STREAMING") return "Streaming…";
   if (route === "NO_LLM") return "0 token";
   if (route === "DATA_TOOL") return "Data Tool · 0 token";
+  if (route === "ADMIN_DB_QUERY") return "Admin DB · read-only";
   if (route === "LOCAL") return "Local AI";
   if (route === "CLOUD") return "Cloud";
   if (route === "CLOUD_FALLBACK") return "Cloud fallback";
