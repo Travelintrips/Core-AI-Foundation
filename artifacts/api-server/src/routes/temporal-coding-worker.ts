@@ -105,7 +105,11 @@ router.post(
     }
 
     if (getAutonomousRuntimeStatus().tickRunning) {
-      res.status(409).json({ error: "Local autonomous tick is still finishing" });
+      res.status(200).json({
+        taskId: id.data,
+        status: "WAITING",
+        action: "LOCAL_TICK_DRAINING",
+      });
       return;
     }
 
