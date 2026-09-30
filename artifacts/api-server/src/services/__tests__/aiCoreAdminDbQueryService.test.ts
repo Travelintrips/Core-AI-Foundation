@@ -446,6 +446,28 @@ describe("AI Core admin database query service", () => {
     expect(renderAdminSemanticQueryResult(result!).replace(/\s/g, "")).toContain("Rp480.000");
   });
 
+  it("prefers the canonical Sport Center facility catalog over compatibility tables", async () => {
+    const facilityColumns = (schema: string, table: string) => [
+      { table_schema: schema, table_name: table, column_name: "id", data_type: "integer", udt_name: "int4", ordinal_position: 1 },
+      { table_schema: schema, table_name: table, column_name: "name", data_type: "text", udt_name: "text", ordinal_position: 2 },
+      { table_schema: schema, table_name: table, column_name: "is_active", data_type: "boolean", udt_name: "bool", ordinal_position: 3 },
+    ];
+    mocks.execute.mockResolvedValueOnce({ rows: [
+      ...facilityColumns("sport_center", "sport_center_facilities"),
+      ...facilityColumns("sport_center", "sport_facilities"),
+    ] });
+    for (let index = 0; index < 4; index++) mocks.txExecute.mockResolvedValueOnce({ rows: [] });
+    mocks.txExecute.mockResolvedValueOnce({ rows: [{ value: "10", matched_rows: "10" }] });
+
+    const result = await executeAdminSemanticQuery("berapa banyak fasilitas sport center");
+
+    expect(result).toMatchObject({
+      sourceTable: "sport_center.sport_facilities",
+      matchedRows: 10,
+    });
+    expect(result?.rows[0]?.value).toBe("10");
+  });
+
   it("does not count pending payments when no successful status is present", async () => {
     mocks.execute.mockResolvedValueOnce({ rows: paymentMetadata() });
     aggregateResponses(mocks.txExecute, ["pending", "cancelled"], "0", "0");
