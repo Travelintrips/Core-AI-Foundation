@@ -113,6 +113,9 @@ const EXPLANATION_ONLY =
 const MUTATION =
   /\b(insert|update|delete|merge|upsert|alter|drop|truncate|create|grant|revoke|comment|vacuum|analyze|refresh|reindex|cluster|copy|call|do|set\s+role|reset\s+role)\b/i;
 
+const AI_RUNTIME_INVENTORY =
+  /\b(agent(?:\s+ai)?|worker|model|provider|runtime|openclaw|openhands|n8n|temporal|ollama|gemini)\b/i;
+
 const DANGEROUS_READ =
   /\b(pg_sleep|pg_read_file|pg_read_binary_file|pg_ls_dir|lo_export|lo_import|dblink|postgres_fdw|file_fdw|program\b|for\s+update|for\s+share|lock\s+table)\b/i;
 
@@ -389,7 +392,7 @@ export function extractAdminDbSemanticIntent(
   context: AdminDbConversationMessage[] = [],
 ): AdminDbSemanticIntent | null {
   const value = message.trim();
-  if (!value || extractExplicitReadOnlySql(value) || MUTATION.test(value) || EXPLANATION_ONLY.test(value)) return null;
+  if (!value || extractExplicitReadOnlySql(value) || MUTATION.test(value) || EXPLANATION_ONLY.test(value) || AI_RUNTIME_INVENTORY.test(value)) return null;
 
   const current = semanticParts(value);
   let metric = current.metric;

@@ -39,7 +39,7 @@ const REPOSITORY_READONLY_CONTEXT =
 export function isAiCoreCapabilityQuery(message: string): boolean {
   const value = message.trim().toLowerCase();
   if (!value) return false;
-  return /(?:\bkemampuan\b|\bkapabilitas\b|\bcapabilit(?:y|ies)\b|\banda\s+bisa\s+apa\b|\bapa\s+(?:saja\s+)?yang\s+(?:bisa|dapat)\s+(?:anda|kamu|ai\s+core)\b|\b(?:apakah\s+)?(?:sekarang\s+)?(?:anda|kamu|ai\s+core)?\s*(?:sudah\s+)?(?:bisa|dapat)\s+(?:langsung\s+)?(?:akses|mencari|query|membaca|melihat)\s+(?:ke\s+|di\s+|dari\s+)?(?:database|db)\b|\b(?:bisa|dapat)\s+(?:akses|query)\s+(?:database|db)\b)/i.test(value);
+  return /(?:\bkemampuan\b|\bkapabilitas\b|\bcapabilit(?:y|ies)\b|\banda\s+bisa\s+apa\b|\bapa\s+(?:saja\s+)?yang\s+(?:bisa|dapat)\s+(?:anda|kamu|ai\s+core)\b|\b(?:apakah\s+)?(?:sekarang\s+)?(?:anda|kamu|ai\s+core)?\s*(?:sudah\s+)?(?:bisa|dapat)\s+(?:langsung\s+)?(?:akses|mencari|query|membaca|melihat)\s+(?:ke\s+|di\s+|dari\s+)?(?:database|db)\b|\b(?:bisa|dapat)\s+(?:akses|query)\s+(?:database|db)\b|\b(?:agent(?:\s+ai)?|worker|model|provider)\s+(?:apa(?:\s+saja)?|mana|yang\s+mana)\s+(?:yang\s+)?(?:sudah\s+)?(?:terpasang|terinstall|terinstal|installed|aktif|online|tersedia)\b|\b(?:apa(?:\s+saja)?|daftar|list)\s+(?:agent(?:\s+ai)?|worker|model|provider)\s+(?:yang\s+)?(?:sudah\s+)?(?:terpasang|terinstall|terinstal|installed|aktif|online|tersedia)\b)/i.test(value);
 }
 
 export function detectRemoteWorkerPreset(
