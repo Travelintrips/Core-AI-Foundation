@@ -604,16 +604,18 @@ async function deterministicReply(
       reply:
         "AI Core Chat adalah satu pintu otomatis untuk bertanya sekaligus memberi perintah. Kemampuan saya saat ini:\n\n" +
         "1. **Menjawab & menganalisis** — menjelaskan konsep, status sistem, troubleshooting, perbandingan, dan reasoning.\n" +
-        "2. **Memeriksa secara read-only** — cek/review repository, build, test, diff, log, konfigurasi, dan validasi melalui trusted read-only worker tanpa membuat coding task.\n" +
-        "3. **Menjalankan pekerjaan coding** — perintah seperti perbaiki, implementasikan, ubah kode, buat test, commit, atau push otomatis masuk Coding Orchestrator.\n" +
-        "4. **Membagi pekerjaan** — Coding Orchestrator dapat memecah pekerjaan menjadi beberapa workstream/child task, memberi ownership path, dependency, dan menjalankan worker paralel bila diperlukan.\n" +
-        "5. **Menggunakan control plane** — pekerjaan dapat diteruskan ke worker/agent yang sesuai dan dipantau melalui task/run resmi.\n" +
-        "6. **Menjaga approval gate** — merge, deploy production, migrasi/drop database, restart production, perubahan security, dan rotasi secret tetap berhenti pada approval eksplisit.\n\n" +
+        "2. **Mencari database admin secara langsung** — pencarian data natural-language dapat membaca schema/tabel aplikasi secara dinamis dan menjalankan query read-only tanpa allowlist entitas; query kompleks dipetakan ke SELECT/WITH, hasil sensitif seperti token/secret tetap disamarkan.\n" +
+        "3. **Memeriksa secara read-only** — cek/review repository, build, test, diff, log, konfigurasi, dan validasi melalui trusted read-only worker tanpa membuat coding task.\n" +
+        "4. **Menjalankan pekerjaan coding** — perintah seperti perbaiki, implementasikan, ubah kode, buat test, commit, atau push otomatis masuk Coding Orchestrator.\n" +
+        "5. **Membagi pekerjaan** — Coding Orchestrator dapat memecah pekerjaan menjadi beberapa workstream/child task, memberi ownership path, dependency, dan menjalankan worker paralel bila diperlukan.\n" +
+        "6. **Menggunakan control plane** — pekerjaan dapat diteruskan ke worker/agent yang sesuai dan dipantau melalui task/run resmi.\n" +
+        "7. **Menjaga approval gate** — merge, deploy production, migrasi/drop database, restart production, perubahan security, dan rotasi secret tetap berhenti pada approval eksplisit.\n\n" +
         "Jadi saya **bukan hanya asisten yang memberi saran**: dari chat yang sama saya dapat membedakan pertanyaan, pemeriksaan, coding, dan tindakan kritis lalu merutekannya ke jalur yang sesuai. Yang tidak saya lakukan adalah membuka/menampilkan secret atau melewati approval gate.",
       capabilities: {
         autoRouting: true,
         answer: true,
         readonlyInspection: true,
+        adminDatabaseRead: true,
         codingExecution: true,
         workstreamDelegation: true,
         criticalApprovalRequired: true,
