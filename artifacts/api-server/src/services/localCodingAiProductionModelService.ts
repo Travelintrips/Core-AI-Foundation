@@ -1,6 +1,7 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
+import { getActiveProviderRuntimeCircuit } from "./providerRuntimeCircuitService.js";
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -161,6 +162,7 @@ function isCodingCapable(row: ModelWithProvider): boolean {
 
 
 export function isProviderHealthyForCoding(row: ModelWithProvider): boolean {
+  if (getActiveProviderRuntimeCircuit(row.provider.metadata)) return false;
   const failures = Number(row.provider.consecutiveFailures ?? 0);
   return !Number.isFinite(failures) || failures <= 0;
 }

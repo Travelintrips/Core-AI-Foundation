@@ -50,6 +50,7 @@ function row(
       isActive: true,
       baseUrl: null,
       consecutiveFailures: 0,
+      metadata: null,
     },
     model: {
       id: 1,
@@ -208,6 +209,39 @@ describe("Production constrained coding model resolution", () => {
   });
 
 
+
+  it("excludes a provider while a runtime invocation circuit is open", async () => {
+    const blockedGoogle = row("google", "gemini-code", ["code", "reasoning"]);
+    blockedGoogle.provider.metadata = {
+      runtimeCircuit: {
+        reason: "AUTH",
+        openedAt: new Date(Date.now() - 1_000).toISOString(),
+        openUntil: new Date(Date.now() + 60_000).toISOString(),
+        lastError: "Gemini authentication failed.",
+      },
+    };
+    mocks.models.push(
+      blockedGoogle,
+      row("anthropic", "claude-code", ["code"]),
+    );
+    mocks.keys.set("google", "secret");
+    mocks.keys.set("anthropic", "secret");
+
+    const result = await resolveProductionCodingModel({
+      providerAllowlist: ["google", "anthropic"],
+      modelAllowlist: [],
+      timeoutMs: 45_000,
+      maxOutputTokens: 4_096,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      selection: {
+        provider: { slug: "anthropic" },
+        model: { modelId: "claude-code" },
+      },
+    });
+  });
 
   it("excludes a provider with an active health-check failure from primary coding selection", async () => {
     const unhealthyGoogle = row("google", "gemini-code", ["code", "reasoning"]);

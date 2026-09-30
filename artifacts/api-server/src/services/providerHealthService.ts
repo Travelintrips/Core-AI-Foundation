@@ -9,6 +9,7 @@
 import { eq, lt, and } from "drizzle-orm";
 import { db, aiProvidersTable, aiProviderHealthLogsTable } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
+import { getActiveProviderRuntimeCircuit } from "./providerRuntimeCircuitService.js";
 
 // ── Ping ─────────────────────────────────────────────────────────────────────
 
@@ -145,8 +146,21 @@ export async function runHealthCheck(id: number): Promise<HealthCheckResult> {
     };
   }
 
-  const ping = await pingProvider(provider.slug, provider.baseUrl, apiKey);
-  const newFailures = ping.ok ? 0 : (provider.consecutiveFailures ?? 0) + 1;
+  const runtimeCircuit = getActiveProviderRuntimeCircuit(
+    provider.metadata,
+    now.getTime(),
+  );
+  const ping = runtimeCircuit
+    ? {
+        ok: false,
+        httpStatus: 0,
+        error:
+          `Recent runtime invocation failure (${runtimeCircuit.reason}); provider is cooling down until ${runtimeCircuit.openUntil}.`,
+      }
+    : await pingProvider(provider.slug, provider.baseUrl, apiKey);
+  const newFailures = ping.ok
+    ? 0
+    : Math.max(1, (provider.consecutiveFailures ?? 0) + 1);
   const lastSuccessAt = ping.ok ? now : (provider.lastSuccessAt ?? null);
 
   await db

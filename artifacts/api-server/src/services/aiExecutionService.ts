@@ -2,6 +2,7 @@ import { getProviderApiKey } from "./aiSecretService.js";
 import { logExecutionSafe, type ObservabilityContext } from "./observabilityService.js";
 import { readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 import { readOllamaLocalConfig } from "./ollamaLocalService.js";
+import { recordProviderRuntimeFailure } from "./providerRuntimeCircuitService.js";
 
 export type { ObservabilityContext };
 
@@ -611,6 +612,9 @@ async function executeAIInternal(
         );
     }
   } catch (err) {
+    if (!localProvider) {
+      await recordProviderRuntimeFailure(input.provider.slug, err).catch(() => false);
+    }
     if (input.observability) {
       logExecutionSafe({
         ...input.observability,
