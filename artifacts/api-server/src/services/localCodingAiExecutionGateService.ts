@@ -301,12 +301,25 @@ export function createConstrainedCodingProviderAdapter(input: {
 
 function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
   const trimmed = rawOutput.trim();
-  const match = /^```(?:json)?[\t ]*\r?\n([\s\S]*?)\r?\n```$/i.exec(trimmed);
-  if (!match) return rawOutput;
+  const fenced = /^```(?:json)?[\t ]*(?:\r?\n)?([\s\S]*?)(?:\r?\n)?```$/i.exec(trimmed);
+  const candidate = (fenced?.[1] ?? trimmed).trim();
 
-  const body = (match[1] ?? "").trim();
-  if (!body.startsWith("{") || !body.endsWith("}")) return rawOutput;
-  return body;
+  if (candidate.startsWith("{") && candidate.endsWith("}")) return candidate;
+
+  // Bounded recovery for a provider preface/suffix around one JSON object.
+  // The extracted object still must pass Proposal Contract V1 binding and policy validation.
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    const extracted = candidate.slice(start, end + 1).trim();
+    try {
+      JSON.parse(extracted);
+      return extracted;
+    } catch {
+      return rawOutput;
+    }
+  }
+  return rawOutput;
 }
 
 export async function invokeConstrainedAiProposal(input: {
@@ -353,9 +366,7 @@ export async function invokeConstrainedAiProposal(input: {
 
     try {
       const proposal = parseLocalCodingAiProposalV1(
-        attempt === 2
-          ? normalizeBoundedSchemaRepairOutput(response.output.text)
-          : response.output.text,
+        normalizeBoundedSchemaRepairOutput(response.output.text),
         binding,
       );
       return { proposal, metadata: response.metadata };
