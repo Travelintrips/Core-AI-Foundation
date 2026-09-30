@@ -52,6 +52,29 @@ async function ensureInternal(): Promise<void> {
   `);
 
   const tokenHash = workerTokenHash();
+
+  // Keep an existing canonical row aligned when the configured worker token is
+  // rotated, but never overwrite another row that already owns the new hash.
+  await db.execute(sql`
+    UPDATE ai_platform.ai_agent_service_tokens AS token
+    SET token_hash = ${tokenHash},
+        scopes = ARRAY['model:chat','agent:presence','agent:work']::text[],
+        is_active = TRUE,
+        expires_at = NULL,
+        metadata = token.metadata || '{"source":"gcp-ai-workers-bootstrap"}'::jsonb,
+        updated_at = NOW()
+    WHERE token.name = ${WORKER_TOKEN_NAME}
+      AND token.token_hash <> ${tokenHash}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ai_platform.ai_agent_service_tokens AS existing
+        WHERE existing.token_hash = ${tokenHash}
+      )
+  `);
+
+  // The same scoped token can already exist under the legacy ai-workers stack
+  // name. The credential hash is the stable identity, so make bootstrap
+  // idempotent on token_hash instead of failing on a second descriptive name.
   await db.execute(sql`
     INSERT INTO ai_platform.ai_agent_service_tokens (
       name, token_hash, scopes, is_active, metadata, created_at, updated_at
@@ -65,12 +88,12 @@ async function ensureInternal(): Promise<void> {
       NOW(),
       NOW()
     )
-    ON CONFLICT (name) DO UPDATE
-      SET token_hash = EXCLUDED.token_hash,
-          scopes = EXCLUDED.scopes,
+    ON CONFLICT (token_hash) DO UPDATE
+      SET scopes = EXCLUDED.scopes,
           is_active = TRUE,
           expires_at = NULL,
-          metadata = EXCLUDED.metadata,
+          metadata =
+            ai_agent_service_tokens.metadata || EXCLUDED.metadata,
           updated_at = NOW()
   `);
 
