@@ -70,7 +70,7 @@ describe("AI Core Chat automatic dispatch", () => {
 
   it("routes explicit bounded OpenClaw delegation to the external-agent queue", () => {
     const decision = classifyAiCoreChatDispatch(
-      "Gunakan OpenClaw untuk memeriksa status integrasi ini.",
+      "Gunakan OpenClaw untuk koordinasikan pemeriksaan integrasi ini.",
     );
 
     expect(decision.kind).toBe("EXTERNAL_AGENT");
