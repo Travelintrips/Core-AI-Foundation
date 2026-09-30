@@ -696,7 +696,7 @@ async function recoverOrphanedReadyReviewTasks(): Promise<void> {
       const cycleCount = Number(row.cycle_count ?? 0);
       const maxCycles = Number(row.max_cycles ?? DEFAULT_MAX_CYCLES);
       if (
-        ["FAILED", "BLOCKED", "DISABLED"].includes(String(row.status ?? "")) &&
+        ["FAILED", "BLOCKED"].includes(String(row.status ?? "")) &&
         cycleCount < maxCycles
       ) {
         await db.execute(sql`
