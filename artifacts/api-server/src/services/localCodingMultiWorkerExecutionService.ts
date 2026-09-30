@@ -160,9 +160,10 @@ function globToRegExp(pattern: string): RegExp {
 }
 
 export function codingWorkstreamOwnsFile(
-  filePath: string,
-  ownershipPaths: string[],
+  filePath: unknown,
+  ownershipPaths: unknown[],
 ): boolean {
+  if (typeof filePath !== "string") return false;
   const normalized = filePath.replace(/\\/g, "/").replace(/^\.\//, "");
   if (
     !normalized ||
@@ -174,6 +175,7 @@ export function codingWorkstreamOwnsFile(
   }
 
   return ownershipPaths.some((raw) => {
+    if (typeof raw !== "string") return false;
     const pattern = raw.replace(/\\/g, "/").replace(/\/+$/, "");
     if (!pattern) return false;
     if (!/[?*]/.test(pattern)) {
