@@ -2,6 +2,7 @@ import { Router } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { aiClientMemoryTable, db } from "@workspace/db";
+import { redactLearningText } from "../services/aiCoreChatLearningService.js";
 
 const router = Router();
 
@@ -49,13 +50,14 @@ router.post("/ai/client-memory", async (req, res): Promise<void> => {
     .insert(aiClientMemoryTable)
     .values({
       ...parsed.data,
+      value: redactLearningText(parsed.data.value),
       confidence,
       metadata: parsed.data.metadata ?? {},
     })
     .onConflictDoUpdate({
       target: [aiClientMemoryTable.clientId, aiClientMemoryTable.key],
       set: {
-        value: parsed.data.value,
+        value: redactLearningText(parsed.data.value),
         valueType: parsed.data.valueType,
         category: parsed.data.category ?? null,
         source: parsed.data.source,
