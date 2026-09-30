@@ -88,6 +88,12 @@ import {
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
 import { deactivateRegisteredModel } from "../services/aiModelService.js";
 import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
+import {
+  appendLearningsToMessage,
+  promoteExplicitChatLearning,
+  recordChatLearningEvent,
+  retrieveChatLearnings,
+} from "../services/aiCoreChatLearningService.js";
 
 const router = Router();
 
@@ -99,6 +105,7 @@ const ChatRequest = z.object({
   repository: z.string().trim().min(1).max(500).optional(),
   branch: z.string().trim().min(1).max(200).optional(),
   priority: z.number().int().min(0).max(100).optional(),
+  conversationId: z.string().trim().min(1).max(200).optional(),
   context: z.array(
     z.object({
       role: z.enum(["user", "assistant"]),
@@ -1765,25 +1772,62 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   }
 
   try {
+    const scope = {
+      sessionId: parsed.data.conversationId ?? null,
+      projectName: parsed.data.projectName ?? null,
+      repository: parsed.data.repository ?? null,
+      branch: parsed.data.branch ?? null,
+    };
+    await recordChatLearningEvent({
+      role: "user",
+      content: parsed.data.message,
+      scope,
+      metadata: { mode: parsed.data.mode, modelPolicy: parsed.data.modelPolicy },
+    }).catch(() => undefined);
+    await promoteExplicitChatLearning(parsed.data.message, scope).catch(() => false);
+
+    const learnings = await retrieveChatLearnings(scope).catch(() => []);
+    const effectiveInput = {
+      ...parsed.data,
+      message: appendLearningsToMessage(parsed.data.message, learnings),
+    };
+
     const result =
-      parsed.data.mode === "agent"
-        ? (await runAdminDbMutationOperation(parsed.data.message)) ??
-          (await runInfrastructureOperation(parsed.data.message)) ??
-          (classifyAiCoreChatDispatch(parsed.data.message).kind === "EXTERNAL_AGENT"
+      effectiveInput.mode === "agent"
+        ? (await runAdminDbMutationOperation(effectiveInput.message)) ??
+          (await runInfrastructureOperation(effectiveInput.message)) ??
+          (classifyAiCoreChatDispatch(effectiveInput.message).kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
-                parsed.data,
-                classifyAiCoreChatDispatch(parsed.data.message).externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
+                effectiveInput,
+                classifyAiCoreChatDispatch(effectiveInput.message).externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
               )
             : null) ??
-          (await maybeRunRemoteWorkerPreset(parsed.data)) ??
-          await startAgentTask(parsed.data)
-        : parsed.data.mode === "ask"
+          (await maybeRunRemoteWorkerPreset(effectiveInput)) ??
+          await startAgentTask(effectiveInput)
+        : effectiveInput.mode === "ask"
           ? await answerAskMode(
-              parsed.data.message,
-              parsed.data.modelPolicy,
-              parsed.data.context ?? [],
+              effectiveInput.message,
+              effectiveInput.modelPolicy,
+              effectiveInput.context ?? [],
             )
-          : await runAutoMode(parsed.data);
+          : await runAutoMode(effectiveInput);
+
+    const assistantContent =
+      typeof result["reply"] === "string"
+        ? result["reply"]
+        : JSON.stringify({ kind: result["kind"], status: result["status"] ?? null });
+    await recordChatLearningEvent({
+      role: "assistant",
+      content: assistantContent,
+      scope,
+      metadata: {
+        route: result["route"] ?? null,
+        kind: result["kind"] ?? null,
+        status: result["status"] ?? null,
+        taskId: result["taskId"] ?? null,
+        learningCount: learnings.length,
+      },
+    }).catch(() => undefined);
 
     res
       .status(
