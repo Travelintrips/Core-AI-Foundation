@@ -467,7 +467,19 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     }
 
     if (state.activeRun) {
-      await setState(taskId, "WAITING", `WAIT_ACTIVE_RUN:${state.activeRun.agentName}`);
+      // Polling an already-running bounded operation is not a repair attempt.
+      // Do not consume the finite autonomous repair budget while simply waiting.
+      await db.execute(sql`
+        UPDATE ai_platform.ai_coding_autonomous_tasks
+        SET status = 'WAITING',
+            last_action = ${`WAIT_ACTIVE_RUN:${state.activeRun.agentName}`},
+            last_error = NULL,
+            last_cycle_at = NOW(),
+            updated_at = NOW()
+        WHERE task_id = ${taskId}::uuid
+          AND enabled = TRUE
+          AND status <> 'DISABLED'
+      `);
       return {
         taskId,
         status: "WAITING",
