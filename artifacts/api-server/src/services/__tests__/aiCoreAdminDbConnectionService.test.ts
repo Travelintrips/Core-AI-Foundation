@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(), transaction: vi.fn(), poolOptions: vi.fn(),
   poolOn: vi.fn(), poolEnd: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@workspace/db", () => ({
+vi.mock("@workspace/db", async () => ({
+  withTransientDatabaseRetry: (await vi.importActual<typeof import("@workspace/db")>("@workspace/db")).withTransientDatabaseRetry,
   db: { execute: mocks.execute, transaction: mocks.transaction },
   PostgresPool: class {
     constructor(options: unknown) { mocks.poolOptions(options); }
@@ -15,7 +16,7 @@ vi.mock("@workspace/db", () => ({
   },
 }));
 vi.mock("drizzle-orm/node-postgres", () => ({ drizzle: () => ({ execute: mocks.execute, transaction: mocks.transaction }) }));
-import { getAdminDbConnections, readAdminDbMetadata } from "../aiCoreAdminDbConnectionService.js";
+import { getAdminDbConnections, readAdminDbMetadata, runAdminDbReadTransaction } from "../aiCoreAdminDbConnectionService.js";
 import { getAdminDbConnectionDescriptors } from "../aiCoreAdminDbRegistryService.js";
 
 const registration = '[{"id":"sports","label":"Sport center","databaseUrlEnv":"SPORT_DATABASE_URL"}]';
@@ -59,5 +60,25 @@ describe("admin database connection boundaries", () => {
     expect(mocks.execute.mock.calls.map(([query]) => dialect.sqlToQuery(query).sql)).toEqual([
       "SET TRANSACTION READ ONLY", "SET LOCAL statement_timeout = '8000ms'", "SET LOCAL lock_timeout = '1500ms'", "SELECT table_name FROM information_schema.tables",
     ]);
+  });
+
+  it("retries a disconnected read transaction and starts its read-only guards again", async () => {
+    mocks.transaction.mockRejectedValueOnce(new Error("Failed query", {
+      cause: Object.assign(new Error("connection reset"), { code: "08006" }),
+    }));
+    await readAdminDbMetadata(getAdminDbConnections({})[0]!, sql.raw("SELECT 1"));
+    expect(mocks.transaction).toHaveBeenCalledTimes(2);
+    expect(mocks.execute).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not retry SQL errors or retry more than three disconnected attempts", async () => {
+    const connection = getAdminDbConnections({})[0]!;
+    mocks.transaction.mockRejectedValueOnce(Object.assign(new Error("syntax error"), { code: "42601" }));
+    await expect(runAdminDbReadTransaction(connection, async () => "ok")).rejects.toThrow("syntax error");
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    mocks.transaction.mockClear();
+    mocks.transaction.mockRejectedValue(Object.assign(new Error("connection reset"), { code: "08006" }));
+    await expect(runAdminDbReadTransaction(connection, async () => "ok")).rejects.toThrow("connection reset");
+    expect(mocks.transaction).toHaveBeenCalledTimes(3);
   });
 });

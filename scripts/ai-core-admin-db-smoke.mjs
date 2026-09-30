@@ -23,10 +23,12 @@ const payload = { message: question, mode: "ask", modelPolicy: "smart" };
 const metadata = await (await request("/ai/core-chat/databases/metadata")).json();
 assert.ok(metadata.tables.some((table) => table.databaseId === "primary" && table.schema === "sport_center" && table.table === "sport_payments"), "Sport payment metadata must be discoverable");
 assert.equal(metadata.secretsExposed, false);
+console.log(JSON.stringify({ phase: "metadata", tables: metadata.discovery.tableCount }));
 
 const answer = await (await request("/ai/core-chat/messages", payload)).json();
 function checkSemantic(result) {
   assert.equal(result.route, "ADMIN_DB_QUERY");
+  assert.ok(result.databaseQuery?.sourceDatabaseId, result.warning || result.reply || "Semantic query did not execute");
   assert.equal(result.databaseQuery?.sourceDatabaseId, "primary");
   assert.equal(result.databaseQuery?.sourceTable, "sport_center.sport_payments");
   assert.equal(result.databaseQuery?.valueColumn, "amount");
@@ -40,11 +42,13 @@ function checkSemantic(result) {
 checkSemantic(answer);
 assert.equal(answer.workload, "DATA_LOOKUP");
 assert.equal(answer.costClass, "ZERO");
+console.log(JSON.stringify({ phase: "ask", amount: answer.data[0].value, rows: answer.data[0].matched_rows }));
 
 const autoAnswer = await (await request("/ai/core-chat/messages", { ...payload, mode: "auto" })).json();
 checkSemantic(autoAnswer);
 assert.equal(autoAnswer.workload, "DATA_LOOKUP");
 assert.equal(autoAnswer.costClass, "ZERO");
+console.log(JSON.stringify({ phase: "auto", result: "PASS" }));
 
 // Compare the semantic result with an independent, explicit read-only aggregate.
 const baseline = await (await request("/ai/core-chat/messages", {
@@ -52,6 +56,7 @@ const baseline = await (await request("/ai/core-chat/messages", {
   message: "SELECT COALESCE(SUM(amount), 0) AS value, COUNT(*) AS matched_rows FROM sport_center.sport_payments WHERE lower(status::text) = 'confirmed' AND paid_at AT TIME ZONE 'Asia/Jakarta' >= (now() AT TIME ZONE 'Asia/Jakarta')::date - INTERVAL '1 day' AND paid_at AT TIME ZONE 'Asia/Jakarta' < (now() AT TIME ZONE 'Asia/Jakarta')::date",
 })).json();
 assert.equal(baseline.route, "ADMIN_DB_QUERY");
+assert.ok(Array.isArray(baseline.data) && baseline.data.length === 1, baseline.warning || baseline.reply || "SQL baseline did not execute");
 assert.equal(Number(answer.data[0].value), Number(baseline.data[0].value));
 assert.equal(Number(answer.data[0].matched_rows), Number(baseline.data[0].matched_rows));
 

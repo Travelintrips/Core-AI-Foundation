@@ -1,4 +1,4 @@
-import { db, PostgresPool } from "@workspace/db";
+import { db, PostgresPool, withTransientDatabaseRetry } from "@workspace/db";
 import { sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
@@ -82,8 +82,18 @@ export function getAdminDbConnection(id = "primary"): AdminDbConnection {
   return connection;
 }
 
+export function runAdminDbReadTransaction<T>(
+  connection: AdminDbConnection,
+  work: (tx: AdminDbExecutor) => Promise<T>,
+): Promise<T> {
+  return withTransientDatabaseRetry(
+    () => connection.client().transaction(work),
+    { attempts: 3, baseDelayMs: 200 },
+  );
+}
+
 export async function readAdminDbMetadata(connection: AdminDbConnection, query: SQL): Promise<unknown> {
-  return connection.client().transaction(async (tx) => {
+  return runAdminDbReadTransaction(connection, async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw("SET LOCAL statement_timeout = '8000ms'"));
     await tx.execute(sql.raw("SET LOCAL lock_timeout = '1500ms'"));
