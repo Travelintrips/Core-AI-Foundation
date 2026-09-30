@@ -1175,8 +1175,25 @@ async function buildSyntheticContextLease(
   };
 }
 
+export function normalizeWorkstreamGitHeadOutput(value: unknown): string {
+  const text =
+    typeof value === "string"
+      ? value
+      : Buffer.isBuffer(value)
+        ? value.toString("utf8")
+        : "";
+  const head = text.trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(head)) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Repository HEAD could not be resolved for workstream AI execution.",
+      "INVALID_CONTEXT",
+    );
+  }
+  return head;
+}
+
 async function gitHead(root: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+  const result = await execFileAsync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     timeout: 15_000,
     maxBuffer: 1_000_000,
@@ -1188,7 +1205,11 @@ async function gitHead(root: string): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  return stdout.trim().toLowerCase();
+  const raw =
+    typeof result === "string" || Buffer.isBuffer(result)
+      ? result
+      : (result as { stdout?: unknown } | null | undefined)?.stdout;
+  return normalizeWorkstreamGitHeadOutput(raw);
 }
 
 async function persistCandidate(input: {
