@@ -472,6 +472,20 @@ function semanticTableScore(
   // because its amount/time columns look suitable.
   if (score === 0) return 0;
 
+  // Sport Center has several legacy/mirror facility tables. The canonical
+  // operational catalog is sport_center.sport_facilities; prefer it over
+  // similarly named historical compatibility tables such as
+  // sport_center.sport_center_facilities.
+  const normalizedDomain = words.join(" ");
+  if (
+    intent.aggregation === "count" &&
+    /facilit|fasilitas/.test(normalizedDomain) &&
+    /sport|center/.test(normalizedDomain)
+  ) {
+    if (schemaName === "sport_center" && tableName === "sport_facilities") score += 50;
+    if (tableName === "sport_center_facilities") score -= 20;
+  }
+
   if (intent.valueKind === "currency") {
     if (/expense|refund|cost|fee/.test(tableName)) return 0;
     if (/payment|transaction|sale|revenue|receipt/.test(tableName)) score += 14;
