@@ -167,8 +167,43 @@ elif [ -z "$(find "$projects_path" -mindepth 1 -maxdepth 1 -print -quit)" ]; the
   fi
 fi
 
-if ! compose run -T --rm --no-deps --entrypoint sh openhands -lc 'test -w /projects'; then
-  fail "OpenHands cannot write $projects_path. Grant UID/GID $projects_uid:$projects_gid write access or change OPENHANDS_PROJECTS_PATH."
+source_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+source_remote="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+
+workspace_git() {
+  git -c safe.directory="$projects_path" -C "$projects_path" "$@"
+}
+
+if [ -d "$projects_path/.git" ] && ! workspace_git rev-parse --verify HEAD >/dev/null 2>&1; then
+  workspace_payload="$(find "$projects_path" -mindepth 1 -maxdepth 1 ! -name .git -print -quit)"
+  [ -z "$workspace_payload" ] || fail "OpenHands workspace has invalid git metadata plus existing files; refusing to overwrite it."
+  rm -rf "$projects_path/.git"
+  log "Removed empty legacy OpenHands git metadata"
+fi
+
+if [ -z "$(find "$projects_path" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+  git clone --no-local "$REPO_ROOT" "$projects_path"
+  log "Cloned the deployed repository into the OpenHands workspace"
+fi
+
+if [ -d "$projects_path/.git" ]; then
+  if [ -n "$(workspace_git status --porcelain)" ]; then
+    log "OpenHands workspace has local changes; preserving it without automatic checkout"
+  else
+    workspace_git fetch --quiet "$REPO_ROOT" "$source_sha"
+    workspace_git checkout --detach "$source_sha"
+    if [ -n "$source_remote" ]; then
+      workspace_git remote set-url origin "$source_remote"
+    fi
+    chown -R "$projects_uid:$projects_gid" "$projects_path"
+    log "Synchronized OpenHands workspace to deployed commit $source_sha"
+  fi
+else
+  fail "OpenHands workspace is not a git repository after bootstrap: $projects_path"
+fi
+
+if ! compose run -T --rm --no-deps --entrypoint sh openhands -lc 'test -w /projects && git -C /projects rev-parse --verify HEAD >/dev/null'; then
+  fail "OpenHands workspace is not writable or has no checked-out repository."
 fi
 
 log "Starting Temporal, n8n, and OpenHands"
@@ -189,7 +224,8 @@ if [ "$n8n_ready" != "true" ]; then
   fail "n8n did not become ready for external-work workflow installation"
 fi
 compose exec -T n8n n8n import:workflow --input=/opt/ai-core-n8n/ai-core-external-work.json >/dev/null
-compose exec -T n8n n8n update:workflow --id=AIcoreExternalWork001 --active=true >/dev/null
+compose exec -T n8n n8n publish:workflow --id=AIcoreExternalWork001 >/dev/null
+compose restart n8n
 
 if [ -n "$temporal_coding_token" ]; then
   log "Starting Temporal coding orchestrator"
