@@ -100,7 +100,7 @@ function normalize(input: string): string {
 }
 
 const CRITICAL_ACTION =
-  /\b(deploy(?:ment)?(?:\s+ke|\s+to)?\s+(?:production|prod)|merge(?:\s+pr)?|production\s+deploy|prod\s+deploy|migrasi\s+(?:database|db)(?:\s+production|\s+prod)?|database\s+migration|drop\s+(?:table|database)|truncate\s+(?:table|database)|hapus\s+(?:table|database)|delete\s+(?:table|database)|restart\s+(?:production|prod)|security\s+change|ubah\s+security|rotate\s+(?:secret|key|token))\b/i;
+  /\b(deploy(?:ment)?\b.{0,80}\b(?:production|prod)\b|(?:production|prod)\b.{0,40}\bdeploy(?:ment)?\b|merge\b.{0,40}\b(?:pr|pull\s*request)\b|migrasi\b.{0,40}\b(?:database|db)\b|database\s+migration|drop\s+(?:table|database)|truncate\s+(?:table|database)|hapus\s+(?:table|database)|delete\s+(?:table|database)|restart\b.{0,40}\b(?:production|prod)\b|security\s+change|ubah\s+security|rotate\s+(?:secret|key|token))\b/i;
 
 const CODING_ACTION =
   /\b(perbaiki|fix|implement(?:asikan)?|buat(?:kan)?\s+(?:kode|fitur|endpoint|api|service|komponen|component|test|unit\s+test)|tambah(?:kan)?\s+(?:kode|fitur|endpoint|api|service|komponen|component|test|unit\s+test)|refactor|ubah\s+(?:kode|source|file)|edit\s+(?:kode|source|file)|patch|commit|push)\b/i;
