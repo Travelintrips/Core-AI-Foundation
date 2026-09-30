@@ -218,8 +218,12 @@ router.post(
   async (req, res): Promise<void> => {
     const commandId = z.string().uuid().safeParse(req.params["commandId"]);
     const parsed = ExternalAgentWorkRenewRequest.safeParse(req.body ?? {});
-    if (!commandId.success || !parsed.success) {
-      res.status(400).json({ error: commandId.success ? parsed.error.message : "Invalid command id" });
+    if (!commandId.success) {
+      res.status(400).json({ error: "Invalid command id" });
+      return;
+    }
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
       return;
     }
     const renewed = await renewCodingBridgeCommandClaim({
@@ -236,8 +240,12 @@ router.post(
   async (req, res): Promise<void> => {
     const commandId = z.string().uuid().safeParse(req.params["commandId"]);
     const parsed = ExternalAgentWorkResultRequest.safeParse(req.body ?? {});
-    if (!commandId.success || !parsed.success) {
-      res.status(400).json({ error: commandId.success ? parsed.error.message : "Invalid command id" });
+    if (!commandId.success) {
+      res.status(400).json({ error: "Invalid command id" });
+      return;
+    }
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
       return;
     }
     const result = await completeCodingBridgeCommand({
