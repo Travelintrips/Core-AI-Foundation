@@ -172,6 +172,7 @@ function testTaskRetentionMs(): number {
 
 function isDisposableCodingTestTask(projectName: string): boolean {
   return projectName === "Control Plane E2E Canary" ||
+    projectName.startsWith("Control Plane E2E Canary / ") ||
     projectName.startsWith("GitHub Trigger temporal-e2e-smoke-");
 }
 
