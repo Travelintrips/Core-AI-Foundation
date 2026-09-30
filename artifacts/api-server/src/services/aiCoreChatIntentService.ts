@@ -1,0 +1,84 @@
+import {
+  classifyAiCoreWorkload,
+  type AiCoreWorkloadRoute,
+} from "./aiCoreWorkloadRouterService.js";
+
+export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
+
+export type AiCoreChatMode = "auto" | "ask" | "agent";
+export type AiCoreChatDispatchKind =
+  | "ANSWER"
+  | "REMOTE_READONLY"
+  | "CONTROL_PLANE";
+export type RemoteWorkerPreset = "check" | "build" | "test" | "review";
+
+export interface AiCoreChatDispatchDecision {
+  kind: AiCoreChatDispatchKind;
+  workload: AiCoreWorkloadRoute;
+  preset: RemoteWorkerPreset | null;
+  reason: string;
+}
+
+const MUTATING =
+  /\b(fix|perbaiki|ubah|edit|patch|deploy|merge|commit|push|hapus|delete|create|buat|tambah|add|implement(?:asikan)?|refactor)\b/i;
+
+const REPOSITORY_READONLY_CONTEXT =
+  /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
+
+export function detectRemoteWorkerPreset(
+  message: string,
+): RemoteWorkerPreset | null {
+  const value = message.trim().toLowerCase();
+  if (!value || MUTATING.test(value)) return null;
+
+  if (/\b(review|tinjau|audit\s+diff|cek\s+diff)\b/i.test(value)) {
+    return REPOSITORY_READONLY_CONTEXT.test(value) ? "review" : null;
+  }
+  if (/\b(build|compile)\b/i.test(value)) return "build";
+  if (/\b(test|testing|uji)\b/i.test(value)) return "test";
+  if (/\b(cek|check|verify|verifikasi|validasi|status\s+repository|status\s+repo|periksa|inspect)\b/i.test(value)) {
+    return REPOSITORY_READONLY_CONTEXT.test(value) ? "check" : null;
+  }
+  return null;
+}
+
+export function classifyAiCoreChatDispatch(
+  message: string,
+): AiCoreChatDispatchDecision {
+  const workload = classifyAiCoreWorkload(message);
+
+  if (workload.requiresAgent) {
+    return {
+      kind: "CONTROL_PLANE",
+      workload,
+      preset: null,
+      reason:
+        workload.workload === "CRITICAL_ACTION"
+          ? "Critical actions must enter the control plane and stop at the explicit approval gate."
+          : "Repository-changing coding work must enter the Coding Orchestrator.",
+    };
+  }
+
+  const preset =
+    workload.workload === "REVIEW"
+      ? detectRemoteWorkerPreset(message)
+      : null;
+
+  if (preset) {
+    return {
+      kind: "REMOTE_READONLY",
+      workload,
+      preset,
+      reason:
+        "Read-only repository inspection can run on the trusted remote worker without creating a coding task.",
+    };
+  }
+
+  return {
+    kind: "ANSWER",
+    workload,
+    preset: null,
+    reason:
+      "This request can be answered without mutating the repository or production system.",
+  };
+}

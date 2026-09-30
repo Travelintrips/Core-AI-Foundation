@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { apiEventStream, apiFetch } from "@/lib/apiFetch";
 
-type ChatMode = "ask" | "agent";
+type ChatMode = "auto" | "ask" | "agent";
 type ModelPolicy = "economy" | "smart" | "auto" | "cloud";
 type TokenUsage = { inputTokens: number; outputTokens: number; totalTokens: number };
 
@@ -118,6 +118,7 @@ function routeLabel(route?: string | null): string {
   if (route === "CLOUD") return "Cloud";
   if (route === "CLOUD_FALLBACK") return "Cloud fallback";
   if (route === "CONTROL_PLANE") return "Control plane";
+  if (route === "REMOTE_OLLAMA_POWERSHELL") return "Read-only worker";
   return route || "AI Core";
 }
 
@@ -134,7 +135,7 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 export default function AiCoreChat() {
-  const [mode, setMode] = useState<ChatMode>("ask");
+  const [mode] = useState<ChatMode>("auto");
   const [policy, setPolicy] = useState<ModelPolicy>("smart");
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
   const [input, setInput] = useState("");
@@ -513,7 +514,7 @@ export default function AiCoreChat() {
                   </div>
                   <h2 className="font-semibold text-base">Perintahkan AI Core dari sini</h2>
                   <p className="text-sm mt-2 max-w-xl mx-auto" style={{ color: "#7085AE" }}>
-                    Ask Mode untuk tanya jawab hemat token. Agent Mode untuk coding task melalui analyzer, policy gate, testing, dan approval flow.
+                    Satu chat untuk bertanya, memeriksa, dan memberi perintah. AI Core otomatis memilih jawaban, worker read-only, Coding Orchestrator, atau approval gate.
                   </p>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {["/status", "Cek booking SC-0992", "Berapa outstanding tenant sekarang?", "Kenapa build ini gagal?"].map((sample) => (
@@ -633,22 +634,17 @@ export default function AiCoreChat() {
           <div className="px-4 sm:px-8 pb-6 pt-3">
             <div className="max-w-4xl mx-auto">
               <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ background: "#171D3C", border: "1px solid #313C78", color: "#B8AEFF" }}>
+                  <Sparkles className="size-3.5" />
+                  Auto routing
+                </div>
                 <div className="flex rounded-lg p-1" style={{ background: "#0A1327", border: "1px solid #1E3057" }}>
-                  {(["ask", "agent"] as ChatMode[]).map((value) => (
-                    <button key={value} onClick={() => setMode(value)} className="px-3 py-1.5 rounded-md text-xs font-medium" style={mode === value ? { background: "#675ADB", color: "white" } : { color: "#7186AE" }}>
-                      {value === "ask" ? "Ask" : "Agent"}
+                  {(["economy", "smart", "auto", "cloud"] as ModelPolicy[]).map((value) => (
+                    <button key={value} onClick={() => setPolicy(value)} className="px-2.5 py-1.5 rounded-md text-[11px]" style={policy === value ? { background: "#19234A", color: "#B6ADFF" } : { color: "#63779E" }}>
+                      {value === "economy" ? "Economy" : value === "smart" ? "Smart" : value === "auto" ? "Local→Cloud" : "Cloud"}
                     </button>
                   ))}
                 </div>
-                {mode === "ask" && (
-                  <div className="flex rounded-lg p-1" style={{ background: "#0A1327", border: "1px solid #1E3057" }}>
-                    {(["economy", "smart", "auto", "cloud"] as ModelPolicy[]).map((value) => (
-                      <button key={value} onClick={() => setPolicy(value)} className="px-2.5 py-1.5 rounded-md text-[11px]" style={policy === value ? { background: "#19234A", color: "#B6ADFF" } : { color: "#63779E" }}>
-                        {value === "economy" ? "Economy" : value === "smart" ? "Smart" : value === "auto" ? "Auto" : "Cloud"}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <form onSubmit={(event) => void submit(event)} className="rounded-2xl overflow-hidden" style={{ background: "#0A1327", border: "1px solid #263765" }}>
@@ -662,21 +658,19 @@ export default function AiCoreChat() {
                     }
                   }}
                   rows={3}
-                  placeholder={mode === "agent" ? "Contoh: audit modul coding, perbaiki sampai test hijau, berhenti hanya jika perlu critical approval…" : "Tanya AI Core…"}
+                  placeholder="Tanya, periksa, atau beri perintah. Contoh: cek modul auth, jelaskan masalahnya, lalu perbaiki sampai test hijau…"
                   className="w-full resize-none bg-transparent outline-none px-4 pt-4 pb-2 text-sm"
                   style={{ color: "#E7EDFA" }}
                 />
                 <div className="px-3 pb-3 flex items-center justify-between gap-3">
                   <div className="text-[10px]" style={{ color: "#536A94" }}>
-                    {mode === "ask"
-                      ? policy === "economy"
-                        ? "Economy: local only, tanpa biaya cloud."
-                        : policy === "smart"
-                          ? "Smart: streaming cloud sesuai tugas & biaya; local menjadi fallback."
-                          : policy === "auto"
-                            ? "Auto: local dulu, cloud hanya bila local gagal."
-                            : "Cloud: gunakan cloud route sesuai workload."
-                      : "Agent: analyzer → policy gates → workers; critical action tetap approval."}
+                    {policy === "economy"
+                      ? "Auto routing aktif · jawaban memakai local only; perintah kerja tetap masuk control plane."
+                      : policy === "smart"
+                        ? "Auto routing aktif · AI Core membedakan tanya, cek/review, coding, dan critical action."
+                        : policy === "auto"
+                          ? "Auto routing aktif · jawaban local dulu lalu cloud; coding tetap dibagikan lewat orchestrator."
+                          : "Auto routing aktif · jawaban memakai cloud; tindakan sistem tetap melalui guardrail."}
                   </div>
                   <button type="submit" disabled={busy || !input.trim()} className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40" style={{ background: "#675ADB", color: "white" }}>
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -705,9 +699,11 @@ export default function AiCoreChat() {
             ))}
           </div>
 
-          {mode === "agent" && (
-            <>
-              <div className="text-[10px] uppercase tracking-widest mt-6 mb-3" style={{ color: "#586E98" }}>Agent Context</div>
+          <>
+              <div className="text-[10px] uppercase tracking-widest mt-6 mb-3" style={{ color: "#586E98" }}>Work Context</div>
+              <p className="text-[10px] leading-4 mb-3" style={{ color: "#60749B" }}>
+                Dipakai otomatis hanya ketika perintah membutuhkan repository/worker.
+              </p>
               <div className="space-y-3">
                 {[
                   ["PROJECT", projectName, setProjectName],
@@ -730,12 +726,11 @@ export default function AiCoreChat() {
                 </label>
               </div>
             </>
-          )}
 
           <div className="text-[10px] uppercase tracking-widest mt-6 mb-3" style={{ color: "#586E98" }}>Guardrails</div>
           <div className="space-y-2 text-[11px]" style={{ color: "#7D91B7" }}>
-            <div className="flex gap-2"><CheckCircle2 className="size-3.5 flex-shrink-0 mt-0.5" style={{ color: "#10B981" }} />Ask Mode tidak punya shell, Git, filesystem, atau tool access.</div>
-            <div className="flex gap-2"><TerminalSquare className="size-3.5 flex-shrink-0 mt-0.5" style={{ color: "#9D91FB" }} />Agent Mode masuk melalui Coding Orchestrator resmi.</div>
+            <div className="flex gap-2"><CheckCircle2 className="size-3.5 flex-shrink-0 mt-0.5" style={{ color: "#10B981" }} />Pertanyaan biasa tetap berada di jalur non-mutating tanpa shell/Git/filesystem.</div>
+            <div className="flex gap-2"><TerminalSquare className="size-3.5 flex-shrink-0 mt-0.5" style={{ color: "#9D91FB" }} />Cek/review repository dapat memakai trusted read-only worker; coding otomatis masuk Coding Orchestrator dan workstream.</div>
             <div className="flex gap-2"><ShieldCheck className="size-3.5 flex-shrink-0 mt-0.5" style={{ color: "#F8C66A" }} />Merge, deploy production, destructive DB, security, dan restart production tetap critical approval.</div>
           </div>
         </aside>

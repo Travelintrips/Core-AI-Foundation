@@ -39,6 +39,12 @@ import {
   type AiCoreWorkloadRoute,
 } from "../services/aiCoreWorkloadRouterService.js";
 import {
+  classifyAiCoreChatDispatch,
+  DEFAULT_AI_CORE_CHAT_MODE,
+  detectRemoteWorkerPreset,
+  type RemoteWorkerPreset,
+} from "../services/aiCoreChatIntentService.js";
+import {
   getAiCoreDataToolReadiness,
   tryRunAiCoreDataTool,
 } from "../services/aiCoreDataToolService.js";
@@ -50,7 +56,7 @@ const router = Router();
 
 const ChatRequest = z.object({
   message: z.string().trim().min(1).max(50_000),
-  mode: z.enum(["ask", "agent"]).default("ask"),
+  mode: z.enum(["auto", "ask", "agent"]).default(DEFAULT_AI_CORE_CHAT_MODE),
   modelPolicy: z.enum(["economy", "smart", "auto", "cloud"]).default("smart"),
   projectName: z.string().trim().min(1).max(200).optional(),
   repository: z.string().trim().min(1).max(500).optional(),
@@ -65,8 +71,8 @@ type ChatPolicy = z.infer<typeof ChatRequest>["modelPolicy"];
 const ASK_SYSTEM_PROMPT = [
   "You are AI Core Chat, the internal assistant for the AI Core control plane.",
   "Answer the user's question directly and concisely.",
-  "This is ASK MODE: you have no tools and must never claim that code, shell commands, deployments, merges, database changes, or external actions were executed.",
-  "If the user requests an action that changes a repository or system, explain that Agent Mode should be used.",
+  "This is the non-mutating answer path: you have no tools and must never claim that code, shell commands, deployments, merges, database changes, or external actions were executed.",
+  "Mutating requests are routed by AI Core to the control plane before this prompt is used; if one reaches this path, state that execution requires control-plane routing.",
   "Never reveal or request secret values, API keys, passwords, tokens, or private credentials.",
   "Prefer Indonesian when the user writes Indonesian; otherwise follow the user's language.",
 ].join(" ");
@@ -402,7 +408,7 @@ async function deterministicReply(
       estimatedCostUsd: 0,
       ...routingMeta,
       reply:
-        "Halo. AI Core Chat aktif. Gunakan Ask untuk bertanya atau Agent untuk menjalankan coding task. Sapaan ini memakai 0 token LLM.",
+        "Halo. AI Core Chat aktif. Tanyakan, periksa, atau beri perintah dari chat yang sama; AI Core akan memilih jalur jawaban, worker read-only, atau Coding Orchestrator secara otomatis. Sapaan ini memakai 0 token LLM.",
     };
   }
 
@@ -416,7 +422,7 @@ async function deterministicReply(
       estimatedCostUsd: 0,
       ...routingMeta,
       reply:
-        "Perintah cepat: /status untuk runtime AI Core, /model untuk model coding, /routing untuk kebijakan biaya/model, Ask Smart untuk chat cepat hemat biaya, dan Agent Mode untuk coding melalui policy gate.",
+        "Perintah cepat: /status untuk runtime AI Core, /model untuk model coding, /routing untuk kebijakan biaya/model. Chat otomatis membedakan tanya, periksa/review, coding, dan tindakan kritis; coding masuk Coding Orchestrator dan tindakan kritis tetap berhenti di approval gate.",
     };
   }
 
@@ -525,7 +531,7 @@ async function answerAskMode(
       estimatedCostUsd: 0,
       ...routingMeta,
       reply:
-        "Tindakan production/kritis tidak dijalankan sebagai chat. Gunakan Agent Mode; AI Core akan menjalankannya melalui control plane dan berhenti pada explicit approval gate. Klasifikasi ini memakai 0 token LLM.",
+        "Tindakan production/kritis harus masuk control plane dan berhenti pada explicit approval gate. Ask-only mode tidak menjalankannya. Klasifikasi ini memakai 0 token LLM.",
       requiresApproval: true,
     };
   }
@@ -540,7 +546,7 @@ async function answerAskMode(
       estimatedCostUsd: 0,
       ...routingMeta,
       reply:
-        "Instruksi ini terdeteksi sebagai pekerjaan coding yang mengubah repository. Gunakan Agent Mode agar masuk Coding Orchestrator, test, review, dan approval gate. Routing ini memakai 0 token LLM.",
+        "Instruksi ini terdeteksi sebagai pekerjaan coding yang mengubah repository. Ask-only mode tidak menjalankannya; jalur Auto/Agent akan memasukkannya ke Coding Orchestrator, test, review, dan approval gate. Routing ini memakai 0 token LLM.",
       requiresAgent: true,
     };
   }
@@ -1002,20 +1008,6 @@ async function streamAskMode(
 }
 
 
-type RemoteWorkerPreset = "check" | "build" | "test" | "review";
-
-function detectRemoteWorkerPreset(message: string): RemoteWorkerPreset | null {
-  const value = message.trim().toLowerCase();
-  const mutating = /\b(fix|perbaiki|ubah|edit|patch|deploy|merge|commit|push|hapus|delete|create|buat|tambah|add)\b/i.test(value);
-  if (mutating) return null;
-
-  if (/\b(review|tinjau|audit diff|cek diff)\b/i.test(value)) return "review";
-  if (/\b(build|compile)\b/i.test(value)) return "build";
-  if (/\b(test|testing|uji)\b/i.test(value)) return "test";
-  if (/\b(cek|check|verify|validasi|status repository|status repo)\b/i.test(value)) return "check";
-  return null;
-}
-
 function remotePresetInstruction(preset: RemoteWorkerPreset): string {
   switch (preset) {
     case "build":
@@ -1031,8 +1023,9 @@ function remotePresetInstruction(preset: RemoteWorkerPreset): string {
 
 async function maybeRunRemoteWorkerPreset(
   input: z.infer<typeof ChatRequest>,
+  requestedPreset?: RemoteWorkerPreset | null,
 ): Promise<Record<string, unknown> | null> {
-  const preset = detectRemoteWorkerPreset(input.message);
+  const preset = requestedPreset ?? detectRemoteWorkerPreset(input.message);
   if (!preset) return null;
 
   if (
@@ -1138,13 +1131,39 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
     model: null,
     usage: null,
     reply:
-      `Task ${task.taskNumber} dimulai. AI Core akan menganalisis repository, menjalankan langkah aman secara otomatis, dan berhenti pada critical approval seperti merge/deploy/database/security.`,
+      `Task ${task.taskNumber} dimulai. AI Core akan menganalisis repository, membagikan pekerjaan ke workstream/worker bila diperlukan, menjalankan langkah aman secara otomatis, dan berhenti pada critical approval seperti merge/deploy/database/security.`,
     taskId: task.id,
     taskNumber: task.taskNumber,
     status: "ANALYZING",
     workspaceUrl: `/coding-workspace/${task.id}`,
     autonomous: true,
   };
+}
+
+async function runAutoMode(
+  input: z.infer<typeof ChatRequest>,
+): Promise<Record<string, unknown>> {
+  const decision = classifyAiCoreChatDispatch(input.message);
+  const routingMeta = {
+    workload: decision.workload.workload,
+    costClass: decision.workload.costClass,
+    autoRouted: true,
+    dispatch: decision.kind,
+    dispatchReason: decision.reason,
+  };
+
+  if (decision.kind === "CONTROL_PLANE") {
+    const result = await startAgentTask(input);
+    return { ...result, ...routingMeta };
+  }
+
+  if (decision.kind === "REMOTE_READONLY") {
+    const remote = await maybeRunRemoteWorkerPreset(input, decision.preset);
+    if (remote) return { ...remote, ...routingMeta };
+  }
+
+  const answer = await answerAskMode(input.message, input.modelPolicy);
+  return { ...answer, ...routingMeta };
 }
 
 router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
@@ -1158,7 +1177,14 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
   const runtime = getAutonomousRuntimeStatus();
 
   res.json({
-    defaultMode: "ask",
+    defaultMode: DEFAULT_AI_CORE_CHAT_MODE,
+    modes: ["auto", "ask", "agent"],
+    autoRouting: {
+      answer: ["DETERMINISTIC", "CHAT", "REASONING"],
+      remoteReadonly: ["REVIEW"],
+      controlPlane: ["CODING", "CRITICAL_ACTION"],
+      criticalApprovalPreserved: true,
+    },
     defaultModelPolicy: "smart",
     routing: ["NO_LLM", "DATA_TOOL", "SMART_CLOUD", "LOCAL", "CLOUD"],
     streaming: {
@@ -1266,7 +1292,9 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     const result =
       parsed.data.mode === "agent"
         ? (await maybeRunRemoteWorkerPreset(parsed.data)) ?? await startAgentTask(parsed.data)
-        : await answerAskMode(parsed.data.message, parsed.data.modelPolicy);
+        : parsed.data.mode === "ask"
+          ? await answerAskMode(parsed.data.message, parsed.data.modelPolicy)
+          : await runAutoMode(parsed.data);
 
     res.status(result["kind"] === "agent" ? 202 : 200).json(result);
   } catch (error) {
