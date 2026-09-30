@@ -204,7 +204,11 @@ router.post(
       return;
     }
     const work = await claimCodingBridgeCommand(parsed.data);
-    res.status(work ? 200 : 204).json(work ?? undefined);
+    if (!work) {
+      res.status(204).end();
+      return;
+    }
+    res.json(work);
   },
 );
 
