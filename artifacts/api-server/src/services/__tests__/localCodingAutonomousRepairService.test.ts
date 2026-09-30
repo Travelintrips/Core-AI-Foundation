@@ -34,6 +34,10 @@ vi.mock("../localCodingCommitApprovalService.js", () => ({ approveCommitAndCreat
 vi.mock("../localCodingPullRequestGateService.js", () => ({ startPullRequestVerification: vi.fn() }));
 vi.mock("../codingCriticalApprovalService.js", () => ({ requestCodingCriticalApproval: vi.fn() }));
 vi.mock("../codingControlBridgeSchemaService.js", () => ({ ensureCodingControlBridgeTables: vi.fn() }));
+vi.mock("../localCodingRunRecoveryService.js", () => ({
+  reconcileStaleCodingRuns: vi.fn(async () => ({ inspected: 0, recoveredRuns: 0, recoveredTasks: 0 })),
+  purgeExpiredCodingTestTasks: vi.fn(async () => ({ inspected: 0, purgedTasks: 0 })),
+}));
 
 describe("autonomous coding workstream lease handling", () => {
   it("waits only for live claims and lets expired claims be reclaimed", async () => {
