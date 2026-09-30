@@ -20,7 +20,7 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 10
+    timeout-minutes: 45
     env:
       API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
       ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -63,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           task="${{ steps.submit.outputs.task_id }}"
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 240); do
             code=$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/progress.json -w "%{http_code}"               "$API_BASE_URL/ai/core-chat/tasks/$task/progress"               -H "x-admin-api-key: $ADMIN_API_KEY" || true)
             if [ "$code" = "200" ]; then
               jq -c '{task:.task, autonomous:.autonomous, latestRun:.latestRun, workspaceUrl:.workspaceUrl}' /tmp/progress.json
@@ -77,12 +77,17 @@ jobs:
                   jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
                   exit 1
                   ;;
-                *)
+                COMPLETED|AWAITING_APPROVAL|REVIEW_AI_PATCH)
+                  echo "Delegated coding task reached an accepted terminal/approval state: $observed_status"
+                  jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
                   exit 0
+                  ;;
+                *)
+                  echo "Task is still in progress: $observed_status"
                   ;;
               esac
             fi
             sleep 5
           done
-          echo "::error::Delegated coding task was not observable within bounded polling window"
+          echo "::error::Delegated coding task did not reach a terminal/approval state within bounded polling window"
           exit 1
