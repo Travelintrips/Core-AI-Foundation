@@ -603,7 +603,10 @@ export async function enableAutonomousCodingTask(
             THEN 'COMPLETED'
           ELSE 'ACTIVE'
         END,
-        max_cycles = ${bounded},
+        max_cycles = LEAST(
+          ai_platform.ai_coding_autonomous_tasks.max_cycles,
+          EXCLUDED.max_cycles
+        ),
         last_error = NULL,
         updated_at = NOW()
   `), { attempts: 3, baseDelayMs: 250 });
