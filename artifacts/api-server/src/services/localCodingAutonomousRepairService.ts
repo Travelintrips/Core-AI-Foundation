@@ -146,17 +146,25 @@ async function report(
 }
 
 async function loadTaskState(taskId: string) {
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, taskId));
+  const [task] = await withTransientDatabaseRetry(
+    () =>
+      db
+        .select()
+        .from(aiCodingTasksTable)
+        .where(eq(aiCodingTasksTable.id, taskId)),
+    { attempts: 4, baseDelayMs: 250 },
+  );
   if (!task) throw new Error("CODING_TASK_NOT_FOUND");
 
-  const runs = await db
-    .select()
-    .from(aiCodingRunsTable)
-    .where(eq(aiCodingRunsTable.taskId, taskId))
-    .orderBy(desc(aiCodingRunsTable.startedAt));
+  const runs = await withTransientDatabaseRetry(
+    () =>
+      db
+        .select()
+        .from(aiCodingRunsTable)
+        .where(eq(aiCodingRunsTable.taskId, taskId))
+        .orderBy(desc(aiCodingRunsTable.startedAt)),
+    { attempts: 4, baseDelayMs: 250 },
+  );
 
   const activeRun = runs.find((run) => run.status === "RUNNING") ?? null;
   const orchestrator = runs.find(
