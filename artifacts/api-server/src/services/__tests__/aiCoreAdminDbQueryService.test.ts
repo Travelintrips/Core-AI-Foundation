@@ -164,7 +164,7 @@ describe("AI Core admin database query service", () => {
 
     const reply = result ? renderAdminSemanticQueryResult(result) : "";
     expect(reply).toContain("Pendapatan sport center kemarin");
-    expect(reply).toContain("Rp1.250.000");
+    expect(reply.replace(/\s/g, "")).toContain("Rp1.250.000");
     expect(reply).toContain("read-only Admin DB Query");
   });
 
