@@ -4,6 +4,7 @@ import {
   aiCodingRunsTable,
   aiCodingTasksTable,
   db,
+  isTransientDatabaseConnectionError,
   withTransientDatabaseRetry,
   type AiCodingTask,
 } from "@workspace/db";
@@ -1396,8 +1397,12 @@ export async function generateAndPersistCodingMultiTaskPlan(
       leaseToken: authority.leaseToken,
       fencingGeneration: authority.fencingGeneration,
     }).catch((error) => {
-      // The planner result/error is primary. A stale or already-released lease
-      // during cleanup must not mask it, but every live lease is released here.
+      // The planner result/error is primary. Cleanup has its own bounded DB
+      // retries, and a remaining transient connection failure must not convert
+      // an already-persisted PREPARED graph into a failed planner job. The
+      // authority lease is bounded and will expire even if this final delete
+      // cannot reach the database.
+      if (isTransientDatabaseConnectionError(error)) return;
       if (
         error instanceof PlannerAuthorityError &&
         ["NOT_HOLDER", "STALE_FENCE", "LEASE_EXPIRED"].includes(error.code)

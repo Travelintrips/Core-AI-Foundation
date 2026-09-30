@@ -67,6 +67,7 @@ vi.mock("@workspace/db", () => {
     aiCodingTaskGraphsTable: TABLES.graphs,
     aiCodingWorkstreamsTable: TABLES.workstreams,
     aiCodingWorkstreamDependenciesTable: TABLES.dependencies,
+    withTransientDatabaseRetry: vi.fn(async (operation: () => Promise<unknown>) => operation()),
     db: {
       transaction: vi.fn(async (callback: (tx: typeof tx) => unknown) => {
         insertCall = 0;
