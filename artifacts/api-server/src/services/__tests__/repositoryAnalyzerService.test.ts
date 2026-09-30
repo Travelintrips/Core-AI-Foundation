@@ -7,6 +7,9 @@ import { promisify } from "node:util";
 
 const mockDbSelect = vi.hoisted(() => vi.fn());
 const mockDbTransaction = vi.hoisted(() => vi.fn());
+const mockWithTransientDatabaseRetry = vi.hoisted(() =>
+  vi.fn(async (operation: () => Promise<unknown>) => operation()),
+);
 const mockTxUpdateSet = vi.hoisted(() => vi.fn());
 const mockTxUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTxUpdateReturning = vi.hoisted(() => vi.fn());
@@ -51,6 +54,7 @@ vi.mock("@workspace/db", () => ({
     id: "jobs.id",
     status: "jobs.status",
   },
+  withTransientDatabaseRetry: mockWithTransientDatabaseRetry,
 }));
 
 const {
@@ -337,6 +341,10 @@ describe("repository analyzer execution", () => {
       operations: [],
     });
     expect(result.localExecution).toBeNull();
+    expect(mockWithTransientDatabaseRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      { attempts: 4, baseDelayMs: 250 },
+    );
   }, 15_000);
 
   it("handles the exact production audit instruction without undefined split failures", async () => {
