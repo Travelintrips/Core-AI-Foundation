@@ -305,6 +305,9 @@ function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
   const candidate = (fenced?.[1] ?? trimmed).trim();
 
   if (candidate.startsWith("{") && candidate.endsWith("}")) return candidate;
+  // An array or JSON string is a different top-level value, not prose wrapping
+  // one proposal. Do not extract an object from inside such a value.
+  if (candidate.startsWith("[") || candidate.startsWith('"')) return rawOutput;
 
   // Bounded recovery for a provider preface/suffix around one JSON object.
   // The extracted object still must pass Proposal Contract V1 binding and policy validation.

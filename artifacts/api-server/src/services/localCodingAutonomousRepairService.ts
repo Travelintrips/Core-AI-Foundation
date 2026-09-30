@@ -1,9 +1,10 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
   aiCodingBridgeCommandsTable,
   aiCodingRunsTable,
   aiCodingTasksTable,
+  aiJobsTable,
   db,
   withTransientDatabaseRetry,
 } from "@workspace/db";
@@ -109,13 +110,52 @@ async function setState(
         last_action = ${action},
         last_error = ${error ?? null},
         last_cycle_at = NOW(),
-        cycle_count = cycle_count + 1,
         completed_at = CASE WHEN ${status} = 'COMPLETED' THEN NOW() ELSE completed_at END,
         updated_at = NOW()
     WHERE task_id = ${taskId}::uuid
       AND enabled = TRUE
       AND status <> 'DISABLED'
   `);
+}
+
+class AutonomousCycleStopped extends Error {
+  constructor(
+    readonly status: AutonomousStatus,
+    readonly action: string,
+  ) {
+    super(action);
+  }
+}
+
+async function reserveActionCycle(taskId: string): Promise<void> {
+  // Reserve only a mutation attempt, atomically and before invoking it. Polls,
+  // race deferrals and terminal observations do not spend the repair budget.
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_autonomous_tasks
+    SET cycle_count = cycle_count + 1, last_cycle_at = NOW(), updated_at = NOW()
+    WHERE task_id = ${taskId}::uuid
+      AND enabled = TRUE
+      AND status IN ('ACTIVE', 'WAITING')
+      AND cycle_count < max_cycles
+    RETURNING task_id
+  `);
+  if (result.rows?.length) return;
+
+  const current = await getAutonomousCodingTaskStatus(taskId) as AutonomousRow | null;
+  if (!current || !current.enabled || current.status === "DISABLED") {
+    throw new AutonomousCycleStopped("DISABLED", "NOOP");
+  }
+  if (!["ACTIVE", "WAITING"].includes(current.status)) {
+    throw new AutonomousCycleStopped(current.status, current.last_action ?? "NOOP");
+  }
+  await setState(taskId, "BLOCKED", "MAX_CYCLES_REACHED", "Autonomous repair cycle limit reached.");
+  await report(
+    taskId,
+    "BLOCKER",
+    "AI Core menghentikan autonomous repair karena batas siklus tercapai.",
+    { cycleCount: current.cycle_count, maxCycles: current.max_cycles },
+  );
+  throw new AutonomousCycleStopped("BLOCKED", "MAX_CYCLES_REACHED");
 }
 
 async function commandIdForTask(taskId: string): Promise<string | null> {
@@ -176,7 +216,21 @@ async function loadTaskState(taskId: string) {
   const nextAction =
     typeof orchestration.nextAction === "string" ? orchestration.nextAction : null;
 
-  return { task, runs, activeRun, orchestrator, payload, nextAction };
+  const [activeAiJob] = ["AI_HANDOFF_APPROVED", "AI_EXECUTION_RUNNING"].includes(nextAction ?? "")
+    ? await withTransientDatabaseRetry(
+        () => db.select({ id: aiJobsTable.id })
+          .from(aiJobsTable)
+          .where(and(
+            eq(aiJobsTable.jobType, "coding_ai_execution"),
+            inArray(aiJobsTable.status, ["queued", "waiting", "running", "retrying"]),
+            sql`${aiJobsTable.payloadJson}->>'taskId' = ${taskId}`,
+          ))
+          .limit(1),
+        { attempts: 3, baseDelayMs: 250 },
+      )
+    : [];
+
+  return { task, runs, activeRun, activeAiJob, orchestrator, payload, nextAction };
 }
 
 function contextHeadSha(payload: Record<string, unknown>): string | null {
@@ -207,11 +261,13 @@ export function hasLiveCodingWorkstreamClaim(
 async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
+  reserveCycle: () => Promise<void>,
 ): Promise<{ handled: boolean; action?: string; waiting?: boolean; blocker?: string }> {
   const snapshot = await getLatestCodingTaskGraph(taskId);
   if (!snapshot) return { handled: false };
 
   if (snapshot.graph.status === "PREPARED") {
+    await reserveCycle();
     await approveCodingTaskGraph(taskId, snapshot.graph.id);
     return { handled: true, action: "AUTO_APPROVE_TASK_GRAPH" };
   }
@@ -261,6 +317,7 @@ async function processTaskGraph(
           };
         }
 
+        await reserveCycle();
         await approveWorkstreamAiCandidatePatch(review.id);
         await materializeApprovedWorkstreamAiCandidate(review.id);
         await completeReviewedCodingWorkstream(review.id, {
@@ -278,6 +335,7 @@ async function processTaskGraph(
         execution?.status === "CANDIDATE_READY" &&
         execution.reviewStatus === "APPROVED"
       ) {
+        await reserveCycle();
         await materializeApprovedWorkstreamAiCandidate(review.id);
         await completeReviewedCodingWorkstream(review.id, {
           completeChildTask: true,
@@ -290,6 +348,7 @@ async function processTaskGraph(
         };
       }
 
+      await reserveCycle();
       const prepared = await prepareWorkstreamAiExecutionHandoff(review.id);
       const lease = await approveWorkstreamAiExecutionHandoff(
         review.id,
@@ -306,6 +365,7 @@ async function processTaskGraph(
       };
     }
 
+    await reserveCycle();
     await completeReviewedCodingWorkstream(review.id);
     return {
       handled: true,
@@ -325,6 +385,7 @@ async function processTaskGraph(
       return { handled: false };
     }
 
+    await reserveCycle();
     const finalized = await finalizeCodingTaskGraphIntegration(taskId);
     return {
       handled: true,
@@ -342,6 +403,16 @@ async function processTaskGraph(
       };
     }
 
+    const completedKeys = new Set(snapshot.workstreams
+      .filter((item) => item.status === "COMPLETED")
+      .map((item) => item.key));
+    if (!snapshot.workstreams.some((item) =>
+      ["PENDING", "READY", "CLAIMED", "RUNNING"].includes(item.status) &&
+      item.dependencies.every((dependency) => completedKeys.has(dependency))
+    )) {
+      return { handled: true, action: "WAIT_TASK_GRAPH", waiting: true };
+    }
+
     const baseSha =
       contextHeadSha(payload) ??
       snapshot.workstreams
@@ -356,6 +427,7 @@ async function processTaskGraph(
       };
     }
 
+    await reserveCycle();
     const dispatch = await dispatchReadyCodingWorkstreams(snapshot.graph.id, {
       baseSha,
       maxParallel: 8,
@@ -438,18 +510,8 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
   if (!row || !row.enabled || row.status === "DISABLED") {
     return { taskId, status: "DISABLED", action: "NOOP" };
   }
-  if (["COMPLETED", "BLOCKED", "FAILED"].includes(row.status)) {
+  if (["COMPLETED", "BLOCKED", "FAILED", "APPROVAL_REQUIRED"].includes(row.status)) {
     return { taskId, status: row.status, action: row.last_action ?? "NOOP" };
-  }
-  if (row.cycle_count >= row.max_cycles) {
-    await setState(taskId, "BLOCKED", "MAX_CYCLES_REACHED", "Autonomous repair cycle limit reached.");
-    await report(
-      taskId,
-      "BLOCKER",
-      "AI Core menghentikan autonomous repair karena batas siklus tercapai.",
-      { cycleCount: row.cycle_count, maxCycles: row.max_cycles },
-    );
-    return { taskId, status: "BLOCKED", action: "MAX_CYCLES_REACHED" };
   }
 
   try {
@@ -467,19 +529,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     }
 
     if (state.activeRun) {
-      // Polling an already-running bounded operation is not a repair attempt.
-      // Do not consume the finite autonomous repair budget while simply waiting.
-      await db.execute(sql`
-        UPDATE ai_platform.ai_coding_autonomous_tasks
-        SET status = 'WAITING',
-            last_action = ${`WAIT_ACTIVE_RUN:${state.activeRun.agentName}`},
-            last_error = NULL,
-            last_cycle_at = NOW(),
-            updated_at = NOW()
-        WHERE task_id = ${taskId}::uuid
-          AND enabled = TRUE
-          AND status <> 'DISABLED'
-      `);
+      await setState(taskId, "WAITING", `WAIT_ACTIVE_RUN:${state.activeRun.agentName}`);
       return {
         taskId,
         status: "WAITING",
@@ -487,7 +537,14 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       };
     }
 
-    const graphAction = await processTaskGraph(taskId, state.payload);
+    if (state.activeAiJob) {
+      const action = `WAIT_AI_EXECUTION_JOB:${state.activeAiJob.id}`;
+      await setState(taskId, "WAITING", action);
+      return { taskId, status: "WAITING", action };
+    }
+
+    const reserveCycle = () => reserveActionCycle(taskId);
+    const graphAction = await processTaskGraph(taskId, state.payload, reserveCycle);
     if (graphAction.handled) {
       if (graphAction.blocker) {
         await setState(taskId, "BLOCKED", "TASK_GRAPH_BLOCKER", graphAction.blocker);
@@ -507,36 +564,43 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
 
     switch (state.nextAction) {
       case "APPROVE_PLAN":
+        await reserveCycle();
         await approvePlanAndStartCoding(taskId);
         await setState(taskId, "WAITING", "AUTO_APPROVE_PLAN");
         return { taskId, status: "WAITING", action: "AUTO_APPROVE_PLAN" };
 
       case "REVIEW_LOCAL_PATCH":
+        await reserveCycle();
         await approveAndValidateLocalPatch(taskId);
         await setState(taskId, "WAITING", "AUTO_APPROVE_LOCAL_PATCH");
         return { taskId, status: "WAITING", action: "AUTO_APPROVE_LOCAL_PATCH" };
 
       case "RUN_SANDBOX_VERIFICATION":
+        await reserveCycle();
         await startSandboxVerification(taskId);
         await setState(taskId, "WAITING", "AUTO_SANDBOX_VERIFY");
         return { taskId, status: "WAITING", action: "AUTO_SANDBOX_VERIFY" };
 
       case "LOCAL_RECOVERY_REQUIRED":
+        await reserveCycle();
         await startDeterministicLocalRecovery(taskId);
         await setState(taskId, "WAITING", "AUTO_LOCAL_RECOVERY");
         return { taskId, status: "WAITING", action: "AUTO_LOCAL_RECOVERY" };
 
       case "AI_REQUIRED":
+        await reserveCycle();
         await startAiHandoffPreparation(taskId);
         await setState(taskId, "WAITING", "AUTO_PREPARE_AI_HANDOFF");
         return { taskId, status: "WAITING", action: "AUTO_PREPARE_AI_HANDOFF" };
 
       case "APPROVE_AI_HANDOFF":
+        await reserveCycle();
         await approveAiHandoff(taskId);
         await setState(taskId, "ACTIVE", "AUTO_APPROVE_AI_HANDOFF");
         return { taskId, status: "ACTIVE", action: "AUTO_APPROVE_AI_HANDOFF" };
 
       case "AI_HANDOFF_APPROVED": {
+        await reserveCycle();
         const lease = await assertApprovedAiHandoffFresh(taskId);
         await enqueueCodingAiExecution(taskId, {
           requestedBy: "autonomous-repair-loop",
@@ -547,16 +611,19 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       }
 
       case "REVIEW_AI_PATCH":
+        await reserveCycle();
         await approveAndValidateAiPatch(taskId);
         await setState(taskId, "WAITING", "AUTO_APPROVE_AI_PATCH");
         return { taskId, status: "WAITING", action: "AUTO_APPROVE_AI_PATCH" };
 
       case "APPROVE_COMMIT":
+        await reserveCycle();
         await approveCommitAndCreatePullRequest(taskId);
         await setState(taskId, "WAITING", "AUTO_CREATE_PR");
         return { taskId, status: "WAITING", action: "AUTO_CREATE_PR" };
 
       case "REVIEW_PR":
+        await reserveCycle();
         await startPullRequestVerification(taskId);
         await setState(taskId, "WAITING", "AUTO_VERIFY_PR");
         return { taskId, status: "WAITING", action: "AUTO_VERIFY_PR" };
@@ -588,6 +655,9 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       }
     }
   } catch (error) {
+    if (error instanceof AutonomousCycleStopped) {
+      return { taskId, status: error.status, action: error.action };
+    }
     const message = error instanceof Error ? error.message : String(error);
     const state = await loadTaskState(taskId).catch(() => null);
 
