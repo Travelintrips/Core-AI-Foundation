@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 
 export type AiCoreDataToolName =
   | "SPORT_CENTER_BOOKING_LOOKUP"
-  | "TENANT_OUTSTANDING_SUMMARY";
+  | "TENANT_OUTSTANDING_SUMMARY"
+  | "CUSTOMER_LOOKUP";
 
 export type AiCoreDataToolResult =
   | { matched: false }
@@ -44,9 +45,18 @@ function rowsOf<T extends Record<string, unknown>>(value: unknown): T[] {
   return Array.isArray(rows) ? (rows as T[]) : [];
 }
 
+function cleanCustomerQuery(value: string): string {
+  return value
+    .replace(/[?!.,;:]+$/g, "")
+    .replace(/\s+(?:di|dari)\s+(?:db|database)(?:\s+.*)?$/i, "")
+    .trim()
+    .slice(0, 160);
+}
+
 export function detectAiCoreDataTool(message: string):
   | { tool: "SPORT_CENTER_BOOKING_LOOKUP"; bookingNumber: string }
   | { tool: "TENANT_OUTSTANDING_SUMMARY" }
+  | { tool: "CUSTOMER_LOOKUP"; query: string }
   | null {
   const text = normalize(message);
   if (!text || MUTATION_WORDS.test(text) || !READ_WORDS.test(text)) return null;
@@ -64,6 +74,17 @@ export function detectAiCoreDataTool(message: string):
     /\btenant\b/i.test(text);
   if (tenantOutstanding) {
     return { tool: "TENANT_OUTSTANDING_SUMMARY" };
+  }
+
+  const customerKeyword = /\b(customer|pelanggan|klien|client)\b/i.test(text);
+  if (customerKeyword) {
+    const match = text.match(
+      /\b(?:customer|pelanggan|klien|client)\b(?:\s+(?:atas\s+nama|bernama|nama))?\s+(.+)$/i,
+    );
+    const query = cleanCustomerQuery(match?.[1] ?? "");
+    if (query.length >= 2) {
+      return { tool: "CUSTOMER_LOOKUP", query };
+    }
   }
 
   return null;
@@ -137,6 +158,108 @@ async function lookupSportCenterBooking(
       booking,
       payments,
       totalPaid,
+    },
+  };
+}
+
+async function lookupCustomer(
+  query: string,
+): Promise<AiCoreDataToolResult> {
+  const pattern = `%${query}%`;
+  const result = await db.execute(sql`
+    SELECT
+      id,
+      customer_code,
+      name,
+      company_name,
+      email,
+      phone,
+      whatsapp,
+      pic_name,
+      pic_phone,
+      tier,
+      payment_terms,
+      preferred_channel,
+      preferred_language,
+      total_tasks,
+      total_documents,
+      ai_summary,
+      updated_at
+    FROM public.customers
+    WHERE
+      name ILIKE ${pattern}
+      OR company_name ILIKE ${pattern}
+      OR customer_code ILIKE ${pattern}
+      OR email ILIKE ${pattern}
+      OR phone ILIKE ${pattern}
+      OR whatsapp ILIKE ${pattern}
+      OR pic_name ILIKE ${pattern}
+    ORDER BY
+      CASE
+        WHEN lower(COALESCE(name, '')) = lower(${query}) THEN 0
+        WHEN lower(COALESCE(company_name, '')) = lower(${query}) THEN 1
+        WHEN lower(COALESCE(customer_code, '')) = lower(${query}) THEN 2
+        WHEN lower(COALESCE(name, '')) LIKE lower(${query}) || '%' THEN 3
+        WHEN lower(COALESCE(company_name, '')) LIKE lower(${query}) || '%' THEN 4
+        ELSE 5
+      END,
+      updated_at DESC NULLS LAST,
+      id DESC
+    LIMIT 20
+  `);
+
+  const customers = rowsOf<Record<string, unknown>>(result);
+  if (customers.length === 0) {
+    return {
+      matched: true,
+      tool: "CUSTOMER_LOOKUP",
+      reply:
+        `Customer dengan pencarian "${query}" tidak ditemukan di public.customers. Data dibaca langsung secara read-only; 0 token LLM.`,
+      data: { query, found: false, customers: [] },
+    };
+  }
+
+  const lines = customers.slice(0, 10).map((customer, index) => {
+    const displayName =
+      String(customer.company_name ?? "").trim() ||
+      String(customer.name ?? "").trim() ||
+      "Customer";
+    const code = String(customer.customer_code ?? "").trim();
+    const contact =
+      String(customer.pic_name ?? "").trim() ||
+      String(customer.name ?? "").trim();
+    const phone =
+      String(customer.whatsapp ?? "").trim() ||
+      String(customer.phone ?? "").trim() ||
+      String(customer.pic_phone ?? "").trim();
+    const suffix = [
+      code ? `kode ${code}` : "",
+      contact && contact !== displayName ? `PIC ${contact}` : "",
+      phone ? `kontak ${phone}` : "",
+      customer.tier ? `tier ${String(customer.tier)}` : "",
+    ].filter(Boolean).join("; ");
+
+    return `${index + 1}. ${displayName}${suffix ? ` — ${suffix}` : ""}`;
+  });
+
+  const reply = [
+    `Ditemukan ${customers.length} customer yang cocok dengan "${query}".`,
+    ...lines,
+    customers.length > 10
+      ? `Menampilkan 10 dari ${customers.length} hasil teratas.`
+      : "",
+    "Data dibaca langsung dari public.customers secara read-only; 0 token LLM.",
+  ].filter(Boolean).join("\n");
+
+  return {
+    matched: true,
+    tool: "CUSTOMER_LOOKUP",
+    reply,
+    data: {
+      query,
+      found: true,
+      count: customers.length,
+      customers,
     },
   };
 }
@@ -215,6 +338,10 @@ export type AiCoreDataToolReadiness = {
       ready: boolean;
       missing: string[];
     };
+    customerLookup: {
+      ready: boolean;
+      missing: string[];
+    };
   };
 };
 
@@ -241,6 +368,27 @@ const DATA_TOOL_SCHEMA_REQUIREMENTS = {
       "method",
       "status",
       "paid_at",
+    ],
+  },
+  customerLookup: {
+    customers: [
+      "id",
+      "customer_code",
+      "name",
+      "company_name",
+      "email",
+      "phone",
+      "whatsapp",
+      "pic_name",
+      "pic_phone",
+      "tier",
+      "payment_terms",
+      "preferred_channel",
+      "preferred_language",
+      "total_tasks",
+      "total_documents",
+      "ai_summary",
+      "updated_at",
     ],
   },
   tenantOutstandingSummary: {
@@ -283,6 +431,7 @@ export async function getAiCoreDataToolReadiness(): Promise<AiCoreDataToolReadin
     "sport_bookings",
     "sport_facilities",
     "sport_payments",
+    "customers",
     "tenant_invoices",
     "tenants",
   ];
@@ -295,6 +444,7 @@ export async function getAiCoreDataToolReadiness(): Promise<AiCoreDataToolReadin
         'sport_bookings',
         'sport_facilities',
         'sport_payments',
+        'customers',
         'tenant_invoices',
         'tenants'
       )
@@ -318,15 +468,22 @@ export async function getAiCoreDataToolReadiness(): Promise<AiCoreDataToolReadin
     available,
     DATA_TOOL_SCHEMA_REQUIREMENTS.tenantOutstandingSummary,
   );
+  const customerLookup = readinessForRequirements(
+    available,
+    DATA_TOOL_SCHEMA_REQUIREMENTS.customerLookup,
+  );
 
   return {
     status:
-      sportCenterBookingLookup.ready && tenantOutstandingSummary.ready
+      sportCenterBookingLookup.ready &&
+      tenantOutstandingSummary.ready &&
+      customerLookup.ready
         ? "ok"
         : "degraded",
     tools: {
       sportCenterBookingLookup,
       tenantOutstandingSummary,
+      customerLookup,
     },
   };
 }
@@ -340,6 +497,9 @@ export async function tryRunAiCoreDataTool(
   try {
     if (intent.tool === "SPORT_CENTER_BOOKING_LOOKUP") {
       return await lookupSportCenterBooking(intent.bookingNumber);
+    }
+    if (intent.tool === "CUSTOMER_LOOKUP") {
+      return await lookupCustomer(intent.query);
     }
     return await tenantOutstandingSummary();
   } catch (error) {
