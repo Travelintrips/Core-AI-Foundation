@@ -178,7 +178,7 @@ export async function claimCodingBridgeCommand(input: {
     WITH candidate AS (
       SELECT id
       FROM ai_platform.ai_coding_bridge_commands
-      WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text::text::text
+      WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text
         AND (
           status = 'RECEIVED'
           OR (
@@ -262,8 +262,8 @@ export async function renewCodingBridgeCommandClaim(input: {
         updated_at = NOW()
     WHERE id = ${input.commandId}::uuid
       AND status = 'PROCESSING'
-      AND metadata_json ->> 'assignedClientId' = ${input.clientId}
-      AND metadata_json ->> 'claimToken' = ${input.claimToken}::text::text
+      AND metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+      AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
     RETURNING id
   `);
 
@@ -298,8 +298,8 @@ export async function completeCodingBridgeCommand(input: {
         updated_at = NOW()
     WHERE id = ${input.commandId}::uuid
       AND status = 'PROCESSING'
-      AND metadata_json ->> 'assignedClientId' = ${input.clientId}
-      AND metadata_json ->> 'claimToken' = ${input.claimToken}
+      AND metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+      AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
     RETURNING id, task_id
   `);
 
