@@ -52,11 +52,14 @@ import {
 import {
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
+  executeAdminSemanticQuery,
   extractExplicitReadOnlySql,
   formatAdminDbSchemaCatalog,
   getAdminDbSchemaCatalog,
   renderAdminDbQueryResult,
+  renderAdminSemanticQueryResult,
   shouldAttemptAdminDbQuery,
+  type AdminDbConversationMessage,
 } from "../services/aiCoreAdminDbQueryService.js";
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
 import { deactivateRegisteredModel } from "../services/aiModelService.js";
@@ -72,6 +75,12 @@ const ChatRequest = z.object({
   repository: z.string().trim().min(1).max(500).optional(),
   branch: z.string().trim().min(1).max(200).optional(),
   priority: z.number().int().min(0).max(100).optional(),
+  context: z.array(
+    z.object({
+      role: z.enum(["user", "assistant"]),
+      text: z.string().trim().min(1).max(5_000),
+    }).strict(),
+  ).max(12).optional(),
 }).strict();
 
 const TaskId = z.string().uuid();
@@ -436,7 +445,43 @@ function parseAdminDbPlan(raw: string): z.infer<typeof AdminDbPlan> {
 async function tryRunAdminDbQuery(
   message: string,
   policy: ChatPolicy,
+  context: AdminDbConversationMessage[] = [],
 ): Promise<Record<string, unknown> | null> {
+  const semanticQuery = await executeAdminSemanticQuery(message, context);
+  if (semanticQuery) {
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: renderAdminSemanticQueryResult(semanticQuery),
+      databaseQuery: {
+        sql: semanticQuery.sql,
+        rowCount: semanticQuery.rowCount,
+        truncated: semanticQuery.truncated,
+        elapsedMs: semanticQuery.elapsedMs,
+        reason:
+          "Schema-aware semantic aggregate over dynamically discovered application tables.",
+        access: "ADMIN_READ_ONLY",
+        confidence: semanticQuery.confidence,
+        sourceTable: semanticQuery.sourceTable,
+        valueColumn: semanticQuery.valueColumn,
+        timeColumn: semanticQuery.timeColumn,
+        statusFilterApplied: semanticQuery.statusFilterApplied,
+        inheritedFromContext: semanticQuery.intent.inheritedFromContext,
+      },
+      data: semanticQuery.rows,
+    };
+  }
+
   if (!shouldAttemptAdminDbQuery(message)) return null;
 
   const deterministicLookup = await executeAdminNaturalTextLookup(message);
@@ -479,7 +524,14 @@ async function tryRunAdminDbQuery(
   if (!plannedSql) {
     const schemaCatalog = await getAdminDbSchemaCatalog(message);
     const schemaText = formatAdminDbSchemaCatalog(schemaCatalog);
+    const recentContext = context
+      .slice(-8)
+      .map((item) => item.role.toUpperCase() + ": " + item.text)
+      .join("\n");
     const plannerMessage = [
+      ...(recentContext
+        ? ["RECENT CONVERSATION:", recentContext, ""]
+        : []),
       "USER REQUEST:",
       message,
       "",
@@ -717,6 +769,7 @@ async function deterministicReply(
 async function answerAskMode(
   message: string,
   policy: ChatPolicy,
+  context: AdminDbConversationMessage[] = [],
 ): Promise<Record<string, unknown>> {
   const workload = classifyAiCoreWorkload(message);
   const routingMeta = {
@@ -746,7 +799,7 @@ async function answerAskMode(
     };
   }
 
-  const adminDbQuery = await tryRunAdminDbQuery(message, policy).catch(
+  const adminDbQuery = await tryRunAdminDbQuery(message, policy, context).catch(
     (error: unknown) => ({
       kind: "answer",
       route: "ADMIN_DB_QUERY",
@@ -1021,6 +1074,7 @@ async function streamAskMode(
   policy: ChatPolicy,
   res: Response,
   signal: AbortSignal,
+  context: AdminDbConversationMessage[] = [],
 ): Promise<void> {
   const workload = classifyAiCoreWorkload(message);
   const routingMeta = {
@@ -1053,7 +1107,7 @@ async function streamAskMode(
     return;
   }
 
-  const adminDbQuery = await tryRunAdminDbQuery(message, policy).catch(
+  const adminDbQuery = await tryRunAdminDbQuery(message, policy, context).catch(
     (error: unknown) => ({
       kind: "answer",
       route: "ADMIN_DB_QUERY",
@@ -1078,13 +1132,13 @@ async function streamAskMode(
     workload.workload === "CODING" ||
     (policy !== "smart" && policy !== "cloud")
   ) {
-    writeBufferedChatStream(res, await answerAskMode(message, policy));
+    writeBufferedChatStream(res, await answerAskMode(message, policy, context));
     return;
   }
 
   const cloud = await resolveCloudSelection(workload.workload);
   if (!cloud.ok) {
-    writeBufferedChatStream(res, await answerAskMode(message, policy));
+    writeBufferedChatStream(res, await answerAskMode(message, policy, context));
     return;
   }
 
@@ -1155,7 +1209,7 @@ async function streamAskMode(
       safeProviderFailure(error) || "Cloud streaming invocation failed.";
 
     if (!emittedText && quarantined) {
-      const retry = await answerAskMode(message, policy);
+      const retry = await answerAskMode(message, policy, context);
       const retryModel =
         typeof retry["model"] === "string" ? retry["model"] : null;
       if (retryModel !== model || retry["route"] !== "CLOUD") {
@@ -1424,7 +1478,7 @@ async function runAutoMode(
     if (remote) return { ...remote, ...routingMeta };
   }
 
-  const answer = await answerAskMode(input.message, input.modelPolicy);
+  const answer = await answerAskMode(input.message, input.modelPolicy, input.context ?? []);
   return { ...answer, ...routingMeta };
 }
 
@@ -1522,6 +1576,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       parsed.data.modelPolicy,
       res,
       controller.signal,
+      parsed.data.context ?? [],
     );
   } catch (error) {
     if (!controller.signal.aborted && !res.writableEnded) {
@@ -1555,7 +1610,11 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       parsed.data.mode === "agent"
         ? (await maybeRunRemoteWorkerPreset(parsed.data)) ?? await startAgentTask(parsed.data)
         : parsed.data.mode === "ask"
-          ? await answerAskMode(parsed.data.message, parsed.data.modelPolicy)
+          ? await answerAskMode(
+              parsed.data.message,
+              parsed.data.modelPolicy,
+              parsed.data.context ?? [],
+            )
           : await runAutoMode(parsed.data);
 
     res.status(result["kind"] === "agent" ? 202 : 200).json(result);
