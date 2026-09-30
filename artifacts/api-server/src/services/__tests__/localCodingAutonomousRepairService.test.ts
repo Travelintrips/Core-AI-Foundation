@@ -99,6 +99,16 @@ describe("autonomous coding explicit stop", () => {
     expect(source).toContain('=== "DISABLED"');
     expect(source).toContain("Autonomous enable skipped because the task was explicitly disabled");
   });
+
+  it("never reactivates DISABLED tasks during READY_REVIEW recovery", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('["FAILED", "BLOCKED"].includes(String(row.status ?? ""))');
+    expect(source).not.toContain('["FAILED", "BLOCKED", "DISABLED"]');
+  });
 });
 
 describe("autonomous coding cycle budget", () => {
