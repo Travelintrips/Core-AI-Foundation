@@ -15,9 +15,12 @@ vi.mock("@workspace/db", () => ({
 
 import {
   executeAdminNaturalTextLookup,
-  extractAdminDbNaturalLookup,
   executeAdminReadOnlySql,
+  executeAdminSemanticQuery,
+  extractAdminDbNaturalLookup,
+  extractAdminDbSemanticIntent,
   getAdminDbSchemaCatalog,
+  renderAdminSemanticQueryResult,
   shouldAttemptAdminDbQuery,
   validateAdminReadOnlySql,
 } from "../aiCoreAdminDbQueryService.js";
@@ -30,6 +33,139 @@ describe("AI Core admin database query service", () => {
     mocks.transaction.mockImplementation(async (fn: (tx: { execute: typeof mocks.txExecute }) => Promise<unknown>) =>
       fn({ execute: mocks.txExecute }),
     );
+  });
+
+  it("understands business metric, domain, and relative time semantically", () => {
+    expect(
+      extractAdminDbSemanticIntent("cek berapa pendapatan sport center kemarin"),
+    ).toMatchObject({
+      aggregation: "sum",
+      metricLabel: "pendapatan",
+      valueKind: "currency",
+      domain: "sport center",
+      timeRange: {
+        label: "kemarin",
+        startSql: "CURRENT_DATE - INTERVAL '1 day'",
+        endSql: "CURRENT_DATE",
+      },
+      inheritedFromContext: false,
+    });
+  });
+
+  it("inherits metric and domain for short conversational follow-ups", () => {
+    expect(
+      extractAdminDbSemanticIntent("kalau minggu lalu?", [
+        {
+          role: "user",
+          text: "cek berapa pendapatan sport center kemarin",
+        },
+        {
+          role: "assistant",
+          text: "Pendapatan sport center kemarin: Rp1.000.000.",
+        },
+      ]),
+    ).toMatchObject({
+      aggregation: "sum",
+      metricLabel: "pendapatan",
+      domain: "sport center",
+      timeRange: {
+        label: "minggu lalu",
+      },
+      inheritedFromContext: true,
+    });
+  });
+
+  it("discovers the best fact table and executes a semantic aggregate read-only", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          table_schema: "public",
+          table_name: "sport_bookings",
+          column_name: "id",
+          data_type: "bigint",
+          udt_name: "int8",
+          ordinal_position: 1,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_bookings",
+          column_name: "total_amount",
+          data_type: "numeric",
+          udt_name: "numeric",
+          ordinal_position: 2,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_bookings",
+          column_name: "booking_date",
+          data_type: "date",
+          udt_name: "date",
+          ordinal_position: 3,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_payments",
+          column_name: "id",
+          data_type: "bigint",
+          udt_name: "int8",
+          ordinal_position: 1,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_payments",
+          column_name: "amount",
+          data_type: "numeric",
+          udt_name: "numeric",
+          ordinal_position: 2,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_payments",
+          column_name: "status",
+          data_type: "character varying",
+          udt_name: "varchar",
+          ordinal_position: 3,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_payments",
+          column_name: "paid_at",
+          data_type: "timestamp with time zone",
+          udt_name: "timestamptz",
+          ordinal_position: 4,
+        },
+      ],
+    });
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{ value: "paid" }, { value: "failed" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ value: "1250000", matched_rows: "12" }],
+      });
+
+    const result = await executeAdminSemanticQuery(
+      "cek berapa pendapatan sport center kemarin",
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.sourceTable).toBe("public.sport_payments");
+    expect(result?.valueColumn).toBe("amount");
+    expect(result?.timeColumn).toBe("paid_at");
+    expect(result?.statusFilterApplied).toBe(true);
+    expect(result?.matchedRows).toBe(12);
+    expect(result?.sql).toContain('SUM("amount")');
+    expect(result?.sql).toContain('"paid_at" >= CURRENT_DATE - INTERVAL \'1 day\'');
+    expect(result?.sql).toContain("lower(\"status\"::text) IN ('paid')");
+
+    const reply = result ? renderAdminSemanticQueryResult(result) : "";
+    expect(reply).toContain("Pendapatan sport center kemarin");
+    expect(reply).toContain("Rp1.250.000");
+    expect(reply).toContain("read-only Admin DB Query");
   });
 
   it("extracts deterministic natural text lookups", () => {
