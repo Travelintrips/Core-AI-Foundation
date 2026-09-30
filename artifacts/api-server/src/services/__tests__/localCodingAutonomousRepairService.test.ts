@@ -179,3 +179,18 @@ describe("autonomous active-run race recovery", () => {
     expect(source).toContain('"active_run_race_deferred"');
   });
 });
+
+
+describe("autonomous AI handoff approval race recovery", () => {
+  it("continues when another cycle already advanced the handoff gate", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("/Coding task is not at the APPROVE_AI_HANDOFF gate/i.test(message)");
+    expect(source).toContain('state.nextAction === "AI_HANDOFF_APPROVED"');
+    expect(source).toContain('"CONTINUE_AI_HANDOFF_APPROVED"');
+    expect(source).toContain('"handoff_approval_race_advanced"');
+  });
+});
