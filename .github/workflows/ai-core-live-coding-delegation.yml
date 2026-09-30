@@ -33,9 +33,23 @@ jobs:
           test -n "$ADMIN_API_KEY"
           instruction='Audit AI Core Chat pada repository Core-AI-Foundation. Cari satu masalah kecil tetapi nyata pada reliability atau error handling yang aman untuk diperbaiki. Analisis penyebabnya, buat rencana kerja, bagi pekerjaan ke agent/worker yang sesuai bila diperlukan, implementasikan perbaikannya, tambahkan atau perbarui regression test, jalankan verification yang relevan, lalu laporkan hasil akhirnya beserta bukti test. Jangan melakukan perubahan production yang destruktif dan jangan melewati approval gate yang diwajibkan.'
           jq -nc --arg m "$instruction" '{message:$m,mode:"agent",modelPolicy:"auto",projectName:"AI Core",repository:"Travelintrips/Core-AI-Foundation",branch:"main",conversationId:"live-coding-delegation-20260930"}' > /tmp/request.json
-          code=$(curl -sS --connect-timeout 10 --max-time 60 -o /tmp/response.json -w "%{http_code}"             -X POST "$API_BASE_URL/ai/core-chat/messages"             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             --data-binary @/tmp/request.json || true)
+          code=""
+          for attempt in $(seq 1 5); do
+            code=$(curl -sS --connect-timeout 10 --max-time 90 -o /tmp/response.json -w "%{http_code}" \
+              -X POST "$API_BASE_URL/ai/core-chat/messages" \
+              -H "Content-Type: application/json" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              --data-binary @/tmp/request.json || true)
+            if [ "$code" = "202" ] || [ "$code" = "200" ]; then break; fi
+            if [ "$code" = "503" ] || [ "$code" = "502" ] || [ "$code" = "504" ] || [ "$code" = "000" ] || [ -z "$code" ]; then
+              echo "Transient AI Core Chat HTTP ${code:-curl-error} (attempt $attempt/5); retrying..."
+              sleep $((attempt * 5))
+              continue
+            fi
+            break
+          done
           if [ "$code" != "202" ] && [ "$code" != "200" ]; then
-            echo "::error::AI Core Chat delegation failed with HTTP $code"
+            echo "::error::AI Core Chat delegation failed after bounded retries with HTTP ${code:-curl-error}"
             jq -c '{error,warning}' /tmp/response.json 2>/dev/null || cat /tmp/response.json
             exit 1
           fi
