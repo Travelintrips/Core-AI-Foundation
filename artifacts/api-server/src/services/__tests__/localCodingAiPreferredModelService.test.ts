@@ -272,7 +272,51 @@ describe("Preferred constrained coding model routing", () => {
     });
   });
 
-  it("uses healthy loopback Ollama only when primary resolution fails", async () => {
+  it("prefers a healthy cloud fallback before default Ollama when the primary was not explicitly configured", async () => {
+    mocks.primary.ok = false;
+    mocks.cloudFallback.ok = true;
+
+    await expect(
+      resolvePreferredCodingModel({} as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      route: "FALLBACK",
+      primary: { provider: "openai", model: "gpt-5.6-sol" },
+      fallback: { provider: "anthropic", model: "claude-code" },
+      selection: {
+        provider: { slug: "anthropic" },
+        model: { modelId: "claude-code" },
+      },
+    });
+
+    expect(mocks.registeredLookupCalls).toBe(0);
+    expect(mocks.remoteLookupCalls).toBe(0);
+  });
+
+  it("keeps the configured Ollama fallback ahead of cloud fallback for an explicit primary", async () => {
+    mocks.primary.ok = false;
+    mocks.cloudFallback.ok = true;
+
+    await expect(
+      resolvePreferredCodingModel({
+        AI_CODING_PRIMARY_PROVIDER: "openai",
+        AI_CODING_PRIMARY_MODEL: "gpt-5.6-sol",
+      } as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({
+      ok: true,
+      route: "FALLBACK",
+      fallback: { provider: "ollama", model: "qwen2.5-coder:7b" },
+      selection: {
+        provider: {
+          slug: "ollama",
+          baseUrl: "http://127.0.0.1:11434/v1",
+        },
+        model: { modelId: "qwen2.5-coder:7b" },
+      },
+    });
+  });
+
+  it("uses healthy loopback Ollama only when default primary resolution fails and cloud fallback is unavailable", async () => {
     mocks.primary.ok = false;
 
     await expect(
