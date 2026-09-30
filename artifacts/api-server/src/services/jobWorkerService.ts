@@ -474,6 +474,30 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
   const capJson = JSON.stringify(capabilities);
 
   return db.transaction(async (tx) => {
+    // Multiple dispatch slots may concurrently target the same worker. Serialize
+    // only the short claim transaction for that worker so capacity admission is
+    // atomic while the actual job executions still run in parallel.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${workerId})`);
+    const [lockedWorker] = await tx
+      .select()
+      .from(aiWorkersTable)
+      .where(eq(aiWorkersTable.id, workerId))
+      .limit(1);
+
+    if (!lockedWorker) return null;
+    if (lockedWorker.status === "offline" || lockedWorker.status === "stale") {
+      return null;
+    }
+    if (
+      lockedWorker.leaseExpiresAt !== null &&
+      lockedWorker.leaseExpiresAt < new Date()
+    ) {
+      return null;
+    }
+    if (lockedWorker.runningJobs >= lockedWorker.maxConcurrentJobs) {
+      return null;
+    }
+
     // Find the highest-priority available job and lock it.
     // Also promotes due 'retrying' jobs (next_retry_at has elapsed).
     //

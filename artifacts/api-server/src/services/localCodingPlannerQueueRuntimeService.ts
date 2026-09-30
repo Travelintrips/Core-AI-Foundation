@@ -28,6 +28,7 @@ export async function enqueueCodingMultiTaskPlanner(taskId: string) {
     const [job] = await tx.insert(aiJobsTable).values({
       jobCode: `PLAN-${randomUUID().slice(0, 8).toUpperCase()}`,
       jobType: CODING_MULTI_TASK_PLANNER_JOB_TYPE,
+      requiredCapability: CODING_MULTI_TASK_PLANNER_JOB_TYPE,
       payloadJson: { taskId },
       priority: 80,
       priorityScore: "80",
