@@ -14,6 +14,8 @@ vi.mock("@workspace/db", () => ({
 }));
 
 import {
+  executeAdminNaturalTextLookup,
+  extractAdminDbNaturalLookup,
   executeAdminReadOnlySql,
   getAdminDbSchemaCatalog,
   shouldAttemptAdminDbQuery,
@@ -28,6 +30,17 @@ describe("AI Core admin database query service", () => {
     mocks.transaction.mockImplementation(async (fn: (tx: { execute: typeof mocks.txExecute }) => Promise<unknown>) =>
       fn({ execute: mocks.txExecute }),
     );
+  });
+
+  it("extracts deterministic natural text lookups", () => {
+    expect(extractAdminDbNaturalLookup("cari customer atas nama IKI")).toEqual({
+      subject: "customer",
+      value: "IKI",
+    });
+    expect(extractAdminDbNaturalLookup("lihat vendor bernama PT Sumber Makmur")).toEqual({
+      subject: "vendor",
+      value: "PT Sumber Makmur",
+    });
   });
 
   it("recognizes natural-language database lookups without an entity allowlist", () => {
@@ -77,6 +90,45 @@ describe("AI Core admin database query service", () => {
     expect(result[0]).toMatchObject({
       schema: "logistics",
       table: "shipments",
+    });
+  });
+
+  it("runs deterministic text lookup across dynamically discovered tables", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          table_schema: "public",
+          table_name: "customers",
+          columns: ["id", "name", "company_name", "api_token"],
+          text_columns: ["name", "company_name", "api_token"],
+        },
+      ],
+    });
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            row_data: {
+              id: "cust-1",
+              name: "IKI",
+              company_name: "IKI Logistics",
+              api_token: "hidden",
+            },
+          },
+        ],
+      });
+
+    const result = await executeAdminNaturalTextLookup("cari customer atas nama IKI");
+
+    expect(result?.rowCount).toBe(1);
+    expect(result?.rows[0]).toMatchObject({
+      source_table: "public.customers",
+      name: "IKI",
+      company_name: "IKI Logistics",
+      api_token: "[REDACTED]",
     });
   });
 
