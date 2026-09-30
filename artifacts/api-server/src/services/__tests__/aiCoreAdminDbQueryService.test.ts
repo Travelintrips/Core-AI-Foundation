@@ -476,6 +476,30 @@ describe("AI Core admin database query service", () => {
     expect(reply).not.toContain("Admin DB Query");
   });
 
+  it.each([
+    ["berapa banyak fasilitas sport center", "facilities", "sport_center_facilities"],
+    ["berapa jumlah booking sport center", "bookings", "sport_center_bookings"],
+    ["berapa jumlah customer sport center", "customers", "sport_center_customers"],
+    ["berapa jumlah invoice sport center", "invoices", "sport_center_invoices"],
+  ])("prefers canonical entity tables for %s", async (question, canonical, compatibility) => {
+    const columns = (table: string) => [
+      { table_schema: "sport_center", table_name: table, column_name: "id", data_type: "integer", udt_name: "int4", ordinal_position: 1 },
+      { table_schema: "sport_center", table_name: table, column_name: "name", data_type: "text", udt_name: "text", ordinal_position: 2 },
+    ];
+    mocks.execute.mockResolvedValueOnce({ rows: [...columns(compatibility), ...columns(canonical)] });
+    for (let index = 0; index < 4; index++) mocks.txExecute.mockResolvedValueOnce({ rows: [] });
+    mocks.txExecute.mockResolvedValueOnce({ rows: [{ value: "6", matched_rows: "6" }] });
+    const result = await executeAdminSemanticQuery(question);
+    expect(result?.sourceTable).toBe("sport_center." + canonical);
+    expect(result?.matchedRows).toBe(6);
+  });
+
+  it("recognizes Indonesian facility wording as the canonical facility domain", () => {
+    expect(extractAdminDbSemanticIntent("berapa banyak fasilitas sport center")).toMatchObject({
+      aggregation: "count", domain: "fasilitas sport center",
+    });
+  });
+
   it("does not count pending payments when no successful status is present", async () => {
     mocks.execute.mockResolvedValueOnce({ rows: paymentMetadata() });
     aggregateResponses(mocks.txExecute, ["pending", "cancelled"], "0", "0");

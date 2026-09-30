@@ -168,6 +168,10 @@ function normalizeWords(message: string): string[] {
     layanan: ["service", "services", "request"],
     service: ["service", "services", "request"],
     dokumen: ["document", "documents", "file"],
+    fasilitas: ["facility", "facilities"],
+    facility: ["facility", "facilities", "fasilitas"],
+    transaksi: ["transaction", "transactions", "payment", "payments"],
+    member: ["member", "members", "membership", "memberships"],
   };
 
   const base = message
@@ -364,7 +368,7 @@ function detectSemanticAggregation(message: string): {
 function extractSemanticDomain(message: string): string {
   let value = normalizeSemanticText(message);
   const removable = [
-    /\b(tolong|mohon|please|cek|check|periksa|lihat|show|tampilkan|cari|find|search|berapa|berapa banyak|hitung|count|jumlah|total)\b/g,
+    /\b(tolong|mohon|please|cek|check|periksa|lihat|show|tampilkan|cari|find|search|berapa(?:\s+banyak)?|hitung|count|jumlah|total)\b/g,
     /\b(pendapatan|omzet|revenue|pemasukan|income|sales|penjualan|nilai penjualan|total pembayaran|payment total|gross sales)\b/g,
     /\b(rata rata|average|avg|rerata|terbesar|tertinggi|maximum|max|maksimum|terkecil|terendah|minimum|min)\b/g,
     /\b(kemarin|yesterday|hari ini|today|minggu lalu|pekan lalu|last week|minggu ini|pekan ini|this week|bulan lalu|last month|bulan ini|this month|tahun lalu|last year|tahun ini|this year)\b/g,
@@ -471,6 +475,20 @@ function semanticTableScore(
   // A financial table from an unrelated business domain must not win merely
   // because its amount/time columns look suitable.
   if (score === 0) return 0;
+
+  // Prefer canonical operational entity tables over schema-prefixed
+  // compatibility/mirror names across common business domains.
+  const domainWords = new Set(words);
+  const canonicalEntities = [
+    ["facility", "facilities"], ["tenant", "tenants"], ["booking", "bookings"],
+    ["payment", "payments"], ["invoice", "invoices"], ["customer", "customers"],
+    ["vendor", "vendors"], ["member", "members"],
+  ] as const;
+  for (const [entity, plural] of canonicalEntities) {
+    if (!domainWords.has(entity) && !domainWords.has(plural)) continue;
+    if (tableName === plural) score += 30;
+    if (tableName.endsWith("_" + plural) && schemaName && tableName.startsWith(schemaName + "_")) score -= 20;
+  }
 
   if (intent.valueKind === "currency") {
     if (/expense|refund|cost|fee/.test(tableName)) return 0;
