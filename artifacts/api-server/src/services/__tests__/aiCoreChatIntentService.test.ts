@@ -3,11 +3,19 @@ import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
   detectRemoteWorkerPreset,
+  isAiCoreCapabilityQuery,
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
   it("defaults to one automatic chat mode", () => {
     expect(DEFAULT_AI_CORE_CHAT_MODE).toBe("auto");
+  });
+
+  it("recognizes capability questions for deterministic capability reporting", () => {
+    expect(isAiCoreCapabilityQuery("saya ingin tau kemampuan anda sebagai asisten")).toBe(true);
+    expect(isAiCoreCapabilityQuery("Anda bisa apa?")).toBe(true);
+    expect(isAiCoreCapabilityQuery("apa capabilities AI Core?")).toBe(true);
+    expect(isAiCoreCapabilityQuery("jelaskan Temporal")).toBe(false);
   });
 
   it("keeps normal questions on the answer path", () => {
