@@ -11,10 +11,10 @@ export type ChatLearningScope = {
 type LearningMetadata = Record<string, unknown>;
 
 const SECRET_PATTERNS = [
-  /\\b(?:api[_-]?key|token|password|secret)\\s*[:=]\\s*[^\\s,;]+/gi,
-  /\\bauthorization\\s*[:=]\\s*(?:Bearer\\s+)?[^\\s,;]+/gi,
-  /\\b(?:sk|ghp|github_pat|xox[baprs])-[-A-Za-z0-9_]{12,}\\b/g,
-  /\\bBearer\\s+[A-Za-z0-9._~+\\/-]+=*\\b/gi,
+  /\b(?:api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+/gi,
+  /\bauthorization\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/gi,
+  /\b(?:sk|ghp|github_pat|xox[baprs])-[-A-Za-z0-9_]{12,}\b/g,
+  /\bBearer\s+[A-Za-z0-9._~+\/-]+=*\b/gi,
 ];
 
 export function redactLearningText(value: string): string {
