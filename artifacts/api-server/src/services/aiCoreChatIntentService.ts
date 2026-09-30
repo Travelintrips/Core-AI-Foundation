@@ -6,6 +6,7 @@ import {
   detectAiCoreInfrastructureOperation,
   type AiCoreInfrastructureOperation,
 } from "./aiCoreInfrastructureControlService.js";
+import { isExplicitOpenClawDelegation } from "./externalAgentDispatchService.js";
 
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
 
@@ -14,6 +15,7 @@ export type AiCoreChatDispatchKind =
   | "ANSWER"
   | "REMOTE_READONLY"
   | "INFRA_OPERATION"
+  | "EXTERNAL_AGENT"
   | "CONTROL_PLANE";
 export type RemoteWorkerPreset = "check" | "build" | "test" | "review";
 
@@ -80,6 +82,17 @@ export function classifyAiCoreChatDispatch(
         workload.workload === "CRITICAL_ACTION"
           ? "Critical actions must enter the control plane and stop at the explicit approval gate."
           : "Repository-changing coding work must enter the Coding Orchestrator.",
+    };
+  }
+
+  if (isExplicitOpenClawDelegation(message)) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload,
+      preset: null,
+      infrastructureOperation: null,
+      reason:
+        "Explicit OpenClaw delegation is routed to the bounded external-agent work queue controlled by AI Core.",
     };
   }
 
