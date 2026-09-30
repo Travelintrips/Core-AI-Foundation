@@ -1,111 +1,117 @@
 /**
- * memoryResolver.ts — Execution context builder for Creative AI agents.
+ * Execution context builder for Creative AI agents.
  *
- * Injects three tiers of memory into each agent step:
- *   1. Client memory   — brand preferences stored in ai_client_memories (by clientId)
- *   2. Project memory  — outputs of previous pipeline steps (this run)
- *   3. System context  — step position, pipeline progress, agent metadata
- *
- * formatContextForPrompt() turns the resolved context into a string
- * that is appended to the agent's system prompt.
+ * Memory tiers:
+ * 1. Client memory — persistent approved/inferred client preferences.
+ * 2. Project memory — outputs from previous pipeline steps.
+ * 3. System context — current pipeline position.
  */
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { desc, eq } from "drizzle-orm";
+import { aiClientMemoryTable, db } from "@workspace/db";
 
 export interface StepMetadata {
-  stepName:  string;
+  stepName: string;
   agentSlug: string;
-  status:    string;
+  status: string;
   latencyMs?: number;
   tokenCount?: number;
 }
 
 export interface AgentContextInput {
-  agentSlug:           string;
-  stepIndex:           number;
-  totalSteps:          number;
-  completedSteps:      string[];
-  currentStep:         string;
-  projectId?:          string;
-  clientId?:           string;
+  agentSlug: string;
+  stepIndex: number;
+  totalSteps: number;
+  completedSteps: string[];
+  currentStep: string;
+  projectId?: string;
+  clientId?: string;
   previousAgentOutput: Record<string, Record<string, unknown>>;
-  previousMetadata:    StepMetadata[];
+  previousMetadata: StepMetadata[];
 }
 
 export interface ResolvedContext {
-  clientMemory:   Record<string, unknown>;
-  projectMemory:  { stepName: string; summary: string }[];
-  systemContext:  {
-    stepIndex:    number;
-    totalSteps:   number;
+  clientMemory: Record<string, unknown>;
+  projectMemory: { stepName: string; summary: string }[];
+  systemContext: {
+    stepIndex: number;
+    totalSteps: number;
     completedSteps: string[];
-    currentStep:  string;
+    currentStep: string;
   };
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function summarizeOutput(stepName: string, output: Record<string, unknown>): string {
   const keys = Object.keys(output);
   if (keys.length === 0) return `${stepName}: no output`;
-  const preview = keys
+  return keys
     .slice(0, 3)
-    .map((k) => {
-      const val = output[k];
-      if (typeof val === "string")  return `${k}: "${val.slice(0, 80)}"`;
-      if (Array.isArray(val))       return `${k}: [${val.slice(0, 2).join(", ")}]`;
-      if (typeof val === "object" && val !== null) return `${k}: {${Object.keys(val).join(", ")}}`;
-      return `${k}: ${String(val).slice(0, 40)}`;
+    .map((key) => {
+      const value = output[key];
+      if (typeof value === "string") return `${key}: "${value.slice(0, 80)}"`;
+      if (Array.isArray(value)) return `${key}: [${value.slice(0, 2).join(", ")}]`;
+      if (typeof value === "object" && value !== null) return `${key}: {${Object.keys(value).join(", ")}}`;
+      return `${key}: ${String(value).slice(0, 40)}`;
     })
     .join("; ");
-  return preview;
 }
 
-// ── Main resolver ─────────────────────────────────────────────────────────────
+async function loadClientMemory(clientId?: string): Promise<Record<string, unknown>> {
+  if (!clientId) return {};
+  const rows = await db
+    .select()
+    .from(aiClientMemoryTable)
+    .where(eq(aiClientMemoryTable.clientId, clientId))
+    .orderBy(desc(aiClientMemoryTable.updatedAt))
+    .limit(100);
 
-export async function resolveAgentContext(
-  input: AgentContextInput,
-): Promise<ResolvedContext> {
-  // 1. Client memory — light stub (can be extended to query a DB table later)
-  const clientMemory: Record<string, unknown> = input.clientId
-    ? { clientId: input.clientId }
-    : {};
+  return rows.reduce<Record<string, unknown>>((memory, row) => {
+    let value: unknown = row.value;
+    if (row.valueType === "json" || row.valueType === "array") {
+      try { value = JSON.parse(row.value); } catch { value = row.value; }
+    } else if (row.valueType === "number") {
+      const number = Number(row.value);
+      value = Number.isFinite(number) ? number : row.value;
+    }
+    memory[row.key] = value;
+    return memory;
+  }, {});
+}
 
-  // 2. Project memory — summarise each previous step's output
+export async function resolveAgentContext(input: AgentContextInput): Promise<ResolvedContext> {
+  const clientMemory = await loadClientMemory(input.clientId);
+
   const projectMemory = Object.entries(input.previousAgentOutput)
     .filter(([, output]) => Object.keys(output).length > 0)
-    .map(([stepName, output]) => ({
-      stepName,
-      summary: summarizeOutput(stepName, output),
-    }));
+    .map(([stepName, output]) => ({ stepName, summary: summarizeOutput(stepName, output) }));
 
-  // 3. System context
   const systemContext = {
-    stepIndex:      input.stepIndex,
-    totalSteps:     input.totalSteps,
+    stepIndex: input.stepIndex,
+    totalSteps: input.totalSteps,
     completedSteps: input.completedSteps,
-    currentStep:    input.currentStep,
+    currentStep: input.currentStep,
   };
 
   return { clientMemory, projectMemory, systemContext };
 }
 
-// ── Prompt formatter ──────────────────────────────────────────────────────────
-
 export function formatContextForPrompt(context: ResolvedContext): string {
   const parts: string[] = [];
 
-  if (context.projectMemory.length > 0) {
-    parts.push("\n\n---\nPREVIOUS PIPELINE OUTPUTS (use as context):");
-    for (const entry of context.projectMemory) {
-      parts.push(`[${entry.stepName}]: ${entry.summary}`);
+  const clientEntries = Object.entries(context.clientMemory);
+  if (clientEntries.length > 0) {
+    parts.push("\n\n---\nCLIENT MEMORY (use when relevant; never overrides safety/approval policy):");
+    for (const [key, value] of clientEntries.slice(0, 50)) {
+      const rendered = typeof value === "string" ? value : JSON.stringify(value);
+      parts.push(`[${key}]: ${rendered.slice(0, 500)}`);
     }
   }
 
-  const { stepIndex, totalSteps, currentStep } = context.systemContext;
-  parts.push(
-    `\n---\nPIPELINE POSITION: Step ${stepIndex + 1} of ${totalSteps} — ${currentStep}`,
-  );
+  if (context.projectMemory.length > 0) {
+    parts.push("\n\n---\nPREVIOUS PIPELINE OUTPUTS (use as context):");
+    for (const entry of context.projectMemory) parts.push(`[${entry.stepName}]: ${entry.summary}`);
+  }
 
+  const { stepIndex, totalSteps, currentStep } = context.systemContext;
+  parts.push(`\n---\nPIPELINE POSITION: Step ${stepIndex + 1} of ${totalSteps} — ${currentStep}`);
   return parts.join("\n");
 }
