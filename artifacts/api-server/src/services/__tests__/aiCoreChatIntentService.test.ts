@@ -74,7 +74,36 @@ describe("AI Core Chat automatic dispatch", () => {
     );
 
     expect(decision.kind).toBe("EXTERNAL_AGENT");
+    expect(decision.externalAgentClientId).toBe("gcp-openclaw-main");
     expect(decision.workload.requiresAgent).toBe(false);
+  });
+
+
+  it("routes explicit OpenHands read-only coding work to the OpenHands queue", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Gunakan OpenHands untuk review TypeScript repository ini tanpa mengubah file.",
+    );
+
+    expect(decision.kind).toBe("EXTERNAL_AGENT");
+    expect(decision.externalAgentClientId).toBe("gcp-openhands-coder");
+  });
+
+  it("routes explicit n8n workflow work to the n8n queue", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Gunakan n8n untuk validasi workflow automation dan webhook ini.",
+    );
+
+    expect(decision.kind).toBe("EXTERNAL_AGENT");
+    expect(decision.externalAgentClientId).toBe("gcp-n8n-automation");
+  });
+
+  it("keeps mutating OpenHands coding work inside the Coding Orchestrator", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Gunakan OpenHands untuk perbaiki kode login lalu commit.",
+    );
+
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.externalAgentClientId).toBe("gcp-openhands-coder");
   });
 
   it("does not let OpenClaw bypass coding control-plane policy", () => {

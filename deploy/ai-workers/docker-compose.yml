@@ -168,6 +168,7 @@ services:
       AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
     volumes:
       - n8n-state:/home/node/.n8n
+      - ./n8n:/opt/ai-core-n8n:ro
     ports:
       - "127.0.0.1:${N8N_PORT:-5678}:5678"
     networks:
@@ -239,6 +240,64 @@ services:
     security_opt:
       - no-new-privileges:true
     command: ["node", "/app/openclaw-supervisor.mjs"]
+
+
+  openhands-work-supervisor:
+    image: python:3.13-slim
+    restart: unless-stopped
+    depends_on:
+      openhands:
+        condition: service_started
+    environment:
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      AI_CORE_EXTERNAL_AGENT_CLIENT_ID: gcp-openhands-coder
+      AI_CORE_EXTERNAL_AGENT_RUNTIME: openhands
+      AI_CORE_AGENT_WORK_POLL_SECONDS: ${AI_CORE_AGENT_WORK_POLL_SECONDS:-5}
+      AI_CORE_AGENT_WORK_LEASE_SECONDS: ${AI_CORE_AGENT_WORK_LEASE_SECONDS:-120}
+      AI_CORE_AGENT_WORK_TIMEOUT_SECONDS: ${OPENHANDS_WORK_TIMEOUT_SECONDS:-180}
+      OPENHANDS_INTERNAL_URL: http://openhands:8000
+      OPENHANDS_LOCAL_BACKEND_API_KEY: ${OPENHANDS_LOCAL_BACKEND_API_KEY:?set OPENHANDS_LOCAL_BACKEND_API_KEY}
+    volumes:
+      - ./external-agent-supervisor.py:/app/external-agent-supervisor.py:ro
+    command: ["python", "/app/external-agent-supervisor.py"]
+    networks:
+      - control
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  n8n-work-supervisor:
+    image: python:3.13-slim
+    restart: unless-stopped
+    depends_on:
+      n8n:
+        condition: service_started
+    environment:
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      AI_CORE_EXTERNAL_AGENT_CLIENT_ID: gcp-n8n-automation
+      AI_CORE_EXTERNAL_AGENT_RUNTIME: n8n
+      AI_CORE_AGENT_WORK_POLL_SECONDS: ${AI_CORE_AGENT_WORK_POLL_SECONDS:-5}
+      AI_CORE_AGENT_WORK_LEASE_SECONDS: ${AI_CORE_AGENT_WORK_LEASE_SECONDS:-120}
+      AI_CORE_AGENT_WORK_TIMEOUT_SECONDS: ${N8N_WORK_TIMEOUT_SECONDS:-60}
+      N8N_AGENT_WORK_WEBHOOK_URL: http://n8n:5678/webhook/ai-core-external-work
+    volumes:
+      - ./external-agent-supervisor.py:/app/external-agent-supervisor.py:ro
+    command: ["python", "/app/external-agent-supervisor.py"]
+    networks:
+      - control
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
   agent-registrar:
     image: python:3.13-slim

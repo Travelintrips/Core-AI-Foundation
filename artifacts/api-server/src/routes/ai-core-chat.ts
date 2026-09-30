@@ -62,7 +62,9 @@ import {
 import {
   dispatchExternalAgentWork,
   getExternalAgentWorkState,
+  N8N_AGENT_CLIENT_ID,
   OPENCLAW_AGENT_CLIENT_ID,
+  OPENHANDS_AGENT_CLIENT_ID,
 } from "../services/externalAgentDispatchService.js";
 import {
   buildAdminDbUnresolvedAnswer,
@@ -1497,26 +1499,34 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
 
 async function startExternalAgentWork(
   input: z.infer<typeof ChatRequest>,
+  clientId: string,
 ): Promise<Record<string, unknown>> {
   const dispatched = await dispatchExternalAgentWork({
-    clientId: OPENCLAW_AGENT_CLIENT_ID,
+    clientId,
     instruction: input.message,
     source: "ai-core-chat",
   });
 
+  const provider =
+    clientId === OPENHANDS_AGENT_CLIENT_ID
+      ? "openhands"
+      : clientId === N8N_AGENT_CLIENT_ID
+        ? "n8n"
+        : "openclaw";
+
   return {
     kind: "external_agent",
     route: "EXTERNAL_AGENT",
-    provider: "openclaw",
+    provider,
     model: null,
     usage: null,
     estimatedCostUsd: null,
     reply:
-      "Perintah sudah diterima AI Core dan didelegasikan ke OpenClaw melalui bounded work queue. OpenClaw tidak memperoleh izin merge, production deploy, atau akses credential production.",
+      `Perintah sudah diterima AI Core dan didelegasikan ke ${provider} melalui role-scoped work queue. Critical production actions tetap membutuhkan approval AI Core.`,
     commandId: dispatched.command.id,
     externalCommandId: dispatched.command.externalCommandId,
     status: dispatched.command.status,
-    clientId: OPENCLAW_AGENT_CLIENT_ID,
+    clientId,
     created: dispatched.created,
   };
 }
@@ -1602,7 +1612,7 @@ async function runAutoMode(
   }
 
   if (decision.kind === "EXTERNAL_AGENT") {
-    const external = await startExternalAgentWork(input);
+    const external = await startExternalAgentWork(input, decision.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID);
     return { ...external, ...routingMeta };
   }
 
@@ -1760,7 +1770,10 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         ? (await runAdminDbMutationOperation(parsed.data.message)) ??
           (await runInfrastructureOperation(parsed.data.message)) ??
           (classifyAiCoreChatDispatch(parsed.data.message).kind === "EXTERNAL_AGENT"
-            ? await startExternalAgentWork(parsed.data)
+            ? await startExternalAgentWork(
+                parsed.data,
+                classifyAiCoreChatDispatch(parsed.data.message).externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
+              )
             : null) ??
           (await maybeRunRemoteWorkerPreset(parsed.data)) ??
           await startAgentTask(parsed.data)

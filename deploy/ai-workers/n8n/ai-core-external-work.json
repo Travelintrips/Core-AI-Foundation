@@ -1,0 +1,53 @@
+[
+  {
+    "id": "AIcoreExternalWork001",
+    "name": "AI Core External Work",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ai-core-external-work",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "ai-core-webhook",
+        "name": "AI Core Work Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "eb56518a-706f-4a91-9110-3b0f2cd97927"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $json.body ?? $json;\nreturn [{\n  json: {\n    ok: true,\n    status: \"N8N_WORKFLOW_EXECUTED\",\n    message: \"n8n executed the AI Core external-work workflow.\",\n    commandId: body.commandId ?? null,\n    instruction: body.instruction ?? null,\n    clientId: body.clientId ?? null\n  }\n}];"
+        },
+        "id": "ack-work",
+        "name": "Execute Scoped Work",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          260,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "AI Core Work Webhook": {
+        "main": [
+          [
+            {
+              "node": "Execute Scoped Work",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {}
+  }
+]

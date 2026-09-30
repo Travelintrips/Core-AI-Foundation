@@ -176,6 +176,21 @@ compose up -d --remove-orphans \
   temporal-db temporal-admin-tools temporal temporal-create-namespace temporal-ui \
   n8n-db n8n openhands
 
+log "Installing AI Core n8n external-work workflow"
+n8n_ready=false
+for _ in $(seq 1 30); do
+  if compose exec -T n8n wget -q -O /dev/null http://127.0.0.1:5678/healthz >/dev/null 2>&1; then
+    n8n_ready=true
+    break
+  fi
+  sleep 2
+done
+if [ "$n8n_ready" != "true" ]; then
+  fail "n8n did not become ready for external-work workflow installation"
+fi
+compose exec -T n8n n8n import:workflow --input=/opt/ai-core-n8n/ai-core-external-work.json >/dev/null
+compose exec -T n8n n8n update:workflow --id=AIcoreExternalWork001 --active=true >/dev/null
+
 if [ -n "$temporal_coding_token" ]; then
   log "Starting Temporal coding orchestrator"
   compose up -d temporal-coding-worker
@@ -246,8 +261,11 @@ openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gat
 compose run -T --rm --no-deps --entrypoint node openclaw \
   dist/index.js config set --batch-json "$openclaw_policy"
 
-log "Starting OpenClaw"
+log "Starting OpenClaw and scoped external-agent workers"
 compose up -d openclaw agent-registrar
+if [ -n "$scoped_agent_token" ]; then
+  compose up -d openhands-work-supervisor n8n-work-supervisor
+fi
 
 log "Running bounded health checks"
 AI_WORKERS_ENV_FILE="$ENV_FILE" bash "$SCRIPT_DIR/ai-workers-healthcheck.sh"

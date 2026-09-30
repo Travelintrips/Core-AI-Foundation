@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+﻿import { randomUUID } from "node:crypto";
 import {
   EXTERNAL_AGENT_POLICY_VERSION,
   getExternalAgentRegistrySnapshot,
   getExternalAgentRule,
+  type ExternalAgentClientId,
 } from "./externalAgentRegistryService.js";
 import {
   getCodingBridgeCommandExecutionState,
@@ -10,6 +11,26 @@ import {
 } from "./localCodingControlBridgeService.js";
 
 export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
+export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
+export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
+
+const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
+  [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
+  [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
+  [N8N_AGENT_CLIENT_ID]: "workflow:automation",
+};
+
+const EXPLICIT_AGENT_PATTERNS: Array<{
+  clientId: ExternalAgentClientId;
+  agent: RegExp;
+}> = [
+  { clientId: OPENCLAW_AGENT_CLIENT_ID, agent: /\bopen\s*claw\b|\bopenclaw\b/i },
+  { clientId: OPENHANDS_AGENT_CLIENT_ID, agent: /\bopen\s*hands\b|\bopenhands\b/i },
+  { clientId: N8N_AGENT_CLIENT_ID, agent: /\bn8n\b/i },
+];
+
+const DELEGATION_VERB =
+  /\b(gunakan|pakai|gunakanlah|jalankan|suruh|minta|delegasikan|delegate|route|rutekan|via|melalui|dengan)\b/i;
 
 export class ExternalAgentDispatchError extends Error {
   constructor(
@@ -24,13 +45,22 @@ export class ExternalAgentDispatchError extends Error {
   }
 }
 
-export function isExplicitOpenClawDelegation(message: string): boolean {
-  const text = message.trim().toLowerCase();
-  if (!text || !/\bopen\s*claw\b|\bopenclaw\b/i.test(text)) return false;
+export function detectExplicitExternalAgentClientId(
+  message: string,
+): ExternalAgentClientId | null {
+  const text = message.trim();
+  if (!text || !DELEGATION_VERB.test(text)) return null;
 
-  return /\b(gunakan|pakai|gunakanlah|jalankan|suruh|minta|delegasikan|delegate|route|rutekan|via|melalui|dengan)\b/i.test(
-    text,
-  );
+  for (const candidate of EXPLICIT_AGENT_PATTERNS) {
+    if (candidate.agent.test(text)) return candidate.clientId;
+  }
+  return null;
+}
+
+export function requiredCapabilityForExternalAgent(
+  clientId: ExternalAgentClientId,
+): string {
+  return REQUIRED_CAPABILITY[clientId];
 }
 
 export async function dispatchExternalAgentWork(input: {
@@ -47,10 +77,13 @@ export async function dispatchExternalAgentWork(input: {
     );
   }
 
-  if (!rule.capabilities.some((capability) => capability === "tools:bounded")) {
+  const requiredCapability = requiredCapabilityForExternalAgent(
+    input.clientId as ExternalAgentClientId,
+  );
+  if (!rule.capabilities.some((capability) => capability === requiredCapability)) {
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
-      "External agent is not authorized for bounded tool execution.",
+      `External agent is not authorized for required capability ${requiredCapability}.`,
     );
   }
 
@@ -81,7 +114,8 @@ export async function dispatchExternalAgentWork(input: {
     },
     metadata: {
       requestedAt: new Date().toISOString(),
-      executionBoundary: "bounded",
+      executionBoundary: "role-scoped",
+      requiredCapability,
       criticalActionsRequireAiCoreApproval: true,
     },
   });
@@ -96,3 +130,4 @@ export async function dispatchExternalAgentWork(input: {
 export async function getExternalAgentWorkState(commandId: string) {
   return getCodingBridgeCommandExecutionState(commandId);
 }
+

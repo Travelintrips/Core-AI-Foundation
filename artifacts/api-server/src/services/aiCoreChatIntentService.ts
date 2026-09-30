@@ -1,4 +1,4 @@
-import {
+﻿import {
   classifyAiCoreWorkload,
   type AiCoreWorkloadRoute,
 } from "./aiCoreWorkloadRouterService.js";
@@ -6,6 +6,9 @@ import {
   detectAiCoreInfrastructureOperation,
   type AiCoreInfrastructureOperation,
 } from "./aiCoreInfrastructureControlService.js";
+import {
+  detectExplicitExternalAgentClientId,
+} from "./externalAgentDispatchService.js";
 
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
 
@@ -23,6 +26,7 @@ export interface AiCoreChatDispatchDecision {
   workload: AiCoreWorkloadRoute;
   preset: RemoteWorkerPreset | null;
   infrastructureOperation: AiCoreInfrastructureOperation | null;
+  externalAgentClientId: string | null;
   reason: string;
 }
 
@@ -31,12 +35,6 @@ const MUTATING =
 
 const REPOSITORY_READONLY_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
-
-function isExplicitOpenClawDelegation(message: string): boolean {
-  const text = message.trim().toLowerCase();
-  if (!text || !/\bopen\s*claw\b|\bopenclaw\b/i.test(text)) return false;
-  return /\b(gunakan|pakai|gunakanlah|jalankan|suruh|minta|delegasikan|delegate|route|rutekan|via|melalui|dengan)\b/i.test(text);
-}
 
 export function isAiCoreCapabilityQuery(message: string): boolean {
   const value = message.trim().toLowerCase();
@@ -66,6 +64,7 @@ export function classifyAiCoreChatDispatch(
 ): AiCoreChatDispatchDecision {
   const workload = classifyAiCoreWorkload(message);
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
+  const externalAgentClientId = detectExplicitExternalAgentClientId(message);
 
   if (infrastructureOperation) {
     return {
@@ -73,6 +72,7 @@ export function classifyAiCoreChatDispatch(
       workload,
       preset: null,
       infrastructureOperation,
+      externalAgentClientId: null,
       reason: "Infrastructure request is handled directly by the AI Core capability executor.",
     };
   }
@@ -83,21 +83,23 @@ export function classifyAiCoreChatDispatch(
       workload,
       preset: null,
       infrastructureOperation: null,
+      externalAgentClientId,
       reason:
         workload.workload === "CRITICAL_ACTION"
           ? "Critical actions must enter the control plane and stop at the explicit approval gate."
-          : "Repository-changing coding work must enter the Coding Orchestrator.",
+          : "Repository-changing coding work must enter the Coding Orchestrator; an explicitly named coding agent may be used only inside that controlled path.",
     };
   }
 
-  if (isExplicitOpenClawDelegation(message)) {
+  if (externalAgentClientId) {
     return {
       kind: "EXTERNAL_AGENT",
       workload,
       preset: null,
       infrastructureOperation: null,
+      externalAgentClientId,
       reason:
-        "Explicit OpenClaw delegation is routed to the bounded external-agent work queue controlled by AI Core.",
+        "Explicit external-agent delegation is routed to the role-scoped work queue controlled by AI Core.",
     };
   }
 
@@ -112,6 +114,7 @@ export function classifyAiCoreChatDispatch(
       workload,
       preset,
       infrastructureOperation: null,
+      externalAgentClientId: null,
       reason:
         "Read-only repository inspection can run on the trusted remote worker without creating a coding task.",
     };
@@ -122,7 +125,9 @@ export function classifyAiCoreChatDispatch(
     workload,
     preset: null,
     infrastructureOperation: null,
+    externalAgentClientId: null,
     reason:
       "This request can be answered without mutating the repository or production system.",
   };
 }
+
