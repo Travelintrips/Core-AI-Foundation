@@ -194,3 +194,18 @@ describe("autonomous AI handoff approval race recovery", () => {
     expect(source).toContain('"handoff_approval_race_advanced"');
   });
 });
+
+
+describe("autonomous transient database recovery", () => {
+  it("retries state reads and defers transient database failures instead of terminal FAILED", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("withTransientDatabaseRetry(");
+    expect(source).toContain("/timeout exceeded when trying to connect|Failed query:/i.test(message)");
+    expect(source).toContain('"RETRY_TRANSIENT_DATABASE"');
+    expect(source).toContain('"transient_database_retry_scheduled"');
+  });
+});
