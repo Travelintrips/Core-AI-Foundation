@@ -53,6 +53,21 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(detectRemoteWorkerPreset("uji test API secara read-only")).toBe("test");
   });
 
+  it("routes Hostinger and GCP operations to the infrastructure executor", () => {
+    expect(classifyAiCoreChatDispatch("cek status Hostinger VPS")).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "HOSTINGER_VPS_STATUS",
+    });
+    expect(classifyAiCoreChatDispatch("restart GCP ollama VM")).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "GCP_VM_RESTART",
+    });
+    expect(classifyAiCoreChatDispatch("cek status OpenClaw dan OpenHands")).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "EXTERNAL_AGENT_STATUS",
+    });
+  });
+
   it("routes coding changes directly to the control plane", () => {
     const decision = classifyAiCoreChatDispatch(
       "Perbaiki kode login dan test sampai hijau.",

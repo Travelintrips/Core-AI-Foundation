@@ -50,11 +50,18 @@ import {
   tryRunAiCoreDataTool,
 } from "../services/aiCoreDataToolService.js";
 import {
+  detectAiCoreInfrastructureOperation,
+  executeAiCoreInfrastructureOperation,
+} from "../services/aiCoreInfrastructureControlService.js";
+import {
+  executeAdminMutationSql,
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
+  extractExplicitAdminMutationSql,
   extractExplicitReadOnlySql,
   formatAdminDbSchemaCatalog,
   getAdminDbSchemaCatalog,
+  renderAdminDbMutationResult,
   renderAdminDbQueryResult,
   shouldAttemptAdminDbQuery,
 } from "../services/aiCoreAdminDbQueryService.js";
@@ -1402,9 +1409,67 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
   };
 }
 
+async function runAdminDbMutationOperation(
+  message: string,
+): Promise<Record<string, unknown> | null> {
+  const statement = extractExplicitAdminMutationSql(message);
+  if (!statement) return null;
+
+  const result = await executeAdminMutationSql(statement);
+  return {
+    kind: "execution",
+    route: "ADMIN_DB_MUTATION",
+    provider: "postgres",
+    model: null,
+    usage: null,
+    estimatedCostUsd: 0,
+    mutating: true,
+    reply: renderAdminDbMutationResult(result),
+    rowCount: result.rowCount,
+    elapsedMs: result.elapsedMs,
+  };
+}
+
+async function runInfrastructureOperation(
+  message: string,
+): Promise<Record<string, unknown> | null> {
+  const operation = detectAiCoreInfrastructureOperation(message);
+  if (!operation) return null;
+
+  const result = await executeAiCoreInfrastructureOperation({
+    operation,
+    requestedBy: "ai-core-chat",
+  });
+
+  return {
+    kind: "execution",
+    route: "INFRA_CONTROL_PLANE",
+    provider: result.provider,
+    model: null,
+    usage: null,
+    estimatedCostUsd: 0,
+    operation: result.operation,
+    mutating: result.mutating,
+    reply: result.reply,
+    data: result.data,
+  };
+}
+
 async function runAutoMode(
   input: z.infer<typeof ChatRequest>,
 ): Promise<Record<string, unknown>> {
+  const dbMutation = await runAdminDbMutationOperation(input.message);
+  if (dbMutation) {
+    return {
+      ...dbMutation,
+      workload: "DATA_MUTATION",
+      costClass: "ZERO",
+      autoRouted: true,
+      dispatch: "DB_MUTATION",
+      dispatchReason: "Explicit SQL mutation executed by the AI Core database executor.",
+    };
+  }
+
   const decision = classifyAiCoreChatDispatch(input.message);
   const routingMeta = {
     workload: decision.workload.workload,
@@ -1413,6 +1478,11 @@ async function runAutoMode(
     dispatch: decision.kind,
     dispatchReason: decision.reason,
   };
+
+  if (decision.kind === "INFRA_OPERATION") {
+    const result = await runInfrastructureOperation(input.message);
+    if (result) return { ...result, ...routingMeta };
+  }
 
   if (decision.kind === "CONTROL_PLANE") {
     const result = await startAgentTask(input);
@@ -1444,6 +1514,7 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     autoRouting: {
       answer: ["DETERMINISTIC", "CHAT", "REASONING"],
       remoteReadonly: ["REVIEW"],
+      infrastructure: ["GCP", "HOSTINGER", "EXTERNAL_AGENT"],
       controlPlane: ["CODING", "CRITICAL_ACTION"],
       criticalApprovalPreserved: true,
     },
@@ -1553,7 +1624,10 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   try {
     const result =
       parsed.data.mode === "agent"
-        ? (await maybeRunRemoteWorkerPreset(parsed.data)) ?? await startAgentTask(parsed.data)
+        ? (await runAdminDbMutationOperation(parsed.data.message)) ??
+          (await runInfrastructureOperation(parsed.data.message)) ??
+          (await maybeRunRemoteWorkerPreset(parsed.data)) ??
+          await startAgentTask(parsed.data)
         : parsed.data.mode === "ask"
           ? await answerAskMode(parsed.data.message, parsed.data.modelPolicy)
           : await runAutoMode(parsed.data);
