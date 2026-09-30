@@ -73,6 +73,17 @@ const SENSITIVE_COLUMN =
 
 const MAX_RESULT_ROWS = 200;
 const STATEMENT_TIMEOUT_MS = 8000;
+const DEFAULT_BUSINESS_TIMEZONE = "Asia/Jakarta";
+
+function adminDbBusinessTimezone(): string {
+  const candidate =
+    process.env["AI_CORE_BUSINESS_TIMEZONE"] ??
+    process.env["AI_SCHEDULER_TIMEZONE"] ??
+    DEFAULT_BUSINESS_TIMEZONE;
+  return /^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+.-]+)*$/.test(candidate)
+    ? candidate
+    : DEFAULT_BUSINESS_TIMEZONE;
+}
 
 function rowsOf<T extends Record<string, unknown>>(value: unknown): T[] {
   if (!value || typeof value !== "object" || !("rows" in value)) return [];
@@ -162,7 +173,7 @@ const FOLLOW_UP_HINT =
   /^(?:kalau|kalo|bagaimana|gimana|lalu|terus|dan|dibanding|bandingkan|yang|untuk|sedangkan)\b/i;
 
 const SUCCESS_STATUS =
-  /^(?:paid|success|successful|completed|complete|settled|captured|approved|done|succeeded)$/i;
+  /^(?:paid|success|successful|completed|complete|settled|captured|approved|done|succeeded|lunas|berhasil)$/i;
 
 const NUMERIC_DATA_TYPES = new Set([
   "smallint",
@@ -612,12 +623,16 @@ export async function executeAdminSemanticQuery(
     quoteIdentifier(plan.table.schema) + "." + quoteIdentifier(plan.table.table);
   const startedAt = Date.now();
 
+  const businessTimezone = adminDbBusinessTimezone();
   const execution = await db.transaction(async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw(
       "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
     ));
     await tx.execute(sql.raw("SET LOCAL lock_timeout = '1500ms'"));
+    await tx.execute(sql.raw(
+      "SET LOCAL TIME ZONE " + quoteSqlLiteral(businessTimezone)
+    ));
 
     let successfulStatuses: string[] = [];
     if (plan.statusColumn && plan.intent.valueKind === "currency") {
@@ -671,6 +686,7 @@ export async function executeAdminSemanticQuery(
     source_table: plan.table.schema + "." + plan.table.table,
     source_column: plan.valueColumn?.name ?? null,
     time_column: plan.timeColumn?.name ?? null,
+    timezone: businessTimezone,
   }];
 
   return {
@@ -721,13 +737,20 @@ export function renderAdminSemanticQueryResult(
   const timeDetail =
     result.timeColumn ? "; waktu memakai " + result.timeColumn : "";
 
+  const zeroDetail =
+    result.matchedRows === 0
+      ? " Tidak ada transaksi/record yang memenuhi filter pada periode tersebut."
+      : "";
+
   return [
     result.intent.metricLabel.charAt(0).toUpperCase() +
       result.intent.metricLabel.slice(1) +
       " " + result.intent.domain + period + ": " +
-      formatSemanticValue(row.value, result.intent.valueKind) + ".",
+      formatSemanticValue(row.value, result.intent.valueKind) + "." +
+      zeroDetail,
     "Dihitung dari " + String(result.matchedRows) +
-      " record pada " + source + timeDetail + ".",
+      " record pada " + source + timeDetail +
+      "; zona waktu " + adminDbBusinessTimezone() + ".",
     "Confidence semantic: " +
       String(Math.round(result.confidence * 100)) + "%; " +
       (result.statusFilterApplied
