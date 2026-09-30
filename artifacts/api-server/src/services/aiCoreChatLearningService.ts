@@ -11,7 +11,8 @@ export type ChatLearningScope = {
 type LearningMetadata = Record<string, unknown>;
 
 const SECRET_PATTERNS = [
-  /\b(?:api[_-]?key|token|password|secret|authorization)\s*[:=]\s*[^\s,;]+/gi,
+  /\b(?:api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+/gi,
+  /\bauthorization\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/gi,
   /\b(?:sk|ghp|github_pat|xox[baprs])-[-A-Za-z0-9_]{12,}\b/g,
   /\bBearer\s+[A-Za-z0-9._~+\/-]+=*\b/gi,
 ];
@@ -124,15 +125,19 @@ export async function retrieveChatLearnings(
 
   const repo = scope.repository?.toLowerCase() ?? null;
   const project = scope.projectName?.toLowerCase() ?? null;
+  const branch = scope.branch?.toLowerCase() ?? null;
   return rows
     .filter((row) => {
       const meta = (row.metadata ?? {}) as Record<string, unknown>;
       const memoryRepo = typeof meta.repository === "string" ? meta.repository.toLowerCase() : null;
       const memoryProject = typeof meta.projectName === "string" ? meta.projectName.toLowerCase() : null;
+      const memoryBranch = typeof meta.branch === "string" ? meta.branch.toLowerCase() : null;
       if (memoryRepo && repo && memoryRepo !== repo) return false;
       if (memoryRepo && !repo) return false;
       if (memoryProject && project && memoryProject !== project) return false;
       if (memoryProject && !project) return false;
+      if (memoryBranch && branch && memoryBranch !== branch) return false;
+      if (memoryBranch && !branch) return false;
       return true;
     })
     .slice(0, limit);
