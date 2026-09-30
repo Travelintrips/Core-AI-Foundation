@@ -572,6 +572,24 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const state = await loadTaskState(taskId).catch(() => null);
+
+    if (
+      /Coding task already has an active run/i.test(message) &&
+      state?.activeRun
+    ) {
+      const action = `WAIT_ACTIVE_RUN:${state.activeRun.agentName}`;
+      await setState(taskId, "WAITING", action, null);
+      await logAudit(
+        "coding-autonomous",
+        "active_run_race_deferred",
+        taskId,
+        "coding_task",
+        "success",
+        { activeRunId: state.activeRun.id, agentName: state.activeRun.agentName },
+      ).catch(() => undefined);
+      return { taskId, status: "WAITING", action };
+    }
+
     const freshHandoffRequired =
       state?.task.status === "READY_REVIEW" &&
       state.nextAction === "AI_REQUIRED" &&
