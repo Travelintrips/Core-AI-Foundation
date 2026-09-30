@@ -1124,20 +1124,21 @@ async function streamAskMode(
   res: Response,
   signal: AbortSignal,
   context: AdminDbConversationMessage[] = [],
+  routingMessage = message,
 ): Promise<void> {
-  const workload = classifyAiCoreWorkload(message);
+  const workload = classifyAiCoreWorkload(routingMessage);
   const routingMeta = {
     workload: workload.workload,
     costClass: workload.costClass,
   };
 
-  const deterministic = await deterministicReply(message, workload);
+  const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) {
     writeBufferedChatStream(res, deterministic);
     return;
   }
 
-  const dataTool = await tryRunAiCoreDataTool(message);
+  const dataTool = await tryRunAiCoreDataTool(routingMessage);
   if (dataTool.matched) {
     writeBufferedChatStream(res, {
       kind: "answer",
@@ -1156,7 +1157,7 @@ async function streamAskMode(
     return;
   }
 
-  const adminDbQuery = await tryRunAdminDbQuery(message, policy, context).catch(
+  const adminDbQuery = await tryRunAdminDbQuery(routingMessage, policy, context).catch(
     (error: unknown) => ({
       kind: "answer",
       route: "ADMIN_DB_QUERY",
@@ -1739,12 +1740,29 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   res.once("close", abort);
 
   try {
+    const scope = {
+      sessionId: parsed.data.conversationId ?? null,
+      projectName: parsed.data.projectName ?? null,
+      repository: parsed.data.repository ?? null,
+      branch: parsed.data.branch ?? null,
+    };
+    await recordChatLearningEvent({
+      role: "user",
+      content: parsed.data.message,
+      scope,
+      metadata: { mode: "ask", modelPolicy: parsed.data.modelPolicy, streaming: true },
+    }).catch(() => undefined);
+    await promoteExplicitChatLearning(parsed.data.message, scope).catch(() => false);
+    const learnings = await retrieveChatLearnings(scope).catch(() => []);
+    const effectiveMessage = appendLearningsToMessage(parsed.data.message, learnings);
+
     await streamAskMode(
-      parsed.data.message,
+      effectiveMessage,
       parsed.data.modelPolicy,
       res,
       controller.signal,
       parsed.data.context ?? [],
+      parsed.data.message,
     );
   } catch (error) {
     if (!controller.signal.aborted && !res.writableEnded) {
