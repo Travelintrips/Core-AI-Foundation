@@ -19,6 +19,8 @@ describe("AI Core Chat automatic dispatch", () => {
       isAiCoreCapabilityQuery("apakah sekarang anda sudah dapat langsung mencari ke database?"),
     ).toBe(true);
     expect(isAiCoreCapabilityQuery("bisa query db langsung?")).toBe(true);
+    expect(isAiCoreCapabilityQuery("Agent apa saja yang sudah terinstall disini")).toBe(true);
+    expect(isAiCoreCapabilityQuery("Worker apa yang terpasang")).toBe(true);
     expect(isAiCoreCapabilityQuery("jelaskan Temporal")).toBe(false);
   });
 
