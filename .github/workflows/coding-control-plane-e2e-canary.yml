@@ -253,9 +253,9 @@ jobs:
               -H "x-admin-api-key: $ADMIN_API_KEY" || true)
             if [ "$graph_code" = "200" ]; then
               graph_status=$(jq -r '.graph.status // empty' /tmp/graph-probe.json 2>/dev/null || true)
-              graph_id=$(jq -r 'select(.graph.status == "PREPARED") | .graph.id // empty' /tmp/graph-probe.json 2>/dev/null || true)
+              graph_id=$(jq -r 'select(.graph.status == "PREPARED" or .graph.status == "APPROVED") | .graph.id // empty' /tmp/graph-probe.json 2>/dev/null || true)
               if [[ "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-                echo "Adopting PREPARED task graph $graph_id produced by the in-flight planner."
+                echo "Adopting $graph_status task graph $graph_id produced by the in-flight planner."
                 break
               fi
               if [ -n "$graph_status" ]; then
@@ -395,9 +395,10 @@ jobs:
             cat /tmp/graph.json 2>/dev/null || true
             exit 1
           fi
-          graph_id=$(jq -r 'select(.graph.status == "PREPARED") | .graph.id // empty' /tmp/graph.json 2>/dev/null || true)
+          graph_status=$(jq -r '.graph.status // empty' /tmp/graph.json 2>/dev/null || true)
+          graph_id=$(jq -r 'select(.graph.status == "PREPARED" or .graph.status == "APPROVED") | .graph.id // empty' /tmp/graph.json 2>/dev/null || true)
           if [[ ! "$graph_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-            echo "::error::Planner job completed but no PREPARED task graph was persisted"
+            echo "::error::Planner job completed but no PREPARED/APPROVED task graph was persisted"
             cat /tmp/graph.json 2>/dev/null || true
             exit 1
           fi
