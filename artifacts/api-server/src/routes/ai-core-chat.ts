@@ -50,6 +50,7 @@ import {
   tryRunAiCoreDataTool,
 } from "../services/aiCoreDataToolService.js";
 import {
+  executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
   extractExplicitReadOnlySql,
   formatAdminDbSchemaCatalog,
@@ -437,6 +438,34 @@ async function tryRunAdminDbQuery(
   policy: ChatPolicy,
 ): Promise<Record<string, unknown> | null> {
   if (!shouldAttemptAdminDbQuery(message)) return null;
+
+  const deterministicLookup = await executeAdminNaturalTextLookup(message);
+  if (deterministicLookup) {
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: renderAdminDbQueryResult(deterministicLookup),
+      databaseQuery: {
+        sql: deterministicLookup.sql,
+        rowCount: deterministicLookup.rowCount,
+        truncated: deterministicLookup.truncated,
+        elapsedMs: deterministicLookup.elapsedMs,
+        reason: "Deterministic dynamic text lookup over discovered application tables.",
+        access: "ADMIN_READ_ONLY",
+      },
+      data: deterministicLookup.rows,
+    };
+  }
 
   const explicitSql = extractExplicitReadOnlySql(message);
   let plannedSql = explicitSql;
