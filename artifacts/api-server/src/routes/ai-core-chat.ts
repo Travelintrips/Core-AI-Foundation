@@ -62,9 +62,9 @@ import {
 import {
   dispatchExternalAgentWork,
   getExternalAgentWorkState,
-  N8N_AGENT_CLIENT_ID,
   OPENCLAW_AGENT_CLIENT_ID,
-  OPENHANDS_AGENT_CLIENT_ID,
+  providerForExternalAgent,
+  type ExternalAgentClientId,
 } from "../services/externalAgentDispatchService.js";
 import {
   buildAdminDbUnresolvedAnswer,
@@ -1499,20 +1499,14 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
 
 async function startExternalAgentWork(
   input: z.infer<typeof ChatRequest>,
-  clientId: string,
+  clientId: ExternalAgentClientId,
 ): Promise<Record<string, unknown>> {
   const dispatched = await dispatchExternalAgentWork({
     clientId,
     instruction: input.message,
     source: "ai-core-chat",
   });
-
-  const provider =
-    clientId === OPENHANDS_AGENT_CLIENT_ID
-      ? "openhands"
-      : clientId === N8N_AGENT_CLIENT_ID
-        ? "n8n"
-        : "openclaw";
+  const provider = providerForExternalAgent(clientId);
 
   return {
     kind: "external_agent",
@@ -1527,6 +1521,7 @@ async function startExternalAgentWork(
     externalCommandId: dispatched.command.externalCommandId,
     status: dispatched.command.status,
     clientId,
+    requiredCapability: dispatched.requiredCapability,
     created: dispatched.created,
   };
 }
@@ -1642,7 +1637,12 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       answer: ["DETERMINISTIC", "CHAT", "REASONING"],
       remoteReadonly: ["REVIEW"],
       infrastructure: ["GCP", "HOSTINGER", "EXTERNAL_AGENT_STATUS"],
-      externalAgent: ["EXPLICIT_OPENCLAW_DELEGATION"],
+      externalAgent: [
+        "OPENHANDS_BUILD_TEST_REVIEW",
+        "N8N_WORKFLOW_WEBHOOK_AUTOMATION",
+        "OPENCLAW_BOUNDED_COORDINATION",
+        "EXPLICIT_AGENT_DELEGATION",
+      ],
       controlPlane: ["CODING", "CRITICAL_ACTION"],
       criticalApprovalPreserved: true,
     },
