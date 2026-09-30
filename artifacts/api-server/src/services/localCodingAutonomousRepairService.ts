@@ -571,6 +571,36 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const state = await loadTaskState(taskId).catch(() => null);
+    const freshHandoffRequired =
+      state?.task.status === "READY_REVIEW" &&
+      state.nextAction === "AI_REQUIRED" &&
+      /one-shot model privilege was consumed|fresh AI handoff is required|Proposal Contract V1 validation/i.test(message);
+
+    if (freshHandoffRequired) {
+      await setState(
+        taskId,
+        "ACTIVE",
+        "RECOVER_FRESH_AI_HANDOFF",
+        message.slice(0, 2000),
+      );
+      await report(
+        taskId,
+        "CHECKPOINT",
+        "Constrained AI proposal gagal setelah privilege dikonsumsi. AI Core akan membuat fresh AI handoff pada siklus berikutnya.",
+        { source: "autonomous-repair-loop", nextAction: "AI_REQUIRED" },
+      );
+      await logAudit(
+        "coding-autonomous",
+        "fresh_ai_handoff_recovery_scheduled",
+        taskId,
+        "coding_task",
+        "success",
+        { error: message.slice(0, 1000) },
+      ).catch(() => undefined);
+      return { taskId, status: "ACTIVE", action: "RECOVER_FRESH_AI_HANDOFF" };
+    }
+
     await setState(taskId, "FAILED", "AUTONOMOUS_CYCLE_FAILED", message.slice(0, 2000));
     await report(
       taskId,
