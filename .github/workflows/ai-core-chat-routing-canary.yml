@@ -46,8 +46,26 @@ jobs:
           set -euo pipefail
           ask() {
             local message="$1" context="${2:-[]}" out="$3"
-            jq -nc --arg m "$message" --argjson c "$context"               '{message:$m,mode:"ask",modelPolicy:"auto",conversationId:"production-chat-routing-canary",context:$c}' |
-              curl -fsS --connect-timeout 10 --max-time 45                 -X POST "$API_BASE_URL/ai/core-chat/messages"                 -H "Content-Type: application/json"                 -H "x-admin-api-key: $ADMIN_API_KEY"                 --data-binary @- > "$out"
+            jq -nc --arg m "$message" --argjson c "$context" \
+              '{message:$m,mode:"ask",modelPolicy:"auto",conversationId:"production-chat-routing-canary",context:$c}' > /tmp/chat-request.json
+            local code=""
+            for attempt in $(seq 1 4); do
+              code=$(curl -sS --connect-timeout 10 --max-time 90 -o "$out" -w "%{http_code}" \
+                -X POST "$API_BASE_URL/ai/core-chat/messages" \
+                -H "Content-Type: application/json" \
+                -H "x-admin-api-key: $ADMIN_API_KEY" \
+                --data-binary @/tmp/chat-request.json || true)
+              if [ "$code" = "200" ]; then return 0; fi
+              if [ "$code" = "503" ] || [ "$code" = "502" ] || [ "$code" = "504" ] || [ "$code" = "000" ] || [ -z "$code" ]; then
+                echo "Transient chat HTTP ${code:-curl-error} (attempt $attempt/4); retrying..."
+                sleep $((attempt * 5))
+                continue
+              fi
+              break
+            done
+            echo "::error::AI Core Chat request failed after bounded retries with HTTP ${code:-curl-error}"
+            jq -c '{error,warning}' "$out" 2>/dev/null || cat "$out"
+            return 1
           }
 
           assert_not_financial_db() {
