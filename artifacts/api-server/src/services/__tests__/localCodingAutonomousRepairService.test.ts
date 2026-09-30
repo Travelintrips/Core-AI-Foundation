@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@workspace/db", () => ({
@@ -68,6 +69,19 @@ describe("autonomous coding workstream lease handling", () => {
         new Date("2026-09-27T07:23:50.000Z"),
       ),
     ).toBe(true);
+  });
+});
+
+describe("autonomous coding cycle budget", () => {
+  it("never widens an existing cycle budget during re-enable", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("max_cycles = LEAST(");
+    expect(source).toContain("ai_platform.ai_coding_autonomous_tasks.max_cycles");
+    expect(source).toContain("EXCLUDED.max_cycles");
   });
 });
 
