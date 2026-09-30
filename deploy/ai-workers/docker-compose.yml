@@ -219,11 +219,14 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
       AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      AI_CORE_AGENT_WORK_POLL_MS: ${AI_CORE_AGENT_WORK_POLL_MS:-5000}
+      OPENCLAW_WORK_TIMEOUT_SECONDS: ${OPENCLAW_WORK_TIMEOUT_SECONDS:-180}
       CUSTOM_API_KEY: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
       TZ: ${TZ:-Asia/Jakarta}
     volumes:
       - openclaw-state:/home/node/.openclaw
       - openclaw-auth:/home/node/.config/openclaw
+      - ./openclaw-supervisor.mjs:/app/openclaw-supervisor.mjs:ro
     ports:
       - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
     extra_hosts:
@@ -235,7 +238,7 @@ services:
       - NET_ADMIN
     security_opt:
       - no-new-privileges:true
-    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
+    command: ["node", "/app/openclaw-supervisor.mjs"]
 
   agent-registrar:
     image: python:3.13-slim

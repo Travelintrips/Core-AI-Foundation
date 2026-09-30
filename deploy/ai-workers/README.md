@@ -30,7 +30,9 @@ production database credentials into agent containers.
   image and applies it only when creating a new workspace or repairing an empty
   legacy workspace; an existing non-empty directory is never recursively re-owned.
 - **OpenClaw** is an operations/agent gateway. Its UI/API binds to loopback and
-  runs without the host Docker socket.
+  runs without the host Docker socket. The OpenClaw supervisor also polls AI
+  Core's scoped work queue and executes only work explicitly assigned to
+  `gcp-openclaw-main`; production-critical actions remain owned by AI Core.
 - **n8n** handles workflow automation with a dedicated Postgres database and
   persistent state.
 - **Model routing** is not duplicated in Docker. AI Core already owns model
@@ -59,9 +61,10 @@ The installer is idempotent. On every run it:
 6. starts Temporal, n8n, and OpenHands;
 7. generates a dedicated `AI_CORE_SCOPED_AGENT_TOKEN` when it is missing;
 8. configures OpenHands and OpenClaw to use the scoped AI Core agent runtime;
-9. falls back to direct OpenClaw provider onboarding only when no scoped runtime is available;
-10. runs bounded local and AI Core bridge health checks; and
-11. prints `READY` only after every required service endpoint is healthy.
+9. starts the OpenClaw gateway with the AI Core bounded-work dispatcher;
+10. falls back to direct OpenClaw provider onboarding only when no scoped runtime is available;
+11. runs bounded local and AI Core bridge health checks; and
+12. prints `READY` only after every required service endpoint is healthy.
 
 For a host-managed secret file:
 
@@ -81,8 +84,11 @@ will generate them.
 `AI_CORE_SCOPED_AGENT_TOKEN` is deliberately separate from `ADMIN_API_KEY`.
 When empty, the installer generates a dedicated random token and never prints
 it. AI Core stores only its SHA-256 hash and authorizes explicit scopes
-`model:chat` and `agent:presence`. The latter is restricted to the canonical
-OpenClaw/OpenHands/n8n registry IDs and cannot grant production deploy. Do
+`model:chat`, `agent:presence`, and `agent:work`. Presence is restricted to
+the canonical OpenClaw/OpenHands/n8n registry IDs. `agent:work` only lets a
+registered worker claim work already assigned to its own canonical client ID;
+it does not grant production deploy, merge, production credentials, or a
+general-purpose AI Core admin API. Do
 **not** substitute `ADMIN_API_KEY`.
 
 When the scoped token is present, OpenHands is configured automatically with

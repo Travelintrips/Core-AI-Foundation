@@ -14,6 +14,7 @@ export type AiCoreChatDispatchKind =
   | "ANSWER"
   | "REMOTE_READONLY"
   | "INFRA_OPERATION"
+  | "EXTERNAL_AGENT"
   | "CONTROL_PLANE";
 export type RemoteWorkerPreset = "check" | "build" | "test" | "review";
 
@@ -30,6 +31,12 @@ const MUTATING =
 
 const REPOSITORY_READONLY_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
+
+function isExplicitOpenClawDelegation(message: string): boolean {
+  const text = message.trim().toLowerCase();
+  if (!text || !/\bopen\s*claw\b|\bopenclaw\b/i.test(text)) return false;
+  return /\b(gunakan|pakai|gunakanlah|jalankan|suruh|minta|delegasikan|delegate|route|rutekan|via|melalui|dengan)\b/i.test(text);
+}
 
 export function isAiCoreCapabilityQuery(message: string): boolean {
   const value = message.trim().toLowerCase();
@@ -80,6 +87,17 @@ export function classifyAiCoreChatDispatch(
         workload.workload === "CRITICAL_ACTION"
           ? "Critical actions must enter the control plane and stop at the explicit approval gate."
           : "Repository-changing coding work must enter the Coding Orchestrator.",
+    };
+  }
+
+  if (isExplicitOpenClawDelegation(message)) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload,
+      preset: null,
+      infrastructureOperation: null,
+      reason:
+        "Explicit OpenClaw delegation is routed to the bounded external-agent work queue controlled by AI Core.",
     };
   }
 

@@ -4,6 +4,7 @@ import { getProviderApiKey } from "../services/aiSecretService.js";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logger } from "../lib/logger.js";
 import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
+import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim } from "../services/localCodingControlBridgeService.js";
 
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
@@ -11,6 +12,25 @@ const ExternalAgentHeartbeatRequest = z.object({
   health: z.enum(["healthy", "degraded"]),
   version: z.string().trim().min(1).max(100).nullable().optional(),
   details: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+const ExternalAgentWorkClaimRequest = z.object({
+  clientId: z.string().trim().min(1).max(200),
+  leaseSeconds: z.number().int().min(30).max(300).optional(),
+}).strict();
+
+const ExternalAgentWorkResultRequest = z.object({
+  clientId: z.string().trim().min(1).max(200),
+  claimToken: z.string().uuid(),
+  status: z.enum(["COMPLETED", "FAILED"]),
+  message: z.string().trim().min(1).max(50_000),
+  details: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+const ExternalAgentWorkRenewRequest = z.object({
+  clientId: z.string().trim().min(1).max(200),
+  claimToken: z.string().uuid(),
+  leaseSeconds: z.number().int().min(30).max(300).optional(),
 }).strict();
 
 const ChatCompletionRequest = z.object({
@@ -166,6 +186,77 @@ router.get(
       authority: "ai-core",
       agents,
     });
+  },
+);
+
+router.post(
+  "/ai/agent-runtime/work/claim",
+  requireAgentServiceScope("agent:work"),
+  async (req, res): Promise<void> => {
+    const parsed = ExternalAgentWorkClaimRequest.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const rule = (await import("../services/externalAgentRegistryService.js")).getExternalAgentRule(parsed.data.clientId);
+    if (!rule) {
+      res.status(404).json({ error: "Unknown external agent client ID" });
+      return;
+    }
+    const work = await claimCodingBridgeCommand(parsed.data);
+    if (!work) {
+      res.status(204).end();
+      return;
+    }
+    res.json(work);
+  },
+);
+
+router.post(
+  "/ai/agent-runtime/work/:commandId/renew",
+  requireAgentServiceScope("agent:work"),
+  async (req, res): Promise<void> => {
+    const commandId = z.string().uuid().safeParse(req.params["commandId"]);
+    const parsed = ExternalAgentWorkRenewRequest.safeParse(req.body ?? {});
+    if (!commandId.success) {
+      res.status(400).json({ error: "Invalid command id" });
+      return;
+    }
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const renewed = await renewCodingBridgeCommandClaim({
+      commandId: commandId.data,
+      ...parsed.data,
+    });
+    res.status(renewed ? 200 : 409).json({ renewed });
+  },
+);
+
+router.post(
+  "/ai/agent-runtime/work/:commandId/result",
+  requireAgentServiceScope("agent:work"),
+  async (req, res): Promise<void> => {
+    const commandId = z.string().uuid().safeParse(req.params["commandId"]);
+    const parsed = ExternalAgentWorkResultRequest.safeParse(req.body ?? {});
+    if (!commandId.success) {
+      res.status(400).json({ error: "Invalid command id" });
+      return;
+    }
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const result = await completeCodingBridgeCommand({
+      commandId: commandId.data,
+      ...parsed.data,
+    });
+    if (!result) {
+      res.status(409).json({ error: "Work claim is missing, expired, or owned by another agent" });
+      return;
+    }
+    res.json(result);
   },
 );
 
