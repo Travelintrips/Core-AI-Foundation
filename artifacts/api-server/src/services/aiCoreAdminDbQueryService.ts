@@ -168,6 +168,10 @@ function normalizeWords(message: string): string[] {
     layanan: ["service", "services", "request"],
     service: ["service", "services", "request"],
     dokumen: ["document", "documents", "file"],
+    fasilitas: ["facility", "facilities"],
+    facility: ["facility", "facilities", "fasilitas"],
+    transaksi: ["transaction", "transactions", "payment", "payments"],
+    member: ["member", "members", "membership", "memberships"],
   };
 
   const base = message
@@ -471,6 +475,20 @@ function semanticTableScore(
   // A financial table from an unrelated business domain must not win merely
   // because its amount/time columns look suitable.
   if (score === 0) return 0;
+
+  // Prefer canonical operational entity tables over schema-prefixed
+  // compatibility/mirror names across common business domains.
+  const domainWords = new Set(words);
+  const canonicalEntities = [
+    ["facility", "facilities"], ["tenant", "tenants"], ["booking", "bookings"],
+    ["payment", "payments"], ["invoice", "invoices"], ["customer", "customers"],
+    ["vendor", "vendors"], ["member", "members"],
+  ] as const;
+  for (const [entity, plural] of canonicalEntities) {
+    if (!domainWords.has(entity) && !domainWords.has(plural)) continue;
+    if (tableName === plural) score += 30;
+    if (tableName.endsWith("_" + plural) && schemaName && tableName.startsWith(schemaName + "_")) score -= 20;
+  }
 
   if (intent.valueKind === "currency") {
     if (/expense|refund|cost|fee/.test(tableName)) return 0;
