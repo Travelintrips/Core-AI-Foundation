@@ -224,6 +224,14 @@ export default function AiCoreChat() {
     const text = input.trim();
     if (!text || busy) return;
 
+    const context = messages
+      .filter((message) => !message.error && message.text.trim())
+      .slice(-10)
+      .map((message) => ({
+        role: message.role,
+        text: message.text.slice(-4_000),
+      }));
+
     if (mode === "agent" && (!projectName.trim() || !repository.trim() || !branch.trim())) {
       append({
         id: messageId(),
@@ -259,6 +267,7 @@ export default function AiCoreChat() {
               message: text,
               mode: "ask",
               modelPolicy: policy,
+              context,
             }),
           },
           ({ event: streamEvent, data }) => {
@@ -395,6 +404,7 @@ export default function AiCoreChat() {
           message: text,
           mode,
           modelPolicy: policy,
+          context,
           projectName: projectName.trim(),
           repository: repository.trim(),
           branch: branch.trim(),
