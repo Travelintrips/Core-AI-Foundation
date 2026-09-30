@@ -47,7 +47,7 @@ export async function dispatchExternalAgentWork(input: {
     );
   }
 
-  if (!rule.capabilities.includes("tools:bounded" as never)) {
+  if (!rule.capabilities.some((capability) => capability === "tools:bounded")) {
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
       "External agent is not authorized for bounded tool execution.",
