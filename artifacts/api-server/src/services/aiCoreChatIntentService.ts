@@ -25,6 +25,12 @@ const MUTATING =
 const REPOSITORY_READONLY_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
 
+export function isAiCoreCapabilityQuery(message: string): boolean {
+  const value = message.trim().toLowerCase();
+  if (!value) return false;
+  return /(?:\bkemampuan\b|\bkapabilitas\b|\bcapabilit(?:y|ies)\b|\banda\s+bisa\s+apa\b|\bapa\s+(?:saja\s+)?yang\s+(?:bisa|dapat)\s+(?:anda|kamu|ai\s+core)\b)/i.test(value);
+}
+
 export function detectRemoteWorkerPreset(
   message: string,
 ): RemoteWorkerPreset | null {

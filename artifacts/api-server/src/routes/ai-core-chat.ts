@@ -42,6 +42,7 @@ import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
   detectRemoteWorkerPreset,
+  isAiCoreCapabilityQuery,
   type RemoteWorkerPreset,
 } from "../services/aiCoreChatIntentService.js";
 import {
@@ -71,8 +72,9 @@ type ChatPolicy = z.infer<typeof ChatRequest>["modelPolicy"];
 const ASK_SYSTEM_PROMPT = [
   "You are AI Core Chat, the internal assistant for the AI Core control plane.",
   "Answer the user's question directly and concisely.",
-  "This is the non-mutating answer path: you have no tools and must never claim that code, shell commands, deployments, merges, database changes, or external actions were executed.",
-  "Mutating requests are routed by AI Core to the control plane before this prompt is used; if one reaches this path, state that execution requires control-plane routing.",
+  "This is the non-mutating answer path for the current response: do not claim that this path itself executed code, shell commands, deployments, merges, database changes, or external actions.",
+  "AI Core Chat as a whole can execute read-only checks through trusted workers and can route coding work into the Coding Orchestrator/control plane automatically. When asked about capabilities, describe the overall AI Core Chat system, not only this answer path.",
+  "Mutating requests are routed by AI Core to the control plane before this prompt is used; critical production actions must still stop at explicit approval gates.",
   "Never reveal or request secret values, API keys, passwords, tokens, or private credentials.",
   "Prefer Indonesian when the user writes Indonesian; otherwise follow the user's language.",
 ].join(" ");
@@ -397,6 +399,35 @@ async function deterministicReply(
     workload: workload.workload,
     costClass: workload.costClass,
   };
+
+  if (isAiCoreCapabilityQuery(command)) {
+    return {
+      kind: "answer",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      ...routingMeta,
+      reply:
+        "AI Core Chat adalah satu pintu otomatis untuk bertanya sekaligus memberi perintah. Kemampuan saya saat ini:\n\n" +
+        "1. **Menjawab & menganalisis** — menjelaskan konsep, status sistem, troubleshooting, perbandingan, dan reasoning.\n" +
+        "2. **Memeriksa secara read-only** — cek/review repository, build, test, diff, log, konfigurasi, dan validasi melalui trusted read-only worker tanpa membuat coding task.\n" +
+        "3. **Menjalankan pekerjaan coding** — perintah seperti perbaiki, implementasikan, ubah kode, buat test, commit, atau push otomatis masuk Coding Orchestrator.\n" +
+        "4. **Membagi pekerjaan** — Coding Orchestrator dapat memecah pekerjaan menjadi beberapa workstream/child task, memberi ownership path, dependency, dan menjalankan worker paralel bila diperlukan.\n" +
+        "5. **Menggunakan control plane** — pekerjaan dapat diteruskan ke worker/agent yang sesuai dan dipantau melalui task/run resmi.\n" +
+        "6. **Menjaga approval gate** — merge, deploy production, migrasi/drop database, restart production, perubahan security, dan rotasi secret tetap berhenti pada approval eksplisit.\n\n" +
+        "Jadi saya **bukan hanya asisten yang memberi saran**: dari chat yang sama saya dapat membedakan pertanyaan, pemeriksaan, coding, dan tindakan kritis lalu merutekannya ke jalur yang sesuai. Yang tidak saya lakukan adalah membuka/menampilkan secret atau melewati approval gate.",
+      capabilities: {
+        autoRouting: true,
+        answer: true,
+        readonlyInspection: true,
+        codingExecution: true,
+        workstreamDelegation: true,
+        criticalApprovalRequired: true,
+      },
+    };
+  }
 
   if (["hello", "hi", "halo", "hai", "hey"].includes(command)) {
     return {
