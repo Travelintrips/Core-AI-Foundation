@@ -19,6 +19,13 @@ import {
   Zap,
 } from "lucide-react";
 import { apiEventStream, apiFetch } from "@/lib/apiFetch";
+import {
+  PWA_APP_INSTALLED_EVENT,
+  PWA_INSTALL_PROMPT_READY_EVENT,
+  clearDeferredPwaInstallPrompt,
+  getDeferredPwaInstallPrompt,
+  type BeforeInstallPromptEvent,
+} from "@/lib/pwaInstall";
 
 type ChatMode = "auto" | "ask" | "agent";
 type ModelPolicy = "economy" | "smart" | "auto" | "cloud";
@@ -67,10 +74,6 @@ type CoreConfig = {
   streaming?: { enabled: boolean; endpoint?: string; defaultPolicy?: string };
 };
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-}
 
 type TaskProgress = {
   task: {
@@ -164,7 +167,7 @@ export default function AiCoreChat() {
   const [progress, setProgress] = useState<TaskProgress | null>(null);
   const [progressError, setProgressError] = useState("");
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredPwaInstallPrompt());
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     new URLSearchParams(window.location.search).get("standalone") === "1";
@@ -177,17 +180,16 @@ export default function AiCoreChat() {
   }, []);
 
   useEffect(() => {
-    const handleInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
+    const syncInstallPrompt = () => {
+      setInstallPrompt(getDeferredPwaInstallPrompt());
     };
-    const handleInstalled = () => setInstallPrompt(null);
 
-    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
-    window.addEventListener("appinstalled", handleInstalled);
+    syncInstallPrompt();
+    window.addEventListener(PWA_INSTALL_PROMPT_READY_EVENT, syncInstallPrompt);
+    window.addEventListener(PWA_APP_INSTALLED_EVENT, syncInstallPrompt);
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
-      window.removeEventListener("appinstalled", handleInstalled);
+      window.removeEventListener(PWA_INSTALL_PROMPT_READY_EVENT, syncInstallPrompt);
+      window.removeEventListener(PWA_APP_INSTALLED_EVENT, syncInstallPrompt);
     };
   }, []);
 
@@ -481,6 +483,7 @@ export default function AiCoreChat() {
     if (!installPrompt) return;
     await installPrompt.prompt();
     await installPrompt.userChoice;
+    clearDeferredPwaInstallPrompt();
     setInstallPrompt(null);
   }
 
