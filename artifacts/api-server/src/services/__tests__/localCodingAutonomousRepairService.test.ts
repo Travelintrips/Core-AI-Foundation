@@ -117,8 +117,17 @@ describe("autonomous coding explicit stop", () => {
     );
 
     expect(source).toContain("options: { forceDisabled?: boolean } = {}");
-    expect(source).toContain("status = 'DISABLED' AND NOT ${forceDisabled}");
-    expect(source).toContain("THEN FALSE");
+    expect(source).toContain("WHERE ai_platform.ai_coding_autonomous_tasks.status <> 'DISABLED'");
+  });
+
+  it("prevents an in-flight cycle from overwriting an explicit stop", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("AND enabled = TRUE");
+    expect(source).toContain("AND status <> 'DISABLED'");
   });
 
   it("allows only the explicit autonomous start route to force a disabled task active", () => {
