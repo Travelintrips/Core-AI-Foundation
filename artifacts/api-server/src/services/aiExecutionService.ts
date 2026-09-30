@@ -1,4 +1,8 @@
 import { getProviderApiKey } from "./aiSecretService.js";
+import {
+  recordProviderRuntimeFailure,
+  type ProviderRuntimeFailureKind,
+} from "./aiModelService.js";
 import { logExecutionSafe, type ObservabilityContext } from "./observabilityService.js";
 import { readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 import { readOllamaLocalConfig } from "./ollamaLocalService.js";
@@ -513,6 +517,22 @@ function isQuotaExhausted(errorMessage: string): boolean {
   return QUOTA_ERROR_PATTERNS.some((p) => lower.includes(p));
 }
 
+function classifyProviderRuntimeFailure(
+  error: unknown,
+): ProviderRuntimeFailureKind | null {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/authentication failed|api key|\b401\b|\b403\b/i.test(message)) {
+    return "AUTH";
+  }
+  if (/rate limit|quota|\b429\b/i.test(message)) {
+    return "RATE_LIMIT";
+  }
+  if (/timeout|timed out|network|fetch failed|unavailable|\b502\b|\b503\b|\b504\b/i.test(message)) {
+    return "UNAVAILABLE";
+  }
+  return null;
+}
+
 /**
  * Fallback: if the primary provider fails with a quota/billing error, retry
  * using Anthropic (claude-haiku — fast, cheap, OpenAI-compatible quality).
@@ -527,6 +547,12 @@ async function executeWithQuotaFallback(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!isQuotaExhausted(msg)) throw err;
+
+    await recordProviderRuntimeFailure(
+      input.provider.slug,
+      "RATE_LIMIT",
+      msg,
+    ).catch(() => false);
 
     const anthropicKey = getProviderApiKey("anthropic");
     if (!anthropicKey) throw err; // no fallback configured
@@ -626,6 +652,18 @@ async function executeAIInternal(
         errorMessage: String(err),
       });
     }
+
+    const runtimeFailure = localProvider
+      ? null
+      : classifyProviderRuntimeFailure(err);
+    if (runtimeFailure) {
+      await recordProviderRuntimeFailure(
+        input.provider.slug,
+        runtimeFailure,
+        err instanceof Error ? err.message : String(err),
+      ).catch(() => false);
+    }
+
     throw err;
   }
 

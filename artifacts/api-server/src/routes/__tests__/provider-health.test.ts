@@ -230,9 +230,14 @@ describe("runHealthCheck — unit", () => {
     const setMock = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
     mockDbUpdate.mockReturnValue({ set: setMock });
 
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response("{}", { status: 200 }),
-    );
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: [{ id: "gpt-4o-mini" }] }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
 
     const { runHealthCheck } = await import("../../services/providerHealthService.js");
     const result = await runHealthCheck(42);

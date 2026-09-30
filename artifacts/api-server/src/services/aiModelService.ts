@@ -1,4 +1,10 @@
-import { db, aiModelsTable, aiProvidersTable, withTransientDatabaseRetry } from "@workspace/db";
+import {
+  db,
+  aiModelsTable,
+  aiProviderHealthLogsTable,
+  aiProvidersTable,
+  withTransientDatabaseRetry,
+} from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
 export interface ModelWithProvider {
@@ -18,6 +24,90 @@ let activeModelLoad: Promise<ModelWithProvider[]> | null = null;
 
 function invalidateActiveModelCache(): void {
   activeModelCache = null;
+}
+
+export type ProviderRuntimeFailureKind =
+  | "AUTH"
+  | "RATE_LIMIT"
+  | "UNAVAILABLE";
+
+function normalizeProviderRegistrySlug(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "google-gemini" || normalized === "gemini") return "google";
+  return normalized;
+}
+
+function providerRuntimeFailureHttpStatus(kind: ProviderRuntimeFailureKind): number {
+  if (kind === "AUTH") return 401;
+  if (kind === "RATE_LIMIT") return 429;
+  return 503;
+}
+
+/**
+ * Mark a provider unhealthy when a real model invocation fails.
+ * Health-check /models probes can be weaker than an actual generation call;
+ * this runtime signal must therefore participate in coding-model routing.
+ */
+export async function recordProviderRuntimeFailure(
+  providerSlug: string,
+  kind: ProviderRuntimeFailureKind,
+  detail: string,
+): Promise<boolean> {
+  const normalizedProvider = normalizeProviderRegistrySlug(providerSlug);
+  if (!normalizedProvider) return false;
+
+  const checkedAt = new Date();
+  const safeDetail = detail
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 700);
+
+  const updated = await withTransientDatabaseRetry(
+    () =>
+      db.transaction(async (tx) => {
+        const [provider] = await tx
+          .select({
+            id: aiProvidersTable.id,
+            consecutiveFailures: aiProvidersTable.consecutiveFailures,
+          })
+          .from(aiProvidersTable)
+          .where(eq(aiProvidersTable.slug, normalizedProvider))
+          .for("update")
+          .limit(1);
+
+        if (!provider) return false;
+
+        const consecutiveFailures =
+          Math.max(0, Number(provider.consecutiveFailures ?? 0)) + 1;
+
+        await tx
+          .update(aiProvidersTable)
+          .set({
+            consecutiveFailures,
+            lastCheckedAt: checkedAt,
+          })
+          .where(eq(aiProvidersTable.id, provider.id));
+
+        await tx.insert(aiProviderHealthLogsTable).values({
+          providerId: provider.id,
+          isActive: false,
+          httpStatus: providerRuntimeFailureHttpStatus(kind),
+          error:
+            "Runtime model invocation " +
+            kind.toLowerCase().replace("_", " ") +
+            " failure" +
+            (safeDetail ? ": " + safeDetail : "."),
+          checkedAt,
+        });
+
+        return true;
+      }),
+    { attempts: 3, baseDelayMs: 150 },
+  );
+
+  if (updated) invalidateActiveModelCache();
+  return updated;
 }
 
 /**

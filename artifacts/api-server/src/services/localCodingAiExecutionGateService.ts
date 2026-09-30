@@ -12,7 +12,10 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { executeAINoFallback, type ObservabilityContext } from "./aiExecutionService.js";
-import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
+import {
+  resolvePreferredCodingModel,
+  type PreferredCodingModelResolution,
+} from "./localCodingAiPreferredModelService.js";
 import { createScheduledOllamaProviderAdapter } from "./localCodingOllamaWorkerProviderService.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
@@ -1012,6 +1015,134 @@ async function failExecution(
   }).catch(() => undefined);
 }
 
+const PROVIDER_PREFLIGHT_MAX_ATTEMPTS = 4;
+const PROVIDER_PREFLIGHT_TIMEOUT_MS = 8_000;
+const PROVIDER_PREFLIGHT_OUTPUT_TOKENS = 8;
+
+function isLocalCodingProvider(providerSlug: string): boolean {
+  return providerSlug === "ollama" || providerSlug === "zerollm";
+}
+
+async function resolvePreflightedCodingModel(
+  taskId: string,
+  codingRunId: string,
+): Promise<PreferredCodingModelResolution> {
+  const attemptedTargets = new Set<string>();
+
+  for (let attempt = 1; attempt <= PROVIDER_PREFLIGHT_MAX_ATTEMPTS; attempt += 1) {
+    const resolved = await resolvePreferredCodingModel();
+    if (!resolved.ok) {
+      throw new LocalCodingAiExecutionGateError(
+        resolved.message,
+        "MODEL_UNAVAILABLE",
+        {
+          reason: resolved.reason,
+          primaryFailure: resolved.primaryFailure,
+          fallbackFailure: resolved.fallbackFailure,
+          preflightAttempts: attempt - 1,
+        },
+      );
+    }
+
+    const providerSlug = String(resolved.selection.provider.slug ?? "")
+      .trim()
+      .toLowerCase();
+    const modelId = String(resolved.selection.model.modelId ?? "").trim();
+    if (!providerSlug || !modelId) {
+      throw new LocalCodingAiExecutionGateError(
+        "Production coding model resolver returned an invalid provider/model",
+        "MODEL_UNAVAILABLE",
+      );
+    }
+
+    if (isLocalCodingProvider(providerSlug)) return resolved;
+
+    const targetKey = providerSlug + "\n" + modelId;
+    if (attemptedTargets.has(targetKey)) {
+      throw new LocalCodingAiExecutionGateError(
+        "Coding provider preflight could not advance to a healthy alternative provider.",
+        "MODEL_UNAVAILABLE",
+        { provider: providerSlug, model: modelId, preflightAttempts: attempt - 1 },
+      );
+    }
+    attemptedTargets.add(targetKey);
+
+    const selectedBaseUrl =
+      typeof resolved.selection.provider.baseUrl === "string"
+        ? resolved.selection.provider.baseUrl
+        : null;
+
+    try {
+      await executeAINoFallback({
+        prompt: "Reply with exactly: AI_CORE_PREFLIGHT_OK",
+        systemPrompt:
+          "This is a credential and quota preflight. Return only AI_CORE_PREFLIGHT_OK.",
+        model: {
+          modelId,
+          maxOutputTokens: PROVIDER_PREFLIGHT_OUTPUT_TOKENS,
+        },
+        provider: {
+          slug: providerSlug,
+          ...(selectedBaseUrl ? { baseUrl: selectedBaseUrl } : {}),
+        },
+        temperature: 0,
+        maxTokens: PROVIDER_PREFLIGHT_OUTPUT_TOKENS,
+        signal: AbortSignal.timeout(
+          Math.max(
+            1_000,
+            Math.min(
+              PROVIDER_PREFLIGHT_TIMEOUT_MS,
+              resolved.selection.timeoutMs,
+            ),
+          ),
+        ),
+      });
+      return resolved;
+    } catch (rawError) {
+      const mapped = mapProviderFailure(rawError);
+      const retryWithAlternative =
+        mapped.code === "AUTH" ||
+        mapped.code === "RATE_LIMIT" ||
+        mapped.code === "UNAVAILABLE";
+
+      await logAudit(
+        "coding-orchestrator",
+        "ai_execution_provider_preflight_failed",
+        taskId,
+        "coding_task",
+        "failure",
+        {
+          codingRunId,
+          provider: providerSlug,
+          model: modelId,
+          providerErrorCode: mapped.code,
+          retryWithAlternative,
+          attempt,
+        },
+      ).catch(() => undefined);
+
+      if (!retryWithAlternative) {
+        throw new LocalCodingAiExecutionGateError(
+          mapped.message,
+          "MODEL_UNAVAILABLE",
+          {
+            provider: providerSlug,
+            model: modelId,
+            providerErrorCode: mapped.code,
+            preflightAttempts: attempt,
+          },
+        );
+      }
+    }
+  }
+
+  throw new LocalCodingAiExecutionGateError(
+    "No healthy coding provider passed the bounded preflight.",
+    "MODEL_UNAVAILABLE",
+    { preflightAttempts: PROVIDER_PREFLIGHT_MAX_ATTEMPTS },
+  );
+}
+
 async function executeReserved(
   reserved: ReservedAiExecution,
   lease: ApprovedAiHandoffLease,
@@ -1021,18 +1152,14 @@ async function executeReserved(
 
   try {
     const prompt = buildLocalCodingAiPrompt(lease);
-    const resolvedModel = await resolvePreferredCodingModel();
-    if (!resolvedModel.ok) {
-      throw new LocalCodingAiExecutionGateError(
-        resolvedModel.message,
-        "MODEL_UNAVAILABLE",
-        {
-          reason: resolvedModel.reason,
-          primaryFailure: resolvedModel.primaryFailure,
-          fallbackFailure: resolvedModel.fallbackFailure,
-        },
-      );
-    }
+    // Validate credentials/quota using a harmless synthetic prompt before
+    // consuming the one-shot human-approved model privilege. Runtime failures
+    // quarantine the provider, so a healthy alternative can be selected
+    // without forcing the user to approve the task again.
+    const resolvedModel = await resolvePreflightedCodingModel(
+      reserved.task.id,
+      reserved.run.id,
+    );
 
     const selected = resolvedModel.selection;
     const modelRoute = resolvedModel.route;
