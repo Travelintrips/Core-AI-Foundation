@@ -590,6 +590,28 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       return { taskId, status: "WAITING", action };
     }
 
+    const handoffApprovalAdvanced =
+      /Coding task is not at the APPROVE_AI_HANDOFF gate/i.test(message) &&
+      state?.task.status === "READY_REVIEW" &&
+      state.nextAction === "AI_HANDOFF_APPROVED";
+
+    if (handoffApprovalAdvanced) {
+      await setState(taskId, "ACTIVE", "CONTINUE_AI_HANDOFF_APPROVED", null);
+      await logAudit(
+        "coding-autonomous",
+        "handoff_approval_race_advanced",
+        taskId,
+        "coding_task",
+        "success",
+        { nextAction: state.nextAction },
+      ).catch(() => undefined);
+      return {
+        taskId,
+        status: "ACTIVE",
+        action: "CONTINUE_AI_HANDOFF_APPROVED",
+      };
+    }
+
     const freshHandoffRequired =
       state?.task.status === "READY_REVIEW" &&
       state.nextAction === "AI_REQUIRED" &&
