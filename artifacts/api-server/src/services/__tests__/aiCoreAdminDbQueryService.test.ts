@@ -141,6 +141,7 @@ describe("AI Core admin database query service", () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
         rows: [{ value: "paid" }, { value: "failed" }],
       })
@@ -165,7 +166,58 @@ describe("AI Core admin database query service", () => {
     const reply = result ? renderAdminSemanticQueryResult(result) : "";
     expect(reply).toContain("Pendapatan sport center kemarin");
     expect(reply.replace(/\s/g, "")).toContain("Rp1.250.000");
+    expect(reply).toContain("zona waktu Asia/Jakarta");
     expect(reply).toContain("read-only Admin DB Query");
+  });
+
+  it("renders an empty aggregate as zero instead of saying no rows were found", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          table_schema: "public",
+          table_name: "sport_payments",
+          column_name: "amount",
+          data_type: "numeric",
+          udt_name: "numeric",
+          ordinal_position: 1,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_payments",
+          column_name: "status",
+          data_type: "text",
+          udt_name: "text",
+          ordinal_position: 2,
+        },
+        {
+          table_schema: "public",
+          table_name: "sport_payments",
+          column_name: "paid_at",
+          data_type: "timestamp with time zone",
+          udt_name: "timestamptz",
+          ordinal_position: 3,
+        },
+      ],
+    });
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ value: "paid" }] })
+      .mockResolvedValueOnce({
+        rows: [{ value: "0", matched_rows: "0" }],
+      });
+
+    const result = await executeAdminSemanticQuery(
+      "cek berapa pendapatan sport center kemarin",
+    );
+    const reply = result ? renderAdminSemanticQueryResult(result) : "";
+
+    expect(reply.replace(/\s/g, "")).toContain("Rp0");
+    expect(reply).toContain("Tidak ada transaksi/record");
+    expect(reply).not.toContain("tidak menemukan baris");
   });
 
   it("extracts deterministic natural text lookups", () => {
