@@ -17,19 +17,16 @@ const { Pool } = pg;
 // Supabase pooler connections.
 const isProduction = process.env["NODE_ENV"] === "production";
 const configuredPoolMax = Number(process.env["PG_POOL_MAX"]);
-const poolMax =
-  Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
+const poolMax = isProduction
+  ? 10
+  : Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
     ? Math.max(1, Math.min(10, Math.floor(configuredPoolMax)))
-    : isProduction
-      ? 10
-      : 5;
+    : 5;
 
 const poolConfig = {
   connectionString: resolveDatabaseUrl(),
-  // Production uses a bounded 10-connection application pool. This is large
-  // enough for the current dispatcher concurrency while remaining well below
-  // the project's Postgres connection ceiling; PG_POOL_MAX can only reduce or
-  // raise the configured value within the same hard cap of 10.
+  // Production is intentionally fixed at 10 application connections per
+  // process. Development/test may still override PG_POOL_MAX, bounded to 10.
   max: poolMax,
   idleTimeoutMillis: isProduction ? 10_000 : 30_000,
   connectionTimeoutMillis: isProduction ? 3_000 : 8_000,
