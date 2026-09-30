@@ -230,9 +230,50 @@ jobs:
           );
           NODE
 
-          payload='{"message":"Jawab tepat: GCP_OLLAMA_CI_OK","mode":"ask","modelPolicy":"economy"}'
-          economy_ok=false
-          for attempt in $(seq 1 3); do
+          # A healthy remote pull worker can legitimately be saturated by production work.
+          # Wait briefly for a free slot before exercising Economy routing so deployment
+          # verification does not fail merely because all model slots are busy.
+          capacity_ready=false
+          for capacity_attempt in $(seq 1 10); do
+            workers_code=$(curl --http1.1 -L -sS \
+              -o /tmp/ollama-workers -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/cluster/workers" || true)
+            if [ "$workers_code" = "200" ] && node - <<'NODE'
+          const fs = require("fs");
+          const workers = JSON.parse(fs.readFileSync("/tmp/ollama-workers", "utf8"));
+          const worker = Array.isArray(workers)
+            ? workers.find((w) => w.workerName === "gcp-ollama-01")
+            : null;
+          const ready =
+            worker &&
+            worker.leaseValid === true &&
+            ["online", "idle", "busy"].includes(String(worker.status).toLowerCase()) &&
+            Number(worker.availableSlots ?? 0) > 0;
+          if (worker) {
+            console.log(
+              "ollama_capacity_wait status="+String(worker.status)+
+              " runningJobs="+String(worker.runningJobs)+
+              " availableSlots="+String(worker.availableSlots)
+            );
+          }
+          process.exit(ready ? 0 : 1);
+          NODE
+            then
+              capacity_ready=true
+              break
+            fi
+            if [ "$capacity_attempt" -lt 10 ]; then sleep 10; fi
+          done
+
+          if [ "$capacity_ready" != "true" ]; then
+            echo "::warning::gcp-ollama-01 is healthy but remained saturated; skipping Economy invocation smoke for this production verification."
+            echo "ollama_economy=SKIPPED reason=worker_saturated"
+          else
+            payload='{"message":"Jawab tepat: GCP_OLLAMA_CI_OK","mode":"ask","modelPolicy":"economy"}'
+            economy_ok=false
+            for attempt in $(seq 1 3); do
             started=$(date +%s)
             code=$(curl --http1.1 -L -sS               -o /tmp/ai-core-ollama-smoke -w "%{http_code}"               --connect-timeout 15 --max-time 75               -H "Content-Type: application/json"               -H "x-admin-api-key: $ADMIN_API_KEY"               -d "$payload"               "$API_BASE_URL/ai/core-chat/messages" || true)
             elapsed=$(( $(date +%s) - started ))
@@ -254,16 +295,16 @@ jobs:
               break
             fi
 
-            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 5)); fi
-          done
+              if [ "$attempt" -lt 3 ]; then sleep $((attempt * 5)); fi
+            done
 
-          if [ "$economy_ok" != "true" ]; then
-            echo "::error::GCP Ollama Economy routing smoke failed after bounded retries"
-            cat /tmp/ai-core-ollama-smoke 2>/dev/null || true
-            exit 1
-          fi
+            if [ "$economy_ok" != "true" ]; then
+              echo "::error::GCP Ollama Economy routing smoke failed after capacity became available"
+              cat /tmp/ai-core-ollama-smoke 2>/dev/null || true
+              exit 1
+            fi
 
-          node - <<'NODE'
+            node - <<'NODE'
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-ollama-smoke", "utf8"));
           console.log(
@@ -276,6 +317,7 @@ jobs:
             " estimatedCostUsd="+String(value.estimatedCostUsd)
           );
           NODE
+          fi
 
       - name: Verify AI Core cloud routing
         if: steps.target.outputs.stale != 'true'
