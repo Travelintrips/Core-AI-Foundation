@@ -2,47 +2,20 @@ import { eq } from "drizzle-orm";
 import { aiCodingBridgePresenceTable, db } from "@workspace/db";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { renewCodingBridgePresence } from "./localCodingControlBridgeService.js";
+import {
+  EXTERNAL_AGENT_POLICY_VERSION,
+  EXTERNAL_AGENT_RULES,
+  getExternalAgentRule,
+} from "./externalAgentPolicyService.js";
 
-export const EXTERNAL_AGENT_POLICY_VERSION = 1;
+export {
+  EXTERNAL_AGENT_POLICY_VERSION,
+  EXTERNAL_AGENT_RULES,
+  getExternalAgentRule,
+} from "./externalAgentPolicyService.js";
+export type { ExternalAgentClientId } from "./externalAgentPolicyService.js";
+
 export const EXTERNAL_AGENT_LEASE_SECONDS = 90;
-
-export const EXTERNAL_AGENT_RULES = {
-  "gcp-openclaw-main": {
-    source: "openclaw",
-    role: "bounded_orchestration_agent",
-    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
-    permissions: {
-      codingWorkspaceWrite: false,
-      gitCommit: false,
-      gitPush: false,
-      productionDeploy: false,
-    },
-  },
-  "gcp-openhands-coder": {
-    source: "openhands",
-    role: "coding_executor",
-    capabilities: ["model:chat", "coding:workspace", "coding:test", "git:branch", "git:commit", "git:push"],
-    permissions: {
-      codingWorkspaceWrite: true,
-      gitCommit: true,
-      gitPush: true,
-      productionDeploy: false,
-    },
-  },
-  "gcp-n8n-automation": {
-    source: "n8n",
-    role: "integration_automation_agent",
-    capabilities: ["workflow:automation", "webhook:integration"],
-    permissions: {
-      codingWorkspaceWrite: false,
-      gitCommit: false,
-      gitPush: false,
-      productionDeploy: false,
-    },
-  },
-} as const;
-
-export type ExternalAgentClientId = keyof typeof EXTERNAL_AGENT_RULES;
 export type ExternalAgentHealth = "healthy" | "degraded";
 
 export class ExternalAgentRegistryError extends Error {
@@ -53,10 +26,6 @@ export class ExternalAgentRegistryError extends Error {
     super(message);
     this.name = "ExternalAgentRegistryError";
   }
-}
-
-export function getExternalAgentRule(clientId: string) {
-  return EXTERNAL_AGENT_RULES[clientId as ExternalAgentClientId] ?? null;
 }
 
 function safeDetails(details: Record<string, unknown> | undefined): Record<string, unknown> {
