@@ -60,6 +60,11 @@ import {
   renderAiCoreCapabilityRegistry,
 } from "../services/aiCoreCapabilityRegistryService.js";
 import {
+  dispatchExternalAgentWork,
+  getExternalAgentWorkState,
+  OPENCLAW_AGENT_CLIENT_ID,
+} from "../services/externalAgentDispatchService.js";
+import {
   buildAdminDbUnresolvedAnswer,
   executeAdminMutationSql,
   executeAdminNaturalTextLookup,
@@ -1490,6 +1495,32 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
   };
 }
 
+async function startExternalAgentWork(
+  input: z.infer<typeof ChatRequest>,
+): Promise<Record<string, unknown>> {
+  const dispatched = await dispatchExternalAgentWork({
+    clientId: OPENCLAW_AGENT_CLIENT_ID,
+    instruction: input.message,
+    source: "ai-core-chat",
+  });
+
+  return {
+    kind: "external_agent",
+    route: "EXTERNAL_AGENT",
+    provider: "openclaw",
+    model: null,
+    usage: null,
+    estimatedCostUsd: null,
+    reply:
+      "Perintah sudah diterima AI Core dan didelegasikan ke OpenClaw melalui bounded work queue. OpenClaw tidak memperoleh izin merge, production deploy, atau akses credential production.",
+    commandId: dispatched.command.id,
+    externalCommandId: dispatched.command.externalCommandId,
+    status: dispatched.command.status,
+    clientId: OPENCLAW_AGENT_CLIENT_ID,
+    created: dispatched.created,
+  };
+}
+
 async function runAdminDbMutationOperation(
   message: string,
 ): Promise<Record<string, unknown> | null> {
@@ -1570,6 +1601,11 @@ async function runAutoMode(
     return { ...result, ...routingMeta };
   }
 
+  if (decision.kind === "EXTERNAL_AGENT") {
+    const external = await startExternalAgentWork(input);
+    return { ...external, ...routingMeta };
+  }
+
   if (decision.kind === "REMOTE_READONLY") {
     const remote = await maybeRunRemoteWorkerPreset(input, decision.preset);
     if (remote) return { ...remote, ...routingMeta };
@@ -1595,7 +1631,8 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     autoRouting: {
       answer: ["DETERMINISTIC", "CHAT", "REASONING"],
       remoteReadonly: ["REVIEW"],
-      infrastructure: ["GCP", "HOSTINGER", "EXTERNAL_AGENT"],
+      infrastructure: ["GCP", "HOSTINGER", "EXTERNAL_AGENT_STATUS"],
+      externalAgent: ["EXPLICIT_OPENCLAW_DELEGATION"],
       controlPlane: ["CODING", "CRITICAL_ACTION"],
       criticalApprovalPreserved: true,
     },
@@ -1722,6 +1759,9 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       parsed.data.mode === "agent"
         ? (await runAdminDbMutationOperation(parsed.data.message)) ??
           (await runInfrastructureOperation(parsed.data.message)) ??
+          (classifyAiCoreChatDispatch(parsed.data.message).kind === "EXTERNAL_AGENT"
+            ? await startExternalAgentWork(parsed.data)
+            : null) ??
           (await maybeRunRemoteWorkerPreset(parsed.data)) ??
           await startAgentTask(parsed.data)
         : parsed.data.mode === "ask"
@@ -1732,12 +1772,34 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             )
           : await runAutoMode(parsed.data);
 
-    res.status(result["kind"] === "agent" ? 202 : 200).json(result);
+    res
+      .status(
+        result["kind"] === "agent" || result["kind"] === "external_agent"
+          ? 202
+          : 200,
+      )
+      .json(result);
   } catch (error) {
     res.status(503).json({
       error: safeProviderFailure(error) || "AI Core Chat request failed.",
     });
   }
+});
+
+router.get("/ai/core-chat/external-work/:id", async (req, res): Promise<void> => {
+  const commandId = TaskId.safeParse(req.params["id"]);
+  if (!commandId.success) {
+    res.status(400).json({ error: "Invalid external work id" });
+    return;
+  }
+
+  const state = await getExternalAgentWorkState(commandId.data);
+  if (!state) {
+    res.status(404).json({ error: "External work item not found" });
+    return;
+  }
+
+  res.json(state);
 });
 
 router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> => {
