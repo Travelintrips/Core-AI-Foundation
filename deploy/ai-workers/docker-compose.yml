@@ -258,6 +258,10 @@ services:
       AI_CORE_AGENT_WORK_TIMEOUT_SECONDS: ${OPENHANDS_WORK_TIMEOUT_SECONDS:-180}
       OPENHANDS_INTERNAL_URL: http://openhands:8000
       OPENHANDS_LOCAL_BACKEND_API_KEY: ${OPENHANDS_LOCAL_BACKEND_API_KEY:?set OPENHANDS_LOCAL_BACKEND_API_KEY}
+      OPENHANDS_LLM_MODEL: ${OPENHANDS_LLM_MODEL:-openai/ai-core-agent}
+      OPENHANDS_LLM_BASE_URL: ${OPENHANDS_LLM_BASE_URL:-}
+      OPENHANDS_LLM_API_KEY: ${OPENHANDS_LLM_API_KEY:-}
+      OPENHANDS_AI_CORE_WORKSPACE: /projects
     volumes:
       - ./external-agent-supervisor.py:/app/external-agent-supervisor.py:ro
     command: ["python", "/app/external-agent-supervisor.py"]
