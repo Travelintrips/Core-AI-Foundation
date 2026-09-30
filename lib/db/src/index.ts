@@ -19,16 +19,17 @@ const isProduction = process.env["NODE_ENV"] === "production";
 const configuredPoolMax = Number(process.env["PG_POOL_MAX"]);
 const poolMax =
   Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
-    ? Math.max(1, Math.min(5, Math.floor(configuredPoolMax)))
+    ? Math.max(1, Math.min(10, Math.floor(configuredPoolMax)))
     : isProduction
-      ? 3
+      ? 10
       : 5;
 
 const poolConfig = {
   connectionString: resolveDatabaseUrl(),
-  // Keep each Hostinger process deliberately small. Rolling deploys can run
-  // multiple processes at once; a default pg pool of 10 per process can exceed
-  // Supabase's session-pool client limit immediately.
+  // Production uses a bounded 10-connection application pool. This is large
+  // enough for the current dispatcher concurrency while remaining well below
+  // the project's Postgres connection ceiling; PG_POOL_MAX can only reduce or
+  // raise the configured value within the same hard cap of 10.
   max: poolMax,
   idleTimeoutMillis: isProduction ? 10_000 : 30_000,
   connectionTimeoutMillis: isProduction ? 3_000 : 8_000,
