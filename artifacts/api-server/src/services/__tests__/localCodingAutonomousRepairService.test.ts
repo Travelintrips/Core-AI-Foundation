@@ -164,3 +164,18 @@ describe("autonomous coding repair runtime contract", () => {
     expect(service).toHaveProperty("stopAutonomousCodingRuntime");
   });
 });
+
+
+describe("autonomous active-run race recovery", () => {
+  it("treats an active-run handoff race as WAITING instead of terminal FAILED", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("/Coding task already has an active run/i.test(message)");
+    expect(source).toContain('const action = `WAIT_ACTIVE_RUN:${state.activeRun.agentName}`');
+    expect(source).toContain('await setState(taskId, "WAITING", action, null)');
+    expect(source).toContain('"active_run_race_deferred"');
+  });
+});
