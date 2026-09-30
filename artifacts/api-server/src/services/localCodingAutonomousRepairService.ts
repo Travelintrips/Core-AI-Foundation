@@ -146,17 +146,23 @@ async function report(
 }
 
 async function loadTaskState(taskId: string) {
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, taskId));
+  const [task] = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, taskId)),
+    { attempts: 3, baseDelayMs: 250 },
+  );
   if (!task) throw new Error("CODING_TASK_NOT_FOUND");
 
-  const runs = await db
-    .select()
-    .from(aiCodingRunsTable)
-    .where(eq(aiCodingRunsTable.taskId, taskId))
-    .orderBy(desc(aiCodingRunsTable.startedAt));
+  const runs = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiCodingRunsTable)
+      .where(eq(aiCodingRunsTable.taskId, taskId))
+      .orderBy(desc(aiCodingRunsTable.startedAt)),
+    { attempts: 3, baseDelayMs: 250 },
+  );
 
   const activeRun = runs.find((run) => run.status === "RUNNING") ?? null;
   const orchestrator = runs.find(
@@ -609,6 +615,32 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         taskId,
         status: "ACTIVE",
         action: "CONTINUE_AI_HANDOFF_APPROVED",
+      };
+    }
+
+    const transientDatabaseFailure =
+      /timeout exceeded when trying to connect|Failed query:/i.test(message) &&
+      !/CODING_TASK_NOT_FOUND/i.test(message);
+
+    if (transientDatabaseFailure) {
+      await setState(
+        taskId,
+        "WAITING",
+        "RETRY_TRANSIENT_DATABASE",
+        message.slice(0, 2000),
+      ).catch(() => undefined);
+      await logAudit(
+        "coding-autonomous",
+        "transient_database_retry_scheduled",
+        taskId,
+        "coding_task",
+        "success",
+        { error: message.slice(0, 1000) },
+      ).catch(() => undefined);
+      return {
+        taskId,
+        status: "WAITING",
+        action: "RETRY_TRANSIENT_DATABASE",
       };
     }
 
