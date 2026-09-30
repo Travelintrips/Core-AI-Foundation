@@ -171,7 +171,8 @@ export function isAnalyzerBranchFromPriorWorkstreamAttempt(
   return false;
 }
 
-function normalizeRepoPath(value: string): string | null {
+function normalizeRepoPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
   const normalized = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
   if (
     !normalized ||
@@ -918,7 +919,7 @@ export function selectWorkstreamAiAllowedFiles(
   // Exact ownership paths may intentionally point at files that do not exist yet.
   // Include those first so create-file workstreams stay bounded to the approved path.
   for (const raw of ownershipPaths) {
-    const portable = raw.trim().replace(/\\/g, "/");
+    const portable = normalizeRepoPath(raw);
     if (
       portable &&
       !portable.endsWith("/") &&
@@ -1174,8 +1175,25 @@ async function buildSyntheticContextLease(
   };
 }
 
+export function normalizeWorkstreamGitHeadOutput(value: unknown): string {
+  const text =
+    typeof value === "string"
+      ? value
+      : Buffer.isBuffer(value)
+        ? value.toString("utf8")
+        : "";
+  const head = text.trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(head)) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Repository HEAD could not be resolved for workstream AI execution.",
+      "INVALID_CONTEXT",
+    );
+  }
+  return head;
+}
+
 async function gitHead(root: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+  const result = await execFileAsync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     timeout: 15_000,
     maxBuffer: 1_000_000,
@@ -1187,7 +1205,11 @@ async function gitHead(root: string): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  return stdout.trim().toLowerCase();
+  const raw =
+    typeof result === "string" || Buffer.isBuffer(result)
+      ? result
+      : (result as { stdout?: unknown } | null | undefined)?.stdout;
+  return normalizeWorkstreamGitHeadOutput(raw);
 }
 
 async function persistCandidate(input: {
@@ -1367,9 +1389,11 @@ export async function executeCodingWorkstreamAiJob(
   let consumed = false;
   let workspacePath: string | null = null;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let phase = "load_execution_context";
 
   try {
     loaded = await loadExecutionContext(payload);
+    phase = "start_claim";
     await startCodingWorkstreamClaim(payload.workstreamId, payload.leaseToken);
 
     let heartbeatError: Error | null = null;
@@ -1384,6 +1408,7 @@ export async function executeCodingWorkstreamAiJob(
     }, AI_PHASE_HEARTBEAT_MS);
     heartbeatTimer.unref?.();
 
+    phase = "assert_authorization";
     const authorization =
       await assertApprovedWorkstreamAiHandoffFresh(payload.workstreamId);
     if (
@@ -1407,6 +1432,7 @@ export async function executeCodingWorkstreamAiJob(
       sourceBranch === authorizedBranch
         ? `${authorizedBranch}-local-${payload.claimAttempt}`
         : authorizedBranch;
+    phase = "prepare_repository_workspace";
     const workspace = await prepareRepositoryWorkspace(
       loaded.childTask.repository,
       sourceBranch,
@@ -1423,6 +1449,7 @@ export async function executeCodingWorkstreamAiJob(
     }
     workspacePath = workspace.path;
 
+    phase = "resolve_workspace_head";
     const actualHead = await gitHead(workspacePath);
     if (
       actualHead !== authorization.package.workstream.baseSha.toLowerCase()
@@ -1434,13 +1461,16 @@ export async function executeCodingWorkstreamAiJob(
       );
     }
 
+    phase = "build_synthetic_context";
     const contextLease = await buildSyntheticContextLease(
       loaded,
       authorization,
       workspacePath,
     );
+    phase = "build_prompt";
     const prompt = buildLocalCodingAiPrompt(contextLease);
 
+    phase = "resolve_model";
     const resolved = await resolvePreferredCodingModel();
     if (!resolved.ok) {
       throw new LocalCodingWorkstreamAiExecutionError(
@@ -1468,6 +1498,7 @@ export async function executeCodingWorkstreamAiJob(
 
     const executionId =
       "workstream-ai:" + payload.workstreamId + ":" + String(job.id);
+    phase = "consume_authorization";
     await consumeApprovedWorkstreamAiHandoff(
       payload.workstreamId,
       payload.authorizationPackageHash,
@@ -1492,6 +1523,7 @@ export async function executeCodingWorkstreamAiJob(
       },
     });
     const adapter = createConstrainedModelInvocationAdapter(provider);
+    phase = "invoke_model";
     const modelResult = await invokeConstrainedAiProposal({
       lease: contextLease,
       adapter,
@@ -1504,6 +1536,7 @@ export async function executeCodingWorkstreamAiJob(
 
     if (heartbeatError) throw heartbeatError;
 
+    phase = "validate_proposal";
     const candidate = await validateAndApplyAiProposal({
       lease: contextLease,
       proposal: modelResult.proposal,
@@ -1522,6 +1555,7 @@ export async function executeCodingWorkstreamAiJob(
       );
     }
 
+    phase = "persist_candidate";
     await persistCandidate({
       payload,
       sourceResult: loaded.analyzerResult,
@@ -1618,13 +1652,17 @@ export async function executeCodingWorkstreamAiJob(
       manualReviewReason,
     };
   } catch (error) {
+    const diagnosticError = new Error(
+      `Workstream AI phase '${phase}' failed: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
     if (!consumed) {
       await revokeWorkstreamAiHandoff(payload.workstreamId).catch(() => undefined);
     }
     await persistExecutionFailure(
       payload,
       loaded?.analyzerResult ?? failureSourceResult,
-      error,
+      diagnosticError,
       consumed,
     ).catch(() => undefined);
 
@@ -1639,7 +1677,8 @@ export async function executeCodingWorkstreamAiJob(
         claimAttempt: payload.claimAttempt,
         modelInvoked: consumed,
         privilegeEnded: consumed,
-        error: error instanceof Error ? error.message.slice(0, 700) : String(error),
+        phase,
+        error: diagnosticError.message.slice(0, 700),
       },
     ).catch(() => undefined);
     throw error;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hashWorkstreamAnalyzerResult,
   manualAiPatchReviewReason,
+  normalizeWorkstreamGitHeadOutput,
   parseWorkstreamAiJobPayload,
   selectWorkstreamAiAllowedFiles,
 } from "../localCodingWorkstreamAiExecutionService.js";
@@ -13,6 +14,15 @@ const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
 
 describe("per-workstream constrained AI execution contract", () => {
+  it("fails closed instead of trimming undefined git HEAD output", () => {
+    expect(() => normalizeWorkstreamGitHeadOutput(undefined)).toThrow(
+      /Repository HEAD could not be resolved/,
+    );
+    expect(
+      normalizeWorkstreamGitHeadOutput(Buffer.from("a".repeat(40) + "\n")),
+    ).toBe("a".repeat(40));
+  });
+
   it("hashes analyzer results deterministically regardless of object key order", () => {
     const left = {
       localExecutionPlan: { status: "AI_REQUIRED", targetFiles: ["src/a.ts"] },
@@ -131,6 +141,21 @@ describe("per-workstream constrained AI execution contract", () => {
     );
 
     expect(selected).toEqual(["docs/ollama-local-smoke-test-8b.md"]);
+  });
+
+  it("ignores malformed non-string ownership paths instead of crashing", () => {
+    const selected = selectWorkstreamAiAllowedFiles(
+      {
+        contextPackage: {
+          affectedFiles: ["src/a.ts"],
+          relevantFiles: [{ path: "src/a.ts" }],
+        },
+        localExecutionPlan: { targetFiles: [] },
+      },
+      [undefined as unknown as string, null as unknown as string, "src/a.ts"],
+    );
+
+    expect(selected).toEqual(["src/a.ts"]);
   });
 
   it("caps the model-edit allowlist at twelve files", () => {
