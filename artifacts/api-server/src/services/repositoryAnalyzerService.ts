@@ -11,6 +11,7 @@ import {
   aiJobsTable,
   db,
   type AiJob,
+  withTransientDatabaseRetry,
 } from "@workspace/db";
 import {
   buildLocalCodingContextPackage,
@@ -733,10 +734,14 @@ export async function executeRepositoryAnalyzerJob(job: AiJob): Promise<Record<s
     description: requiredString(payload, "description"),
   };
 
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, input.codingTaskId));
+  const [task] = await withTransientDatabaseRetry(
+    () =>
+      db
+        .select()
+        .from(aiCodingTasksTable)
+        .where(eq(aiCodingTasksTable.id, input.codingTaskId)),
+    { attempts: 4, baseDelayMs: 250 },
+  );
   if (!task) throw new Error(`Coding task ${input.codingTaskId} not found`);
 
   const result = await analyzeRepository(input);
