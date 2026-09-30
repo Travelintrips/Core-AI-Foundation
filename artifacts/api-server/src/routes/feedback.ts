@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { aiFeedbackTable, db } from "@workspace/db";
+import { aiFeedbackTable, aiMemoryTable, db } from "@workspace/db";
+import { redactLearningText } from "../services/aiCoreChatLearningService.js";
 
 const router = Router();
 
@@ -34,7 +35,35 @@ router.post("/ai/feedback", async (req, res): Promise<void> => {
     return;
   }
 
-  const [row] = await db.insert(aiFeedbackTable).values(parsed.data).returning();
+  const sanitized = {
+    ...parsed.data,
+    feedbackText: parsed.data.feedbackText ? redactLearningText(parsed.data.feedbackText) : undefined,
+    diff: parsed.data.diff ? redactLearningText(parsed.data.diff) : undefined,
+  };
+  const [row] = await db.insert(aiFeedbackTable).values(sanitized).returning();
+
+  if (
+    sanitized.feedbackText &&
+    (sanitized.action === "human_edit" || sanitized.action === "needs_revision")
+  ) {
+    await db.insert(aiMemoryTable).values({
+      agentId: "ai-core-chat",
+      sessionId: null,
+      memoryType: "validated_rule",
+      content: sanitized.feedbackText,
+      key: `human_feedback:${sanitized.projectId}:${row.id}`,
+      importance: "0.950",
+      expiresAt: null,
+      metadata: {
+        status: "validated",
+        source: "human_feedback",
+        projectName: sanitized.projectId,
+        feedbackId: row.id,
+        action: sanitized.action,
+      },
+    });
+  }
+
   res.status(201).json(row);
 });
 
