@@ -178,7 +178,7 @@ export async function claimCodingBridgeCommand(input: {
     WITH candidate AS (
       SELECT id
       FROM ai_platform.ai_coding_bridge_commands
-      WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}
+      WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text::text::text
         AND (
           status = 'RECEIVED'
           OR (
@@ -198,8 +198,8 @@ export async function claimCodingBridgeCommand(input: {
         processed_at = COALESCE(command.processed_at, NOW()),
         metadata_json = command.metadata_json || jsonb_build_object(
           'claimToken', gen_random_uuid()::text,
-          'claimLeaseExpiresAt', (NOW() + (${leaseSeconds} * INTERVAL '1 second'))::text,
-          'claimedBy', ${input.clientId},
+          'claimLeaseExpiresAt', (NOW() + (${leaseSeconds}::integer * INTERVAL '1 second'))::text,
+          'claimedBy', ${input.clientId}::text,
           'claimedAt', NOW()::text
         ),
         updated_at = NOW()
@@ -257,13 +257,13 @@ export async function renewCodingBridgeCommandClaim(input: {
   const result = await db.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_commands
     SET metadata_json = metadata_json || jsonb_build_object(
-          'claimLeaseExpiresAt', (NOW() + (${leaseSeconds} * INTERVAL '1 second'))::text
+          'claimLeaseExpiresAt', (NOW() + (${leaseSeconds}::integer * INTERVAL '1 second'))::text
         ),
         updated_at = NOW()
     WHERE id = ${input.commandId}::uuid
       AND status = 'PROCESSING'
       AND metadata_json ->> 'assignedClientId' = ${input.clientId}
-      AND metadata_json ->> 'claimToken' = ${input.claimToken}
+      AND metadata_json ->> 'claimToken' = ${input.claimToken}::text::text
     RETURNING id
   `);
 
@@ -292,7 +292,7 @@ export async function completeCodingBridgeCommand(input: {
         metadata_json = (
           metadata_json - 'claimToken' - 'claimLeaseExpiresAt'
         ) || jsonb_build_object(
-          'completedBy', ${input.clientId},
+          'completedBy', ${input.clientId}::text,
           'completedAt', NOW()::text
         ),
         updated_at = NOW()
