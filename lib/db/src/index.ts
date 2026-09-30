@@ -104,5 +104,8 @@ export async function withTransientDatabaseRetry<T>(
 
 export const db = drizzle(pool, { schema });
 
+// Additional admin read connections use the same installed Postgres driver.
+export { Pool as PostgresPool } from "pg";
+
 export * from "./schema";
 export * from "./env";

@@ -60,16 +60,23 @@ import {
   renderAiCoreCapabilityRegistry,
 } from "../services/aiCoreCapabilityRegistryService.js";
 import {
+  buildAdminDbUnresolvedAnswer,
   executeAdminMutationSql,
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
+  executeAdminSemanticQuery,
+  extractAdminDbSemanticIntent,
   extractExplicitAdminMutationSql,
   extractExplicitReadOnlySql,
   formatAdminDbSchemaCatalog,
-  getAdminDbSchemaCatalog,
+  inspectAdminDbSchemaCatalog,
+  sanitizeAdminDbError,
   renderAdminDbMutationResult,
   renderAdminDbQueryResult,
+  renderAdminSemanticQueryResult,
   shouldAttemptAdminDbQuery,
+  type AdminDbConversationMessage,
+  type AdminDbDiscovery,
 } from "../services/aiCoreAdminDbQueryService.js";
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
 import { deactivateRegisteredModel } from "../services/aiModelService.js";
@@ -85,6 +92,12 @@ const ChatRequest = z.object({
   repository: z.string().trim().min(1).max(500).optional(),
   branch: z.string().trim().min(1).max(200).optional(),
   priority: z.number().int().min(0).max(100).optional(),
+  context: z.array(
+    z.object({
+      role: z.enum(["user", "assistant"]),
+      text: z.string().trim().min(1).max(5_000),
+    }).strict(),
+  ).max(12).optional(),
 }).strict();
 
 const TaskId = z.string().uuid();
@@ -104,9 +117,9 @@ const ASK_SYSTEM_PROMPT = [
 const ADMIN_DB_PLANNER_SYSTEM_PROMPT = [
   "You are the PostgreSQL query planner for AI Core Chat's authenticated admin-only read path.",
   "Your job is to decide whether the user's request should read the database and, if so, produce exactly one safe read-only PostgreSQL query.",
-  "Return exactly one JSON object and no markdown: {\"shouldQuery\":true|false,\"sql\":\"SELECT ...\"|null,\"reason\":\"short reason\"}.",
+  "Return exactly one JSON object and no markdown: {\"shouldQuery\":true|false,\"sql\":\"SELECT ...\"|null,\"databaseId\":\"primary or listed connection id\",\"reason\":\"short reason\"}.",
   "Only SELECT or WITH queries are allowed. Never emit INSERT, UPDATE, DELETE, MERGE, CREATE, ALTER, DROP, TRUNCATE, GRANT, REVOKE, COPY, CALL, DO, locking clauses, or functions that read server files or perform network access.",
-  "Use only tables and columns listed in the supplied schema catalog.",
+  "Use only tables and columns listed in the supplied schema catalog. Return the databaseId listed with the chosen tables. A query must use tables from exactly one database connection.",
   "For fuzzy human names, company names, emails, phone numbers, codes, or labels, prefer ILIKE with surrounding percent wildcards unless the user explicitly asks for exact matching.",
   "Use explicit JOIN conditions. Never invent columns.",
   "Prefer LIMIT 100 for row listings. Aggregate/count queries may omit LIMIT.",
@@ -115,6 +128,7 @@ const ADMIN_DB_PLANNER_SYSTEM_PROMPT = [
 
 const AdminDbPlan = z.object({
   shouldQuery: z.boolean(),
+  databaseId: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/).optional(),
   sql: z.string().trim().min(1).nullable(),
   reason: z.string().trim().max(500).optional(),
 });
@@ -461,8 +475,46 @@ function parseAdminDbPlan(raw: string): z.infer<typeof AdminDbPlan> {
 async function tryRunAdminDbQuery(
   message: string,
   policy: ChatPolicy,
+  context: AdminDbConversationMessage[] = [],
 ): Promise<Record<string, unknown> | null> {
-  if (!shouldAttemptAdminDbQuery(message)) return null;
+  const semanticQuery = await executeAdminSemanticQuery(message, context);
+  if (semanticQuery) {
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: renderAdminSemanticQueryResult(semanticQuery),
+      databaseQuery: {
+        sql: semanticQuery.sql,
+        rowCount: semanticQuery.rowCount,
+        truncated: semanticQuery.truncated,
+        elapsedMs: semanticQuery.elapsedMs,
+        reason:
+          "Schema-aware semantic aggregate over dynamically discovered application tables.",
+        access: "ADMIN_READ_ONLY",
+        confidence: semanticQuery.confidence,
+        sourceTable: semanticQuery.sourceTable,
+        sourceDatabaseId: semanticQuery.sourceDatabaseId,
+        discovery: semanticQuery.discovery,
+        valueColumn: semanticQuery.valueColumn,
+        timeColumn: semanticQuery.timeColumn,
+        statusFilterApplied: semanticQuery.statusFilterApplied,
+        inheritedFromContext: semanticQuery.intent.inheritedFromContext,
+      },
+      data: semanticQuery.rows,
+    };
+  }
+
+  if (!shouldAttemptAdminDbQuery(message) && !extractAdminDbSemanticIntent(message, context)) return null;
 
   const deterministicLookup = await executeAdminNaturalTextLookup(message);
   if (deterministicLookup) {
@@ -494,6 +546,8 @@ async function tryRunAdminDbQuery(
 
   const explicitSql = extractExplicitReadOnlySql(message);
   let plannedSql = explicitSql;
+  let databaseId = "primary";
+  let discovery: AdminDbDiscovery = { databases: [], tableCount: 0 };
   let plannerProvider: string | null = null;
   let plannerModel: string | null = null;
   let plannerUsage: TokenUsage | null = null;
@@ -502,9 +556,24 @@ async function tryRunAdminDbQuery(
     : "Natural-language admin database lookup.";
 
   if (!plannedSql) {
-    const schemaCatalog = await getAdminDbSchemaCatalog(message);
+    const inspected = await inspectAdminDbSchemaCatalog(message);
+    const schemaCatalog = inspected.tables;
+    discovery = inspected.discovery;
+    const databaseIds = new Set(schemaCatalog.map((table) => table.databaseId ?? "primary"));
+    const selectedDatabase = (id?: string): string => {
+      if (id && databaseIds.has(id)) return id;
+      if (!id && databaseIds.size === 1) return [...databaseIds][0]!;
+      throw new Error("Database planner belum memilih satu koneksi terdaftar yang sesuai dengan metadata.");
+    };
     const schemaText = formatAdminDbSchemaCatalog(schemaCatalog);
+    const recentContext = context
+      .slice(-8)
+      .map((item) => item.role.toUpperCase() + ": " + item.text)
+      .join("\n");
     const plannerMessage = [
+      ...(recentContext
+        ? ["RECENT CONVERSATION:", recentContext, ""]
+        : []),
       "USER REQUEST:",
       message,
       "",
@@ -525,7 +594,8 @@ async function tryRunAdminDbQuery(
           ADMIN_DB_PLANNER_SYSTEM_PROMPT,
         );
         const plan = parseAdminDbPlan(planned.reply);
-        if (!plan.shouldQuery || !plan.sql) return null;
+        if (!plan.shouldQuery || !plan.sql) return buildAdminDbUnresolvedAnswer(message, context, discovery);
+        databaseId = selectedDatabase(plan.databaseId);
         plannedSql = plan.sql;
         plannerReason = plan.reason ?? plannerReason;
         plannerProvider = planned.provider;
@@ -539,7 +609,8 @@ async function tryRunAdminDbQuery(
         );
         if (fallback.ok) {
           const plan = parseAdminDbPlan(fallback.result.reply);
-          if (!plan.shouldQuery || !plan.sql) return null;
+          if (!plan.shouldQuery || !plan.sql) return buildAdminDbUnresolvedAnswer(message, context, discovery);
+          databaseId = selectedDatabase(plan.databaseId);
           plannedSql = plan.sql;
           plannerReason = plan.reason ?? plannerReason;
           plannerProvider = fallback.result.provider;
@@ -554,7 +625,8 @@ async function tryRunAdminDbQuery(
             ADMIN_DB_PLANNER_SYSTEM_PROMPT,
           );
           const plan = parseAdminDbPlan(planned.reply);
-          if (!plan.shouldQuery || !plan.sql) return null;
+          if (!plan.shouldQuery || !plan.sql) return buildAdminDbUnresolvedAnswer(message, context, discovery);
+          databaseId = selectedDatabase(plan.databaseId);
           plannedSql = plan.sql;
           plannerReason = plan.reason ?? plannerReason;
           plannerProvider = planned.provider;
@@ -564,14 +636,15 @@ async function tryRunAdminDbQuery(
       }
     } else {
       const local = await resolveLocalSelection();
-      if (!local.ok) return null;
+      if (!local.ok) return buildAdminDbUnresolvedAnswer(message, context, discovery);
       const planned = await invokeChatModel(
         local.selection,
         plannerMessage,
         ADMIN_DB_PLANNER_SYSTEM_PROMPT,
       );
       const plan = parseAdminDbPlan(planned.reply);
-      if (!plan.shouldQuery || !plan.sql) return null;
+      if (!plan.shouldQuery || !plan.sql) return buildAdminDbUnresolvedAnswer(message, context, discovery);
+      databaseId = selectedDatabase(plan.databaseId);
       plannedSql = plan.sql;
       plannerReason = plan.reason ?? plannerReason;
       plannerProvider = planned.provider;
@@ -580,7 +653,7 @@ async function tryRunAdminDbQuery(
     }
   }
 
-  const result = await executeAdminReadOnlySql(plannedSql);
+  const result = await executeAdminReadOnlySql(plannedSql, databaseId);
   return {
     kind: "answer",
     route: "ADMIN_DB_QUERY",
@@ -600,6 +673,8 @@ async function tryRunAdminDbQuery(
       rowCount: result.rowCount,
       truncated: result.truncated,
       elapsedMs: result.elapsedMs,
+      sourceDatabaseId: result.sourceDatabaseId,
+      discovery,
       reason: plannerReason,
       access: "ADMIN_READ_ONLY",
     },
@@ -726,6 +801,7 @@ async function deterministicReply(
 async function answerAskMode(
   message: string,
   policy: ChatPolicy,
+  context: AdminDbConversationMessage[] = [],
 ): Promise<Record<string, unknown>> {
   const workload = classifyAiCoreWorkload(message);
   const routingMeta = {
@@ -755,7 +831,7 @@ async function answerAskMode(
     };
   }
 
-  const adminDbQuery = await tryRunAdminDbQuery(message, policy).catch(
+  const adminDbQuery = await tryRunAdminDbQuery(message, policy, context).catch(
     (error: unknown) => ({
       kind: "answer",
       route: "ADMIN_DB_QUERY",
@@ -767,7 +843,7 @@ async function answerAskMode(
       costClass: "ZERO",
       reply:
         "Admin DB Query dikenali tetapi query read-only gagal. Tidak ada perubahan data yang dilakukan.",
-      warning: safeProviderFailure(error),
+      warning: sanitizeAdminDbError(error),
     }),
   );
   if (adminDbQuery) return adminDbQuery;
@@ -1021,6 +1097,8 @@ function writeBufferedChatStream(
     taskNumber: result["taskNumber"] ?? null,
     status: result["status"] ?? null,
     workspaceUrl: result["workspaceUrl"] ?? null,
+    databaseQuery: result["databaseQuery"] ?? null,
+    data: result["data"] ?? null,
     incomplete: false,
   });
 }
@@ -1030,6 +1108,7 @@ async function streamAskMode(
   policy: ChatPolicy,
   res: Response,
   signal: AbortSignal,
+  context: AdminDbConversationMessage[] = [],
 ): Promise<void> {
   const workload = classifyAiCoreWorkload(message);
   const routingMeta = {
@@ -1062,7 +1141,7 @@ async function streamAskMode(
     return;
   }
 
-  const adminDbQuery = await tryRunAdminDbQuery(message, policy).catch(
+  const adminDbQuery = await tryRunAdminDbQuery(message, policy, context).catch(
     (error: unknown) => ({
       kind: "answer",
       route: "ADMIN_DB_QUERY",
@@ -1074,7 +1153,7 @@ async function streamAskMode(
       costClass: "ZERO",
       reply:
         "Admin DB Query dikenali tetapi query read-only gagal. Tidak ada perubahan data yang dilakukan.",
-      warning: safeProviderFailure(error),
+      warning: sanitizeAdminDbError(error),
     }),
   );
   if (adminDbQuery) {
@@ -1087,13 +1166,13 @@ async function streamAskMode(
     workload.workload === "CODING" ||
     (policy !== "smart" && policy !== "cloud")
   ) {
-    writeBufferedChatStream(res, await answerAskMode(message, policy));
+    writeBufferedChatStream(res, await answerAskMode(message, policy, context));
     return;
   }
 
   const cloud = await resolveCloudSelection(workload.workload);
   if (!cloud.ok) {
-    writeBufferedChatStream(res, await answerAskMode(message, policy));
+    writeBufferedChatStream(res, await answerAskMode(message, policy, context));
     return;
   }
 
@@ -1164,7 +1243,7 @@ async function streamAskMode(
       safeProviderFailure(error) || "Cloud streaming invocation failed.";
 
     if (!emittedText && quarantined) {
-      const retry = await answerAskMode(message, policy);
+      const retry = await answerAskMode(message, policy, context);
       const retryModel =
         typeof retry["model"] === "string" ? retry["model"] : null;
       if (retryModel !== model || retry["route"] !== "CLOUD") {
@@ -1496,8 +1575,8 @@ async function runAutoMode(
     if (remote) return { ...remote, ...routingMeta };
   }
 
-  const answer = await answerAskMode(input.message, input.modelPolicy);
-  return { ...answer, ...routingMeta };
+  const answer = await answerAskMode(input.message, input.modelPolicy, input.context ?? []);
+  return { ...routingMeta, ...answer };
 }
 
 router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
@@ -1545,6 +1624,15 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
 router.get("/ai/core-chat/capabilities", async (_req, res): Promise<void> => {
   const registry = await getAiCoreCapabilityRegistrySnapshot();
   res.status(200).json(registry);
+});
+
+router.get("/ai/core-chat/databases/metadata", async (_req, res): Promise<void> => {
+  try {
+    const metadata = await inspectAdminDbSchemaCatalog();
+    res.status(200).json({ ...metadata, secretsExposed: false });
+  } catch (error) {
+    res.status(503).json({ error: sanitizeAdminDbError(error), secretsExposed: false });
+  }
 });
 
 router.get("/ai/core-chat/data-tools/readiness", async (_req, res): Promise<void> => {
@@ -1600,6 +1688,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       parsed.data.modelPolicy,
       res,
       controller.signal,
+      parsed.data.context ?? [],
     );
   } catch (error) {
     if (!controller.signal.aborted && !res.writableEnded) {
@@ -1636,7 +1725,11 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
           (await maybeRunRemoteWorkerPreset(parsed.data)) ??
           await startAgentTask(parsed.data)
         : parsed.data.mode === "ask"
-          ? await answerAskMode(parsed.data.message, parsed.data.modelPolicy)
+          ? await answerAskMode(
+              parsed.data.message,
+              parsed.data.modelPolicy,
+              parsed.data.context ?? [],
+            )
           : await runAutoMode(parsed.data);
 
     res.status(result["kind"] === "agent" ? 202 : 200).json(result);

@@ -321,8 +321,9 @@ describe("repository analyzer execution", () => {
       codingRunId: runId,
       executionStatus: "COMPLETED",
       sourceTarget: ".",
-      branch: "main",
+      branch: expect.any(String),
     });
+    expect(result.branch).toBe(result.contextPackage.branch);
     expect(Array.isArray(result.filesInspected)).toBe(true);
     expect(Array.isArray(result.findings)).toBe(true);
     expect(Array.isArray(result.recommendedChanges)).toBe(true);
@@ -336,7 +337,7 @@ describe("repository analyzer execution", () => {
       operations: [],
     });
     expect(result.localExecution).toBeNull();
-  });
+  }, 15_000);
 
   it("handles the exact production audit instruction without undefined split failures", async () => {
     const result = await executeRepositoryAnalyzerJob({

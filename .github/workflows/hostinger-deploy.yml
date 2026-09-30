@@ -188,6 +188,12 @@ jobs:
           console.log("ai_core_chat_stream_smoke=PASS");
           NODE
 
+      - name: Verify schema-aware AI Core Chat database queries
+        if: steps.target.outputs.stale != 'true'
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: node scripts/ai-core-admin-db-smoke.mjs
+
       - name: Verify GCP Ollama worker and Economy routing
         if: steps.target.outputs.stale != 'true'
         shell: bash
@@ -591,6 +597,7 @@ jobs:
           echo "Health/readiness: PASS"
           echo "Admin auth guard: PASS"
           echo "Authenticated Coding Workspace smoke: PASS"
+          echo "Admin DB metadata, revenue, streaming and follow-up: PASS"
           echo "GCP Ollama worker + Economy routing: PASS"
           echo "Public sitemap Googlebot fetch: PASS"
 
