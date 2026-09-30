@@ -1,0 +1,80 @@
+name: AI Core Chat Routing Canary
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Hostinger Production Verify
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-core-chat-routing-canary
+  cancel-in-progress: false
+
+jobs:
+  routing-canary:
+    name: Production chat routing canary
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Guard production credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+      - name: Verify AI Core health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 20 "$API_BASE_URL/healthz" >/dev/null
+
+      - name: Assert runtime inventory routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ask() {
+            local message="$1" context="${2:-[]}" out="$3"
+            jq -nc --arg m "$message" --argjson c "$context"               '{message:$m,mode:"ask",modelPolicy:"auto",conversationId:"production-chat-routing-canary",context:$c}' |
+              curl -fsS --connect-timeout 10 --max-time 45                 -X POST "$API_BASE_URL/ai/core-chat/messages"                 -H "Content-Type: application/json"                 -H "x-admin-api-key: $ADMIN_API_KEY"                 --data-binary @- > "$out"
+          }
+
+          assert_not_financial_db() {
+            local file="$1"
+            if jq -e '
+              ((.route // "" | ascii_downcase) | contains("admin_db")) or
+              ((.kind // "" | ascii_downcase) | contains("admin_db")) or
+              ((.reply // "" | ascii_downcase) |
+                test("pendapatan|omzet|revenue|price_per_hour|ai_approval_queue\\.amount"))
+            ' "$file" >/dev/null; then
+              echo "::error::Runtime inventory question was misrouted into financial/Admin DB semantics"
+              jq -c '{kind,route,status,reply}' "$file"
+              exit 1
+            fi
+          }
+
+          ask "Worker apa yang terpasang" '[]' /tmp/worker.json
+          assert_not_financial_db /tmp/worker.json
+
+          ask "Agent apa saja yang sudah terinstall disini" '[]' /tmp/agent.json
+          assert_not_financial_db /tmp/agent.json
+
+          context='[{"role":"user","content":"Berapa pendapatan minggu ini?"},{"role":"assistant","content":"Permintaan sebelumnya membahas pendapatan."}]'
+          ask "Bukan pendapatan maksudnya agent ai" "$context" /tmp/correction.json
+          assert_not_financial_db /tmp/correction.json
+
+          ask "Worker apa yang terpasang" "$context" /tmp/context-leak.json
+          assert_not_financial_db /tmp/context-leak.json
+
+          echo "AI Core chat runtime-inventory routing canary passed."
