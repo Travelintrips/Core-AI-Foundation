@@ -28,6 +28,7 @@ vi.mock("../aiCoreAdminDbConnectionService.js", () => {
       throw new Error("Koneksi database tidak terdaftar.");
     },
     readAdminDbMetadata: (connection: typeof primary, query: unknown) => connection.client().execute(query),
+    runAdminDbReadTransaction: (connection: typeof primary, work: Parameters<typeof mocks.transaction>[0]) => connection.client().transaction(work),
   };
 });
 
@@ -42,6 +43,7 @@ import {
   extractExplicitAdminMutationSql,
   getAdminDbSchemaCatalog,
   inspectAdminDbSchemaCatalog,
+  sanitizeAdminDbError,
   renderAdminSemanticQueryResult,
   shouldAttemptAdminDbQuery,
   validateAdminMutationSql,
@@ -470,6 +472,14 @@ describe("AI Core admin database query service", () => {
     expect(result.tables[0]).toMatchObject({ databaseId: "primary", table: "customers" });
     expect(result.discovery).toMatchObject({ tableCount: 1, databases: [ { id: "primary", status: "ok" }, { id: "sports", status: "unavailable" } ] });
     expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it("reports the underlying database error instead of echoing a failed query containing private data", () => {
+    const error = new Error("Failed query: SELECT 'private'", { cause: new Error("connect postgresql://user:private@invalid/db password=private") });
+    const warning = sanitizeAdminDbError(error);
+    expect(warning).toContain("connect");
+    expect(warning).not.toContain("private");
+    expect(warning).not.toContain("SELECT");
   });
 
   it("executes explicit reads only on registered connections", async () => {

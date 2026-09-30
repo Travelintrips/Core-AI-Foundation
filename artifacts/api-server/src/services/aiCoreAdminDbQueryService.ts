@@ -4,6 +4,7 @@ import {
   getAdminDbConnection,
   getAdminDbConnections,
   readAdminDbMetadata,
+  runAdminDbReadTransaction,
 } from "./aiCoreAdminDbConnectionService.js";
 
 export type AdminDbSchemaTable = {
@@ -30,7 +31,9 @@ export type AdminDbDiscovery = {
 };
 
 export function sanitizeAdminDbError(error: unknown): string {
-  return String(error instanceof Error ? error.message : error)
+  const cause = error instanceof Error ? error.cause : undefined;
+  const message = cause instanceof Error ? cause.message : error instanceof Error ? error.message : error;
+  return String(message)
     .replace(/(?:postgres(?:ql)?|https?):\/\/[^\s]+/gi, "[REDACTED_URL]")
     .replace(/((?:password|token|secret|api[_-]?key)\s*[=:]\s*)\S+/gi, "$1[REDACTED]")
     .replace(/[\r\n\t]+/g, " ").slice(0, 300);
@@ -682,7 +685,7 @@ export async function executeAdminSemanticQuery(
   const startedAt = Date.now();
 
   const businessTimezone = adminDbBusinessTimezone();
-  const execution = await getAdminDbConnection(plan.table.databaseId).client().transaction(async (tx) => {
+  const execution = await runAdminDbReadTransaction(getAdminDbConnection(plan.table.databaseId), async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw(
       "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
@@ -949,7 +952,7 @@ export async function executeAdminNaturalTextLookup(
   }
   const collected: Record<string, unknown>[] = [];
   for (const [databaseId, databaseTargets] of groupedTargets) {
-    const matches = await getAdminDbConnection(databaseId).client().transaction(async (tx) => {
+    const matches = await runAdminDbReadTransaction(getAdminDbConnection(databaseId), async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw(
       "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
@@ -1154,7 +1157,7 @@ export async function executeAdminReadOnlySql(
     String(MAX_RESULT_ROWS + 1);
   const startedAt = Date.now();
 
-  const result = await getAdminDbConnection(databaseId).client().transaction(async (tx) => {
+  const result = await runAdminDbReadTransaction(getAdminDbConnection(databaseId), async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw(
       "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
