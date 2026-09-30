@@ -66,6 +66,8 @@ const { ensureAgentServiceTokenBootstrap } =
   await import("./services/agentServiceTokenBootstrapService.js");
 const codingAutonomous =
   await import("./services/localCodingAutonomousRepairService.js");
+const codingOrchestrationRecovery =
+  await import("./services/codingOrchestratorService.js");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 let _designBatchRecoveryStarted = false;
@@ -148,6 +150,10 @@ async function initializeRuntimeServices(): Promise<void> {
     "[coding-autonomous] Runtime start",
     () => codingAutonomous.startAutonomousCodingRuntime(),
   );
+
+  // Resume only repository-analysis runs already requested by a user. This
+  // continuation also serves tasks whose autonomous approval/dispatch is off.
+  codingOrchestrationRecovery.startCodingOrchestrationRecoveryRuntime();
 
   // Production workers fail closed: they only auto-start when explicitly enabled.
   // Development keeps the existing auto-start behavior for local workflows.
@@ -235,6 +241,7 @@ function shutdown(signal: string): void {
     jobDispatcher.shutdown(),
     ollamaWorkerRuntime.shutdownOllamaWorkerRuntime(),
     Promise.resolve(codingAutonomous.stopAutonomousCodingRuntime()),
+    Promise.resolve(codingOrchestrationRecovery.stopCodingOrchestrationRecoveryRuntime()),
   ])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
