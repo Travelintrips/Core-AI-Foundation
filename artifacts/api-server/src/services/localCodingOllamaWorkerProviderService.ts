@@ -117,6 +117,7 @@ function mapHttpFailure(status: number): ProviderInvocationError {
 export function createScheduledOllamaProviderAdapter(input: {
   modelId: string;
   apiKey?: string;
+  queuePriority?: number;
 }): ConstrainedModelProvider {
   return {
     provider: "ollama",
@@ -139,13 +140,19 @@ export function createScheduledOllamaProviderAdapter(input: {
         }
 
         if (remoteReady) {
-          const job = await enqueueRemoteOllamaInvocation({
+          const invocation = {
             requestId: request.requestId,
             modelId: input.modelId,
             input: request.input,
             responseFormat: request.responseFormat as unknown as Record<string, unknown>,
             maxOutputTokens: request.maxOutputTokens,
-          });
+          };
+          const job =
+            input.queuePriority == null
+              ? await enqueueRemoteOllamaInvocation(invocation)
+              : await enqueueRemoteOllamaInvocation(invocation, {
+                  priority: input.queuePriority,
+                });
           return await waitForRemoteOllamaInvocation(
             job.id,
             context.signal,

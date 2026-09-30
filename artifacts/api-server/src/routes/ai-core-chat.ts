@@ -238,7 +238,10 @@ function buildChatProvider(
       : null;
 
   if (providerSlug === "ollama" && !baseUrl) {
-    return createScheduledOllamaProviderAdapter({ modelId });
+    return createScheduledOllamaProviderAdapter({
+      modelId,
+      queuePriority: 95,
+    });
   }
 
   return createConstrainedCodingProviderAdapter({
