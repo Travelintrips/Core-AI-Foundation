@@ -1,0 +1,61 @@
+name: AI Core Live Coding Delegation
+
+on:
+  workflow_run:
+    workflows:
+      - Hostinger Production Verify
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-core-live-coding-delegation
+  cancel-in-progress: false
+
+jobs:
+  delegate:
+    name: Delegate real coding task through AI Core Chat
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Submit goal-level coding instruction
+        id: submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          instruction='Audit AI Core Chat pada repository Core-AI-Foundation. Cari satu masalah kecil tetapi nyata pada reliability atau error handling yang aman untuk diperbaiki. Analisis penyebabnya, buat rencana kerja, bagi pekerjaan ke agent/worker yang sesuai bila diperlukan, implementasikan perbaikannya, tambahkan atau perbarui regression test, jalankan verification yang relevan, lalu laporkan hasil akhirnya beserta bukti test. Jangan melakukan perubahan production yang destruktif dan jangan melewati approval gate yang diwajibkan.'
+          jq -nc --arg m "$instruction" '{message:$m,mode:"agent",modelPolicy:"auto",repository:"Travelintrips/Core-AI-Foundation",branch:"main",conversationId:"live-coding-delegation-20260930"}' > /tmp/request.json
+          code=$(curl -sS --connect-timeout 10 --max-time 60 -o /tmp/response.json -w "%{http_code}"             -X POST "$API_BASE_URL/ai/core-chat/messages"             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             --data-binary @/tmp/request.json || true)
+          if [ "$code" != "202" ] && [ "$code" != "200" ]; then
+            echo "::error::AI Core Chat delegation failed with HTTP $code"
+            jq -c '{error,warning}' /tmp/response.json 2>/dev/null || cat /tmp/response.json
+            exit 1
+          fi
+          jq -c '{kind,status,route,taskId,reply}' /tmp/response.json
+          task_id=$(jq -r '.taskId // empty' /tmp/response.json)
+          test -n "$task_id"
+          echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
+
+      - name: Verify task is observable
+        shell: bash
+        run: |
+          set -euo pipefail
+          task="${{ steps.submit.outputs.task_id }}"
+          for attempt in $(seq 1 24); do
+            code=$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/progress.json -w "%{http_code}"               "$API_BASE_URL/ai/core-chat/tasks/$task/progress"               -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+            if [ "$code" = "200" ]; then
+              jq -c '{taskId,status,phase,progress,approvalRequired,workstreams,workers}' /tmp/progress.json
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Delegated coding task was not observable within bounded polling window"
+          exit 1
