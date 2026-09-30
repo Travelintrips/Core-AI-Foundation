@@ -68,6 +68,34 @@ describe("AI Core Chat automatic dispatch", () => {
     });
   });
 
+  it("routes explicit bounded OpenClaw delegation to the external-agent queue", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Gunakan OpenClaw untuk memeriksa status integrasi ini.",
+    );
+
+    expect(decision.kind).toBe("EXTERNAL_AGENT");
+    expect(decision.workload.requiresAgent).toBe(false);
+  });
+
+  it("does not let OpenClaw bypass coding control-plane policy", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Gunakan OpenClaw untuk perbaiki kode login dan commit.",
+    );
+
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.workload.workload).toBe("CODING");
+  });
+
+  it("does not let OpenClaw bypass critical approval policy", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Pakai OpenClaw untuk deploy ke production sekarang.",
+    );
+
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.workload.workload).toBe("CRITICAL_ACTION");
+    expect(decision.workload.requiresApproval).toBe(true);
+  });
+
   it("routes coding changes directly to the control plane", () => {
     const decision = classifyAiCoreChatDispatch(
       "Perbaiki kode login dan test sampai hijau.",
