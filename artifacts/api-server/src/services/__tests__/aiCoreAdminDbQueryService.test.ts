@@ -84,6 +84,13 @@ describe("AI Core admin database query service", () => {
     });
   });
 
+  it("never inherits financial semantics into AI runtime inventory questions", () => {
+    const context = [{ role: "user" as const, text: "cek berapa pendapatan sport center kemarin" }];
+    expect(extractAdminDbSemanticIntent("Worker apa yang terpasang", context)).toBeNull();
+    expect(extractAdminDbSemanticIntent("Agent apa saja yang sudah terinstall disini", context)).toBeNull();
+    expect(extractAdminDbSemanticIntent("Bukan pendapatan maksudnya agent ai", context)).toBeNull();
+  });
+
   it("inherits metric and domain for short conversational follow-ups", () => {
     expect(
       extractAdminDbSemanticIntent("kalau minggu lalu?", [
