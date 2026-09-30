@@ -256,6 +256,10 @@ vi.mock("../../services/localCodingGitHubDiscoveryService.js", () => ({
   listCodingRepositoryBranches: mockListCodingRepositoryBranches,
 }));
 
+vi.mock("../../services/localCodingRunRecoveryService.js", () => ({
+  reconcileStaleCodingRuns: vi.fn(async () => ({ inspected: 0, recoveredRuns: 0, recoveredTasks: 0 })),
+}));
+
 const { default: codingWorkspaceRouter } = await import("../coding-workspace.js");
 
 const taskId = "11111111-1111-4111-8111-111111111111";

@@ -60,6 +60,7 @@ import {
   LocalAiPatchApprovalError,
 } from "../services/localCodingAiPatchApprovalService.js";
 import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorkerRecoveryService.js";
+import { reconcileStaleCodingRuns } from "../services/localCodingRunRecoveryService.js";
 import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
 
 const router = Router();
@@ -136,6 +137,10 @@ router.get(
 );
 
 router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
+  await reconcileStaleCodingRuns().catch((error) => {
+    logger.warn({ err: error }, "[coding-workspace] stale coding-run reconciliation failed");
+  });
+
   const tasks = await db
     .select()
     .from(aiCodingTasksTable)
@@ -213,7 +218,10 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  await reconcileStaleMultiWorkerRuns({ taskId: params.data.id }).catch(() => undefined);
+  await Promise.all([
+    reconcileStaleMultiWorkerRuns({ taskId: params.data.id }).catch(() => undefined),
+    reconcileStaleCodingRuns({ taskId: params.data.id }).catch(() => undefined),
+  ]);
 
   const [task] = await withCodingWorkspaceReadRetry(() =>
     db
@@ -266,6 +274,11 @@ router.delete("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+
+  await Promise.all([
+    reconcileStaleMultiWorkerRuns({ taskId: params.data.id }).catch(() => undefined),
+    reconcileStaleCodingRuns({ taskId: params.data.id }).catch(() => undefined),
+  ]);
 
   try {
     const deleted = await db.transaction(async (tx) => {

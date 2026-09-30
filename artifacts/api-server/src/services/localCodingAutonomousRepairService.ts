@@ -40,6 +40,7 @@ import { startPullRequestVerification } from "./localCodingPullRequestGateServic
 import { requestCodingCriticalApproval } from "./codingCriticalApprovalService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
+import { purgeExpiredCodingTestTasks, reconcileStaleCodingRuns } from "./localCodingRunRecoveryService.js";
 
 const DEFAULT_INTERVAL_MS = 8_000;
 const MIN_INTERVAL_MS = 2_000;
@@ -69,6 +70,8 @@ type AutonomousRow = {
 
 let timer: NodeJS.Timeout | null = null;
 let tickRunning = false;
+let lastTestTaskRetentionSweepAt = 0;
+const TEST_TASK_RETENTION_SWEEP_INTERVAL_MS = 60 * 60_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -728,6 +731,26 @@ async function autonomousTick(): Promise<void> {
   if (tickRunning) return;
   tickRunning = true;
   try {
+    const recovery = await reconcileStaleCodingRuns().catch((error) => {
+      logger.warn({ err: error }, "[coding-autonomous] stale coding-run reconciliation failed");
+      return null;
+    });
+    if (recovery && (recovery.recoveredRuns > 0 || recovery.recoveredTasks > 0)) {
+      logger.warn({ recovery }, "[coding-autonomous] recovered stale coding-run lifecycle");
+    }
+
+    const nowMs = Date.now();
+    if (nowMs - lastTestTaskRetentionSweepAt >= TEST_TASK_RETENTION_SWEEP_INTERVAL_MS) {
+      lastTestTaskRetentionSweepAt = nowMs;
+      const retention = await purgeExpiredCodingTestTasks().catch((error) => {
+        logger.warn({ err: error }, "[coding-autonomous] coding test-task retention sweep failed");
+        return null;
+      });
+      if (retention && retention.purgedTasks > 0) {
+        logger.info({ retention }, "[coding-autonomous] purged expired coding smoke/canary tasks");
+      }
+    }
+
     if (await temporalOrchestratorActive()) {
       logger.debug("[coding-autonomous] Temporal orchestrator lease active; local tick skipped");
       return;
