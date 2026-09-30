@@ -133,6 +133,21 @@ describe("per-workstream constrained AI execution contract", () => {
     expect(selected).toEqual(["docs/ollama-local-smoke-test-8b.md"]);
   });
 
+  it("ignores malformed non-string ownership paths instead of crashing", () => {
+    const selected = selectWorkstreamAiAllowedFiles(
+      {
+        contextPackage: {
+          affectedFiles: ["src/a.ts"],
+          relevantFiles: [{ path: "src/a.ts" }],
+        },
+        localExecutionPlan: { targetFiles: [] },
+      },
+      [undefined as unknown as string, null as unknown as string, "src/a.ts"],
+    );
+
+    expect(selected).toEqual(["src/a.ts"]);
+  });
+
   it("caps the model-edit allowlist at twelve files", () => {
     const affectedFiles = Array.from(
       { length: 30 },
