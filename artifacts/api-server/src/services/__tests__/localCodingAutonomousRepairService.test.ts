@@ -109,6 +109,26 @@ describe("autonomous coding explicit stop", () => {
     expect(source).toContain('["FAILED", "BLOCKED"].includes(String(row.status ?? ""))');
     expect(source).not.toContain('["FAILED", "BLOCKED", "DISABLED"]');
   });
+
+  it("preserves DISABLED across internal enable calls unless explicitly forced", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("options: { forceDisabled?: boolean } = {}");
+    expect(source).toContain("status = 'DISABLED' AND NOT ${forceDisabled}");
+    expect(source).toContain("THEN FALSE");
+  });
+
+  it("allows only the explicit autonomous start route to force a disabled task active", () => {
+    const route = readFileSync(
+      new URL("../../routes/coding-control-bridge.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(route).toContain("forceDisabled:true");
+  });
 });
 
 describe("autonomous coding cycle budget", () => {

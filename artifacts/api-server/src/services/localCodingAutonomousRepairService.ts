@@ -591,26 +591,38 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
 export async function enableAutonomousCodingTask(
   taskId: string,
   maxCycles = DEFAULT_MAX_CYCLES,
+  options: { forceDisabled?: boolean } = {},
 ): Promise<void> {
   await ensureCodingControlBridgeTables();
   const bounded = Math.max(5, Math.min(100, Math.floor(maxCycles)));
+  const forceDisabled = options.forceDisabled === true;
   await withTransientDatabaseRetry(() => db.execute(sql`
     INSERT INTO ai_platform.ai_coding_autonomous_tasks (
       task_id, enabled, status, max_cycles, updated_at
     )
     VALUES (${taskId}::uuid, TRUE, 'ACTIVE', ${bounded}, NOW())
     ON CONFLICT (task_id) DO UPDATE
-    SET enabled = TRUE,
+    SET enabled = CASE
+          WHEN ai_platform.ai_coding_autonomous_tasks.status = 'DISABLED' AND NOT ${forceDisabled}
+            THEN FALSE
+          ELSE TRUE
+        END,
         status = CASE
           WHEN ai_platform.ai_coding_autonomous_tasks.status = 'COMPLETED'
             THEN 'COMPLETED'
+          WHEN ai_platform.ai_coding_autonomous_tasks.status = 'DISABLED' AND NOT ${forceDisabled}
+            THEN 'DISABLED'
           ELSE 'ACTIVE'
         END,
         max_cycles = LEAST(
           ai_platform.ai_coding_autonomous_tasks.max_cycles,
           EXCLUDED.max_cycles
         ),
-        last_error = NULL,
+        last_error = CASE
+          WHEN ai_platform.ai_coding_autonomous_tasks.status = 'DISABLED' AND NOT ${forceDisabled}
+            THEN ai_platform.ai_coding_autonomous_tasks.last_error
+          ELSE NULL
+        END,
         updated_at = NOW()
   `), { attempts: 3, baseDelayMs: 250 });
 }

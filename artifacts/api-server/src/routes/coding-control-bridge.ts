@@ -33,7 +33,7 @@ router.post("/ai/coding/tasks/:id/autonomous/start",async(req,res):Promise<void>
  const body=z.object({maxCycles:z.number().int().min(5).max(100).optional()}).strict().safeParse(req.body??{});
  if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
  if(!body.success){res.status(400).json({error:body.error.message});return;}
- await enableAutonomousCodingTask(id.data,body.data.maxCycles);
+ await enableAutonomousCodingTask(id.data,body.data.maxCycles,{forceDisabled:true});
  const cycle=await runAutonomousCodingCycle(id.data);
  res.status(202).json({enabled:true,cycle});
 });
