@@ -1,36 +1,25 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { getExternalAgentRegistrySnapshot } from "./externalAgentRegistryService.js";
 import {
   EXTERNAL_AGENT_POLICY_VERSION,
-  getExternalAgentRegistrySnapshot,
   getExternalAgentRule,
+  requiredCapabilityForExternalAgent,
   type ExternalAgentClientId,
-} from "./externalAgentRegistryService.js";
+} from "./externalAgentPolicyService.js";
 import {
   getCodingBridgeCommandExecutionState,
   submitCodingBridgeCommand,
 } from "./localCodingControlBridgeService.js";
 
-export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
-export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
-export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
-
-const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
-  [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
-  [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
-  [N8N_AGENT_CLIENT_ID]: "workflow:automation",
-};
-
-const EXPLICIT_AGENT_PATTERNS: Array<{
-  clientId: ExternalAgentClientId;
-  agent: RegExp;
-}> = [
-  { clientId: OPENCLAW_AGENT_CLIENT_ID, agent: /\bopen\s*claw\b|\bopenclaw\b/i },
-  { clientId: OPENHANDS_AGENT_CLIENT_ID, agent: /\bopen\s*hands\b|\bopenhands\b/i },
-  { clientId: N8N_AGENT_CLIENT_ID, agent: /\bn8n\b/i },
-];
-
-const DELEGATION_VERB =
-  /\b(gunakan|pakai|gunakanlah|jalankan|suruh|minta|delegasikan|delegate|route|rutekan|via|melalui|dengan)\b/i;
+export {
+  detectExplicitExternalAgentClientId,
+  N8N_AGENT_CLIENT_ID,
+  OPENCLAW_AGENT_CLIENT_ID,
+  OPENHANDS_AGENT_CLIENT_ID,
+  providerForExternalAgent,
+  requiredCapabilityForExternalAgent,
+} from "./externalAgentPolicyService.js";
+export type { ExternalAgentClientId } from "./externalAgentPolicyService.js";
 
 export class ExternalAgentDispatchError extends Error {
   constructor(
@@ -45,26 +34,8 @@ export class ExternalAgentDispatchError extends Error {
   }
 }
 
-export function detectExplicitExternalAgentClientId(
-  message: string,
-): ExternalAgentClientId | null {
-  const text = message.trim();
-  if (!text || !DELEGATION_VERB.test(text)) return null;
-
-  for (const candidate of EXPLICIT_AGENT_PATTERNS) {
-    if (candidate.agent.test(text)) return candidate.clientId;
-  }
-  return null;
-}
-
-export function requiredCapabilityForExternalAgent(
-  clientId: ExternalAgentClientId,
-): string {
-  return REQUIRED_CAPABILITY[clientId];
-}
-
 export async function dispatchExternalAgentWork(input: {
-  clientId: string;
+  clientId: ExternalAgentClientId;
   instruction: string;
   taskId?: string | null;
   source?: string;
@@ -77,9 +48,7 @@ export async function dispatchExternalAgentWork(input: {
     );
   }
 
-  const requiredCapability = requiredCapabilityForExternalAgent(
-    input.clientId as ExternalAgentClientId,
-  );
+  const requiredCapability = requiredCapabilityForExternalAgent(input.clientId);
   if (!rule.capabilities.some((capability) => capability === requiredCapability)) {
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
@@ -110,6 +79,7 @@ export async function dispatchExternalAgentWork(input: {
       clientId: input.clientId,
       role: rule.role,
       capabilities: [...rule.capabilities],
+      requiredCapability,
       permissions: { ...rule.permissions },
     },
     metadata: {
@@ -122,6 +92,7 @@ export async function dispatchExternalAgentWork(input: {
 
   return {
     clientId: input.clientId,
+    requiredCapability,
     command: submitted.command,
     created: submitted.created,
   };
@@ -130,4 +101,3 @@ export async function dispatchExternalAgentWork(input: {
 export async function getExternalAgentWorkState(commandId: string) {
   return getCodingBridgeCommandExecutionState(commandId);
 }
-
