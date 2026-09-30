@@ -50,11 +50,22 @@ import {
   tryRunAiCoreDataTool,
 } from "../services/aiCoreDataToolService.js";
 import {
+  detectAiCoreInfrastructureOperation,
+  executeAiCoreInfrastructureOperation,
+} from "../services/aiCoreInfrastructureControlService.js";
+import {
+  getAiCoreCapabilityRegistrySnapshot,
+  renderAiCoreCapabilityRegistry,
+} from "../services/aiCoreCapabilityRegistryService.js";
+import {
+  executeAdminMutationSql,
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
+  extractExplicitAdminMutationSql,
   extractExplicitReadOnlySql,
   formatAdminDbSchemaCatalog,
   getAdminDbSchemaCatalog,
+  renderAdminDbMutationResult,
   renderAdminDbQueryResult,
   shouldAttemptAdminDbQuery,
 } from "../services/aiCoreAdminDbQueryService.js";
@@ -593,33 +604,17 @@ async function deterministicReply(
   };
 
   if (isAiCoreCapabilityQuery(command)) {
+    const registry = await getAiCoreCapabilityRegistrySnapshot();
     return {
       kind: "answer",
-      route: "NO_LLM",
+      route: "CAPABILITY_REGISTRY",
       provider: null,
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       estimatedCostUsd: 0,
       ...routingMeta,
-      reply:
-        "AI Core Chat adalah satu pintu otomatis untuk bertanya sekaligus memberi perintah. Kemampuan saya saat ini:\n\n" +
-        "1. **Menjawab & menganalisis** — menjelaskan konsep, status sistem, troubleshooting, perbandingan, dan reasoning.\n" +
-        "2. **Mencari database admin secara langsung** — pencarian data natural-language dapat membaca schema/tabel aplikasi secara dinamis dan menjalankan query read-only tanpa allowlist entitas; query kompleks dipetakan ke SELECT/WITH, hasil sensitif seperti token/secret tetap disamarkan.\n" +
-        "3. **Memeriksa secara read-only** — cek/review repository, build, test, diff, log, konfigurasi, dan validasi melalui trusted read-only worker tanpa membuat coding task.\n" +
-        "4. **Menjalankan pekerjaan coding** — perintah seperti perbaiki, implementasikan, ubah kode, buat test, commit, atau push otomatis masuk Coding Orchestrator.\n" +
-        "5. **Membagi pekerjaan** — Coding Orchestrator dapat memecah pekerjaan menjadi beberapa workstream/child task, memberi ownership path, dependency, dan menjalankan worker paralel bila diperlukan.\n" +
-        "6. **Menggunakan control plane** — pekerjaan dapat diteruskan ke worker/agent yang sesuai dan dipantau melalui task/run resmi.\n" +
-        "7. **Menjaga approval gate** — merge, deploy production, migrasi/drop database, restart production, perubahan security, dan rotasi secret tetap berhenti pada approval eksplisit.\n\n" +
-        "Jadi saya **bukan hanya asisten yang memberi saran**: dari chat yang sama saya dapat membedakan pertanyaan, pemeriksaan, coding, dan tindakan kritis lalu merutekannya ke jalur yang sesuai. Yang tidak saya lakukan adalah membuka/menampilkan secret atau melewati approval gate.",
-      capabilities: {
-        autoRouting: true,
-        answer: true,
-        readonlyInspection: true,
-        adminDatabaseRead: true,
-        codingExecution: true,
-        workstreamDelegation: true,
-        criticalApprovalRequired: true,
-      },
+      reply: renderAiCoreCapabilityRegistry(registry),
+      capabilities: registry,
     };
   }
 
@@ -1402,9 +1397,67 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
   };
 }
 
+async function runAdminDbMutationOperation(
+  message: string,
+): Promise<Record<string, unknown> | null> {
+  const statement = extractExplicitAdminMutationSql(message);
+  if (!statement) return null;
+
+  const result = await executeAdminMutationSql(statement);
+  return {
+    kind: "execution",
+    route: "ADMIN_DB_MUTATION",
+    provider: "postgres",
+    model: null,
+    usage: null,
+    estimatedCostUsd: 0,
+    mutating: true,
+    reply: renderAdminDbMutationResult(result),
+    rowCount: result.rowCount,
+    elapsedMs: result.elapsedMs,
+  };
+}
+
+async function runInfrastructureOperation(
+  message: string,
+): Promise<Record<string, unknown> | null> {
+  const operation = detectAiCoreInfrastructureOperation(message);
+  if (!operation) return null;
+
+  const result = await executeAiCoreInfrastructureOperation({
+    operation,
+    requestedBy: "ai-core-chat",
+  });
+
+  return {
+    kind: "execution",
+    route: "INFRA_CONTROL_PLANE",
+    provider: result.provider,
+    model: null,
+    usage: null,
+    estimatedCostUsd: 0,
+    operation: result.operation,
+    mutating: result.mutating,
+    reply: result.reply,
+    data: result.data,
+  };
+}
+
 async function runAutoMode(
   input: z.infer<typeof ChatRequest>,
 ): Promise<Record<string, unknown>> {
+  const dbMutation = await runAdminDbMutationOperation(input.message);
+  if (dbMutation) {
+    return {
+      ...dbMutation,
+      workload: "DATA_MUTATION",
+      costClass: "ZERO",
+      autoRouted: true,
+      dispatch: "DB_MUTATION",
+      dispatchReason: "Explicit SQL mutation executed by the AI Core database executor.",
+    };
+  }
+
   const decision = classifyAiCoreChatDispatch(input.message);
   const routingMeta = {
     workload: decision.workload.workload,
@@ -1413,6 +1466,11 @@ async function runAutoMode(
     dispatch: decision.kind,
     dispatchReason: decision.reason,
   };
+
+  if (decision.kind === "INFRA_OPERATION") {
+    const result = await runInfrastructureOperation(input.message);
+    if (result) return { ...result, ...routingMeta };
+  }
 
   if (decision.kind === "CONTROL_PLANE") {
     const result = await startAgentTask(input);
@@ -1444,6 +1502,7 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     autoRouting: {
       answer: ["DETERMINISTIC", "CHAT", "REASONING"],
       remoteReadonly: ["REVIEW"],
+      infrastructure: ["GCP", "HOSTINGER", "EXTERNAL_AGENT"],
       controlPlane: ["CODING", "CRITICAL_ACTION"],
       criticalApprovalPreserved: true,
     },
@@ -1467,6 +1526,11 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     codingModel: modelConfig,
     secretsExposed: false,
   });
+});
+
+router.get("/ai/core-chat/capabilities", async (_req, res): Promise<void> => {
+  const registry = await getAiCoreCapabilityRegistrySnapshot();
+  res.status(200).json(registry);
 });
 
 router.get("/ai/core-chat/data-tools/readiness", async (_req, res): Promise<void> => {
@@ -1553,7 +1617,10 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   try {
     const result =
       parsed.data.mode === "agent"
-        ? (await maybeRunRemoteWorkerPreset(parsed.data)) ?? await startAgentTask(parsed.data)
+        ? (await runAdminDbMutationOperation(parsed.data.message)) ??
+          (await runInfrastructureOperation(parsed.data.message)) ??
+          (await maybeRunRemoteWorkerPreset(parsed.data)) ??
+          await startAgentTask(parsed.data)
         : parsed.data.mode === "ask"
           ? await answerAskMode(parsed.data.message, parsed.data.modelPolicy)
           : await runAutoMode(parsed.data);

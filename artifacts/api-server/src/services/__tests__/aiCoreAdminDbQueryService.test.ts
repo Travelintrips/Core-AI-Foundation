@@ -14,11 +14,14 @@ vi.mock("@workspace/db", () => ({
 }));
 
 import {
+  executeAdminMutationSql,
   executeAdminNaturalTextLookup,
   extractAdminDbNaturalLookup,
   executeAdminReadOnlySql,
+  extractExplicitAdminMutationSql,
   getAdminDbSchemaCatalog,
   shouldAttemptAdminDbQuery,
+  validateAdminMutationSql,
   validateAdminReadOnlySql,
 } from "../aiCoreAdminDbQueryService.js";
 
@@ -62,6 +65,29 @@ describe("AI Core admin database query service", () => {
       .toThrow(/SELECT\/WITH/);
     expect(() => validateAdminReadOnlySql("SELECT 1; SELECT 2"))
       .toThrow(/one SQL statement/i);
+  });
+
+  it("accepts explicit bounded DML and rejects broad/destructive mutations", async () => {
+    expect(extractExplicitAdminMutationSql(
+      "jalankan sql: UPDATE public.customers SET active = true WHERE id = 7",
+    )).toContain("UPDATE public.customers");
+    expect(validateAdminMutationSql(
+      "DELETE FROM public.ai_tasks WHERE id = 'abc'",
+    )).toContain("WHERE id");
+    expect(() => validateAdminMutationSql("DELETE FROM public.ai_tasks"))
+      .toThrow(/WHERE/);
+    expect(() => validateAdminMutationSql("DROP TABLE public.ai_tasks"))
+      .toThrow(/INSERT, UPDATE, or DELETE/);
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] });
+
+    const result = await executeAdminMutationSql(
+      "UPDATE public.customers SET active = true WHERE id = 7",
+    );
+    expect(result.rowCount).toBe(1);
   });
 
   it("discovers tables dynamically across application schemas", async () => {

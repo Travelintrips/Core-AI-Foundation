@@ -450,3 +450,57 @@ export function renderAdminDbQueryResult(
       " ms. Akses: read-only Admin DB Query.",
   ].join("\n");
 }
+
+export type AdminDbMutationExecution = {
+  sql: string;
+  rowCount: number;
+  elapsedMs: number;
+};
+
+const DESTRUCTIVE_DDL =
+  /\b(drop|truncate|alter|grant|revoke|create\s+(?:role|user|extension)|reindex|cluster|vacuum|copy|call|do)\b/i;
+
+export function extractExplicitAdminMutationSql(message: string): string | null {
+  const candidate = message.trim();
+  const prefixed = candidate.match(/^(?:run|execute|eksekusi|jalankan)\s+sql\s*:\s*([\s\S]+)$/i);
+  const sqlText = prefixed?.[1]?.trim() ?? (/^(insert|update|delete)\b/i.test(candidate) ? candidate : null);
+  return sqlText || null;
+}
+
+export function validateAdminMutationSql(rawSql: string): string {
+  const normalized = rawSql.trim().replace(/;+\s*$/g, "");
+  if (!/^(insert|update|delete)\b/i.test(normalized)) {
+    throw new Error("Admin DB mutation only accepts INSERT, UPDATE, or DELETE.");
+  }
+  if (normalized.includes(";") || /--|\/\*/.test(normalized)) {
+    throw new Error("Only one SQL statement without SQL comments is allowed.");
+  }
+  if (DESTRUCTIVE_DDL.test(normalized) || DANGEROUS_READ.test(normalized)) {
+    throw new Error("DDL, privileged functions, and unsafe locking are not allowed here.");
+  }
+  if (/^(update|delete)\b/i.test(normalized) && !/\bwhere\b/i.test(normalized)) {
+    throw new Error("UPDATE/DELETE requires an explicit WHERE clause.");
+  }
+  return normalized;
+}
+
+export async function executeAdminMutationSql(
+  rawSql: string,
+): Promise<AdminDbMutationExecution> {
+  const query = validateAdminMutationSql(rawSql);
+  const startedAt = Date.now();
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql.raw("SET LOCAL statement_timeout = '8000ms'"));
+    await tx.execute(sql.raw("SET LOCAL lock_timeout = '1500ms'"));
+    return tx.execute(sql.raw(query));
+  });
+  const rowCount =
+    result && typeof result === "object" && "rowCount" in result
+      ? Number((result as { rowCount?: unknown }).rowCount ?? 0)
+      : 0;
+  return { sql: query, rowCount: Number.isFinite(rowCount) ? rowCount : 0, elapsedMs: Date.now() - startedAt };
+}
+
+export function renderAdminDbMutationResult(result: AdminDbMutationExecution): string {
+  return `Perubahan database berhasil dijalankan. Baris terdampak: ${result.rowCount}. Waktu: ${result.elapsedMs} ms.`;
+}

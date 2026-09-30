@@ -2,6 +2,10 @@ import {
   classifyAiCoreWorkload,
   type AiCoreWorkloadRoute,
 } from "./aiCoreWorkloadRouterService.js";
+import {
+  detectAiCoreInfrastructureOperation,
+  type AiCoreInfrastructureOperation,
+} from "./aiCoreInfrastructureControlService.js";
 
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
 
@@ -9,6 +13,7 @@ export type AiCoreChatMode = "auto" | "ask" | "agent";
 export type AiCoreChatDispatchKind =
   | "ANSWER"
   | "REMOTE_READONLY"
+  | "INFRA_OPERATION"
   | "CONTROL_PLANE";
 export type RemoteWorkerPreset = "check" | "build" | "test" | "review";
 
@@ -16,6 +21,7 @@ export interface AiCoreChatDispatchDecision {
   kind: AiCoreChatDispatchKind;
   workload: AiCoreWorkloadRoute;
   preset: RemoteWorkerPreset | null;
+  infrastructureOperation: AiCoreInfrastructureOperation | null;
   reason: string;
 }
 
@@ -52,12 +58,24 @@ export function classifyAiCoreChatDispatch(
   message: string,
 ): AiCoreChatDispatchDecision {
   const workload = classifyAiCoreWorkload(message);
+  const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
+
+  if (infrastructureOperation) {
+    return {
+      kind: "INFRA_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation,
+      reason: "Infrastructure request is handled directly by the AI Core capability executor.",
+    };
+  }
 
   if (workload.requiresAgent) {
     return {
       kind: "CONTROL_PLANE",
       workload,
       preset: null,
+      infrastructureOperation: null,
       reason:
         workload.workload === "CRITICAL_ACTION"
           ? "Critical actions must enter the control plane and stop at the explicit approval gate."
@@ -75,6 +93,7 @@ export function classifyAiCoreChatDispatch(
       kind: "REMOTE_READONLY",
       workload,
       preset,
+      infrastructureOperation: null,
       reason:
         "Read-only repository inspection can run on the trusted remote worker without creating a coding task.",
     };
@@ -84,6 +103,7 @@ export function classifyAiCoreChatDispatch(
     kind: "ANSWER",
     workload,
     preset: null,
+    infrastructureOperation: null,
     reason:
       "This request can be answered without mutating the repository or production system.",
   };
