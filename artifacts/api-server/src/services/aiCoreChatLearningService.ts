@@ -124,15 +124,19 @@ export async function retrieveChatLearnings(
 
   const repo = scope.repository?.toLowerCase() ?? null;
   const project = scope.projectName?.toLowerCase() ?? null;
+  const branch = scope.branch?.toLowerCase() ?? null;
   return rows
     .filter((row) => {
       const meta = (row.metadata ?? {}) as Record<string, unknown>;
       const memoryRepo = typeof meta.repository === "string" ? meta.repository.toLowerCase() : null;
       const memoryProject = typeof meta.projectName === "string" ? meta.projectName.toLowerCase() : null;
+      const memoryBranch = typeof meta.branch === "string" ? meta.branch.toLowerCase() : null;
       if (memoryRepo && repo && memoryRepo !== repo) return false;
       if (memoryRepo && !repo) return false;
       if (memoryProject && project && memoryProject !== project) return false;
       if (memoryProject && !project) return false;
+      if (memoryBranch && branch && memoryBranch !== branch) return false;
+      if (memoryBranch && !branch) return false;
       return true;
     })
     .slice(0, limit);
