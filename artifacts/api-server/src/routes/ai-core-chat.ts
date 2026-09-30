@@ -49,6 +49,14 @@ import {
   getAiCoreDataToolReadiness,
   tryRunAiCoreDataTool,
 } from "../services/aiCoreDataToolService.js";
+import {
+  executeAdminReadOnlySql,
+  extractExplicitReadOnlySql,
+  formatAdminDbSchemaCatalog,
+  getAdminDbSchemaCatalog,
+  renderAdminDbQueryResult,
+  shouldAttemptAdminDbQuery,
+} from "../services/aiCoreAdminDbQueryService.js";
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
 import { deactivateRegisteredModel } from "../services/aiModelService.js";
 import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
@@ -78,6 +86,24 @@ const ASK_SYSTEM_PROMPT = [
   "Never reveal or request secret values, API keys, passwords, tokens, or private credentials.",
   "Prefer Indonesian when the user writes Indonesian; otherwise follow the user's language.",
 ].join(" ");
+
+const ADMIN_DB_PLANNER_SYSTEM_PROMPT = [
+  "You are the PostgreSQL query planner for AI Core Chat's authenticated admin-only read path.",
+  "Your job is to decide whether the user's request should read the database and, if so, produce exactly one safe read-only PostgreSQL query.",
+  "Return exactly one JSON object and no markdown: {\"shouldQuery\":true|false,\"sql\":\"SELECT ...\"|null,\"reason\":\"short reason\"}.",
+  "Only SELECT or WITH queries are allowed. Never emit INSERT, UPDATE, DELETE, MERGE, CREATE, ALTER, DROP, TRUNCATE, GRANT, REVOKE, COPY, CALL, DO, locking clauses, or functions that read server files or perform network access.",
+  "Use only tables and columns listed in the supplied schema catalog.",
+  "For fuzzy human names, company names, emails, phone numbers, codes, or labels, prefer ILIKE with surrounding percent wildcards unless the user explicitly asks for exact matching.",
+  "Use explicit JOIN conditions. Never invent columns.",
+  "Prefer LIMIT 100 for row listings. Aggregate/count queries may omit LIMIT.",
+  "If the request is conceptual rather than asking for stored data, return shouldQuery=false.",
+].join(" ");
+
+const AdminDbPlan = z.object({
+  shouldQuery: z.boolean(),
+  sql: z.string().trim().min(1).nullable(),
+  reason: z.string().trim().max(500).optional(),
+});
 
 function createTaskNumber(): string {
   return `CWS-${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -221,6 +247,7 @@ function buildChatProvider(
 async function invokeChatModel(
   selection: ProductionCodingModelSelection,
   message: string,
+  systemPrompt = ASK_SYSTEM_PROMPT,
 ): Promise<{
   reply: string;
   provider: string;
@@ -253,7 +280,7 @@ async function invokeChatModel(
     target: { provider, model },
     input: JSON.stringify({
       version: 1,
-      system: ASK_SYSTEM_PROMPT,
+      system: systemPrompt,
       user: message,
     }),
     responseFormat: { type: "text" },
@@ -310,6 +337,7 @@ async function resolveCloudFallbackSelections(
 async function invokeCloudFallbackChain(
   primary: ProductionCodingModelSelection,
   message: string,
+  systemPrompt = ASK_SYSTEM_PROMPT,
 ): Promise<
   | { ok: true; result: Awaited<ReturnType<typeof invokeChatModel>>; selection: ProductionCodingModelSelection }
   | { ok: false; errors: string[] }
@@ -318,7 +346,7 @@ async function invokeCloudFallbackChain(
   const errors: string[] = [];
   for (const selection of selections) {
     try {
-      const result = await invokeChatModel(selection, message);
+      const result = await invokeChatModel(selection, message, systemPrompt);
       return { ok: true, result, selection };
     } catch (error) {
       await quarantineRetiredCloudModel(selection, error);
@@ -388,6 +416,141 @@ async function resolveCloudSelection(workload: AiCoreWorkload): Promise<
     return { ok: false, message: "Cloud-only model resolution returned a local provider." };
   }
   return { ok: true, selection: resolved.selection };
+}
+
+function parseAdminDbPlan(raw: string): z.infer<typeof AdminDbPlan> {
+  const cleaned = raw
+    .trim()
+    .replace(/^\`\`\`(?:json)?\s*/i, "")
+    .replace(/\`\`\`\s*$/i, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    throw new Error("Database planner did not return JSON.");
+  }
+  return AdminDbPlan.parse(JSON.parse(cleaned.slice(start, end + 1)));
+}
+
+async function tryRunAdminDbQuery(
+  message: string,
+  policy: ChatPolicy,
+): Promise<Record<string, unknown> | null> {
+  if (!shouldAttemptAdminDbQuery(message)) return null;
+
+  const explicitSql = extractExplicitReadOnlySql(message);
+  let plannedSql = explicitSql;
+  let plannerProvider: string | null = null;
+  let plannerModel: string | null = null;
+  let plannerUsage: TokenUsage | null = null;
+  let plannerReason = explicitSql
+    ? "Explicit admin SELECT/WITH query."
+    : "Natural-language admin database lookup.";
+
+  if (!plannedSql) {
+    const schemaCatalog = await getAdminDbSchemaCatalog(message);
+    const schemaText = formatAdminDbSchemaCatalog(schemaCatalog);
+    const plannerMessage = [
+      "USER REQUEST:",
+      message,
+      "",
+      "AVAILABLE DATABASE SCHEMA:",
+      schemaText,
+    ].join("\n");
+
+    const useLocalOnly = policy === "economy";
+    const cloud = useLocalOnly
+      ? { ok: false as const, message: "Economy policy uses local planner." }
+      : await resolveCloudSelection("REASONING");
+
+    if (cloud.ok) {
+      try {
+        const planned = await invokeChatModel(
+          cloud.selection,
+          plannerMessage,
+          ADMIN_DB_PLANNER_SYSTEM_PROMPT,
+        );
+        const plan = parseAdminDbPlan(planned.reply);
+        if (!plan.shouldQuery || !plan.sql) return null;
+        plannedSql = plan.sql;
+        plannerReason = plan.reason ?? plannerReason;
+        plannerProvider = planned.provider;
+        plannerModel = planned.model;
+        plannerUsage = planned.usage;
+      } catch (error) {
+        const fallback = await invokeCloudFallbackChain(
+          cloud.selection,
+          plannerMessage,
+          ADMIN_DB_PLANNER_SYSTEM_PROMPT,
+        );
+        if (fallback.ok) {
+          const plan = parseAdminDbPlan(fallback.result.reply);
+          if (!plan.shouldQuery || !plan.sql) return null;
+          plannedSql = plan.sql;
+          plannerReason = plan.reason ?? plannerReason;
+          plannerProvider = fallback.result.provider;
+          plannerModel = fallback.result.model;
+          plannerUsage = fallback.result.usage;
+        } else {
+          const local = await resolveLocalSelection();
+          if (!local.ok) throw error;
+          const planned = await invokeChatModel(
+            local.selection,
+            plannerMessage,
+            ADMIN_DB_PLANNER_SYSTEM_PROMPT,
+          );
+          const plan = parseAdminDbPlan(planned.reply);
+          if (!plan.shouldQuery || !plan.sql) return null;
+          plannedSql = plan.sql;
+          plannerReason = plan.reason ?? plannerReason;
+          plannerProvider = planned.provider;
+          plannerModel = planned.model;
+          plannerUsage = planned.usage;
+        }
+      }
+    } else {
+      const local = await resolveLocalSelection();
+      if (!local.ok) return null;
+      const planned = await invokeChatModel(
+        local.selection,
+        plannerMessage,
+        ADMIN_DB_PLANNER_SYSTEM_PROMPT,
+      );
+      const plan = parseAdminDbPlan(planned.reply);
+      if (!plan.shouldQuery || !plan.sql) return null;
+      plannedSql = plan.sql;
+      plannerReason = plan.reason ?? plannerReason;
+      plannerProvider = planned.provider;
+      plannerModel = planned.model;
+      plannerUsage = planned.usage;
+    }
+  }
+
+  const result = await executeAdminReadOnlySql(plannedSql);
+  return {
+    kind: "answer",
+    route: "ADMIN_DB_QUERY",
+    provider: plannerProvider,
+    model: plannerModel,
+    usage: plannerUsage ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    },
+    estimatedCostUsd: null,
+    workload: "DATA_LOOKUP",
+    costClass: plannerUsage ? "LOW" : "ZERO",
+    reply: renderAdminDbQueryResult(result),
+    databaseQuery: {
+      sql: result.sql,
+      rowCount: result.rowCount,
+      truncated: result.truncated,
+      elapsedMs: result.elapsedMs,
+      reason: plannerReason,
+      access: "ADMIN_READ_ONLY",
+    },
+    data: result.rows,
+  };
 }
 
 async function deterministicReply(
@@ -551,6 +714,23 @@ async function answerAskMode(
       ...(dataTool.warning ? { warning: dataTool.warning } : {}),
     };
   }
+
+  const adminDbQuery = await tryRunAdminDbQuery(message, policy).catch(
+    (error: unknown) => ({
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply:
+        "Admin DB Query dikenali tetapi query read-only gagal. Tidak ada perubahan data yang dilakukan.",
+      warning: safeProviderFailure(error),
+    }),
+  );
+  if (adminDbQuery) return adminDbQuery;
 
   if (workload.workload === "CRITICAL_ACTION") {
     return {
@@ -839,6 +1019,26 @@ async function streamAskMode(
       data: dataTool.data,
       ...(dataTool.warning ? { warning: dataTool.warning } : {}),
     });
+    return;
+  }
+
+  const adminDbQuery = await tryRunAdminDbQuery(message, policy).catch(
+    (error: unknown) => ({
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply:
+        "Admin DB Query dikenali tetapi query read-only gagal. Tidak ada perubahan data yang dilakukan.",
+      warning: safeProviderFailure(error),
+    }),
+  );
+  if (adminDbQuery) {
+    writeBufferedChatStream(res, adminDbQuery);
     return;
   }
 
