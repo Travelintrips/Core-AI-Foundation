@@ -762,16 +762,24 @@ export async function startCodingOrchestration(
     .limit(1);
 
   if (activeAnalyzer) {
-    const error = new Error(
-      `Repository Analyzer is busy with job ${activeAnalyzer.id}; concurrency is limited to 1`,
+    // A healthy single-flight analyzer is normal backpressure, not a task
+    // failure. Keep this orchestration retryable instead of poisoning the
+    // coding run merely because another analyzer owns the only slot.
+    const detail =
+      `Repository Analyzer is busy with job ${activeAnalyzer.id}; waiting for the single-flight slot`;
+    logger.info(
+      { activeAnalyzerJobId: activeAnalyzer.id, taskId: input.task.id, codingRunId: input.run.id },
+      "[coding-orchestrator] Analyzer slot busy; deferring orchestration without failing the task",
     );
-    await failOrchestration(
-      input,
-      sessionId,
-      updateStage(stages, "repository_analyzer", "FAILED", error.message),
-      error,
-    );
-    throw error;
+    await logAudit(
+      "coding-orchestrator",
+      "repository_analyzer_deferred",
+      input.task.id,
+      "coding_task",
+      "success",
+      { sessionId, codingRunId: input.run.id, activeAnalyzerJobId: activeAnalyzer.id },
+    ).catch(() => undefined);
+    return { sessionId };
   }
 
   let queuedJob: AiJob | null = null;

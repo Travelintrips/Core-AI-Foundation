@@ -241,6 +241,28 @@ describe("Coding Orchestrator", () => {
     expect(mockSpawn).toHaveBeenCalledTimes(1);
   });
 
+  it("defers instead of failing when the analyzer single-flight slot is busy", async () => {
+    mockSelectLimit.mockResolvedValueOnce([{ id: 1509 }]);
+
+    const started = await startCodingOrchestration({
+      task: task as never,
+      run: run as never,
+    });
+
+    expect(started.sessionId).toBe(`coding-${run.id}`);
+    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockUpdateWhere).not.toHaveBeenCalled();
+    expect(mockLogAudit).toHaveBeenCalledWith(
+      "coding-orchestrator",
+      "repository_analyzer_deferred",
+      task.id,
+      "coding_task",
+      "success",
+      expect.objectContaining({ activeAnalyzerJobId: 1509 }),
+    );
+  });
+
   it("escalates AI_REQUIRED into a PREPARED task graph without coding execution", async () => {
     const started = await startCodingOrchestration({ task: task as never, run: run as never });
 
