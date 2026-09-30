@@ -6,7 +6,6 @@ import {
   detectAiCoreInfrastructureOperation,
   type AiCoreInfrastructureOperation,
 } from "./aiCoreInfrastructureControlService.js";
-import { isExplicitOpenClawDelegation } from "./externalAgentDispatchService.js";
 
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
 
@@ -32,6 +31,12 @@ const MUTATING =
 
 const REPOSITORY_READONLY_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
+
+function isExplicitOpenClawDelegation(message: string): boolean {
+  const text = message.trim().toLowerCase();
+  if (!text || !/\bopen\s*claw\b|\bopenclaw\b/i.test(text)) return false;
+  return /\b(gunakan|pakai|gunakanlah|jalankan|suruh|minta|delegasikan|delegate|route|rutekan|via|melalui|dengan)\b/i.test(text);
+}
 
 export function isAiCoreCapabilityQuery(message: string): boolean {
   const value = message.trim().toLowerCase();
