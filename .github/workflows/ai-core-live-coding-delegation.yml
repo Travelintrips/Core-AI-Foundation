@@ -66,8 +66,21 @@ jobs:
           for attempt in $(seq 1 24); do
             code=$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/progress.json -w "%{http_code}"               "$API_BASE_URL/ai/core-chat/tasks/$task/progress"               -H "x-admin-api-key: $ADMIN_API_KEY" || true)
             if [ "$code" = "200" ]; then
-              jq -c '{taskId,status,phase,progress,approvalRequired,workstreams,workers}' /tmp/progress.json
-              exit 0
+              jq -c '{task:.task, autonomous:.autonomous, latestRun:.latestRun, workspaceUrl:.workspaceUrl}' /tmp/progress.json
+              observed_id=$(jq -r '.task.id // empty' /tmp/progress.json)
+              observed_status=$(jq -r '.task.status // empty' /tmp/progress.json)
+              test "$observed_id" = "$task"
+              test -n "$observed_status"
+              case "$observed_status" in
+                FAILED|CANCELLED)
+                  echo "::error::Delegated coding task reached terminal failure state: $observed_status"
+                  jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
+                  exit 1
+                  ;;
+                *)
+                  exit 0
+                  ;;
+              esac
             fi
             sleep 5
           done
