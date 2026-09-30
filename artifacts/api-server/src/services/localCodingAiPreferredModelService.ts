@@ -285,25 +285,22 @@ export async function resolvePreferredCodingModel(
     };
   }
 
-  const fallbackResolution = await resolveConfiguredCodingFallbackModel(env);
-  if (fallbackResolution.ok) {
-    return {
-      ok: true,
-      route: "FALLBACK",
-      primary: { provider: primaryProvider, model: primaryModel },
-      fallback: fallbackResolution.fallback,
-      primaryFailure: primary,
-      selection: fallbackResolution.selection,
-    };
-  }
+  const explicitPrimaryConfigured = Boolean(
+    env["AI_CODING_PRIMARY_PROVIDER"]?.trim() ||
+      env["AI_CODING_PRIMARY_MODEL"]?.trim() ||
+      base.provider ||
+      base.model,
+  );
 
-  const cloudFallback = await resolveAlternativeCloudCodingModel({
-    excludeProvider: primaryProvider,
-    excludeModel: primaryModel,
-    config: base,
-  });
+  const cloudFallback = !explicitPrimaryConfigured
+    ? await resolveAlternativeCloudCodingModel({
+        excludeProvider: primaryProvider,
+        excludeModel: primaryModel,
+        config: base,
+      })
+    : null;
 
-  if (cloudFallback.ok) {
+  if (cloudFallback?.ok) {
     return {
       ok: true,
       route: "FALLBACK",
@@ -317,14 +314,52 @@ export async function resolvePreferredCodingModel(
     };
   }
 
+  const fallbackResolution = await resolveConfiguredCodingFallbackModel(env);
+  if (fallbackResolution.ok) {
+    return {
+      ok: true,
+      route: "FALLBACK",
+      primary: { provider: primaryProvider, model: primaryModel },
+      fallback: fallbackResolution.fallback,
+      primaryFailure: primary,
+      selection: fallbackResolution.selection,
+    };
+  }
+
+  const lateCloudFallback = explicitPrimaryConfigured
+    ? await resolveAlternativeCloudCodingModel({
+        excludeProvider: primaryProvider,
+        excludeModel: primaryModel,
+        config: base,
+      })
+    : cloudFallback;
+
+  if (lateCloudFallback?.ok) {
+    return {
+      ok: true,
+      route: "FALLBACK",
+      primary: { provider: primaryProvider, model: primaryModel },
+      fallback: {
+        provider: String(lateCloudFallback.selection.provider.slug),
+        model: String(lateCloudFallback.selection.model.modelId),
+      },
+      primaryFailure: primary,
+      selection: lateCloudFallback.selection,
+    };
+  }
+
   return {
     ok: false,
     reason: fallbackResolution.reason,
     message:
-      "Primary coding model is unavailable and neither local nor cloud fallback could be used.",
+      "Primary coding model is unavailable and neither cloud nor local fallback could be used.",
     primaryFailure: primary,
     fallbackFailure:
-      fallbackResolution.message + "; cloud fallback: " + cloudFallback.message,
+      (lateCloudFallback && !lateCloudFallback.ok
+        ? lateCloudFallback.message
+        : "cloud fallback unavailable") +
+      "; local fallback: " +
+      fallbackResolution.message,
   };
 }
 
