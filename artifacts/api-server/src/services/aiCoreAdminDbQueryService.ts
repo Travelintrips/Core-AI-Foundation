@@ -368,7 +368,7 @@ function detectSemanticAggregation(message: string): {
 function extractSemanticDomain(message: string): string {
   let value = normalizeSemanticText(message);
   const removable = [
-    /\b(tolong|mohon|please|cek|check|periksa|lihat|show|tampilkan|cari|find|search|berapa|berapa banyak|hitung|count|jumlah|total)\b/g,
+    /\b(tolong|mohon|please|cek|check|periksa|lihat|show|tampilkan|cari|find|search|berapa(?:\s+banyak)?|hitung|count|jumlah|total)\b/g,
     /\b(pendapatan|omzet|revenue|pemasukan|income|sales|penjualan|nilai penjualan|total pembayaran|payment total|gross sales)\b/g,
     /\b(rata rata|average|avg|rerata|terbesar|tertinggi|maximum|max|maksimum|terkecil|terendah|minimum|min)\b/g,
     /\b(kemarin|yesterday|hari ini|today|minggu lalu|pekan lalu|last week|minggu ini|pekan ini|this week|bulan lalu|last month|bulan ini|this month|tahun lalu|last year|tahun ini|this year)\b/g,
