@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { initializePwaInstallCapture } from "@/lib/pwaInstall";
 
 // Attach the admin API key to every outgoing API request.
 // VITE_ADMIN_API_KEY is baked into the bundle at build time — set it as a
@@ -10,6 +11,8 @@ const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
 if (adminKey && adminKey.trim()) {
   setAuthTokenGetter(() => adminKey.trim());
 }
+
+initializePwaInstallCapture();
 
 createRoot(document.getElementById("root")!).render(<App />);
 
