@@ -1125,65 +1125,72 @@ export async function generateAndPersistCodingMultiTaskPlan(
         fallbackModelId &&
         (fallbackProviderSlug !== providerSlug || fallbackModelId !== modelId);
 
+      let localFallbackReason = fallback.ok
+        ? "SAME_TARGET"
+        : fallback.reason;
+      let localFallbackFailure = fallback.ok
+        ? "Configured local fallback resolves to the same provider/model as the currently selected target."
+        : fallback.message;
+
       if (fallbackIsDifferent && fallback.ok) {
-          const fallbackProvider = createPlannerProviderAdapter({
-            providerSlug: fallbackProviderSlug,
-            modelId: fallbackModelId,
-            baseUrl:
-              typeof fallback.selection.provider.baseUrl === "string"
-                ? fallback.selection.provider.baseUrl
-                : null,
-            observability: {
-              conversationId: taskId,
-              agentName: "Automated Multi-Task Planner",
-              providerName: fallbackProviderSlug,
-              modelName: fallbackModelId,
-              requestType: "code-fallback",
-              createdBy: "coding-task-graph-generator",
+        const fallbackProvider = createPlannerProviderAdapter({
+          providerSlug: fallbackProviderSlug,
+          modelId: fallbackModelId,
+          baseUrl:
+            typeof fallback.selection.provider.baseUrl === "string"
+              ? fallback.selection.provider.baseUrl
+              : null,
+          observability: {
+            conversationId: taskId,
+            agentName: "Automated Multi-Task Planner",
+            providerName: fallbackProviderSlug,
+            modelName: fallbackModelId,
+            requestType: "code-fallback",
+            createdBy: "coding-task-graph-generator",
+          },
+        });
+        const fallbackAdapter =
+          createConstrainedModelInvocationAdapter(fallbackProvider);
+
+        try {
+          generated = await generateCodingMultiTaskPlanWithAdapter({
+            context,
+            adapter: fallbackAdapter,
+            target: {
+              provider: fallbackProviderSlug,
+              model: fallbackModelId,
             },
+            timeoutMs: boundedPlannerTimeout(fallback.selection.timeoutMs),
+            maxOutputTokens: fallback.selection.maxOutputTokens,
           });
-          const fallbackAdapter =
-            createConstrainedModelInvocationAdapter(fallbackProvider);
+          selection = fallback.selection;
+          selectedProviderSlug = fallbackProviderSlug;
+          selectedModelId = fallbackModelId;
+          fallbackUsed = true;
+        } catch (fallbackError) {
+          localFallbackReason = "FALLBACK_INVOCATION_FAILED";
+          localFallbackFailure =
+            fallbackError instanceof Error
+              ? fallbackError.message.slice(0, 1_000)
+              : String(fallbackError).slice(0, 1_000);
 
-          try {
-            generated = await generateCodingMultiTaskPlanWithAdapter({
-              context,
-              adapter: fallbackAdapter,
-              target: {
-                provider: fallbackProviderSlug,
-                model: fallbackModelId,
-              },
-              timeoutMs: boundedPlannerTimeout(fallback.selection.timeoutMs),
-              maxOutputTokens: fallback.selection.maxOutputTokens,
-            });
-            selection = fallback.selection;
-            selectedProviderSlug = fallbackProviderSlug;
-            selectedModelId = fallbackModelId;
-            fallbackUsed = true;
-          } catch (fallbackError) {
-            throw new AutomatedMultiTaskPlannerError(
-              "Constrained multi-task planner primary and fallback model invocation failed.",
-              "MODEL_FAILED",
-              {
-                primaryCause:
-                  error instanceof Error
-                    ? error.message.slice(0, 1_000)
-                    : String(error),
-                fallbackCause:
-                  fallbackError instanceof Error
-                    ? fallbackError.message.slice(0, 1_000)
-                    : String(fallbackError),
-              },
-            );
-          }
-      } else {
-        const localFallbackReason = fallback.ok
-          ? "SAME_TARGET"
-          : fallback.reason;
-        const localFallbackFailure = fallback.ok
-          ? "Configured local fallback resolves to the same provider/model as the currently selected target."
-          : fallback.message;
+          await logAudit(
+            "automated-multi-task-planner",
+            "configured_fallback_failed",
+            taskId,
+            "coding_task",
+            "failure",
+            {
+              provider: fallbackProviderSlug,
+              model: fallbackModelId,
+              errorMessage: localFallbackFailure,
+              remainingBudgetMs: Math.max(0, plannerModelDeadline - Date.now()),
+            },
+          ).catch(() => undefined);
+        }
+      }
 
+      if (!generated) {
         const cloudFallbacks = await resolveAlternativeCloudCodingModels({
           excludeTargets: [
             { provider: providerSlug, model: modelId },
@@ -1257,7 +1264,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
 
           if (!cloudSucceeded) {
             throw new AutomatedMultiTaskPlannerError(
-              "Constrained multi-task planner exhausted all bounded cloud fallback candidates.",
+              "Constrained multi-task planner exhausted all bounded fallback candidates.",
               "MODEL_FAILED",
               {
                 primaryCause:
