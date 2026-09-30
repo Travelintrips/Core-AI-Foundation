@@ -76,6 +76,31 @@ describe("autonomous coding workstream lease handling", () => {
   });
 });
 
+describe("autonomous coding explicit stop", () => {
+  it("persists DISABLED even when the autonomous row does not exist yet", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("INSERT INTO ai_platform.ai_coding_autonomous_tasks");
+    expect(source).toContain("VALUES (${taskId}::uuid, FALSE, 'DISABLED'");
+    expect(source).toContain("ON CONFLICT (task_id) DO UPDATE");
+    expect(source).toContain("status = 'DISABLED'");
+  });
+
+  it("prevents the coding orchestrator from auto-reenabling an explicitly disabled task", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("getAutonomousCodingTaskStatus");
+    expect(source).toContain('=== "DISABLED"');
+    expect(source).toContain("Autonomous enable skipped because the task was explicitly disabled");
+  });
+});
+
 describe("autonomous coding cycle budget", () => {
   it("never widens an existing cycle budget during re-enable", () => {
     const source = readFileSync(

@@ -13,7 +13,10 @@ import {
   type AiJob,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { enableAutonomousCodingTask } from "./localCodingAutonomousRepairService.js";
+import {
+  enableAutonomousCodingTask,
+  getAutonomousCodingTaskStatus,
+} from "./localCodingAutonomousRepairService.js";
 import { logAudit } from "./aiAuditService.js";
 import { executeAI, type ExecutionOutput } from "./aiExecutionService.js";
 import { getFallbackModels, routeToModel } from "./aiModelRouter.js";
@@ -629,7 +632,18 @@ export async function continueCodingOrchestration(
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
     if (localPlan?.status === "AI_REQUIRED") {
-      await enableAutonomousCodingTask(input.task.id, 40);
+      const autonomousState = await getAutonomousCodingTaskStatus(input.task.id).catch(() => null);
+      const explicitlyDisabled =
+        String(autonomousState?.["status"] ?? "").toUpperCase() === "DISABLED";
+
+      if (!explicitlyDisabled) {
+        await enableAutonomousCodingTask(input.task.id, 40);
+      } else {
+        logger.info(
+          { taskId: input.task.id },
+          "[coding-orchestrator] Autonomous enable skipped because the task was explicitly disabled",
+        );
+      }
     }
 
     logger.info(

@@ -618,9 +618,14 @@ export async function enableAutonomousCodingTask(
 export async function disableAutonomousCodingTask(taskId: string): Promise<void> {
   await ensureCodingControlBridgeTables();
   await db.execute(sql`
-    UPDATE ai_platform.ai_coding_autonomous_tasks
-    SET enabled = FALSE, status = 'DISABLED', updated_at = NOW()
-    WHERE task_id = ${taskId}::uuid
+    INSERT INTO ai_platform.ai_coding_autonomous_tasks (
+      task_id, enabled, status, max_cycles, updated_at
+    )
+    VALUES (${taskId}::uuid, FALSE, 'DISABLED', ${DEFAULT_MAX_CYCLES}, NOW())
+    ON CONFLICT (task_id) DO UPDATE
+    SET enabled = FALSE,
+        status = 'DISABLED',
+        updated_at = NOW()
   `);
 }
 
