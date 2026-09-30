@@ -386,7 +386,7 @@ export function extractAdminDbSemanticIntent(
   context: AdminDbConversationMessage[] = [],
 ): AdminDbSemanticIntent | null {
   const value = message.trim();
-  if (!value || MUTATION.test(value) || EXPLANATION_ONLY.test(value)) return null;
+  if (!value || extractExplicitReadOnlySql(value) || MUTATION.test(value) || EXPLANATION_ONLY.test(value)) return null;
 
   const current = semanticParts(value);
   let metric = current.metric;

@@ -271,6 +271,13 @@ describe("AI Core admin database query service", () => {
     expect(shouldAttemptAdminDbQuery("jelaskan apa itu customer profile")).toBe(false);
   });
 
+  it("preserves explicit SQL instead of interpreting COUNT or SUM as a natural-language metric", async () => {
+    expect(await executeAdminSemanticQuery("SELECT SUM(amount), COUNT(*) FROM sport_center.sport_payments")).toBeNull();
+    expect(extractAdminDbSemanticIntent("WITH payments AS (SELECT 1) SELECT COUNT(*) FROM payments")).toBeNull();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
   it("accepts direct admin SELECT/WITH but rejects mutation and multi-statement SQL", () => {
     expect(validateAdminReadOnlySql("SELECT * FROM public.customers LIMIT 5"))
       .toBe("SELECT * FROM public.customers LIMIT 5");
