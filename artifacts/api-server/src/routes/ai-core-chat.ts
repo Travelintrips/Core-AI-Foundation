@@ -816,18 +816,19 @@ async function answerAskMode(
   message: string,
   policy: ChatPolicy,
   context: AdminDbConversationMessage[] = [],
+  routingMessage = message,
 ): Promise<Record<string, unknown>> {
-  const workload = classifyAiCoreWorkload(message);
+  const workload = classifyAiCoreWorkload(routingMessage);
   const routingMeta = {
     workload: workload.workload,
     costClass: workload.costClass,
   };
-  const deterministic = await deterministicReply(message, workload);
+  const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) return deterministic;
 
   // Read-only data tools run before any LLM. They never accept mutation verbs and
   // only execute parameterized SELECT queries against known business tables.
-  const dataTool = await tryRunAiCoreDataTool(message);
+  const dataTool = await tryRunAiCoreDataTool(routingMessage);
   if (dataTool.matched) {
     return {
       kind: "answer",
@@ -845,7 +846,7 @@ async function answerAskMode(
     };
   }
 
-  const adminDbQuery = await tryRunAdminDbQuery(message, policy, context).catch(
+  const adminDbQuery = await tryRunAdminDbQuery(routingMessage, policy, context).catch(
     (error: unknown) => ({
       kind: "answer",
       route: "ADMIN_DB_QUERY",
@@ -1586,6 +1587,7 @@ async function runInfrastructureOperation(
 
 async function runAutoMode(
   input: z.infer<typeof ChatRequest>,
+  executionInput: z.infer<typeof ChatRequest> = input,
 ): Promise<Record<string, unknown>> {
   const dbMutation = await runAdminDbMutationOperation(input.message);
   if (dbMutation) {
@@ -1614,12 +1616,12 @@ async function runAutoMode(
   }
 
   if (decision.kind === "CONTROL_PLANE") {
-    const result = await startAgentTask(input);
+    const result = await startAgentTask(executionInput);
     return { ...result, ...routingMeta };
   }
 
   if (decision.kind === "EXTERNAL_AGENT") {
-    const external = await startExternalAgentWork(input, decision.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID);
+    const external = await startExternalAgentWork(executionInput, decision.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID);
     return { ...external, ...routingMeta };
   }
 
@@ -1628,7 +1630,7 @@ async function runAutoMode(
     if (remote) return { ...remote, ...routingMeta };
   }
 
-  const answer = await answerAskMode(input.message, input.modelPolicy, input.context ?? []);
+  const answer = await answerAskMode(executionInput.message, input.modelPolicy, input.context ?? [], input.message);
   return { ...routingMeta, ...answer };
 }
 
@@ -1792,25 +1794,28 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       message: appendLearningsToMessage(parsed.data.message, learnings),
     };
 
+    const rawInput = parsed.data;
+    const rawDispatch = classifyAiCoreChatDispatch(rawInput.message);
     const result =
       effectiveInput.mode === "agent"
-        ? (await runAdminDbMutationOperation(effectiveInput.message)) ??
-          (await runInfrastructureOperation(effectiveInput.message)) ??
-          (classifyAiCoreChatDispatch(effectiveInput.message).kind === "EXTERNAL_AGENT"
+        ? (await runAdminDbMutationOperation(rawInput.message)) ??
+          (await runInfrastructureOperation(rawInput.message)) ??
+          (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
                 effectiveInput,
-                classifyAiCoreChatDispatch(effectiveInput.message).externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
+                rawDispatch.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
               )
             : null) ??
-          (await maybeRunRemoteWorkerPreset(effectiveInput)) ??
+          (await maybeRunRemoteWorkerPreset(rawInput)) ??
           await startAgentTask(effectiveInput)
         : effectiveInput.mode === "ask"
           ? await answerAskMode(
               effectiveInput.message,
               effectiveInput.modelPolicy,
               effectiveInput.context ?? [],
+              rawInput.message,
             )
-          : await runAutoMode(effectiveInput);
+          : await runAutoMode(rawInput, effectiveInput);
 
     const assistantContent =
       typeof result["reply"] === "string"
