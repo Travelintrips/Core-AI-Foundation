@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Cloud,
   Cpu,
+  Download,
   ExternalLink,
   Loader2,
   MessageSquareText,
@@ -65,6 +66,11 @@ type CoreConfig = {
   codingModel: Record<string, unknown>;
   streaming?: { enabled: boolean; endpoint?: string; defaultPolicy?: string };
 };
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
 
 type TaskProgress = {
   task: {
@@ -150,12 +156,31 @@ export default function AiCoreChat() {
   const [progress, setProgress] = useState<TaskProgress | null>(null);
   const [progressError, setProgressError] = useState("");
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    new URLSearchParams(window.location.search).get("standalone") === "1";
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void apiFetch<CoreConfig>("/api/ai/core-chat/config")
       .then(setConfig)
       .catch(() => setConfig(null));
+  }, []);
+
+  useEffect(() => {
+    const handleInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    const handleInstalled = () => setInstallPrompt(null);
+
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
   }, []);
 
   useEffect(() => {
@@ -437,6 +462,13 @@ export default function AiCoreChat() {
     }
   }
 
+  async function installShortcut() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  }
+
   function clearChat() {
     setMessages([]);
     setProgress(null);
@@ -498,6 +530,17 @@ export default function AiCoreChat() {
           <div className="px-3 py-2 rounded-lg font-mono" style={{ background: "#0A1327", border: "1px solid #1E3057", color: "#7F91B8" }}>
             ${totalEstimatedCostUsd.toFixed(6)}
           </div>
+          {installPrompt && !isStandalone && (
+            <button
+              onClick={() => void installShortcut()}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5"
+              style={{ color: "#B8AEFF", border: "1px solid #313C78", background: "#171D3C" }}
+              title="Pasang AI Core Chat sebagai shortcut aplikasi"
+            >
+              <Download className="size-3.5" />
+              <span>Install App</span>
+            </button>
+          )}
           <button onClick={clearChat} className="p-2 rounded-lg hover:bg-white/5" style={{ color: "#6B82B0", border: "1px solid #1E3057" }} title="Hapus riwayat chat lokal">
             <Trash2 className="size-4" />
           </button>
