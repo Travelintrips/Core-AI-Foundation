@@ -82,48 +82,84 @@ def _openhands_headers():
 
 
 def run_openhands(work):
-    _, models = _request(
-        "GET",
-        OPENHANDS_URL + "/v1/models",
-        headers=_openhands_headers(),
-    )
-    entries = models.get("data") if isinstance(models, dict) else None
-    if not isinstance(entries, list) or not entries:
-        raise RuntimeError("OpenHands returned no available models")
-    model = str(entries[0].get("id") or "").strip()
-    if not model:
-        raise RuntimeError("OpenHands returned an invalid model id")
-
-    _, result = _request(
-        "POST",
-        OPENHANDS_URL + "/v1/chat/completions",
-        {
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are the OpenHands coding executor managed by AI Core. "
-                        "Stay inside the mounted /projects workspace. "
-                        "Do not deploy to production or bypass AI Core approval gates."
-                    ),
-                },
-                {"role": "user", "content": str(work["instruction"])},
-            ],
-            "stream": False,
+    model = "openai/ai-core-agent"
+    conversation_payload = {
+        "workspace": {
+            "working_dir": "/projects",
+            "kind": "LocalWorkspace",
         },
+        "initial_message": {
+            "role": "user",
+            "content": [{"type": "text", "text": str(work["instruction"])}],
+            "run": True,
+        },
+        "max_iterations": 25,
+        "stuck_detection": True,
+        "autotitle": False,
+        "agent": {
+            "kind": "Agent",
+            "llm": {
+                "model": model,
+                "api_key": TOKEN,
+                "base_url": API_BASE + "/ai/agent-runtime/v1",
+                "usage_id": "ai-core-openhands-worker",
+                "is_subscription": False,
+            },
+            "tools": [
+                {"name": "terminal", "params": {}},
+                {"name": "file_editor", "params": {}},
+                {"name": "task_tracker", "params": {}},
+            ],
+            "agent_context": {
+                "system_message_suffix": (
+                    "You are the OpenHands coding executor managed by AI Core. "
+                    "Stay inside the mounted /projects workspace. "
+                    "Never deploy to production or bypass AI Core approval gates."
+                )
+            },
+        },
+    }
+
+    _, conversation = _request(
+        "POST",
+        OPENHANDS_URL + "/api/conversations",
+        conversation_payload,
         headers=_openhands_headers(),
-        timeout=TIMEOUT_SECONDS,
+        timeout=30,
     )
-    choices = result.get("choices") if isinstance(result, dict) else None
-    text = ""
-    if isinstance(choices, list) and choices:
-        message = choices[0].get("message") if isinstance(choices[0], dict) else None
-        if isinstance(message, dict):
-            text = str(message.get("content") or "").strip()
-    if not text:
-        text = json.dumps(result, ensure_ascii=False)[:20000]
-    return text, {"runtime": "openhands-agent-server", "model": model}
+    conversation_id = str(
+        conversation.get("id")
+        or conversation.get("conversation_id")
+        or ""
+    ).strip()
+    if not conversation_id:
+        raise RuntimeError("OpenHands did not return a conversation id")
+
+    deadline = time.monotonic() + TIMEOUT_SECONDS
+    last_response = ""
+    while time.monotonic() < deadline:
+        _, result = _request(
+            "GET",
+            OPENHANDS_URL
+            + "/api/conversations/"
+            + conversation_id
+            + "/agent_final_response",
+            headers=_openhands_headers(),
+            timeout=30,
+        )
+        if isinstance(result, dict):
+            last_response = str(result.get("response") or "").strip()
+        if last_response:
+            return last_response[:20000], {
+                "runtime": "openhands-native-conversation",
+                "model": model,
+                "conversationId": conversation_id,
+            }
+        time.sleep(2)
+
+    raise RuntimeError(
+        "OpenHands conversation timed out before producing a final response"
+    )
 
 
 def run_n8n(work):
