@@ -25,7 +25,7 @@ const clients = new Map<string, {
   pool: InstanceType<typeof PostgresPool>;
 }>();
 
-function additionalClient(id: string, rawUrl: string): AdminDbClient {
+function additionalClient(id: string, rawUrl: string, env: NodeJS.ProcessEnv): AdminDbClient {
   let parsed: URL;
   try { parsed = new URL(rawUrl); } catch {
     throw new Error(`Koneksi database ${id} memiliki konfigurasi URL tidak valid.`);
@@ -35,7 +35,7 @@ function additionalClient(id: string, rawUrl: string): AdminDbClient {
   }
   const supabase = /(?:\.supabase\.co|\.pooler\.supabase\.com)$/.test(parsed.hostname);
   if (supabase && !parsed.searchParams.has("sslmode")) parsed.searchParams.set("sslmode", "require");
-  if (process.env["NODE_ENV"] === "production" && parsed.hostname.endsWith(".pooler.supabase.com") && parsed.port === "5432") {
+  if (env["NODE_ENV"] === "production" && env["SUPABASE_FORCE_SESSION_POOLER"] !== "true" && parsed.hostname.endsWith(".pooler.supabase.com") && parsed.port === "5432") {
     parsed.port = "6543";
   }
   const url = parsed.toString();
@@ -67,11 +67,18 @@ export function getAdminDbConnections(
   return descriptors.map((descriptor) => ({
     ...descriptor,
     client: () => {
-      if (descriptor.id === "primary") return db;
+      if (descriptor.id === "primary") {
+        if (env["NODE_ENV"] !== "production") return db;
+        const url = (env["SUPABASE_PROD_DATABASE_URL"] || env["SUPABASE_DATABASE_URL"])?.trim();
+        if (!url) throw new Error("Koneksi database primary belum dikonfigurasi.");
+        // Keep interactive reads out of the control-plane worker queue, while
+        // limiting the extra production database load to one connection.
+        return additionalClient("primary", url, env);
+      }
       const entry = entries.find((item) => item.id === descriptor.id)!;
       const url = env[entry.databaseUrlEnv]?.trim();
       if (!url) throw new Error(`Koneksi database ${descriptor.id} belum dikonfigurasi.`);
-      return additionalClient(descriptor.id, url);
+      return additionalClient(descriptor.id, url, env);
     },
   }));
 }
