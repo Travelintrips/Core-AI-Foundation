@@ -67,14 +67,9 @@ export function getAdminDbConnections(
   return descriptors.map((descriptor) => ({
     ...descriptor,
     client: () => {
-      if (descriptor.id === "primary") {
-        if (env["NODE_ENV"] !== "production") return db;
-        const url = (env["SUPABASE_PROD_DATABASE_URL"] || env["SUPABASE_DATABASE_URL"])?.trim();
-        if (!url) throw new Error("Koneksi database primary belum dikonfigurasi.");
-        // Keep interactive reads out of the control-plane worker queue, while
-        // limiting the extra production database load to one connection.
-        return additionalClient("primary", url, env);
-      }
+      // Reuse the application's verified production connection profile.
+      // Registered additional databases keep their own bounded read pools.
+      if (descriptor.id === "primary") return db;
       const entry = entries.find((item) => item.id === descriptor.id)!;
       const url = env[entry.databaseUrlEnv]?.trim();
       if (!url) throw new Error(`Koneksi database ${descriptor.id} belum dikonfigurasi.`);

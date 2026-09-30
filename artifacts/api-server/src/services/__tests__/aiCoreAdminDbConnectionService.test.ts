@@ -72,15 +72,12 @@ describe("admin database connection boundaries", () => {
     expect(mocks.execute).toHaveBeenCalledTimes(4);
   });
 
-  it("isolates production admin reads from the shared worker pool with one transaction-pool connection", async () => {
+  it("preserves the primary application's production connection profile and read-only retry guards", async () => {
     const connection = getAdminDbConnections({ NODE_ENV: "production", SUPABASE_PROD_DATABASE_URL: "postgresql://user:private@primary.pooler.supabase.com:5432/postgres" })[0]!;
-    expect(connection.client()).not.toBe(sharedDb);
-    expect(mocks.poolOptions).toHaveBeenCalledWith(expect.objectContaining({ max: 1, application_name: "ai-core-admin-read-primary" }));
-    const url = new URL(mocks.poolOptions.mock.calls[0]![0].connectionString);
-    expect(url.port).toBe("6543");
+    expect(connection.client()).toBe(sharedDb);
     await readAdminDbMetadata(connection, sql.raw("SELECT 1"));
     expect(mocks.execute).toHaveBeenCalledTimes(4);
-    expect(mocks.poolOptions).toHaveBeenCalledTimes(1);
+    expect(mocks.poolOptions).not.toHaveBeenCalled();
   });
 
   it("does not retry SQL errors or retry more than three disconnected attempts", async () => {
