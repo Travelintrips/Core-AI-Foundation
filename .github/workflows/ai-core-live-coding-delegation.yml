@@ -69,8 +69,21 @@ jobs:
               jq -c '{task:.task, autonomous:.autonomous, latestRun:.latestRun, workspaceUrl:.workspaceUrl}' /tmp/progress.json
               observed_id=$(jq -r '.task.id // empty' /tmp/progress.json)
               observed_status=$(jq -r '.task.status // empty' /tmp/progress.json)
+              autonomous_status=$(jq -r '.autonomous.status // empty' /tmp/progress.json)
               test "$observed_id" = "$task"
               test -n "$observed_status"
+              case "$autonomous_status" in
+                FAILED|BLOCKED|DISABLED)
+                  echo "::error::Delegated coding autonomous runtime reached terminal failure state: $autonomous_status"
+                  jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
+                  exit 1
+                  ;;
+                APPROVAL_REQUIRED|COMPLETED)
+                  echo "Delegated coding autonomous runtime reached accepted terminal/approval state: $autonomous_status"
+                  jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
+                  exit 0
+                  ;;
+              esac
               case "$observed_status" in
                 FAILED|CANCELLED)
                   echo "::error::Delegated coding task reached terminal failure state: $observed_status"
