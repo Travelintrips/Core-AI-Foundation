@@ -5,6 +5,7 @@ import {
   aiCodingWorkstreamDependenciesTable,
   aiCodingWorkstreamsTable,
   db,
+  withTransientDatabaseRetry,
   type AiCodingTaskGraph,
   type AiCodingWorkstream,
 } from "@workspace/db";
@@ -114,16 +115,19 @@ export function readyPersistedCodingWorkstreams(
 async function loadGraphSnapshotById(
   graph: AiCodingTaskGraph,
 ): Promise<CodingTaskGraphSnapshot> {
-  const [workstreams, dependencies] = await Promise.all([
-    db
-      .select()
-      .from(aiCodingWorkstreamsTable)
-      .where(eq(aiCodingWorkstreamsTable.graphId, graph.id)),
-    db
-      .select()
-      .from(aiCodingWorkstreamDependenciesTable)
-      .where(eq(aiCodingWorkstreamDependenciesTable.graphId, graph.id)),
-  ]);
+  const [workstreams, dependencies] = await withTransientDatabaseRetry(
+    () => Promise.all([
+      db
+        .select()
+        .from(aiCodingWorkstreamsTable)
+        .where(eq(aiCodingWorkstreamsTable.graphId, graph.id)),
+      db
+        .select()
+        .from(aiCodingWorkstreamDependenciesTable)
+        .where(eq(aiCodingWorkstreamDependenciesTable.graphId, graph.id)),
+    ]),
+    { attempts: 3, baseDelayMs: 150 },
+  );
 
   const keyById = new Map(workstreams.map((item) => [item.id, item.workstreamKey]));
   const dependenciesByWorkstream = new Map<string, string[]>();
@@ -176,12 +180,13 @@ async function loadGraphSnapshotById(
 export async function getLatestCodingTaskGraph(
   taskId: string,
 ): Promise<CodingTaskGraphSnapshot | null> {
-  const [graph] = await db
+  const [graph] = await withTransientDatabaseRetry(() => db
     .select()
     .from(aiCodingTaskGraphsTable)
     .where(eq(aiCodingTaskGraphsTable.taskId, taskId))
     .orderBy(desc(aiCodingTaskGraphsTable.version))
-    .limit(1);
+    .limit(1),
+  { attempts: 3, baseDelayMs: 150 });
 
   return graph ? loadGraphSnapshotById(graph) : null;
 }
@@ -202,7 +207,7 @@ export async function persistCodingTaskGraph(
   const planHash = hashCodingMultiTaskPlan(plan);
   const lockKey = `coding-task-graph:${taskId}`;
 
-  return db.transaction(async (tx) => {
+  return withTransientDatabaseRetry(() => db.transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
     );
@@ -296,14 +301,14 @@ export async function persistCodingTaskGraph(
     }
 
     return { graph, created: true };
-  });
+  }), { attempts: 4, baseDelayMs: 200 });
 }
 
 export async function approveCodingTaskGraph(
   taskId: string,
   graphId: string,
 ): Promise<AiCodingTaskGraph> {
-  return db.transaction(async (tx) => {
+  return withTransientDatabaseRetry(() => db.transaction(async (tx) => {
     const [graph] = await tx
       .select()
       .from(aiCodingTaskGraphsTable)
@@ -315,6 +320,9 @@ export async function approveCodingTaskGraph(
         "Coding task graph was not found for this task.",
         "NOT_FOUND",
       );
+    }
+    if (graph.status === "APPROVED") {
+      return graph;
     }
     if (graph.status !== "PREPARED") {
       throw new LocalCodingTaskGraphError(
@@ -340,5 +348,5 @@ export async function approveCodingTaskGraph(
       );
     }
     return updated;
-  });
+  }), { attempts: 4, baseDelayMs: 200 });
 }
