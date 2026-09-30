@@ -57,6 +57,7 @@ jobs:
           sh -n deploy/ai-workers/temporal/scripts/create-namespace.sh
           python3 -m py_compile deploy/ai-workers/temporal/coding-worker.py
           python3 -m py_compile deploy/ai-workers/agent-registrar.py
+          node --check deploy/ai-workers/openclaw-supervisor.mjs
 
       - name: Worker verification regression tests (offline)
         run: python3 -m unittest discover -s scripts/tests -p 'test_ai_workers_connect.py' -v
@@ -99,6 +100,8 @@ jobs:
 
           ! grep -q '/var/run/docker.sock' "$file"
           ! grep -q 'ADMIN_API_KEY' "$file"
+          grep -q 'openclaw-supervisor.mjs:/app/openclaw-supervisor.mjs:ro' "$file"
+          grep -q 'command: \["node", "/app/openclaw-supervisor.mjs"\]' "$file"
 
           grep -A3 '^  temporal-data:' "$file" | grep -q 'internal: true'
           grep -A3 '^  n8n-data:' "$file" | grep -q 'internal: true'
