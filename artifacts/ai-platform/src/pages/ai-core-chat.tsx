@@ -116,6 +116,14 @@ function loadHistory(): ChatMessage[] {
   }
 }
 
+function requestFailureText(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (/failed query:|ai_platform/i.test(detail)) {
+    return "Permintaan gagal: Database AI Core sementara sibuk atau tidak tersedia. Silakan coba lagi sebentar lagi.";
+  }
+  return "Permintaan gagal: " + detail.slice(0, 500);
+}
+
 function routeLabel(route?: string | null): string {
   if (route === "STREAMING") return "Streaming…";
   if (route === "NO_LLM") return "0 token";
@@ -400,10 +408,7 @@ export default function AiCoreChat() {
       } catch (error) {
         updateMessage(assistantId, (message) => ({
           ...message,
-          text:
-            message.text ||
-            "Permintaan gagal: " +
-              (error instanceof Error ? error.message : String(error)),
+          text: message.text || requestFailureText(error),
           error: !message.text,
         }));
       } finally {
@@ -453,7 +458,7 @@ export default function AiCoreChat() {
       append({
         id: messageId(),
         role: "assistant",
-        text: "Permintaan gagal: " + (error instanceof Error ? error.message : String(error)),
+        text: requestFailureText(error),
         createdAt: new Date().toISOString(),
         error: true,
       });

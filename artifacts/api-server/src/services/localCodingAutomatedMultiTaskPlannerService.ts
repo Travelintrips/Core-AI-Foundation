@@ -4,6 +4,7 @@ import {
   aiCodingRunsTable,
   aiCodingTasksTable,
   db,
+  withTransientDatabaseRetry,
   type AiCodingTask,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
@@ -685,11 +686,12 @@ async function loadAutomatedPlannerContext(
   taskId: string,
   analysisOverride?: Record<string, unknown>,
 ): Promise<{ task: AiCodingTask; context: AutomatedPlannerContext }> {
-  const [task] = await db
+  const [task] = await withTransientDatabaseRetry(() => db
     .select()
     .from(aiCodingTasksTable)
     .where(eq(aiCodingTasksTable.id, taskId))
-    .limit(1);
+    .limit(1),
+  { attempts: 4, baseDelayMs: 200 });
   if (!task) {
     throw new AutomatedMultiTaskPlannerError(
       "Coding task not found.",
@@ -739,11 +741,12 @@ async function loadAutomatedPlannerContext(
     return { task, context };
   }
 
-  const runs = await db
+  const runs = await withTransientDatabaseRetry(() => db
     .select()
     .from(aiCodingRunsTable)
     .where(eq(aiCodingRunsTable.taskId, taskId))
-    .orderBy(desc(aiCodingRunsTable.startedAt));
+    .orderBy(desc(aiCodingRunsTable.startedAt)),
+  { attempts: 4, baseDelayMs: 200 });
 
   const sourceRuns = runs.filter(
     (run) =>

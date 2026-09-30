@@ -5,6 +5,8 @@ import { aiAgentServiceTokensTable, db, withTransientDatabaseRetry } from "@work
 import { logger } from "../lib/logger.js";
 
 const MAX_TOKEN_LENGTH = 512;
+const TOKEN_USAGE_UPDATE_INTERVAL_MS = 60_000;
+const lastTokenUsageUpdateAt = new Map<string, number>();
 
 export function hashAgentServiceToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
@@ -63,21 +65,30 @@ export function requireAgentServiceScope(requiredScope: string) {
         scopes,
       };
 
-      // Usage telemetry must never turn an already-authenticated request into a
-      // 503 during a transient database write failure. Keep it best-effort.
-      void withTransientDatabaseRetry(() => db
-        .update(aiAgentServiceTokensTable)
-        .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-        .where(eq(aiAgentServiceTokensTable.id, record.id)), {
-          attempts: 2,
-          baseDelayMs: 250,
-        })
-        .catch((error) => {
-          logger.warn(
-            { err: error, service: record.name },
-            "[agent-runtime] failed to update scoped token usage telemetry",
-          );
-        });
+      // Usage telemetry is best-effort and intentionally throttled. Agent
+      // heartbeats can be frequent, and writing last_used_at on every request
+      // doubles database pressure exactly when the connection pool is busy.
+      const usageUpdateAt = Date.now();
+      const previousUsageUpdateAt = lastTokenUsageUpdateAt.get(record.id) ?? 0;
+      if (usageUpdateAt - previousUsageUpdateAt >= TOKEN_USAGE_UPDATE_INTERVAL_MS) {
+        lastTokenUsageUpdateAt.set(record.id, usageUpdateAt);
+        void withTransientDatabaseRetry(() => db
+          .update(aiAgentServiceTokensTable)
+          .set({ lastUsedAt: new Date(usageUpdateAt), updatedAt: new Date(usageUpdateAt) })
+          .where(eq(aiAgentServiceTokensTable.id, record.id)), {
+            attempts: 2,
+            baseDelayMs: 250,
+          })
+          .catch((error) => {
+            if (lastTokenUsageUpdateAt.get(record.id) === usageUpdateAt) {
+              lastTokenUsageUpdateAt.delete(record.id);
+            }
+            logger.warn(
+              { err: error, service: record.name },
+              "[agent-runtime] failed to update scoped token usage telemetry",
+            );
+          });
+      }
 
       next();
     } catch (error) {

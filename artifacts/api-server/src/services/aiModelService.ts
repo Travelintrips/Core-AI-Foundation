@@ -1,4 +1,4 @@
-import { db, aiModelsTable, aiProvidersTable } from "@workspace/db";
+import { db, aiModelsTable, aiProvidersTable, withTransientDatabaseRetry } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
 export interface ModelWithProvider {
@@ -6,17 +6,59 @@ export interface ModelWithProvider {
   provider: typeof aiProvidersTable.$inferSelect;
 }
 
+const ACTIVE_MODEL_CACHE_TTL_MS = 5_000;
+const ACTIVE_MODEL_STALE_TTL_MS = 60_000;
+
+let activeModelCache: {
+  rows: ModelWithProvider[];
+  expiresAt: number;
+  staleUntil: number;
+} | null = null;
+let activeModelLoad: Promise<ModelWithProvider[]> | null = null;
+
+function invalidateActiveModelCache(): void {
+  activeModelCache = null;
+}
+
 /**
  * Returns all active models joined with their active provider.
  */
 export async function getAllActiveModels(): Promise<ModelWithProvider[]> {
-  const rows = await db
-    .select({ model: aiModelsTable, provider: aiProvidersTable })
-    .from(aiModelsTable)
-    .innerJoin(aiProvidersTable, eq(aiModelsTable.providerId, aiProvidersTable.id))
-    .where(and(eq(aiModelsTable.isActive, true), eq(aiProvidersTable.isActive, true)));
+  const now = Date.now();
+  if (activeModelCache && now < activeModelCache.expiresAt) {
+    return activeModelCache.rows;
+  }
+  if (activeModelLoad) return activeModelLoad;
 
-  return rows.map((r) => ({ model: r.model, provider: r.provider }));
+  const stale = activeModelCache;
+  activeModelLoad = withTransientDatabaseRetry(async () => {
+    const rows = await db
+      .select({ model: aiModelsTable, provider: aiProvidersTable })
+      .from(aiModelsTable)
+      .innerJoin(aiProvidersTable, eq(aiModelsTable.providerId, aiProvidersTable.id))
+      .where(and(eq(aiModelsTable.isActive, true), eq(aiProvidersTable.isActive, true)));
+    return rows.map((row) => ({ model: row.model, provider: row.provider }));
+  }, { attempts: 3, baseDelayMs: 150 })
+    .then((rows) => {
+      const loadedAt = Date.now();
+      activeModelCache = {
+        rows,
+        expiresAt: loadedAt + ACTIVE_MODEL_CACHE_TTL_MS,
+        staleUntil: loadedAt + ACTIVE_MODEL_STALE_TTL_MS,
+      };
+      return rows;
+    })
+    .catch((error) => {
+      if (stale && Date.now() < stale.staleUntil) {
+        return stale.rows;
+      }
+      throw error;
+    })
+    .finally(() => {
+      activeModelLoad = null;
+    });
+
+  return activeModelLoad;
 }
 
 /**
@@ -24,11 +66,12 @@ export async function getAllActiveModels(): Promise<ModelWithProvider[]> {
  * Returns null if not found or inactive.
  */
 export async function getActiveModel(modelId: number): Promise<ModelWithProvider | null> {
-  const [row] = await db
+  const [row] = await withTransientDatabaseRetry(() => db
     .select({ model: aiModelsTable, provider: aiProvidersTable })
     .from(aiModelsTable)
     .innerJoin(aiProvidersTable, eq(aiModelsTable.providerId, aiProvidersTable.id))
-    .where(and(eq(aiModelsTable.id, modelId), eq(aiModelsTable.isActive, true), eq(aiProvidersTable.isActive, true)));
+    .where(and(eq(aiModelsTable.id, modelId), eq(aiModelsTable.isActive, true), eq(aiProvidersTable.isActive, true))),
+  { attempts: 3, baseDelayMs: 150 });
 
   return row ? { model: row.model, provider: row.provider } : null;
 }
@@ -48,15 +91,16 @@ export async function deactivateRegisteredModel(
   const normalizedModel = modelId.trim();
   if (!normalizedProvider || !normalizedModel) return false;
 
-  const [provider] = await db
+  const [provider] = await withTransientDatabaseRetry(() => db
     .select({ id: aiProvidersTable.id })
     .from(aiProvidersTable)
     .where(eq(aiProvidersTable.slug, normalizedProvider))
-    .limit(1);
+    .limit(1),
+  { attempts: 3, baseDelayMs: 150 });
 
   if (!provider) return false;
 
-  const rows = await db
+  const rows = await withTransientDatabaseRetry(() => db
     .update(aiModelsTable)
     .set({ isActive: false })
     .where(
@@ -66,7 +110,9 @@ export async function deactivateRegisteredModel(
         eq(aiModelsTable.isActive, true),
       ),
     )
-    .returning({ id: aiModelsTable.id });
+    .returning({ id: aiModelsTable.id }),
+  { attempts: 3, baseDelayMs: 150 });
 
+  if (rows.length > 0) invalidateActiveModelCache();
   return rows.length > 0;
 }

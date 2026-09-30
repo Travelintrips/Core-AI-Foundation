@@ -61,12 +61,26 @@ const TRANSIENT_DB_CODES = new Set([
   "57P01", "57P02", "57P03", "53300",
 ]);
 
-export function isTransientDatabaseConnectionError(error: unknown): boolean {
+function isTransientDatabaseConnectionErrorAtDepth(
+  error: unknown,
+  depth: number,
+): boolean {
+  if (depth > 4) return false;
   const candidate = error as { code?: unknown; message?: unknown; cause?: unknown } | null;
   const code = typeof candidate?.code === "string" ? candidate.code : "";
   const message = String(candidate?.message ?? error ?? "").toLowerCase();
-  return TRANSIENT_DB_CODES.has(code) ||
+  const directMatch = TRANSIENT_DB_CODES.has(code) ||
     /timeout exceeded when trying to connect|connection terminated unexpectedly|connection reset|connection refused|connection timed out|server closed the connection unexpectedly|terminating connection due to administrator command|too many connections|remaining connection slots are reserved|econnreset|econnrefused|etimedout/.test(message);
+  if (directMatch) return true;
+
+  const cause = candidate?.cause;
+  return cause != null && cause !== error
+    ? isTransientDatabaseConnectionErrorAtDepth(cause, depth + 1)
+    : false;
+}
+
+export function isTransientDatabaseConnectionError(error: unknown): boolean {
+  return isTransientDatabaseConnectionErrorAtDepth(error, 0);
 }
 
 export async function withTransientDatabaseRetry<T>(
