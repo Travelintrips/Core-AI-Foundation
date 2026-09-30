@@ -38,14 +38,24 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.preset).toBeNull();
   });
 
-  it("routes repository inspection to the trusted read-only worker", () => {
+  it("routes repository test work to OpenHands", () => {
     const decision = classifyAiCoreChatDispatch(
       "Cek repository dan validasi test sebelum saya lanjut.",
     );
 
-    expect(decision.kind).toBe("REMOTE_READONLY");
+    expect(decision.kind).toBe("EXTERNAL_AGENT");
     expect(decision.workload.workload).toBe("REVIEW");
     expect(decision.preset).toBe("test");
+    expect(decision.externalAgentClientId).toBe("gcp-openhands-coder");
+  });
+
+  it("keeps simple repository status inspection on the trusted read-only worker", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Cek status repository dan commit HEAD.",
+    );
+
+    expect(decision.kind).toBe("REMOTE_READONLY");
+    expect(decision.preset).toBe("check");
   });
 
   it("routes build and test requests as read-only work", () => {
@@ -95,6 +105,24 @@ describe("AI Core Chat automatic dispatch", () => {
 
     expect(decision.kind).toBe("EXTERNAL_AGENT");
     expect(decision.externalAgentClientId).toBe("gcp-n8n-automation");
+  });
+
+  it("automatically routes executable workflow automation to n8n", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Jalankan workflow untuk proses webhook integration ini.",
+    );
+
+    expect(decision.kind).toBe("EXTERNAL_AGENT");
+    expect(decision.externalAgentClientId).toBe("gcp-n8n-automation");
+  });
+
+  it("automatically routes bounded coordination to OpenClaw", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Koordinasikan tugas antar agent untuk pemeriksaan ini.",
+    );
+
+    expect(decision.kind).toBe("EXTERNAL_AGENT");
+    expect(decision.externalAgentClientId).toBe("gcp-openclaw-main");
   });
 
   it("keeps mutating OpenHands coding work inside the Coding Orchestrator", () => {
