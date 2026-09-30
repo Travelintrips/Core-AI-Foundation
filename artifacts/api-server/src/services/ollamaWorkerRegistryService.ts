@@ -1,6 +1,6 @@
 
 import { eq, sql } from "drizzle-orm";
-import { aiWorkersTable, db, type AiWorker } from "@workspace/db";
+import { aiWorkersTable, db, withTransientDatabaseRetry, type AiWorker } from "@workspace/db";
 import {
   DEFAULT_LEASE_TTL_MS,
   registerWorker,
@@ -380,13 +380,19 @@ export async function recoverStaleOllamaReservations(
 export async function reserveOllamaWorker(
   modelId: string,
 ): Promise<OllamaWorkerReservation | null> {
-  const first = await attemptReserveOllamaWorker(modelId);
+  const first = await withTransientDatabaseRetry(
+    () => attemptReserveOllamaWorker(modelId),
+    { attempts: 3, baseDelayMs: 100 },
+  );
   if (first) return first;
 
   const recovered = await recoverStaleOllamaReservations(modelId).catch(() => 0);
   if (recovered <= 0) return null;
 
-  return attemptReserveOllamaWorker(modelId);
+  return withTransientDatabaseRetry(
+    () => attemptReserveOllamaWorker(modelId),
+    { attempts: 3, baseDelayMs: 100 },
+  );
 }
 
 export async function releaseOllamaWorkerReservation(

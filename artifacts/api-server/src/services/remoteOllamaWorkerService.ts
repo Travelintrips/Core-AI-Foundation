@@ -1,6 +1,6 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { aiJobsTable, aiWorkersTable, db, type AiJob, type AiWorker } from "@workspace/db";
+import { aiJobsTable, aiWorkersTable, db, withTransientDatabaseRetry, type AiJob, type AiWorker } from "@workspace/db";
 import { registerWorker, renewLease, DEFAULT_LEASE_TTL_MS } from "./workerClusterService.js";
 import { completeJob, retryJob, JobOwnershipLostError } from "./jobWorkerService.js";
 
@@ -104,21 +104,26 @@ export async function authenticateRemoteOllamaWorker(
   token: string | undefined,
 ): Promise<AiWorker | null> {
   if (!token) return null;
-  const [worker] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
-  if (
-    !worker ||
-    worker.providerSlug !== PROVIDER ||
-    worker.runtimeKind !== REMOTE_OLLAMA_RUNTIME_KIND ||
-    !worker.heartbeatToken ||
-    !safeEqual(token.trim(), worker.heartbeatToken) ||
-    worker.status === "offline" ||
-    worker.status === "stale"
-  ) return null;
-  return worker;
+  return withTransientDatabaseRetry(async () => {
+    const [worker] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
+    if (
+      !worker ||
+      worker.providerSlug !== PROVIDER ||
+      worker.runtimeKind !== REMOTE_OLLAMA_RUNTIME_KIND ||
+      !worker.heartbeatToken ||
+      !safeEqual(token.trim(), worker.heartbeatToken) ||
+      worker.status === "offline" ||
+      worker.status === "stale"
+    ) return null;
+    return worker;
+  }, { attempts: 3, baseDelayMs: 100 });
 }
 
 export async function heartbeatRemoteOllamaWorker(workerId: number, token: string): Promise<AiWorker | null> {
-  return renewLease(workerId, token, DEFAULT_LEASE_TTL_MS);
+  return withTransientDatabaseRetry(
+    () => renewLease(workerId, token, DEFAULT_LEASE_TTL_MS),
+    { attempts: 3, baseDelayMs: 100 },
+  );
 }
 
 export async function recoverStaleRemoteOllamaCapacity(
@@ -185,16 +190,18 @@ export async function recoverStaleRemoteOllamaCapacity(
 export async function hasRemoteOllamaWorker(modelId: string): Promise<boolean> {
   await recoverStaleRemoteOllamaCapacity(modelId).catch(() => 0);
 
-  const [row] = await db.select({ id: aiWorkersTable.id }).from(aiWorkersTable).where(
-    and(
-      eq(aiWorkersTable.providerSlug, PROVIDER),
-      eq(aiWorkersTable.runtimeKind, REMOTE_OLLAMA_RUNTIME_KIND),
-      eq(aiWorkersTable.modelId, modelId),
-      inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
-      sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
-    ),
-  ).limit(1);
-  return Boolean(row);
+  return withTransientDatabaseRetry(async () => {
+    const [row] = await db.select({ id: aiWorkersTable.id }).from(aiWorkersTable).where(
+      and(
+        eq(aiWorkersTable.providerSlug, PROVIDER),
+        eq(aiWorkersTable.runtimeKind, REMOTE_OLLAMA_RUNTIME_KIND),
+        eq(aiWorkersTable.modelId, modelId),
+        inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
+        sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
+      ),
+    ).limit(1);
+    return Boolean(row);
+  }, { attempts: 3, baseDelayMs: 100 });
 }
 
 export async function enqueueRemoteOllamaInvocation(
