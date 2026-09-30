@@ -15,6 +15,34 @@ export type AdminDbQueryExecution = {
   elapsedMs: number;
 };
 
+export type AdminDbConversationMessage = {
+  role: "user" | "assistant";
+  text: string;
+};
+
+export type AdminDbSemanticIntent = {
+  aggregation: "sum" | "count" | "avg" | "min" | "max";
+  metricLabel: string;
+  valueKind: "currency" | "number";
+  domain: string;
+  timeRange: {
+    label: string;
+    startSql: string;
+    endSql: string;
+  } | null;
+  inheritedFromContext: boolean;
+};
+
+export type AdminDbSemanticExecution = AdminDbQueryExecution & {
+  intent: AdminDbSemanticIntent;
+  sourceTable: string;
+  valueColumn: string | null;
+  timeColumn: string | null;
+  matchedRows: number;
+  confidence: number;
+  statusFilterApplied: boolean;
+};
+
 type AdminDbNaturalLookupIntent = {
   subject: string;
   value: string;
@@ -91,6 +119,622 @@ function normalizeWords(message: string): string[] {
     for (const synonym of synonyms[word] ?? []) expanded.add(synonym);
   }
   return [...expanded];
+}
+
+
+type AdminDbColumnMetadata = {
+  name: string;
+  dataType: string;
+  udtName: string;
+};
+
+type AdminDbSemanticTable = {
+  schema: string;
+  table: string;
+  columns: AdminDbColumnMetadata[];
+};
+
+type AdminDbSemanticPlan = {
+  intent: AdminDbSemanticIntent;
+  table: AdminDbSemanticTable;
+  valueColumn: AdminDbColumnMetadata | null;
+  timeColumn: AdminDbColumnMetadata | null;
+  statusColumn: AdminDbColumnMetadata | null;
+  confidence: number;
+};
+
+const MONEY_METRIC =
+  /\b(pendapatan|omzet|revenue|pemasukan|income|sales|penjualan|nilai\s+penjualan|total\s+pembayaran|payment\s+total|gross\s+sales)\b/i;
+
+const AVERAGE_METRIC =
+  /\b(rata[-\s]?rata|average|avg|rerata)\b/i;
+
+const MAX_METRIC =
+  /\b(terbesar|tertinggi|maximum|max|maksimum)\b/i;
+
+const MIN_METRIC =
+  /\b(terkecil|terendah|minimum|min)\b/i;
+
+const COUNT_METRIC =
+  /\b(jumlah|count|berapa\s+banyak|total\s+(?:booking|order|pesanan|customer|pelanggan|tenant|transaksi|transaction|invoice|tagihan|user|pengguna))\b/i;
+
+const FOLLOW_UP_HINT =
+  /^(?:kalau|kalo|bagaimana|gimana|lalu|terus|dan|dibanding|bandingkan|yang|untuk|sedangkan)\b/i;
+
+const SUCCESS_STATUS =
+  /^(?:paid|success|successful|completed|complete|settled|captured|approved|done|succeeded)$/i;
+
+const NUMERIC_DATA_TYPES = new Set([
+  "smallint",
+  "integer",
+  "bigint",
+  "decimal",
+  "numeric",
+  "real",
+  "double precision",
+  "money",
+]);
+
+const TEMPORAL_DATA_TYPES = new Set([
+  "date",
+  "timestamp without time zone",
+  "timestamp with time zone",
+  "time without time zone",
+  "time with time zone",
+]);
+
+function normalizeSemanticText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectSemanticTimeRange(
+  message: string,
+): AdminDbSemanticIntent["timeRange"] {
+  const value = normalizeSemanticText(message);
+
+  if (/\b(kemarin|yesterday)\b/.test(value)) {
+    return {
+      label: "kemarin",
+      startSql: "CURRENT_DATE - INTERVAL '1 day'",
+      endSql: "CURRENT_DATE",
+    };
+  }
+  if (/\b(hari ini|today)\b/.test(value)) {
+    return {
+      label: "hari ini",
+      startSql: "CURRENT_DATE",
+      endSql: "CURRENT_DATE + INTERVAL '1 day'",
+    };
+  }
+  if (/\b(minggu lalu|pekan lalu|last week)\b/.test(value)) {
+    return {
+      label: "minggu lalu",
+      startSql: "date_trunc('week', CURRENT_DATE) - INTERVAL '1 week'",
+      endSql: "date_trunc('week', CURRENT_DATE)",
+    };
+  }
+  if (/\b(minggu ini|pekan ini|this week)\b/.test(value)) {
+    return {
+      label: "minggu ini",
+      startSql: "date_trunc('week', CURRENT_DATE)",
+      endSql: "date_trunc('week', CURRENT_DATE) + INTERVAL '1 week'",
+    };
+  }
+  if (/\b(bulan lalu|last month)\b/.test(value)) {
+    return {
+      label: "bulan lalu",
+      startSql: "date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'",
+      endSql: "date_trunc('month', CURRENT_DATE)",
+    };
+  }
+  if (/\b(bulan ini|this month)\b/.test(value)) {
+    return {
+      label: "bulan ini",
+      startSql: "date_trunc('month', CURRENT_DATE)",
+      endSql: "date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'",
+    };
+  }
+  if (/\b(tahun lalu|last year)\b/.test(value)) {
+    return {
+      label: "tahun lalu",
+      startSql: "date_trunc('year', CURRENT_DATE) - INTERVAL '1 year'",
+      endSql: "date_trunc('year', CURRENT_DATE)",
+    };
+  }
+  if (/\b(tahun ini|this year)\b/.test(value)) {
+    return {
+      label: "tahun ini",
+      startSql: "date_trunc('year', CURRENT_DATE)",
+      endSql: "date_trunc('year', CURRENT_DATE) + INTERVAL '1 year'",
+    };
+  }
+
+  const trailingDays = value.match(/\b(\d{1,3})\s+hari\s+terakhir\b/);
+  if (trailingDays) {
+    const days = Math.min(Math.max(Number(trailingDays[1] ?? 1), 1), 366);
+    return {
+      label: String(days) + " hari terakhir",
+      startSql: "CURRENT_DATE - INTERVAL '" + String(days - 1) + " days'",
+      endSql: "CURRENT_DATE + INTERVAL '1 day'",
+    };
+  }
+
+  return null;
+}
+
+function detectSemanticAggregation(message: string): {
+  aggregation: AdminDbSemanticIntent["aggregation"];
+  metricLabel: string;
+  valueKind: AdminDbSemanticIntent["valueKind"];
+} | null {
+  if (MONEY_METRIC.test(message)) {
+    return { aggregation: "sum", metricLabel: "pendapatan", valueKind: "currency" };
+  }
+  if (AVERAGE_METRIC.test(message)) {
+    return { aggregation: "avg", metricLabel: "rata-rata", valueKind: "number" };
+  }
+  if (MAX_METRIC.test(message)) {
+    return { aggregation: "max", metricLabel: "nilai tertinggi", valueKind: "number" };
+  }
+  if (MIN_METRIC.test(message)) {
+    return { aggregation: "min", metricLabel: "nilai terendah", valueKind: "number" };
+  }
+  if (COUNT_METRIC.test(message)) {
+    return { aggregation: "count", metricLabel: "jumlah", valueKind: "number" };
+  }
+
+  const normalized = normalizeSemanticText(message);
+  if (/\bberapa\b/.test(normalized) && !/\b(berapa\s+(?:rupiah|rp|nilai|nominal))\b/.test(normalized)) {
+    return { aggregation: "count", metricLabel: "jumlah", valueKind: "number" };
+  }
+
+  return null;
+}
+
+function extractSemanticDomain(message: string): string {
+  let value = normalizeSemanticText(message);
+  const removable = [
+    /\b(tolong|mohon|please|cek|check|periksa|lihat|show|tampilkan|cari|find|search|berapa|berapa banyak|hitung|count|jumlah|total)\b/g,
+    /\b(pendapatan|omzet|revenue|pemasukan|income|sales|penjualan|nilai penjualan|total pembayaran|payment total|gross sales)\b/g,
+    /\b(rata rata|average|avg|rerata|terbesar|tertinggi|maximum|max|maksimum|terkecil|terendah|minimum|min)\b/g,
+    /\b(kemarin|yesterday|hari ini|today|minggu lalu|pekan lalu|last week|minggu ini|pekan ini|this week|bulan lalu|last month|bulan ini|this month|tahun lalu|last year|tahun ini|this year)\b/g,
+    /\b\d{1,3}\s+hari\s+terakhir\b/g,
+    /\b(kalau|kalo|bagaimana|gimana|lalu|terus|dan|dibanding|bandingkan|dengan|yang|untuk|pada|di|dari|saat|sekarang|ini|itu)\b/g,
+  ];
+  for (const pattern of removable) value = value.replace(pattern, " ");
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function semanticParts(message: string): {
+  metric: ReturnType<typeof detectSemanticAggregation>;
+  domain: string;
+  timeRange: AdminDbSemanticIntent["timeRange"];
+} {
+  return {
+    metric: detectSemanticAggregation(message),
+    domain: extractSemanticDomain(message),
+    timeRange: detectSemanticTimeRange(message),
+  };
+}
+
+export function extractAdminDbSemanticIntent(
+  message: string,
+  context: AdminDbConversationMessage[] = [],
+): AdminDbSemanticIntent | null {
+  const value = message.trim();
+  if (!value || MUTATION.test(value) || EXPLANATION_ONLY.test(value)) return null;
+
+  const current = semanticParts(value);
+  let metric = current.metric;
+  let domain = current.domain;
+  let timeRange = current.timeRange;
+  let inheritedFromContext = false;
+
+  const words = normalizeSemanticText(value).split(" ").filter(Boolean);
+  const looksLikeFollowUp =
+    FOLLOW_UP_HINT.test(value.trim().toLowerCase()) ||
+    (words.length <= 6 && Boolean(current.timeRange));
+
+  if ((!metric || !domain || (!timeRange && looksLikeFollowUp)) && context.length > 0) {
+    for (let index = context.length - 1; index >= 0; index -= 1) {
+      const previous = context[index];
+      if (!previous || previous.role !== "user") continue;
+      const prior = semanticParts(previous.text);
+      let used = false;
+      if (!metric && prior.metric) {
+        metric = prior.metric;
+        used = true;
+      }
+      if (!domain && prior.domain) {
+        domain = prior.domain;
+        used = true;
+      }
+      if (!timeRange && looksLikeFollowUp && prior.timeRange) {
+        timeRange = prior.timeRange;
+        used = true;
+      }
+      inheritedFromContext = inheritedFromContext || used;
+      if (metric && domain && (timeRange || !looksLikeFollowUp)) break;
+    }
+  }
+
+  if (!metric || !domain) return null;
+
+  return {
+    ...metric,
+    domain,
+    timeRange,
+    inheritedFromContext,
+  };
+}
+
+function isNumericColumn(column: AdminDbColumnMetadata): boolean {
+  return NUMERIC_DATA_TYPES.has(column.dataType) ||
+    /^(int2|int4|int8|float4|float8|numeric|decimal|money)$/.test(column.udtName);
+}
+
+function isTemporalColumn(column: AdminDbColumnMetadata): boolean {
+  return TEMPORAL_DATA_TYPES.has(column.dataType) ||
+    /^(date|timestamp|timestamptz|time|timetz)$/.test(column.udtName);
+}
+
+function semanticTableScore(
+  table: AdminDbSemanticTable,
+  intent: AdminDbSemanticIntent,
+): number {
+  const words = normalizeWords(intent.domain);
+  let score = 0;
+  const tableName = table.table.toLowerCase();
+  const schemaName = table.schema.toLowerCase();
+  const columnNames = table.columns.map((column) => column.name.toLowerCase());
+
+  for (const word of words) {
+    if (tableName.includes(word)) score += 14;
+    if (schemaName.includes(word)) score += 3;
+    if (columnNames.some((column) => column.includes(word))) score += 4;
+  }
+
+  if (intent.valueKind === "currency") {
+    if (/payment|transaction|sale|revenue|receipt/.test(tableName)) score += 14;
+    else if (/invoice|order|booking|billing/.test(tableName)) score += 6;
+  }
+
+  return score;
+}
+
+function semanticValueColumnScore(
+  column: AdminDbColumnMetadata,
+  intent: AdminDbSemanticIntent,
+): number {
+  if (!isNumericColumn(column) || /(^id$|_id$|count$|quantity$|qty$)/i.test(column.name)) {
+    return -1;
+  }
+
+  const name = column.name.toLowerCase();
+  if (intent.valueKind === "currency") {
+    const priorities: Array<[RegExp, number]> = [
+      [/^(paid_amount|settled_amount|captured_amount)$/, 38],
+      [/^(amount|revenue|income)$/, 36],
+      [/^(total_amount|grand_total|gross_amount|net_amount)$/, 34],
+      [/(paid|settled|captured).*amount/, 32],
+      [/(revenue|income|sales|amount|total|price|value)/, 24],
+    ];
+    for (const [pattern, score] of priorities) {
+      if (pattern.test(name)) return score;
+    }
+    return 3;
+  }
+
+  if (/(amount|total|price|value|score|duration|rate|quantity|qty)/.test(name)) {
+    return 20;
+  }
+  return 6;
+}
+
+function semanticTimeColumnScore(
+  column: AdminDbColumnMetadata,
+  intent: AdminDbSemanticIntent,
+): number {
+  if (!isTemporalColumn(column)) return -1;
+  const name = column.name.toLowerCase();
+
+  if (intent.valueKind === "currency") {
+    const priorities: Array<[RegExp, number]> = [
+      [/^(paid_at|settled_at|captured_at|payment_date|paid_date)$/, 40],
+      [/(paid|settled|captured|payment|transaction).*(_at|date|time)$/, 36],
+      [/^(completed_at|completed_date)$/, 30],
+      [/(booking|order|invoice).*(_at|date|time)$/, 24],
+      [/^(created_at|created_date)$/, 18],
+    ];
+    for (const [pattern, score] of priorities) {
+      if (pattern.test(name)) return score;
+    }
+  }
+
+  if (/(_at|date|time)$/.test(name)) return 16;
+  return 8;
+}
+
+function semanticStatusColumnScore(column: AdminDbColumnMetadata): number {
+  const name = column.name.toLowerCase();
+  if (name === "payment_status") return 30;
+  if (name === "status") return 24;
+  if (/status|state/.test(name)) return 12;
+  return -1;
+}
+
+async function getAdminDbSemanticTables(): Promise<AdminDbSemanticTable[]> {
+  const result = await db.execute(sql.raw(
+    "SELECT table_schema, table_name, column_name, data_type, udt_name, ordinal_position " +
+    "FROM information_schema.columns " +
+    "WHERE table_schema NOT IN ('pg_catalog','information_schema') " +
+    "ORDER BY table_schema, table_name, ordinal_position"
+  ));
+
+  const grouped = new Map<string, AdminDbSemanticTable>();
+  for (const row of rowsOf<Record<string, unknown>>(result)) {
+    const schema = String(row.table_schema ?? "");
+    const table = String(row.table_name ?? "");
+    const name = String(row.column_name ?? "");
+    if (!schema || !table || !name) continue;
+    const key = schema + "." + table;
+    const current = grouped.get(key) ?? { schema, table, columns: [] };
+    current.columns.push({
+      name,
+      dataType: String(row.data_type ?? ""),
+      udtName: String(row.udt_name ?? ""),
+    });
+    grouped.set(key, current);
+  }
+  return [...grouped.values()];
+}
+
+async function buildAdminDbSemanticPlan(
+  intent: AdminDbSemanticIntent,
+): Promise<AdminDbSemanticPlan | null> {
+  const tables = await getAdminDbSemanticTables();
+  const candidates = tables
+    .map((table) => {
+      const tableScore = semanticTableScore(table, intent);
+      const valueColumn =
+        intent.aggregation === "count"
+          ? null
+          : [...table.columns]
+              .map((column) => ({
+                column,
+                score: semanticValueColumnScore(column, intent),
+              }))
+              .filter((item) => item.score >= 0)
+              .sort((left, right) => right.score - left.score)[0] ?? null;
+      const timeColumn =
+        intent.timeRange
+          ? [...table.columns]
+              .map((column) => ({
+                column,
+                score: semanticTimeColumnScore(column, intent),
+              }))
+              .filter((item) => item.score >= 0)
+              .sort((left, right) => right.score - left.score)[0] ?? null
+          : null;
+      const statusColumn =
+        [...table.columns]
+          .map((column) => ({
+            column,
+            score: semanticStatusColumnScore(column),
+          }))
+          .filter((item) => item.score >= 0)
+          .sort((left, right) => right.score - left.score)[0] ?? null;
+
+      const valueScore = valueColumn?.score ?? (intent.aggregation === "count" ? 20 : -20);
+      const timeScore = intent.timeRange ? (timeColumn?.score ?? -30) : 10;
+      const score = tableScore + valueScore + timeScore;
+
+      return {
+        table,
+        tableScore,
+        valueColumn: valueColumn?.column ?? null,
+        valueScore,
+        timeColumn: timeColumn?.column ?? null,
+        timeScore,
+        statusColumn: statusColumn?.column ?? null,
+        score,
+      };
+    })
+    .filter((item) =>
+      item.tableScore > 0 &&
+      (intent.aggregation === "count" || item.valueColumn) &&
+      (!intent.timeRange || item.timeColumn)
+    )
+    .sort((left, right) => right.score - left.score);
+
+  const best = candidates[0];
+  if (!best) return null;
+
+  const confidence = Math.min(
+    0.99,
+    0.5 +
+      Math.min(best.tableScore, 36) / 120 +
+      Math.max(best.valueScore, 0) / 160 +
+      Math.max(best.timeScore, 0) / 200 +
+      (intent.inheritedFromContext ? 0.02 : 0),
+  );
+
+  if (confidence < 0.72) return null;
+
+  return {
+    intent,
+    table: best.table,
+    valueColumn: best.valueColumn,
+    timeColumn: best.timeColumn,
+    statusColumn: best.statusColumn,
+    confidence,
+  };
+}
+
+function quoteSqlLiteral(value: string): string {
+  return "'" + value.replace(/'/g, "''") + "'";
+}
+
+function semanticAggregateExpression(plan: AdminDbSemanticPlan): string {
+  if (plan.intent.aggregation === "count") return "COUNT(*)::bigint";
+  if (!plan.valueColumn) throw new Error("Semantic aggregate requires a numeric value column.");
+  const column = quoteIdentifier(plan.valueColumn.name);
+  switch (plan.intent.aggregation) {
+    case "sum":
+      return "COALESCE(SUM(" + column + "), 0)";
+    case "avg":
+      return "AVG(" + column + ")";
+    case "min":
+      return "MIN(" + column + ")";
+    case "max":
+      return "MAX(" + column + ")";
+    default:
+      throw new Error("Unsupported semantic aggregation.");
+  }
+}
+
+export async function executeAdminSemanticQuery(
+  message: string,
+  context: AdminDbConversationMessage[] = [],
+): Promise<AdminDbSemanticExecution | null> {
+  const intent = extractAdminDbSemanticIntent(message, context);
+  if (!intent) return null;
+
+  const plan = await buildAdminDbSemanticPlan(intent);
+  if (!plan) return null;
+
+  const tableRef =
+    quoteIdentifier(plan.table.schema) + "." + quoteIdentifier(plan.table.table);
+  const startedAt = Date.now();
+
+  const execution = await db.transaction(async (tx) => {
+    await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
+    await tx.execute(sql.raw(
+      "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
+    ));
+    await tx.execute(sql.raw("SET LOCAL lock_timeout = '1500ms'"));
+
+    let successfulStatuses: string[] = [];
+    if (plan.statusColumn && plan.intent.valueKind === "currency") {
+      const statusRef = quoteIdentifier(plan.statusColumn.name);
+      const statusResult = await tx.execute(sql.raw(
+        "SELECT DISTINCT lower(" + statusRef + "::text) AS value " +
+        "FROM " + tableRef + " WHERE " + statusRef + " IS NOT NULL LIMIT 40"
+      ));
+      successfulStatuses = rowsOf<Record<string, unknown>>(statusResult)
+        .map((row) => String(row.value ?? "").trim().toLowerCase())
+        .filter((value) => value && SUCCESS_STATUS.test(value));
+    }
+
+    const conditions: string[] = [];
+    if (intent.timeRange && plan.timeColumn) {
+      const timeRef = quoteIdentifier(plan.timeColumn.name);
+      conditions.push(
+        timeRef + " >= " + intent.timeRange.startSql +
+        " AND " + timeRef + " < " + intent.timeRange.endSql
+      );
+    }
+    if (plan.statusColumn && successfulStatuses.length > 0) {
+      const statusRef = quoteIdentifier(plan.statusColumn.name);
+      conditions.push(
+        "lower(" + statusRef + "::text) IN (" +
+        successfulStatuses.map(quoteSqlLiteral).join(",") + ")"
+      );
+    }
+
+    const query =
+      "SELECT " + semanticAggregateExpression(plan) + " AS value, " +
+      "COUNT(*)::bigint AS matched_rows FROM " + tableRef +
+      (conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "");
+
+    const result = await tx.execute(sql.raw(query));
+    const row = rowsOf<Record<string, unknown>>(result)[0] ?? {};
+    return {
+      query,
+      row,
+      statusFilterApplied: successfulStatuses.length > 0,
+    };
+  });
+
+  const matchedRows = Number(execution.row.matched_rows ?? 0);
+  const rows = [{
+    metric: intent.metricLabel,
+    domain: intent.domain,
+    period: intent.timeRange?.label ?? "semua waktu",
+    value: execution.row.value ?? 0,
+    matched_rows: matchedRows,
+    source_table: plan.table.schema + "." + plan.table.table,
+    source_column: plan.valueColumn?.name ?? null,
+    time_column: plan.timeColumn?.name ?? null,
+  }];
+
+  return {
+    sql: execution.query,
+    rows,
+    rowCount: 1,
+    truncated: false,
+    elapsedMs: Date.now() - startedAt,
+    intent,
+    sourceTable: plan.table.schema + "." + plan.table.table,
+    valueColumn: plan.valueColumn?.name ?? null,
+    timeColumn: plan.timeColumn?.name ?? null,
+    matchedRows,
+    confidence: plan.confidence,
+    statusFilterApplied: execution.statusFilterApplied,
+  };
+}
+
+function formatSemanticValue(
+  value: unknown,
+  kind: AdminDbSemanticIntent["valueKind"],
+): string {
+  const numeric = Number(value ?? 0);
+  if (kind === "currency" && Number.isFinite(numeric)) {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(numeric);
+  }
+  if (Number.isFinite(numeric)) {
+    return new Intl.NumberFormat("id-ID", {
+      maximumFractionDigits: 2,
+    }).format(numeric);
+  }
+  return displayValue(value);
+}
+
+export function renderAdminSemanticQueryResult(
+  result: AdminDbSemanticExecution,
+): string {
+  const row = result.rows[0] ?? {};
+  const period =
+    result.intent.timeRange ? " " + result.intent.timeRange.label : "";
+  const source =
+    result.sourceTable +
+    (result.valueColumn ? "." + result.valueColumn : "");
+  const timeDetail =
+    result.timeColumn ? "; waktu memakai " + result.timeColumn : "";
+
+  return [
+    result.intent.metricLabel.charAt(0).toUpperCase() +
+      result.intent.metricLabel.slice(1) +
+      " " + result.intent.domain + period + ": " +
+      formatSemanticValue(row.value, result.intent.valueKind) + ".",
+    "Dihitung dari " + String(result.matchedRows) +
+      " record pada " + source + timeDetail + ".",
+    "Confidence semantic: " +
+      String(Math.round(result.confidence * 100)) + "%; " +
+      (result.statusFilterApplied
+        ? "status transaksi sukses terdeteksi dan difilter otomatis."
+        : "tidak ada filter status sukses yang perlu/berhasil diterapkan."),
+    "Akses: read-only Admin DB Query; 0 token LLM.",
+  ].join("\n");
 }
 
 export function extractAdminDbNaturalLookup(
