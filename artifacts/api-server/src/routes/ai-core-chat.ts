@@ -42,6 +42,7 @@ import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
   detectRemoteWorkerPreset,
+  isAiCoreCapabilityQuery,
   type RemoteWorkerPreset,
 } from "../services/aiCoreChatIntentService.js";
 import {
@@ -399,10 +400,7 @@ async function deterministicReply(
     costClass: workload.costClass,
   };
 
-  const capabilityQuery =
-    /(?:\bkemampuan\b|\bkapabilitas\b|\bcapabilit(?:y|ies)\b|\banda\s+bisa\s+apa\b|\bapa\s+(?:saja\s+)?yang\s+(?:bisa|dapat)\s+(?:anda|kamu|ai\s+core)\b)/i.test(command);
-
-  if (capabilityQuery) {
+  if (isAiCoreCapabilityQuery(command)) {
     return {
       kind: "answer",
       route: "NO_LLM",
