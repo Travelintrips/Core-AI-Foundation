@@ -12,3 +12,10 @@ if (adminKey && adminKey.trim()) {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/ai-core-chat-sw.js", { scope: "/" });
+  });
+}

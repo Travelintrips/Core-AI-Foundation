@@ -1,4 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import {
+  isTransientDatabaseConnectionError,
+  type AiWorker,
+} from "@workspace/db";
 import { z } from "zod";
 import {
   assertRemoteOllamaEnrollmentSecret,
@@ -53,6 +57,10 @@ async function requireWorker(req: Request, res: Response, next: NextFunction): P
     next();
   } catch (error) {
     logger.error({ err: error, workerId }, "[remote-ollama] authentication failed");
+    if (isTransientDatabaseConnectionError(error)) {
+      res.status(503).json({ error: "Remote Ollama authentication temporarily unavailable" });
+      return;
+    }
     res.status(500).json({ error: "Remote Ollama authentication failed" });
   }
 }
@@ -125,8 +133,9 @@ router.post("/ai/ollama-workers/:id/heartbeat", requireWorker, async (req, res):
 
 router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Promise<void> => {
   const workerId = Number.parseInt(routeParam(req, "id"), 10);
+  const worker = res.locals["remoteOllamaWorker"] as AiWorker;
   try {
-    const job = await claimRemoteOllamaInvocation(workerId);
+    const job = await claimRemoteOllamaInvocation(worker);
     if (!job) {
       res.status(204).end();
       return;

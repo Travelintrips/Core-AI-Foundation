@@ -1,10 +1,17 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import {
+  getAdminDbConnection,
+  getAdminDbConnections,
+  readAdminDbMetadata,
+} from "./aiCoreAdminDbConnectionService.js";
 
 export type AdminDbSchemaTable = {
   schema: string;
   table: string;
   columns: string[];
+  databaseId?: string;
+  databaseLabel?: string;
 };
 
 export type AdminDbQueryExecution = {
@@ -13,7 +20,44 @@ export type AdminDbQueryExecution = {
   rowCount: number;
   truncated: boolean;
   elapsedMs: number;
+  sourceDatabaseId?: string;
+  discovery?: AdminDbDiscovery;
 };
+
+export type AdminDbDiscovery = {
+  databases: Array<{ id: string; label: string; status: "ok" | "unavailable"; tableCount: number; error?: string }>;
+  tableCount: number;
+};
+
+export function sanitizeAdminDbError(error: unknown): string {
+  return String(error instanceof Error ? error.message : error)
+    .replace(/(?:postgres(?:ql)?|https?):\/\/[^\s]+/gi, "[REDACTED_URL]")
+    .replace(/((?:password|token|secret|api[_-]?key)\s*[=:]\s*)\S+/gi, "$1[REDACTED]")
+    .replace(/[\r\n\t]+/g, " ").slice(0, 300);
+}
+
+async function discoverAdminDbMetadata(query: ReturnType<typeof sql.raw>) {
+  const connections = getAdminDbConnections();
+  const outcomes = await Promise.allSettled(connections.map((connection) => readAdminDbMetadata(connection, query)));
+  const records: Array<Record<string, unknown> & { database_id: string; database_label: string }> = [];
+  const discovery: AdminDbDiscovery = { databases: [], tableCount: 0 };
+  outcomes.forEach((outcome, index) => {
+    const connection = connections[index]!;
+    if (outcome.status === "rejected") {
+      discovery.databases.push({ id: connection.id, label: connection.label, status: "unavailable", tableCount: 0, error: sanitizeAdminDbError(outcome.reason) });
+      return;
+    }
+    const rows = rowsOf<Record<string, unknown>>(outcome.value);
+    const tableCount = new Set(rows.map((row) => `${row.table_schema}.${row.table_name}`)).size;
+    discovery.databases.push({ id: connection.id, label: connection.label, status: "ok", tableCount });
+    discovery.tableCount += tableCount;
+    for (const row of rows) records.push({ ...row, database_id: connection.id, database_label: connection.label });
+  });
+  if (!discovery.databases.some((entry) => entry.status === "ok")) {
+    throw new Error("Metadata database tidak dapat dibaca: " + discovery.databases.map((entry) => `${entry.label}: ${entry.error}`).join("; "));
+  }
+  return { records, discovery };
+}
 
 export type AdminDbConversationMessage = {
   role: "user" | "assistant";
@@ -54,6 +98,7 @@ type AdminDbTextSearchTarget = {
   columns: string[];
   textColumns: string[];
   score: number;
+  databaseId: string;
 };
 
 const READ_INTENT =
@@ -143,6 +188,8 @@ type AdminDbSemanticTable = {
   schema: string;
   table: string;
   columns: AdminDbColumnMetadata[];
+  databaseId: string;
+  databaseLabel: string;
 };
 
 type AdminDbSemanticPlan = {
@@ -152,6 +199,7 @@ type AdminDbSemanticPlan = {
   timeColumn: AdminDbColumnMetadata | null;
   statusColumn: AdminDbColumnMetadata | null;
   confidence: number;
+  discovery: AdminDbDiscovery;
 };
 
 const MONEY_METRIC =
@@ -173,7 +221,7 @@ const FOLLOW_UP_HINT =
   /^(?:kalau|kalo|bagaimana|gimana|lalu|terus|dan|dibanding|bandingkan|yang|untuk|sedangkan)\b/i;
 
 const SUCCESS_STATUS =
-  /^(?:paid|success|successful|completed|complete|settled|captured|approved|done|succeeded|lunas|berhasil)$/i;
+  /^(?:paid|success|successful|completed|complete|settled|captured|approved|done|succeeded|lunas|berhasil|confirmed|verified|accepted)$/i;
 
 const NUMERIC_DATA_TYPES = new Set([
   "smallint",
@@ -404,13 +452,22 @@ function semanticTableScore(
   const schemaName = table.schema.toLowerCase();
   const columnNames = table.columns.map((column) => column.name.toLowerCase());
 
+  // Historical copies and synchronization tables are not current business facts.
+  if (/(^zz_|^deleted_|^backup_|_backup$|_sync$|_logs?$|_audit)/.test(tableName)) return 0;
+
   for (const word of words) {
     if (tableName.includes(word)) score += 14;
     if (schemaName.includes(word)) score += 3;
+    if ((table.databaseId + " " + table.databaseLabel).toLowerCase().includes(word)) score += 6;
     if (columnNames.some((column) => column.includes(word))) score += 4;
   }
 
+  // A financial table from an unrelated business domain must not win merely
+  // because its amount/time columns look suitable.
+  if (score === 0) return 0;
+
   if (intent.valueKind === "currency") {
+    if (/expense|refund|cost|fee/.test(tableName)) return 0;
     if (/payment|transaction|sale|revenue|receipt/.test(tableName)) score += 14;
     else if (/invoice|order|booking|billing/.test(tableName)) score += 6;
   }
@@ -479,8 +536,8 @@ function semanticStatusColumnScore(column: AdminDbColumnMetadata): number {
   return -1;
 }
 
-async function getAdminDbSemanticTables(): Promise<AdminDbSemanticTable[]> {
-  const result = await db.execute(sql.raw(
+async function getAdminDbSemanticTables(): Promise<{ tables: AdminDbSemanticTable[]; discovery: AdminDbDiscovery }> {
+  const result = await discoverAdminDbMetadata(sql.raw(
     "SELECT table_schema, table_name, column_name, data_type, udt_name, ordinal_position " +
     "FROM information_schema.columns " +
     "WHERE table_schema NOT IN ('pg_catalog','information_schema') " +
@@ -488,13 +545,13 @@ async function getAdminDbSemanticTables(): Promise<AdminDbSemanticTable[]> {
   ));
 
   const grouped = new Map<string, AdminDbSemanticTable>();
-  for (const row of rowsOf<Record<string, unknown>>(result)) {
+  for (const row of result.records) {
     const schema = String(row.table_schema ?? "");
     const table = String(row.table_name ?? "");
     const name = String(row.column_name ?? "");
     if (!schema || !table || !name) continue;
-    const key = schema + "." + table;
-    const current = grouped.get(key) ?? { schema, table, columns: [] };
+    const key = row.database_id + "." + schema + "." + table;
+    const current = grouped.get(key) ?? { schema, table, columns: [], databaseId: row.database_id, databaseLabel: row.database_label };
     current.columns.push({
       name,
       dataType: String(row.data_type ?? ""),
@@ -502,13 +559,13 @@ async function getAdminDbSemanticTables(): Promise<AdminDbSemanticTable[]> {
     });
     grouped.set(key, current);
   }
-  return [...grouped.values()];
+  return { tables: [...grouped.values()], discovery: result.discovery };
 }
 
 async function buildAdminDbSemanticPlan(
   intent: AdminDbSemanticIntent,
 ): Promise<AdminDbSemanticPlan | null> {
-  const tables = await getAdminDbSemanticTables();
+  const { tables, discovery } = await getAdminDbSemanticTables();
   const candidates = tables
     .map((table) => {
       const tableScore = semanticTableScore(table, intent);
@@ -584,6 +641,7 @@ async function buildAdminDbSemanticPlan(
     timeColumn: best.timeColumn,
     statusColumn: best.statusColumn,
     confidence,
+    discovery,
   };
 }
 
@@ -624,7 +682,7 @@ export async function executeAdminSemanticQuery(
   const startedAt = Date.now();
 
   const businessTimezone = adminDbBusinessTimezone();
-  const execution = await db.transaction(async (tx) => {
+  const execution = await getAdminDbConnection(plan.table.databaseId).client().transaction(async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw(
       "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
@@ -654,11 +712,12 @@ export async function executeAdminSemanticQuery(
         " AND " + timeRef + " < " + intent.timeRange.endSql
       );
     }
-    if (plan.statusColumn && successfulStatuses.length > 0) {
+    if (plan.statusColumn && intent.valueKind === "currency") {
       const statusRef = quoteIdentifier(plan.statusColumn.name);
       conditions.push(
-        "lower(" + statusRef + "::text) IN (" +
-        successfulStatuses.map(quoteSqlLiteral).join(",") + ")"
+        successfulStatuses.length > 0
+          ? "lower(" + statusRef + "::text) IN (" + successfulStatuses.map(quoteSqlLiteral).join(",") + ")"
+          : "FALSE"
       );
     }
 
@@ -672,7 +731,7 @@ export async function executeAdminSemanticQuery(
     return {
       query,
       row,
-      statusFilterApplied: successfulStatuses.length > 0,
+      statusFilterApplied: Boolean(plan.statusColumn && intent.valueKind === "currency"),
     };
   });
 
@@ -684,6 +743,7 @@ export async function executeAdminSemanticQuery(
     value: execution.row.value ?? 0,
     matched_rows: matchedRows,
     source_table: plan.table.schema + "." + plan.table.table,
+    source_database: plan.table.databaseId,
     source_column: plan.valueColumn?.name ?? null,
     time_column: plan.timeColumn?.name ?? null,
     timezone: businessTimezone,
@@ -697,6 +757,8 @@ export async function executeAdminSemanticQuery(
     elapsedMs: Date.now() - startedAt,
     intent,
     sourceTable: plan.table.schema + "." + plan.table.table,
+    sourceDatabaseId: plan.table.databaseId,
+    discovery: plan.discovery,
     valueColumn: plan.valueColumn?.name ?? null,
     timeColumn: plan.timeColumn?.name ?? null,
     matchedRows,
@@ -750,6 +812,7 @@ export function renderAdminSemanticQueryResult(
       zeroDetail,
     "Dihitung dari " + String(result.matchedRows) +
       " record pada " + source + timeDetail +
+      "; database " + (result.sourceDatabaseId ?? "primary") +
       "; zona waktu " + adminDbBusinessTimezone() + ".",
     "Confidence semantic: " +
       String(Math.round(result.confidence * 100)) + "%; " +
@@ -788,7 +851,7 @@ function quoteIdentifier(value: string): string {
 async function getAdminDbTextSearchTargets(
   subject: string,
 ): Promise<AdminDbTextSearchTarget[]> {
-  const result = await db.execute(sql.raw(
+  const result = await discoverAdminDbMetadata(sql.raw(
     "SELECT table_schema, table_name, " +
     "array_agg(column_name ORDER BY ordinal_position) AS columns, " +
     "array_agg(column_name ORDER BY ordinal_position) FILTER (" +
@@ -800,7 +863,7 @@ async function getAdminDbTextSearchTargets(
   ));
 
   const words = normalizeWords(subject);
-  return rowsOf<Record<string, unknown>>(result)
+  return result.records
     .map((row) => {
       const schema = String(row.table_schema ?? "");
       const table = String(row.table_name ?? "");
@@ -820,7 +883,7 @@ async function getAdminDbTextSearchTargets(
         }
       }
 
-      return { schema, table, columns, textColumns, score };
+      return { schema, table, columns, textColumns, score, databaseId: row.database_id };
     })
     .filter(
       (target) =>
@@ -878,7 +941,15 @@ export async function executeAdminNaturalTextLookup(
   }
 
   const pattern = "%" + intent.value + "%";
-  const collected = await db.transaction(async (tx) => {
+  const groupedTargets = new Map<string, AdminDbTextSearchTarget[]>();
+  for (const target of targets) {
+    const group = groupedTargets.get(target.databaseId) ?? [];
+    group.push(target);
+    groupedTargets.set(target.databaseId, group);
+  }
+  const collected: Record<string, unknown>[] = [];
+  for (const [databaseId, databaseTargets] of groupedTargets) {
+    const matches = await getAdminDbConnection(databaseId).client().transaction(async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw(
       "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
@@ -886,7 +957,7 @@ export async function executeAdminNaturalTextLookup(
     await tx.execute(sql.raw("SET LOCAL lock_timeout = '1500ms'"));
 
     const output: Record<string, unknown>[] = [];
-    for (const target of targets) {
+    for (const target of databaseTargets) {
       const searchableColumns = target.textColumns
         .filter((column) => !SENSITIVE_COLUMN.test(column))
         .slice(0, 30);
@@ -913,13 +984,17 @@ export async function executeAdminNaturalTextLookup(
             : {};
         output.push({
           source_table: target.schema + "." + target.table,
+          source_database: databaseId,
           ...rowData,
         });
         if (output.length >= MAX_RESULT_ROWS + 1) return output;
       }
     }
     return output;
-  });
+    });
+    collected.push(...matches);
+    if (collected.length >= MAX_RESULT_ROWS + 1) break;
+  }
 
   const truncated = collected.length > MAX_RESULT_ROWS;
   const rows = collected.slice(0, MAX_RESULT_ROWS);
@@ -962,17 +1037,23 @@ export function extractExplicitReadOnlySql(message: string): string | null {
 export async function getAdminDbSchemaCatalog(
   message: string,
 ): Promise<AdminDbSchemaTable[]> {
-  const result = await db.execute(sql.raw(
+  return (await inspectAdminDbSchemaCatalog(message)).tables;
+}
+
+export async function inspectAdminDbSchemaCatalog(message = ""): Promise<{ tables: AdminDbSchemaTable[]; discovery: AdminDbDiscovery }> {
+  const result = await discoverAdminDbMetadata(sql.raw(
     "SELECT table_schema, table_name, array_agg(column_name ORDER BY ordinal_position) AS columns " +
     "FROM information_schema.columns " +
     "WHERE table_schema NOT IN ('pg_catalog', 'information_schema') " +
     "GROUP BY table_schema, table_name ORDER BY table_schema, table_name"
   ));
 
-  const tables = rowsOf<Record<string, unknown>>(result)
+  const tables = result.records
     .map((row) => ({
       schema: String(row.table_schema ?? ""),
       table: String(row.table_name ?? ""),
+      databaseId: row.database_id,
+      databaseLabel: row.database_label,
       columns: Array.isArray(row.columns)
         ? row.columns.map((column) => String(column))
         : [],
@@ -998,7 +1079,34 @@ export async function getAdminDbSchemaCatalog(
     .slice(0, 40)
     .map((item) => item.table);
 
-  return relevant.length > 0 ? relevant : tables.slice(0, 120);
+  return { tables: message.trim() ? (relevant.length > 0 ? relevant : tables.slice(0, 120)) : tables, discovery: result.discovery };
+}
+
+export function buildAdminDbUnresolvedAnswer(
+  message: string,
+  context: AdminDbConversationMessage[],
+  discovery: AdminDbDiscovery,
+): Record<string, unknown> | null {
+  const semantic = extractAdminDbSemanticIntent(message, context);
+  const requiresData = Boolean(
+    extractExplicitReadOnlySql(message) || extractAdminDbNaturalLookup(message) ||
+    (semantic && (semantic.valueKind === "currency" || semantic.timeRange)) ||
+    (shouldAttemptAdminDbQuery(message) && /\b(data|database|db|record|rekam|riwayat|tabel|table)\b/i.test(message)),
+  );
+  if (!requiresData) return null;
+  const searched = discovery.databases.filter((entry) => entry.status === "ok");
+  const unavailable = discovery.databases.filter((entry) => entry.status === "unavailable");
+  return {
+    kind: "answer", route: "ADMIN_DB_QUERY", provider: null, model: null,
+    workload: "DATA_LOOKUP", costClass: "ZERO", estimatedCostUsd: 0,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    reply: [
+      `Metadata ${discovery.tableCount} tabel pada ${searched.map((entry) => entry.label).join(", ") || "database terdaftar"} sudah diperiksa.`,
+      "Sumber data atau kolom yang cocok belum dapat dipastikan, sehingga angka belum dihitung. Tidak ada hasil perkiraan yang digunakan.",
+      ...(unavailable.length ? [`Koneksi yang belum dapat diperiksa: ${unavailable.map((entry) => entry.label).join(", ")}.`] : []),
+    ].join("\n"),
+    databaseQuery: { executed: false, access: "ADMIN_READ_ONLY", discovery },
+  };
 }
 
 export function formatAdminDbSchemaCatalog(
@@ -1006,7 +1114,7 @@ export function formatAdminDbSchemaCatalog(
 ): string {
   return tables
     .map((table) =>
-      table.schema + "." + table.table + "(" + table.columns.join(", ") + ")"
+      "[database=" + (table.databaseId ?? "primary") + "] " + table.schema + "." + table.table + "(" + table.columns.join(", ") + ")"
     )
     .join("\n");
 }
@@ -1038,6 +1146,7 @@ function redactSensitiveRow(
 
 export async function executeAdminReadOnlySql(
   rawSql: string,
+  databaseId = "primary",
 ): Promise<AdminDbQueryExecution> {
   const query = validateAdminReadOnlySql(rawSql);
   const wrapped =
@@ -1045,7 +1154,7 @@ export async function executeAdminReadOnlySql(
     String(MAX_RESULT_ROWS + 1);
   const startedAt = Date.now();
 
-  const result = await db.transaction(async (tx) => {
+  const result = await getAdminDbConnection(databaseId).client().transaction(async (tx) => {
     await tx.execute(sql.raw("SET TRANSACTION READ ONLY"));
     await tx.execute(sql.raw(
       "SET LOCAL statement_timeout = '" + String(STATEMENT_TIMEOUT_MS) + "ms'"
@@ -1066,6 +1175,7 @@ export async function executeAdminReadOnlySql(
     rowCount: rows.length,
     truncated,
     elapsedMs: Date.now() - startedAt,
+    sourceDatabaseId: databaseId,
   };
 }
 

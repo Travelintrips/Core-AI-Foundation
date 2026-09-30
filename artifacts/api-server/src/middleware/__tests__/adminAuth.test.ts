@@ -69,6 +69,7 @@ describe("adminAuthWithExceptions", () => {
   });
 
   const adminRoutesSamePrefix: { method: string; path: string }[] = [
+    { method: "GET", path: "/ai/core-chat/databases/metadata" },
     { method: "GET", path: "/ai/catalog/services" }, // list — admin only
     { method: "POST", path: "/ai/catalog/services" }, // create — admin only
     { method: "PATCH", path: "/ai/catalog/services/42" }, // update — admin only

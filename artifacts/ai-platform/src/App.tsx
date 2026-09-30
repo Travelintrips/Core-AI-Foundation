@@ -118,6 +118,18 @@ import AiCoreChat from "@/pages/ai-core-chat";
 const queryClient = new QueryClient();
 
 function AdminRouter() {
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+  const standaloneAiCore =
+    pathname === "/ai-core-chat" &&
+    (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      new URLSearchParams(window.location.search).get("standalone") === "1"
+    );
+
+  if (standaloneAiCore) {
+    return <AiCoreChat />;
+  }
+
   return (
     <Layout>
       <Switch>

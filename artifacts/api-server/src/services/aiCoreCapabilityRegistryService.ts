@@ -1,3 +1,5 @@
+import { getAdminDbConnectionDescriptors } from "./aiCoreAdminDbRegistryService.js";
+
 export type AiCoreCapabilityKind =
   | "database"
   | "repository"
@@ -42,6 +44,7 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
   const databaseConfigured = hasAnyEnv(env, [
     "SUPABASE_PROD_DATABASE_URL",
     "SUPABASE_DEV_DATABASE_URL",
+    "SUPABASE_DATABASE_URL",
     "DATABASE_URL",
   ]);
 
@@ -80,6 +83,17 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
         secretsExposed: false,
       },
     },
+    ...getAdminDbConnectionDescriptors(env).filter((entry) => entry.id !== "primary").map((entry): AiCoreCapabilityResource => ({
+      id: `database.${entry.id}`,
+      kind: "database",
+      provider: "postgres",
+      label: entry.label,
+      state: configuredState(entry.configured),
+      actions: ["schema-discovery", "select", "with"],
+      mutatingActions: [],
+      approvalRequiredActions: [],
+      details: { databaseId: entry.id, dynamicSchemaDiscovery: true, readOnlyTransactions: true, secretsExposed: false },
+    })),
     {
       id: "repository.coding",
       kind: "repository",

@@ -4,6 +4,8 @@ import {
   aiCodingRunsTable,
   aiCodingTasksTable,
   db,
+  isTransientDatabaseConnectionError,
+  withTransientDatabaseRetry,
   type AiCodingTask,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
@@ -685,11 +687,12 @@ async function loadAutomatedPlannerContext(
   taskId: string,
   analysisOverride?: Record<string, unknown>,
 ): Promise<{ task: AiCodingTask; context: AutomatedPlannerContext }> {
-  const [task] = await db
+  const [task] = await withTransientDatabaseRetry(() => db
     .select()
     .from(aiCodingTasksTable)
     .where(eq(aiCodingTasksTable.id, taskId))
-    .limit(1);
+    .limit(1),
+  { attempts: 4, baseDelayMs: 200 });
   if (!task) {
     throw new AutomatedMultiTaskPlannerError(
       "Coding task not found.",
@@ -739,11 +742,12 @@ async function loadAutomatedPlannerContext(
     return { task, context };
   }
 
-  const runs = await db
+  const runs = await withTransientDatabaseRetry(() => db
     .select()
     .from(aiCodingRunsTable)
     .where(eq(aiCodingRunsTable.taskId, taskId))
-    .orderBy(desc(aiCodingRunsTable.startedAt));
+    .orderBy(desc(aiCodingRunsTable.startedAt)),
+  { attempts: 4, baseDelayMs: 200 });
 
   const sourceRuns = runs.filter(
     (run) =>
@@ -858,7 +862,10 @@ function createPlannerProviderAdapter(input: {
   };
 }) {
   return input.providerSlug === "ollama" && !input.baseUrl
-    ? createScheduledOllamaProviderAdapter({ modelId: input.modelId })
+    ? createScheduledOllamaProviderAdapter({
+        modelId: input.modelId,
+        queuePriority: 60,
+      })
     : createConstrainedCodingProviderAdapter(input);
 }
 
@@ -1390,8 +1397,12 @@ export async function generateAndPersistCodingMultiTaskPlan(
       leaseToken: authority.leaseToken,
       fencingGeneration: authority.fencingGeneration,
     }).catch((error) => {
-      // The planner result/error is primary. A stale or already-released lease
-      // during cleanup must not mask it, but every live lease is released here.
+      // The planner result/error is primary. Cleanup has its own bounded DB
+      // retries, and a remaining transient connection failure must not convert
+      // an already-persisted PREPARED graph into a failed planner job. The
+      // authority lease is bounded and will expire even if this final delete
+      // cannot reach the database.
+      if (isTransientDatabaseConnectionError(error)) return;
       if (
         error instanceof PlannerAuthorityError &&
         ["NOT_HOLDER", "STALE_FENCE", "LEASE_EXPIRED"].includes(error.code)
