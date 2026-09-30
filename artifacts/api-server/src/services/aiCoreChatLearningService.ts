@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { aiMemoryTable, db } from "@workspace/db";
 
 export type ChatLearningScope = {
@@ -116,7 +116,7 @@ export async function retrieveChatLearnings(
       and(
         eq(aiMemoryTable.agentId, "ai-core-chat"),
         eq(aiMemoryTable.memoryType, "validated_rule"),
-        or(isNull(aiMemoryTable.expiresAt), eq(aiMemoryTable.expiresAt, null)),
+        isNull(aiMemoryTable.expiresAt),
       ),
     )
     .orderBy(desc(aiMemoryTable.importance), desc(aiMemoryTable.createdAt))
