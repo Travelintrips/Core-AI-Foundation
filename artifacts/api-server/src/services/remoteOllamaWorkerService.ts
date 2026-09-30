@@ -1,6 +1,13 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { aiJobsTable, aiWorkersTable, db, type AiJob, type AiWorker } from "@workspace/db";
+import {
+  aiJobsTable,
+  aiWorkersTable,
+  db,
+  withTransientDatabaseRetry,
+  type AiJob,
+  type AiWorker,
+} from "@workspace/db";
 import { registerWorker, renewLease, DEFAULT_LEASE_TTL_MS } from "./workerClusterService.js";
 import { completeJob, retryJob, JobOwnershipLostError } from "./jobWorkerService.js";
 
@@ -20,6 +27,8 @@ export const REMOTE_OLLAMA_STALE_RUNNING_MS = 70_000;
 // and a later caller creates a fresh job instead of an automatic retry
 // immediately reclaiming scarce GPU capacity.
 export const REMOTE_OLLAMA_MAX_RETRY = 0;
+export const REMOTE_OLLAMA_RECOVERY_THROTTLE_MS = 10_000;
+const lastRemoteOllamaRecoveryAt = new Map<string, number>();
 
 export interface RemoteOllamaInvocationPayload {
   requestId: string;
@@ -104,7 +113,15 @@ export async function authenticateRemoteOllamaWorker(
   token: string | undefined,
 ): Promise<AiWorker | null> {
   if (!token) return null;
-  const [worker] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
+  const [worker] = await withTransientDatabaseRetry(
+    () =>
+      db
+        .select()
+        .from(aiWorkersTable)
+        .where(eq(aiWorkersTable.id, workerId))
+        .limit(1),
+    { attempts: 2, baseDelayMs: 100 },
+  );
   if (
     !worker ||
     worker.providerSlug !== PROVIDER ||
@@ -182,18 +199,32 @@ export async function recoverStaleRemoteOllamaCapacity(
   });
 }
 
-export async function hasRemoteOllamaWorker(modelId: string): Promise<boolean> {
-  await recoverStaleRemoteOllamaCapacity(modelId).catch(() => 0);
+async function maybeRecoverStaleRemoteOllamaCapacity(modelId: string): Promise<number> {
+  const now = Date.now();
+  const previous = lastRemoteOllamaRecoveryAt.get(modelId) ?? 0;
+  if (now - previous < REMOTE_OLLAMA_RECOVERY_THROTTLE_MS) return 0;
+  lastRemoteOllamaRecoveryAt.set(modelId, now);
+  return recoverStaleRemoteOllamaCapacity(modelId);
+}
 
-  const [row] = await db.select({ id: aiWorkersTable.id }).from(aiWorkersTable).where(
-    and(
-      eq(aiWorkersTable.providerSlug, PROVIDER),
-      eq(aiWorkersTable.runtimeKind, REMOTE_OLLAMA_RUNTIME_KIND),
-      eq(aiWorkersTable.modelId, modelId),
-      inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
-      sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
-    ),
-  ).limit(1);
+export async function hasRemoteOllamaWorker(modelId: string): Promise<boolean> {
+  const [row] = await withTransientDatabaseRetry(
+    () =>
+      db
+        .select({ id: aiWorkersTable.id })
+        .from(aiWorkersTable)
+        .where(
+          and(
+            eq(aiWorkersTable.providerSlug, PROVIDER),
+            eq(aiWorkersTable.runtimeKind, REMOTE_OLLAMA_RUNTIME_KIND),
+            eq(aiWorkersTable.modelId, modelId),
+            inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
+            sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
+          ),
+        )
+        .limit(1),
+    { attempts: 2, baseDelayMs: 100 },
+  );
   return Boolean(row);
 }
 
@@ -224,23 +255,13 @@ export async function enqueueRemoteOllamaInvocation(
   return job;
 }
 
-export async function claimRemoteOllamaInvocation(workerId: number): Promise<AiJob | null> {
-  const [candidate] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
-  if (candidate?.modelId) {
-    await recoverStaleRemoteOllamaCapacity(candidate.modelId).catch(() => 0);
+export async function claimRemoteOllamaInvocation(
+  worker: Pick<AiWorker, "id" | "modelId">,
+): Promise<AiJob | null> {
+  const workerId = worker.id;
+  if (worker.modelId) {
+    await maybeRecoverStaleRemoteOllamaCapacity(worker.modelId).catch(() => 0);
   }
-
-  const [worker] = await db.select().from(aiWorkersTable).where(eq(aiWorkersTable.id, workerId));
-  if (
-    !worker ||
-    worker.providerSlug !== PROVIDER ||
-    worker.runtimeKind !== REMOTE_OLLAMA_RUNTIME_KIND ||
-    worker.status === "offline" ||
-    worker.status === "stale" ||
-    !worker.leaseExpiresAt ||
-    worker.leaseExpiresAt < new Date() ||
-    worker.runningJobs >= worker.maxConcurrentJobs
-  ) return null;
 
   return db.transaction(async (tx) => {
     const raw = await tx.execute(sql`
@@ -262,10 +283,9 @@ export async function claimRemoteOllamaInvocation(workerId: number): Promise<AiJ
     const row = (raw as unknown as { rows?: Record<string, unknown>[] }).rows?.[0];
     if (!row) return null;
     const job = row as unknown as AiJob;
-    // Capacity admission must be atomic with the job claim. Pending jobs do
-    // not consume a slot; only a worker that still has room may transition a
-    // queued job to running. This also protects against overlapping claim
-    // requests during worker reconnect/restart.
+    // Capacity admission remains atomic with the claim. The authenticated
+    // worker identity is reused from middleware so polling does not issue two
+    // extra worker SELECTs before every short transaction.
     const [capacity] = await tx
       .update(aiWorkersTable)
       .set({
@@ -297,8 +317,6 @@ export async function claimRemoteOllamaInvocation(workerId: number): Promise<AiJ
     }).where(and(eq(aiJobsTable.id, job.id), inArray(aiJobsTable.status, ["queued", "retrying"]))).returning();
 
     if (!claimed) {
-      // The selected row is locked by this transaction, so this is defensive.
-      // Throwing rolls back the slot reservation rather than leaking capacity.
       throw new Error("REMOTE_OLLAMA_CLAIM_RACE");
     }
 
