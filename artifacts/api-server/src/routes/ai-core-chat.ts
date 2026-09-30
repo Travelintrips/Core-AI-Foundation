@@ -6,6 +6,8 @@ import {
   aiCodingRunsTable,
   aiCodingTasksTable,
   db,
+  isTransientDatabaseConnectionError,
+  withTransientDatabaseRetry,
 } from "@workspace/db";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import {
@@ -166,12 +168,21 @@ function estimateSelectionCostUsd(
 }
 
 function safeProviderFailure(error: unknown): string {
+  if (isTransientDatabaseConnectionError(error)) {
+    return "Database AI Core sementara sibuk atau tidak tersedia. Silakan ulangi permintaan sebentar lagi.";
+  }
+
   const message = error instanceof Error ? error.message : String(error);
-  return message
+  const normalized = message
     .replace(/[\r\n\t]+/g, " ")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 500);
+    .trim();
+
+  if (/^failed query:/i.test(normalized) || /from ["']?ai_platform["']?/i.test(normalized)) {
+    return "Database AI Core gagal memproses permintaan. Detail query disembunyikan dari tampilan chat.";
+  }
+
+  return normalized.slice(0, 500);
 }
 
 function isExplicitRetiredModelFailure(
@@ -1631,10 +1642,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     res.status(result["kind"] === "agent" ? 202 : 200).json(result);
   } catch (error) {
     res.status(503).json({
-      error:
-        error instanceof Error
-          ? error.message.slice(0, 1_500)
-          : "AI Core Chat request failed.",
+      error: safeProviderFailure(error) || "AI Core Chat request failed.",
     });
   }
 });
@@ -1646,23 +1654,25 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
     return;
   }
 
-  const [task] = await db
+  const [task] = await withTransientDatabaseRetry(() => db
     .select()
     .from(aiCodingTasksTable)
     .where(eq(aiCodingTasksTable.id, taskId.data))
-    .limit(1);
+    .limit(1),
+  { attempts: 3, baseDelayMs: 150 });
 
   if (!task) {
     res.status(404).json({ error: "Coding task not found" });
     return;
   }
 
-  const [latestRun] = await db
+  const [latestRun] = await withTransientDatabaseRetry(() => db
     .select()
     .from(aiCodingRunsTable)
     .where(eq(aiCodingRunsTable.taskId, task.id))
     .orderBy(desc(aiCodingRunsTable.startedAt))
-    .limit(1);
+    .limit(1),
+  { attempts: 3, baseDelayMs: 150 });
 
   const autonomous = await getAutonomousCodingTaskStatus(task.id).catch(() => null);
 
