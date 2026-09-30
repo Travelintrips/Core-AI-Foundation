@@ -70,7 +70,7 @@ jobs:
           ask "Agent apa saja yang sudah terinstall disini" '[]' /tmp/agent.json
           assert_not_financial_db /tmp/agent.json
 
-          context='[{"role":"user","content":"Berapa pendapatan minggu ini?"},{"role":"assistant","content":"Permintaan sebelumnya membahas pendapatan."}]'
+          context='[{"role":"user","text":"Berapa pendapatan minggu ini?"},{"role":"assistant","text":"Permintaan sebelumnya membahas pendapatan."}]'
           ask "Bukan pendapatan maksudnya agent ai" "$context" /tmp/correction.json
           assert_not_financial_db /tmp/correction.json
 
