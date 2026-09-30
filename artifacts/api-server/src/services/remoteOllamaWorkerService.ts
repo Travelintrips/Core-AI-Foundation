@@ -199,15 +199,20 @@ export async function hasRemoteOllamaWorker(modelId: string): Promise<boolean> {
 
 export async function enqueueRemoteOllamaInvocation(
   payload: RemoteOllamaInvocationPayload,
+  options: { priority?: number } = {},
 ): Promise<AiJob> {
   const now = new Date();
+  const priority = Math.max(
+    0,
+    Math.min(100, Math.floor(options.priority ?? 70)),
+  );
   const [job] = await db.insert(aiJobsTable).values({
     jobCode: "OLLAMA-" + randomUUID().slice(0, 8).toUpperCase(),
     jobType: REMOTE_OLLAMA_JOB_TYPE,
     requiredCapability: REMOTE_OLLAMA_CAPABILITY,
     payloadJson: payload,
-    priority: 70,
-    priorityScore: "70",
+    priority,
+    priorityScore: String(priority),
     status: "queued",
     retryCount: 0,
     maxRetry: REMOTE_OLLAMA_MAX_RETRY,

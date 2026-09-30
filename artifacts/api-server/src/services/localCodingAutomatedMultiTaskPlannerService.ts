@@ -858,7 +858,10 @@ function createPlannerProviderAdapter(input: {
   };
 }) {
   return input.providerSlug === "ollama" && !input.baseUrl
-    ? createScheduledOllamaProviderAdapter({ modelId: input.modelId })
+    ? createScheduledOllamaProviderAdapter({
+        modelId: input.modelId,
+        queuePriority: 60,
+      })
     : createConstrainedCodingProviderAdapter(input);
 }
 
