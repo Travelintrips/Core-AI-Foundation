@@ -810,12 +810,22 @@ export function renderAdminSemanticQueryResult(
       ? " Tidak ada transaksi/record yang memenuhi filter pada periode tersebut."
       : "";
 
-  return [
+  const summary =
     result.intent.metricLabel.charAt(0).toUpperCase() +
-      result.intent.metricLabel.slice(1) +
-      " " + result.intent.domain + period + ": " +
-      formatSemanticValue(row.value, result.intent.valueKind) + "." +
-      zeroDetail,
+    result.intent.metricLabel.slice(1) +
+    " " + result.intent.domain + period + ": " +
+    formatSemanticValue(row.value, result.intent.valueKind) + "." +
+    zeroDetail;
+
+  // Simple count questions should read like a normal chat answer. Keep
+  // provenance/diagnostics in structured execution metadata instead of
+  // exposing database internals to the user.
+  if (result.intent.aggregation === "count") {
+    return summary;
+  }
+
+  return [
+    summary,
     "Dihitung dari " + String(result.matchedRows) +
       " record pada " + source + timeDetail +
       "; database " + (result.sourceDatabaseId ?? "primary") +

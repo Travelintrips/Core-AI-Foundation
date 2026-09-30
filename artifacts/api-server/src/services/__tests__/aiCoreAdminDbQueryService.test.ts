@@ -446,6 +446,36 @@ describe("AI Core admin database query service", () => {
     expect(renderAdminSemanticQueryResult(result!).replace(/\s/g, "")).toContain("Rp480.000");
   });
 
+  it("keeps simple count answers concise without exposing database diagnostics", () => {
+    const reply = renderAdminSemanticQueryResult({
+      rows: [{ value: 21 }],
+      rowCount: 1,
+      sql: "SELECT COUNT(*)",
+      truncated: false,
+      elapsedMs: 1,
+      intent: {
+        aggregation: "count",
+        metricLabel: "jumlah",
+        valueKind: "number",
+        domain: "tenant yang ada sekarang",
+        timeRange: null,
+        inheritedFromContext: false,
+      },
+      sourceTable: "public.tenants",
+      sourceDatabaseId: "primary",
+      discovery: { tableCount: 1, databases: [] },
+      valueColumn: null,
+      timeColumn: null,
+      matchedRows: 21,
+      confidence: 0.91,
+      statusFilterApplied: false,
+    });
+    expect(reply).toBe("Jumlah tenant yang ada sekarang: 21.");
+    expect(reply).not.toContain("record pada");
+    expect(reply).not.toContain("Confidence semantic");
+    expect(reply).not.toContain("Admin DB Query");
+  });
+
   it("does not count pending payments when no successful status is present", async () => {
     mocks.execute.mockResolvedValueOnce({ rows: paymentMetadata() });
     aggregateResponses(mocks.txExecute, ["pending", "cancelled"], "0", "0");
