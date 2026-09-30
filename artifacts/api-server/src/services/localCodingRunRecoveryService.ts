@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { aiCodingRunsTable, aiCodingTasksTable, db } from "@workspace/db";
 
 const TERMINAL_TASK_STATUSES = new Set(["PR_CREATED", "READY_REVIEW", "COMPLETED", "FAILED"]);
@@ -136,7 +136,20 @@ export async function reconcileStaleCodingRuns(
           })
           .where(eq(aiCodingTasksTable.id, task.id))
           .returning({ id: aiCodingTasksTable.id });
-        if (updatedTask) result.recoveredTasks += 1;
+        if (updatedTask) {
+          result.recoveredTasks += 1;
+          await tx.execute(sql`
+            UPDATE ai_platform.ai_coding_autonomous_tasks
+            SET enabled = FALSE,
+                status = 'FAILED',
+                last_action = 'STALE_RUN_RECOVERED',
+                last_error = ${recoveryMessage},
+                completed_at = ${now},
+                updated_at = ${now}
+            WHERE task_id = ${task.id}::uuid
+              AND enabled = TRUE
+          `);
+        }
       }
     });
   }
