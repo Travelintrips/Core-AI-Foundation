@@ -38,7 +38,7 @@ describe("AI Core Chat automatic dispatch", () => {
 
   it("routes build and test requests as read-only work", () => {
     expect(detectRemoteWorkerPreset("build repository ini")).toBe("build");
-    expect(detectRemoteWorkerPreset("uji test API tanpa mengubah file")).toBe("test");
+    expect(detectRemoteWorkerPreset("uji test API secara read-only")).toBe("test");
   });
 
   it("routes coding changes directly to the control plane", () => {
