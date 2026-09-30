@@ -115,7 +115,7 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     suffix:            "4",
     workerType:        "coding_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["coding_worker"]!,
-    maxConcurrentJobs: 1,
+    maxConcurrentJobs: 5,
   },
 ];
 
@@ -136,7 +136,7 @@ const _settings: DispatcherSettings = {
   workerHeartbeatIntervalMs: 10_000,
   workerTimeoutMs:          60_000,
   jobTimeoutMs:            300_000,
-  maxConcurrentJobs:             5,
+  maxConcurrentJobs:             10,
 };
 
 let _running         = false;
@@ -339,28 +339,60 @@ export async function tick(): Promise<TickResult> {
 
     if (_workers.length === 0) return result;
 
-    // 3. Find idle managed workers
+    // 3. Find managed workers that still have capacity. A worker may stay
+    // "busy" while it has free slots, so status=idle alone would serialize it.
     const workerIds = _workers.map((w) => w.id);
-    const idleWorkers = await db
+    const managedWorkers = await db
       .select()
       .from(aiWorkersTable)
       .where(
         and(
           inArray(aiWorkersTable.id, workerIds),
-          eq(aiWorkersTable.status, "idle"),
+          inArray(aiWorkersTable.status, ["idle", "busy"]),
         ),
       );
 
-    if (idleWorkers.length === 0) return result;
+    if (managedWorkers.length === 0) return result;
 
-    // 4. Cap by maxConcurrentJobs setting
-    const currentBusy = workerIds.length - idleWorkers.length;
-    const slots       = Math.max(0, _settings.maxConcurrentJobs - currentBusy);
-    const toDispatch  = idleWorkers.slice(0, slots);
+    // 4. Cap total dispatcher concurrency, then fill free worker slots in a
+    // round-robin plan so one worker cannot monopolize every global slot.
+    const currentRunning = managedWorkers.reduce(
+      (sum, worker) => sum + Math.max(0, worker.runningJobs),
+      0,
+    );
+    const globalSlots = Math.max(
+      0,
+      _settings.maxConcurrentJobs - currentRunning,
+    );
+    if (globalSlots === 0) return result;
 
-    // 5. Dispatch in parallel
+    const slotState = managedWorkers.map((worker) => ({
+      workerId: worker.id,
+      remaining: Math.max(
+        0,
+        worker.maxConcurrentJobs - worker.runningJobs,
+      ),
+    }));
+    const dispatchWorkerIds: number[] = [];
+
+    while (dispatchWorkerIds.length < globalSlots) {
+      let added = false;
+      for (const slot of slotState) {
+        if (slot.remaining <= 0) continue;
+        dispatchWorkerIds.push(slot.workerId);
+        slot.remaining -= 1;
+        added = true;
+        if (dispatchWorkerIds.length >= globalSlots) break;
+      }
+      if (!added) break;
+    }
+
+    if (dispatchWorkerIds.length === 0) return result;
+
+    // 5. Dispatch all available slots in parallel. claimJob() serializes
+    // capacity admission per worker in the database before each claim.
     const outcomes = await Promise.allSettled(
-      toDispatch.map((w) => dispatch(w.id)),
+      dispatchWorkerIds.map((workerId) => dispatch(workerId)),
     );
 
     for (const outcome of outcomes) {
