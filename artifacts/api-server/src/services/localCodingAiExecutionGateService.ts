@@ -17,6 +17,7 @@ import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelServic
 import { createScheduledOllamaProviderAdapter } from "./localCodingOllamaWorkerProviderService.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
+  ModelInvocationError,
   ProviderInvocationError,
   createConstrainedModelInvocationAdapter,
   type ConstrainedModelInvocationAdapter,
@@ -280,19 +281,10 @@ export function createConstrainedCodingProviderAdapter(input: {
         });
         const output =
           request.responseFormat.type === "structured"
-            ? (() => {
-                try {
-                  return {
-                    type: "structured" as const,
-                    value: JSON.parse(result.content) as unknown,
-                  };
-                } catch {
-                  throw new ProviderInvocationError(
-                    "Constrained provider returned malformed structured JSON",
-                    "BAD_REQUEST",
-                  );
-                }
-              })()
+            ? {
+                type: "structured" as const,
+                value: parseBoundedStructuredProviderJson(result.content),
+              }
             : { type: "text" as const, text: result.content };
         return {
           output,
@@ -307,6 +299,37 @@ export function createConstrainedCodingProviderAdapter(input: {
       }
     },
   };
+}
+
+function parseBoundedStructuredProviderJson(rawOutput: string): unknown {
+  const candidates = boundedJsonObjectCandidates(rawOutput);
+  if (candidates.length !== 1) {
+    throw new ProviderInvocationError(
+      "Constrained provider returned ambiguous structured JSON",
+      "BAD_REQUEST",
+    );
+  }
+
+  try {
+    return JSON.parse(candidates[0]!) as unknown;
+  } catch {
+    throw new ProviderInvocationError(
+      "Constrained provider returned malformed structured JSON",
+      "BAD_REQUEST",
+    );
+  }
+}
+
+function isRecoverableStructuredOutputError(error: unknown): boolean {
+  if (!(error instanceof ModelInvocationError)) return false;
+  if (error.code === "MALFORMED_RESPONSE") return true;
+  if (error.code !== "PROVIDER_BAD_REQUEST") return false;
+
+  const cause = error.cause;
+  return (
+    cause instanceof ProviderInvocationError &&
+    /malformed structured JSON|ambiguous structured JSON/i.test(cause.message)
+  );
 }
 
 function stripExactJsonFence(value: string): string {
@@ -447,18 +470,35 @@ export async function invokeConstrainedAiProposal(input: {
       ? prompt
       : { ...prompt, user: prompt.user + repairSuffix };
 
-    const response = await input.adapter.invoke({
-      requestId: attempt === 1 ? input.requestId : input.requestId + "-schema-repair-1",
-      target: input.target,
-      input: serializeBoundedModelPrompt(attemptPrompt),
-      responseFormat: {
-        type: "structured",
-        schemaName: "coding_proposal_v1",
-        jsonSchema: localCodingAiProposalV1JsonSchema,
-      },
-      maxOutputTokens,
-      timeoutMs,
-    });
+    let response;
+    try {
+      response = await input.adapter.invoke({
+        requestId: attempt === 1 ? input.requestId : input.requestId + "-schema-repair-1",
+        target: input.target,
+        input: serializeBoundedModelPrompt(attemptPrompt),
+        responseFormat: {
+          type: "structured",
+          schemaName: "coding_proposal_v1",
+          jsonSchema: localCodingAiProposalV1JsonSchema,
+        },
+        maxOutputTokens,
+        timeoutMs,
+      });
+    } catch (error) {
+      if (!isRecoverableStructuredOutputError(error)) throw error;
+
+      lastValidationError =
+        "Provider returned malformed or ambiguous structured JSON";
+      if (attempt === 2) {
+        throw new LocalCodingAiExecutionGateError(
+          "AI proposal failed Proposal Contract V1 validation after bounded schema repair: " +
+            lastValidationError,
+          "INVALID_PROPOSAL",
+          { schemaRepairAttempts: 1 },
+        );
+      }
+      continue;
+    }
 
     try {
       if (response.output.type === "structured") {
