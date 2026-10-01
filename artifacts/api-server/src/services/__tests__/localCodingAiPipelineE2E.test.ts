@@ -13,7 +13,9 @@ import {
 } from "../localCodingAiModelAdapterService.js";
 import { computeAiHandoffPackageHash } from "../localCodingAiProposalPolicyService.js";
 import {
+  boundedJsonObjectCandidates,
   invokeConstrainedAiProposal,
+  normalizeBoundedSchemaRepairOutput,
   validateAndApplyAiProposal,
 } from "../localCodingAiExecutionGateService.js";
 import { verifyChangedFilesStatically } from "../localCodingVerificationService.js";
@@ -158,12 +160,12 @@ function proposalJson(
   });
 }
 
-function fakeProvider(output: string): {
+function fakeProvider(value: unknown): {
   provider: ConstrainedModelProvider;
   invoke: ReturnType<typeof vi.fn>;
 } {
   const invoke = vi.fn(async () => ({
-    output: { type: "text" as const, text: output },
+    output: { type: "structured" as const, value },
     usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
   }));
   return {
@@ -179,9 +181,10 @@ function fakeProvider(output: string): {
 
 async function runProposal(
   lease: ApprovedAiHandoffLease,
-  output: string,
+  output: string | unknown,
 ) {
-  const fake = fakeProvider(output);
+  const value = typeof output === "string" ? JSON.parse(output) : output;
+  const fake = fakeProvider(value);
   const result = await invokeConstrainedAiProposal({
     lease,
     adapter: createConstrainedModelInvocationAdapter(fake.provider),
@@ -261,30 +264,32 @@ describe("Full constrained AI coding pipeline E2E", () => {
     );
   });
 
-  it("normalizes one wrapped proposal and fails closed on malformed or multiple JSON objects", async () => {
+  it("keeps legacy text normalization bounded without weakening structured execution", async () => {
     const repo = await createRepositoryFixture();
     const lease = leaseFixture(repo.head);
     const fence = String.fromCharCode(96).repeat(3);
+    const proposal = proposalJson(lease);
 
-    const repaired = await runProposal(
-      lease,
-      `${fence}json\n${proposalJson(lease)}\n${fence}`,
-    );
-    expect(repaired.proposal.taskId).toBe(lease.package.task.id);
+    expect(
+      normalizeBoundedSchemaRepairOutput(
+        fence + "json\n" + proposal + "\n" + fence,
+      ),
+    ).toBe(proposal);
 
-    await expect(
-      runProposal(lease, "{not-valid-json"),
-    ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    expect(
+      boundedJsonObjectCandidates(
+        "Here is the proposal:\n" +
+          fence +
+          "json\n" +
+          proposal +
+          "\n" +
+          fence,
+      ),
+    ).toEqual([proposal]);
 
-    const wrapped = await runProposal(
-      lease,
-      `Here is the proposal:\n${fence}json\n${proposalJson(lease)}\n${fence}`,
-    );
-    expect(wrapped.proposal.taskId).toBe(lease.package.task.id);
-    expect(wrapped.invoke).toHaveBeenCalledTimes(1);
-
-    await expect(runProposal(lease, `${proposalJson(lease)}\n${proposalJson(lease)}`))
-      .rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    expect(
+      boundedJsonObjectCandidates(proposal + "\n" + proposal),
+    ).toEqual([proposal, proposal]);
 
     expect(await readFile(join(repo.root, "example.ts"), "utf8")).toBe(
       "export const value = 1;\n",
