@@ -124,6 +124,7 @@ describe("multi-worker execution boundary", () => {
       status: "REVIEW_REQUIRED",
     });
     mocks.completeAnalyzer.mockResolvedValue(undefined);
+    mocks.logAudit.mockResolvedValue(undefined);
     mocks.isTransientDatabaseConnectionError.mockReturnValue(false);
     mocks.executeAnalyzer.mockResolvedValue({
       codingTaskId: TASK_ID,
