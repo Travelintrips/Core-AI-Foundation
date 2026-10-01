@@ -24,16 +24,43 @@ export interface MultiWorkerRecoveryResult {
   recoveredJobs: number;
 }
 
-function runTerminalStatus(workstreamStatus: string): "COMPLETED" | "FAILED" {
-  return workstreamStatus === "REVIEW_REQUIRED" || workstreamStatus === "COMPLETED"
-    ? "COMPLETED"
-    : "FAILED";
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
-function taskTerminalStatus(workstreamStatus: string): "READY_REVIEW" | "FAILED" {
-  return workstreamStatus === "REVIEW_REQUIRED" || workstreamStatus === "COMPLETED"
-    ? "READY_REVIEW"
-    : "FAILED";
+export function workstreamChildLifecycleDisposition(
+  workstreamStatus: string,
+  resultJson: unknown,
+): {
+  runStatus: "COMPLETED" | "FAILED";
+  taskStatus: "READY_REVIEW" | "FAILED";
+  aiFailure: boolean;
+} {
+  const result = record(resultJson);
+  const execution = record(result?.workstreamAiExecution);
+  const retryPending = execution?.autoRepairStatus === "RETRY_PENDING";
+  const aiFailure =
+    workstreamStatus === "REVIEW_REQUIRED" &&
+    execution?.status === "FAILED" &&
+    !retryPending;
+
+  if (aiFailure) {
+    return {
+      runStatus: "FAILED",
+      taskStatus: "FAILED",
+      aiFailure: true,
+    };
+  }
+
+  const successfulTerminal =
+    workstreamStatus === "REVIEW_REQUIRED" || workstreamStatus === "COMPLETED";
+  return {
+    runStatus: successfulTerminal ? "COMPLETED" : "FAILED",
+    taskStatus: successfulTerminal ? "READY_REVIEW" : "FAILED",
+    aiFailure: false,
+  };
 }
 
 export function expiredLeaseRecoveryDisposition() {
@@ -170,7 +197,11 @@ export async function reconcileStaleMultiWorkerRuns(
         }
       }
 
-      const desiredRunStatus = runTerminalStatus(effectiveWorkstreamStatus);
+      const disposition = workstreamChildLifecycleDisposition(
+        effectiveWorkstreamStatus,
+        current.resultJson,
+      );
+      const desiredRunStatus = disposition.runStatus;
       const [updatedRun] = await tx
         .update(aiCodingRunsTable)
         .set({
@@ -180,7 +211,9 @@ export async function reconcileStaleMultiWorkerRuns(
             ? {
                 errorMessage:
                   current.errorMessage ??
-                  "Multi-worker execution ended without closing its coding run.",
+                  (disposition.aiFailure
+                    ? "Constrained AI execution failed; automatic repair or incident handling is required."
+                    : "Multi-worker execution ended without closing its coding run."),
               }
             : {}),
         })
@@ -194,7 +227,7 @@ export async function reconcileStaleMultiWorkerRuns(
 
       if (updatedRun) result.recoveredRuns += 1;
 
-      const desiredTaskStatus = taskTerminalStatus(effectiveWorkstreamStatus);
+      const desiredTaskStatus = disposition.taskStatus;
       const [updatedTask] = await tx
         .update(aiCodingTasksTable)
         .set({
@@ -203,7 +236,9 @@ export async function reconcileStaleMultiWorkerRuns(
             ? {
                 resultSummary:
                   current.errorMessage ??
-                  "Multi-worker execution was recovered after its lease or lifecycle ended.",
+                  (disposition.aiFailure
+                    ? "Constrained AI execution failed. AI Core will attempt bounded repair; unresolved failures are routed to Incident Inbox."
+                    : "Multi-worker execution was recovered after its lease or lifecycle ended."),
               }
             : {}),
         })
@@ -216,6 +251,7 @@ export async function reconcileStaleMultiWorkerRuns(
               "CODING",
               "TESTING",
               "COMMITTING",
+              "READY_REVIEW",
             ]),
           ),
         )
