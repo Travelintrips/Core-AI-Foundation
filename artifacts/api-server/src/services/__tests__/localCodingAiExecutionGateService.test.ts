@@ -432,6 +432,43 @@ describe("Local Coding AI Execution Gate integration", () => {
     ).resolves.toMatchObject({ proposal: { taskId: lease.package.task.id } });
   });
 
+  it("selects the single Contract V1 proposal from mixed provider JSON fragments", async () => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const fence = String.fromCharCode(96).repeat(3);
+    const invoke = vi.fn(async () => ({
+      output: {
+        type: "text" as const,
+        text:
+          'Provider diagnostic: {"status":"repairing","attempt":1}\n' +
+          fence +
+          "json\n" +
+          proposalJson(lease) +
+          "\n" +
+          fence +
+          "\nDone.",
+      },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    }));
+
+    const result = await invokeConstrainedAiProposal({
+      lease,
+      adapter: createConstrainedModelInvocationAdapter({
+        provider: "fake",
+        model: "proposal-v1",
+        capabilities: CONSTRAINED_MODEL_CAPABILITIES,
+        invoke,
+      }),
+      target: { provider: "fake", model: "proposal-v1" },
+      requestId: "execution-test-mixed-json-fragments",
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+    });
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(result.proposal.taskId).toBe(lease.package.task.id);
+  });
+
   it.each(["array", "multiple objects", "wrong binding", "forbidden capability"])(
     "keeps strict validation after normalization: %s",
     async (format) => {

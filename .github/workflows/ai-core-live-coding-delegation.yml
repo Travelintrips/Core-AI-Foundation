@@ -78,10 +78,24 @@ jobs:
                   jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
                   exit 1
                   ;;
-                APPROVAL_REQUIRED|COMPLETED)
-                  echo "Delegated coding autonomous runtime reached accepted terminal/approval state: $autonomous_status"
+                APPROVAL_REQUIRED)
+                  echo "Delegated coding autonomous runtime reached approval state: $autonomous_status"
                   jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
                   exit 0
+                  ;;
+                COMPLETED)
+                  case "$observed_status" in
+                    COMPLETED|AWAITING_APPROVAL|REVIEW_AI_PATCH)
+                      echo "Delegated coding task reached an accepted state before autonomous completion: $observed_status"
+                      jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
+                      exit 0
+                      ;;
+                    *)
+                      echo "::error::Autonomous runtime completed before the delegated coding task reached an accepted terminal/approval state"
+                      jq -c '{task:.task,latestRun:.latestRun,autonomous:.autonomous}' /tmp/progress.json
+                      exit 1
+                      ;;
+                  esac
                   ;;
               esac
               case "$observed_status" in

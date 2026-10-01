@@ -304,48 +304,116 @@ export function createConstrainedCodingProviderAdapter(input: {
   };
 }
 
-export function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
-  const stripFence = (value: string): string => {
-    const fenced = /^```(?:json)?[\t ]*(?:\r?\n)?([\s\S]*?)(?:\r?\n)?```$/i.exec(
-      value.trim(),
-    );
-    return (fenced?.[1] ?? value).trim();
-  };
+function stripExactJsonFence(value: string): string {
+  const fenced = /^\`\`\`(?:json)?[\t ]*(?:\r?\n)?([\s\S]*?)(?:\r?\n)?\`\`\`$/i.exec(
+    value.trim(),
+  );
+  return (fenced?.[1] ?? value).trim();
+}
 
-  let candidate = stripFence(rawOutput);
+function unwrapBoundedJsonString(value: string): string {
+  let candidate = value.trim();
 
-  // Some providers honor JSON mode by returning one JSON string whose value
-  // is the model's JSON/fenced-JSON text. Unwrap exactly one string layer;
-  // Contract V1 binding/schema/policy validation still runs afterwards.
-  if (candidate.startsWith('"') && candidate.endsWith('"')) {
+  // Providers occasionally wrap their JSON payload as a JSON string. Unwrap
+  // at most two layers so transport quirks are tolerated without turning this
+  // into a general-purpose decoder.
+  for (let layer = 0; layer < 2; layer += 1) {
+    if (!candidate.startsWith('"') || !candidate.endsWith('"')) break;
     try {
       const decoded = JSON.parse(candidate) as unknown;
-      if (typeof decoded === "string") {
-        candidate = stripFence(decoded);
+      if (typeof decoded !== "string") break;
+      candidate = decoded.trim();
+    } catch {
+      break;
+    }
+  }
+
+  return candidate;
+}
+
+function extractBalancedJsonObjects(value: string): string[] {
+  const candidates: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!;
+
+    if (start < 0) {
+      if (char === "{") {
+        start = index;
+        depth = 1;
+        inString = false;
+        escaped = false;
       }
-    } catch {
-      return rawOutput;
+      continue;
     }
-  }
 
-  if (candidate.startsWith("{") && candidate.endsWith("}")) return candidate;
-  // An array is a different top-level value, not prose wrapping one proposal.
-  if (candidate.startsWith("[")) return rawOutput;
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
 
-  // Bounded recovery for a provider preface/suffix around one JSON object.
-  // The extracted object still must pass Proposal Contract V1 binding and policy validation.
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    const extracted = candidate.slice(start, end + 1).trim();
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char !== "}") continue;
+
+    depth -= 1;
+    if (depth !== 0) continue;
+
+    const candidate = value.slice(start, index + 1).trim();
     try {
-      JSON.parse(extracted);
-      return extracted;
+      const parsed = JSON.parse(candidate) as unknown;
+      if (isRecord(parsed)) candidates.push(candidate);
     } catch {
-      return rawOutput;
+      // Ignore malformed fragments. Contract validation decides whether any
+      // remaining complete object is the approved proposal.
+    }
+    start = -1;
+  }
+
+  return candidates;
+}
+
+export function boundedJsonObjectCandidates(rawOutput: string): string[] {
+  const exact = unwrapBoundedJsonString(stripExactJsonFence(rawOutput));
+  if (!exact) return [rawOutput];
+
+  // Arrays are a different top-level contract value. Never recover objects
+  // from inside an array because that would weaken the top-level shape check.
+  if (exact.startsWith("[")) return [rawOutput];
+
+  if (exact.startsWith("{") && exact.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(exact) as unknown;
+      if (isRecord(parsed)) return [exact];
+    } catch {
+      // Fall through to balanced extraction; a provider may have appended a
+      // second fragment after an otherwise complete object.
     }
   }
-  return rawOutput;
+
+  const extracted = extractBalancedJsonObjects(exact);
+  return extracted.length > 0 ? extracted : [rawOutput];
+}
+
+export function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
+  const candidates = boundedJsonObjectCandidates(rawOutput);
+  return candidates.length === 1 ? candidates[0]! : rawOutput;
 }
 
 export async function invokeConstrainedAiProposal(input: {
@@ -391,11 +459,37 @@ export async function invokeConstrainedAiProposal(input: {
     }
 
     try {
-      const proposal = parseLocalCodingAiProposalV1(
-        normalizeBoundedSchemaRepairOutput(response.output.text),
-        binding,
+      const candidates = boundedJsonObjectCandidates(response.output.text);
+      const valid: LocalCodingAiProposalV1[] = [];
+      let lastCandidateError: unknown = null;
+
+      for (const candidate of candidates.slice(0, 8)) {
+        try {
+          valid.push(parseLocalCodingAiProposalV1(candidate, binding));
+        } catch (error) {
+          lastCandidateError = error;
+        }
+      }
+
+      if (valid.length === 1) {
+        return { proposal: valid[0]!, metadata: response.metadata };
+      }
+      if (valid.length > 1) {
+        throw new Error(
+          "AI proposal output contains multiple valid Proposal Contract V1 objects",
+        );
+      }
+
+      if (candidates.length > 8) {
+        throw new Error(
+          "AI proposal output contains too many JSON object candidates",
+        );
+      }
+
+      throw (
+        lastCandidateError ??
+        new Error("AI proposal output contains no valid Proposal Contract V1 object")
       );
-      return { proposal, metadata: response.metadata };
     } catch (error) {
       lastValidationError =
         error instanceof Error ? error.message : String(error);
