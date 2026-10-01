@@ -10,6 +10,7 @@ import {
   aiCodingTasksTable,
   aiJobsTable,
   db,
+  withTransientDatabaseRetry,
   type AiJob,
 } from "@workspace/db";
 import {
@@ -733,10 +734,13 @@ export async function executeRepositoryAnalyzerJob(job: AiJob): Promise<Record<s
     description: requiredString(payload, "description"),
   };
 
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, input.codingTaskId));
+  const [task] = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, input.codingTaskId)),
+    { attempts: 5, baseDelayMs: 250 },
+  );
   if (!task) throw new Error(`Coding task ${input.codingTaskId} not found`);
 
   const result = await analyzeRepository(input);
