@@ -35,7 +35,7 @@ export function workstreamChildLifecycleDisposition(
   resultJson: unknown,
 ): {
   runStatus: "COMPLETED" | "FAILED";
-  taskStatus: "READY_REVIEW" | "FAILED";
+  taskStatus: "READY_REVIEW" | "COMPLETED" | "FAILED";
   aiFailure: boolean;
 } {
   const result = record(resultJson);
@@ -54,11 +54,25 @@ export function workstreamChildLifecycleDisposition(
     };
   }
 
-  const successfulTerminal =
-    workstreamStatus === "REVIEW_REQUIRED" || workstreamStatus === "COMPLETED";
+  if (workstreamStatus === "COMPLETED") {
+    return {
+      runStatus: "COMPLETED",
+      taskStatus: "COMPLETED",
+      aiFailure: false,
+    };
+  }
+
+  if (workstreamStatus === "REVIEW_REQUIRED") {
+    return {
+      runStatus: "COMPLETED",
+      taskStatus: "READY_REVIEW",
+      aiFailure: false,
+    };
+  }
+
   return {
-    runStatus: successfulTerminal ? "COMPLETED" : "FAILED",
-    taskStatus: successfulTerminal ? "READY_REVIEW" : "FAILED",
+    runStatus: "FAILED",
+    taskStatus: "FAILED",
     aiFailure: false,
   };
 }

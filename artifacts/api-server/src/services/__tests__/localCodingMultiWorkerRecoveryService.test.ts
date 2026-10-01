@@ -63,4 +63,17 @@ describe("multi-worker child lifecycle recovery", () => {
       aiFailure: false,
     });
   });
+
+  it("auto-finishes the child task when the workstream is already completed", () => {
+    expect(
+      workstreamChildLifecycleDisposition("COMPLETED", {
+        localExecutionPlan: { status: "EXECUTABLE" },
+        localExecution: { status: "NO_CHANGES" },
+      }),
+    ).toEqual({
+      runStatus: "COMPLETED",
+      taskStatus: "COMPLETED",
+      aiFailure: false,
+    });
+  });
 });
