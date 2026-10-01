@@ -64,6 +64,7 @@ export interface RegisterWorkerInput {
   capabilities: string[];
   maxConcurrentJobs?: number;
   leaseOwner: string;
+  heartbeatToken?: string;
   leaseTtlMs?: number;
   providerSlug?: string | null;
   modelId?: string | null;
@@ -130,55 +131,102 @@ export function registerNode(input: {
  */
 export async function registerWorker(input: RegisterWorkerInput): Promise<AiWorker> {
   const now = new Date();
-  const token = randomUUID();
-  const leaseExpires = new Date(now.getTime() + (input.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS));
+  const token = input.heartbeatToken ?? randomUUID();
+  const leaseExpires = new Date(
+    now.getTime() + (input.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS),
+  );
+  const lockKey = `worker-register:${input.workerName}`;
 
-  const [worker] = await withTransientDatabaseRetry(() => db
-    .insert(aiWorkersTable)
-    .values({
-      workerName:       input.workerName,
-      workerType:       input.workerType,
-      clusterId:        input.clusterId,
-      nodeId:           input.nodeId,
-      region:           input.region ?? "local",
-      version:          input.version ?? "1.0.0",
-      capabilities:     input.capabilities,
-      maxConcurrentJobs: input.maxConcurrentJobs ?? 2,
-      providerSlug:     input.providerSlug ?? null,
-      modelId:          input.modelId ?? null,
-      endpointUrl:      input.endpointUrl ?? null,
-      runtimeKind:      input.runtimeKind ?? null,
-      status:           "online",
-      leaseOwner:       input.leaseOwner,
-      leaseExpiresAt:   leaseExpires,
-      heartbeatToken:   token,
-      lockVersion:      0,
-      lastHeartbeat:    now,
-    })
-    .onConflictDoUpdate({
-      target: aiWorkersTable.workerName,
-      set: {
-        workerType:       input.workerType,
-        clusterId:        input.clusterId,
-        nodeId:           input.nodeId,
-        region:           input.region ?? "local",
-        version:          input.version ?? "1.0.0",
-        capabilities:     input.capabilities,
-        maxConcurrentJobs: input.maxConcurrentJobs ?? 2,
-        providerSlug:     input.providerSlug ?? null,
-        modelId:          input.modelId ?? null,
-        endpointUrl:      input.endpointUrl ?? null,
-        runtimeKind:      input.runtimeKind ?? null,
-        status:           "online",
-        leaseOwner:       input.leaseOwner,
-        leaseExpiresAt:   leaseExpires,
-        heartbeatToken:   token,
-        lockVersion:      sql`ai_workers.lock_version + 1`,
-        lastHeartbeat:    now,
-        updatedAt:        now,
+  const registration = await withTransientDatabaseRetry(
+    () =>
+      db.transaction(async (tx) => {
+        // Serialize registration for one logical worker name so overlapping
+        // rolling-deploy instances cannot overwrite each other's heartbeat
+        // token between SELECT and UPDATE.
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
+        );
+
+        const [existing] = await tx
+          .select()
+          .from(aiWorkersTable)
+          .where(eq(aiWorkersTable.workerName, input.workerName))
+          .for("update");
+
+        const heldByAnotherLiveOwner =
+          Boolean(existing) &&
+          existing!.leaseOwner !== input.leaseOwner &&
+          existing!.leaseExpiresAt !== null &&
+          existing!.leaseExpiresAt > now &&
+          !["offline", "stale"].includes(existing!.status);
+
+        if (existing && heldByAnotherLiveOwner) {
+          return { worker: existing, acquired: false };
+        }
+
+        const workerValues = {
+          workerType: input.workerType,
+          clusterId: input.clusterId,
+          nodeId: input.nodeId,
+          region: input.region ?? "local",
+          version: input.version ?? "1.0.0",
+          capabilities: input.capabilities,
+          maxConcurrentJobs: input.maxConcurrentJobs ?? 2,
+          providerSlug: input.providerSlug ?? null,
+          modelId: input.modelId ?? null,
+          endpointUrl: input.endpointUrl ?? null,
+          runtimeKind: input.runtimeKind ?? null,
+          status: "online" as const,
+          leaseOwner: input.leaseOwner,
+          leaseExpiresAt: leaseExpires,
+          heartbeatToken: token,
+          lastHeartbeat: now,
+          updatedAt: now,
+        };
+
+        if (existing) {
+          const [worker] = await tx
+            .update(aiWorkersTable)
+            .set({
+              ...workerValues,
+              lockVersion: sql`lock_version + 1`,
+            })
+            .where(eq(aiWorkersTable.id, existing.id))
+            .returning();
+          return { worker, acquired: true };
+        }
+
+        const [worker] = await tx
+          .insert(aiWorkersTable)
+          .values({
+            workerName: input.workerName,
+            ...workerValues,
+            lockVersion: 0,
+          })
+          .returning();
+        return { worker, acquired: true };
+      }),
+    { attempts: 3, baseDelayMs: 250 },
+  );
+
+  const worker = registration.worker;
+  if (!worker) {
+    throw new Error(`Failed to register worker ${input.workerName}`);
+  }
+
+  if (!registration.acquired) {
+    logger.info(
+      {
+        workerId: worker.id,
+        workerName: worker.workerName,
+        leaseOwner: worker.leaseOwner,
+        requestedLeaseOwner: input.leaseOwner,
+        leaseExpiresAt: worker.leaseExpiresAt,
       },
-    })
-    .returning(), { attempts: 3, baseDelayMs: 250 });
+      "[cluster] Worker registration deferred; live lease is owned by another dispatcher instance",
+    );
+    return worker;
+  }
 
   await logAudit(
     "worker-cluster",
@@ -186,11 +234,21 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
     String(worker.id),
     "ai_worker",
     "success",
-    { workerName: worker.workerName, workerType: worker.workerType, capabilities: input.capabilities },
+    {
+      workerName: worker.workerName,
+      workerType: worker.workerType,
+      capabilities: input.capabilities,
+      leaseOwner: input.leaseOwner,
+    },
   );
 
   logger.info(
-    { workerId: worker.id, workerName: worker.workerName, workerType: worker.workerType },
+    {
+      workerId: worker.id,
+      workerName: worker.workerName,
+      workerType: worker.workerType,
+      leaseOwner: input.leaseOwner,
+    },
     "[cluster] Worker registered",
   );
 
