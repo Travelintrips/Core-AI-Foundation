@@ -7,6 +7,7 @@ const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTransaction = vi.hoisted(() => vi.fn());
 const mockSelectLimit = vi.hoisted(() => vi.fn());
 const mockDbExecute = vi.hoisted(() => vi.fn());
+const mockWithTransientDatabaseRetry = vi.hoisted(() => vi.fn());
 const mockEnqueue = vi.hoisted(() => vi.fn());
 const mockExecuteRepositoryAnalyzerJobOnDemand = vi.hoisted(() => vi.fn());
 const mockFailStaleRepositoryAnalyzerRuns = vi.hoisted(() => vi.fn());
@@ -57,6 +58,7 @@ vi.mock("@workspace/db", () => ({
     execute: mockDbExecute,
     transaction: mockTransaction,
   },
+  withTransientDatabaseRetry: mockWithTransientDatabaseRetry,
   aiCodingRunsTable: { id: "runs.id" },
   aiCodingTasksTable: { id: "tasks.id" },
   aiJobsTable: { id: "jobs.id", jobType: "jobs.jobType", status: "jobs.status" },
@@ -141,6 +143,9 @@ describe("Coding Orchestrator", () => {
     mockTransaction.mockImplementation((callback: (executor: typeof tx) => unknown) => callback(tx));
     mockSelectLimit.mockResolvedValue([]);
     mockDbExecute.mockResolvedValue({ rows: [] });
+    mockWithTransientDatabaseRetry.mockImplementation(
+      async (operation: () => Promise<unknown>) => operation(),
+    );
     mockLogAudit.mockResolvedValue(undefined);
     mockSpawn.mockReturnValue({ unref: vi.fn(), once: vi.fn() });
 
@@ -244,6 +249,18 @@ describe("Coding Orchestrator", () => {
     expect(mockDbExecute).toHaveBeenCalledTimes(1);
     expect(mockEnqueue).toHaveBeenCalledTimes(1);
     expect(mockSpawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses transient DB retry for the analyzer single-flight probe", async () => {
+    await startCodingOrchestration({
+      task: task as never,
+      run: run as never,
+    });
+
+    expect(mockWithTransientDatabaseRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      { attempts: 4, baseDelayMs: 250 },
+    );
   });
 
   it("defers instead of failing when the analyzer single-flight slot is busy", async () => {
