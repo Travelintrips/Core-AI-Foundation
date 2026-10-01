@@ -1541,16 +1541,10 @@ async function moveWorkstreamFailureToRepairInbox(input: {
     )
     .returning({ id: aiCodingWorkstreamsTable.id });
 
-  if (!failedWorkstream) {
-    const [current] = await db
-      .select({ status: aiCodingWorkstreamsTable.status })
-      .from(aiCodingWorkstreamsTable)
-      .where(eq(aiCodingWorkstreamsTable.id, input.payload.workstreamId))
-      .limit(1);
-    if (current && ["CLAIMED", "RUNNING"].includes(current.status)) {
-      return false;
-    }
-  }
+  // Fail closed only if this exact REVIEW_REQUIRED state was ours to
+  // transition. If another actor already claimed/completed the workstream,
+  // never overwrite its child task or create a stale repair incident.
+  if (!failedWorkstream) return false;
 
   await db
     .update(aiCodingTasksTable)
