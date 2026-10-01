@@ -7,6 +7,7 @@ import {
   aiCodingRunsTable,
   aiCodingTasksTable,
   db,
+  withTransientDatabaseRetry,
   type AiCodingRun,
   type AiCodingTask,
 } from "@workspace/db";
@@ -303,15 +304,33 @@ export function createConstrainedCodingProviderAdapter(input: {
   };
 }
 
-function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
-  const trimmed = rawOutput.trim();
-  const fenced = /^```(?:json)?[\t ]*(?:\r?\n)?([\s\S]*?)(?:\r?\n)?```$/i.exec(trimmed);
-  const candidate = (fenced?.[1] ?? trimmed).trim();
+export function normalizeBoundedSchemaRepairOutput(rawOutput: string): string {
+  const stripFence = (value: string): string => {
+    const fenced = /^```(?:json)?[\t ]*(?:\r?\n)?([\s\S]*?)(?:\r?\n)?```$/i.exec(
+      value.trim(),
+    );
+    return (fenced?.[1] ?? value).trim();
+  };
+
+  let candidate = stripFence(rawOutput);
+
+  // Some providers honor JSON mode by returning one JSON string whose value
+  // is the model's JSON/fenced-JSON text. Unwrap exactly one string layer;
+  // Contract V1 binding/schema/policy validation still runs afterwards.
+  if (candidate.startsWith('"') && candidate.endsWith('"')) {
+    try {
+      const decoded = JSON.parse(candidate) as unknown;
+      if (typeof decoded === "string") {
+        candidate = stripFence(decoded);
+      }
+    } catch {
+      return rawOutput;
+    }
+  }
 
   if (candidate.startsWith("{") && candidate.endsWith("}")) return candidate;
-  // An array or JSON string is a different top-level value, not prose wrapping
-  // one proposal. Do not extract an object from inside such a value.
-  if (candidate.startsWith("[") || candidate.startsWith('"')) return rawOutput;
+  // An array is a different top-level value, not prose wrapping one proposal.
+  if (candidate.startsWith("[")) return rawOutput;
 
   // Bounded recovery for a provider preface/suffix around one JSON object.
   // The extracted object still must pass Proposal Contract V1 binding and policy validation.
@@ -521,19 +540,25 @@ export async function validateAndApplyAiProposal(input: {
 }
 
 async function loadSnapshot(taskId: string): Promise<AiExecutionSnapshot> {
-  const [task] = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, taskId));
+  const [task] = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, taskId)),
+    { attempts: 5, baseDelayMs: 250 },
+  );
   if (!task) {
     throw new LocalCodingAiExecutionGateError("Coding task not found", "NOT_FOUND");
   }
 
-  const runs = await db
-    .select()
-    .from(aiCodingRunsTable)
-    .where(eq(aiCodingRunsTable.taskId, taskId))
-    .orderBy(desc(aiCodingRunsTable.startedAt));
+  const runs = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiCodingRunsTable)
+      .where(eq(aiCodingRunsTable.taskId, taskId))
+      .orderBy(desc(aiCodingRunsTable.startedAt)),
+    { attempts: 5, baseDelayMs: 250 },
+  );
 
   const orchestratorRun = runs.find(
     (run) =>
