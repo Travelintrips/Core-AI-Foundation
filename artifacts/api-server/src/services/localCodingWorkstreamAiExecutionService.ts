@@ -43,6 +43,7 @@ import { codingWorkstreamOwnsFile } from "./localCodingMultiWorkerExecutionServi
 import {
   createConstrainedCodingProviderAdapter,
   invokeConstrainedAiProposal,
+  LocalCodingAiExecutionGateError,
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { createConstrainedModelInvocationAdapter } from "./localCodingAiModelAdapterService.js";
@@ -60,6 +61,7 @@ import {
   prepareRepositoryWorkspace,
 } from "./repositoryAnalyzerService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
+import { enqueueCodingRepairInboxItem } from "./localCodingControlBridgeService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -72,6 +74,7 @@ const MAX_ALLOWED_FILES = 12;
 const MAX_SNIPPETS = 5;
 const MAX_FILE_BYTES = 250_000;
 const MAX_SNIPPET_CHARS = 6_000;
+const MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS = 2;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA40_RE = /^[0-9a-f]{40}$/i;
@@ -97,6 +100,65 @@ export class LocalCodingWorkstreamAiExecutionError extends Error {
     super(message);
     this.name = "LocalCodingWorkstreamAiExecutionError";
   }
+}
+
+export interface WorkstreamAiAutoRepairDecision {
+  recoverable: boolean;
+  shouldRetry: boolean;
+  previousRepairAttempts: number;
+  nextRepairAttempt: number;
+  maxRepairAttempts: number;
+  reason: string;
+}
+
+export function decideWorkstreamAiAutoRepair(
+  error: unknown,
+  sourceResult: Record<string, unknown> | null,
+): WorkstreamAiAutoRepairDecision {
+  const priorExecution =
+    sourceResult &&
+    isRecord(sourceResult.workstreamAiExecution)
+      ? sourceResult.workstreamAiExecution
+      : null;
+  const previousRepairAttempts =
+    typeof priorExecution?.autoRepairAttempt === "number" &&
+    Number.isInteger(priorExecution.autoRepairAttempt) &&
+    priorExecution.autoRepairAttempt >= 0
+      ? priorExecution.autoRepairAttempt
+      : 0;
+
+  const message = error instanceof Error ? error.message : String(error);
+  const gateKind =
+    error instanceof LocalCodingAiExecutionGateError ? error.kind : null;
+  const workstreamCode =
+    error instanceof LocalCodingWorkstreamAiExecutionError ? error.code : null;
+
+  const recoverable =
+    gateKind === "INVALID_PROPOSAL" ||
+    gateKind === "MODEL_FAILED" ||
+    workstreamCode === "MODEL_UNAVAILABLE" ||
+    workstreamCode === "MODEL_FAILED" ||
+    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout/i.test(
+      message,
+    );
+
+  const nextRepairAttempt = previousRepairAttempts + 1;
+  const shouldRetry =
+    recoverable &&
+    previousRepairAttempts < MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS;
+
+  return {
+    recoverable,
+    shouldRetry,
+    previousRepairAttempts,
+    nextRepairAttempt,
+    maxRepairAttempts: MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS,
+    reason: recoverable
+      ? shouldRetry
+        ? "SAFE_AUTOMATIC_REPAIR"
+        : "AUTOMATIC_REPAIR_BUDGET_EXHAUSTED"
+      : "NON_RETRYABLE_FAILURE",
+  };
 }
 
 interface WorkstreamAiJobPayload {
