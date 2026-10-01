@@ -30,3 +30,54 @@ describe("database connection resilience", () => {
     expect(attempts).toBe(3);
   });
 });
+
+
+describe("production database URL resolution", () => {
+  it("uses APP_ENV=production even when NODE_ENV is absent", async () => {
+    const { resolveDatabaseUrl } = await import("@workspace/db");
+    const url = resolveDatabaseUrl({
+      APP_ENV: "production",
+      SUPABASE_URL: "https://nzdweipzckfszczzqtuw.supabase.co",
+      SUPABASE_PROD_DATABASE_URL:
+        "postgresql://postgres:secret@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres",
+      SUPABASE_DEV_DATABASE_URL:
+        "postgresql://dev:secret@dev.example:5432/postgres",
+    });
+
+    const parsed = new URL(url);
+    expect(parsed.hostname).toBe("aws-1-ap-southeast-2.pooler.supabase.com");
+    expect(parsed.port).toBe("6543");
+    expect(parsed.username).toBe("postgres.nzdweipzckfszczzqtuw");
+  });
+
+  it("keeps an already tenant-qualified Supavisor username", async () => {
+    const { normalizeProductionPoolerUrl } = await import("@workspace/db");
+    const url = normalizeProductionPoolerUrl(
+      "postgresql://postgres.nzdweipzckfszczzqtuw:secret@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres",
+      {
+        APP_ENV: "production",
+        SUPABASE_URL: "https://nzdweipzckfszczzqtuw.supabase.co",
+      },
+    );
+
+    const parsed = new URL(url);
+    expect(parsed.username).toBe("postgres.nzdweipzckfszczzqtuw");
+    expect(parsed.port).toBe("6543");
+  });
+
+  it("preserves session mode when explicitly forced while still fixing the tenant username", async () => {
+    const { normalizeProductionPoolerUrl } = await import("@workspace/db");
+    const url = normalizeProductionPoolerUrl(
+      "postgresql://postgres:secret@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres",
+      {
+        APP_ENV: "production",
+        SUPABASE_URL: "https://nzdweipzckfszczzqtuw.supabase.co",
+        SUPABASE_FORCE_SESSION_POOLER: "true",
+      },
+    );
+
+    const parsed = new URL(url);
+    expect(parsed.username).toBe("postgres.nzdweipzckfszczzqtuw");
+    expect(parsed.port).toBe("5432");
+  });
+});
