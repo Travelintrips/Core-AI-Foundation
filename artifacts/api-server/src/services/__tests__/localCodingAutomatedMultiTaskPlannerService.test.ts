@@ -383,6 +383,15 @@ describe("automated multi-task planner", () => {
       maxOutputTokens: 2_048,
       capabilities: CONSTRAINED_MODEL_CAPABILITIES,
     });
+    const schemaText = JSON.stringify(
+      provider.calls[0]?.responseFormat.type === "structured"
+        ? provider.calls[0].responseFormat.jsonSchema
+        : null,
+    );
+    expect(schemaText).not.toContain('"const"');
+    expect(schemaText).not.toContain('"pattern"');
+    expect(schemaText).not.toContain('"minLength"');
+    expect(schemaText).not.toContain('"maxLength"');
     expect(result.plan.taskId).toBe(TASK_ID);
     expect(result.metadata).toMatchObject({
       provider: "fake-provider",

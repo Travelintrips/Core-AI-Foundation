@@ -202,12 +202,11 @@ describe("Local Coding AI Execution Gate integration", () => {
       }
       for (const [, request] of fetchMock.mock.calls) {
         const body = JSON.parse(String(request?.body));
-        expect(body.generationConfig.responseFormat?.text?.mimeType)
-          .toBe("APPLICATION_JSON");
-        expect(body.generationConfig.responseFormat?.text?.schema)
+        expect(body.generationConfig.responseMimeType)
+          .toBe("application/json");
+        expect(body.generationConfig.responseJsonSchema)
           .toEqual(expect.objectContaining({ type: "object" }));
-        expect(body.generationConfig).not.toHaveProperty("responseMimeType");
-        expect(body.generationConfig).not.toHaveProperty("responseJsonSchema");
+        expect(body.generationConfig).not.toHaveProperty("responseFormat");
       }
     },
   );

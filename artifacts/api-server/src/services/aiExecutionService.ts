@@ -221,14 +221,11 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
       ...(input.temperature != null ? { temperature: input.temperature } : {}),
       ...(input.responseJsonSchema
         ? {
-            responseFormat: {
-              text: {
-                // responseFormat.text.mimeType is a Gemini enum, unlike the legacy
-                // responseMimeType field which accepts an IANA MIME string.
-                mimeType: "APPLICATION_JSON",
-                schema: input.responseJsonSchema,
-              },
-            },
+            // Gemini generateContent v1beta accepts the legacy structured-output
+            // pair used successfully by the constrained coding path before
+            // responseFormat.text was introduced here.
+            responseMimeType: "application/json",
+            responseJsonSchema: input.responseJsonSchema,
           }
         : input.jsonOutput
           ? { responseMimeType: "application/json" }
