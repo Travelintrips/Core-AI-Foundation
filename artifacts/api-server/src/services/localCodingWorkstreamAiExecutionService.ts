@@ -1385,6 +1385,7 @@ async function persistExecutionFailure(
   sourceResult: Record<string, unknown> | null,
   error: unknown,
   consumed: boolean,
+  repairDecision?: WorkstreamAiAutoRepairDecision,
 ): Promise<void> {
   const now = new Date();
   const message = error instanceof Error ? error.message : String(error);
@@ -1400,6 +1401,17 @@ async function persistExecutionFailure(
       error: message.slice(0, 1_200),
       modelInvoked: consumed,
       privilegeEnded: consumed,
+      autoRepairAttempt: repairDecision?.shouldRetry
+        ? repairDecision.nextRepairAttempt
+        : repairDecision?.previousRepairAttempts ?? 0,
+      autoRepairMaxAttempts:
+        repairDecision?.maxRepairAttempts ??
+        MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS,
+      autoRepairStatus: repairDecision?.shouldRetry
+        ? "RETRY_PENDING"
+        : repairDecision?.recoverable
+          ? "EXHAUSTED"
+          : "NOT_RETRYABLE",
       failedAt: now.toISOString(),
     },
   };
@@ -1434,6 +1446,147 @@ async function persistExecutionFailure(
     })
     .where(eq(aiCodingTasksTable.id, payload.childTaskId))
     .catch(() => undefined);
+}
+
+async function scheduleAutomaticWorkstreamAiRepair(
+  payload: WorkstreamAiJobPayload,
+  decision: WorkstreamAiAutoRepairDecision,
+): Promise<AiJob> {
+  const prepared = await prepareWorkstreamAiExecutionHandoff(
+    payload.workstreamId,
+  );
+  const lease = await approveWorkstreamAiExecutionHandoff(
+    payload.workstreamId,
+    prepared.handoffId,
+  );
+  const retryJob = await enqueueWorkstreamAiExecution(payload.workstreamId, {
+    expectedPackageHash: lease.packageHash,
+    requestedBy: "workstream-ai-auto-repair",
+  });
+
+  await db
+    .update(aiCodingTasksTable)
+    .set({
+      status: "ANALYZING",
+      resultSummary:
+        `AI Core auto-repair ${decision.nextRepairAttempt}/${decision.maxRepairAttempts} dijadwalkan setelah kegagalan constrained AI yang masih dapat dipulihkan.`,
+    })
+    .where(eq(aiCodingTasksTable.id, payload.childTaskId));
+
+  await logAudit(
+    "coding-multi-worker",
+    "workstream_ai_auto_repair_scheduled",
+    payload.workstreamId,
+    "coding_workstream",
+    "success",
+    {
+      failedJobClaimAttempt: payload.claimAttempt,
+      retryJobId: retryJob.id,
+      nextRepairAttempt: decision.nextRepairAttempt,
+      maxRepairAttempts: decision.maxRepairAttempts,
+    },
+  ).catch(() => undefined);
+
+  return retryJob;
+}
+
+async function moveWorkstreamFailureToRepairInbox(input: {
+  payload: WorkstreamAiJobPayload;
+  parentTaskId: string;
+  error: unknown;
+  decision: WorkstreamAiAutoRepairDecision;
+  schedulingError?: unknown;
+}): Promise<boolean> {
+  const now = new Date();
+  const primaryMessage =
+    input.error instanceof Error ? input.error.message : String(input.error);
+  const schedulingMessage =
+    input.schedulingError instanceof Error
+      ? input.schedulingError.message
+      : input.schedulingError
+        ? String(input.schedulingError)
+        : "";
+  const combinedMessage = [
+    primaryMessage,
+    schedulingMessage ? "Auto-repair scheduling failed: " + schedulingMessage : "",
+  ]
+    .filter(Boolean)
+    .join(" | ")
+    .slice(0, 2_000);
+
+  const [failedWorkstream] = await db
+    .update(aiCodingWorkstreamsTable)
+    .set({
+      status: "FAILED",
+      workerId: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      heartbeatAt: now,
+      completedAt: now,
+      errorMessage: combinedMessage,
+    })
+    .where(
+      and(
+        eq(aiCodingWorkstreamsTable.id, input.payload.workstreamId),
+        eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"),
+      ),
+    )
+    .returning({ id: aiCodingWorkstreamsTable.id });
+
+  if (!failedWorkstream) {
+    const [current] = await db
+      .select({ status: aiCodingWorkstreamsTable.status })
+      .from(aiCodingWorkstreamsTable)
+      .where(eq(aiCodingWorkstreamsTable.id, input.payload.workstreamId))
+      .limit(1);
+    if (current && ["CLAIMED", "RUNNING"].includes(current.status)) {
+      return false;
+    }
+  }
+
+  await db
+    .update(aiCodingTasksTable)
+    .set({
+      status: "FAILED",
+      resultSummary:
+        "AI Core tidak dapat memulihkan kegagalan ini secara aman. Diagnostik sudah dimasukkan ke Repair Inbox.",
+    })
+    .where(eq(aiCodingTasksTable.id, input.payload.childTaskId))
+    .catch(() => undefined);
+
+  await enqueueCodingRepairInboxItem({
+    taskId: input.parentTaskId,
+    workstreamId: input.payload.workstreamId,
+    graphId: input.payload.graphId,
+    childTaskId: input.payload.childTaskId,
+    error: combinedMessage,
+    repairAttempt: input.decision.previousRepairAttempts,
+    maxRepairAttempts: input.decision.maxRepairAttempts,
+    metadata: {
+      source: "workstream-ai-execution",
+      recoverable: input.decision.recoverable,
+      repairDecision: input.decision.reason,
+      failedClaimAttempt: input.payload.claimAttempt,
+    },
+  }).catch(() => undefined);
+
+  await logAudit(
+    "coding-multi-worker",
+    "workstream_ai_sent_to_repair_inbox",
+    input.payload.workstreamId,
+    "coding_workstream",
+    "failure",
+    {
+      graphId: input.payload.graphId,
+      childTaskId: input.payload.childTaskId,
+      repairAttempt: input.decision.previousRepairAttempts,
+      maxRepairAttempts: input.decision.maxRepairAttempts,
+      repairDecision: input.decision.reason,
+      error: combinedMessage.slice(0, 1_000),
+    },
+  ).catch(() => undefined);
+
+  return true;
 }
 
 export async function executeCodingWorkstreamAiJob(
