@@ -370,6 +370,37 @@ describe("Local Coding AI Execution Gate integration", () => {
     expect(result.proposal.taskId).toBe(lease.package.task.id);
   });
 
+  it("unwraps one JSON-string layer containing fenced proposal JSON", async () => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const fence = String.fromCharCode(96).repeat(3);
+    const wrapped = JSON.stringify(
+      fence + "json\n" + proposalJson(lease) + "\n" + fence,
+    );
+    const invoke = vi.fn(async () => ({
+      output: { type: "text" as const, text: wrapped },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    }));
+    const provider: ConstrainedModelProvider = {
+      provider: "fake",
+      model: "proposal-v1",
+      capabilities: CONSTRAINED_MODEL_CAPABILITIES,
+      invoke,
+    };
+
+    const result = await invokeConstrainedAiProposal({
+      lease,
+      adapter: createConstrainedModelInvocationAdapter(provider),
+      target: { provider: "fake", model: "proposal-v1" },
+      requestId: "execution-test-json-string-wrapper",
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+    });
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(result.proposal.taskId).toBe(lease.package.task.id);
+  });
+
   it("normalizes one fenced JSON object surrounded by provider prose", async () => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
