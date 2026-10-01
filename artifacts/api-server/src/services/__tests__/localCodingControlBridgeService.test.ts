@@ -15,6 +15,8 @@ describe("coding control bridge contract", () => {
     expect(bridge).toHaveProperty("appendCodingBridgeResponse");
     expect(bridge).toHaveProperty("listPendingCodingBridgeResponses");
     expect(bridge).toHaveProperty("acknowledgeCodingBridgeResponse");
+    expect(bridge).toHaveProperty("enqueueCodingRepairInboxItem");
+    expect(bridge).toHaveProperty("listCodingRepairInboxItems");
   });
 
   it("exports external-agent work claim primitives", async () => {
