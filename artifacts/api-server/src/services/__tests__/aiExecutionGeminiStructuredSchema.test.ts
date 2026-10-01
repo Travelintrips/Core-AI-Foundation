@@ -9,7 +9,7 @@ vi.mock("../aiSecretService.js", () => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Gemini native structured proposal schema", () => {
-  it("sends current Gemini responseFormat schema with the APPLICATION_JSON enum", async () => {
+  it("sends Gemini legacy structured output fields accepted by generateContent", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -35,19 +35,14 @@ describe("Gemini native structured proposal schema", () => {
     });
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body.generationConfig.responseFormat).toEqual({
-      text: {
-        mimeType: "APPLICATION_JSON",
-        schema: localCodingAiProposalV1JsonSchema,
-      },
-    });
+    expect(body.generationConfig.responseMimeType).toBe("application/json");
+    expect(body.generationConfig.responseJsonSchema)
+      .toEqual(localCodingAiProposalV1JsonSchema);
     const operationItems =
-      body.generationConfig.responseFormat.text.schema.properties.proposal
+      body.generationConfig.responseJsonSchema.properties.proposal
         .properties.operations.items;
     expect(operationItems.anyOf).toHaveLength(5);
     expect(operationItems).not.toHaveProperty("oneOf");
-
-    expect(body.generationConfig).not.toHaveProperty("responseJsonSchema");
-    expect(body.generationConfig).not.toHaveProperty("responseMimeType");
+    expect(body.generationConfig).not.toHaveProperty("responseFormat");
   });
 });
