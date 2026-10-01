@@ -27,6 +27,28 @@ describe("GCP application secret precedence", () => {
     expect(result).toEqual({ loaded: 1, overridden: 2, skipped: 1 });
   });
 
+
+  it("treats APP_ENV from the consolidated secret as production before applying precedence", () => {
+    const env: NodeJS.ProcessEnv = {
+      SUPABASE_PROD_DATABASE_URL: "postgresql://postgres:stale@db.example:6543/postgres",
+      OPENAI_API_KEY: "hostinger-openai",
+    };
+
+    const result = applyGcpApplicationSecrets(
+      {
+        APP_ENV: "production",
+        SUPABASE_PROD_DATABASE_URL: "postgresql://postgres:fresh@db.example:6543/postgres",
+        OPENAI_API_KEY: "gcp-openai",
+      },
+      env,
+    );
+
+    expect(env.APP_ENV).toBe("production");
+    expect(env.SUPABASE_PROD_DATABASE_URL).toContain(":fresh@");
+    expect(env.OPENAI_API_KEY).toBe("hostinger-openai");
+    expect(result).toEqual({ loaded: 1, overridden: 1, skipped: 1 });
+  });
+
   it("keeps existing database URLs outside production", () => {
     const env: NodeJS.ProcessEnv = {
       NODE_ENV: "development",
