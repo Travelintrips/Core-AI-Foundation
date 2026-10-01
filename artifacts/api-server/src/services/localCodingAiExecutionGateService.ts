@@ -12,6 +12,7 @@ import {
   type AiCodingTask,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
+import { normalizeExecFileStdout } from "./execFileOutputService.js";
 import { executeAINoFallback, type ObservabilityContext } from "./aiExecutionService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
 import {
@@ -153,7 +154,7 @@ function sha256Json(value: unknown): string {
 }
 
 async function gitHead(root: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+  const result = await execFileAsync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     timeout: 15_000,
     maxBuffer: 1_000_000,
@@ -165,7 +166,14 @@ async function gitHead(root: string): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  return stdout.trim().toLowerCase();
+  const head = normalizeExecFileStdout(result).trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(head)) {
+    throw new LocalCodingAiExecutionGateError(
+      "Repository HEAD could not be resolved in the isolated AI execution workspace",
+      "INVALID_CONTEXT",
+    );
+  }
+  return head;
 }
 
 export function buildAiProposalBinding(
