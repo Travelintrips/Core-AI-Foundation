@@ -1509,6 +1509,7 @@ export async function executeCodingWorkstreamAiJob(
     const provider = createConstrainedCodingProviderAdapter({
       providerSlug,
       modelId,
+      jsonOutput: true,
       baseUrl:
         typeof selected.provider.baseUrl === "string"
           ? selected.provider.baseUrl
