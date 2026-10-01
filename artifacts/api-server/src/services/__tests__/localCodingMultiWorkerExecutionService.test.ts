@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   claimReady: vi.fn(),
   selectClaimable: vi.fn(),
   logAudit: vi.fn(),
+  isTransientDatabaseConnectionError: vi.fn(),
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -20,6 +21,7 @@ vi.mock("@workspace/db", () => ({
   aiCodingWorkstreamsTable: {},
   aiJobsTable: {},
   db: {},
+  isTransientDatabaseConnectionError: mocks.isTransientDatabaseConnectionError,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -122,6 +124,7 @@ describe("multi-worker execution boundary", () => {
       status: "REVIEW_REQUIRED",
     });
     mocks.completeAnalyzer.mockResolvedValue(undefined);
+    mocks.isTransientDatabaseConnectionError.mockReturnValue(false);
     mocks.executeAnalyzer.mockResolvedValue({
       codingTaskId: TASK_ID,
       codingRunId: RUN_ID,
@@ -156,6 +159,26 @@ describe("multi-worker execution boundary", () => {
     ).toBe(false);
     expect(codingWorkstreamOwnsFile("../secret.ts", ["**"])).toBe(false);
     expect(codingWorkstreamOwnsFile("/etc/passwd", ["**"])).toBe(false);
+  });
+
+  it("keeps transient database failures retryable instead of failing the workstream", async () => {
+    const transient = new Error("timeout exceeded when trying to connect");
+    mocks.executeAnalyzer.mockRejectedValueOnce(transient);
+    mocks.isTransientDatabaseConnectionError.mockReturnValueOnce(true);
+
+    await expect(executeCodingWorkstreamJob(job())).rejects.toThrow(
+      /timeout exceeded/,
+    );
+
+    expect(mocks.failAnalyzer).not.toHaveBeenCalled();
+    expect(mocks.logAudit).toHaveBeenCalledWith(
+      "coding-multi-worker",
+      "workstream_transient_db_retry",
+      WS_ID,
+      "coding_workstream",
+      "success",
+      expect.objectContaining({ graphId: GRAPH_ID, jobId: 17 }),
+    );
   });
 
   it("moves a successful analyzer result to REVIEW_WORKSTREAM, not COMPLETED", async () => {
