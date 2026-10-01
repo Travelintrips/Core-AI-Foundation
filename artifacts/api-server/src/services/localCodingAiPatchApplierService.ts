@@ -9,6 +9,7 @@ import {
   type LocalCodingExecutionPlan,
   type LocalEditOperation,
 } from "./localCodingExecutorService.js";
+import { normalizeExecFileStdout } from "./execFileOutputService.js";
 import { isSensitiveRepositoryPath } from "./localCodingEngineService.js";
 
 const execFileAsync = promisify(execFile);
@@ -201,8 +202,9 @@ async function snapshot(root: string, file: string): Promise<Snapshot> {
 }
 async function restore(snapshots: Snapshot[]): Promise<void> { for (const item of snapshots) await writeFile(item.absolute, item.content, "utf8"); }
 async function git(root: string, args: string[], trim = true): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd: root, timeout: 15_000, maxBuffer: 4 * 1024 * 1024,
+  const result = await execFileAsync("git", args, { cwd: root, timeout: 15_000, maxBuffer: 4 * 1024 * 1024,
     env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", LANG: "C", LC_ALL: "C", GIT_TERMINAL_PROMPT: "0" } });
+  const stdout = normalizeExecFileStdout(result);
   return trim ? stdout.trim() : stdout;
 }
 function executorOp(op: ProposalOperation): LocalEditOperation {
