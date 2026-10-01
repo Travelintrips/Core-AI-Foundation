@@ -223,7 +223,9 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
         ? {
             responseFormat: {
               text: {
-                mimeType: "application/json",
+                // responseFormat.text.mimeType is a Gemini enum, unlike the legacy
+                // responseMimeType field which accepts an IANA MIME string.
+                mimeType: "APPLICATION_JSON",
                 schema: input.responseJsonSchema,
               },
             },
