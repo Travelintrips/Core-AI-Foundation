@@ -1785,7 +1785,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   );
 }
 
-function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExecutionQueued }: { detail?: CodingTaskDetail; isLoading: boolean; isError: boolean; onRetry: () => void; onClose: () => void; onAiExecutionQueued: () => void }) {
+function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExecutionQueued, presentationStatus }: { detail?: CodingTaskDetail; isLoading: boolean; isError: boolean; onRetry: () => void; onClose: () => void; onAiExecutionQueued: () => void; presentationStatus?: CodingTaskStatus }) {
   const { t, lang } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1819,6 +1819,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   if (isError || !detail) return <Card className="border-rose-400/20 bg-[#0c1628]"><CardContent className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center"><XCircle className="mb-4 size-8 text-rose-300" /><p className="font-display text-lg text-slate-100">{t("pages.codingWorkspace.errorTitle")}</p><p className="mt-2 max-w-xs text-sm leading-6 text-slate-500">{t("pages.codingWorkspace.errorHint")}</p><Button variant="outline" onClick={onRetry} className="mt-5 border-white/10 text-slate-300 hover:bg-white/5" data-testid="button-retry-coding-detail"><RotateCcw />{t("pages.codingWorkspace.retry")}</Button></CardContent></Card>;
 
   const task = detail.task;
+  const displayedTaskStatus = presentationStatus ?? task.status;
   const activeRun = detail.runs.find((run) => run.status === "RUNNING");
   const hasActiveRun = Boolean(activeRun);
   const latestResultRun = detail.runs.find(
@@ -2408,7 +2409,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
           <div className="min-w-0"><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-cyan-300"><span className="size-1.5 rounded-full bg-cyan-300" />{task.taskNumber}</div><h2 className="truncate font-display text-xl text-slate-100">{task.projectName}</h2><div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-slate-500"><GitBranch className="size-3.5 shrink-0 text-slate-600" /><span className="truncate">{task.repository}</span><span className="text-slate-700">/</span><span className="truncate text-slate-400">{task.branch}</span></div></div>
           <button type="button" onClick={onClose} className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200" aria-label={t("pages.codingWorkspace.close")} data-testid="button-close-coding-detail"><XCircle className="size-4" /></button>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2"><StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} /><span className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-slate-500">P{task.priority}</span><span className="text-xs text-slate-600">{formatDate(task.createdAt, lang, true)}</span></div>
+        <div className="mt-4 flex flex-wrap items-center gap-2"><StatusBadge status={displayedTaskStatus} label={t(`pages.codingWorkspace.statuses.${displayedTaskStatus.toLowerCase()}`)} /><span className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-slate-500">P{task.priority}</span><span className="text-xs text-slate-600">{formatDate(task.createdAt, lang, true)}</span></div>
       </CardHeader>
       <CardContent className="space-y-6 p-5">
         <section><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><TerminalSquare className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.instruction")}</div><p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-[#091222] p-3 text-sm leading-6 text-slate-300">{task.instruction}</p></section>
@@ -3658,6 +3659,8 @@ export default function CodingWorkspace() {
     return query ? source.filter((task) => [task.taskNumber, task.projectName, task.repository, task.branch, task.status].some((value) => value.toLowerCase().includes(query))) : source;
   }, [tasks, search]);
   const selectedId = activeFromRoute ?? visibleTasks[0]?.id;
+  const selectedPresentationStatus =
+    (tasks ?? []).find((task) => task.id === selectedId)?.status;
   const detailQuery = useGetCodingTask(selectedId ?? "", { query: { enabled: Boolean(selectedId), queryKey: getGetCodingTaskQueryKey(selectedId ?? "") } });
   const hasActiveRun = detailQuery.data?.runs.some((run) => run.status === "RUNNING") ?? false;
   const aiExecutionRunCount =
@@ -3807,6 +3810,7 @@ export default function CodingWorkspace() {
             onRetry={() => detailQuery.refetch()}
             onClose={() => setLocation("/coding-workspace")}
             onAiExecutionQueued={() => setQueuedAiBaselineRunCount(aiExecutionRunCount)}
+            presentationStatus={selectedPresentationStatus}
           /> : <Card className="min-h-[420px] border-white/[0.08] bg-[#0c1628]"><CardContent className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{isLoading ? t("pages.codingWorkspace.loading") : t("pages.codingWorkspace.selectTask")}</p></CardContent></Card>}</div>
         </div>
         <div className="mt-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-slate-700"><div className="h-px flex-1 bg-white/[0.05]" /><span>Travelintrips engineering / coding intake</span><div className="h-px flex-1 bg-white/[0.05]" /></div>
