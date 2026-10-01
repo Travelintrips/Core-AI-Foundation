@@ -813,19 +813,28 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
 
     if (
       /Coding task already has an active run/i.test(message) &&
-      state?.activeRun
+      state
     ) {
-      const action = `WAIT_ACTIVE_RUN:${state.activeRun.agentName}`;
-      await setState(taskId, "WAITING", action, null);
+      const stillActive = state.activeRun;
+      const action = stillActive
+        ? `WAIT_ACTIVE_RUN:${stillActive.agentName}`
+        : "RETRY_AFTER_ACTIVE_RUN_RACE";
+      const status: AutonomousStatus = stillActive ? "WAITING" : "ACTIVE";
+      await setState(taskId, status, action, null);
       await logAudit(
         "coding-autonomous",
         "active_run_race_deferred",
         taskId,
         "coding_task",
         "success",
-        { activeRunId: state.activeRun.id, agentName: state.activeRun.agentName },
+        {
+          activeRunId: stillActive?.id ?? null,
+          agentName: stillActive?.agentName ?? null,
+          raceAlreadyCleared: !stillActive,
+          nextAction: state.nextAction,
+        },
       ).catch(() => undefined);
-      return { taskId, status: "WAITING", action };
+      return { taskId, status, action };
     }
 
     const workstreamAiClaimRace =
