@@ -346,6 +346,43 @@ describe("autonomous action budget behavior", () => {
     vi.mocked(graph.getLatestCodingTaskGraph).mockResolvedValue(null);
   });
 
+  it.each(["stopped", "budget exhausted", "recoverable"])("rechecks current recovery state before reactivation: %s", async (scenario) => {
+    autonomous.status = "BLOCKED";
+    autonomous.cycle_count = 9;
+    mockDbExecute.mockImplementation(async (query: SQL) => {
+      const normalized = dialect.sqlToQuery(query).sql.replace(/\s+/g, " ");
+      if (normalized.includes("SELECT task_id, enabled, status, cycle_count, max_cycles")) {
+        const snapshot = { ...autonomous };
+        if (scenario === "stopped") {
+          autonomous.enabled = false;
+          autonomous.status = "DISABLED";
+        } else if (scenario === "budget exhausted") {
+          autonomous.cycle_count = 40;
+        }
+        return { rows: [snapshot] };
+      }
+      if (normalized.includes("last_action = 'RECOVER_READY_REVIEW'")) {
+        const stateAllowsUpdate = !normalized.includes("AND status IN ('FAILED', 'BLOCKED')") ||
+          ["FAILED", "BLOCKED"].includes(String(autonomous.status));
+        const budgetAllowsUpdate = !normalized.includes("AND cycle_count < max_cycles") ||
+          Number(autonomous.cycle_count) < Number(autonomous.max_cycles);
+        if (!stateAllowsUpdate || !budgetAllowsUpdate) return { rows: [] };
+        autonomous.enabled = true;
+        autonomous.status = "ACTIVE";
+        return { rows: [{ task_id: taskId }] };
+      }
+      return { rows: [{ ...autonomous }] };
+    });
+
+    const { recoverOrphanedReadyReviewTasks } = await import("../localCodingAutonomousRepairService.js");
+    await recoverOrphanedReadyReviewTasks();
+    expect(autonomous).toMatchObject(
+      scenario === "stopped" ? { enabled: false, status: "DISABLED" } :
+      scenario === "budget exhausted" ? { status: "BLOCKED", cycle_count: 40 } :
+      { enabled: true, status: "ACTIVE" },
+    );
+  });
+
   it("keeps polling an active execution at the exact limit without blocking or spending cycles", async () => {
     const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
     autonomous.cycle_count = 40;
