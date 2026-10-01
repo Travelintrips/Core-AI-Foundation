@@ -26,6 +26,9 @@ import type { AiJob } from "@workspace/db";
 // ─── Mock all heavy imports so unit tests don't need a real DB ────────────────
 
 vi.mock("@workspace/db", () => ({
+  withTransientDatabaseRetry: vi.fn(
+    async (operation: () => Promise<unknown>) => operation(),
+  ),
   db: {
     select: vi.fn(() => ({
       from:  vi.fn().mockReturnThis(),
