@@ -8,6 +8,7 @@ import {
   aiJobsTable,
   aiOrchestratorSessionsTable,
   db,
+  withTransientDatabaseRetry,
   type AiCodingRun,
   type AiCodingTask,
   type AiJob,
@@ -755,16 +756,19 @@ export async function startCodingOrchestration(
   // analyzer would compete for the same CPU/memory/DB resources and can starve
   // the public API. Keep the durable job queue clean instead of spawning
   // parallel analyzer child processes.
-  const [activeAnalyzer] = await db
-    .select({ id: aiJobsTable.id })
-    .from(aiJobsTable)
-    .where(
-      and(
-        eq(aiJobsTable.jobType, "coding_repository_analyzer"),
-        inArray(aiJobsTable.status, ["queued", "running", "retrying"]),
-      ),
-    )
-    .limit(1);
+  const [activeAnalyzer] = await withTransientDatabaseRetry(
+    () => db
+      .select({ id: aiJobsTable.id })
+      .from(aiJobsTable)
+      .where(
+        and(
+          eq(aiJobsTable.jobType, "coding_repository_analyzer"),
+          inArray(aiJobsTable.status, ["queued", "running", "retrying"]),
+        ),
+      )
+      .limit(1),
+    { attempts: 4, baseDelayMs: 250 },
+  );
 
   if (activeAnalyzer) {
     // A healthy single-flight analyzer is normal backpressure, not a task
