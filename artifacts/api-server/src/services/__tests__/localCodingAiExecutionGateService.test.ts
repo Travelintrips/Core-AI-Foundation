@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApprovedAiHandoffLease } from "../localCodingAiHandoffService.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
+  ProviderInvocationError,
   createConstrainedModelInvocationAdapter,
   type ConstrainedModelProvider,
 } from "../localCodingAiModelAdapterService.js";
@@ -205,6 +206,114 @@ describe("Local Coding AI Execution Gate integration", () => {
       }
     },
   );
+
+  it.each(["fenced", "json-string"])(
+    "recovers bounded Gemini structured JSON transport wrapper: %s",
+    async (format) => {
+      const { head } = await repositoryFixture();
+      const lease = leaseFixture(head);
+      const fence = String.fromCharCode(96).repeat(3);
+      const proposal = proposalJson(lease);
+      const content =
+        format === "fenced"
+          ? fence + "json\n" + proposal + "\n" + fence
+          : JSON.stringify(proposal);
+
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: content }] } }],
+            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 20 },
+          }),
+          { status: 200 },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const provider = createConstrainedCodingProviderAdapter({
+        providerSlug: "google",
+        modelId: "gemini-3.8-flash",
+        jsonOutput: true,
+      });
+      const result = await invokeConstrainedAiProposal({
+        lease,
+        adapter: createConstrainedModelInvocationAdapter(provider),
+        target: { provider: "google", model: "gemini-3.8-flash" },
+        requestId: "native-gemini-wrapper-" + format,
+        timeoutMs: 5_000,
+        maxOutputTokens: 512,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.proposal.taskId).toBe(lease.package.task.id);
+    },
+  );
+
+  it("uses the bounded schema-repair attempt after malformed structured provider output", async () => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const invoke = vi.fn()
+      .mockRejectedValueOnce(
+        new ProviderInvocationError(
+          "Constrained provider returned malformed structured JSON",
+          "BAD_REQUEST",
+        ),
+      )
+      .mockResolvedValueOnce({
+        output: {
+          type: "structured" as const,
+          value: JSON.parse(proposalJson(lease)),
+        },
+        usage: { inputTokens: 20, outputTokens: 20, totalTokens: 40 },
+      });
+
+    const result = await invokeConstrainedAiProposal({
+      lease,
+      adapter: createConstrainedModelInvocationAdapter({
+        provider: "fake",
+        model: "proposal-v1",
+        capabilities: CONSTRAINED_MODEL_CAPABILITIES,
+        invoke,
+      }),
+      target: { provider: "fake", model: "proposal-v1" },
+      requestId: "execution-test-malformed-structured-repair",
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+    });
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke.mock.calls[1]?.[0].input).toContain("SCHEMA REPAIR REQUIRED");
+    expect(result.proposal.taskId).toBe(lease.package.task.id);
+  });
+
+  it("fails as INVALID_PROPOSAL after two malformed structured responses", async () => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const invoke = vi.fn(async () => {
+      throw new ProviderInvocationError(
+        "Constrained provider returned malformed structured JSON",
+        "BAD_REQUEST",
+      );
+    });
+
+    await expect(
+      invokeConstrainedAiProposal({
+        lease,
+        adapter: createConstrainedModelInvocationAdapter({
+          provider: "fake",
+          model: "proposal-v1",
+          capabilities: CONSTRAINED_MODEL_CAPABILITIES,
+          invoke,
+        }),
+        target: { provider: "fake", model: "proposal-v1" },
+        requestId: "execution-test-malformed-structured-terminal",
+        timeoutMs: 5_000,
+        maxOutputTokens: 512,
+      }),
+    ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
 
   it("runs prompt -> constrained adapter -> Contract V1 -> policy -> deterministic patch without scripts", async () => {
     const { root, head } = await repositoryFixture();
