@@ -92,6 +92,21 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
   const supportsTemperature = openAIModelSupportsTemperature(modelId);
   const baseURL = (input.provider.baseUrl as string | undefined) || "https://api.openai.com/v1";
 
+  // o-series chat models do not accept a system message on this path. Preserve
+  // the bounded system policy by folding it into the user message instead of
+  // silently dropping it. JSON mode also requires the messages themselves to
+  // explicitly mention JSON.
+  const jsonInstruction = input.jsonOutput
+    ? "Return exactly one JSON object. Do not include markdown fences or prose."
+    : "";
+  const userPrompt = [
+    isOSeries ? input.systemPrompt : "",
+    input.prompt,
+    jsonInstruction,
+  ]
+    .filter((part): part is string => typeof part === "string" && part.length > 0)
+    .join("\n\n");
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const messages: Array<{ role: string; content: any }> = [];
   if (input.systemPrompt && !isOSeries) {
@@ -101,12 +116,12 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
     messages.push({
       role: "user",
       content: [
-        { type: "text", text: input.prompt },
+        { type: "text", text: userPrompt },
         { type: "image_url", image_url: { url: input.imageUrl } },
       ],
     });
   } else {
-    messages.push({ role: "user", content: input.prompt });
+    messages.push({ role: "user", content: userPrompt });
   }
 
   const body: Record<string, unknown> = {
