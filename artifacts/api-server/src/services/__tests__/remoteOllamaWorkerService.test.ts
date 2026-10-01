@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   REMOTE_OLLAMA_MAX_RETRY,
@@ -13,6 +14,19 @@ describe("remote Ollama worker service", () => {
   it("keeps pending work off scarce GPU capacity until a fresh claim", () => {
     expect(REMOTE_OLLAMA_MAX_RETRY).toBe(0);
     expect(REMOTE_OLLAMA_STALE_RUNNING_MS).toBe(70_000);
+  });
+
+  it("reconciles worker capacity after complete and retry bookkeeping", () => {
+    const source = readFileSync(
+      new URL("../remoteOllamaWorkerService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("reconcileRemoteOllamaWorkerCapacity");
+    expect(source).toContain("COUNT(*)::int AS active_count");
+    expect(source).toContain("payload_json->>'_claimedByWorkerId'");
+    expect(source).toContain("await reconcileRemoteOllamaWorkerCapacity(workerId).catch");
+    expect(source).toContain("await reconcileRemoteOllamaWorkerCapacity(existing.id).catch");
   });
 });
 // Registration is intentionally clamped to at least two slots server-side so

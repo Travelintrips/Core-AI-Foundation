@@ -76,8 +76,9 @@ export async function registerRemoteOllamaWorker(input: {
     if (existing.heartbeatToken) {
       const renewed = await renewLease(existing.id, existing.heartbeatToken, DEFAULT_LEASE_TTL_MS);
       if (renewed) {
+        await reconcileRemoteOllamaWorkerCapacity(existing.id).catch(() => undefined);
         const [reactivated] = await db.update(aiWorkersTable).set({
-          status: existing.runningJobs > 0 ? "busy" : "online",
+          status: sql`CASE WHEN running_jobs > 0 THEN 'busy' ELSE 'online' END`,
           region: input.region ?? "remote",
           version: input.version ?? "1.0.0",
           capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
@@ -324,6 +325,61 @@ export async function claimRemoteOllamaInvocation(
   });
 }
 
+export async function reconcileRemoteOllamaWorkerCapacity(
+  workerId: number,
+): Promise<void> {
+  await withTransientDatabaseRetry(
+    () =>
+      db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(${workerId})`);
+
+        const raw = await tx.execute(sql`
+          SELECT
+            COUNT(*)::int AS active_count,
+            MIN(id)::int AS current_job
+          FROM ai_platform.ai_jobs
+          WHERE status = 'running'
+            AND job_type IN (
+              ${REMOTE_OLLAMA_JOB_TYPE},
+              ${REMOTE_OLLAMA_POWERSHELL_JOB_TYPE}
+            )
+            AND payload_json->>'_claimedByWorkerId' = ${String(workerId)}
+        `);
+        const row =
+          (raw as unknown as {
+            rows?: Array<{ active_count?: number | string; current_job?: number | null }>;
+          }).rows?.[0];
+        const activeCount = Math.max(0, Number(row?.active_count ?? 0));
+        const currentJob =
+          row?.current_job == null ? null : Number(row.current_job);
+
+        await tx
+          .update(aiWorkersTable)
+          .set({
+            runningJobs: activeCount,
+            currentJob:
+              Number.isInteger(currentJob) && currentJob! > 0
+                ? currentJob
+                : null,
+            status: sql`CASE
+              WHEN status IN ('online', 'idle', 'busy')
+                THEN CASE WHEN ${activeCount} = 0 THEN 'idle' ELSE 'busy' END
+              ELSE status
+            END`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(aiWorkersTable.id, workerId),
+              eq(aiWorkersTable.providerSlug, PROVIDER),
+              eq(aiWorkersTable.runtimeKind, REMOTE_OLLAMA_RUNTIME_KIND),
+            ),
+          );
+      }),
+    { attempts: 5, baseDelayMs: 200 },
+  );
+}
+
 export async function completeRemoteOllamaInvocation(
   workerId: number,
   jobId: number,
@@ -331,7 +387,12 @@ export async function completeRemoteOllamaInvocation(
 ): Promise<AiJob> {
   const chars = JSON.stringify(result).length;
   if (chars > MAX_RESULT_CHARS) throw new Error("REMOTE_OLLAMA_RESULT_TOO_LARGE");
-  return completeJob(jobId, workerId, result);
+
+  try {
+    return await completeJob(jobId, workerId, result);
+  } finally {
+    await reconcileRemoteOllamaWorkerCapacity(workerId).catch(() => undefined);
+  }
 }
 
 export async function retryRemoteOllamaInvocation(
@@ -339,7 +400,15 @@ export async function retryRemoteOllamaInvocation(
   jobId: number,
   errorMessage: string,
 ): Promise<AiJob> {
-  return retryJob(jobId, workerId, errorMessage.slice(0, 2_000));
+  try {
+    return await retryJob(jobId, workerId, errorMessage.slice(0, 2_000));
+  } finally {
+    // retryJob updates the terminal/retry state and worker capacity in separate
+    // statements. If bookkeeping fails after the job state has already
+    // changed, reconstruct capacity from the authoritative set of RUNNING
+    // remote Ollama jobs so failed HTTP/model calls cannot leak slots.
+    await reconcileRemoteOllamaWorkerCapacity(workerId).catch(() => undefined);
+  }
 }
 
 async function cancelRemoteOllamaInvocation(jobId: number): Promise<void> {
