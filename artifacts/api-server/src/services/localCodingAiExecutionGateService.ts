@@ -252,33 +252,59 @@ export function createConstrainedCodingProviderAdapter(input: {
     capabilities: CONSTRAINED_MODEL_CAPABILITIES,
     async invoke(request, context) {
       const bounded = parseBoundedModelPrompt(request.input);
+      const commonExecutionInput = {
+        prompt: bounded.user,
+        systemPrompt:
+          bounded.system +
+          (request.responseFormat.type === "structured"
+            ? " Return exactly one JSON object matching the requested structured schema. No markdown fences or prose."
+            : ""),
+        model: {
+          modelId: input.modelId,
+          maxOutputTokens: request.maxOutputTokens,
+        },
+        provider: {
+          slug: input.providerSlug,
+          ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
+        },
+        temperature: 0,
+        maxTokens: request.maxOutputTokens,
+        ...(input.jsonOutput || request.responseFormat.type === "structured"
+          ? { jsonOutput: true as const }
+          : {}),
+        signal: context.signal,
+        observability: input.observability,
+      };
+
       try {
-        const result = await executeAINoFallback({
-          prompt: bounded.user,
-          systemPrompt:
-            bounded.system +
-            (request.responseFormat.type === "structured"
-              ? " Return exactly one JSON object matching the requested structured schema. No markdown fences or prose."
-              : ""),
-          model: {
-            modelId: input.modelId,
-            maxOutputTokens: request.maxOutputTokens,
-          },
-          provider: {
-            slug: input.providerSlug,
-            ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
-          },
-          temperature: 0,
-          maxTokens: request.maxOutputTokens,
-          ...(input.jsonOutput || request.responseFormat.type === "structured"
-            ? { jsonOutput: true }
-            : {}),
-          ...(request.responseFormat.type === "structured"
-            ? { responseJsonSchema: request.responseFormat.jsonSchema }
-            : {}),
-          signal: context.signal,
-          observability: input.observability,
-        });
+        let result;
+        try {
+          result = await executeAINoFallback({
+            ...commonExecutionInput,
+            ...(request.responseFormat.type === "structured"
+              ? { responseJsonSchema: request.responseFormat.jsonSchema }
+              : {}),
+          });
+        } catch (error) {
+          const mapped = mapProviderFailure(error);
+          const canRetryGeminiWithoutSchema =
+            input.providerSlug === "google" &&
+            request.responseFormat.type === "structured" &&
+            mapped.code === "BAD_REQUEST" &&
+            /Gemini API request failed \(HTTP 400\)|INVALID_ARGUMENT/i.test(
+              mapped.message,
+            );
+
+          if (!canRetryGeminiWithoutSchema) {
+            throw mapped;
+          }
+
+          // Gemini's supported JSON Schema subset varies by endpoint/model.
+          // Retry once in JSON-only mode, then keep the exact same bounded
+          // parse + Contract V1/binding/policy validation on the server.
+          result = await executeAINoFallback(commonExecutionInput);
+        }
+
         const output =
           request.responseFormat.type === "structured"
             ? {

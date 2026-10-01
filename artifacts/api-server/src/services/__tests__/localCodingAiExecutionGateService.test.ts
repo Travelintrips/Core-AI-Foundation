@@ -211,6 +211,63 @@ describe("Local Coding AI Execution Gate integration", () => {
     },
   );
 
+  it("retries one Gemini schema rejection in JSON-only mode and still validates Contract V1", async () => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 400,
+              message: "Request contains an invalid argument.",
+              status: "INVALID_ARGUMENT",
+            },
+          }),
+          { status: 400 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            candidates: [{
+              content: { parts: [{ text: proposalJson(lease) }] },
+            }],
+            usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 60 },
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = createConstrainedCodingProviderAdapter({
+      providerSlug: "google",
+      modelId: "gemini-3.8-flash",
+      jsonOutput: true,
+    });
+    const result = await invokeConstrainedAiProposal({
+      lease,
+      adapter: createConstrainedModelInvocationAdapter(provider),
+      target: { provider: "google", model: "gemini-3.8-flash" },
+      requestId: "native-gemini-schema-400-fallback",
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+    });
+
+    expect(result.proposal.taskId).toBe(lease.package.task.id);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(firstBody.generationConfig.responseMimeType).toBe("application/json");
+    expect(firstBody.generationConfig.responseJsonSchema)
+      .toEqual(expect.objectContaining({ type: "object" }));
+
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(secondBody.generationConfig.responseMimeType).toBe("application/json");
+    expect(secondBody.generationConfig).not.toHaveProperty("responseJsonSchema");
+    expect(secondBody.generationConfig).not.toHaveProperty("responseFormat");
+  });
+
   it.each(["fenced", "json-string"])(
     "recovers bounded Gemini structured JSON transport wrapper: %s",
     async (format) => {
