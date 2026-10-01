@@ -20,7 +20,7 @@ export interface ExecutionInput {
   };
   temperature?: number | null;
   maxTokens?: number | null;
-  /** Request native JSON output from Gemini for constrained proposal calls.
+  /** Request native JSON output for constrained proposal calls.
    * The caller still validates the proposal's binding, schema, and policy. */
   jsonOutput?: boolean;
   /** Optional native JSON Schema for Gemini structured output. */
@@ -115,6 +115,7 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
     max_completion_tokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
   };
   if (supportsTemperature) body.temperature = input.temperature ?? 0.7;
+  if (input.jsonOutput) body.response_format = { type: "json_object" };
 
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: "POST",

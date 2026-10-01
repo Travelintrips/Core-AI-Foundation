@@ -20,9 +20,18 @@ import {
   buildAiProposalPolicyEnvelope,
   createConstrainedCodingProviderAdapter,
   invokeConstrainedAiProposal,
+  invokeProductionCodingAiProposal,
   normalizeBoundedSchemaRepairOutput,
   validateAndApplyAiProposal,
 } from "../localCodingAiExecutionGateService.js";
+import type { ProductionCodingModelSelection } from "../localCodingAiProductionModelService.js";
+
+const runtimeFallback = vi.hoisted(() => ({ resolve: vi.fn() }));
+
+vi.mock("../localCodingAiProductionModelService.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../localCodingAiProductionModelService.js")>(),
+  resolveAlternativeCloudCodingModels: runtimeFallback.resolve,
+}));
 
 vi.mock("../aiSecretService.js", () => ({
   getProviderApiKey: () => "gemini-test-key",
@@ -146,6 +155,8 @@ function proposalJson(lease: ApprovedAiHandoffLease): string {
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+  runtimeFallback.resolve.mockReset();
   while (cleanup.length > 0) {
     const root = cleanup.pop();
     if (root) await rm(root, { recursive: true, force: true });
@@ -153,6 +164,139 @@ afterEach(async () => {
 });
 
 describe("Local Coding AI Execution Gate integration", () => {
+  function modelSelection(provider: string, model: string): ProductionCodingModelSelection {
+    return {
+      provider: { slug: provider },
+      model: { modelId: model },
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+      selectionReason: "AUTO_CODING_CAPABILITY",
+    };
+  }
+
+  it("fails over malformed Gemini proposals to native OpenAI JSON while preserving the approved binding", async () => {
+    const { root, head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    runtimeFallback.resolve.mockResolvedValue({
+      ok: true,
+      selections: [modelSelection("openai", "gpt-4o-mini")],
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (url, request) => {
+      if (String(url).includes("googleapis.com")) {
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: '{"broken":' }] } }],
+        }), { status: 200 });
+      }
+      const body = JSON.parse(String(request?.body));
+      expect(body.response_format).toEqual({ type: "json_object" });
+      expect(body.messages[1].content).toContain(lease.packageHash);
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: proposalJson(lease) } }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await invokeProductionCodingAiProposal({
+      lease,
+      selection: modelSelection("google", "gemini-3.8-flash"),
+      requestId: "production-failover",
+      env: {},
+    });
+    const candidate = await validateAndApplyAiProposal({
+      lease,
+      proposal: result.proposal,
+      repositoryRoot: root,
+      currentRepositoryHeadSha: head,
+    });
+    expect(candidate.applyResult.status).toBe("APPLIED");
+    expect(candidate.applyResult.scriptsExecuted).toBe(false);
+    expect(result.metadata).toMatchObject({ provider: "openai", model: "gpt-4o-mini" });
+    expect(result.fallbackUsed).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(runtimeFallback.resolve).toHaveBeenCalledWith(expect.objectContaining({
+      excludeTargets: [{ provider: "google", model: "gemini-3.8-flash" }], limit: 2,
+    }));
+    expect(await readFile(join(root, "example.ts"), "utf8")).toBe("export const value = 2;\n");
+  });
+
+  it.each(["valid third target", "all invalid"])("limits failover to three targets with Contract V1 enforced: %s", async (scenario) => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    runtimeFallback.resolve.mockResolvedValue({
+      ok: true,
+      selections: ["first", "second", "must-not-invoke"].map(model => modelSelection("openai", model)),
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_, request) => {
+      const body = JSON.parse(String(request?.body));
+      const proposal = JSON.parse(proposalJson(lease));
+      if (scenario === "all invalid" || body.model !== "second") proposal.packageHash = "0".repeat(64);
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(proposal) } }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const invocation = invokeProductionCodingAiProposal({
+      lease,
+      selection: modelSelection("openai", "primary"),
+      requestId: "production-target-budget",
+      env: {},
+    });
+    if (scenario === "all invalid") {
+      await expect(invocation).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+    } else {
+      await expect(invocation).resolves.toMatchObject({
+        metadata: { provider: "openai", model: "second" }, fallbackUsed: true,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    }
+    expect(runtimeFallback.resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors disabled runtime fallback after bounded schema repair", async () => {
+    const { head } = await repositoryFixture();
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: "invalid JSON" } }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(invokeProductionCodingAiProposal({
+      lease: leaseFixture(head),
+      selection: modelSelection("openai", "primary"),
+      requestId: "production-fallback-disabled",
+      env: { AI_CODING_FALLBACK_ENABLED: "false" },
+    })).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(runtimeFallback.resolve).not.toHaveBeenCalled();
+  });
+
+  it("preserves the proposal failure when no alternative configured model exists", async () => {
+    const { head } = await repositoryFixture();
+    runtimeFallback.resolve.mockResolvedValue({ ok: false, reason: "NO_CODING_CAPABLE_MODEL" });
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: "invalid JSON" } }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(invokeProductionCodingAiProposal({
+      lease: leaseFixture(head), selection: modelSelection("openai", "primary"),
+      requestId: "production-no-alternative", env: {},
+    })).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops before fallback when the overall proposal deadline is exhausted", async () => {
+    const { head } = await repositoryFixture();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 65_000);
+      return new Response(JSON.stringify({ choices: [{ message: { content: "invalid JSON" } }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(invokeProductionCodingAiProposal({
+      lease: leaseFixture(head), selection: modelSelection("openai", "primary"),
+      requestId: "production-time-budget", env: {},
+    })).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(runtimeFallback.resolve).not.toHaveBeenCalled();
+  });
+
   it.each(["valid", "wrong binding", "forbidden capability"])(
     "validates native Gemini JSON through Contract V1: %s",
     async (format) => {

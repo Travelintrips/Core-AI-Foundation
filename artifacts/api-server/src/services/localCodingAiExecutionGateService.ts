@@ -14,9 +14,15 @@ import {
 import { logAudit } from "./aiAuditService.js";
 import { executeAINoFallback, type ObservabilityContext } from "./aiExecutionService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
+import {
+  readProductionCodingModelConfig,
+  resolveAlternativeCloudCodingModels,
+  type ProductionCodingModelSelection,
+} from "./localCodingAiProductionModelService.js";
 import { createScheduledOllamaProviderAdapter } from "./localCodingOllamaWorkerProviderService.js";
 import {
   CONSTRAINED_MODEL_CAPABILITIES,
+  MODEL_INVOCATION_LIMITS,
   ModelInvocationError,
   ProviderInvocationError,
   createConstrainedModelInvocationAdapter,
@@ -583,6 +589,94 @@ export async function invokeConstrainedAiProposal(input: {
   throw new LocalCodingAiExecutionGateError(
     "AI proposal failed Proposal Contract V1 validation",
     "INVALID_PROPOSAL",
+  );
+}
+
+export async function invokeProductionCodingAiProposal(input: {
+  lease: ApprovedAiHandoffLease;
+  selection: ProductionCodingModelSelection;
+  requestId: string;
+  prompt?: LocalCodingAiPrompt;
+  observability?: ObservabilityContext;
+  env?: NodeJS.ProcessEnv;
+}): Promise<ConstrainedAiProposalResult & {
+  selection: ProductionCodingModelSelection;
+  fallbackUsed: boolean;
+}> {
+  const env = input.env ?? process.env;
+  const fallbackEnabled = !/^(0|false|no|off)$/i.test(
+    (env["AI_CODING_FALLBACK_ENABLED"] ?? "").trim(),
+  );
+  // One approved proposal resolution: at most three configured targets, each
+  // with the existing single schema-repair attempt. Keep one overall deadline
+  // and never consume another privilege or apply an unvalidated proposal.
+  const deadline = Date.now() + Math.max(120_000, input.selection.timeoutMs * 2);
+  const selections = [input.selection];
+  let lastError: unknown;
+
+  for (let index = 0; index < selections.length && index < 3; index++) {
+    const selection = selections[index]!;
+    const providerSlug = String(selection.provider.slug ?? "").toLowerCase();
+    const modelId = String(selection.model.modelId ?? "");
+    const remaining = deadline - Date.now();
+    if (remaining < MODEL_INVOCATION_LIMITS.minTimeoutMs * 2) break;
+    const baseUrl = typeof selection.provider.baseUrl === "string"
+      ? selection.provider.baseUrl : null;
+    const provider = providerSlug === "ollama" && !baseUrl
+      ? createScheduledOllamaProviderAdapter({ modelId })
+      : createConstrainedCodingProviderAdapter({
+          providerSlug,
+          modelId,
+          baseUrl,
+          jsonOutput: true,
+          ...(input.observability ? {
+            observability: {
+              ...input.observability,
+              providerName: providerSlug,
+              modelName: modelId,
+              ...(index > 0 ? { requestType: "code-cloud-fallback" } : {}),
+            },
+          } : {}),
+        });
+
+    try {
+      const result = await invokeConstrainedAiProposal({
+        lease: input.lease,
+        prompt: input.prompt,
+        adapter: createConstrainedModelInvocationAdapter(provider),
+        target: { provider: providerSlug, model: modelId },
+        requestId: index === 0 ? input.requestId : input.requestId + "-fallback-" + index,
+        // Both schema attempts together fit the remaining resolution budget.
+        timeoutMs: Math.min(selection.timeoutMs, Math.floor(remaining / 2)),
+        maxOutputTokens: selection.maxOutputTokens,
+      });
+      return { ...result, selection, fallbackUsed: index > 0 };
+    } catch (error) {
+      lastError = error;
+      const canFailOver =
+        (error instanceof LocalCodingAiExecutionGateError && error.kind === "INVALID_PROPOSAL") ||
+        (error instanceof ModelInvocationError && [
+          "TIMEOUT", "PROVIDER_AUTH", "PROVIDER_RATE_LIMIT", "PROVIDER_UNAVAILABLE",
+          "PROVIDER_BAD_REQUEST", "PROVIDER_ERROR", "MALFORMED_RESPONSE",
+          "OUTPUT_LIMIT_EXCEEDED",
+        ].includes(error.code));
+      if (!fallbackEnabled || !canFailOver) throw error;
+      if (deadline - Date.now() < MODEL_INVOCATION_LIMITS.minTimeoutMs * 2) throw error;
+
+      if (index === 0) {
+        const alternatives = await resolveAlternativeCloudCodingModels({
+          excludeTargets: [{ provider: providerSlug, model: modelId }],
+          config: readProductionCodingModelConfig(env),
+          limit: 2,
+        }).catch(() => null);
+        if (alternatives?.ok) selections.push(...alternatives.selections.slice(0, 2));
+      }
+    }
+  }
+
+  throw lastError ?? new LocalCodingAiExecutionGateError(
+    "Constrained coding proposal exceeded its model execution budget.",
+    "MODEL_FAILED",
   );
 }
 
@@ -1258,10 +1352,6 @@ async function executeReserved(
       );
     }
 
-    const selectedBaseUrl =
-      typeof selected.provider.baseUrl === "string"
-        ? selected.provider.baseUrl
-        : null;
     const observability: ObservabilityContext = {
       conversationId: reserved.task.id,
       agentName: "AI Execution Gate",
@@ -1270,22 +1360,6 @@ async function executeReserved(
       requestType: modelRoute === "PRIMARY" ? "code-primary" : "code-fallback",
       createdBy: `coding-run:${reserved.run.id}`,
     };
-    const provider =
-      providerSlug === "ollama" && !selectedBaseUrl
-        ? createScheduledOllamaProviderAdapter({ modelId })
-        : createConstrainedCodingProviderAdapter({
-            providerSlug,
-            modelId,
-            baseUrl: selectedBaseUrl,
-            observability,
-            jsonOutput: true,
-          });
-    const adapter = createConstrainedModelInvocationAdapter(provider);
-    const target: ModelTarget = {
-      provider: providerSlug,
-      model: modelId,
-    };
-
     await consumePrivilege(
       reserved.task.id,
       reserved.orchestratorRunId,
@@ -1294,14 +1368,12 @@ async function executeReserved(
     );
     consumed = true;
 
-    const modelResult = await invokeConstrainedAiProposal({
+    const modelResult = await invokeProductionCodingAiProposal({
       lease,
-      adapter,
-      target,
+      selection: selected,
       requestId: reserved.run.id,
       prompt,
-      timeoutMs: selected.timeoutMs,
-      maxOutputTokens: selected.maxOutputTokens,
+      observability,
     });
 
     const workspace = await prepareRepositoryWorkspace(
@@ -1334,7 +1406,7 @@ async function executeReserved(
     await completeExecution({
       reserved,
       lease,
-      model: { provider: providerSlug, model: modelId },
+      model: { provider: modelResult.metadata.provider, model: modelResult.metadata.model },
       metadata: modelResult.metadata,
       candidate,
     });
@@ -1348,11 +1420,12 @@ async function executeReserved(
       {
         codingRunId: reserved.run.id,
         packageHash: lease.packageHash,
-        provider: providerSlug,
-        model: modelId,
-        selectionReason: selected.selectionReason,
-        timeoutMs: selected.timeoutMs,
-        maxOutputTokens: selected.maxOutputTokens,
+        provider: modelResult.metadata.provider,
+        model: modelResult.metadata.model,
+        selectionReason: modelResult.selection.selectionReason,
+        timeoutMs: modelResult.metadata.timeoutMs,
+        maxOutputTokens: modelResult.metadata.maxOutputTokens,
+        fallbackUsed: modelRoute === "FALLBACK" || modelResult.fallbackUsed,
         changedFiles: candidate.applyResult.changedFiles.length,
         candidatePatchSha256: candidate.applyResult.patchSha256,
         modelInvoked: true,

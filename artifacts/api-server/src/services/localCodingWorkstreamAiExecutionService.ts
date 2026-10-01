@@ -41,12 +41,10 @@ import {
 } from "./localCodingMultiWorkerOrchestratorService.js";
 import { codingWorkstreamOwnsFile } from "./localCodingMultiWorkerExecutionService.js";
 import {
-  createConstrainedCodingProviderAdapter,
-  invokeConstrainedAiProposal,
+  invokeProductionCodingAiProposal,
   LocalCodingAiExecutionGateError,
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
-import { createConstrainedModelInvocationAdapter } from "./localCodingAiModelAdapterService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
@@ -1754,14 +1752,12 @@ export async function executeCodingWorkstreamAiJob(
     );
     consumed = true;
 
-    const provider = createConstrainedCodingProviderAdapter({
-      providerSlug,
-      modelId,
-      jsonOutput: true,
-      baseUrl:
-        typeof selected.provider.baseUrl === "string"
-          ? selected.provider.baseUrl
-          : null,
+    phase = "invoke_model";
+    const modelResult = await invokeProductionCodingAiProposal({
+      lease: contextLease,
+      selection: selected,
+      requestId: executionId,
+      prompt,
       observability: {
         conversationId: loaded.graphTaskId,
         agentName: "Workstream AI Execution Gate",
@@ -1770,17 +1766,6 @@ export async function executeCodingWorkstreamAiJob(
         requestType: "code",
         createdBy: "workstream-ai-job:" + String(job.id),
       },
-    });
-    const adapter = createConstrainedModelInvocationAdapter(provider);
-    phase = "invoke_model";
-    const modelResult = await invokeConstrainedAiProposal({
-      lease: contextLease,
-      adapter,
-      target: { provider: providerSlug, model: modelId },
-      requestId: executionId,
-      prompt,
-      timeoutMs: selected.timeoutMs,
-      maxOutputTokens: selected.maxOutputTokens,
     });
 
     if (heartbeatError) throw heartbeatError;
@@ -1810,8 +1795,8 @@ export async function executeCodingWorkstreamAiJob(
       sourceResult: loaded.analyzerResult,
       authorization,
       contextLease,
-      provider: providerSlug,
-      model: modelId,
+      provider: modelResult.metadata.provider,
+      model: modelResult.metadata.model,
       metadata: modelResult.metadata as unknown as Record<string, unknown>,
       proposal: modelResult.proposal,
       candidate,
@@ -1870,8 +1855,9 @@ export async function executeCodingWorkstreamAiJob(
         claimAttempt: payload.claimAttempt,
         authorizationPackageHash: authorization.packageHash,
         contextPackageHash: contextLease.packageHash,
-        provider: providerSlug,
-        model: modelId,
+        provider: modelResult.metadata.provider,
+        model: modelResult.metadata.model,
+        fallbackUsed: resolved.route === "FALLBACK" || modelResult.fallbackUsed,
         changedFiles: candidate.applyResult.changedFiles.length,
         patchSha256: candidate.applyResult.patchSha256,
         modelInvoked: true,
@@ -1890,8 +1876,9 @@ export async function executeCodingWorkstreamAiJob(
       claimAttempt: payload.claimAttempt,
       authorizationPackageHash: authorization.packageHash,
       contextPackageHash: contextLease.packageHash,
-      provider: providerSlug,
-      model: modelId,
+      provider: modelResult.metadata.provider,
+      model: modelResult.metadata.model,
+      fallbackUsed: resolved.route === "FALLBACK" || modelResult.fallbackUsed,
       changedFiles: candidate.applyResult.changedFiles,
       patchSha256: candidate.applyResult.patchSha256,
       modelInvoked: true,
@@ -2661,4 +2648,3 @@ export async function materializeApprovedWorkstreamAiCandidate(
     await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
   }
 }
-

@@ -1082,7 +1082,7 @@ async function temporalOrchestratorActive(): Promise<boolean> {
 }
 
 
-async function recoverOrphanedReadyReviewTasks(): Promise<void> {
+export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
   const candidates = await db
     .select({ id: aiCodingTasksTable.id })
     .from(aiCodingTasksTable)
@@ -1119,7 +1119,7 @@ async function recoverOrphanedReadyReviewTasks(): Promise<void> {
         ["FAILED", "BLOCKED"].includes(String(row.status ?? "")) &&
         cycleCount < maxCycles
       ) {
-        await db.execute(sql`
+        const reactivated = await db.execute(sql`
           UPDATE ai_platform.ai_coding_autonomous_tasks
           SET enabled = TRUE,
               status = 'ACTIVE',
@@ -1127,7 +1127,12 @@ async function recoverOrphanedReadyReviewTasks(): Promise<void> {
               last_action = 'RECOVER_READY_REVIEW',
               updated_at = NOW()
           WHERE task_id = ${candidate.id}::uuid
+            AND status IN ('FAILED', 'BLOCKED')
+            AND cycle_count < max_cycles
+          RETURNING task_id
         `);
+        // A concurrent stop or exhausted budget overrides the earlier read.
+        if (!reactivated.rows?.length) continue;
 
         logger.info(
           { taskId: candidate.id, nextAction: state.nextAction, previousStatus: row.status },
