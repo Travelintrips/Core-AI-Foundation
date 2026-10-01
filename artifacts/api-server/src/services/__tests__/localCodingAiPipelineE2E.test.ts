@@ -261,7 +261,7 @@ describe("Full constrained AI coding pipeline E2E", () => {
     );
   });
 
-  it("repairs exact fenced JSON but still fails closed on malformed or prose-wrapped JSON", async () => {
+  it("normalizes one wrapped proposal and fails closed on malformed or multiple JSON objects", async () => {
     const repo = await createRepositoryFixture();
     const lease = leaseFixture(repo.head);
     const fence = String.fromCharCode(96).repeat(3);
@@ -276,12 +276,15 @@ describe("Full constrained AI coding pipeline E2E", () => {
       runProposal(lease, "{not-valid-json"),
     ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
 
-    await expect(
-      runProposal(
-        lease,
-        `Here is the proposal:\n${fence}json\n${proposalJson(lease)}\n${fence}`,
-      ),
-    ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    const wrapped = await runProposal(
+      lease,
+      `Here is the proposal:\n${fence}json\n${proposalJson(lease)}\n${fence}`,
+    );
+    expect(wrapped.proposal.taskId).toBe(lease.package.task.id);
+    expect(wrapped.invoke).toHaveBeenCalledTimes(1);
+
+    await expect(runProposal(lease, `${proposalJson(lease)}\n${proposalJson(lease)}`))
+      .rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
 
     expect(await readFile(join(repo.root, "example.ts"), "utf8")).toBe(
       "export const value = 1;\n",

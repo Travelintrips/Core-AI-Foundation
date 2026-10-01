@@ -1,12 +1,18 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
+
+const mockDbExecute = vi.hoisted(() => vi.fn());
+const mockDbSelect = vi.hoisted(() => vi.fn());
 
 vi.mock("@workspace/db", () => ({
-  db: {},
+  db: { execute: mockDbExecute, select: mockDbSelect },
   withTransientDatabaseRetry: vi.fn(async (operation: () => Promise<unknown>) => operation()),
-  aiCodingBridgeCommandsTable: {},
-  aiCodingRunsTable: {},
-  aiCodingTasksTable: {},
+  aiCodingBridgeCommandsTable: { table: "commands" },
+  aiCodingRunsTable: { table: "runs" },
+  aiCodingTasksTable: { table: "tasks" },
+  aiJobsTable: { table: "jobs" },
 }));
 vi.mock("../aiAuditService.js", () => ({ logAudit: vi.fn() }));
 vi.mock("../localCodingControlBridgeService.js", () => ({ appendCodingBridgeResponse: vi.fn() }));
@@ -207,5 +213,161 @@ describe("autonomous transient database recovery", () => {
     expect(source).toContain("/timeout exceeded when trying to connect|Failed query:/i.test(message)");
     expect(source).toContain('"RETRY_TRANSIENT_DATABASE"');
     expect(source).toContain('"transient_database_retry_scheduled"');
+  });
+});
+
+describe("autonomous action budget behavior", () => {
+  const taskId = "11111111-1111-4111-8111-111111111111";
+  const dialect = new PgDialect();
+  let autonomous: Record<string, unknown>;
+  let task: Record<string, unknown>;
+  let runs: Record<string, unknown>[];
+  let jobs: Record<string, unknown>[];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    autonomous = {
+      task_id: taskId, enabled: true, status: "ACTIVE", cycle_count: 39,
+      max_cycles: 40, last_action: null, last_error: null,
+    };
+    task = { id: taskId, status: "READY_REVIEW", resultSummary: null };
+    runs = [{
+      id: "analysis", agentName: "Coding Orchestrator", status: "COMPLETED",
+      logs: JSON.stringify({ orchestration: { nextAction: "AI_REQUIRED" } }),
+    }];
+    jobs = [];
+    mockDbExecute.mockImplementation(async (query: SQL) => {
+      const { sql: text, params } = dialect.sqlToQuery(query);
+      if (text.includes("RETURNING task_id")) {
+        if (!autonomous.enabled || !["ACTIVE", "WAITING"].includes(String(autonomous.status)) ||
+            Number(autonomous.cycle_count) >= Number(autonomous.max_cycles)) return { rows: [] };
+        autonomous.cycle_count = Number(autonomous.cycle_count) + 1;
+        return { rows: [{ task_id: taskId }] };
+      }
+      if (text.includes("UPDATE ai_platform.ai_coding_autonomous_tasks")) {
+        if (autonomous.enabled && autonomous.status !== "DISABLED") {
+          autonomous.status = params[0];
+          autonomous.last_action = params[1];
+          autonomous.last_error = params[2];
+        }
+        return { rows: [] };
+      }
+      return { rows: [{ ...autonomous }] };
+    });
+    mockDbSelect.mockImplementation(() => {
+      let table = "";
+      const values = () => table === "tasks" ? [task] : table === "runs" ? runs : table === "jobs" ? jobs : [];
+      const builder = {
+        from: (input: { table: string }) => { table = input.table; return builder; },
+        where: () => builder,
+        orderBy: () => builder,
+        limit: async () => values(),
+        then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+          Promise.resolve(values()).then(resolve, reject),
+      };
+      return builder;
+    });
+    const graph = await import("../localCodingTaskGraphService.js");
+    vi.mocked(graph.getLatestCodingTaskGraph).mockResolvedValue(null);
+  });
+
+  it("keeps polling an active execution at the exact limit without blocking or spending cycles", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    autonomous.cycle_count = 40;
+    runs.unshift({ id: "execution", agentName: "AI Execution Gate", status: "RUNNING" });
+    for (let poll = 0; poll < 20; poll += 1) {
+      expect(await runAutonomousCodingCycle(taskId)).toMatchObject({
+        status: "WAITING", action: "WAIT_ACTIVE_RUN:AI Execution Gate",
+      });
+    }
+    expect(autonomous.cycle_count).toBe(40);
+    expect(autonomous.last_error).toBeNull();
+  });
+
+  it("observes completion even when the action budget is exhausted", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    autonomous.cycle_count = 40;
+    task.status = "COMPLETED";
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ status: "COMPLETED" });
+    expect(autonomous.cycle_count).toBe(40);
+  });
+
+  it("spends exactly one cycle before starting the last allowed handoff attempt", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { startAiHandoffPreparation } = await import("../localCodingAiHandoffService.js");
+    vi.mocked(startAiHandoffPreparation).mockImplementationOnce(async () => {
+      expect(autonomous.cycle_count).toBe(40);
+      return {} as never;
+    });
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ action: "AUTO_PREPARE_AI_HANDOFF" });
+    expect(startAiHandoffPreparation).toHaveBeenCalledTimes(1);
+    expect(autonomous.cycle_count).toBe(40);
+  });
+
+  it("blocks a new action at the limit without incrementing to cycle 41", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { startAiHandoffPreparation } = await import("../localCodingAiHandoffService.js");
+    autonomous.cycle_count = 40;
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ status: "BLOCKED", action: "MAX_CYCLES_REACHED" });
+    expect(startAiHandoffPreparation).not.toHaveBeenCalled();
+    expect(autonomous.cycle_count).toBe(40);
+  });
+
+  it("waits for queued AI work without re-enqueueing or consuming the budget", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { enqueueCodingAiExecution } = await import("../localCodingAiQueueRuntimeService.js");
+    autonomous.cycle_count = 40;
+    runs[0]!.logs = JSON.stringify({ orchestration: { nextAction: "AI_HANDOFF_APPROVED" } });
+    jobs = [{ id: 701 }];
+    for (let poll = 0; poll < 3; poll += 1) {
+      expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ status: "WAITING", action: "WAIT_AI_EXECUTION_JOB:701" });
+    }
+    expect(enqueueCodingAiExecution).not.toHaveBeenCalled();
+    expect(autonomous.cycle_count).toBe(40);
+  });
+
+  it("waits for live workstream claims without spending cycles", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { getLatestCodingTaskGraph } = await import("../localCodingTaskGraphService.js");
+    autonomous.cycle_count = 40;
+    vi.mocked(getLatestCodingTaskGraph).mockResolvedValue({
+      graph: { status: "RUNNING" },
+      workstreams: [{ status: "RUNNING", leaseExpiresAt: new Date(Date.now() + 60_000) }],
+    } as never);
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ action: "WAIT_WORKSTREAM_EXECUTION" });
+    expect(autonomous.cycle_count).toBe(40);
+  });
+
+  it("does not start an action after an explicit stop wins the reservation race", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { startAiHandoffPreparation } = await import("../localCodingAiHandoffService.js");
+    const original = mockDbExecute.getMockImplementation()!;
+    mockDbExecute.mockImplementation(async (query: SQL) => {
+      if (dialect.sqlToQuery(query).sql.includes("RETURNING task_id")) {
+        autonomous.enabled = false;
+        autonomous.status = "DISABLED";
+      }
+      return original(query);
+    });
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ status: "DISABLED", action: "NOOP" });
+    expect(startAiHandoffPreparation).not.toHaveBeenCalled();
+    expect(autonomous.cycle_count).toBe(39);
+  });
+
+  it("does not spend cycles when graph dependencies leave nothing ready to dispatch", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { getLatestCodingTaskGraph } = await import("../localCodingTaskGraphService.js");
+    const { dispatchReadyCodingWorkstreams } = await import("../localCodingMultiWorkerExecutionService.js");
+    autonomous.cycle_count = 40;
+    vi.mocked(getLatestCodingTaskGraph).mockResolvedValue({
+      graph: { status: "RUNNING" },
+      workstreams: [
+        { key: "source", status: "BLOCKED", dependencies: [] },
+        { key: "dependent", status: "PENDING", dependencies: ["source"] },
+      ],
+    } as never);
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ action: "WAIT_TASK_GRAPH" });
+    expect(dispatchReadyCodingWorkstreams).not.toHaveBeenCalled();
+    expect(autonomous.cycle_count).toBe(40);
   });
 });

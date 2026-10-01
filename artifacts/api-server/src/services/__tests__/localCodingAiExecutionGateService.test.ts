@@ -279,7 +279,7 @@ describe("Local Coding AI Execution Gate integration", () => {
     expect(result.proposal.proposal.operations).toHaveLength(1);
   });
 
-  it("accepts an exact fenced JSON object only on the bounded schema-repair attempt", async () => {
+  it("accepts an exact fenced JSON object without spending a schema-repair invocation", async () => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
     const fence = String.fromCharCode(96).repeat(3);
@@ -306,11 +306,11 @@ describe("Local Coding AI Execution Gate integration", () => {
       maxOutputTokens: 512,
     });
 
-    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke).toHaveBeenCalledTimes(1);
     expect(result.proposal.taskId).toBe(lease.package.task.id);
   });
 
-  it("still fails closed when fenced JSON has surrounding prose", async () => {
+  it("normalizes one fenced JSON object surrounded by provider prose", async () => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
     const fence = String.fromCharCode(96).repeat(3);
@@ -338,6 +338,34 @@ describe("Local Coding AI Execution Gate integration", () => {
         timeoutMs: 5_000,
         maxOutputTokens: 512,
       }),
-    ).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+    ).resolves.toMatchObject({ proposal: { taskId: lease.package.task.id } });
   });
+
+  it.each(["array", "multiple objects", "wrong binding", "forbidden capability"])(
+    "keeps strict validation after normalization: %s",
+    async (format) => {
+      const { head } = await repositoryFixture();
+      const lease = leaseFixture(head);
+      const proposal = JSON.parse(proposalJson(lease));
+      if (format === "wrong binding") proposal.packageHash = "0".repeat(64);
+      if (format === "forbidden capability") proposal.capabilities.shellCommand = true;
+      const object = JSON.stringify(proposal);
+      const text = format === "array" ? `[${object}]`
+        : format === "multiple objects" ? `Here are proposals:\n${object}\n${object}`
+        : `Here is the proposal:\n${object}`;
+      const invoke = vi.fn(async () => ({
+        output: { type: "text" as const, text },
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      }));
+      await expect(invokeConstrainedAiProposal({
+        lease,
+        adapter: createConstrainedModelInvocationAdapter({
+          provider: "fake", model: "proposal-v1", capabilities: CONSTRAINED_MODEL_CAPABILITIES, invoke,
+        }),
+        target: { provider: "fake", model: "proposal-v1" },
+        requestId: `invalid-${format}`, timeoutMs: 5_000, maxOutputTokens: 512,
+      })).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+      expect(invoke.mock.calls.length).toBeLessThanOrEqual(2);
+    },
+  );
 });
