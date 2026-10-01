@@ -165,12 +165,7 @@ async function gitHead(root: string): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  const stdout =
-    typeof result.stdout === "string"
-      ? result.stdout
-      : Buffer.isBuffer(result.stdout)
-        ? result.stdout.toString("utf8")
-        : "";
+  const stdout = String(result.stdout ?? "");
   const normalized = stdout.trim().toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(normalized)) {
     throw new LocalCodingAiExecutionGateError(
