@@ -76,8 +76,9 @@ export async function registerRemoteOllamaWorker(input: {
     if (existing.heartbeatToken) {
       const renewed = await renewLease(existing.id, existing.heartbeatToken, DEFAULT_LEASE_TTL_MS);
       if (renewed) {
+        await reconcileRemoteOllamaWorkerCapacity(existing.id).catch(() => undefined);
         const [reactivated] = await db.update(aiWorkersTable).set({
-          status: existing.runningJobs > 0 ? "busy" : "online",
+          status: sql`CASE WHEN running_jobs > 0 THEN 'busy' ELSE 'online' END`,
           region: input.region ?? "remote",
           version: input.version ?? "1.0.0",
           capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
