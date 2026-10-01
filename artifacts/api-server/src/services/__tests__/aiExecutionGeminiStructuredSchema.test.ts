@@ -41,6 +41,12 @@ describe("Gemini native structured proposal schema", () => {
         schema: localCodingAiProposalV1JsonSchema,
       },
     });
+    const operationItems =
+      body.generationConfig.responseFormat.text.schema.properties.proposal
+        .properties.operations.items;
+    expect(operationItems.anyOf).toHaveLength(5);
+    expect(operationItems).not.toHaveProperty("oneOf");
+
     expect(body.generationConfig).not.toHaveProperty("responseJsonSchema");
     expect(body.generationConfig).not.toHaveProperty("responseMimeType");
   });
