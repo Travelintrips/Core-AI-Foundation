@@ -1541,12 +1541,27 @@ async function moveWorkstreamFailureToRepairInbox(input: {
         eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"),
       ),
     )
-    .returning({ id: aiCodingWorkstreamsTable.id });
+    .returning({
+      id: aiCodingWorkstreamsTable.id,
+      childRunId: aiCodingWorkstreamsTable.childRunId,
+    });
 
   // Fail closed only if this exact REVIEW_REQUIRED state was ours to
   // transition. If another actor already claimed/completed the workstream,
   // never overwrite its child task or create a stale repair incident.
   if (!failedWorkstream) return false;
+
+  if (failedWorkstream.childRunId) {
+    await db
+      .update(aiCodingRunsTable)
+      .set({
+        status: "FAILED",
+        finishedAt: now,
+        errorMessage: combinedMessage,
+      })
+      .where(eq(aiCodingRunsTable.id, failedWorkstream.childRunId))
+      .catch(() => undefined);
+  }
 
   await db
     .update(aiCodingTasksTable)
