@@ -847,7 +847,7 @@ export default function AiCoreChat() {
                       {listening ? "Mendengarkan Bahasa Indonesia…" : voiceSupported ? "Voice ready · id-ID + istilah teknis" : "Voice input perlu browser yang mendukung SpeechRecognition"}
                     </div>
                   </div>
-                  <div className="text-[10px]" style={{ color: "#536A94" }}> style={{ color: "#536A94" }}>
+                  <div className="text-[10px]" style={{ color: "#536A94" }}>
                     {policy === "economy"
                       ? "Auto routing aktif · jawaban memakai local only; perintah kerja tetap masuk control plane."
                       : policy === "smart"
