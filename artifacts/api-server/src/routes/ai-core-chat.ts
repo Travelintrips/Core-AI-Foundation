@@ -94,6 +94,13 @@ import {
   recordChatLearningEvent,
   retrieveChatLearnings,
 } from "../services/aiCoreChatLearningService.js";
+import {
+  buildConversationPrompt,
+  parseConversationCommand,
+  redactConversationText,
+  sanitizeConversationContext,
+  type ConversationSource,
+} from "../services/aiCoreConversationService.js";
 
 const router = Router();
 
@@ -106,6 +113,7 @@ const ChatRequest = z.object({
   branch: z.string().trim().min(1).max(200).optional(),
   priority: z.number().int().min(0).max(100).optional(),
   conversationId: z.string().trim().min(1).max(200).optional(),
+  source: z.enum(["text", "voice", "whatsapp_voice"]).default("text"),
   context: z.array(
     z.object({
       role: z.enum(["user", "assistant"]),
@@ -819,6 +827,7 @@ async function answerAskMode(
   routingMessage = message,
 ): Promise<Record<string, unknown>> {
   const workload = classifyAiCoreWorkload(routingMessage);
+  const conversationalMessage = buildConversationPrompt(message, context);
   const routingMeta = {
     workload: workload.workload,
     costClass: workload.costClass,
@@ -897,11 +906,11 @@ async function answerAskMode(
     const cloud = await resolveCloudSelection(workload.workload);
     if (cloud.ok) {
       try {
-        const result = await invokeChatModel(cloud.selection, message);
+        const result = await invokeChatModel(cloud.selection, conversationalMessage);
         return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
       } catch (cloudError) {
         await quarantineRetiredCloudModel(cloud.selection, cloudError);
-        const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+        const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
         if (cloudFallback.ok) {
           return {
             kind: "answer",
@@ -917,7 +926,7 @@ async function answerAskMode(
         const local = await resolveLocalSelection();
         if (local.ok) {
           try {
-            const result = await invokeChatModel(local.selection, message);
+            const result = await invokeChatModel(local.selection, conversationalMessage);
             return {
               kind: "answer",
               route: "LOCAL",
@@ -948,7 +957,7 @@ async function answerAskMode(
     const local = await resolveLocalSelection();
     if (local.ok) {
       try {
-        const result = await invokeChatModel(local.selection, message);
+        const result = await invokeChatModel(local.selection, conversationalMessage);
         return { kind: "answer", route: "LOCAL", ...routingMeta, ...result };
       } catch (error) {
         return unavailableAskReply(
@@ -981,7 +990,7 @@ async function answerAskMode(
       };
     }
     try {
-      const result = await invokeChatModel(local.selection, message);
+      const result = await invokeChatModel(local.selection, conversationalMessage);
       return { kind: "answer", route: "LOCAL", ...routingMeta, ...result };
     } catch (error) {
       return unavailableAskReply(
@@ -1006,11 +1015,11 @@ async function answerAskMode(
       };
     }
     try {
-      const result = await invokeChatModel(cloud.selection, message);
+      const result = await invokeChatModel(cloud.selection, conversationalMessage);
       return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
     } catch (error) {
       await quarantineRetiredCloudModel(cloud.selection, error);
-      const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+      const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
       if (cloudFallback.ok) {
         return {
           kind: "answer",
@@ -1035,7 +1044,7 @@ async function answerAskMode(
   let localFailure = local.ok ? "" : local.message;
   if (local.ok) {
     try {
-      const result = await invokeChatModel(local.selection, message);
+      const result = await invokeChatModel(local.selection, conversationalMessage);
       return { kind: "answer", route: "LOCAL", ...routingMeta, ...result };
     } catch (error) {
       // Auto mode is explicitly allowed to fall through to the configured cloud target.
@@ -1053,11 +1062,11 @@ async function answerAskMode(
   }
 
   try {
-    const result = await invokeChatModel(cloud.selection, message);
+    const result = await invokeChatModel(cloud.selection, conversationalMessage);
     return { kind: "answer", route: "CLOUD_FALLBACK", ...routingMeta, ...result };
   } catch (error) {
     await quarantineRetiredCloudModel(cloud.selection, error);
-    const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+    const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
     if (cloudFallback.ok) {
       return {
         kind: "answer",
@@ -1127,6 +1136,7 @@ async function streamAskMode(
   routingMessage = message,
 ): Promise<void> {
   const workload = classifyAiCoreWorkload(routingMessage);
+  const conversationalMessage = buildConversationPrompt(message, context);
   const routingMeta = {
     workload: workload.workload,
     costClass: workload.costClass,
@@ -1213,7 +1223,7 @@ async function streamAskMode(
           ? cloud.selection.provider.baseUrl
           : null,
       systemPrompt: ASK_SYSTEM_PROMPT,
-      prompt: message,
+      prompt: conversationalMessage,
       maxOutputTokens: Math.min(
         4_096,
         cloud.selection.maxOutputTokens || 1_600,
@@ -1276,7 +1286,7 @@ async function streamAskMode(
     }
 
     if (!emittedText) {
-      const cloudFallback = await invokeCloudFallbackChain(cloud.selection, message);
+      const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
       if (cloudFallback.ok) {
         writeStreamEvent(res, "meta", {
           route: "CLOUD_FALLBACK",
@@ -1312,7 +1322,7 @@ async function streamAskMode(
             streaming: false,
             fallback: true,
           });
-          const result = await invokeChatModel(local.selection, message);
+          const result = await invokeChatModel(local.selection, conversationalMessage);
           writeBufferedChatStream(res, {
             kind: "answer",
             route: "LOCAL",
@@ -1590,6 +1600,47 @@ async function runAutoMode(
   input: z.infer<typeof ChatRequest>,
   executionInput: z.infer<typeof ChatRequest> = input,
 ): Promise<Record<string, unknown>> {
+  const parsedConversation = parseConversationCommand(input.message, input.context ?? []);
+  if (parsedConversation.ambiguous) {
+    return {
+      kind: "clarification",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      confidence: parsedConversation.confidence,
+      reply: "Saya belum cukup yakin perintah itu merujuk ke task/project yang mana. Sebutkan nama project, task, atau worker yang dimaksud.",
+    };
+  }
+
+  if (parsedConversation.commands.length > 1) {
+    if (!input.projectName || !input.repository || !input.branch) {
+      return {
+        kind: "validation",
+        reply: "Perintah multi-worker membutuhkan Project, Repository, dan Branch.",
+      };
+    }
+    const tasks = [];
+    for (const command of parsedConversation.commands) {
+      const childInput = { ...executionInput, message: command };
+      tasks.push(await startAgentTask(childInput));
+    }
+    return {
+      kind: "multi_agent",
+      route: "CONTROL_PLANE",
+      provider: null,
+      model: null,
+      usage: null,
+      estimatedCostUsd: 0,
+      workload: "CODING",
+      costClass: "HIGH",
+      confidence: parsedConversation.confidence,
+      reply: `${tasks.length} task terpisah sudah dibuat untuk dijalankan paralel oleh control plane.`,
+      tasks,
+    };
+  }
+
   const dbMutation = await runAdminDbMutationOperation(input.message);
   if (dbMutation) {
     return {
@@ -1663,6 +1714,15 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       endpoint: "/api/ai/core-chat/messages/stream",
       defaultPolicy: "smart",
       cloudProviders: ["openai", "anthropic", "gemini", "mistral"],
+    },
+    voice: {
+      enabled: true,
+      input: "browser-speech-recognition",
+      output: "browser-speech-synthesis",
+      language: "id-ID",
+      transcriptEndpoint: "/api/ai/core-chat/messages",
+      whatsappVoiceSourceReserved: true,
+      secretsRedactedBeforePersistence: true,
     },
     workloadRouting: describeAiCoreWorkloadRouting(),
     local: local.ok
@@ -1746,23 +1806,25 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       repository: parsed.data.repository ?? null,
       branch: parsed.data.branch ?? null,
     };
+    const safeMessage = redactConversationText(parsed.data.message);
+    const safeContext = sanitizeConversationContext(parsed.data.context);
     await recordChatLearningEvent({
       role: "user",
-      content: parsed.data.message,
+      content: safeMessage,
       scope,
-      metadata: { mode: "ask", modelPolicy: parsed.data.modelPolicy, streaming: true },
+      metadata: { mode: "ask", modelPolicy: parsed.data.modelPolicy, streaming: true, source: parsed.data.source },
     }).catch(() => undefined);
-    await promoteExplicitChatLearning(parsed.data.message, scope).catch(() => false);
+    await promoteExplicitChatLearning(safeMessage, scope).catch(() => false);
     const learnings = await retrieveChatLearnings(scope).catch(() => []);
-    const effectiveMessage = appendLearningsToMessage(parsed.data.message, learnings);
+    const effectiveMessage = appendLearningsToMessage(safeMessage, learnings);
 
     await streamAskMode(
       effectiveMessage,
       parsed.data.modelPolicy,
       res,
       controller.signal,
-      parsed.data.context ?? [],
-      parsed.data.message,
+      safeContext,
+      safeMessage,
     );
   } catch (error) {
     if (!controller.signal.aborted && !res.writableEnded) {
@@ -1798,21 +1860,24 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       repository: parsed.data.repository ?? null,
       branch: parsed.data.branch ?? null,
     };
+    const safeMessage = redactConversationText(parsed.data.message);
+    const safeContext = sanitizeConversationContext(parsed.data.context);
     await recordChatLearningEvent({
       role: "user",
-      content: parsed.data.message,
+      content: safeMessage,
       scope,
-      metadata: { mode: parsed.data.mode, modelPolicy: parsed.data.modelPolicy },
+      metadata: { mode: parsed.data.mode, modelPolicy: parsed.data.modelPolicy, source: parsed.data.source },
     }).catch(() => undefined);
-    await promoteExplicitChatLearning(parsed.data.message, scope).catch(() => false);
+    await promoteExplicitChatLearning(safeMessage, scope).catch(() => false);
 
     const learnings = await retrieveChatLearnings(scope).catch(() => []);
     const effectiveInput = {
       ...parsed.data,
-      message: appendLearningsToMessage(parsed.data.message, learnings),
+      message: appendLearningsToMessage(safeMessage, learnings),
+      context: safeContext,
     };
 
-    const rawInput = parsed.data;
+    const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
     const rawDispatch = classifyAiCoreChatDispatch(rawInput.message);
     const result =
       effectiveInput.mode === "agent"
@@ -1841,7 +1906,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         : JSON.stringify({ kind: result["kind"], status: result["status"] ?? null });
     await recordChatLearningEvent({
       role: "assistant",
-      content: assistantContent,
+      content: redactConversationText(assistantContent),
       scope,
       metadata: {
         route: result["route"] ?? null,
