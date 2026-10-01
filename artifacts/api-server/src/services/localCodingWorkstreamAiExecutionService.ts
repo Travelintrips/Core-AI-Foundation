@@ -61,7 +61,7 @@ import {
   prepareRepositoryWorkspace,
 } from "./repositoryAnalyzerService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
-import { enqueueCodingRepairInboxItem } from "./localCodingControlBridgeService.js";
+import { upsertIncident } from "./incidentAutoRepairService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -1503,6 +1503,8 @@ async function moveWorkstreamFailureToRepairInbox(input: {
   parentTaskId: string;
   error: unknown;
   decision: WorkstreamAiAutoRepairDecision;
+  repository: string;
+  branch: string;
   schedulingError?: unknown;
 }): Promise<boolean> {
   const now = new Date();
@@ -1551,23 +1553,37 @@ async function moveWorkstreamFailureToRepairInbox(input: {
     .set({
       status: "FAILED",
       resultSummary:
-        "AI Core tidak dapat memulihkan kegagalan ini secara aman. Diagnostik sudah dimasukkan ke Repair Inbox.",
+        "AI Core tidak dapat memulihkan kegagalan ini secara aman. Diagnostik sudah dimasukkan ke Incident Inbox untuk auto-repair/inspection.",
     })
     .where(eq(aiCodingTasksTable.id, input.payload.childTaskId))
     .catch(() => undefined);
 
-  await enqueueCodingRepairInboxItem({
-    taskId: input.parentTaskId,
-    workstreamId: input.payload.workstreamId,
-    graphId: input.payload.graphId,
-    childTaskId: input.payload.childTaskId,
-    error: combinedMessage,
-    repairAttempt: input.decision.previousRepairAttempts,
-    maxRepairAttempts: input.decision.maxRepairAttempts,
+  await upsertIncident({
+    source: "system",
+    kind: input.decision.recoverable
+      ? "coding_workstream_ai_auto_repair_exhausted"
+      : "coding_workstream_ai_non_retryable_failure",
+    title: "Coding Workspace workstream requires repair",
+    summary: combinedMessage,
+    severity: "critical",
+    riskClass: "GUARDED",
+    repository: input.repository,
+    branch: input.branch,
+    fingerprint:
+      "coding-workstream-ai:" +
+      input.payload.workstreamId +
+      ":" +
+      input.decision.reason,
     metadata: {
       source: "workstream-ai-execution",
+      parentTaskId: input.parentTaskId,
+      workstreamId: input.payload.workstreamId,
+      graphId: input.payload.graphId,
+      childTaskId: input.payload.childTaskId,
       recoverable: input.decision.recoverable,
       repairDecision: input.decision.reason,
+      repairAttempt: input.decision.previousRepairAttempts,
+      maxRepairAttempts: input.decision.maxRepairAttempts,
       failedClaimAttempt: input.payload.claimAttempt,
     },
   }).catch(() => undefined);
@@ -1925,6 +1941,8 @@ export async function executeCodingWorkstreamAiJob(
         parentTaskId: loaded?.graphTaskId ?? payload.childTaskId,
         error: diagnosticError,
         decision: repairDecision,
+        repository: loaded?.childTask.repository ?? "",
+        branch: loaded?.childTask.branch ?? "main",
         ...(autoRepairSchedulingError
           ? { schedulingError: autoRepairSchedulingError }
           : {}),
