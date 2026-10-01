@@ -180,8 +180,9 @@ describe("autonomous active-run race recovery", () => {
     );
 
     expect(source).toContain("/Coding task already has an active run/i.test(message)");
-    expect(source).toContain('const action = `WAIT_ACTIVE_RUN:${state.activeRun.agentName}`');
-    expect(source).toContain('await setState(taskId, "WAITING", action, null)');
+    expect(source).toContain('"RETRY_AFTER_ACTIVE_RUN_RACE"');
+    expect(source).toContain('const status: AutonomousStatus = stillActive ? "WAITING" : "ACTIVE"');
+    expect(source).toContain('raceAlreadyCleared: !stillActive');
     expect(source).toContain('"active_run_race_deferred"');
   });
 });
