@@ -151,12 +151,19 @@ const RECOVERY_INTERVAL_MS = 30_000;
 let _processedToday  = 0;
 let _failedToday     = 0;
 
-// Phase 5.2: each entry holds worker id + heartbeat token for lease renewal
-interface ManagedWorker { id: number; token: string; }
+// Phase 5.2: each entry holds worker identity + heartbeat token for lease renewal.
+interface ManagedWorker { id: number; token: string; workerName: string; }
 const _workers: ManagedWorker[] = [];
 
-const CLUSTER_ID   = "dispatcher";
-const LEASE_OWNER  = `dispatcher-pid-${process.pid}`;
+const CLUSTER_ID = "dispatcher";
+// PID alone is not unique across overlapping deployment containers. A random
+// process instance id prevents two rolling-deploy dispatchers from presenting
+// the same lease owner and stealing each other's heartbeat token.
+const DISPATCHER_INSTANCE_ID = randomUUID();
+const DISPATCHER_NODE_ID =
+  `node-${process.pid}-${DISPATCHER_INSTANCE_ID.slice(0, 8)}`;
+const LEASE_OWNER =
+  `dispatcher-${process.pid}-${DISPATCHER_INSTANCE_ID}`;
 
 // ── Settings API ──────────────────────────────────────────────────────────────
 
@@ -228,38 +235,82 @@ export async function getStatus(): Promise<DispatcherStatus> {
  * Each worker gets cluster identity, capability set, and a fresh lease.
  */
 export async function ensureWorkers(): Promise<void> {
-  _workers.length = 0;
-
-  const nodeId = `node-${process.pid}`;
+  const managedNames = new Set(_workers.map((worker) => worker.workerName));
 
   for (const cfg of DISPATCHER_WORKERS) {
     const workerName = `dispatcher-${cfg.suffix}`;
-    const token      = randomUUID();
+    if (managedNames.has(workerName)) continue;
 
+    const token = randomUUID();
     const worker = await registerWorker({
       workerName,
-      workerType:       cfg.workerType,
-      clusterId:        CLUSTER_ID,
-      nodeId,
-      region:           "local",
-      version:          "5.2.0",
-      capabilities:     cfg.capabilities,
+      workerType: cfg.workerType,
+      clusterId: CLUSTER_ID,
+      nodeId: DISPATCHER_NODE_ID,
+      region: "local",
+      version: "5.2.0",
+      capabilities: cfg.capabilities,
       maxConcurrentJobs: cfg.maxConcurrentJobs,
-      leaseOwner:       LEASE_OWNER,
-      leaseTtlMs:       DEFAULT_LEASE_TTL_MS,
+      leaseOwner: LEASE_OWNER,
+      heartbeatToken: token,
+      leaseTtlMs: DEFAULT_LEASE_TTL_MS,
     });
 
-    // Overwrite the heartbeat_token with one we control (registerWorker generates its own,
-    // but we need to track it for lease renewal)
-    await db
-      .update(aiWorkersTable)
-      .set({ heartbeatToken: token, status: "idle", currentJob: null, runningJobs: 0 })
-      .where(eq(aiWorkersTable.id, worker.id));
+    // During a rolling deploy another live dispatcher instance may still own
+    // this logical worker. In that case registerWorker() deliberately leaves
+    // the existing lease untouched; this process simply retries later.
+    if (worker.leaseOwner !== LEASE_OWNER) {
+      logger.info(
+        {
+          workerId: worker.id,
+          workerName,
+          leaseOwner: worker.leaseOwner,
+          requestedLeaseOwner: LEASE_OWNER,
+        },
+        "[dispatcher] Worker acquisition deferred to current live lease owner",
+      );
+      continue;
+    }
 
-    _workers.push({ id: worker.id, token });
+    const [owned] = await db
+      .update(aiWorkersTable)
+      .set({
+        status: "idle",
+        currentJob: null,
+        runningJobs: 0,
+      })
+      .where(
+        and(
+          eq(aiWorkersTable.id, worker.id),
+          eq(aiWorkersTable.leaseOwner, LEASE_OWNER),
+          eq(aiWorkersTable.heartbeatToken, token),
+        ),
+      )
+      .returning({ id: aiWorkersTable.id });
+
+    if (!owned) {
+      logger.warn(
+        { workerId: worker.id, workerName },
+        "[dispatcher] Worker lease changed before local ownership was confirmed",
+      );
+      continue;
+    }
+
+    _workers.push({ id: worker.id, token, workerName });
+    managedNames.add(workerName);
   }
 
-  logger.info({ workers: _workers.map((w) => w.id) }, "[dispatcher] Workers ensured");
+  logger.info(
+    {
+      instanceId: DISPATCHER_INSTANCE_ID,
+      leaseOwner: LEASE_OWNER,
+      workers: _workers.map((worker) => ({
+        id: worker.id,
+        workerName: worker.workerName,
+      })),
+    },
+    "[dispatcher] Workers ensured",
+  );
 }
 
 /**
@@ -281,6 +332,9 @@ export async function start(): Promise<void> {
 
   _starting = true;
   try {
+    // A stopped/restarted dispatcher must rebuild its local token set from the
+    // database rather than trusting stale in-memory lease handles.
+    _workers.length = 0;
     await ensureWorkers();
   } catch (err) {
     _starting = false;
@@ -295,11 +349,13 @@ export async function start(): Promise<void> {
   logger.info({ pollIntervalMs: _settings.workerPollIntervalMs, workers: workerIds }, "[dispatcher] Started");
   await logAudit("job-dispatcher", "dispatcher_started", "dispatcher", "system", "success", {
     workerIds,
+    instanceId: DISPATCHER_INSTANCE_ID,
+    leaseOwner: LEASE_OWNER,
     settings: _settings,
   });
 
   publishSafe({ eventType: "dispatcher.started", sourceModule: "job-dispatcher", sourceId: "dispatcher",
-    payload: { workerIds, pid: process.pid } });
+    payload: { workerIds, pid: process.pid, instanceId: DISPATCHER_INSTANCE_ID } });
 }
 
 /**
@@ -526,9 +582,13 @@ export async function shutdown(): Promise<void> {
     }
   }
 
+  const releasedWorkerIds = _workers.map((w) => w.id);
+  _workers.length = 0;
+
   logger.info("[dispatcher] Shutdown complete");
   await logAudit("job-dispatcher", "dispatcher_shutdown", "dispatcher", "system", "success", {
-    workerIds: _workers.map((w) => w.id),
+    workerIds: releasedWorkerIds,
+    instanceId: DISPATCHER_INSTANCE_ID,
   });
 }
 
@@ -553,14 +613,65 @@ function _clearTimers(): void {
  * Write heartbeat to DB and renew leases for all managed workers.
  */
 async function _heartbeat(): Promise<void> {
-  if (_workers.length === 0) return;
   _lastHeartbeat = new Date();
 
-  await Promise.allSettled(
-    _workers.map((w) =>
-      renewLease(w.id, w.token, DEFAULT_LEASE_TTL_MS).catch((err) =>
-        logger.error({ err, workerId: w.id }, "[dispatcher] Lease renewal failed"),
+  // A newly started rolling-deploy instance can legitimately own zero workers
+  // while the previous instance still holds live leases. Keep attempting to
+  // acquire missing workers instead of requiring another process restart.
+  if (_workers.length < DISPATCHER_WORKERS.length) {
+    await ensureWorkers().catch((err) =>
+      logger.error({ err }, "[dispatcher] Worker reacquisition failed"),
+    );
+  }
+
+  if (_workers.length === 0) return;
+
+  const snapshot = [..._workers];
+  const results = await Promise.allSettled(
+    snapshot.map(async (worker) => ({
+      worker,
+      renewed: await renewLease(
+        worker.id,
+        worker.token,
+        DEFAULT_LEASE_TTL_MS,
       ),
-    ),
+    })),
   );
+
+  const lostNames = new Set<string>();
+  for (const result of results) {
+    if (result.status === "rejected") {
+      logger.error(
+        { err: result.reason },
+        "[dispatcher] Lease renewal failed",
+      );
+      continue;
+    }
+
+    if (result.value.renewed) continue;
+
+    lostNames.add(result.value.worker.workerName);
+    logger.warn(
+      {
+        workerId: result.value.worker.id,
+        workerName: result.value.worker.workerName,
+        leaseOwner: LEASE_OWNER,
+      },
+      "[dispatcher] Lease ownership lost; scheduling worker reacquisition",
+    );
+  }
+
+  if (lostNames.size > 0) {
+    for (let index = _workers.length - 1; index >= 0; index -= 1) {
+      if (lostNames.has(_workers[index]!.workerName)) {
+        _workers.splice(index, 1);
+      }
+    }
+  }
+
+  if (_workers.length < DISPATCHER_WORKERS.length) {
+    await ensureWorkers().catch((err) =>
+      logger.error({ err }, "[dispatcher] Worker reacquisition failed"),
+    );
+  }
 }
