@@ -24,3 +24,29 @@ describe("OpenAI constrained JSON output", () => {
     expect(request?.signal).toBe(signal);
   });
 });
+
+
+it("preserves the bounded policy in an o-series user message and satisfies JSON mode", async () => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    choices: [{ message: { content: '{"version":1}' } }],
+  }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await executeAINoFallback({
+    prompt: "Produce the bounded proposal.",
+    systemPrompt: "Do not use tools or access the network.",
+    provider: { slug: "openai" },
+    model: { modelId: "o4-mini" },
+    maxTokens: 512,
+    temperature: 0,
+    jsonOutput: true,
+  });
+
+  const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+  expect(body.response_format).toEqual({ type: "json_object" });
+  expect(body.messages).toHaveLength(1);
+  expect(body.messages[0]).toMatchObject({ role: "user" });
+  expect(body.messages[0].content).toContain("Do not use tools or access the network.");
+  expect(body.messages[0].content).toContain("Produce the bounded proposal.");
+  expect(body.messages[0].content.toLowerCase()).toContain("json");
+});
