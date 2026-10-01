@@ -813,6 +813,25 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       };
     }
 
+    const handoffExecutionGateRegressed =
+      /Coding task is not at the AI_HANDOFF_APPROVED gate/i.test(message) &&
+      state?.task.status === "READY_REVIEW" &&
+      ["AI_REQUIRED", "APPROVE_AI_HANDOFF"].includes(state.nextAction ?? "");
+
+    if (handoffExecutionGateRegressed) {
+      const action = "RECOVER_AI_HANDOFF_GATE_REGRESSION";
+      await setState(taskId, "ACTIVE", action, null);
+      await logAudit(
+        "coding-autonomous",
+        "handoff_execution_gate_regression_deferred",
+        taskId,
+        "coding_task",
+        "success",
+        { nextAction: state.nextAction },
+      ).catch(() => undefined);
+      return { taskId, status: "ACTIVE", action };
+    }
+
     const transientDatabaseFailure =
       /timeout exceeded when trying to connect|Failed query:/i.test(message) &&
       !/CODING_TASK_NOT_FOUND/i.test(message);

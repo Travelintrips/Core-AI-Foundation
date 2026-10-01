@@ -146,6 +146,59 @@ function stringify(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+const ADVANCED_AI_ACTIONS_AFTER_AI_REQUIRED = new Set([
+  "APPROVE_TASK_GRAPH",
+  "APPROVE_AI_HANDOFF",
+  "AI_HANDOFF_APPROVED",
+  "AI_EXECUTION_RUNNING",
+  "REVIEW_AI_PATCH",
+  "APPROVE_COMMIT",
+  "REVIEW_PR",
+  "APPROVE_MERGE",
+  "DONE",
+]);
+
+export function shouldPreserveAdvancedAiGate(
+  proposedNextAction: string,
+  persistedLogs: string | null | undefined,
+): boolean {
+  if (proposedNextAction !== "AI_REQUIRED" || !persistedLogs) return false;
+
+  try {
+    const payload = JSON.parse(persistedLogs) as Record<string, unknown>;
+    const orchestration =
+      payload.orchestration &&
+      typeof payload.orchestration === "object" &&
+      !Array.isArray(payload.orchestration)
+        ? payload.orchestration as Record<string, unknown>
+        : null;
+    const persistedNextAction =
+      typeof orchestration?.nextAction === "string"
+        ? orchestration.nextAction
+        : null;
+
+    if (
+      persistedNextAction &&
+      ADVANCED_AI_ACTIONS_AFTER_AI_REQUIRED.has(persistedNextAction)
+    ) {
+      return true;
+    }
+
+    const aiHandoff =
+      payload.aiHandoff &&
+      typeof payload.aiHandoff === "object" &&
+      !Array.isArray(payload.aiHandoff)
+        ? payload.aiHandoff as Record<string, unknown>
+        : null;
+    return (
+      aiHandoff?.status === "PREPARED" ||
+      aiHandoff?.status === "APPROVED"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function extractJsonObject(content: string): Record<string, unknown> | null {
   const cleaned = content
     .trim()
@@ -388,24 +441,38 @@ async function completeLocalAnalysis(
     },
   };
 
+  let preservedAdvancedAiGate = false;
   await db.transaction(async (tx) => {
-    await tx
-      .update(aiCodingRunsTable)
-      .set({
-        status: "COMPLETED",
-        finishedAt: completedAt,
-        logs: stringify(result),
-        errorMessage: null,
-      })
-      .where(eq(aiCodingRunsTable.id, input.run.id));
+    const [persistedRun] = await tx
+      .select({ logs: aiCodingRunsTable.logs })
+      .from(aiCodingRunsTable)
+      .where(eq(aiCodingRunsTable.id, input.run.id))
+      .for("update");
 
-    await tx
-      .update(aiCodingTasksTable)
-      .set({
-        status: "READY_REVIEW",
-        resultSummary: summary,
-      })
-      .where(eq(aiCodingTasksTable.id, input.task.id));
+    preservedAdvancedAiGate = shouldPreserveAdvancedAiGate(
+      nextAction,
+      persistedRun?.logs,
+    );
+
+    if (!preservedAdvancedAiGate) {
+      await tx
+        .update(aiCodingRunsTable)
+        .set({
+          status: "COMPLETED",
+          finishedAt: completedAt,
+          logs: stringify(result),
+          errorMessage: null,
+        })
+        .where(eq(aiCodingRunsTable.id, input.run.id));
+
+      await tx
+        .update(aiCodingTasksTable)
+        .set({
+          status: "READY_REVIEW",
+          resultSummary: summary,
+        })
+        .where(eq(aiCodingTasksTable.id, input.task.id));
+    }
 
     await tx
       .update(aiOrchestratorSessionsTable)
@@ -416,6 +483,22 @@ async function completeLocalAnalysis(
       })
       .where(eq(aiOrchestratorSessionsTable.sessionId, sessionId));
   });
+
+  if (preservedAdvancedAiGate) {
+    await logAudit(
+      "coding-orchestrator",
+      "local_analysis_gate_regression_prevented",
+      input.task.id,
+      "coding_task",
+      "success",
+      {
+        sessionId,
+        codingRunId: input.run.id,
+        proposedNextAction: nextAction,
+      },
+    );
+    return;
+  }
 
   await logAudit(
     "coding-orchestrator",

@@ -218,6 +218,20 @@ describe("autonomous AI handoff approval race recovery", () => {
 });
 
 
+describe("autonomous approved-handoff gate regression recovery", () => {
+  it("recovers a stale approved-handoff assertion instead of terminal FAILED", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("/Coding task is not at the AI_HANDOFF_APPROVED gate/i.test(message)");
+    expect(source).toContain('"RECOVER_AI_HANDOFF_GATE_REGRESSION"');
+    expect(source).toContain('"handoff_execution_gate_regression_deferred"');
+    expect(source).toContain('["AI_REQUIRED", "APPROVE_AI_HANDOFF"].includes(state.nextAction ?? "")');
+  });
+});
+
 describe("autonomous transient database recovery", () => {
   it("retries state reads and defers transient database failures instead of terminal FAILED", () => {
     const source = readFileSync(
