@@ -104,6 +104,7 @@ const {
   resumeDeferredCodingOrchestrations,
   startCodingOrchestrationRecoveryRuntime,
   stopCodingOrchestrationRecoveryRuntime,
+  shouldPreserveAdvancedAiGate,
 } = await import("../codingOrchestratorService.js");
 
 const task = {
@@ -131,6 +132,39 @@ const run = {
   logs: null,
   errorMessage: null,
 };
+
+describe("Coding Orchestrator AI gate monotonicity", () => {
+  it("preserves handoff gates that already advanced beyond AI_REQUIRED", () => {
+    expect(
+      shouldPreserveAdvancedAiGate(
+        "AI_REQUIRED",
+        JSON.stringify({
+          orchestration: { nextAction: "AI_HANDOFF_APPROVED" },
+          aiHandoff: { status: "APPROVED" },
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      shouldPreserveAdvancedAiGate(
+        "AI_REQUIRED",
+        JSON.stringify({
+          orchestration: { nextAction: "AI_REQUIRED" },
+          aiHandoff: { status: "APPROVED" },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not preserve an ordinary unadvanced AI_REQUIRED snapshot", () => {
+    expect(
+      shouldPreserveAdvancedAiGate(
+        "AI_REQUIRED",
+        JSON.stringify({ orchestration: { nextAction: "AI_REQUIRED" } }),
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("Coding Orchestrator", () => {
   beforeEach(() => {
