@@ -10,6 +10,7 @@ const mockDbTransaction = vi.hoisted(() => vi.fn());
 const mockTxUpdateSet = vi.hoisted(() => vi.fn());
 const mockTxUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTxUpdateReturning = vi.hoisted(() => vi.fn());
+const mockWithTransientDatabaseRetry = vi.hoisted(() => vi.fn());
 
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
@@ -40,6 +41,7 @@ vi.mock("@workspace/db", () => ({
     select: mockDbSelect,
     transaction: mockDbTransaction,
   },
+  withTransientDatabaseRetry: mockWithTransientDatabaseRetry,
   aiCodingRunsTable: {
     id: "codingRuns.id",
     status: "codingRuns.status",
@@ -300,7 +302,30 @@ describe("repository analyzer execution", () => {
     mockTxUpdateSet.mockReturnValue(updateBuilder);
     mockTxUpdateWhere.mockReturnValue(updateBuilder);
     mockTxUpdateReturning.mockResolvedValue([{ id: runId }]);
+    mockWithTransientDatabaseRetry.mockImplementation(
+      async (operation: () => Promise<unknown>) => operation(),
+    );
   });
+
+  it("guards the task lookup with transient database retry", async () => {
+    await executeRepositoryAnalyzerJob({
+      id: 700,
+      jobType: "coding_repository_analyzer",
+      payloadJson: {
+        codingTaskId: taskId,
+        codingRunId: runId,
+        repository: ".",
+        branch: "main",
+        title: "Analyzer test",
+        description: "Inspect the repository",
+      },
+    } as never);
+
+    expect(mockWithTransientDatabaseRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      { attempts: 5, baseDelayMs: 250 },
+    );
+  }, 15_000);
 
   it("accepts the coding task/run context and returns structured repository findings", async () => {
     const result = await executeRepositoryAnalyzerJob({
