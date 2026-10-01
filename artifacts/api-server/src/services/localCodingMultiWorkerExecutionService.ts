@@ -21,6 +21,7 @@ import {
 } from "./repositoryAnalyzerService.js";
 import {
   claimReadyCodingWorkstreams,
+  completeReviewedCodingWorkstream,
   heartbeatCodingWorkstreamClaim,
   LocalCodingMultiWorkerError,
   markCodingWorkstreamReviewRequired,
@@ -648,6 +649,40 @@ export async function executeCodingWorkstreamJob(
     );
 
     await completeRepositoryAnalyzerRun(result);
+
+    const localExecution =
+      result.localExecution &&
+      typeof result.localExecution === "object" &&
+      !Array.isArray(result.localExecution)
+        ? (result.localExecution as Record<string, unknown>)
+        : null;
+    const localExecutionPlan =
+      result.localExecutionPlan &&
+      typeof result.localExecutionPlan === "object" &&
+      !Array.isArray(result.localExecutionPlan)
+        ? (result.localExecutionPlan as Record<string, unknown>)
+        : null;
+    const analyzerReachedNoopCompletion =
+      changedFiles.length === 0 &&
+      localExecutionPlan?.status === "EXECUTABLE" &&
+      localExecution?.status === "NO_CHANGES";
+
+    if (analyzerReachedNoopCompletion) {
+      await completeReviewedCodingWorkstream(payload.workstreamId, {
+        completeChildTask: true,
+        childTaskResultSummary:
+          "Repository analysis completed with no code changes; workstream auto-finished.",
+      });
+
+      return {
+        ...result,
+        graphId: payload.graphId,
+        workstreamId: payload.workstreamId,
+        workstreamKey: payload.workstreamKey,
+        ownershipValidated: true,
+        nextAction: "COMPLETED",
+      };
+    }
 
     return {
       ...result,
