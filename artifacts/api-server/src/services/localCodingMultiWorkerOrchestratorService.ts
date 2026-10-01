@@ -7,6 +7,7 @@ import {
   aiCodingWorkstreamDependenciesTable,
   aiCodingWorkstreamsTable,
   db,
+  withTransientDatabaseRetry,
   type AiCodingTaskGraph,
   type AiCodingWorkstream,
 } from "@workspace/db";
@@ -301,22 +302,25 @@ export async function startCodingWorkstreamClaim(
   leaseToken: string,
 ): Promise<AiCodingWorkstream> {
   const now = new Date();
-  const [updated] = await db
-    .update(aiCodingWorkstreamsTable)
-    .set({
-      status: "RUNNING",
-      startedAt: now,
-      heartbeatAt: now,
-    })
-    .where(
-      and(
-        eq(aiCodingWorkstreamsTable.id, workstreamId),
-        eq(aiCodingWorkstreamsTable.status, "CLAIMED"),
-        eq(aiCodingWorkstreamsTable.leaseToken, leaseToken),
-        sql`${aiCodingWorkstreamsTable.leaseExpiresAt} > ${now}`,
-      ),
-    )
-    .returning();
+  const [updated] = await withTransientDatabaseRetry(
+    () => db
+      .update(aiCodingWorkstreamsTable)
+      .set({
+        status: "RUNNING",
+        startedAt: sql`COALESCE(${aiCodingWorkstreamsTable.startedAt}, ${now})`,
+        heartbeatAt: now,
+      })
+      .where(
+        and(
+          eq(aiCodingWorkstreamsTable.id, workstreamId),
+          inArray(aiCodingWorkstreamsTable.status, ["CLAIMED", "RUNNING"]),
+          eq(aiCodingWorkstreamsTable.leaseToken, leaseToken),
+          sql`${aiCodingWorkstreamsTable.leaseExpiresAt} > ${now}`,
+        ),
+      )
+      .returning(),
+    { attempts: 5, baseDelayMs: 250 },
+  );
 
   if (!updated) {
     throw new LocalCodingMultiWorkerError(
