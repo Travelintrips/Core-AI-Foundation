@@ -31,9 +31,11 @@ import {
 } from "./localCodingAiHandoffService.js";
 import {
   parseLocalCodingAiProposalV1,
+  validateLocalCodingAiProposalV1,
   type LocalCodingAiProposalBinding,
   type LocalCodingAiProposalV1,
 } from "./localCodingAiProposalContractService.js";
+import { localCodingAiProposalV1JsonSchema } from "./localCodingAiProposalJsonSchema.js";
 import {
   computeAiProposalRepositoryHash,
   validateAiProposalPolicy,
@@ -270,6 +272,9 @@ export function createConstrainedCodingProviderAdapter(input: {
           ...(input.jsonOutput || request.responseFormat.type === "structured"
             ? { jsonOutput: true }
             : {}),
+          ...(request.responseFormat.type === "structured"
+            ? { responseJsonSchema: request.responseFormat.jsonSchema }
+            : {}),
           signal: context.signal,
           observability: input.observability,
         });
@@ -446,19 +451,24 @@ export async function invokeConstrainedAiProposal(input: {
       requestId: attempt === 1 ? input.requestId : input.requestId + "-schema-repair-1",
       target: input.target,
       input: serializeBoundedModelPrompt(attemptPrompt),
-      responseFormat: { type: "text" },
+      responseFormat: {
+        type: "structured",
+        schemaName: "coding_proposal_v1",
+        jsonSchema: localCodingAiProposalV1JsonSchema,
+      },
       maxOutputTokens,
       timeoutMs,
     });
 
-    if (response.output.type !== "text") {
-      throw new LocalCodingAiExecutionGateError(
-        "Constrained model returned a non-text proposal",
-        "MODEL_FAILED",
-      );
-    }
-
     try {
+      if (response.output.type === "structured") {
+        const proposal = validateLocalCodingAiProposalV1(
+          response.output.value,
+          binding,
+        );
+        return { proposal, metadata: response.metadata };
+      }
+
       const candidates = boundedJsonObjectCandidates(response.output.text);
       const valid: LocalCodingAiProposalV1[] = [];
       let lastCandidateError: unknown = null;
