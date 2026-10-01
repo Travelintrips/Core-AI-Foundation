@@ -13,11 +13,13 @@ import {
 } from "../localCodingAiModelAdapterService.js";
 import { computeAiHandoffPackageHash } from "../localCodingAiProposalPolicyService.js";
 import {
+  boundedJsonObjectCandidates,
   buildAiPatchApplierProposal,
   buildAiProposalBinding,
   buildAiProposalPolicyEnvelope,
   createConstrainedCodingProviderAdapter,
   invokeConstrainedAiProposal,
+  normalizeBoundedSchemaRepairOutput,
   validateAndApplyAiProposal,
 } from "../localCodingAiExecutionGateService.js";
 
@@ -208,7 +210,10 @@ describe("Local Coding AI Execution Gate integration", () => {
     const { root, head } = await repositoryFixture();
     const lease = leaseFixture(head);
     const invoke = vi.fn(async () => ({
-      output: { type: "text" as const, text: proposalJson(lease) },
+      output: {
+        type: "structured" as const,
+        value: JSON.parse(proposalJson(lease)),
+      },
       usage: { inputTokens: 100, outputTokens: 80, totalTokens: 180 },
     }));
     const provider: ConstrainedModelProvider = {
@@ -311,11 +316,14 @@ describe("Local Coding AI Execution Gate integration", () => {
     empty.proposal.operations = [];
     const invoke = vi.fn()
       .mockResolvedValueOnce({
-        output: { type: "text" as const, text: JSON.stringify(empty) },
+        output: { type: "structured" as const, value: empty },
         usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
       })
       .mockResolvedValueOnce({
-        output: { type: "text" as const, text: proposalJson(lease) },
+        output: {
+          type: "structured" as const,
+          value: JSON.parse(proposalJson(lease)),
+        },
         usage: { inputTokens: 20, outputTokens: 20, totalTokens: 40 },
       });
     const provider: ConstrainedModelProvider = {
@@ -339,161 +347,83 @@ describe("Local Coding AI Execution Gate integration", () => {
     expect(result.proposal.proposal.operations).toHaveLength(1);
   });
 
-  it("accepts an exact fenced JSON object without spending a schema-repair invocation", async () => {
+  it("keeps compatibility normalization bounded for legacy text wrappers", async () => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
     const fence = String.fromCharCode(96).repeat(3);
-    const invoke = vi.fn(async () => ({
-      output: {
-        type: "text" as const,
-        text: fence + "json\n" + proposalJson(lease) + "\n" + fence,
-      },
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-    }));
-    const provider: ConstrainedModelProvider = {
-      provider: "fake",
-      model: "proposal-v1",
-      capabilities: CONSTRAINED_MODEL_CAPABILITIES,
-      invoke,
-    };
+    const proposal = proposalJson(lease);
 
-    const result = await invokeConstrainedAiProposal({
-      lease,
-      adapter: createConstrainedModelInvocationAdapter(provider),
-      target: { provider: "fake", model: "proposal-v1" },
-      requestId: "execution-test-fenced-json-repair",
-      timeoutMs: 5_000,
-      maxOutputTokens: 512,
-    });
+    expect(
+      normalizeBoundedSchemaRepairOutput(
+        fence + "json\n" + proposal + "\n" + fence,
+      ),
+    ).toBe(proposal);
 
-    expect(invoke).toHaveBeenCalledTimes(1);
-    expect(result.proposal.taskId).toBe(lease.package.task.id);
+    expect(
+      normalizeBoundedSchemaRepairOutput(
+        JSON.stringify(fence + "json\n" + proposal + "\n" + fence),
+      ),
+    ).toBe(proposal);
+
+    const proseWrapped =
+      "Here is the proposal:\n" +
+      fence +
+      "json\n" +
+      proposal +
+      "\n" +
+      fence;
+    expect(boundedJsonObjectCandidates(proseWrapped)).toEqual([proposal]);
+
+    const mixed =
+      'Provider diagnostic: {"status":"repairing","attempt":1}\n' +
+      fence +
+      "json\n" +
+      proposal +
+      "\n" +
+      fence +
+      "\nDone.";
+    expect(boundedJsonObjectCandidates(mixed)).toEqual([
+      '{"status":"repairing","attempt":1}',
+      proposal,
+    ]);
   });
 
-  it("unwraps one JSON-string layer containing fenced proposal JSON", async () => {
+  it("keeps multiple legacy JSON objects explicit instead of silently choosing one", async () => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
-    const fence = String.fromCharCode(96).repeat(3);
-    const wrapped = JSON.stringify(
-      fence + "json\n" + proposalJson(lease) + "\n" + fence,
-    );
-    const invoke = vi.fn(async () => ({
-      output: { type: "text" as const, text: wrapped },
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-    }));
-    const provider: ConstrainedModelProvider = {
-      provider: "fake",
-      model: "proposal-v1",
-      capabilities: CONSTRAINED_MODEL_CAPABILITIES,
-      invoke,
-    };
-
-    const result = await invokeConstrainedAiProposal({
-      lease,
-      adapter: createConstrainedModelInvocationAdapter(provider),
-      target: { provider: "fake", model: "proposal-v1" },
-      requestId: "execution-test-json-string-wrapper",
-      timeoutMs: 5_000,
-      maxOutputTokens: 512,
-    });
-
-    expect(invoke).toHaveBeenCalledTimes(1);
-    expect(result.proposal.taskId).toBe(lease.package.task.id);
+    const proposal = proposalJson(lease);
+    expect(
+      boundedJsonObjectCandidates(proposal + "\n" + proposal),
+    ).toEqual([proposal, proposal]);
   });
 
-  it("normalizes one fenced JSON object surrounded by provider prose", async () => {
-    const { head } = await repositoryFixture();
-    const lease = leaseFixture(head);
-    const fence = String.fromCharCode(96).repeat(3);
-    const provider: ConstrainedModelProvider = {
-      provider: "fake",
-      model: "proposal-v1",
-      capabilities: CONSTRAINED_MODEL_CAPABILITIES,
-      async invoke() {
-        return {
-          output: {
-            type: "text",
-            text: "Here is the proposal:\n" + fence + "json\n" + proposalJson(lease) + "\n" + fence,
-          },
-          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-        };
-      },
-    };
-
-    await expect(
-      invokeConstrainedAiProposal({
-        lease,
-        adapter: createConstrainedModelInvocationAdapter(provider),
-        target: { provider: "fake", model: "proposal-v1" },
-        requestId: "execution-test-invalid-fenced-prose",
-        timeoutMs: 5_000,
-        maxOutputTokens: 512,
-      }),
-    ).resolves.toMatchObject({ proposal: { taskId: lease.package.task.id } });
-  });
-
-  it("selects the single Contract V1 proposal from mixed provider JSON fragments", async () => {
-    const { head } = await repositoryFixture();
-    const lease = leaseFixture(head);
-    const fence = String.fromCharCode(96).repeat(3);
-    const invoke = vi.fn(async () => ({
-      output: {
-        type: "text" as const,
-        text:
-          'Provider diagnostic: {"status":"repairing","attempt":1}\n' +
-          fence +
-          "json\n" +
-          proposalJson(lease) +
-          "\n" +
-          fence +
-          "\nDone.",
-      },
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-    }));
-
-    const result = await invokeConstrainedAiProposal({
-      lease,
-      adapter: createConstrainedModelInvocationAdapter({
-        provider: "fake",
-        model: "proposal-v1",
-        capabilities: CONSTRAINED_MODEL_CAPABILITIES,
-        invoke,
-      }),
-      target: { provider: "fake", model: "proposal-v1" },
-      requestId: "execution-test-mixed-json-fragments",
-      timeoutMs: 5_000,
-      maxOutputTokens: 512,
-    });
-
-    expect(invoke).toHaveBeenCalledTimes(1);
-    expect(result.proposal.taskId).toBe(lease.package.task.id);
-  });
-
-  it.each(["array", "multiple objects", "wrong binding", "forbidden capability"])(
-    "keeps strict validation after normalization: %s",
+  it.each(["array", "wrong binding", "forbidden capability"])(
+    "keeps strict validation for structured provider output: %s",
     async (format) => {
       const { head } = await repositoryFixture();
       const lease = leaseFixture(head);
       const proposal = JSON.parse(proposalJson(lease));
       if (format === "wrong binding") proposal.packageHash = "0".repeat(64);
       if (format === "forbidden capability") proposal.capabilities.shellCommand = true;
-      const object = JSON.stringify(proposal);
-      const text = format === "array" ? `[${object}]`
-        : format === "multiple objects" ? `Here are proposals:\n${object}\n${object}`
-        : `Here is the proposal:\n${object}`;
+      const value = format === "array" ? [proposal] : proposal;
       const invoke = vi.fn(async () => ({
-        output: { type: "text" as const, text },
+        output: { type: "structured" as const, value },
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
       }));
       await expect(invokeConstrainedAiProposal({
         lease,
         adapter: createConstrainedModelInvocationAdapter({
-          provider: "fake", model: "proposal-v1", capabilities: CONSTRAINED_MODEL_CAPABILITIES, invoke,
+          provider: "fake",
+          model: "proposal-v1",
+          capabilities: CONSTRAINED_MODEL_CAPABILITIES,
+          invoke,
         }),
         target: { provider: "fake", model: "proposal-v1" },
-        requestId: `invalid-${format}`, timeoutMs: 5_000, maxOutputTokens: 512,
+        requestId: `invalid-${format}`,
+        timeoutMs: 5_000,
+        maxOutputTokens: 512,
       })).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
-      expect(invoke.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(invoke).toHaveBeenCalledTimes(2);
     },
   );
 });
