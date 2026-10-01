@@ -128,7 +128,7 @@ export const localCodingAiProposalV1JsonSchema: Record<string, unknown> = {
           minItems: 1,
           maxItems: 24,
           items: {
-            oneOf: operationSchemas,
+            anyOf: operationSchemas,
           },
         },
       },
