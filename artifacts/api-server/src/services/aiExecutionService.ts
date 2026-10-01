@@ -214,18 +214,24 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
   const modelId = input.model.modelId;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
 
+  const generationConfig = {
+    maxOutputTokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
+    ...(input.temperature != null ? { temperature: input.temperature } : {}),
+  };
   const body: Record<string, unknown> = {
     contents: [{ role: "user", parts: [{ text: input.prompt }] }],
     generationConfig: {
-      maxOutputTokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
-      ...(input.temperature != null ? { temperature: input.temperature } : {}),
+      ...generationConfig,
       ...(input.responseJsonSchema
         ? {
-            // Gemini generateContent v1beta accepts the legacy structured-output
-            // pair used successfully by the constrained coding path before
-            // responseFormat.text was introduced here.
-            responseMimeType: "application/json",
-            responseJsonSchema: input.responseJsonSchema,
+            // Current generateContent uses responseFormat.text. Keep the full
+            // schema attached so coding proposals are constrained at generation.
+            responseFormat: {
+              text: {
+                mimeType: "application/json",
+                schema: input.responseJsonSchema,
+              },
+            },
           }
         : input.jsonOutput
           ? { responseMimeType: "application/json" }
@@ -237,12 +243,33 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
     body.systemInstruction = { parts: [{ text: input.systemPrompt }] };
   }
 
-  const response = await fetch(url, {
+  const request = {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
     signal: input.signal,
+  };
+  let response = await fetch(url, {
+    ...request,
+    body: JSON.stringify(body),
   });
+
+  if (input.responseJsonSchema && response.status === 400) {
+    // Older endpoints may reject responseFormat. Retry the legacy wire format
+    // once with the same schema, prompt, limits and cancellation signal before
+    // the constrained adapter considers its existing JSON-only fallback.
+    await response.text().catch(() => "");
+    response = await fetch(url, {
+      ...request,
+      body: JSON.stringify({
+        ...body,
+        generationConfig: {
+          ...generationConfig,
+          responseMimeType: "application/json",
+          responseJsonSchema: input.responseJsonSchema,
+        },
+      }),
+    });
+  }
 
   const latencyMs = Date.now() - startTime;
 

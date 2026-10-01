@@ -202,20 +202,22 @@ describe("Local Coding AI Execution Gate integration", () => {
       }
       for (const [, request] of fetchMock.mock.calls) {
         const body = JSON.parse(String(request?.body));
-        expect(body.generationConfig.responseMimeType)
+        expect(body.generationConfig.responseFormat.text.mimeType)
           .toBe("application/json");
-        expect(body.generationConfig.responseJsonSchema)
+        expect(body.generationConfig.responseFormat.text.schema)
           .toEqual(expect.objectContaining({ type: "object" }));
-        expect(body.generationConfig).not.toHaveProperty("responseFormat");
+        expect(body.generationConfig).not.toHaveProperty("responseJsonSchema");
+        expect(body.generationConfig).not.toHaveProperty("responseMimeType");
       }
     },
   );
 
-  it("retries one Gemini schema rejection in JSON-only mode and still validates Contract V1", async () => {
+  it.each([1, 2])("preserves Contract V1 after %s Gemini schema format rejection(s)", async (rejections) => {
     const { head } = await repositoryFixture();
     const lease = leaseFixture(head);
-    const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(
+    const fetchMock = vi.fn<typeof fetch>();
+    for (let attempt = 0; attempt < rejections; attempt++) {
+      fetchMock.mockResolvedValueOnce(
         new Response(
           JSON.stringify({
             error: {
@@ -226,18 +228,19 @@ describe("Local Coding AI Execution Gate integration", () => {
           }),
           { status: 400 },
         ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            candidates: [{
-              content: { parts: [{ text: proposalJson(lease) }] },
-            }],
-            usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 60 },
-          }),
-          { status: 200 },
-        ),
       );
+    }
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          candidates: [{
+            content: { parts: [{ text: proposalJson(lease) }] },
+          }],
+          usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 60 },
+        }),
+        { status: 200 },
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const provider = createConstrainedCodingProviderAdapter({
@@ -255,17 +258,64 @@ describe("Local Coding AI Execution Gate integration", () => {
     });
 
     expect(result.proposal.taskId).toBe(lease.package.task.id);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(rejections + 1);
 
     const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(firstBody.generationConfig.responseMimeType).toBe("application/json");
-    expect(firstBody.generationConfig.responseJsonSchema)
+    expect(firstBody.generationConfig.responseFormat.text.mimeType).toBe("application/json");
+    expect(firstBody.generationConfig.responseFormat.text.schema)
       .toEqual(expect.objectContaining({ type: "object" }));
 
     const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(secondBody.generationConfig.responseMimeType).toBe("application/json");
-    expect(secondBody.generationConfig).not.toHaveProperty("responseJsonSchema");
+    expect(secondBody.generationConfig.responseJsonSchema)
+      .toEqual(firstBody.generationConfig.responseFormat.text.schema);
     expect(secondBody.generationConfig).not.toHaveProperty("responseFormat");
+    expect(secondBody.contents).toEqual(firstBody.contents);
+    expect(secondBody.systemInstruction).toEqual(firstBody.systemInstruction);
+    if (rejections === 2) {
+      const thirdBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body));
+      expect(thirdBody.generationConfig.responseMimeType).toBe("application/json");
+      expect(thirdBody.generationConfig).not.toHaveProperty("responseJsonSchema");
+      expect(thirdBody.generationConfig).not.toHaveProperty("responseFormat");
+      expect(thirdBody.contents).toEqual(firstBody.contents);
+      expect(thirdBody.systemInstruction).toEqual(firstBody.systemInstruction);
+    }
+  });
+
+  it.each(["wrong binding", "HTTP 400"])("bounds and rejects JSON-only fallback failure: %s", async (failure) => {
+    const { head } = await repositoryFixture();
+    const lease = leaseFixture(head);
+    const proposal = JSON.parse(proposalJson(lease));
+    proposal.packageHash = "0".repeat(64);
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_, request) => {
+      const config = JSON.parse(String(request?.body)).generationConfig;
+      if (config.responseFormat || config.responseJsonSchema || failure === "HTTP 400") {
+        return new Response("INVALID_ARGUMENT", { status: 400 });
+      }
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(proposal) }] } }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = createConstrainedCodingProviderAdapter({
+      providerSlug: "google",
+      modelId: "gemini-3.8-flash",
+      jsonOutput: true,
+    });
+
+    await expect(invokeConstrainedAiProposal({
+      lease,
+      adapter: createConstrainedModelInvocationAdapter(provider),
+      target: { provider: "google", model: "gemini-3.8-flash" },
+      requestId: "native-gemini-fallback-rejected",
+      timeoutMs: 5_000,
+      maxOutputTokens: 512,
+    })).rejects.toMatchObject(
+      failure === "wrong binding"
+        ? { kind: "INVALID_PROPOSAL" }
+        : { code: "PROVIDER_BAD_REQUEST" },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(failure === "wrong binding" ? 6 : 3);
   });
 
   it.each(["fenced", "json-string"])(
