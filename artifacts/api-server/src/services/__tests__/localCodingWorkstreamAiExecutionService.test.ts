@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  decideWorkstreamAiAutoRepair,
   hashWorkstreamAnalyzerResult,
   manualAiPatchReviewReason,
   normalizeWorkstreamGitHeadOutput,
@@ -277,5 +278,58 @@ describe("workstream AI failure context preservation", () => {
     expect(persisted.localExecutionPlan).toEqual({ status: "AI_REQUIRED" });
     expect(persisted.contextPackage).toEqual({ branch: "ai-core/task/ws-001-a3" });
     expect(persisted.workstreamAiExecution).toMatchObject({ status: "FAILED" });
+  });
+
+  it("auto-retries Proposal Contract formatting failures with a bounded budget", () => {
+    const first = decideWorkstreamAiAutoRepair(
+      new Error(
+        "AI proposal failed Proposal Contract V1 validation after bounded schema repair: AI proposal output must be raw JSON only",
+      ),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+      },
+    );
+
+    expect(first).toMatchObject({
+      recoverable: true,
+      shouldRetry: true,
+      previousRepairAttempts: 0,
+      nextRepairAttempt: 1,
+      maxRepairAttempts: 2,
+      reason: "SAFE_AUTOMATIC_REPAIR",
+    });
+
+    const exhausted = decideWorkstreamAiAutoRepair(
+      new Error("AI proposal failed Proposal Contract V1 validation"),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+        workstreamAiExecution: {
+          status: "FAILED",
+          autoRepairAttempt: 2,
+        },
+      },
+    );
+
+    expect(exhausted).toMatchObject({
+      recoverable: true,
+      shouldRetry: false,
+      previousRepairAttempts: 2,
+      reason: "AUTOMATIC_REPAIR_BUDGET_EXHAUSTED",
+    });
+  });
+
+  it("does not auto-retry policy violations", () => {
+    const decision = decideWorkstreamAiAutoRepair(
+      new Error("AI candidate patch escaped its workstream ownership boundary."),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+      },
+    );
+
+    expect(decision).toMatchObject({
+      recoverable: false,
+      shouldRetry: false,
+      reason: "NON_RETRYABLE_FAILURE",
+    });
   });
 });

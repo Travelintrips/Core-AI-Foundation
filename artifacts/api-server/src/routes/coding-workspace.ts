@@ -137,9 +137,20 @@ router.get(
 );
 
 router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
-  await reconcileStaleCodingRuns().catch((error) => {
-    logger.warn({ err: error }, "[coding-workspace] stale coding-run reconciliation failed");
-  });
+  await Promise.all([
+    reconcileStaleMultiWorkerRuns().catch((error) => {
+      logger.warn(
+        { err: error },
+        "[coding-workspace] stale multi-worker reconciliation failed",
+      );
+    }),
+    reconcileStaleCodingRuns().catch((error) => {
+      logger.warn(
+        { err: error },
+        "[coding-workspace] stale coding-run reconciliation failed",
+      );
+    }),
+  ]);
 
   const tasks = await db
     .select()

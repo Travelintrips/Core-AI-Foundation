@@ -43,6 +43,7 @@ import { codingWorkstreamOwnsFile } from "./localCodingMultiWorkerExecutionServi
 import {
   createConstrainedCodingProviderAdapter,
   invokeConstrainedAiProposal,
+  LocalCodingAiExecutionGateError,
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { createConstrainedModelInvocationAdapter } from "./localCodingAiModelAdapterService.js";
@@ -60,6 +61,7 @@ import {
   prepareRepositoryWorkspace,
 } from "./repositoryAnalyzerService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
+import { upsertIncident } from "./incidentAutoRepairService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -72,6 +74,7 @@ const MAX_ALLOWED_FILES = 12;
 const MAX_SNIPPETS = 5;
 const MAX_FILE_BYTES = 250_000;
 const MAX_SNIPPET_CHARS = 6_000;
+const MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS = 2;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA40_RE = /^[0-9a-f]{40}$/i;
@@ -97,6 +100,65 @@ export class LocalCodingWorkstreamAiExecutionError extends Error {
     super(message);
     this.name = "LocalCodingWorkstreamAiExecutionError";
   }
+}
+
+export interface WorkstreamAiAutoRepairDecision {
+  recoverable: boolean;
+  shouldRetry: boolean;
+  previousRepairAttempts: number;
+  nextRepairAttempt: number;
+  maxRepairAttempts: number;
+  reason: string;
+}
+
+export function decideWorkstreamAiAutoRepair(
+  error: unknown,
+  sourceResult: Record<string, unknown> | null,
+): WorkstreamAiAutoRepairDecision {
+  const priorExecution =
+    sourceResult &&
+    isRecord(sourceResult.workstreamAiExecution)
+      ? sourceResult.workstreamAiExecution
+      : null;
+  const previousRepairAttempts =
+    typeof priorExecution?.autoRepairAttempt === "number" &&
+    Number.isInteger(priorExecution.autoRepairAttempt) &&
+    priorExecution.autoRepairAttempt >= 0
+      ? priorExecution.autoRepairAttempt
+      : 0;
+
+  const message = error instanceof Error ? error.message : String(error);
+  const gateKind =
+    error instanceof LocalCodingAiExecutionGateError ? error.kind : null;
+  const workstreamCode =
+    error instanceof LocalCodingWorkstreamAiExecutionError ? error.code : null;
+
+  const recoverable =
+    gateKind === "INVALID_PROPOSAL" ||
+    gateKind === "MODEL_FAILED" ||
+    workstreamCode === "MODEL_UNAVAILABLE" ||
+    workstreamCode === "MODEL_FAILED" ||
+    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout/i.test(
+      message,
+    );
+
+  const nextRepairAttempt = previousRepairAttempts + 1;
+  const shouldRetry =
+    recoverable &&
+    previousRepairAttempts < MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS;
+
+  return {
+    recoverable,
+    shouldRetry,
+    previousRepairAttempts,
+    nextRepairAttempt,
+    maxRepairAttempts: MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS,
+    reason: recoverable
+      ? shouldRetry
+        ? "SAFE_AUTOMATIC_REPAIR"
+        : "AUTOMATIC_REPAIR_BUDGET_EXHAUSTED"
+      : "NON_RETRYABLE_FAILURE",
+  };
 }
 
 interface WorkstreamAiJobPayload {
@@ -1323,7 +1385,8 @@ async function persistExecutionFailure(
   sourceResult: Record<string, unknown> | null,
   error: unknown,
   consumed: boolean,
-): Promise<void> {
+  repairDecision?: WorkstreamAiAutoRepairDecision,
+): Promise<boolean> {
   const now = new Date();
   const message = error instanceof Error ? error.message : String(error);
   const prior = sourceResult ?? {};
@@ -1338,11 +1401,22 @@ async function persistExecutionFailure(
       error: message.slice(0, 1_200),
       modelInvoked: consumed,
       privilegeEnded: consumed,
+      autoRepairAttempt: repairDecision?.shouldRetry
+        ? repairDecision.nextRepairAttempt
+        : repairDecision?.previousRepairAttempts ?? 0,
+      autoRepairMaxAttempts:
+        repairDecision?.maxRepairAttempts ??
+        MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS,
+      autoRepairStatus: repairDecision?.shouldRetry
+        ? "RETRY_PENDING"
+        : repairDecision?.recoverable
+          ? "EXHAUSTED"
+          : "NOT_RETRYABLE",
       failedAt: now.toISOString(),
     },
   };
 
-  await db
+  const [updatedWorkstream] = await db
     .update(aiCodingWorkstreamsTable)
     .set({
       status: "REVIEW_REQUIRED",
@@ -1360,7 +1434,13 @@ async function persistExecutionFailure(
         eq(aiCodingWorkstreamsTable.leaseToken, payload.leaseToken),
         inArray(aiCodingWorkstreamsTable.status, ["CLAIMED", "RUNNING"]),
       ),
-    );
+    )
+    .returning({ id: aiCodingWorkstreamsTable.id });
+
+  // A newer recovery attempt may already own this workstream. In that case
+  // the exhausted/stale job must not push the shared child task back to
+  // READY_REVIEW and hide the active repair attempt.
+  if (!updatedWorkstream) return false;
 
   await db
     .update(aiCodingTasksTable)
@@ -1372,6 +1452,174 @@ async function persistExecutionFailure(
     })
     .where(eq(aiCodingTasksTable.id, payload.childTaskId))
     .catch(() => undefined);
+
+  return true;
+}
+
+async function scheduleAutomaticWorkstreamAiRepair(
+  payload: WorkstreamAiJobPayload,
+  decision: WorkstreamAiAutoRepairDecision,
+): Promise<AiJob> {
+  const prepared = await prepareWorkstreamAiExecutionHandoff(
+    payload.workstreamId,
+  );
+  const lease = await approveWorkstreamAiExecutionHandoff(
+    payload.workstreamId,
+    prepared.handoffId,
+  );
+  const retryJob = await enqueueWorkstreamAiExecution(payload.workstreamId, {
+    expectedPackageHash: lease.packageHash,
+    requestedBy: "workstream-ai-auto-repair",
+  });
+
+  await db
+    .update(aiCodingTasksTable)
+    .set({
+      status: "ANALYZING",
+      resultSummary:
+        `AI Core auto-repair ${decision.nextRepairAttempt}/${decision.maxRepairAttempts} dijadwalkan setelah kegagalan constrained AI yang masih dapat dipulihkan.`,
+    })
+    .where(eq(aiCodingTasksTable.id, payload.childTaskId));
+
+  await logAudit(
+    "coding-multi-worker",
+    "workstream_ai_auto_repair_scheduled",
+    payload.workstreamId,
+    "coding_workstream",
+    "success",
+    {
+      failedJobClaimAttempt: payload.claimAttempt,
+      retryJobId: retryJob.id,
+      nextRepairAttempt: decision.nextRepairAttempt,
+      maxRepairAttempts: decision.maxRepairAttempts,
+    },
+  ).catch(() => undefined);
+
+  return retryJob;
+}
+
+async function moveWorkstreamFailureToRepairInbox(input: {
+  payload: WorkstreamAiJobPayload;
+  parentTaskId: string;
+  error: unknown;
+  decision: WorkstreamAiAutoRepairDecision;
+  repository: string;
+  branch: string;
+  schedulingError?: unknown;
+}): Promise<boolean> {
+  const now = new Date();
+  const primaryMessage =
+    input.error instanceof Error ? input.error.message : String(input.error);
+  const schedulingMessage =
+    input.schedulingError instanceof Error
+      ? input.schedulingError.message
+      : input.schedulingError
+        ? String(input.schedulingError)
+        : "";
+  const combinedMessage = [
+    primaryMessage,
+    schedulingMessage ? "Auto-repair scheduling failed: " + schedulingMessage : "",
+  ]
+    .filter(Boolean)
+    .join(" | ")
+    .slice(0, 2_000);
+
+  const [failedWorkstream] = await db
+    .update(aiCodingWorkstreamsTable)
+    .set({
+      status: "FAILED",
+      workerId: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      heartbeatAt: now,
+      completedAt: now,
+      errorMessage: combinedMessage,
+    })
+    .where(
+      and(
+        eq(aiCodingWorkstreamsTable.id, input.payload.workstreamId),
+        eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"),
+      ),
+    )
+    .returning({
+      id: aiCodingWorkstreamsTable.id,
+      childRunId: aiCodingWorkstreamsTable.childRunId,
+    });
+
+  // Fail closed only if this exact REVIEW_REQUIRED state was ours to
+  // transition. If another actor already claimed/completed the workstream,
+  // never overwrite its child task or create a stale repair incident.
+  if (!failedWorkstream) return false;
+
+  if (failedWorkstream.childRunId) {
+    await db
+      .update(aiCodingRunsTable)
+      .set({
+        status: "FAILED",
+        finishedAt: now,
+        errorMessage: combinedMessage,
+      })
+      .where(eq(aiCodingRunsTable.id, failedWorkstream.childRunId))
+      .catch(() => undefined);
+  }
+
+  await db
+    .update(aiCodingTasksTable)
+    .set({
+      status: "FAILED",
+      resultSummary:
+        "AI Core tidak dapat memulihkan kegagalan ini secara aman. Diagnostik sudah dimasukkan ke Incident Inbox untuk auto-repair/inspection.",
+    })
+    .where(eq(aiCodingTasksTable.id, input.payload.childTaskId))
+    .catch(() => undefined);
+
+  await upsertIncident({
+    source: "system",
+    kind: input.decision.recoverable
+      ? "coding_workstream_ai_auto_repair_exhausted"
+      : "coding_workstream_ai_non_retryable_failure",
+    title: "Coding Workspace workstream requires repair",
+    summary: combinedMessage,
+    severity: "critical",
+    riskClass: "GUARDED",
+    repository: input.repository,
+    branch: input.branch,
+    fingerprint:
+      "coding-workstream-ai:" +
+      input.payload.workstreamId +
+      ":" +
+      input.decision.reason,
+    metadata: {
+      source: "workstream-ai-execution",
+      parentTaskId: input.parentTaskId,
+      workstreamId: input.payload.workstreamId,
+      graphId: input.payload.graphId,
+      childTaskId: input.payload.childTaskId,
+      recoverable: input.decision.recoverable,
+      repairDecision: input.decision.reason,
+      repairAttempt: input.decision.previousRepairAttempts,
+      maxRepairAttempts: input.decision.maxRepairAttempts,
+      failedClaimAttempt: input.payload.claimAttempt,
+    },
+  }).catch(() => undefined);
+
+  await logAudit(
+    "coding-multi-worker",
+    "workstream_ai_sent_to_repair_inbox",
+    input.payload.workstreamId,
+    "coding_workstream",
+    "failure",
+    {
+      graphId: input.payload.graphId,
+      childTaskId: input.payload.childTaskId,
+      repairAttempt: input.decision.previousRepairAttempts,
+      maxRepairAttempts: input.decision.maxRepairAttempts,
+      repairDecision: input.decision.reason,
+      error: combinedMessage.slice(0, 1_000),
+    },
+  ).catch(() => undefined);
+
+  return true;
 }
 
 export async function executeCodingWorkstreamAiJob(
@@ -1657,15 +1905,64 @@ export async function executeCodingWorkstreamAiJob(
       `Workstream AI phase '${phase}' failed: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
+    const sourceResult = loaded?.analyzerResult ?? failureSourceResult;
+    const repairDecision = decideWorkstreamAiAutoRepair(error, sourceResult);
+
     if (!consumed) {
       await revokeWorkstreamAiHandoff(payload.workstreamId).catch(() => undefined);
     }
-    await persistExecutionFailure(
+    const failurePersisted = await persistExecutionFailure(
       payload,
-      loaded?.analyzerResult ?? failureSourceResult,
+      sourceResult,
       diagnosticError,
       consumed,
-    ).catch(() => undefined);
+      repairDecision,
+    ).catch(() => false);
+
+    let autoRepairScheduled = false;
+    let autoRepairSchedulingError: unknown = null;
+
+    if (failurePersisted && repairDecision.shouldRetry) {
+      try {
+        await scheduleAutomaticWorkstreamAiRepair(payload, repairDecision);
+        autoRepairScheduled = true;
+      } catch (repairError) {
+        autoRepairSchedulingError = repairError;
+
+        const [current] = await db
+          .select({ status: aiCodingWorkstreamsTable.status })
+          .from(aiCodingWorkstreamsTable)
+          .where(eq(aiCodingWorkstreamsTable.id, payload.workstreamId))
+          .limit(1)
+          .catch(() => []);
+
+        // Another autonomous actor may have won the recovery race. Treat an
+        // active replacement claim as recovered rather than opening an inbox
+        // incident or forcing the child task back to a terminal state.
+        if (current && ["CLAIMED", "RUNNING"].includes(current.status)) {
+          autoRepairScheduled = true;
+          autoRepairSchedulingError = null;
+        }
+      }
+    }
+
+    if (
+      failurePersisted &&
+      !autoRepairScheduled &&
+      (!repairDecision.shouldRetry || autoRepairSchedulingError)
+    ) {
+      await moveWorkstreamFailureToRepairInbox({
+        payload,
+        parentTaskId: loaded?.graphTaskId ?? payload.childTaskId,
+        error: diagnosticError,
+        decision: repairDecision,
+        repository: loaded?.childTask.repository ?? "",
+        branch: loaded?.childTask.branch ?? "main",
+        ...(autoRepairSchedulingError
+          ? { schedulingError: autoRepairSchedulingError }
+          : {}),
+      }).catch(() => undefined);
+    }
 
     await logAudit(
       "coding-multi-worker",
@@ -1679,6 +1976,13 @@ export async function executeCodingWorkstreamAiJob(
         modelInvoked: consumed,
         privilegeEnded: consumed,
         phase,
+        recoverable: repairDecision.recoverable,
+        autoRepairScheduled,
+        autoRepairAttempt: repairDecision.shouldRetry
+          ? repairDecision.nextRepairAttempt
+          : repairDecision.previousRepairAttempts,
+        maxAutoRepairAttempts: repairDecision.maxRepairAttempts,
+        repairDecision: repairDecision.reason,
         error: diagnosticError.message.slice(0, 700),
       },
     ).catch(() => undefined);

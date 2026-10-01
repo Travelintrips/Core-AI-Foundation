@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   startClaim: vi.fn(),
   heartbeatClaim: vi.fn(),
   markReview: vi.fn(),
+  completeReviewed: vi.fn(),
   claimReady: vi.fn(),
   selectClaimable: vi.fn(),
   logAudit: vi.fn(),
@@ -58,6 +59,7 @@ vi.mock("../localCodingMultiWorkerOrchestratorService.js", () => ({
     }
   },
   markCodingWorkstreamReviewRequired: mocks.markReview,
+  completeReviewedCodingWorkstream: mocks.completeReviewed,
   selectClaimableCodingWorkstreams: mocks.selectClaimable,
   startCodingWorkstreamClaim: mocks.startClaim,
 }));
@@ -123,6 +125,10 @@ describe("multi-worker execution boundary", () => {
       id: WS_ID,
       status: "REVIEW_REQUIRED",
     });
+    mocks.completeReviewed.mockResolvedValue({
+      id: WS_ID,
+      status: "COMPLETED",
+    });
     mocks.completeAnalyzer.mockResolvedValue(undefined);
     mocks.logAudit.mockResolvedValue(undefined);
     mocks.isTransientDatabaseConnectionError.mockReturnValue(false);
@@ -182,7 +188,7 @@ describe("multi-worker execution boundary", () => {
     );
   });
 
-  it("moves a successful analyzer result to REVIEW_WORKSTREAM, not COMPLETED", async () => {
+  it("moves a successful analyzer result with changes to REVIEW_WORKSTREAM", async () => {
     const result = await executeCodingWorkstreamJob(job());
 
     expect(mocks.startClaim).toHaveBeenCalledWith(WS_ID, "lease-token-1");
@@ -200,12 +206,47 @@ describe("multi-worker execution boundary", () => {
       },
     );
     expect(mocks.completeAnalyzer).toHaveBeenCalledTimes(1);
+    expect(mocks.completeReviewed).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       graphId: GRAPH_ID,
       workstreamId: WS_ID,
       workstreamKey: "WS-001",
       ownershipValidated: true,
       nextAction: "REVIEW_WORKSTREAM",
+    });
+  });
+
+  it("auto-finishes a completed no-op workstream instead of leaving it in review", async () => {
+    mocks.executeAnalyzer.mockResolvedValueOnce({
+      codingTaskId: TASK_ID,
+      codingRunId: RUN_ID,
+      localExecutionPlan: {
+        status: "EXECUTABLE",
+      },
+      localExecution: {
+        status: "NO_CHANGES",
+        changedFiles: [],
+      },
+      contextPackage: {
+        headSha: "a".repeat(40),
+      },
+    });
+
+    const result = await executeCodingWorkstreamJob(job());
+
+    expect(mocks.markReview).toHaveBeenCalledTimes(1);
+    expect(mocks.completeAnalyzer).toHaveBeenCalledTimes(1);
+    expect(mocks.completeReviewed).toHaveBeenCalledWith(WS_ID, {
+      completeChildTask: true,
+      childTaskResultSummary:
+        "Repository analysis completed with no code changes; workstream auto-finished.",
+    });
+    expect(result).toMatchObject({
+      graphId: GRAPH_ID,
+      workstreamId: WS_ID,
+      workstreamKey: "WS-001",
+      ownershipValidated: true,
+      nextAction: "COMPLETED",
     });
   });
 });
