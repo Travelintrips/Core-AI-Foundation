@@ -16,9 +16,14 @@ import {
   buildAiPatchApplierProposal,
   buildAiProposalBinding,
   buildAiProposalPolicyEnvelope,
+  createConstrainedCodingProviderAdapter,
   invokeConstrainedAiProposal,
   validateAndApplyAiProposal,
 } from "../localCodingAiExecutionGateService.js";
+
+vi.mock("../aiSecretService.js", () => ({
+  getProviderApiKey: () => "gemini-test-key",
+}));
 
 const execFileAsync = promisify(execFile);
 const cleanup: string[] = [];
@@ -137,6 +142,7 @@ function proposalJson(lease: ApprovedAiHandoffLease): string {
 }
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   while (cleanup.length > 0) {
     const root = cleanup.pop();
     if (root) await rm(root, { recursive: true, force: true });
@@ -144,6 +150,60 @@ afterEach(async () => {
 });
 
 describe("Local Coding AI Execution Gate integration", () => {
+  it.each(["valid", "wrong binding", "forbidden capability"])(
+    "validates native Gemini JSON through Contract V1: %s",
+    async (format) => {
+      const { root, head } = await repositoryFixture();
+      const lease = leaseFixture(head);
+      const proposal = JSON.parse(proposalJson(lease));
+      if (format === "wrong binding") proposal.packageHash = "0".repeat(64);
+      if (format === "forbidden capability") proposal.capabilities.shellCommand = true;
+      const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({
+        candidates: [{ content: { parts: [
+          { thought: true, text: 'The draft shape is {"proposal": "draft"}.' },
+          { text: JSON.stringify(proposal) },
+        ] } }],
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 80 },
+      }), { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      const provider = createConstrainedCodingProviderAdapter({
+        providerSlug: "google",
+        modelId: "gemini-3.8-flash",
+        jsonOutput: true,
+      });
+
+      const invocation = invokeConstrainedAiProposal({
+        lease,
+        adapter: createConstrainedModelInvocationAdapter(provider),
+        target: { provider: "google", model: "gemini-3.8-flash" },
+        requestId: `native-gemini-${format}`,
+        timeoutMs: 5_000,
+        maxOutputTokens: 512,
+      });
+
+      if (format === "valid") {
+        const result = await invocation;
+        const candidate = await validateAndApplyAiProposal({
+          lease,
+          proposal: result.proposal,
+          repositoryRoot: root,
+          currentRepositoryHeadSha: head,
+        });
+        expect(candidate.applyResult.status).toBe("APPLIED");
+        expect(candidate.applyResult.scriptsExecuted).toBe(false);
+        expect(await readFile(join(root, "example.ts"), "utf8")).toBe("export const value = 2;\n");
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } else {
+        await expect(invocation).rejects.toMatchObject({ kind: "INVALID_PROPOSAL" });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      }
+      for (const [, request] of fetchMock.mock.calls) {
+        const body = JSON.parse(String(request?.body));
+        expect(body.generationConfig.responseMimeType).toBe("application/json");
+      }
+    },
+  );
+
   it("runs prompt -> constrained adapter -> Contract V1 -> policy -> deterministic patch without scripts", async () => {
     const { root, head } = await repositoryFixture();
     const lease = leaseFixture(head);

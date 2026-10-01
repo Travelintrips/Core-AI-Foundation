@@ -240,6 +240,7 @@ export function createConstrainedCodingProviderAdapter(input: {
   modelId: string;
   baseUrl?: string | null;
   observability?: ObservabilityContext;
+  jsonOutput?: boolean;
 }): ConstrainedModelProvider {
   return {
     provider: input.providerSlug,
@@ -265,6 +266,9 @@ export function createConstrainedCodingProviderAdapter(input: {
           },
           temperature: 0,
           maxTokens: request.maxOutputTokens,
+          ...(input.jsonOutput || request.responseFormat.type === "structured"
+            ? { jsonOutput: true }
+            : {}),
           signal: context.signal,
           observability: input.observability,
         });
@@ -1079,6 +1083,7 @@ async function executeReserved(
             modelId,
             baseUrl: selectedBaseUrl,
             observability,
+            jsonOutput: true,
           });
     const adapter = createConstrainedModelInvocationAdapter(provider);
     const target: ModelTarget = {

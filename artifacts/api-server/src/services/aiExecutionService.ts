@@ -20,6 +20,9 @@ export interface ExecutionInput {
   };
   temperature?: number | null;
   maxTokens?: number | null;
+  /** Request native JSON output from Gemini for constrained proposal calls.
+   * The caller still validates the proposal's binding, schema, and policy. */
+  jsonOutput?: boolean;
   /** Optional image to attach as vision input (OpenAI/Gemini only). Ignored by
    * providers/models without vision support — callers should check before relying on it. */
   imageUrl?: string | null;
@@ -214,6 +217,7 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
     generationConfig: {
       maxOutputTokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
       ...(input.temperature != null ? { temperature: input.temperature } : {}),
+      ...(input.jsonOutput ? { responseMimeType: "application/json" } : {}),
     },
   };
 
@@ -236,12 +240,27 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
   }
 
   const data = (await response.json()) as {
-    candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: unknown; thought?: boolean }> };
+      finishReason?: unknown;
+    }>;
     usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
   };
 
   const content =
-    data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ?? "";
+    data.candidates?.[0]?.content?.parts
+      ?.filter((part) => part.thought !== true && typeof part.text === "string")
+      .map((part) => part.text)
+      .join("") ?? "";
+  if (input.jsonOutput && !content.trim()) {
+    const finishReason = data.candidates?.[0]?.finishReason;
+    throw new Error(
+      "Gemini returned no final JSON response" +
+      (typeof finishReason === "string"
+        ? " (finish reason: " + finishReason.slice(0, 80) + ")"
+        : ""),
+    );
+  }
   const promptTokens = data.usageMetadata?.promptTokenCount ?? 0;
   const completionTokens = data.usageMetadata?.candidatesTokenCount ?? 0;
 
