@@ -1715,6 +1715,15 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       defaultPolicy: "smart",
       cloudProviders: ["openai", "anthropic", "gemini", "mistral"],
     },
+    voice: {
+      enabled: true,
+      input: "browser-speech-recognition",
+      output: "browser-speech-synthesis",
+      language: "id-ID",
+      transcriptEndpoint: "/api/ai/core-chat/messages",
+      whatsappVoiceSourceReserved: true,
+      secretsRedactedBeforePersistence: true,
+    },
     workloadRouting: describeAiCoreWorkloadRouting(),
     local: local.ok
       ? {
