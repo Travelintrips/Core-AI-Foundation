@@ -1,5 +1,5 @@
-import { randomUUID } from "crypto";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "crypto";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   aiCodingBridgeCommandsTable,
   aiCodingBridgePresenceTable,
@@ -142,6 +142,140 @@ export async function appendCodingBridgeResponse(input: {
   });
 
   return response;
+}
+
+export const CODING_REPAIR_INBOX_COMMAND_TYPE = "REPAIR_REQUIRED";
+
+export async function enqueueCodingRepairInboxItem(input: {
+  taskId: string;
+  workstreamId?: string | null;
+  graphId?: string | null;
+  childTaskId?: string | null;
+  error: string;
+  repairAttempt?: number;
+  maxRepairAttempts?: number;
+  metadata?: Record<string, unknown>;
+}) {
+  await ensureCodingControlBridgeTables();
+
+  const normalizedError = input.error
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 4_000);
+  const fingerprint = createHash("sha256")
+    .update([
+      input.taskId,
+      input.workstreamId ?? "",
+      String(input.repairAttempt ?? 0),
+      normalizedError,
+    ].join("\n"))
+    .digest("hex")
+    .slice(0, 24);
+  const externalCommandId = `repair-inbox:${input.taskId}:${fingerprint}`;
+
+  const [existing] = await db
+    .select()
+    .from(aiCodingBridgeCommandsTable)
+    .where(
+      and(
+        eq(aiCodingBridgeCommandsTable.source, "ai-core"),
+        eq(aiCodingBridgeCommandsTable.externalCommandId, externalCommandId),
+      ),
+    )
+    .limit(1);
+  if (existing) return { command: existing, created: false };
+
+  const now = new Date();
+  const metadataJson = {
+    repairInbox: true,
+    inboxStatus: "OPEN",
+    workstreamId: input.workstreamId ?? null,
+    graphId: input.graphId ?? null,
+    childTaskId: input.childTaskId ?? null,
+    repairAttempt: input.repairAttempt ?? 0,
+    maxRepairAttempts: input.maxRepairAttempts ?? 0,
+    error: normalizedError,
+    ...(input.metadata ?? {}),
+  };
+
+  const [command] = await db
+    .insert(aiCodingBridgeCommandsTable)
+    .values({
+      taskId: input.taskId,
+      externalCommandId,
+      source: "ai-core",
+      commandType: CODING_REPAIR_INBOX_COMMAND_TYPE,
+      instruction: [
+        "Inspect and repair the Coding Workspace failure recorded by AI Core.",
+        input.workstreamId ? `Workstream: ${input.workstreamId}` : "",
+        input.graphId ? `Graph: ${input.graphId}` : "",
+        normalizedError ? `Failure: ${normalizedError}` : "",
+      ].filter(Boolean).join("\n"),
+      authorityJson: {
+        scope: "coding-workspace-repair",
+        automaticProductionMutation: false,
+        mergeStillRequiresCriticalApproval: true,
+      },
+      metadataJson,
+      status: "RECEIVED",
+      receivedAt: now,
+    })
+    .returning();
+  if (!command) throw new Error("Failed to create coding repair inbox item");
+
+  const [response] = await db
+    .insert(aiCodingBridgeResponsesTable)
+    .values({
+      commandId: command.id,
+      taskId: input.taskId,
+      kind: "PROGRESS",
+      message:
+        "Repair inbox item opened. AI Core exhausted safe automatic repair or encountered a non-retryable failure.",
+      checkpointJson: {
+        status: "OPEN",
+        repairInbox: true,
+        workstreamId: input.workstreamId ?? null,
+        repairAttempt: input.repairAttempt ?? 0,
+        maxRepairAttempts: input.maxRepairAttempts ?? 0,
+      },
+      metadataJson,
+    })
+    .returning();
+
+  publishSafe({
+    eventType: "coding.repair.inbox.created",
+    sourceModule: "coding-control-bridge",
+    sourceId: command.id,
+    correlationId: command.id,
+    payload: {
+      commandId: command.id,
+      taskId: input.taskId,
+      workstreamId: input.workstreamId ?? null,
+      graphId: input.graphId ?? null,
+    },
+  });
+
+  return { command, response: response ?? null, created: true };
+}
+
+export async function listCodingRepairInboxItems(limit = 50) {
+  await ensureCodingControlBridgeTables();
+  return db
+    .select()
+    .from(aiCodingBridgeCommandsTable)
+    .where(
+      and(
+        eq(aiCodingBridgeCommandsTable.source, "ai-core"),
+        eq(
+          aiCodingBridgeCommandsTable.commandType,
+          CODING_REPAIR_INBOX_COMMAND_TYPE,
+        ),
+        inArray(aiCodingBridgeCommandsTable.status, ["RECEIVED", "PROCESSING"]),
+      ),
+    )
+    .orderBy(asc(aiCodingBridgeCommandsTable.receivedAt))
+    .limit(Math.max(1, Math.min(100, limit)));
 }
 
 export async function listPendingCodingBridgeResponses(limit = 50) {
