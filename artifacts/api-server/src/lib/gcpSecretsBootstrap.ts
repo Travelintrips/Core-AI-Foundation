@@ -4,8 +4,10 @@
  * Reads GCP_SECRET_MANAGER_BOOTSTRAP_JSON (a service-account JSON blob) and
  * fetches the consolidated secret `aicore-app-secrets` (latest version) from
  * Google Cloud Secret Manager. The secret payload must be a JSON object whose
- * keys are env-var names. Each key is injected into process.env only when the
- * variable is not already set (Replit-injected values take precedence).
+ * keys are env-var names. Existing environment values normally take precedence,
+ * except for canonical production database URLs: those are refreshed from the
+ * consolidated GCP secret so a stale Hostinger setting cannot shadow a rotated
+ * Supabase credential during a rolling deploy.
  *
  * This runs as the very first thing at startup so that downstream modules
  * (DB connection, auth middleware, etc.) always see the resolved values.
@@ -19,6 +21,44 @@ const CONSOLIDATED_SECRET_NAME = "aicore-app-secrets";
 
 interface SecretAccessResponse {
   payload?: { data?: string };
+}
+
+const PRODUCTION_GCP_AUTHORITATIVE_KEYS = new Set([
+  "SUPABASE_PROD_DATABASE_URL",
+  "SUPABASE_DATABASE_URL",
+]);
+
+export function applyGcpApplicationSecrets(
+  secretJson: Record<string, string>,
+  env: NodeJS.ProcessEnv = process.env,
+): { loaded: number; overridden: number; skipped: number } {
+  let loaded = 0;
+  let overridden = 0;
+  let skipped = 0;
+  const production = env["NODE_ENV"] === "production";
+
+  for (const [key, value] of Object.entries(secretJson)) {
+    if (typeof value !== "string") continue;
+
+    const existing = env[key];
+    const gcpAuthoritative =
+      production && PRODUCTION_GCP_AUTHORITATIVE_KEYS.has(key);
+
+    if (existing && !gcpAuthoritative) {
+      skipped += 1;
+      continue;
+    }
+
+    if (existing && gcpAuthoritative && existing !== value) {
+      overridden += 1;
+    } else if (!existing) {
+      loaded += 1;
+    }
+
+    env[key] = value;
+  }
+
+  return { loaded, overridden, skipped };
 }
 
 export async function bootstrapGcpSecrets(): Promise<void> {
@@ -90,21 +130,9 @@ export async function bootstrapGcpSecrets(): Promise<void> {
     return;
   }
 
-  let loaded = 0;
-  let skipped = 0;
-
-  for (const [key, value] of Object.entries(secretJson)) {
-    if (typeof value !== "string") continue;
-    if (process.env[key]) {
-      // Already set (e.g. injected by Replit Secrets or --env-file) — respect that value.
-      skipped++;
-      continue;
-    }
-    process.env[key] = value;
-    loaded++;
-  }
+  const applied = applyGcpApplicationSecrets(secretJson);
 
   console.log(
-    `[gcp-bootstrap] Done — loaded=${loaded} skipped(already-set)=${skipped} source=${CONSOLIDATED_SECRET_NAME} project=${projectId}`,
+    `[gcp-bootstrap] Done — loaded=${applied.loaded} overridden=${applied.overridden} skipped(already-set)=${applied.skipped} source=${CONSOLIDATED_SECRET_NAME} project=${projectId}`,
   );
 }
