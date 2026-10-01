@@ -219,12 +219,18 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
     generationConfig: {
       maxOutputTokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
       ...(input.temperature != null ? { temperature: input.temperature } : {}),
-      ...(input.jsonOutput || input.responseJsonSchema
-        ? { responseMimeType: "application/json" }
-        : {}),
       ...(input.responseJsonSchema
-        ? { responseJsonSchema: input.responseJsonSchema }
-        : {}),
+        ? {
+            responseFormat: {
+              text: {
+                mimeType: "application/json",
+                schema: input.responseJsonSchema,
+              },
+            },
+          }
+        : input.jsonOutput
+          ? { responseMimeType: "application/json" }
+          : {}),
     },
   };
 

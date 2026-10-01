@@ -258,6 +258,52 @@ export function hasLiveCodingWorkstreamClaim(
   });
 }
 
+const REPEATED_AI_PROPOSAL_FAILURE_LIMIT = 3;
+const DETERMINISTIC_AI_PROPOSAL_FAILURE =
+  /^AI proposal failed Proposal Contract V1 validation after bounded schema repair:/i;
+
+function normalizeRunError(value: string | null | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+export function repeatedDeterministicAiProposalFailure(
+  runs: Array<{
+    agentName?: string | null;
+    status?: string | null;
+    errorMessage?: string | null;
+  }>,
+): { count: number; error: string } | null {
+  const aiExecutionRuns = runs.filter(
+    (run) => run.agentName === "AI Execution Gate",
+  );
+  const latest = aiExecutionRuns[0];
+  const latestError = normalizeRunError(latest?.errorMessage);
+
+  if (
+    latest?.status !== "FAILED" ||
+    !DETERMINISTIC_AI_PROPOSAL_FAILURE.test(latestError)
+  ) {
+    return null;
+  }
+
+  let count = 0;
+  for (const run of aiExecutionRuns) {
+    const error = normalizeRunError(run.errorMessage);
+    if (
+      run.status !== "FAILED" ||
+      error !== latestError ||
+      !DETERMINISTIC_AI_PROPOSAL_FAILURE.test(error)
+    ) {
+      break;
+    }
+    count += 1;
+  }
+
+  return count >= REPEATED_AI_PROPOSAL_FAILURE_LIMIT
+    ? { count, error: latestError }
+    : null;
+}
+
 async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
@@ -541,6 +587,37 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       const action = `WAIT_AI_EXECUTION_JOB:${state.activeAiJob.id}`;
       await setState(taskId, "WAITING", action);
       return { taskId, status: "WAITING", action };
+    }
+
+    const repeatedProposalFailure =
+      state.task.status === "READY_REVIEW"
+        ? repeatedDeterministicAiProposalFailure(state.runs)
+        : null;
+    if (repeatedProposalFailure) {
+      const message =
+        `Constrained AI proposal failed identically ${repeatedProposalFailure.count} times: ` +
+        repeatedProposalFailure.error;
+      await setState(taskId, "BLOCKED", "REPEATED_AI_PROPOSAL_FAILURE", message);
+      await report(taskId, "BLOCKER", message, {
+        source: "autonomous-repair-loop",
+        repeatedFailures: repeatedProposalFailure.count,
+      });
+      await logAudit(
+        "coding-autonomous",
+        "repeated_ai_proposal_failure_blocked",
+        taskId,
+        "coding_task",
+        "failure",
+        {
+          repeatedFailures: repeatedProposalFailure.count,
+          error: repeatedProposalFailure.error.slice(0, 1000),
+        },
+      ).catch(() => undefined);
+      return {
+        taskId,
+        status: "BLOCKED",
+        action: "REPEATED_AI_PROPOSAL_FAILURE",
+      };
     }
 
     const reserveCycle = () => reserveActionCycle(taskId);

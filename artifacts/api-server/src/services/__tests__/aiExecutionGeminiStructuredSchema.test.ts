@@ -9,7 +9,7 @@ vi.mock("../aiSecretService.js", () => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Gemini native structured proposal schema", () => {
-  it("sends responseJsonSchema with application/json output", async () => {
+  it("sends current Gemini responseFormat schema with application/json output", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -35,8 +35,13 @@ describe("Gemini native structured proposal schema", () => {
     });
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body.generationConfig.responseMimeType).toBe("application/json");
-    expect(body.generationConfig.responseJsonSchema)
-      .toEqual(localCodingAiProposalV1JsonSchema);
+    expect(body.generationConfig.responseFormat).toEqual({
+      text: {
+        mimeType: "application/json",
+        schema: localCodingAiProposalV1JsonSchema,
+      },
+    });
+    expect(body.generationConfig).not.toHaveProperty("responseJsonSchema");
+    expect(body.generationConfig).not.toHaveProperty("responseMimeType");
   });
 });
