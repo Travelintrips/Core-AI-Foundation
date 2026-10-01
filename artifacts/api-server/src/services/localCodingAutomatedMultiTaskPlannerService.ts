@@ -541,9 +541,9 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
         required: ["version", "taskId", "objective", "workstreams"],
         additionalProperties: false,
         properties: {
-          version: { const: 1 },
-          taskId: { type: "string", minLength: 1, maxLength: 200 },
-          objective: { type: "string", minLength: 1, maxLength: 8_000 },
+          version: { type: "integer", enum: [1] },
+          taskId: { type: "string" },
+          objective: { type: "string" },
           workstreams: {
             type: "array",
             minItems: 1,
@@ -563,8 +563,8 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
               ],
               additionalProperties: false,
               properties: {
-                id: { type: "string", pattern: "^WS-[0-9]{3}$" },
-                title: { type: "string", minLength: 1, maxLength: 160 },
+                id: { type: "string", description: "Workstream id in WS-### form." },
+                title: { type: "string" },
                 role: {
                   type: "string",
                   enum: [
@@ -581,25 +581,23 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
                 },
                 instruction: {
                   type: "string",
-                  minLength: 1,
-                  maxLength: 6_000,
                 },
                 dependencies: {
                   type: "array",
                   maxItems: 20,
-                  items: { type: "string", pattern: "^WS-[0-9]{3}$" },
+                  items: { type: "string", description: "Dependency workstream id in WS-### form." },
                 },
                 ownershipPaths: {
                   type: "array",
                   minItems: 1,
                   maxItems: 40,
-                  items: { type: "string", minLength: 1, maxLength: 500 },
+                  items: { type: "string" },
                 },
                 acceptanceCriteria: {
                   type: "array",
                   minItems: 1,
                   maxItems: 20,
-                  items: { type: "string", minLength: 1, maxLength: 500 },
+                  items: { type: "string" },
                 },
                 verificationProfiles: {
                   type: "array",
