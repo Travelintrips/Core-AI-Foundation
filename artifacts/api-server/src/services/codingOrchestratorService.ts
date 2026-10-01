@@ -75,6 +75,11 @@ interface CodingOrchestrationInput {
   run: AiCodingRun;
 }
 
+const ORCHESTRATION_RECOVERY_POLL_MS = 8_000;
+const WAIT_REPOSITORY_ANALYZER_SLOT = "WAIT_REPOSITORY_ANALYZER_SLOT";
+let orchestrationRecoveryTimer: NodeJS.Timeout | null = null;
+let orchestrationRecoveryRunning = false;
+
 const PLANNER_SYSTEM_PROMPT = [
   "You are the Planning Agent inside a software-engineering orchestrator.",
   "Create a safe implementation plan from the repository analysis and user instruction.",
@@ -767,6 +772,22 @@ export async function startCodingOrchestration(
     // coding run merely because another analyzer owns the only slot.
     const detail =
       `Repository Analyzer is busy with job ${activeAnalyzer.id}; waiting for the single-flight slot`;
+    // Persist a resumable checkpoint before returning. This task may have
+    // autonomous execution explicitly disabled, so its retry must not depend
+    // on the autonomous loop or a Temporal lease.
+    await db.update(aiCodingRunsTable)
+      .set({ logs: stringify({
+        codingTaskId: input.task.id,
+        codingRunId: input.run.id,
+        executionStatus: "WAITING",
+        summary: detail,
+        orchestration: {
+          sessionId, status: "WAITING", stages,
+          nextAction: WAIT_REPOSITORY_ANALYZER_SLOT,
+          activeAnalyzerJobId: activeAnalyzer.id,
+        },
+      }) })
+      .where(and(eq(aiCodingRunsTable.id, input.run.id), eq(aiCodingRunsTable.status, "RUNNING")));
     logger.info(
       { activeAnalyzerJobId: activeAnalyzer.id, taskId: input.task.id, codingRunId: input.run.id },
       "[coding-orchestrator] Analyzer slot busy; deferring orchestration without failing the task",
@@ -906,4 +927,65 @@ export async function startCodingOrchestration(
   });
 
   return { sessionId };
+}
+
+export async function resumeDeferredCodingOrchestrations(): Promise<number> {
+  // Also recover legacy deferrals, which returned without logs or an analyzer
+  // job. A grace period avoids competing with a fresh start still bootstrapping
+  // its session. Any linked job excludes the run, even after analysis completes:
+  // a slow planner must never trigger a second repository analysis.
+  const result = await db.execute(sql`
+    SELECT r.id AS run_id, r.task_id
+    FROM ai_platform.ai_coding_runs AS r
+    JOIN ai_platform.ai_coding_tasks AS t ON t.id = r.task_id
+    WHERE r.agent_name = 'Coding Orchestrator'
+      AND r.status = 'RUNNING'
+      AND t.status = 'ANALYZING'
+      AND (
+        r.logs LIKE '%WAIT_REPOSITORY_ANALYZER_SLOT%'
+        OR (r.logs IS NULL AND r.started_at < NOW() - INTERVAL '30 seconds')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM ai_platform.ai_jobs AS j
+        WHERE j.job_type = 'coding_repository_analyzer'
+          AND j.payload_json->>'codingRunId' = r.id::text
+      )
+    ORDER BY r.started_at ASC, r.id ASC
+    LIMIT 1
+  `);
+  const row = result.rows?.[0] as { run_id: string; task_id: string } | undefined;
+  if (!row) return 0;
+
+  const [task] = await db.select().from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, row.task_id)).limit(1);
+  const [run] = await db.select().from(aiCodingRunsTable)
+    .where(and(eq(aiCodingRunsTable.id, row.run_id), eq(aiCodingRunsTable.taskId, row.task_id))).limit(1);
+  if (!task || !run || task.status !== "ANALYZING" || run.status !== "RUNNING") return 0;
+
+  await startCodingOrchestration({ task, run });
+  return 1;
+}
+
+async function recoverDeferredOrchestrations(): Promise<void> {
+  if (orchestrationRecoveryRunning) return;
+  orchestrationRecoveryRunning = true;
+  try {
+    await resumeDeferredCodingOrchestrations();
+  } catch (error) {
+    logger.warn({ err: error }, "[coding-orchestrator] Deferred analysis recovery will retry");
+  } finally {
+    orchestrationRecoveryRunning = false;
+  }
+}
+
+export function startCodingOrchestrationRecoveryRuntime(): void {
+  if (orchestrationRecoveryTimer) return;
+  orchestrationRecoveryTimer = setInterval(() => void recoverDeferredOrchestrations(), ORCHESTRATION_RECOVERY_POLL_MS);
+  orchestrationRecoveryTimer.unref();
+  void recoverDeferredOrchestrations();
+}
+
+export function stopCodingOrchestrationRecoveryRuntime(): void {
+  if (orchestrationRecoveryTimer) clearInterval(orchestrationRecoveryTimer);
+  orchestrationRecoveryTimer = null;
 }

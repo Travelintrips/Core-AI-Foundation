@@ -97,7 +97,12 @@ vi.mock("../localCodingAutomatedMultiTaskPlannerService.js", () => ({
   generateAndPersistCodingMultiTaskPlan: mockGenerateAndPersistCodingMultiTaskPlan,
 }));
 
-const { startCodingOrchestration } = await import("../codingOrchestratorService.js");
+const {
+  startCodingOrchestration,
+  resumeDeferredCodingOrchestrations,
+  startCodingOrchestrationRecoveryRuntime,
+  stopCodingOrchestrationRecoveryRuntime,
+} = await import("../codingOrchestratorService.js");
 
 const task = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -252,7 +257,10 @@ describe("Coding Orchestrator", () => {
     expect(started.sessionId).toBe(`coding-${run.id}`);
     expect(mockEnqueue).not.toHaveBeenCalled();
     expect(mockSpawn).not.toHaveBeenCalled();
-    expect(mockUpdateWhere).not.toHaveBeenCalled();
+    expect(mockUpdateWhere).toHaveBeenCalledTimes(1);
+    const checkpoint = JSON.parse(mockUpdateSet.mock.calls[0]![0].logs);
+    expect(checkpoint.orchestration.nextAction).toBe("WAIT_REPOSITORY_ANALYZER_SLOT");
+    expect(checkpoint.orchestration.activeAnalyzerJobId).toBe(1509);
     expect(mockLogAudit).toHaveBeenCalledWith(
       "coding-orchestrator",
       "repository_analyzer_deferred",
@@ -351,4 +359,70 @@ describe("Coding Orchestrator", () => {
     expect(mockSpawn).toHaveBeenCalledTimes(1);
     expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
     expect(mockGenerateAndPersistCodingMultiTaskPlan).not.toHaveBeenCalled();
-  });});
+  });
+
+  it("resumes the same deferred run after the analyzer slot becomes available", async () => {
+    mockSelectLimit.mockResolvedValueOnce([{ id: 1509 }]);
+    await startCodingOrchestration({ task: task as never, run: run as never });
+    expect(mockEnqueue).not.toHaveBeenCalled();
+    const deferredRun = { ...run, logs: mockUpdateSet.mock.calls[0]![0].logs };
+
+    mockDbExecute.mockResolvedValueOnce({ rows: [{ run_id: run.id, task_id: task.id }] });
+    mockSelectLimit.mockResolvedValueOnce([task]).mockResolvedValueOnce([deferredRun]).mockResolvedValueOnce([]);
+    expect(await resumeDeferredCodingOrchestrations()).toBe(1);
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+    expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: `coding-repository-analyzer:${run.id}`,
+      payloadJson: expect.objectContaining({ codingRunId: run.id, codingTaskId: task.id }),
+    }));
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a deferred run waiting while the original analyzer still owns the slot", async () => {
+    mockDbExecute.mockResolvedValueOnce({ rows: [{ run_id: run.id, task_id: task.id }] });
+    mockSelectLimit.mockResolvedValueOnce([task]).mockResolvedValueOnce([run]).mockResolvedValueOnce([{ id: 1509 }]);
+    await resumeDeferredCodingOrchestrations();
+    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(JSON.parse(mockUpdateSet.mock.calls[0]![0].logs).orchestration.nextAction)
+      .toBe("WAIT_REPOSITORY_ANALYZER_SLOT");
+  });
+
+  it("does not revive a run whose task was stopped after recovery selected it", async () => {
+    mockDbExecute.mockResolvedValueOnce({ rows: [{ run_id: run.id, task_id: task.id }] });
+    mockSelectLimit.mockResolvedValueOnce([{ ...task, status: "FAILED" }]).mockResolvedValueOnce([run]);
+    expect(await resumeDeferredCodingOrchestrations()).toBe(0);
+    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it("enqueues a recovered analysis for the remote worker without launching a local child", async () => {
+    vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "remote");
+    try {
+      mockDbExecute.mockResolvedValueOnce({ rows: [{ run_id: run.id, task_id: task.id }] });
+      mockSelectLimit.mockResolvedValueOnce([task]).mockResolvedValueOnce([run]).mockResolvedValueOnce([]);
+      expect(await resumeDeferredCodingOrchestrations()).toBe(1);
+      expect(mockEnqueue).toHaveBeenCalledTimes(1);
+      expect(mockSpawn).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("runs recovery independently of autonomous execution and retries transient query failures", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("AI_CODING_AUTONOMOUS_ENABLED", "false");
+    mockDbExecute.mockRejectedValueOnce(new Error("transient query timeout"));
+    try {
+      startCodingOrchestrationRecoveryRuntime();
+      startCodingOrchestrationRecoveryRuntime();
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(mockDbExecute).toHaveBeenCalledTimes(2);
+      stopCodingOrchestrationRecoveryRuntime();
+      await vi.advanceTimersByTimeAsync(16_000);
+      expect(mockDbExecute).toHaveBeenCalledTimes(2);
+    } finally {
+      stopCodingOrchestrationRecoveryRuntime();
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    }
+  });
+});
