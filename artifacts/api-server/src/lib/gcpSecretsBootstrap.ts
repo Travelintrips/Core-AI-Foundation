@@ -35,7 +35,12 @@ export function applyGcpApplicationSecrets(
   let loaded = 0;
   let overridden = 0;
   let skipped = 0;
-  const production = env["NODE_ENV"] === "production";
+  const normalizedEnv = (value: unknown): string =>
+    typeof value === "string" ? value.trim().toLowerCase() : "";
+  const production =
+    normalizedEnv(env["NODE_ENV"]) === "production" ||
+    normalizedEnv(env["APP_ENV"]) === "production" ||
+    normalizedEnv(secretJson["APP_ENV"]) === "production";
 
   for (const [key, value] of Object.entries(secretJson)) {
     if (typeof value !== "string") continue;
