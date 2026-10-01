@@ -304,6 +304,48 @@ export function repeatedDeterministicAiProposalFailure(
     : null;
 }
 
+const REPEATED_PROVIDER_BAD_REQUEST_LIMIT = 2;
+const NON_RETRYABLE_PROVIDER_BAD_REQUEST =
+  /^Constrained model provider failed with PROVIDER_BAD_REQUEST\b/i;
+
+export function repeatedNonRetryableAiProviderFailure(
+  runs: Array<{
+    agentName?: string | null;
+    status?: string | null;
+    errorMessage?: string | null;
+  }>,
+): { count: number; error: string } | null {
+  const aiExecutionRuns = runs.filter(
+    (run) => run.agentName === "AI Execution Gate",
+  );
+  const latest = aiExecutionRuns[0];
+  const latestError = normalizeRunError(latest?.errorMessage);
+
+  if (
+    latest?.status !== "FAILED" ||
+    !NON_RETRYABLE_PROVIDER_BAD_REQUEST.test(latestError)
+  ) {
+    return null;
+  }
+
+  let count = 0;
+  for (const run of aiExecutionRuns) {
+    const error = normalizeRunError(run.errorMessage);
+    if (
+      run.status !== "FAILED" ||
+      error !== latestError ||
+      !NON_RETRYABLE_PROVIDER_BAD_REQUEST.test(error)
+    ) {
+      break;
+    }
+    count += 1;
+  }
+
+  return count >= REPEATED_PROVIDER_BAD_REQUEST_LIMIT
+    ? { count, error: latestError }
+    : null;
+}
+
 async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
@@ -617,6 +659,37 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         taskId,
         status: "BLOCKED",
         action: "REPEATED_AI_PROPOSAL_FAILURE",
+      };
+    }
+
+    const repeatedProviderFailure =
+      state.task.status === "READY_REVIEW"
+        ? repeatedNonRetryableAiProviderFailure(state.runs)
+        : null;
+    if (repeatedProviderFailure) {
+      const message =
+        `Constrained AI provider rejected the same non-retryable request ${repeatedProviderFailure.count} times: ` +
+        repeatedProviderFailure.error;
+      await setState(taskId, "BLOCKED", "REPEATED_PROVIDER_BAD_REQUEST", message);
+      await report(taskId, "BLOCKER", message, {
+        source: "autonomous-repair-loop",
+        repeatedFailures: repeatedProviderFailure.count,
+      });
+      await logAudit(
+        "coding-autonomous",
+        "repeated_provider_bad_request_blocked",
+        taskId,
+        "coding_task",
+        "failure",
+        {
+          repeatedFailures: repeatedProviderFailure.count,
+          error: repeatedProviderFailure.error.slice(0, 1000),
+        },
+      ).catch(() => undefined);
+      return {
+        taskId,
+        status: "BLOCKED",
+        action: "REPEATED_PROVIDER_BAD_REQUEST",
       };
     }
 

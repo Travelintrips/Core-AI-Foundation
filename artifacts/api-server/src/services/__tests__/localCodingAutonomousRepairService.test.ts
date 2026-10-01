@@ -246,6 +246,51 @@ describe("autonomous transient database recovery", () => {
   });
 });
 
+describe("autonomous repeated provider rejection", () => {
+  it("blocks repeated identical non-retryable provider bad requests", async () => {
+    const { repeatedNonRetryableAiProviderFailure } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+    const failedRun = {
+      agentName: "AI Execution Gate",
+      status: "FAILED",
+      errorMessage: "Constrained model provider failed with PROVIDER_BAD_REQUEST",
+    };
+
+    expect(repeatedNonRetryableAiProviderFailure([failedRun])).toBeNull();
+    expect(
+      repeatedNonRetryableAiProviderFailure([
+        failedRun,
+        { ...failedRun },
+      ]),
+    ).toEqual({
+      count: 2,
+      error: "Constrained model provider failed with PROVIDER_BAD_REQUEST",
+    });
+  });
+
+  it("does not treat other provider failures as deterministic bad requests", async () => {
+    const { repeatedNonRetryableAiProviderFailure } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      repeatedNonRetryableAiProviderFailure([
+        {
+          agentName: "AI Execution Gate",
+          status: "FAILED",
+          errorMessage: "Constrained model provider failed with PROVIDER_UNAVAILABLE",
+        },
+        {
+          agentName: "AI Execution Gate",
+          status: "FAILED",
+          errorMessage: "Constrained model provider failed with PROVIDER_UNAVAILABLE",
+        },
+      ]),
+    ).toBeNull();
+  });
+});
+
 describe("autonomous action budget behavior", () => {
   const taskId = "11111111-1111-4111-8111-111111111111";
   const dialect = new PgDialect();
