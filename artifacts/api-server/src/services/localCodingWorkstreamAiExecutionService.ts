@@ -1386,7 +1386,7 @@ async function persistExecutionFailure(
   error: unknown,
   consumed: boolean,
   repairDecision?: WorkstreamAiAutoRepairDecision,
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date();
   const message = error instanceof Error ? error.message : String(error);
   const prior = sourceResult ?? {};
@@ -1416,7 +1416,7 @@ async function persistExecutionFailure(
     },
   };
 
-  await db
+  const [updatedWorkstream] = await db
     .update(aiCodingWorkstreamsTable)
     .set({
       status: "REVIEW_REQUIRED",
@@ -1434,7 +1434,13 @@ async function persistExecutionFailure(
         eq(aiCodingWorkstreamsTable.leaseToken, payload.leaseToken),
         inArray(aiCodingWorkstreamsTable.status, ["CLAIMED", "RUNNING"]),
       ),
-    );
+    )
+    .returning({ id: aiCodingWorkstreamsTable.id });
+
+  // A newer recovery attempt may already own this workstream. In that case
+  // the exhausted/stale job must not push the shared child task back to
+  // READY_REVIEW and hide the active repair attempt.
+  if (!updatedWorkstream) return false;
 
   await db
     .update(aiCodingTasksTable)
@@ -1446,6 +1452,8 @@ async function persistExecutionFailure(
     })
     .where(eq(aiCodingTasksTable.id, payload.childTaskId))
     .catch(() => undefined);
+
+  return true;
 }
 
 async function scheduleAutomaticWorkstreamAiRepair(
@@ -1872,15 +1880,62 @@ export async function executeCodingWorkstreamAiJob(
       `Workstream AI phase '${phase}' failed: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
+    const sourceResult = loaded?.analyzerResult ?? failureSourceResult;
+    const repairDecision = decideWorkstreamAiAutoRepair(error, sourceResult);
+
     if (!consumed) {
       await revokeWorkstreamAiHandoff(payload.workstreamId).catch(() => undefined);
     }
-    await persistExecutionFailure(
+    const failurePersisted = await persistExecutionFailure(
       payload,
-      loaded?.analyzerResult ?? failureSourceResult,
+      sourceResult,
       diagnosticError,
       consumed,
-    ).catch(() => undefined);
+      repairDecision,
+    ).catch(() => false);
+
+    let autoRepairScheduled = false;
+    let autoRepairSchedulingError: unknown = null;
+
+    if (failurePersisted && repairDecision.shouldRetry) {
+      try {
+        await scheduleAutomaticWorkstreamAiRepair(payload, repairDecision);
+        autoRepairScheduled = true;
+      } catch (repairError) {
+        autoRepairSchedulingError = repairError;
+
+        const [current] = await db
+          .select({ status: aiCodingWorkstreamsTable.status })
+          .from(aiCodingWorkstreamsTable)
+          .where(eq(aiCodingWorkstreamsTable.id, payload.workstreamId))
+          .limit(1)
+          .catch(() => []);
+
+        // Another autonomous actor may have won the recovery race. Treat an
+        // active replacement claim as recovered rather than opening an inbox
+        // incident or forcing the child task back to a terminal state.
+        if (current && ["CLAIMED", "RUNNING"].includes(current.status)) {
+          autoRepairScheduled = true;
+          autoRepairSchedulingError = null;
+        }
+      }
+    }
+
+    if (
+      failurePersisted &&
+      !autoRepairScheduled &&
+      (!repairDecision.shouldRetry || autoRepairSchedulingError)
+    ) {
+      await moveWorkstreamFailureToRepairInbox({
+        payload,
+        parentTaskId: loaded?.graphTaskId ?? payload.childTaskId,
+        error: diagnosticError,
+        decision: repairDecision,
+        ...(autoRepairSchedulingError
+          ? { schedulingError: autoRepairSchedulingError }
+          : {}),
+      }).catch(() => undefined);
+    }
 
     await logAudit(
       "coding-multi-worker",
@@ -1894,6 +1949,13 @@ export async function executeCodingWorkstreamAiJob(
         modelInvoked: consumed,
         privilegeEnded: consumed,
         phase,
+        recoverable: repairDecision.recoverable,
+        autoRepairScheduled,
+        autoRepairAttempt: repairDecision.shouldRetry
+          ? repairDecision.nextRepairAttempt
+          : repairDecision.previousRepairAttempts,
+        maxAutoRepairAttempts: repairDecision.maxRepairAttempts,
+        repairDecision: repairDecision.reason,
         error: diagnosticError.message.slice(0, 700),
       },
     ).catch(() => undefined);
