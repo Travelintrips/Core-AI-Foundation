@@ -90,6 +90,9 @@ vi.mock("@workspace/db", () => {
       }),
       update: vi.fn(),
     },
+    withTransientDatabaseRetry: vi.fn(
+      async (operation: () => Promise<unknown>) => operation(),
+    ),
   };
 });
 
