@@ -63,6 +63,10 @@ const PLANNER_MODEL_MAX_ATTEMPTS = 3;
 const PLANNER_MODEL_BACKOFF_MS = [750, 1_500] as const;
 const PLANNER_AUTHORITY_WAIT_MS = 10_000;
 const PLANNER_AUTHORITY_POLL_MS = 1_000;
+// Transaction retries cover brief disconnects; cleanup gets a second bounded
+// window to release a failed planner's lease after the database recovers.
+const PLANNER_AUTHORITY_CLEANUP_ATTEMPTS = 3;
+const PLANNER_AUTHORITY_CLEANUP_BASE_DELAY_MS = 1_000;
 
 export type AutomatedMultiTaskPlannerErrorCode =
   | "NOT_FOUND"
@@ -1389,18 +1393,38 @@ export async function generateAndPersistCodingMultiTaskPlan(
   } finally {
     authorityHeartbeatStopped = true;
     clearInterval(authorityHeartbeat);
-    await releasePlannerAuthority({
-      scope,
-      holderId: plannerHolderId,
-      leaseToken: authority.leaseToken,
-      fencingGeneration: authority.fencingGeneration,
-    }).catch((error) => {
-      // The planner result/error is primary. Cleanup has its own bounded DB
-      // retries, and a remaining transient connection failure must not convert
-      // an already-persisted PREPARED graph into a failed planner job. The
-      // authority lease is bounded and will expire even if this final delete
-      // cannot reach the database.
-      if (isTransientDatabaseConnectionError(error)) return;
+    await withTransientDatabaseRetry(async () => {
+      await releasePlannerAuthority({
+        scope,
+        holderId: plannerHolderId,
+        leaseToken: authority.leaseToken,
+        fencingGeneration: authority.fencingGeneration,
+      });
+    }, {
+      attempts: PLANNER_AUTHORITY_CLEANUP_ATTEMPTS,
+      baseDelayMs: PLANNER_AUTHORITY_CLEANUP_BASE_DELAY_MS,
+    }).catch(async (error: unknown) => {
+      // Preserve the planner result/error after the bounded cleanup window.
+      // Report an exhausted transient failure instead of silently leaving the
+      // lease active until expiry. Fencing is rechecked by every release call.
+      if (isTransientDatabaseConnectionError(error)) {
+        await logAudit(
+          "automated-multi-task-planner",
+          "authority_cleanup_failed",
+          taskId,
+          "coding_task",
+          "failure",
+          {
+            scope,
+            plannerAuthorityGeneration: authority.fencingGeneration,
+            cleanupAttempts: PLANNER_AUTHORITY_CLEANUP_ATTEMPTS,
+            errorMessage: error instanceof Error
+              ? error.message.slice(0, 1_000)
+              : String(error).slice(0, 1_000),
+          },
+        ).catch(() => undefined);
+        return;
+      }
       if (
         error instanceof PlannerAuthorityError &&
         ["NOT_HOLDER", "STALE_FENCE", "LEASE_EXPIRED"].includes(error.code)
