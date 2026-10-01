@@ -23,6 +23,8 @@ export interface ExecutionInput {
   /** Request native JSON output from Gemini for constrained proposal calls.
    * The caller still validates the proposal's binding, schema, and policy. */
   jsonOutput?: boolean;
+  /** Optional native JSON Schema for Gemini structured output. */
+  responseJsonSchema?: Record<string, unknown>;
   /** Optional image to attach as vision input (OpenAI/Gemini only). Ignored by
    * providers/models without vision support — callers should check before relying on it. */
   imageUrl?: string | null;
@@ -217,7 +219,12 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
     generationConfig: {
       maxOutputTokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
       ...(input.temperature != null ? { temperature: input.temperature } : {}),
-      ...(input.jsonOutput ? { responseMimeType: "application/json" } : {}),
+      ...(input.jsonOutput || input.responseJsonSchema
+        ? { responseMimeType: "application/json" }
+        : {}),
+      ...(input.responseJsonSchema
+        ? { responseJsonSchema: input.responseJsonSchema }
+        : {}),
     },
   };
 
