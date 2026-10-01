@@ -153,7 +153,7 @@ function sha256Json(value: unknown): string {
 }
 
 async function gitHead(root: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+  const result = await execFileAsync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     timeout: 15_000,
     maxBuffer: 1_000_000,
@@ -165,7 +165,20 @@ async function gitHead(root: string): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  return stdout.trim().toLowerCase();
+  const stdout =
+    typeof result.stdout === "string"
+      ? result.stdout
+      : Buffer.isBuffer(result.stdout)
+        ? result.stdout.toString("utf8")
+        : "";
+  const normalized = stdout.trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(normalized)) {
+    throw new LocalCodingAiExecutionGateError(
+      "git rev-parse HEAD returned an invalid or empty commit SHA",
+      "INVALID_CONTEXT",
+    );
+  }
+  return normalized;
 }
 
 export function buildAiProposalBinding(
@@ -1325,9 +1338,11 @@ async function executeReserved(
 ): Promise<void> {
   let consumed = false;
   let workspacePath: string | null = null;
+  let phase = "BUILD_PROMPT";
 
   try {
     const prompt = buildLocalCodingAiPrompt(lease);
+    phase = "RESOLVE_MODEL";
     const resolvedModel = await resolvePreferredCodingModel();
     if (!resolvedModel.ok) {
       throw new LocalCodingAiExecutionGateError(
@@ -1360,6 +1375,7 @@ async function executeReserved(
       requestType: modelRoute === "PRIMARY" ? "code-primary" : "code-fallback",
       createdBy: `coding-run:${reserved.run.id}`,
     };
+    phase = "CONSUME_PRIVILEGE";
     await consumePrivilege(
       reserved.task.id,
       reserved.orchestratorRunId,
@@ -1368,6 +1384,7 @@ async function executeReserved(
     );
     consumed = true;
 
+    phase = "INVOKE_MODEL";
     const modelResult = await invokeProductionCodingAiProposal({
       lease,
       selection: selected,
@@ -1376,6 +1393,7 @@ async function executeReserved(
       observability,
     });
 
+    phase = "PREPARE_WORKSPACE";
     const workspace = await prepareRepositoryWorkspace(
       reserved.task.repository,
       reserved.task.branch,
@@ -1388,6 +1406,7 @@ async function executeReserved(
     }
     workspacePath = workspace.path;
 
+    phase = "READ_WORKSPACE_HEAD";
     const actualHead = await gitHead(workspacePath);
     if (actualHead !== lease.package.repository.baseHeadSha.toLowerCase()) {
       throw new LocalCodingAiExecutionGateError(
@@ -1396,6 +1415,7 @@ async function executeReserved(
       );
     }
 
+    phase = "VALIDATE_AND_APPLY_PROPOSAL";
     const candidate = await validateAndApplyAiProposal({
       lease,
       proposal: modelResult.proposal,
@@ -1403,6 +1423,7 @@ async function executeReserved(
       currentRepositoryHeadSha: actualHead,
     });
 
+    phase = "COMPLETE_EXECUTION";
     await completeExecution({
       reserved,
       lease,
@@ -1411,6 +1432,7 @@ async function executeReserved(
       candidate,
     });
 
+    phase = "AUDIT_CANDIDATE_READY";
     await logAudit(
       "coding-orchestrator",
       "ai_execution_candidate_ready",
@@ -1436,13 +1458,19 @@ async function executeReserved(
       },
     );
   } catch (rawError) {
+    const rawMessage = rawError instanceof Error ? rawError.message : String(rawError);
     const error =
       rawError instanceof LocalCodingAiExecutionGateError
         ? rawError
         : new LocalCodingAiExecutionGateError(
-            rawError instanceof Error ? rawError.message : String(rawError),
+            `Unexpected constrained AI execution error during ${phase}: ${rawMessage}`,
             consumed ? "MODEL_FAILED" : "INVALID_CONTEXT",
+            { phase },
           );
+    const stack =
+      rawError instanceof Error && typeof rawError.stack === "string"
+        ? rawError.stack.split("\n").slice(0, 8).join("\n").slice(0, 2_000)
+        : null;
 
     await failExecution(reserved, error, consumed);
     await logAudit(
@@ -1454,7 +1482,9 @@ async function executeReserved(
       {
         codingRunId: reserved.run.id,
         kind: error.kind,
+        phase,
         error: error.message.slice(0, 700),
+        ...(stack ? { stack } : {}),
         modelInvoked: consumed,
         privilegeEnded: consumed,
       },
