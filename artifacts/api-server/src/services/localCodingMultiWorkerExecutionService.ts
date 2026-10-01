@@ -8,6 +8,7 @@ import {
   aiCodingWorkstreamsTable,
   aiJobsTable,
   db,
+  isTransientDatabaseConnectionError,
   type AiCodingWorkstream,
   type AiJob,
 } from "@workspace/db";
@@ -476,8 +477,8 @@ async function createChildExecutionForClaim(
         },
         priority: workstream.priority,
         priorityScore: String(priorityScore),
-        maxRetry: 0,
-        retryStrategy: "manual",
+        maxRetry: 3,
+        retryStrategy: "immediate",
         status: "queued",
         retryCount: 0,
       })
@@ -658,13 +659,28 @@ export async function executeCodingWorkstreamJob(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await recoverFailedCodingWorkstreamJob(
-      {
-        ...job.payloadJson as Record<string, unknown>,
-        jobId: job.id,
-      },
-      message,
-    ).catch(() => undefined);
+    if (!isTransientDatabaseConnectionError(error)) {
+      await recoverFailedCodingWorkstreamJob(
+        {
+          ...job.payloadJson as Record<string, unknown>,
+          jobId: job.id,
+        },
+        message,
+      ).catch(() => undefined);
+    } else {
+      await logAudit(
+        "coding-multi-worker",
+        "workstream_transient_db_retry",
+        payload.workstreamId,
+        "coding_workstream",
+        "success",
+        {
+          graphId: payload.graphId,
+          jobId: job.id,
+          message: message.slice(0, 500),
+        },
+      ).catch(() => undefined);
+    }
     throw error;
   } finally {
     clearInterval(heartbeatTimer);
