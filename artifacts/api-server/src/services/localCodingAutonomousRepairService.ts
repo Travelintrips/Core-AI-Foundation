@@ -678,6 +678,42 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       return { taskId, status: "WAITING", action };
     }
 
+    const workstreamAiClaimRace =
+      /Only a REVIEW_REQUIRED workstream can enter the constrained AI phase|Workstream AI-phase claim lost a concurrent update/i.test(
+        message,
+      );
+
+    if (workstreamAiClaimRace) {
+      const graph = await getLatestCodingTaskGraph(taskId).catch(() => null);
+      if (graph) {
+        const liveClaim = hasLiveCodingWorkstreamClaim(graph.workstreams);
+        const action = liveClaim
+          ? "WAIT_WORKSTREAM_EXECUTION"
+          : "CONTINUE_WORKSTREAM_AI_RACE";
+        const status: AutonomousStatus = liveClaim ? "WAITING" : "ACTIVE";
+
+        await setState(taskId, status, action, null).catch(() => undefined);
+        await logAudit(
+          "coding-autonomous",
+          "workstream_ai_claim_race_deferred",
+          taskId,
+          "coding_task",
+          "success",
+          {
+            action,
+            graphId: graph.graph.id,
+            graphStatus: graph.graph.status,
+            workstreamStatuses: graph.workstreams.map((item) => ({
+              key: item.key,
+              status: item.status,
+            })),
+          },
+        ).catch(() => undefined);
+
+        return { taskId, status, action };
+      }
+    }
+
     const handoffApprovalAdvanced =
       /Coding task is not at the APPROVE_AI_HANDOFF gate/i.test(message) &&
       state?.task.status === "READY_REVIEW" &&

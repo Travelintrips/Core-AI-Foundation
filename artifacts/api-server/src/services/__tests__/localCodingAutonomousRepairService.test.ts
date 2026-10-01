@@ -187,6 +187,22 @@ describe("autonomous active-run race recovery", () => {
 });
 
 
+describe("autonomous workstream AI claim race recovery", () => {
+  it("defers stale REVIEW_REQUIRED snapshots instead of terminal failure", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("Only a REVIEW_REQUIRED workstream can enter the constrained AI phase");
+    expect(source).toContain("Workstream AI-phase claim lost a concurrent update");
+    expect(source).toContain('"workstream_ai_claim_race_deferred"');
+    expect(source).toContain('"WAIT_WORKSTREAM_EXECUTION"');
+    expect(source).toContain('"CONTINUE_WORKSTREAM_AI_RACE"');
+  });
+});
+
+
 describe("autonomous AI handoff approval race recovery", () => {
   it("continues when another cycle already advanced the handoff gate", () => {
     const source = readFileSync(
