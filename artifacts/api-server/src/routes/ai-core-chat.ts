@@ -1136,6 +1136,7 @@ async function streamAskMode(
   routingMessage = message,
 ): Promise<void> {
   const workload = classifyAiCoreWorkload(routingMessage);
+  const conversationalMessage = buildConversationPrompt(message, context);
   const routingMeta = {
     workload: workload.workload,
     costClass: workload.costClass,
@@ -1222,7 +1223,7 @@ async function streamAskMode(
           ? cloud.selection.provider.baseUrl
           : null,
       systemPrompt: ASK_SYSTEM_PROMPT,
-      prompt: message,
+      prompt: conversationalMessage,
       maxOutputTokens: Math.min(
         4_096,
         cloud.selection.maxOutputTokens || 1_600,
