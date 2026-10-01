@@ -213,6 +213,7 @@ export default function AiCoreChat() {
   const [listening, setListening] = useState(false);
   const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(true);
   const [voiceError, setVoiceError] = useState("");
+  const [lastInputSource, setLastInputSource] = useState<"text" | "voice">("text");
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredPwaInstallPrompt());
   const isStandalone =
@@ -317,7 +318,10 @@ export default function AiCoreChat() {
       for (let index = 0; index < event.results.length; index += 1) {
         transcript += event.results[index]?.[0]?.transcript ?? "";
       }
-      if (transcript.trim()) setInput(transcript.trim());
+      if (transcript.trim()) {
+        setInput(transcript.trim());
+        setLastInputSource("voice");
+      }
     };
     recognition.onerror = (event) => {
       setVoiceError("Microphone/STT gagal: " + (event.error || "unknown error"));
@@ -347,6 +351,7 @@ export default function AiCoreChat() {
     event?.preventDefault();
     const text = input.trim();
     if (!text || busy) return;
+    const inputSource = lastInputSource;
 
     const context = messages
       .filter((message) => !message.error && message.text.trim())
@@ -369,6 +374,7 @@ export default function AiCoreChat() {
 
     append({ id: messageId(), role: "user", text, createdAt: new Date().toISOString() });
     setInput("");
+    setLastInputSource("text");
     setBusy(true);
 
     if (mode === "ask") {
@@ -392,7 +398,7 @@ export default function AiCoreChat() {
               mode: "ask",
               modelPolicy: policy,
               conversationId,
-              source: listening ? "voice" : "text",
+              source: inputSource,
               context,
             }),
           },
@@ -528,7 +534,7 @@ export default function AiCoreChat() {
           mode,
           modelPolicy: policy,
           conversationId,
-          source: listening ? "voice" : "text",
+          source: inputSource,
           context,
           projectName: projectName.trim(),
           repository: repository.trim(),
@@ -807,7 +813,10 @@ export default function AiCoreChat() {
               <form onSubmit={(event) => void submit(event)} className="rounded-2xl overflow-hidden" style={{ background: "#0A1327", border: "1px solid #263765" }}>
                 <textarea
                   value={input}
-                  onChange={(event) => setInput(event.target.value)}
+                  onChange={(event) => {
+                    setInput(event.target.value);
+                    setLastInputSource("text");
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
