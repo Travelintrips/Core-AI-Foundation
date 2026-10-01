@@ -10,10 +10,14 @@ import {
   ExternalLink,
   Loader2,
   MessageSquareText,
+  Mic,
+  MicOff,
   Send,
   ShieldCheck,
   Sparkles,
   TerminalSquare,
+  Volume2,
+  VolumeX,
   Trash2,
   User,
   Zap,
@@ -101,7 +105,44 @@ type TaskProgress = {
 };
 
 const STORAGE_KEY = "ai_core_chat_history_v1";
+const CONVERSATION_KEY = "ai_core_conversation_id_v1";
 const MAX_MESSAGES = 80;
+
+type BrowserSpeechRecognitionEvent = Event & {
+  results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>;
+};
+
+type BrowserSpeechRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: Event & { error?: string }) => void) | null;
+  onend: (() => void) | null;
+};
+
+function getConversationId(): string {
+  try {
+    const existing = localStorage.getItem(CONVERSATION_KEY);
+    if (existing) return existing;
+    const created = messageId();
+    localStorage.setItem(CONVERSATION_KEY, created);
+    return created;
+  } catch {
+    return messageId();
+  }
+}
+
+function speechRecognitionConstructor(): (new () => BrowserSpeechRecognition) | null {
+  const candidate = window as typeof window & {
+    SpeechRecognition?: new () => BrowserSpeechRecognition;
+    webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+  };
+  return candidate.SpeechRecognition ?? candidate.webkitSpeechRecognition ?? null;
+}
 
 function messageId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -167,6 +208,12 @@ export default function AiCoreChat() {
   const [progress, setProgress] = useState<TaskProgress | null>(null);
   const [progressError, setProgressError] = useState("");
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [conversationId] = useState(() => getConversationId());
+  const [voiceSupported] = useState(() => Boolean(speechRecognitionConstructor()));
+  const [listening, setListening] = useState(false);
+  const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(true);
+  const [voiceError, setVoiceError] = useState("");
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredPwaInstallPrompt());
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -241,6 +288,48 @@ export default function AiCoreChat() {
     [messages],
   );
 
+  function speakReply(text: string) {
+    if (!voiceReplyEnabled || !("speechSynthesis" in window) || !text.trim()) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.slice(0, 1_200));
+    utterance.lang = "id-ID";
+    utterance.rate = 1;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function toggleListening() {
+    if (!voiceSupported) {
+      setVoiceError("Speech recognition belum didukung browser ini.");
+      return;
+    }
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Constructor = speechRecognitionConstructor();
+    if (!Constructor) return;
+    const recognition = new Constructor();
+    recognition.lang = "id-ID";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += event.results[index]?.[0]?.transcript ?? "";
+      }
+      if (transcript.trim()) setInput(transcript.trim());
+    };
+    recognition.onerror = (event) => {
+      setVoiceError("Microphone/STT gagal: " + (event.error || "unknown error"));
+      setListening(false);
+    };
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    setVoiceError("");
+    setListening(true);
+    recognition.start();
+  }
+
   function append(item: ChatMessage) {
     setMessages((current) => [...current, item].slice(-MAX_MESSAGES));
   }
@@ -302,6 +391,8 @@ export default function AiCoreChat() {
               message: text,
               mode: "ask",
               modelPolicy: policy,
+              conversationId,
+              source: listening ? "voice" : "text",
               context,
             }),
           },
@@ -436,6 +527,8 @@ export default function AiCoreChat() {
           message: text,
           mode,
           modelPolicy: policy,
+          conversationId,
+          source: listening ? "voice" : "text",
           context,
           projectName: projectName.trim(),
           repository: repository.trim(),
@@ -444,10 +537,11 @@ export default function AiCoreChat() {
         }),
       });
 
+      const spokenReply = response.reply;
       append({
         id: messageId(),
         role: "assistant",
-        text: response.reply + (response.warning ? "\n\nCatatan: " + response.warning : ""),
+        text: spokenReply + (response.warning ? "\n\nCatatan: " + response.warning : ""),
         createdAt: new Date().toISOString(),
         meta: {
           route: response.route,
@@ -462,6 +556,7 @@ export default function AiCoreChat() {
         },
       });
 
+      speakReply(spokenReply);
       if (response.taskId) {
         setActiveTaskId(response.taskId);
         setProgress(null);
@@ -725,7 +820,34 @@ export default function AiCoreChat() {
                   style={{ color: "#E7EDFA" }}
                 />
                 <div className="px-3 pb-3 flex items-center justify-between gap-3">
-                  <div className="text-[10px]" style={{ color: "#536A94" }}>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      disabled={busy || !voiceSupported}
+                      className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40"
+                      style={{ background: listening ? "#4C1D2B" : "#101831", color: listening ? "#FDA4AF" : "#9D91FB", border: "1px solid #263765" }}
+                      title={voiceSupported ? (listening ? "Hentikan microphone" : "Bicara ke AI Core") : "Speech recognition tidak tersedia"}
+                    >
+                      {listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.speechSynthesis?.cancel();
+                        setVoiceReplyEnabled((value) => !value);
+                      }}
+                      className="size-9 rounded-xl flex items-center justify-center"
+                      style={{ background: "#101831", color: voiceReplyEnabled ? "#9D91FB" : "#63779E", border: "1px solid #263765" }}
+                      title="Aktif/nonaktifkan jawaban suara"
+                    >
+                      {voiceReplyEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                    </button>
+                    <div className="text-[10px]" style={{ color: "#536A94" }}>
+                      {listening ? "Mendengarkan Bahasa Indonesia…" : voiceSupported ? "Voice ready · id-ID + istilah teknis" : "Voice input perlu browser yang mendukung SpeechRecognition"}
+                    </div>
+                  </div>
+                  <div className="text-[10px]" style={{ color: "#536A94" }}> style={{ color: "#536A94" }}>
                     {policy === "economy"
                       ? "Auto routing aktif · jawaban memakai local only; perintah kerja tetap masuk control plane."
                       : policy === "smart"
@@ -739,6 +861,7 @@ export default function AiCoreChat() {
                   </button>
                 </div>
               </form>
+              {voiceError && <div className="text-xs mt-2" style={{ color: "#FCA5A5" }}>{voiceError}</div>}
             </div>
           </div>
         </section>
