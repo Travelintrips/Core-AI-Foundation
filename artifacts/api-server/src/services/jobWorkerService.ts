@@ -15,6 +15,7 @@ import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import {
   db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable,
   creativeProjectsTable, creativeProjectStepsTable, creativeAiAssetsTable,
+  withTransientDatabaseRetry,
 } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { createHash } from "crypto";
@@ -450,10 +451,13 @@ function exponentialBackoffMs(retryCount: number): number {
  */
 export async function claimJob(workerId: number): Promise<AiJob | null> {
   // ── Pre-flight: validate worker lease and capacity ───────────────────────
-  const [worker] = await db
-    .select()
-    .from(aiWorkersTable)
-    .where(eq(aiWorkersTable.id, workerId));
+  const [worker] = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiWorkersTable)
+      .where(eq(aiWorkersTable.id, workerId)),
+    { attempts: 3, baseDelayMs: 150 },
+  );
 
   if (!worker) return null;
 
@@ -756,10 +760,13 @@ export async function completeJob(
 ): Promise<AiJob> {
   const now = new Date();
 
-  const [job] = await db
-    .select()
-    .from(aiJobsTable)
-    .where(eq(aiJobsTable.id, jobId));
+  const [job] = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiJobsTable)
+      .where(eq(aiJobsTable.id, jobId)),
+    { attempts: 5, baseDelayMs: 250 },
+  );
 
   const actualDuration = job?.startedAt
     ? now.getTime() - job.startedAt.getTime()
@@ -843,10 +850,13 @@ export async function retryJob(
 ): Promise<AiJob> {
   const now = new Date();
 
-  const [job] = await db
-    .select()
-    .from(aiJobsTable)
-    .where(eq(aiJobsTable.id, jobId));
+  const [job] = await withTransientDatabaseRetry(
+    () => db
+      .select()
+      .from(aiJobsTable)
+      .where(eq(aiJobsTable.id, jobId)),
+    { attempts: 5, baseDelayMs: 250 },
+  );
 
   if (!job) throw new Error(`Job ${jobId} not found`);
 
@@ -931,10 +941,13 @@ export async function retryJob(
   // failure. Do not overwrite the recovered state or release another worker's
   // slot in that case.
   if (!updated) {
-    const [current] = await db
-      .select()
-      .from(aiJobsTable)
-      .where(eq(aiJobsTable.id, jobId));
+    const [current] = await withTransientDatabaseRetry(
+      () => db
+        .select()
+        .from(aiJobsTable)
+        .where(eq(aiJobsTable.id, jobId)),
+      { attempts: 5, baseDelayMs: 250 },
+    );
     if (!current) throw new Error(`Job ${jobId} not found after retry race`);
     return current;
   }
