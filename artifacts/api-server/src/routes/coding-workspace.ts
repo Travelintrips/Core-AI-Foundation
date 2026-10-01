@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   db,
   aiCodeChangesTable,
@@ -62,6 +62,7 @@ import {
 import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorkerRecoveryService.js";
 import { reconcileStaleCodingRuns } from "../services/localCodingRunRecoveryService.js";
 import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
+import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
 
 const router = Router();
 
@@ -157,7 +158,47 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
     .from(aiCodingTasksTable)
     .orderBy(desc(aiCodingTasksTable.createdAt));
 
-  res.json(ListCodingTasksResponse.parse(tasks));
+  const autonomousPresentation = await db.execute(sql`
+    SELECT a.task_id,
+           a.status AS autonomous_status,
+           EXISTS (
+             SELECT 1
+             FROM ai_platform.ai_coding_runs AS r
+             WHERE r.task_id = a.task_id
+               AND r.status = 'RUNNING'
+           ) AS has_active_run
+    FROM ai_platform.ai_coding_autonomous_tasks AS a
+    WHERE a.status IN ('FAILED', 'BLOCKED')
+  `);
+
+  const presentationByTask = new Map(
+    (autonomousPresentation.rows ?? []).map((row) => {
+      const item = row as {
+        task_id?: string;
+        autonomous_status?: string;
+        has_active_run?: boolean;
+      };
+      return [
+        item.task_id ?? "",
+        {
+          autonomousStatus: item.autonomous_status ?? null,
+          hasActiveRun: item.has_active_run === true,
+        },
+      ] as const;
+    }),
+  );
+
+  const presentedTasks = tasks.map((task) => {
+    const presentation = presentationByTask.get(task.id);
+    const status = codingTaskPresentationStatus({
+      taskStatus: task.status,
+      autonomousStatus: presentation?.autonomousStatus,
+      hasActiveRun: presentation?.hasActiveRun ?? false,
+    });
+    return status === task.status ? task : { ...task, status };
+  });
+
+  res.json(ListCodingTasksResponse.parse(presentedTasks));
 });
 
 router.post("/ai/coding/tasks", async (req, res): Promise<void> => {
