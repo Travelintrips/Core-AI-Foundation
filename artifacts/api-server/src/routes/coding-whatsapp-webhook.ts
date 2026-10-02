@@ -329,6 +329,7 @@ router.post(
           route: chat.route,
           provider: chat.provider,
           model: chat.model,
+          inputSource,
           messageId: delivery.messageId,
         });
       } catch (error) {
