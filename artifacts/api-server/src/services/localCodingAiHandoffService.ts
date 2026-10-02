@@ -22,7 +22,10 @@ import {
 } from "./localCodingEngineService.js";
 import type { LocalFailureContext } from "./localCodingFailureDiagnosticService.js";
 import type { LocalFailureRecoveryContext } from "./localCodingFailureRecoveryService.js";
-import { resolveRemoteBranchHead } from "./repositoryAnalyzerService.js";
+import {
+  prepareRepositoryWorkspace,
+  resolveRemoteBranchHead,
+} from "./repositoryAnalyzerService.js";
 
 const execFileAsync = promisify(execFile);
 
