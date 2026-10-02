@@ -29,6 +29,45 @@ describe("database connection resilience", () => {
     expect(result).toBe("ok");
     expect(attempts).toBe(3);
   });
+
+  it("classifies PostgreSQL and Supavisor authentication failures as permanent", async () => {
+    const {
+      isDatabaseAuthenticationError,
+      isTransientDatabaseConnectionError,
+    } = await import("@workspace/db");
+
+    const invalidPassword = Object.assign(
+      new Error('password authentication failed for user "postgres"'),
+      { code: "28P01" },
+    );
+    const breaker = new Error(
+      "(ECIRCUITBREAKER) too many authentication failures, new connections are temporarily blocked",
+    );
+    const wrapped = new Error("Failed query: select 1", { cause: invalidPassword });
+
+    expect(isDatabaseAuthenticationError(invalidPassword)).toBe(true);
+    expect(isDatabaseAuthenticationError(breaker)).toBe(true);
+    expect(isDatabaseAuthenticationError(wrapped)).toBe(true);
+    expect(isTransientDatabaseConnectionError(invalidPassword)).toBe(false);
+    expect(isDatabaseAuthenticationError(new Error("connection timed out"))).toBe(false);
+  });
+
+  it("does not retry authentication failures", async () => {
+    const { withTransientDatabaseRetry } = await import("@workspace/db");
+    let attempts = 0;
+
+    await expect(
+      withTransientDatabaseRetry(async () => {
+        attempts += 1;
+        throw Object.assign(
+          new Error('password authentication failed for user "postgres"'),
+          { code: "28P01" },
+        );
+      }, { attempts: 5, baseDelayMs: 25 }),
+    ).rejects.toMatchObject({ code: "28P01" });
+
+    expect(attempts).toBe(1);
+  });
 });
 
 
