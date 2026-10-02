@@ -14,6 +14,7 @@ import { adminAuthWithExceptions } from "../adminAuth.js";
  */
 
 const ADMIN_KEY = "test-admin-key-123";
+const CONNECTOR_KEY = "test-ai-core-connector-key-456";
 
 function makeReq(method: string, path: string, headers: Record<string, string> = {}): Request {
   return { method, path, headers } as unknown as Request;
@@ -36,11 +37,13 @@ function makeRes() {
 describe("adminAuthWithExceptions", () => {
   beforeEach(() => {
     process.env["ADMIN_API_KEY"] = ADMIN_KEY;
+    process.env["AI_CORE_CHAT_CONNECTOR_KEY"] = CONNECTOR_KEY;
     process.env["NODE_ENV"] = "production"; // fail-closed path, matches "test with key active" requirement
   });
 
   afterEach(() => {
     delete process.env["ADMIN_API_KEY"];
+    delete process.env["AI_CORE_CHAT_CONNECTOR_KEY"];
     delete process.env["NODE_ENV"];
   });
 
@@ -116,6 +119,62 @@ describe("adminAuthWithExceptions", () => {
     adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
     expect(next).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBeUndefined();
+  });
+
+  describe("AI Core direct connector scoped auth", () => {
+    it("allows connector key to submit an AI Core command", () => {
+      const req = makeReq("POST", "/ai/core-chat/messages", {
+        "x-ai-core-connector-key": CONNECTOR_KEY,
+      });
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.statusCode).toBeUndefined();
+    });
+
+    it("allows connector key to read task progress", () => {
+      const req = makeReq(
+        "GET",
+        "/ai/core-chat/tasks/11111111-1111-4111-8111-111111111111/progress",
+        { "x-ai-core-connector-key": CONNECTOR_KEY },
+      );
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects connector key on admin/database endpoints", () => {
+      const req = makeReq("GET", "/ai/core-chat/databases/metadata", {
+        "x-ai-core-connector-key": CONNECTOR_KEY,
+      });
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("rejects the wrong connector key", () => {
+      const req = makeReq("POST", "/ai/core-chat/messages", {
+        "x-ai-core-connector-key": "wrong-connector-key",
+      });
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("publishes the connector OpenAPI document without credentials", () => {
+      const req = makeReq("GET", "/ai/core-chat/connector/openapi.json");
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.statusCode).toBeUndefined();
+    });
   });
 
   it("allows an admin route with the correct key via x-admin-key header", () => {
