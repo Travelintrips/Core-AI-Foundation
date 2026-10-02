@@ -116,7 +116,29 @@ const MAX_MESSAGES = 80;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_VOICE_SAMPLE_BYTES = 6 * 1024 * 1024;
 
-type VoicePreset = "auto" | "male" | "female_soft" | "female_firm" | "cloned";
+type VoicePreset =
+  | "auto"
+  | "male_natural"
+  | "male_deep"
+  | "male_casual"
+  | "male_professional"
+  | "female_natural"
+  | "female_soft"
+  | "female_firm"
+  | "female_cheerful"
+  | "cloned";
+
+const VOICE_PRESET_OPTIONS: Array<{ value: VoicePreset; label: string }> = [
+  { value: "auto", label: "Otomatis" },
+  { value: "male_natural", label: "Pria Natural" },
+  { value: "male_deep", label: "Pria Berat" },
+  { value: "male_casual", label: "Pria Santai" },
+  { value: "male_professional", label: "Pria Profesional" },
+  { value: "female_natural", label: "Wanita Natural" },
+  { value: "female_soft", label: "Wanita Lembut" },
+  { value: "female_firm", label: "Wanita Tegas" },
+  { value: "female_cheerful", label: "Wanita Ceria" },
+];
 type PendingImage = {
   name: string;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
@@ -179,10 +201,16 @@ function loadHistory(): ChatMessage[] {
 function loadVoicePreset(): VoicePreset {
   try {
     const stored = localStorage.getItem(VOICE_PRESET_KEY);
-    if (stored === "female") return "female_soft";
-    return stored === "male" ||
+    if (stored === "male") return "male_natural";
+    if (stored === "female") return "female_natural";
+    return stored === "male_natural" ||
+      stored === "male_deep" ||
+      stored === "male_casual" ||
+      stored === "male_professional" ||
+      stored === "female_natural" ||
       stored === "female_soft" ||
       stored === "female_firm" ||
+      stored === "female_cheerful" ||
       stored === "cloned" ||
       stored === "auto"
       ? stored
@@ -378,21 +406,49 @@ export default function AiCoreChat() {
     [messages],
   );
 
-  function selectedVoice(): SpeechSynthesisVoice | null {
+  function selectedVoice(preset: VoicePreset = voicePreset): SpeechSynthesisVoice | null {
     const indonesianVoices = availableVoices.filter((voice) =>
       voice.lang.toLowerCase().startsWith("id"),
     );
     const candidates = indonesianVoices.length ? indonesianVoices : availableVoices;
     if (!candidates.length) return null;
-    if (voicePreset === "auto") return candidates[0] ?? null;
+    if (preset === "auto" || preset === "cloned") return candidates[0] ?? null;
 
     const femalePattern = /female|woman|wanita|perempuan|siti|ayu|damayanti|wavenet[-_ ]?[acde]|neural2[-_ ]?[acde]/i;
     const malePattern = /male|man|pria|laki|adi|budi|wavenet[-_ ]?[bf]|neural2[-_ ]?[bf]/i;
-    const pattern =
-      voicePreset === "female_soft" || voicePreset === "female_firm"
-        ? femalePattern
-        : malePattern;
-    return candidates.find((voice) => pattern.test(voice.name)) ?? candidates[0] ?? null;
+    const isFemale = preset.startsWith("female_");
+    const pattern = isFemale ? femalePattern : malePattern;
+    const matching = candidates.filter((voice) => pattern.test(voice.name));
+    const pool = matching.length ? matching : candidates;
+    const variantIndex =
+      preset === "male_deep" || preset === "female_soft" ? 0 :
+      preset === "male_casual" || preset === "female_cheerful" ? 1 :
+      preset === "male_professional" || preset === "female_firm" ? 2 :
+      0;
+    return pool[variantIndex % pool.length] ?? pool[0] ?? null;
+  }
+
+  function voiceTuning(preset: VoicePreset): { rate: number; pitch: number } {
+    switch (preset) {
+      case "male_natural":
+        return { rate: 1, pitch: 0.9 };
+      case "male_deep":
+        return { rate: 0.9, pitch: 0.72 };
+      case "male_casual":
+        return { rate: 1.06, pitch: 0.94 };
+      case "male_professional":
+        return { rate: 0.96, pitch: 0.84 };
+      case "female_natural":
+        return { rate: 1, pitch: 1.08 };
+      case "female_soft":
+        return { rate: 0.9, pitch: 1.14 };
+      case "female_firm":
+        return { rate: 1.06, pitch: 1.02 };
+      case "female_cheerful":
+        return { rate: 1.1, pitch: 1.2 };
+      default:
+        return { rate: 1, pitch: 1 };
+    }
   }
 
   function startListening() {
@@ -502,16 +558,10 @@ export default function AiCoreChat() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 1_200));
     utterance.lang = "id-ID";
-    utterance.rate =
-      voicePreset === "female_soft" ? 0.92 :
-      voicePreset === "female_firm" ? 1.08 :
-      1;
-    utterance.pitch =
-      voicePreset === "male" ? 0.86 :
-      voicePreset === "female_soft" ? 1.10 :
-      voicePreset === "female_firm" ? 1.02 :
-      1;
-    const voice = selectedVoice();
+    const tuning = voiceTuning(voicePreset);
+    utterance.rate = tuning.rate;
+    utterance.pitch = tuning.pitch;
+    const voice = selectedVoice(voicePreset);
     if (voice) utterance.voice = voice;
     utterance.onend = done;
     utterance.onerror = done;
@@ -1181,12 +1231,22 @@ export default function AiCoreChat() {
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
                       title="Pilih karakter suara jawaban"
                     >
-                      <option value="auto">Otomatis</option>
-                      <option value="male">Pria</option>
-                      <option value="female_soft">Wanita Lembut</option>
-                      <option value="female_firm">Wanita Tegas</option>
+                      {VOICE_PRESET_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
                       {clonedVoiceId && <option value="cloned">Suara Saya</option>}
                     </select>
+                    <button
+                      type="button"
+                      onClick={() => speakReply("Halo, ini contoh suara AI Core. Saya siap membantu Anda.")}
+                      disabled={!voiceReplyEnabled}
+                      className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
+                      style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
+                      title="Preview suara yang dipilih"
+                    >
+                      <Volume2 className="size-3.5" />
+                      Preview
+                    </button>
                     <label className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[10px]" style={{ background: "#0D1730", color: "#8DA1C8", border: "1px solid #263765" }}>
                       <input
                         type="checkbox"
