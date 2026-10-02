@@ -7,6 +7,8 @@ on:
         description: "Bounded command for AI Core handoff"
         required: true
         type: string
+  issues:
+    types: [opened]
 
 permissions:
   contents: read
@@ -14,26 +16,42 @@ permissions:
 
 jobs:
   emit-ai-core-event:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[AI-CORE-CMD]')
     runs-on: ubuntu-latest
     steps:
-      - name: Validate command
+      - name: Resolve and validate command
+        id: command
         shell: bash
         env:
-          COMMAND: ${{ inputs.command }}
+          DISPATCH_COMMAND: ${{ inputs.command }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          test -n "$COMMAND"
-          test "${#COMMAND}" -le 2000
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            command="${ISSUE_BODY:-}"
+          else
+            command="${DISPATCH_COMMAND:-}"
+          fi
+          test -n "$command"
+          test "${#command}" -le 2000
+          {
+            echo 'value<<AI_CORE_COMMAND_EOF'
+            printf '%s\n' "$command"
+            echo 'AI_CORE_COMMAND_EOF'
+          } >> "$GITHUB_OUTPUT"
           echo "ChatGPT command accepted for AI Core CI ingress."
-          echo "Command length: ${#COMMAND}"
+          echo "Command length: ${#command}"
 
       - name: Validate GCP handoff configuration
         shell: bash
         env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           SERVICE_ACCOUNT: ${{ vars.GCP_AI_CORE_SERVICE_ACCOUNT }}
           TOKEN_SECRET: ${{ vars.GCP_AI_CORE_TOKEN_SECRET }}
           CONTROL_BRIDGE_URL: ${{ vars.AI_CORE_CONTROL_BRIDGE_URL }}
         run: |
+          test -n "$PROJECT_ID"
           test -n "$WIF_PROVIDER"
           test -n "$SERVICE_ACCOUNT"
           test -n "$TOKEN_SECRET"
@@ -55,7 +73,7 @@ jobs:
       - name: Send command to AI Core Control Bridge
         shell: bash
         env:
-          COMMAND: ${{ inputs.command }}
+          COMMAND: ${{ steps.command.outputs.value }}
           CONTROL_BRIDGE_URL: ${{ vars.AI_CORE_CONTROL_BRIDGE_URL }}
           AI_CORE_TOKEN: ${{ steps.secrets.outputs.ai_core_token }}
         run: |
