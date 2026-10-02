@@ -106,7 +106,10 @@ type TaskProgress = {
 
 const STORAGE_KEY = "ai_core_chat_history_v1";
 const CONVERSATION_KEY = "ai_core_conversation_id_v1";
+const VOICE_PRESET_KEY = "ai_core_voice_preset_v1";
 const MAX_MESSAGES = 80;
+
+type VoicePreset = "auto" | "male" | "female";
 
 type BrowserSpeechRecognitionEvent = Event & {
   results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>;
@@ -157,6 +160,15 @@ function loadHistory(): ChatMessage[] {
     return Array.isArray(parsed) ? (parsed as ChatMessage[]).slice(-MAX_MESSAGES) : [];
   } catch {
     return [];
+  }
+}
+
+function loadVoicePreset(): VoicePreset {
+  try {
+    const stored = localStorage.getItem(VOICE_PRESET_KEY);
+    return stored === "male" || stored === "female" || stored === "auto" ? stored : "auto";
+  } catch {
+    return "auto";
   }
 }
 
@@ -213,8 +225,12 @@ export default function AiCoreChat() {
   const [listening, setListening] = useState(false);
   const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(true);
   const [voiceError, setVoiceError] = useState("");
+  const [voicePreset, setVoicePreset] = useState<VoicePreset>(() => loadVoicePreset());
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [handsFreeEnabled, setHandsFreeEnabled] = useState(false);
   const [lastInputSource, setLastInputSource] = useState<"text" | "voice">("text");
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const handsFreeRef = useRef(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredPwaInstallPrompt());
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -249,6 +265,30 @@ export default function AiCoreChat() {
     }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VOICE_PRESET_KEY, voicePreset);
+    } catch {
+      // Voice preference remains usable for the current session.
+    }
+  }, [voicePreset]);
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const syncVoices = () => setAvailableVoices(window.speechSynthesis.getVoices());
+    syncVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", syncVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", syncVoices);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      handsFreeRef.current = false;
+      recognitionRef.current?.abort();
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeTaskId) return;
@@ -289,13 +329,76 @@ export default function AiCoreChat() {
     [messages],
   );
 
-  function speakReply(text: string) {
-    if (!voiceReplyEnabled || !("speechSynthesis" in window) || !text.trim()) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 1_200));
-    utterance.lang = "id-ID";
-    utterance.rate = 1;
-    window.speechSynthesis.speak(utterance);
+  function selectedVoice(): SpeechSynthesisVoice | null {
+    const indonesianVoices = availableVoices.filter((voice) =>
+      voice.lang.toLowerCase().startsWith("id"),
+    );
+    const candidates = indonesianVoices.length ? indonesianVoices : availableVoices;
+    if (!candidates.length) return null;
+    if (voicePreset === "auto") return candidates[0] ?? null;
+
+    const femalePattern = /female|woman|wanita|perempuan|siti|ayu|damayanti|wavenet[-_ ]?[acde]|neural2[-_ ]?[acde]/i;
+    const malePattern = /male|man|pria|laki|adi|budi|wavenet[-_ ]?[bf]|neural2[-_ ]?[bf]/i;
+    const pattern = voicePreset === "female" ? femalePattern : malePattern;
+    return candidates.find((voice) => pattern.test(voice.name)) ?? candidates[0] ?? null;
+  }
+
+  function startListening() {
+    if (!voiceSupported || busy || listening) return;
+    const Constructor = speechRecognitionConstructor();
+    if (!Constructor) return;
+
+    let capturedTranscript = "";
+    let submitted = false;
+    const recognition = new Constructor();
+    recognition.lang = "id-ID";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let transcript = "";
+      let hasFinalResult = false;
+      for (let index = 0; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        transcript += result?.[0]?.transcript ?? "";
+        hasFinalResult ||= result?.isFinal === true;
+      }
+      capturedTranscript = transcript.trim();
+      if (capturedTranscript) {
+        setInput(capturedTranscript);
+        setLastInputSource("voice");
+      }
+      if (handsFreeRef.current && hasFinalResult && capturedTranscript && !submitted) {
+        submitted = true;
+        recognition.stop();
+        void submit(undefined, capturedTranscript);
+      }
+    };
+    recognition.onerror = (event) => {
+      const errorCode = event.error || "unknown error";
+      if (errorCode !== "aborted") {
+        setVoiceError("Microphone/STT gagal: " + errorCode);
+      }
+      setListening(false);
+    };
+    recognition.onend = () => {
+      setListening(false);
+      if (handsFreeRef.current && capturedTranscript && !submitted) {
+        submitted = true;
+        void submit(undefined, capturedTranscript);
+      }
+    };
+    recognitionRef.current = recognition;
+    setVoiceError("");
+    setListening(true);
+    recognition.start();
+  }
+
+  function stopVoiceSession() {
+    handsFreeRef.current = false;
+    setHandsFreeEnabled(false);
+    recognitionRef.current?.abort();
+    window.speechSynthesis?.cancel();
+    setListening(false);
   }
 
   function toggleListening() {
@@ -303,35 +406,33 @@ export default function AiCoreChat() {
       setVoiceError("Speech recognition belum didukung browser ini.");
       return;
     }
-    if (listening) {
-      recognitionRef.current?.stop();
+    if (handsFreeRef.current) {
+      stopVoiceSession();
       return;
     }
-    const Constructor = speechRecognitionConstructor();
-    if (!Constructor) return;
-    const recognition = new Constructor();
-    recognition.lang = "id-ID";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index]?.[0]?.transcript ?? "";
-      }
-      if (transcript.trim()) {
-        setInput(transcript.trim());
-        setLastInputSource("voice");
-      }
+    handsFreeRef.current = true;
+    setHandsFreeEnabled(true);
+    startListening();
+  }
+
+  function speakReply(text: string, onFinished?: () => void) {
+    const done = () => {
+      if (onFinished) onFinished();
     };
-    recognition.onerror = (event) => {
-      setVoiceError("Microphone/STT gagal: " + (event.error || "unknown error"));
-      setListening(false);
-    };
-    recognition.onend = () => setListening(false);
-    recognitionRef.current = recognition;
-    setVoiceError("");
-    setListening(true);
-    recognition.start();
+    if (!voiceReplyEnabled || !("speechSynthesis" in window) || !text.trim()) {
+      done();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.slice(0, 1_200));
+    utterance.lang = "id-ID";
+    utterance.rate = 1;
+    utterance.pitch = voicePreset === "male" ? 0.86 : voicePreset === "female" ? 1.12 : 1;
+    const voice = selectedVoice();
+    if (voice) utterance.voice = voice;
+    utterance.onend = done;
+    utterance.onerror = done;
+    window.speechSynthesis.speak(utterance);
   }
 
   function append(item: ChatMessage) {
@@ -347,9 +448,9 @@ export default function AiCoreChat() {
     );
   }
 
-  async function submit(event?: FormEvent) {
+  async function submit(event?: FormEvent, overrideText?: string) {
     event?.preventDefault();
-    const text = input.trim();
+    const text = (overrideText ?? input).trim();
     if (!text || busy) return;
     const inputSource = lastInputSource;
 
@@ -562,7 +663,11 @@ export default function AiCoreChat() {
         },
       });
 
-      speakReply(spokenReply);
+      speakReply(spokenReply, () => {
+        if (handsFreeRef.current) {
+          window.setTimeout(() => startListening(), 250);
+        }
+      });
       if (response.taskId) {
         setActiveTaskId(response.taskId);
         setProgress(null);
@@ -575,6 +680,9 @@ export default function AiCoreChat() {
         createdAt: new Date().toISOString(),
         error: true,
       });
+      if (handsFreeRef.current) {
+        window.setTimeout(() => startListening(), 500);
+      }
     } finally {
       setBusy(false);
     }
@@ -835,10 +943,10 @@ export default function AiCoreChat() {
                       onClick={toggleListening}
                       disabled={busy || !voiceSupported}
                       className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40"
-                      style={{ background: listening ? "#4C1D2B" : "#101831", color: listening ? "#FDA4AF" : "#9D91FB", border: "1px solid #263765" }}
-                      title={voiceSupported ? (listening ? "Hentikan microphone" : "Bicara ke AI Core") : "Speech recognition tidak tersedia"}
+                      style={{ background: handsFreeEnabled ? "#4C1D2B" : "#101831", color: handsFreeEnabled ? "#FDA4AF" : "#9D91FB", border: "1px solid #263765" }}
+                      title={voiceSupported ? (handsFreeEnabled ? "Hentikan percakapan hands-free" : "Mulai percakapan hands-free") : "Speech recognition tidak tersedia"}
                     >
-                      {listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+                      {handsFreeEnabled ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                     </button>
                     <button
                       type="button"
@@ -852,8 +960,25 @@ export default function AiCoreChat() {
                     >
                       {voiceReplyEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
                     </button>
+                    <select
+                      value={voicePreset}
+                      onChange={(event) => setVoicePreset(event.target.value as VoicePreset)}
+                      className="h-9 rounded-xl px-2 text-[11px] outline-none"
+                      style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
+                      title="Pilih karakter suara jawaban"
+                    >
+                      <option value="auto">Otomatis</option>
+                      <option value="male">Pria</option>
+                      <option value="female">Wanita</option>
+                    </select>
                     <div className="text-[10px]" style={{ color: "#536A94" }}>
-                      {listening ? "Mendengarkan Bahasa Indonesia…" : voiceSupported ? "Voice ready · id-ID + istilah teknis" : "Voice input perlu browser yang mendukung SpeechRecognition"}
+                      {listening
+                        ? "Mendengarkan Bahasa Indonesia…"
+                        : handsFreeEnabled
+                          ? "Hands-free aktif · bicara tanpa tombol Send"
+                          : voiceSupported
+                            ? "Voice ready · tekan mic sekali untuk percakapan otomatis"
+                            : "Voice input perlu browser yang mendukung SpeechRecognition"}
                     </div>
                   </div>
                   <div className="text-[10px]" style={{ color: "#536A94" }}>
