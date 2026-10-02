@@ -101,7 +101,7 @@ export async function exchangeAuthorizationCode(input: {
     algorithms: ["HS256"],
     issuer: oauthIssuer(),
     audience: oauthResource(),
-  }) as CodeClaims;
+  }) as unknown as CodeClaims;
   if (decoded.purpose !== "mcp_code") throw new Error("invalid_grant");
   if (usedCodes.has(decoded.jti)) throw new Error("invalid_grant");
   if (decoded.clientId !== input.clientId || decoded.redirectUri !== input.redirectUri) throw new Error("invalid_grant");
@@ -122,7 +122,7 @@ export async function refreshAccessToken(input: {
     algorithms: ["HS256"],
     issuer: oauthIssuer(),
     audience: oauthResource(),
-  }) as TokenClaims;
+  }) as unknown as TokenClaims;
   if (decoded.purpose !== "mcp_refresh") throw new Error("invalid_grant");
   if (decoded.clientId !== input.clientId) throw new Error("invalid_client");
   if (decoded.resource !== input.resource || input.resource !== oauthResource()) throw new Error("invalid_target");
