@@ -158,7 +158,7 @@ export async function verifyMcpAccessToken(token: string) {
     algorithms: ["HS256"],
     issuer: oauthIssuer(),
     audience: oauthResource(),
-  }) as TokenClaims;
+  }) as unknown as TokenClaims;
   if (decoded.purpose !== "mcp_access" || decoded.resource !== oauthResource()) throw new Error("invalid_token");
   const user = await getInternalUserById(decoded.sub);
   if (!user || user.status !== "active" || user.accountType !== "internal") throw new Error("invalid_token");
