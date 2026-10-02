@@ -63,7 +63,12 @@ export function buildWhatsappConversationId(senderDigits: string, destination: s
 }
 
 function canSkipWhatsappConversationContext(message: string): boolean {
-  const normalized = message.trim().toLowerCase().replace(/\s+/g, " ");
+  const normalized = message
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?…]+$/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
   return /^(?:hello|hi|halo|hai|hey|help|bantuan|status|cek status|health|healthz|model|model status|routing|routing biaya|cost|biaya)$/.test(
     normalized,
   );
