@@ -63,6 +63,10 @@ jobs:
               fi
               break
             done
+            if [ "$code" = "403" ] && grep -Eqi 'Checking your browser before accessing|/hcdn-cgi/jschallenge' "$out" 2>/dev/null; then
+              echo "::error::EDGE_WAF_BROWSER_CHALLENGE: Hostinger edge returned an interactive JavaScript challenge for the authenticated AI Core API request. Configure AI_CORE_VERIFY_BASE_URL to a trusted server-to-server origin that bypasses the browser challenge while preserving x-admin-api-key authentication."
+              return 1
+            fi
             echo "::error::AI Core Chat request failed after bounded retries with HTTP ${code:-curl-error}"
             jq -c '{error,warning}' "$out" 2>/dev/null || cat "$out"
             return 1
