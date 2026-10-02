@@ -606,12 +606,21 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     const state = await loadTaskState(taskId);
 
     if (state.task.status === "COMPLETED" || state.nextAction === "DONE") {
+      if (state.task.status !== "COMPLETED") {
+        await db
+          .update(aiCodingTasksTable)
+          .set({
+            status: "COMPLETED",
+            resultSummary: state.task.resultSummary || "Coding task selesai dan seluruh verification gate telah lulus.",
+          })
+          .where(eq(aiCodingTasksTable.id, taskId));
+      }
       await setState(taskId, "COMPLETED", "COMPLETE");
       await report(
         taskId,
         "COMPLETED",
         state.task.resultSummary || "Coding task selesai.",
-        { status: state.task.status },
+        { status: "COMPLETED" },
       );
       return { taskId, status: "COMPLETED", action: "COMPLETE" };
     }
