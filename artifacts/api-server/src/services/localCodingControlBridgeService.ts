@@ -9,6 +9,7 @@ import {
 import { publishSafe } from "./aiEventBusService.js";
 import { notifyCodingBridgeResponse } from "./codingWhatsappNotificationService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
+import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -89,6 +90,10 @@ export async function submitCodingBridgeCommand(input: {
       assignedClientId: input.assignedClientId ?? null,
     },
   });
+
+  if (input.assignedClientId) {
+    void ensureGcpCodingWorkerStarted().catch(() => undefined);
+  }
 
   return { command, created: true };
 }
