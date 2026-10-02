@@ -96,6 +96,7 @@ import {
   recordChatLearningEvent,
   retrieveChatLearnings,
   retrieveOpenAiTeacherAnswer,
+  retrieveRecentChatConversation,
   type ChatLearningScope,
 } from "../services/aiCoreChatLearningService.js";
 import {
@@ -117,7 +118,7 @@ const ChatRequest = z.object({
   branch: z.string().trim().min(1).max(200).optional(),
   priority: z.number().int().min(0).max(100).optional(),
   conversationId: z.string().trim().min(1).max(200).optional(),
-  source: z.enum(["text", "voice", "whatsapp_voice"]).default("text"),
+  source: z.enum(["text", "voice", "whatsapp", "whatsapp_voice"]).default("text"),
   image: z.object({
     mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
     base64: z.string().min(1).max(7_000_000),
@@ -2141,7 +2142,10 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       branch: parsed.data.branch ?? null,
     };
     const safeMessage = redactConversationText(parsed.data.message);
-    const safeContext = sanitizeConversationContext(parsed.data.context);
+    let safeContext = sanitizeConversationContext(parsed.data.context);
+    if (safeContext.length === 0 && parsed.data.source === "whatsapp") {
+      safeContext = await retrieveRecentChatConversation(scope, 10).catch(() => []);
+    }
     await recordChatLearningEvent({
       role: "user",
       content: safeMessage,
@@ -2200,7 +2204,10 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       branch: parsed.data.branch ?? null,
     };
     const safeMessage = redactConversationText(parsed.data.message);
-    const safeContext = sanitizeConversationContext(parsed.data.context);
+    let safeContext = sanitizeConversationContext(parsed.data.context);
+    if (safeContext.length === 0 && parsed.data.source === "whatsapp") {
+      safeContext = await retrieveRecentChatConversation(scope, 10).catch(() => []);
+    }
     await recordChatLearningEvent({
       role: "user",
       content: safeMessage,
