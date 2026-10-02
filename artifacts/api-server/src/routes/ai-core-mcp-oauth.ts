@@ -92,9 +92,9 @@ function renderAuthorizePage(params: ReturnType<typeof oauthParams>, loggedInEma
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hubungkan AI Core</title><style>body{font-family:system-ui;max-width:560px;margin:48px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:6px}input{padding:10px}button{padding:11px 16px;font-weight:600}li{margin:6px 0}.muted{color:#666}</style></head><body>
   <h1>Hubungkan ChatGPT ke AI Core</h1>
   <p>ChatGPT meminta akses ke AI Core internal.</p>
-  ${identity}
-  <p>Izin yang diminta:</p><ul>${scopes.map((scope) => `<li>${escapeHtml(scope)}</li>`).join("")}</ul>
   <form method="post" action="/api/ai/core-chat/oauth/authorize">${hiddenFields}
+    ${identity}
+    <p>Izin yang diminta:</p><ul>${scopes.map((scope) => `<li>${escapeHtml(scope)}</li>`).join("")}</ul>
     <button type="submit">Izinkan & Hubungkan</button>
   </form>
   <p class="muted">Akses dapat dihentikan dengan menonaktifkan koneksi app di ChatGPT atau menonaktifkan akun internal.</p>
