@@ -913,7 +913,19 @@ async function waitForPreparedPlannerResult(
 export async function generateAndPersistCodingMultiTaskPlan(
   taskId: string,
   analysisOverride?: Record<string, unknown>,
+  options: { signal?: AbortSignal } = {},
 ): Promise<AutomatedMultiTaskPlanGenerationResult> {
+  const plannerSignal = options.signal;
+  const assertPlannerLifecycleActive = () => {
+    if (plannerSignal?.aborted) {
+      throw new AutomatedMultiTaskPlannerError(
+        "Constrained multi-task planner lifecycle deadline expired.",
+        "MODEL_FAILED",
+        { cancelled: true },
+      );
+    }
+  };
+  assertPlannerLifecycleActive();
   const latest = await getLatestCodingTaskGraph(taskId);
   if (latest?.graph.status === "PREPARED") {
     return existingPreparedGraphResult(latest);
@@ -944,6 +956,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
   let authority;
   const authorityDeadline = Date.now() + PLANNER_AUTHORITY_WAIT_MS;
   while (!authority) {
+    assertPlannerLifecycleActive();
     try {
       authority = await acquirePlannerAuthority({
         scope,
@@ -989,6 +1002,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
         throw mapAuthorityError(error);
       }
       await sleep(PLANNER_AUTHORITY_POLL_MS);
+      assertPlannerLifecycleActive();
     }
   }
 
