@@ -20,14 +20,19 @@ function loopbackBaseUrl(): string {
 }
 
 export function resolveAiCoreInternalBaseUrl(): string {
-  const configured = (process.env["AI_CORE_INTERNAL_BASE_URL"] ?? "")
-    .trim()
-    .replace(/\/$/, "");
+  const configured = (
+    process.env["AI_CORE_INTERNAL_BASE_URL"] ??
+    process.env["PUBLIC_APP_URL"] ??
+    ""
+  ).trim().replace(/\/$/, "");
   if (configured) return configured;
 
-  // WhatsApp inbound handling already runs inside the AI Core API process.
-  // Keep the chat hop on loopback by default instead of leaving the host,
-  // traversing DNS/TLS/reverse-proxy, and re-entering the same application.
+  // Hostinger production can run the public API behind a process boundary where
+  // 127.0.0.1 is not the serving process. Keep loopback for local/dev only and
+  // use the stable production origin unless an explicit internal URL is set.
+  if (process.env["NODE_ENV"] === "production") {
+    return "https://aicore.cstlogistic.co.id";
+  }
   return loopbackBaseUrl();
 }
 
