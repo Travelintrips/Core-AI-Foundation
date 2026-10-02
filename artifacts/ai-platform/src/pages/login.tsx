@@ -13,6 +13,7 @@ export default function Login() {
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [devSubmitting, setDevSubmitting] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
 
   if (user && !user.mustChangePassword) {
     navigate("/");
@@ -35,6 +36,29 @@ export default function Login() {
       setMessage("Gagal mengirim link login. Silakan coba lagi.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setMessage("Masukkan email terlebih dahulu.");
+      return;
+    }
+    setResetSubmitting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/internal/auth/request-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setMessage(data.message ?? data.error ?? "Permintaan reset password diproses.");
+    } catch {
+      setMessage("Gagal mengirim link reset password. Silakan coba lagi.");
+    } finally {
+      setResetSubmitting(false);
     }
   }
 
@@ -76,8 +100,18 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)} data-testid="input-email" />
             </div>
             {message && <p className="text-sm text-muted-foreground">{message}</p>}
-            <Button type="submit" className="w-full" disabled={submitting || devSubmitting} data-testid="button-login">
+            <Button type="submit" className="w-full" disabled={submitting || devSubmitting || resetSubmitting} data-testid="button-login">
               {submitting ? "Mengirim..." : "Kirim link login"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={submitting || devSubmitting || resetSubmitting || !email.trim()}
+              onClick={handleResetPassword}
+              data-testid="button-reset-password"
+            >
+              {resetSubmitting ? "Mengirim..." : "Kirim ulang link reset password"}
             </Button>
             {import.meta.env.DEV && (
               <Button
