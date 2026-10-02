@@ -1116,6 +1116,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
     });
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
+    assertPlannerLifecycleActive();
 
     await logAudit("automated-multi-task-planner", "model_target_failed", taskId, "coding_task", "failure", {
       stage: "model_invocation",
@@ -1342,6 +1343,8 @@ export async function generateAndPersistCodingMultiTaskPlan(
       "MODEL_FAILED",
     );
   }
+
+  assertPlannerLifecycleActive();
 
   const heartbeatFailure = authorityHeartbeatFailure as Error | null;
   if (heartbeatFailure) {
