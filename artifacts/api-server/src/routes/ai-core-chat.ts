@@ -107,6 +107,7 @@ import {
 } from "../services/aiCoreConversationService.js";
 
 const router = Router();
+const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] === "true";
 
 const ChatRequest = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -1925,7 +1926,7 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       cloudProviders: ["openai", "anthropic", "gemini", "mistral"],
     },
     voice: {
-      enabled: true,
+      enabled: AI_CORE_VOICE_ENABLED,
       input: "browser-speech-recognition",
       output: "browser-speech-synthesis",
       language: "id-ID",
@@ -1970,6 +1971,11 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
 });
 
 router.post("/ai/core-chat/voice-clone/enroll", async (req, res): Promise<void> => {
+  if (!AI_CORE_VOICE_ENABLED) {
+    res.status(503).json({ error: "Voice sementara dinonaktifkan.", enabled: false });
+    return;
+  }
+
   const parsed = VoiceCloneEnrollRequest.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -2027,6 +2033,11 @@ router.post("/ai/core-chat/voice-clone/enroll", async (req, res): Promise<void> 
 });
 
 router.post("/ai/core-chat/voice-clone/speak", async (req, res): Promise<void> => {
+  if (!AI_CORE_VOICE_ENABLED) {
+    res.status(503).json({ error: "Voice sementara dinonaktifkan.", enabled: false });
+    return;
+  }
+
   const parsed = VoiceCloneSpeakRequest.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
