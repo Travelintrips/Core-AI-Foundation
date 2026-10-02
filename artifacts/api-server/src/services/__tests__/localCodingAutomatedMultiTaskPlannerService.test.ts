@@ -452,6 +452,30 @@ describe("automated multi-task planner", () => {
     expect(result.metadata.provider).toBe("fake-provider");
   });
 
+  it("propagates an external lifecycle cancellation before model dispatch", async () => {
+    const provider = new FakeProvider(JSON.stringify(validPlan()));
+    const adapter = new ConstrainedModelInvocationAdapter(provider);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      generateCodingMultiTaskPlanWithAdapter({
+        context: context(),
+        adapter,
+        target: {
+          provider: "fake-provider",
+          model: "fake-model",
+        },
+        timeoutMs: 10_000,
+        maxOutputTokens: 2_048,
+        requestId: "planner-external-cancel",
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ code: "CANCELLED" });
+
+    expect(provider.calls).toHaveLength(0);
+  });
+
   it("retries bounded transient provider rate limits before succeeding", async () => {
     const provider = new FlakyRateLimitedProvider(JSON.stringify(validPlan()));
     const adapter = new ConstrainedModelInvocationAdapter(provider);
