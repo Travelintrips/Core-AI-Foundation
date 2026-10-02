@@ -278,11 +278,42 @@ export async function transcribeAiCoreWhatsappVoiceNote(input: {
   );
 }
 
+function fastWhatsappDeterministicReply(message: string): AiCoreWhatsappChatResult | null {
+  const command = message
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?…,;:]+$/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  if (/^(?:hello|hi|halo|hai|hey)(?:\s+(?:hello|hi|halo|hai|hey))*$/.test(command)) {
+    return {
+      reply: "Halo. AI Core Chat aktif. Ada yang bisa saya bantu?",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+    };
+  }
+
+  if (["help", "bantuan", "/help"].includes(command)) {
+    return {
+      reply: "Silakan kirim pertanyaan atau perintah. AI Core akan memilih jalur jawaban atau pekerjaan yang sesuai.",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+    };
+  }
+
+  return null;
+}
+
 export async function requestAiCoreWhatsappChat(input: {
   message: string;
   conversationId: string;
   source?: "text" | "whatsapp_voice";
 }): Promise<AiCoreWhatsappChatResult> {
+  const fastReply = fastWhatsappDeterministicReply(input.message);
+  if (fastReply) return fastReply;
   const adminKey = (process.env["ADMIN_API_KEY"] ?? "").trim();
   if (!adminKey) {
     throw new Error("ADMIN_API_KEY is not configured for internal AI Core WhatsApp chat.");
