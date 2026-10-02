@@ -86,6 +86,7 @@ import {
   type AdminDbDiscovery,
 } from "../services/aiCoreAdminDbQueryService.js";
 import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js";
+import { getProviderApiKey } from "../services/aiSecretService.js";
 import { deactivateRegisteredModel } from "../services/aiModelService.js";
 import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
 import {
@@ -114,12 +115,28 @@ const ChatRequest = z.object({
   priority: z.number().int().min(0).max(100).optional(),
   conversationId: z.string().trim().min(1).max(200).optional(),
   source: z.enum(["text", "voice", "whatsapp_voice"]).default("text"),
+  image: z.object({
+    mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    base64: z.string().min(1).max(7_000_000),
+  }).strict().optional(),
   context: z.array(
     z.object({
       role: z.enum(["user", "assistant"]),
       text: z.string().trim().min(1).max(5_000),
     }).strict(),
   ).max(12).optional(),
+}).strict();
+
+const VoiceCloneEnrollRequest = z.object({
+  name: z.string().trim().min(1).max(120).default("AI Core - Suara Saya"),
+  mimeType: z.string().trim().regex(/^audio\/[a-z0-9.+-]+$/i),
+  audioBase64: z.string().min(1).max(14_000_000),
+  consent: z.literal(true),
+}).strict();
+
+const VoiceCloneSpeakRequest = z.object({
+  voiceId: z.string().trim().min(4).max(200),
+  text: z.string().trim().min(1).max(1_200),
 }).strict();
 
 const TaskId = z.string().uuid();
@@ -220,6 +237,107 @@ function safeProviderFailure(error: unknown): string {
 
   return normalized.slice(0, 500);
 }
+
+type ChatImageAttachment = NonNullable<z.infer<typeof ChatRequest>["image"]>;
+
+function extractOpenAiResponseText(payload: Record<string, unknown>): string {
+  if (typeof payload["output_text"] === "string" && payload["output_text"].trim()) {
+    return payload["output_text"].trim();
+  }
+  const output = Array.isArray(payload["output"]) ? payload["output"] : [];
+  const parts: string[] = [];
+  for (const item of output) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const content = Array.isArray((item as Record<string, unknown>)["content"])
+      ? ((item as Record<string, unknown>)["content"] as unknown[])
+      : [];
+    for (const part of content) {
+      if (!part || typeof part !== "object" || Array.isArray(part)) continue;
+      const record = part as Record<string, unknown>;
+      if (record["type"] === "output_text" && typeof record["text"] === "string") {
+        parts.push(record["text"]);
+      }
+    }
+  }
+  return parts.join("\n").trim();
+}
+
+async function analyzeChatImage(
+  image: ChatImageAttachment,
+  userMessage: string,
+): Promise<{ description: string; provider: string; model: string }> {
+  const apiKey = getProviderApiKey("openai");
+  if (!apiKey) {
+    throw new Error(
+      "Upload gambar membutuhkan OPENAI_API_KEY pada production AI Core. Gambar tidak disimpan.",
+    );
+  }
+
+  const model = process.env["AI_CORE_VISION_MODEL"]?.trim() || "gpt-6-luna";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_output_tokens: 1_200,
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text:
+              "Analisis gambar ini secara faktual untuk membantu AI Core memahami permintaan pengguna. " +
+              "Gunakan Bahasa Indonesia. Sebutkan teks/error/UI yang terlihat dan konteks penting. " +
+              "Jangan mengklaim melakukan tindakan. Permintaan pengguna: " +
+              userMessage.slice(0, 4_000),
+          },
+          {
+            type: "input_image",
+            image_url: `data:${image.mimeType};base64,${image.base64}`,
+            detail: "auto",
+          },
+        ],
+      }],
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = safeProviderFailure(await response.text().catch(() => ""));
+    throw new Error(
+      `Vision provider gagal (HTTP ${response.status})${detail ? ": " + detail : "."}`,
+    );
+  }
+
+  const payload = await response.json() as Record<string, unknown>;
+  const description = extractOpenAiResponseText(payload);
+  if (!description) {
+    throw new Error("Vision provider tidak mengembalikan deskripsi gambar.");
+  }
+  return { description, provider: "openai", model };
+}
+
+function withImageContext(message: string, imageDescription: string): string {
+  return [
+    message,
+    "",
+    "[Konteks gambar yang diunggah pengguna]",
+    imageDescription,
+    "[Akhir konteks gambar]",
+  ].join("\n");
+}
+
+function decodeBase64Audio(value: string): Buffer {
+  const buffer = Buffer.from(value, "base64");
+  if (!buffer.length) throw new Error("Sampel suara kosong.");
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw new Error("Sampel suara maksimal 10 MB.");
+  }
+  return buffer;
+}
+
 
 function isExplicitRetiredModelFailure(
   providerSlug: string,
@@ -1720,9 +1838,21 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       input: "browser-speech-recognition",
       output: "browser-speech-synthesis",
       language: "id-ID",
+      presets: ["auto", "male", "female_soft", "female_firm", "cloned"],
+      cloneProvider: "elevenlabs",
+      cloneProviderConfigured: Boolean(getProviderApiKey("elevenlabs")),
       transcriptEndpoint: "/api/ai/core-chat/messages",
       whatsappVoiceSourceReserved: true,
       secretsRedactedBeforePersistence: true,
+    },
+    imageUpload: {
+      enabled: true,
+      mimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      maxBytes: 5 * 1024 * 1024,
+      visionProvider: "openai",
+      visionModel: process.env["AI_CORE_VISION_MODEL"]?.trim() || "gpt-6-luna",
+      providerConfigured: Boolean(getProviderApiKey("openai")),
+      persisted: false,
     },
     workloadRouting: describeAiCoreWorkloadRouting(),
     local: local.ok
@@ -1736,6 +1866,109 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     codingModel: modelConfig,
     secretsExposed: false,
   });
+});
+
+router.post("/ai/core-chat/voice-clone/enroll", async (req, res): Promise<void> => {
+  const parsed = VoiceCloneEnrollRequest.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const apiKey = getProviderApiKey("elevenlabs");
+  if (!apiKey) {
+    res.status(503).json({
+      error: "Voice cloning provider belum dikonfigurasi. Tambahkan ELEVENLABS_API_KEY di environment production.",
+      providerConfigured: false,
+    });
+    return;
+  }
+
+  try {
+    const audio = decodeBase64Audio(parsed.data.audioBase64);
+    const form = new FormData();
+    form.append("name", parsed.data.name);
+    form.append(
+      "files",
+      new Blob([new Uint8Array(audio)], { type: parsed.data.mimeType }),
+      "ai-core-voice-sample",
+    );
+    form.append("remove_background_noise", "false");
+    form.append(
+      "description",
+      "Voice clone for authenticated AI Core Chat user. Enrollment submitted with explicit consent.",
+    );
+
+    const response = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey },
+      body: form,
+    });
+    if (!response.ok) {
+      throw new Error(
+        `ElevenLabs enrollment failed (HTTP ${response.status}): ` +
+          safeProviderFailure(await response.text().catch(() => "")),
+      );
+    }
+    const payload = await response.json() as Record<string, unknown>;
+    const voiceId = typeof payload["voice_id"] === "string" ? payload["voice_id"] : "";
+    if (!voiceId) throw new Error("Voice provider tidak mengembalikan voice id.");
+
+    res.status(201).json({
+      voiceId,
+      requiresVerification: payload["requires_verification"] === true,
+      provider: "elevenlabs",
+      samplePersistedByAiCore: false,
+    });
+  } catch (error) {
+    res.status(503).json({ error: safeProviderFailure(error) });
+  }
+});
+
+router.post("/ai/core-chat/voice-clone/speak", async (req, res): Promise<void> => {
+  const parsed = VoiceCloneSpeakRequest.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const apiKey = getProviderApiKey("elevenlabs");
+  if (!apiKey) {
+    res.status(503).json({ error: "Voice cloning provider belum dikonfigurasi." });
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(parsed.data.voiceId)}?output_format=mp3_44100_128&enable_logging=false`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "content-type": "application/json",
+          accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text: parsed.data.text,
+          model_id: process.env["AI_CORE_VOICE_CLONE_MODEL"]?.trim() || "eleven_multilingual_v2",
+        }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `ElevenLabs TTS failed (HTTP ${response.status}): ` +
+          safeProviderFailure(await response.text().catch(() => "")),
+      );
+    }
+    const audio = Buffer.from(await response.arrayBuffer());
+    res.status(200).json({
+      audioBase64: audio.toString("base64"),
+      mimeType: "audio/mpeg",
+      provider: "elevenlabs",
+    });
+  } catch (error) {
+    res.status(503).json({ error: safeProviderFailure(error) });
+  }
 });
 
 router.get("/ai/core-chat/capabilities", async (_req, res): Promise<void> => {
@@ -1812,11 +2045,15 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       role: "user",
       content: safeMessage,
       scope,
-      metadata: { mode: "ask", modelPolicy: parsed.data.modelPolicy, streaming: true, source: parsed.data.source },
+      metadata: { mode: "ask", modelPolicy: parsed.data.modelPolicy, streaming: true, source: parsed.data.source, imageAttached: Boolean(parsed.data.image) },
     }).catch(() => undefined);
     await promoteExplicitChatLearning(safeMessage, scope).catch(() => false);
     const learnings = await retrieveChatLearnings(scope).catch(() => []);
-    const effectiveMessage = appendLearningsToMessage(safeMessage, learnings);
+    let effectiveMessage = appendLearningsToMessage(safeMessage, learnings);
+    if (parsed.data.image) {
+      const vision = await analyzeChatImage(parsed.data.image, safeMessage);
+      effectiveMessage = withImageContext(effectiveMessage, vision.description);
+    }
 
     await streamAskMode(
       effectiveMessage,
@@ -1866,14 +2103,19 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       role: "user",
       content: safeMessage,
       scope,
-      metadata: { mode: parsed.data.mode, modelPolicy: parsed.data.modelPolicy, source: parsed.data.source },
+      metadata: { mode: parsed.data.mode, modelPolicy: parsed.data.modelPolicy, source: parsed.data.source, imageAttached: Boolean(parsed.data.image) },
     }).catch(() => undefined);
     await promoteExplicitChatLearning(safeMessage, scope).catch(() => false);
 
     const learnings = await retrieveChatLearnings(scope).catch(() => []);
+    let effectiveMessage = appendLearningsToMessage(safeMessage, learnings);
+    if (parsed.data.image) {
+      const vision = await analyzeChatImage(parsed.data.image, safeMessage);
+      effectiveMessage = withImageContext(effectiveMessage, vision.description);
+    }
     const effectiveInput = {
       ...parsed.data,
-      message: appendLearningsToMessage(safeMessage, learnings),
+      message: effectiveMessage,
       context: safeContext,
     };
 

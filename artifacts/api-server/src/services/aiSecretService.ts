@@ -12,6 +12,7 @@ const PROVIDER_ENV_VARS: Record<string, string> = {
   gemini: "GEMINI_API_KEY",
   replicate: "REPLICATE_API_TOKEN",
   mistral: "MISTRAL_API_KEY",
+  elevenlabs: "ELEVENLABS_API_KEY",
 };
 
 /**

@@ -12,6 +12,9 @@ import {
   MessageSquareText,
   Mic,
   MicOff,
+  ImagePlus,
+  AudioLines,
+  X,
   Send,
   ShieldCheck,
   Sparkles,
@@ -41,6 +44,7 @@ type ChatMessage = {
   text: string;
   createdAt: string;
   error?: boolean;
+  image?: { name: string; dataUrl: string };
   meta?: {
     route?: string | null;
     provider?: string | null;
@@ -107,9 +111,18 @@ type TaskProgress = {
 const STORAGE_KEY = "ai_core_chat_history_v1";
 const CONVERSATION_KEY = "ai_core_conversation_id_v1";
 const VOICE_PRESET_KEY = "ai_core_voice_preset_v1";
+const CLONED_VOICE_ID_KEY = "ai_core_cloned_voice_id_v1";
 const MAX_MESSAGES = 80;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_VOICE_SAMPLE_BYTES = 10 * 1024 * 1024;
 
-type VoicePreset = "auto" | "male" | "female";
+type VoicePreset = "auto" | "male" | "female_soft" | "female_firm" | "cloned";
+type PendingImage = {
+  name: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  base64: string;
+  dataUrl: string;
+};
 
 type BrowserSpeechRecognitionEvent = Event & {
   results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>;
@@ -166,10 +179,37 @@ function loadHistory(): ChatMessage[] {
 function loadVoicePreset(): VoicePreset {
   try {
     const stored = localStorage.getItem(VOICE_PRESET_KEY);
-    return stored === "male" || stored === "female" || stored === "auto" ? stored : "auto";
+    if (stored === "female") return "female_soft";
+    return stored === "male" ||
+      stored === "female_soft" ||
+      stored === "female_firm" ||
+      stored === "cloned" ||
+      stored === "auto"
+      ? stored
+      : "auto";
   } catch {
     return "auto";
   }
+}
+
+function loadClonedVoiceId(): string {
+  try {
+    return localStorage.getItem(CLONED_VOICE_ID_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Gagal membaca file."));
+    reader.onload = () =>
+      typeof reader.result === "string"
+        ? resolve(reader.result)
+        : reject(new Error("Format file tidak didukung."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function requestFailureText(error: unknown): string {
@@ -227,6 +267,13 @@ export default function AiCoreChat() {
   const [voiceError, setVoiceError] = useState("");
   const [voicePreset, setVoicePreset] = useState<VoicePreset>(() => loadVoicePreset());
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [clonedVoiceId, setClonedVoiceId] = useState(() => loadClonedVoiceId());
+  const [voiceCloneBusy, setVoiceCloneBusy] = useState(false);
+  const [voiceCloneStatus, setVoiceCloneStatus] = useState("");
+  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [attachmentError, setAttachmentError] = useState("");
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const voiceSampleInputRef = useRef<HTMLInputElement | null>(null);
   const [handsFreeEnabled, setHandsFreeEnabled] = useState(false);
   const [lastInputSource, setLastInputSource] = useState<"text" | "voice">("text");
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -259,7 +306,8 @@ export default function AiCoreChat() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-MAX_MESSAGES)));
+      const persisted = messages.slice(-MAX_MESSAGES).map(({ image: _image, ...message }) => message);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
     } catch {
       // Chat still works when browser storage is unavailable.
     }
@@ -339,7 +387,10 @@ export default function AiCoreChat() {
 
     const femalePattern = /female|woman|wanita|perempuan|siti|ayu|damayanti|wavenet[-_ ]?[acde]|neural2[-_ ]?[acde]/i;
     const malePattern = /male|man|pria|laki|adi|budi|wavenet[-_ ]?[bf]|neural2[-_ ]?[bf]/i;
-    const pattern = voicePreset === "female" ? femalePattern : malePattern;
+    const pattern =
+      voicePreset === "female_soft" || voicePreset === "female_firm"
+        ? femalePattern
+        : malePattern;
     return candidates.find((voice) => pattern.test(voice.name)) ?? candidates[0] ?? null;
   }
 
@@ -419,20 +470,122 @@ export default function AiCoreChat() {
     const done = () => {
       if (onFinished) onFinished();
     };
-    if (!voiceReplyEnabled || !("speechSynthesis" in window) || !text.trim()) {
+    if (!voiceReplyEnabled || !text.trim()) {
       done();
       return;
     }
+
+    if (voicePreset === "cloned" && clonedVoiceId) {
+      void apiFetch<{ audioBase64: string; mimeType: string }>("/api/ai/core-chat/voice-clone/speak", {
+        method: "POST",
+        body: JSON.stringify({ voiceId: clonedVoiceId, text: text.slice(0, 1_200) }),
+      })
+        .then((result) => {
+          const audio = new Audio(`data:${result.mimeType};base64,${result.audioBase64}`);
+          audio.onended = done;
+          audio.onerror = done;
+          return audio.play();
+        })
+        .catch((error) => {
+          setVoiceError("Voice clone gagal diputar: " + (error instanceof Error ? error.message : String(error)));
+          done();
+        });
+      return;
+    }
+
+    if (!("speechSynthesis" in window)) {
+      done();
+      return;
+    }
+
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 1_200));
     utterance.lang = "id-ID";
-    utterance.rate = 1;
-    utterance.pitch = voicePreset === "male" ? 0.86 : voicePreset === "female" ? 1.12 : 1;
+    utterance.rate =
+      voicePreset === "female_soft" ? 0.92 :
+      voicePreset === "female_firm" ? 1.08 :
+      1;
+    utterance.pitch =
+      voicePreset === "male" ? 0.86 :
+      voicePreset === "female_soft" ? 1.10 :
+      voicePreset === "female_firm" ? 1.02 :
+      1;
     const voice = selectedVoice();
     if (voice) utterance.voice = voice;
     utterance.onend = done;
     utterance.onerror = done;
     window.speechSynthesis.speak(utterance);
+  }
+
+  async function chooseImage(file: File | null) {
+    if (!file) return;
+    setAttachmentError("");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setAttachmentError("Gambar harus JPG, PNG, atau WebP.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setAttachmentError("Ukuran gambar maksimal 5 MB.");
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const base64 = dataUrl.split(",", 2)[1] || "";
+      setPendingImage({
+        name: file.name || "gambar",
+        mimeType: file.type as PendingImage["mimeType"],
+        base64,
+        dataUrl,
+      });
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function enrollVoiceClone(file: File | null) {
+    if (!file) return;
+    setVoiceCloneStatus("");
+    if (!file.type.startsWith("audio/")) {
+      setVoiceCloneStatus("Sampel harus berupa file audio.");
+      return;
+    }
+    if (file.size > MAX_VOICE_SAMPLE_BYTES) {
+      setVoiceCloneStatus("Sampel suara maksimal 10 MB.");
+      return;
+    }
+    setVoiceCloneBusy(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const base64 = dataUrl.split(",", 2)[1] || "";
+      const result = await apiFetch<{ voiceId: string; requiresVerification?: boolean }>("/api/ai/core-chat/voice-clone/enroll", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "AI Core - Suara Saya",
+          mimeType: file.type,
+          audioBase64: base64,
+          consent: true,
+        }),
+      });
+      setClonedVoiceId(result.voiceId);
+      setVoicePreset("cloned");
+      try {
+        localStorage.setItem(CLONED_VOICE_ID_KEY, result.voiceId);
+      } catch {
+        // Current session still has access to the enrolled voice.
+      }
+      setVoiceCloneStatus(
+        result.requiresVerification
+          ? "Sampel diterima. Provider meminta verifikasi tambahan sebelum suara dapat digunakan."
+          : "Suara Saya sudah terdaftar dan dipilih."
+      );
+    } catch (error) {
+      setVoiceCloneStatus(
+        "Voice clone belum dapat diaktifkan: " +
+          (error instanceof Error ? error.message : String(error))
+      );
+    } finally {
+      setVoiceCloneBusy(false);
+    }
   }
 
   function append(item: ChatMessage) {
@@ -451,7 +604,9 @@ export default function AiCoreChat() {
   async function submit(event?: FormEvent, overrideText?: string) {
     event?.preventDefault();
     const text = (overrideText ?? input).trim();
-    if (!text || busy) return;
+    const image = pendingImage;
+    if ((!text && !image) || busy) return;
+    const submittedText = text || "Analisis gambar ini.";
     const inputSource = lastInputSource;
 
     const context = messages
@@ -473,8 +628,15 @@ export default function AiCoreChat() {
       return;
     }
 
-    append({ id: messageId(), role: "user", text, createdAt: new Date().toISOString() });
+    append({
+      id: messageId(),
+      role: "user",
+      text: submittedText,
+      createdAt: new Date().toISOString(),
+      ...(image ? { image: { name: image.name, dataUrl: image.dataUrl } } : {}),
+    });
     setInput("");
+    setPendingImage(null);
     setLastInputSource("text");
     setBusy(true);
 
@@ -495,12 +657,13 @@ export default function AiCoreChat() {
           {
             method: "POST",
             body: JSON.stringify({
-              message: text,
+              message: submittedText,
               mode: "ask",
               modelPolicy: policy,
               conversationId,
               source: inputSource,
               context,
+              ...(image ? { image: { mimeType: image.mimeType, base64: image.base64 } } : {}),
             }),
           },
           ({ event: streamEvent, data }) => {
@@ -631,12 +794,13 @@ export default function AiCoreChat() {
       const response = await apiFetch<ChatResponse>("/api/ai/core-chat/messages", {
         method: "POST",
         body: JSON.stringify({
-          message: text,
+          message: submittedText,
           mode,
           modelPolicy: policy,
           conversationId,
           source: inputSource,
           context,
+          ...(image ? { image: { mimeType: image.mimeType, base64: image.base64 } } : {}),
           projectName: projectName.trim(),
           repository: repository.trim(),
           branch: branch.trim(),
@@ -815,6 +979,13 @@ export default function AiCoreChat() {
                             : { background: "#0C152A", color: "#DCE5F7", border: "1px solid #1E3057", borderBottomLeftRadius: 5 }
                       }
                     >
+                      {message.image && (
+                        <img
+                          src={message.image.dataUrl}
+                          alt={message.image.name}
+                          className="mb-2 max-h-64 max-w-full rounded-xl object-contain"
+                        />
+                      )}
                       {message.text || (streamingMessageId === message.id ? "AI Core mulai menjawab…" : "")}
                       {streamingMessageId === message.id && message.text && (
                         <span className="inline-block ml-1 w-1.5 h-4 align-middle animate-pulse" style={{ background: "#9D91FB" }} />
@@ -919,6 +1090,38 @@ export default function AiCoreChat() {
               </div>
 
               <form onSubmit={(event) => void submit(event)} className="rounded-2xl overflow-hidden" style={{ background: "#0A1327", border: "1px solid #263765" }}>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(event) => {
+                    void chooseImage(event.target.files?.[0] ?? null);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <input
+                  ref={voiceSampleInputRef}
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    void enrollVoiceClone(event.target.files?.[0] ?? null);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                {pendingImage && (
+                  <div className="mx-3 mt-3 flex items-center gap-3 rounded-xl p-2.5" style={{ background: "#0D1730", border: "1px solid #263765" }}>
+                    <img src={pendingImage.dataUrl} alt={pendingImage.name} className="h-16 w-16 rounded-lg object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs" style={{ color: "#DCE5F7" }}>{pendingImage.name}</div>
+                      <div className="text-[10px] mt-1" style={{ color: "#667AA2" }}>Gambar akan dianalisis AI Core saat dikirim.</div>
+                    </div>
+                    <button type="button" onClick={() => setPendingImage(null)} className="size-8 rounded-lg flex items-center justify-center" style={{ color: "#8DA1C8", border: "1px solid #263765" }} title="Hapus gambar">
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
                 <textarea
                   value={input}
                   onChange={(event) => {
@@ -937,7 +1140,17 @@ export default function AiCoreChat() {
                   style={{ color: "#E7EDFA" }}
                 />
                 <div className="px-3 pb-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={busy}
+                      className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40"
+                      style={{ background: "#101831", color: pendingImage ? "#C4B5FD" : "#9D91FB", border: "1px solid #263765" }}
+                      title="Upload gambar dari kamera atau galeri"
+                    >
+                      <ImagePlus className="size-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={toggleListening}
@@ -969,8 +1182,21 @@ export default function AiCoreChat() {
                     >
                       <option value="auto">Otomatis</option>
                       <option value="male">Pria</option>
-                      <option value="female">Wanita</option>
+                      <option value="female_soft">Wanita Lembut</option>
+                      <option value="female_firm">Wanita Tegas</option>
+                      {clonedVoiceId && <option value="cloned">Suara Saya</option>}
                     </select>
+                    <button
+                      type="button"
+                      onClick={() => voiceSampleInputRef.current?.click()}
+                      disabled={voiceCloneBusy}
+                      className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
+                      style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
+                      title="Daftarkan sampel suara Anda sendiri atau suara yang Anda punya izin untuk gunakan"
+                    >
+                      {voiceCloneBusy ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
+                      {clonedVoiceId ? "Ganti Suara Saya" : "Daftarkan Suara Saya"}
+                    </button>
                     <div className="text-[10px]" style={{ color: "#536A94" }}>
                       {listening
                         ? "Mendengarkan Bahasa Indonesia…"
@@ -990,11 +1216,13 @@ export default function AiCoreChat() {
                           ? "Auto routing aktif · jawaban local dulu lalu cloud; coding tetap dibagikan lewat orchestrator."
                           : "Auto routing aktif · jawaban memakai cloud; tindakan sistem tetap melalui guardrail."}
                   </div>
-                  <button type="submit" disabled={busy || !input.trim()} className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40" style={{ background: "#675ADB", color: "white" }}>
+                  <button type="submit" disabled={busy || (!input.trim() && !pendingImage)} className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40" style={{ background: "#675ADB", color: "white" }}>
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                   </button>
                 </div>
               </form>
+              {attachmentError && <div className="text-xs mt-2" style={{ color: "#FCA5A5" }}>{attachmentError}</div>}
+              {voiceCloneStatus && <div className="text-xs mt-2" style={{ color: voiceCloneStatus.startsWith("Voice clone belum") ? "#FCA5A5" : "#86EFAC" }}>{voiceCloneStatus}</div>}
               {voiceError && <div className="text-xs mt-2" style={{ color: "#FCA5A5" }}>{voiceError}</div>}
             </div>
           </div>
