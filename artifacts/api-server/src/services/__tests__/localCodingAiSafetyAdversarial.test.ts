@@ -55,6 +55,7 @@ vi.mock("../repositoryAnalyzerService.js", () => ({
     path: "/tmp/core-ai-safety-fixture",
     cleanup: true,
   })),
+  resolveRemoteBranchHead: vi.fn(async () => harness.state.remoteHead),
 }));
 
 vi.mock("node:child_process", () => ({
