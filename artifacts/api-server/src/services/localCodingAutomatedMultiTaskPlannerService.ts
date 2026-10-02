@@ -1112,6 +1112,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
       },
       timeoutMs: boundedPlannerTimeout(selection.timeoutMs),
       maxOutputTokens: selection.maxOutputTokens,
+      ...(plannerSignal ? { signal: plannerSignal } : {}),
     });
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
@@ -1187,6 +1188,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
             },
             timeoutMs: boundedPlannerTimeout(fallback.selection.timeoutMs),
             maxOutputTokens: fallback.selection.maxOutputTokens,
+            ...(plannerSignal ? { signal: plannerSignal } : {}),
           });
           selection = fallback.selection;
           selectedProviderSlug = fallbackProviderSlug;
@@ -1268,6 +1270,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
                 },
                 timeoutMs: boundedPlannerTimeout(cloudSelection.timeoutMs),
                 maxOutputTokens: cloudSelection.maxOutputTokens,
+                ...(plannerSignal ? { signal: plannerSignal } : {}),
               });
               selection = cloudSelection;
               selectedProviderSlug = cloudProviderSlug;
