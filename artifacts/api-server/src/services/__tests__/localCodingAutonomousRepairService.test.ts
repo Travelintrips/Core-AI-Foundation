@@ -7,7 +7,7 @@ const mockDbExecute = vi.hoisted(() => vi.fn());
 const mockDbSelect = vi.hoisted(() => vi.fn());
 
 vi.mock("@workspace/db", () => ({
-  db: { execute: mockDbExecute, select: mockDbSelect },
+  db: { execute: mockDbExecute, select: mockDbSelect, update: vi.fn() },
   withTransientDatabaseRetry: vi.fn(async (operation: () => Promise<unknown>) => operation()),
   aiCodingBridgeCommandsTable: { table: "commands" },
   aiCodingRunsTable: { table: "runs" },
@@ -482,5 +482,19 @@ describe("autonomous action budget behavior", () => {
     expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ action: "WAIT_TASK_GRAPH" });
     expect(dispatchReadyCodingWorkstreams).not.toHaveBeenCalled();
     expect(autonomous.cycle_count).toBe(40);
+  });
+});
+
+
+describe("autonomous terminal task status", () => {
+  it("persists COMPLETED when the verified orchestration reaches DONE", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('state.task.status !== "COMPLETED"');
+    expect(source).toContain('status: "COMPLETED"');
+    expect(source).toContain('status: "COMPLETED" },');
   });
 });
