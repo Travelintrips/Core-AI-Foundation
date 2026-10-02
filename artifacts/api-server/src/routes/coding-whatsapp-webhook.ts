@@ -10,6 +10,7 @@ import {
   decideCodingCriticalApproval,
   parseCriticalApprovalCommand,
 } from "../services/codingCriticalApprovalService.js";
+import { sendAiCoreWhatsappChatReply } from "../services/codingWhatsappNotificationService.js";
 
 const router = Router();
 
@@ -93,6 +94,84 @@ function verifySignature(rawBody: Buffer, supplied: string | undefined, secret: 
   }
 }
 
+function incomingMessageId(payload: IncomingEnvelope, rawBody: Buffer): string {
+  return typeof payload.message?.key?.id === "string" && payload.message.key.id.trim()
+    ? payload.message.key.id.trim()
+    : crypto.createHash("sha256").update(rawBody).digest("hex").slice(0, 32);
+}
+
+function whatsappConversationId(senderDigits: string): string {
+  return "wa-" + crypto.createHash("sha256").update(senderDigits, "utf8").digest("hex").slice(0, 32);
+}
+
+async function processGeneralWhatsappChat(input: {
+  sender: string;
+  messageId: string;
+  text: string;
+}): Promise<void> {
+  const adminKey = (process.env["ADMIN_API_KEY"] ?? "").trim();
+  if (!adminKey) {
+    logger.error("[coding-wa-inbound] ADMIN_API_KEY missing; general WhatsApp chat cannot call AI Core");
+    return;
+  }
+
+  const port = Number(process.env["PORT"] ?? "3000");
+  const baseUrl = `http://127.0.0.1:${Number.isFinite(port) && port > 0 ? port : 3000}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/ai/core-chat/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-admin-api-key": adminKey,
+      },
+      body: JSON.stringify({
+        message: input.text,
+        mode: "auto",
+        modelPolicy: "smart",
+        conversationId: whatsappConversationId(input.sender),
+        source: "whatsapp",
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    if (!response.ok) {
+      throw new Error(
+        typeof payload?.["error"] === "string"
+          ? payload["error"]
+          : `AI Core Chat HTTP ${response.status}`,
+      );
+    }
+
+    const reply =
+      typeof payload?.["reply"] === "string" && payload["reply"].trim()
+        ? payload["reply"].trim()
+        : "AI Core menerima pesan, tetapi tidak menghasilkan jawaban teks.";
+
+    const delivery = await sendAiCoreWhatsappChatReply({
+      to: input.sender,
+      inboundMessageId: input.messageId,
+      text: reply,
+    });
+
+    if (delivery.status !== "queued") {
+      logger.warn(
+        { delivery, inboundMessageId: input.messageId, senderSuffix: input.sender.slice(-4) },
+        "[coding-wa-inbound] general AI Core reply was not queued",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        inboundMessageId: input.messageId,
+        senderSuffix: input.sender.slice(-4),
+      },
+      "[coding-wa-inbound] general AI Core chat failed",
+    );
+  }
+}
+
 router.post(
   "/ai/coding/whatsapp/webhook",
   raw({ type: "application/json", limit: "512kb" }),
@@ -142,6 +221,11 @@ router.post(
     }
 
     const text = extractText(payload);
+    if (!text) {
+      res.status(202).json({ accepted: false, reason: "EMPTY_TEXT" });
+      return;
+    }
+    const messageId = incomingMessageId(payload, body);
 
     const approvalCommand = parseCriticalApprovalCommand(text);
     if (approvalCommand) {
@@ -174,7 +258,17 @@ router.post(
     }
 
     if (!/^coding(?:\s|:)/i.test(text)) {
-      res.status(202).json({ accepted: false, reason: "NOT_A_CODING_COMMAND" });
+      res.status(202).json({
+        accepted: true,
+        kind: "AI_CORE_CHAT",
+        queued: true,
+        messageId,
+      });
+      void processGeneralWhatsappChat({
+        sender,
+        messageId,
+        text,
+      });
       return;
     }
 
@@ -183,11 +277,6 @@ router.post(
       res.status(400).json({ error: "EMPTY_CODING_COMMAND" });
       return;
     }
-
-    const messageId =
-      typeof payload.message?.key?.id === "string" && payload.message.key.id.trim()
-        ? payload.message.key.id.trim()
-        : crypto.createHash("sha256").update(body).digest("hex").slice(0, 32);
 
     const result = await submitCodingBridgeCommand({
       externalCommandId: messageId,
