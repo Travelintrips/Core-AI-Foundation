@@ -817,44 +817,21 @@ export function renderAdminSemanticQueryResult(
   const row = result.rows[0] ?? {};
   const period =
     result.intent.timeRange ? " " + result.intent.timeRange.label : "";
-  const source =
-    result.sourceTable +
-    (result.valueColumn ? "." + result.valueColumn : "");
-  const timeDetail =
-    result.timeColumn ? "; waktu memakai " + result.timeColumn : "";
-
   const zeroDetail =
     result.matchedRows === 0
       ? " Tidak ada transaksi/record yang memenuhi filter pada periode tersebut."
       : "";
 
-  const summary =
+  // Keep user-visible semantic metric answers strictly scoped to the
+  // question. Provenance, confidence, database, timezone, and access-mode
+  // diagnostics remain available in structured execution metadata.
+  return (
     result.intent.metricLabel.charAt(0).toUpperCase() +
     result.intent.metricLabel.slice(1) +
     " " + result.intent.domain + period + ": " +
     formatSemanticValue(row.value, result.intent.valueKind) + "." +
-    zeroDetail;
-
-  // Simple count questions should read like a normal chat answer. Keep
-  // provenance/diagnostics in structured execution metadata instead of
-  // exposing database internals to the user.
-  if (result.intent.aggregation === "count") {
-    return summary;
-  }
-
-  return [
-    summary,
-    "Dihitung dari " + String(result.matchedRows) +
-      " record pada " + source + timeDetail +
-      "; database " + (result.sourceDatabaseId ?? "primary") +
-      "; zona waktu " + adminDbBusinessTimezone() + ".",
-    "Confidence semantic: " +
-      String(Math.round(result.confidence * 100)) + "%; " +
-      (result.statusFilterApplied
-        ? "status transaksi sukses terdeteksi dan difilter otomatis."
-        : "tidak ada filter status sukses yang perlu/berhasil diterapkan."),
-    "Akses: read-only Admin DB Query; 0 token LLM.",
-  ].join("\n");
+    zeroDetail
+  );
 }
 
 export function extractAdminDbNaturalLookup(
