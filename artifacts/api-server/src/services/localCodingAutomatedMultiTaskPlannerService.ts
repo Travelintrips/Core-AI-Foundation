@@ -525,6 +525,7 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
   timeoutMs: number;
   maxOutputTokens: number;
   requestId?: string;
+  signal?: AbortSignal;
 }): Promise<GeneratedMultiTaskPlan> {
   const prompt = buildAutomatedMultiTaskPlannerPrompt(input.context);
   const response = await invokePlannerModelWithBoundedRetry({
@@ -634,6 +635,7 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
       input.maxOutputTokens,
     ),
       timeoutMs: input.timeoutMs,
+      ...(input.signal ? { signal: input.signal } : {}),
     },
   });
 
