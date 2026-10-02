@@ -80,6 +80,7 @@ type CoreConfig = {
   autonomous: { configured: boolean; running: boolean; pollIntervalMs: number };
   codingModel: Record<string, unknown>;
   streaming?: { enabled: boolean; endpoint?: string; defaultPolicy?: string };
+  voice?: { enabled: boolean };
 };
 
 
@@ -311,6 +312,7 @@ export default function AiCoreChat() {
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     new URLSearchParams(window.location.search).get("standalone") === "1";
+  const voiceFeatureEnabled = config?.voice?.enabled === true;
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -452,7 +454,7 @@ export default function AiCoreChat() {
   }
 
   function startListening() {
-    if (!voiceSupported || busy || listening) return;
+    if (!voiceFeatureEnabled || !voiceSupported || busy || listening) return;
     const Constructor = speechRecognitionConstructor();
     if (!Constructor) return;
 
@@ -510,6 +512,10 @@ export default function AiCoreChat() {
   }
 
   function toggleListening() {
+    if (!voiceFeatureEnabled) {
+      setVoiceError("Voice sementara dinonaktifkan.");
+      return;
+    }
     if (!voiceSupported) {
       setVoiceError("Speech recognition belum didukung browser ini.");
       return;
@@ -527,7 +533,7 @@ export default function AiCoreChat() {
     const done = () => {
       if (onFinished) onFinished();
     };
-    if (!voiceReplyEnabled || !text.trim()) {
+    if (!voiceFeatureEnabled || !voiceReplyEnabled || !text.trim()) {
       done();
       return;
     }
@@ -594,6 +600,10 @@ export default function AiCoreChat() {
   }
 
   async function enrollVoiceClone(file: File | null) {
+    if (!voiceFeatureEnabled) {
+      setVoiceCloneStatus("Voice sementara dinonaktifkan.");
+      return;
+    }
     if (!file) return;
     setVoiceCloneStatus("");
     if (!file.type.startsWith("audio/")) {
@@ -1205,7 +1215,7 @@ export default function AiCoreChat() {
                     <button
                       type="button"
                       onClick={toggleListening}
-                      disabled={busy || !voiceSupported}
+                      disabled={busy || !voiceSupported || !voiceFeatureEnabled}
                       className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40"
                       style={{ background: handsFreeEnabled ? "#4C1D2B" : "#101831", color: handsFreeEnabled ? "#FDA4AF" : "#9D91FB", border: "1px solid #263765" }}
                       title={voiceSupported ? (handsFreeEnabled ? "Hentikan percakapan hands-free" : "Mulai percakapan hands-free") : "Speech recognition tidak tersedia"}
@@ -1218,9 +1228,10 @@ export default function AiCoreChat() {
                         window.speechSynthesis?.cancel();
                         setVoiceReplyEnabled((value) => !value);
                       }}
-                      className="size-9 rounded-xl flex items-center justify-center"
+                      disabled={!voiceFeatureEnabled}
+                      className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40"
                       style={{ background: "#101831", color: voiceReplyEnabled ? "#9D91FB" : "#63779E", border: "1px solid #263765" }}
-                      title="Aktif/nonaktifkan jawaban suara"
+                      title={voiceFeatureEnabled ? "Aktif/nonaktifkan jawaban suara" : "Voice sementara dinonaktifkan"}
                     >
                       {voiceReplyEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
                     </button>
@@ -1229,7 +1240,8 @@ export default function AiCoreChat() {
                       onChange={(event) => setVoicePreset(event.target.value as VoicePreset)}
                       className="h-9 rounded-xl px-2 text-[11px] outline-none"
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
-                      title="Pilih karakter suara jawaban"
+                      disabled={!voiceFeatureEnabled}
+                      title={voiceFeatureEnabled ? "Pilih karakter suara jawaban" : "Voice sementara dinonaktifkan"}
                     >
                       {VOICE_PRESET_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -1239,7 +1251,7 @@ export default function AiCoreChat() {
                     <button
                       type="button"
                       onClick={() => speakReply("Halo, ini contoh suara AI Core. Saya siap membantu Anda.")}
-                      disabled={!voiceReplyEnabled}
+                      disabled={!voiceFeatureEnabled || !voiceReplyEnabled}
                       className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
                       title="Preview suara yang dipilih"
@@ -1251,6 +1263,7 @@ export default function AiCoreChat() {
                       <input
                         type="checkbox"
                         checked={voiceCloneConsent}
+                        disabled={!voiceFeatureEnabled}
                         onChange={(event) => setVoiceCloneConsent(event.target.checked)}
                       />
                       Suara saya / saya berizin
@@ -1258,7 +1271,7 @@ export default function AiCoreChat() {
                     <button
                       type="button"
                       onClick={() => voiceSampleInputRef.current?.click()}
-                      disabled={voiceCloneBusy || !voiceCloneConsent}
+                      disabled={!voiceFeatureEnabled || voiceCloneBusy || !voiceCloneConsent}
                       className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
                       title={voiceCloneConsent ? "Daftarkan sampel suara (maksimal 6 MB)" : "Centang persetujuan kepemilikan/izin suara terlebih dahulu"}
@@ -1267,13 +1280,15 @@ export default function AiCoreChat() {
                       {clonedVoiceId ? "Ganti Suara Saya" : "Daftarkan Suara Saya"}
                     </button>
                     <div className="text-[10px]" style={{ color: "#536A94" }}>
-                      {listening
-                        ? "Mendengarkan Bahasa Indonesia…"
-                        : handsFreeEnabled
-                          ? "Hands-free aktif · bicara tanpa tombol Send"
-                          : voiceSupported
-                            ? "Voice ready · tekan mic sekali untuk percakapan otomatis"
-                            : "Voice input perlu browser yang mendukung SpeechRecognition"}
+                      {!voiceFeatureEnabled
+                        ? "Voice sementara dinonaktifkan"
+                        : listening
+                          ? "Mendengarkan Bahasa Indonesia…"
+                          : handsFreeEnabled
+                            ? "Hands-free aktif · bicara tanpa tombol Send"
+                            : voiceSupported
+                              ? "Voice ready · tekan mic sekali untuk percakapan otomatis"
+                              : "Voice input perlu browser yang mendukung SpeechRecognition"}
                     </div>
                   </div>
                   <div className="text-[10px]" style={{ color: "#536A94" }}>
