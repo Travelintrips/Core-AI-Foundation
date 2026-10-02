@@ -20,6 +20,7 @@ import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
+import aiCoreMcpOauthRouter from "./routes/ai-core-mcp-oauth.js";
 
 const app: Express = express();
 
@@ -122,6 +123,10 @@ app.use("/api", codingWhatsappWebhookRouter);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
+
+// OAuth discovery/authorization endpoints own their authentication and must be
+// reachable before the admin API guard. MCP tool execution remains protected.
+app.use(aiCoreMcpOauthRouter);
 
 // ── Trust proxy (Replit reverse proxy injects X-Forwarded-For) ───────────────
 // Without this express-rate-limit cannot identify individual client IPs and
