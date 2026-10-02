@@ -1,11 +1,16 @@
 import { timingSafeEqual } from "node:crypto";
-import { Router, type Request, type Response } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
+import {
+  oauthIssuer,
+  oauthResource,
+  verifyMcpAccessToken,
+} from "../services/aiCoreMcpOAuthService.js";
 
 const router = Router();
 const MCP_PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.0.0" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.1.0" };
 
 const SendCommandArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -32,15 +37,41 @@ function bearerToken(req: Request): string {
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
 }
 
-function authenticate(req: Request, res: Response): string | null {
-  const configured = process.env["AI_CORE_CHAT_CONNECTOR_KEY"]?.trim() ?? "";
+type McpIdentity =
+  | { kind: "legacy"; connectorKey: string; scopes: Set<string>; user: null }
+  | {
+      kind: "oauth";
+      connectorKey: string;
+      scopes: Set<string>;
+      user: Awaited<ReturnType<typeof verifyMcpAccessToken>>["user"];
+    };
+
+async function authenticate(req: Request): Promise<McpIdentity | null> {
   const supplied = bearerToken(req);
-  if (!configured || !supplied || !safeEqualSecret(supplied, configured)) {
-    res.setHeader("WWW-Authenticate", 'Bearer realm="ai-core-mcp"');
-    res.status(401).json({ error: "Unauthorized MCP request" });
+  if (!supplied) return null;
+
+  const connectorKey = process.env["AI_CORE_CHAT_CONNECTOR_KEY"]?.trim() ?? "";
+  if (connectorKey && safeEqualSecret(supplied, connectorKey)) {
+    return {
+      kind: "legacy",
+      connectorKey,
+      scopes: new Set(["ai_core.command", "ai_core.progress", "profile"]),
+      user: null,
+    };
+  }
+
+  try {
+    const verified = await verifyMcpAccessToken(supplied);
+    if (!connectorKey) return null;
+    return {
+      kind: "oauth",
+      connectorKey,
+      scopes: verified.scopes,
+      user: verified.user,
+    };
+  } catch {
     return null;
   }
-  return configured;
 }
 
 function rpcResult(id: unknown, result: unknown) {
@@ -55,11 +86,24 @@ function rpcError(id: unknown, code: number, message: string, data?: unknown) {
   };
 }
 
+function authChallenge(scope: string) {
+  const metadata = `${oauthIssuer()}/.well-known/oauth-protected-resource`;
+  return `Bearer resource_metadata="${metadata}", scope="${scope}", error="insufficient_scope", error_description="Authenticate to AI Core to continue"`;
+}
+
+function authRequiredResult(id: unknown, scope: string) {
+  return rpcResult(id, {
+    content: [{ type: "text", text: "Authentication required to use this AI Core tool." }],
+    _meta: { "mcp/www_authenticate": [authChallenge(scope)] },
+    isError: true,
+  });
+}
+
 const tools = [
   {
     name: "send_ai_core_command",
     description:
-      "Send a text instruction directly to AI Core Agent Mode. Use for coding, fixes, deployment work, audits, and other executable AI Core tasks.",
+      "Send a text instruction directly to AI Core Agent Mode. This can cause code, configuration, deployment, or other operational changes.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -74,6 +118,7 @@ const tools = [
         conversationId: { type: "string" },
       },
     },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.command"] }],
     annotations: {
       title: "Send AI Core Command",
       readOnlyHint: false,
@@ -94,6 +139,7 @@ const tools = [
         taskId: { type: "string", format: "uuid" },
       },
     },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
     annotations: {
       title: "Get AI Core Task Progress",
       readOnlyHint: true,
@@ -101,6 +147,37 @@ const tools = [
       idempotentHint: true,
       openWorldHint: false,
     },
+  },
+  {
+    name: "get_profile",
+    description:
+      "Return the internal AI Core profile represented by the current OAuth connection.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    outputSchema: {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        id: { type: "string", minLength: 1, pattern: "\\S" },
+        name: { type: "string" },
+        email: { type: "string" },
+        nickname: { type: "string" },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["profile"] }],
+    annotations: {
+      title: "Get AI Core Profile",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    _meta: { "openai/profile": true },
   },
 ];
 
@@ -123,15 +200,14 @@ async function callAiCore(path: string, init: RequestInit, key: string) {
     // Keep text payload when upstream is not JSON.
   }
   if (!response.ok) {
-    throw new Error(`AI Core upstream HTTP ${response.status}: ${typeof payload === "string" ? payload.slice(0, 500) : JSON.stringify(payload)}`);
+    throw new Error(
+      `AI Core upstream HTTP ${response.status}: ${typeof payload === "string" ? payload.slice(0, 500) : JSON.stringify(payload)}`,
+    );
   }
   return payload;
 }
 
 router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
-  const key = authenticate(req, res);
-  if (!key) return;
-
   const body = req.body as {
     jsonrpc?: unknown;
     id?: unknown;
@@ -181,6 +257,26 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
     return;
   }
 
+  const requiredScope =
+    params.name === "send_ai_core_command"
+      ? "ai_core.command"
+      : params.name === "get_ai_core_task_progress"
+        ? "ai_core.progress"
+        : params.name === "get_profile"
+          ? "profile"
+          : "";
+
+  if (!requiredScope) {
+    res.status(200).json(rpcError(body.id ?? null, -32602, `Unknown tool: ${params.name}`));
+    return;
+  }
+
+  const identity = await authenticate(req);
+  if (!identity || !identity.scopes.has(requiredScope)) {
+    res.status(200).json(authRequiredResult(body.id ?? null, requiredScope));
+    return;
+  }
+
   try {
     let payload: unknown;
     if (params.name === "send_ai_core_command") {
@@ -195,18 +291,25 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
             source: "text",
           }),
         },
-        key,
+        identity.connectorKey,
       );
     } else if (params.name === "get_ai_core_task_progress") {
       const parsed = TaskProgressArgs.parse(params.arguments ?? {});
       payload = await callAiCore(
         `/ai/core-chat/tasks/${encodeURIComponent(parsed.taskId)}/progress`,
         { method: "GET" },
-        key,
+        identity.connectorKey,
       );
     } else {
-      res.status(200).json(rpcError(body.id ?? null, -32602, `Unknown tool: ${params.name}`));
-      return;
+      if (!identity.user) {
+        res.status(200).json(authRequiredResult(body.id ?? null, "profile"));
+        return;
+      }
+      payload = {
+        id: `internal-${identity.user.id}`,
+        email: identity.user.email,
+        nickname: identity.user.email,
+      };
     }
 
     res.status(200).json(
@@ -228,8 +331,11 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
 });
 
 router.get("/ai/core-chat/mcp", (_req, res): void => {
-  res.setHeader("Allow", "POST");
-  res.status(405).json({ error: "Use MCP Streamable HTTP POST requests." });
+  res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${oauthIssuer()}/.well-known/oauth-protected-resource"`);
+  res.status(405).json({
+    error: "Use MCP Streamable HTTP POST requests.",
+    resource: oauthResource(),
+  });
 });
 
 export default router;
