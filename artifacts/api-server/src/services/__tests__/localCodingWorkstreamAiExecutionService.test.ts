@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWorkstreamMaterializationClonePlan,
   decideWorkstreamAiAutoRepair,
   hashWorkstreamAnalyzerResult,
   manualAiPatchReviewReason,
@@ -253,13 +254,29 @@ describe("workstream AI isolated branch binding", () => {
 
 
 describe("approved workstream candidate materialization branch binding", () => {
-  it("uses the authorized workstream branch rather than the moving parent branch", () => {
-    const parentBranch = "main";
-    const authorizedBranch = "ai-core/0dd869883fb3/ws-001-a11";
-    const materializationSourceBranch = authorizedBranch;
+  it("clones the real remote source branch and recreates the authorized synthetic branch locally", () => {
+    expect(
+      buildWorkstreamMaterializationClonePlan({
+        parentBranch: "main",
+        authorizedBranch: "ai-core/0dd869883fb3/ws-001-a11",
+      }),
+    ).toEqual({
+      sourceBranch: "main",
+      isolatedBranchName: "ai-core/0dd869883fb3/ws-001-a11",
+    });
+  });
 
-    expect(materializationSourceBranch).toBe(authorizedBranch);
-    expect(materializationSourceBranch).not.toBe(parentBranch);
+  it("uses the real CI repair branch when the authorized branch already exists remotely", () => {
+    expect(
+      buildWorkstreamMaterializationClonePlan({
+        parentBranch: "main",
+        authorizedBranch: "fix/ci-repair",
+        ciRepairBranch: "fix/ci-repair",
+      }),
+    ).toEqual({
+      sourceBranch: "fix/ci-repair",
+      isolatedBranchName: "fix/ci-repair",
+    });
   });
 });
 
