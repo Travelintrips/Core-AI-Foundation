@@ -22,7 +22,10 @@ import {
 } from "./localCodingEngineService.js";
 import type { LocalFailureContext } from "./localCodingFailureDiagnosticService.js";
 import type { LocalFailureRecoveryContext } from "./localCodingFailureRecoveryService.js";
-import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
+import {
+  prepareRepositoryWorkspace,
+  resolveRemoteBranchHead,
+} from "./repositoryAnalyzerService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -317,27 +320,25 @@ function validateApprovedPackageBinding(
 }
 
 async function assertRemoteHeadCurrent(context: HandoffContext): Promise<void> {
-  const workspace = await prepareRepositoryWorkspace(
-    context.task.repository,
-    context.task.branch,
-  );
-  if (!workspace.cleanup) {
+  let actualHead: string;
+  try {
+    actualHead = await resolveRemoteBranchHead(
+      context.task.repository,
+      context.task.branch,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new LocalAiHandoffError(
-      "AI handoff validation only verifies against an isolated remote clone",
+      `AI handoff could not verify remote repository HEAD: ${message.slice(0, 500)}`,
       "APPROVAL_FAILED",
     );
   }
 
-  try {
-    const actualHead = (await git(workspace.path, ["rev-parse", "HEAD"])).toLowerCase();
-    if (actualHead !== context.baseHeadSha) {
-      throw new LocalAiHandoffError(
-        `Repository HEAD changed from ${context.baseHeadSha} to ${actualHead}; prepare the AI handoff again`,
-        "STALE_HEAD",
-      );
-    }
-  } finally {
-    await rm(workspace.path, { recursive: true, force: true }).catch(() => undefined);
+  if (actualHead !== context.baseHeadSha) {
+    throw new LocalAiHandoffError(
+      `Repository HEAD changed from ${context.baseHeadSha} to ${actualHead}; prepare the AI handoff again`,
+      "STALE_HEAD",
+    );
   }
 }
 

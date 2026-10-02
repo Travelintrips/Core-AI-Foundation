@@ -50,7 +50,7 @@ const MAX_FILES = 120;
 const MAX_READ_BYTES = 400_000;
 const MAX_FILE_BYTES = 80_000;
 const CLONE_TIMEOUT_MS = 120_000;
-const PRIMARY_CLONE_DEPTH = 20;
+const PRIMARY_CLONE_DEPTH = 1;
 const FALLBACK_CLONE_DEPTH = 1;
 let cloneQueueTail: Promise<void> = Promise.resolve();
 const IGNORED_DIRECTORIES = new Set([
@@ -334,9 +334,33 @@ export async function configureIsolatedRepositoryWorkspace(
       },
     );
   } catch {
-    throw new Error(
-      `Approved repository base SHA is unavailable in isolated workspace: expected ${normalizedBaseSha}, cloned HEAD ${actualHead}`,
-    );
+    // Keep the common path fast with a depth-1 clone. If the approved commit
+    // is no longer the branch tip, fetch only that exact commit instead of
+    // cloning a wider history window for every coding job.
+    try {
+      await execFileAsync(
+        "git",
+        ["fetch", "--depth", "1", "origin", normalizedBaseSha],
+        {
+          cwd: workspace,
+          timeout: CLONE_TIMEOUT_MS,
+          maxBuffer: 64 * 1024,
+        },
+      );
+      await execFileAsync(
+        "git",
+        ["cat-file", "-e", `${normalizedBaseSha}^{commit}`],
+        {
+          cwd: workspace,
+          timeout: 15_000,
+          maxBuffer: 64 * 1024,
+        },
+      );
+    } catch {
+      throw new Error(
+        `Approved repository base SHA is unavailable in isolated workspace: expected ${normalizedBaseSha}, cloned HEAD ${actualHead}`,
+      );
+    }
   }
 
   await execFileAsync(
@@ -350,7 +374,7 @@ export async function configureIsolatedRepositoryWorkspace(
   );
 }
 
-function normalizeRemoteRepository(repository: string): string {
+export function normalizeRemoteRepository(repository: string): string {
   if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
     return `https://github.com/${repository.replace(/\/+$/, "")}.git`;
   }
@@ -371,6 +395,42 @@ function normalizeRemoteRepository(repository: string): string {
     throw new Error("Repository Analyzer only accepts HTTPS GitHub or GitLab targets");
   }
   return parsed.toString();
+}
+
+export async function resolveRemoteBranchHead(
+  repository: string,
+  branch: string,
+): Promise<string> {
+  const remote = normalizeRemoteRepository(repository);
+  if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.startsWith("-")) {
+    throw new Error("Repository branch contains unsupported characters");
+  }
+
+  const result = await execFileAsync(
+    "git",
+    ["ls-remote", "--heads", remote, `refs/heads/${branch}`],
+    {
+      timeout: 20_000,
+      maxBuffer: 64 * 1024,
+      env: buildRepositoryCloneEnvironment(remote),
+    },
+  );
+  const raw =
+    typeof result === "string" || Buffer.isBuffer(result)
+      ? result
+      : (result as { stdout?: unknown } | null | undefined)?.stdout;
+  const stdout = Buffer.isBuffer(raw)
+    ? raw.toString("utf8")
+    : raw instanceof Uint8Array
+      ? Buffer.from(raw).toString("utf8")
+      : typeof raw === "string"
+        ? raw
+        : "";
+  const head = stdout.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  if (!/^[0-9a-f]{40}$/.test(head)) {
+    throw new Error(`Repository branch HEAD could not be resolved for ${branch}`);
+  }
+  return head;
 }
 
 export async function prepareRepositoryWorkspace(
