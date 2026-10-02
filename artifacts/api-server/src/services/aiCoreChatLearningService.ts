@@ -103,6 +103,43 @@ export async function promoteExplicitChatLearning(
   return true;
 }
 
+
+export async function retrieveRecentChatContext(
+  scope: ChatLearningScope,
+  limit = 12,
+): Promise<Array<{ role: "user" | "assistant"; text: string }>> {
+  const sessionId = scope.sessionId?.trim();
+  if (!sessionId) return [];
+
+  const rows = await db
+    .select({
+      content: aiMemoryTable.content,
+      metadata: aiMemoryTable.metadata,
+      createdAt: aiMemoryTable.createdAt,
+    })
+    .from(aiMemoryTable)
+    .where(
+      and(
+        eq(aiMemoryTable.agentId, "ai-core-chat"),
+        eq(aiMemoryTable.memoryType, "chat_event"),
+        eq(aiMemoryTable.sessionId, sessionId),
+      ),
+    )
+    .orderBy(desc(aiMemoryTable.createdAt))
+    .limit(Math.max(1, Math.min(limit, 12)));
+
+  return rows
+    .reverse()
+    .flatMap((row) => {
+      const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+      const role = metadata["role"];
+      if (role !== "user" && role !== "assistant") return [];
+      const text = row.content.trim();
+      if (!text) return [];
+      return [{ role, text }];
+    });
+}
+
 export async function retrieveChatLearnings(
   scope: ChatLearningScope,
   limit = 12,
