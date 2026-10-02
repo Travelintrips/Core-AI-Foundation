@@ -109,7 +109,7 @@ import {
 } from "../services/aiCoreConversationService.js";
 
 const router = Router();
-const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] === "true";
+const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] !== "false";
 
 const ChatRequest = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -275,7 +275,7 @@ async function analyzeChatImage(
   const apiKey = getProviderApiKey("openai");
   if (!apiKey) {
     throw new Error(
-      "Upload gambar membutuhkan OPENAI_API_KEY pada production AI Core. Gambar tidak disimpan.",
+      "Vision AI Core belum dikonfigurasi: OPENAI_API_KEY tidak tersedia. Gambar tidak disimpan.",
     );
   }
 
