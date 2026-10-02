@@ -89,12 +89,7 @@ export async function dispatchExternalAgentWork(input: {
 
   const registry = await getExternalAgentRegistrySnapshot();
   const agent = registry.find((item) => item.clientId === input.clientId);
-  if (!agent?.eligible) {
-    throw new ExternalAgentDispatchError(
-      "AGENT_UNAVAILABLE",
-      "External agent is not healthy and active in the AI Core registry.",
-    );
-  }
+  const coldStart = !agent?.eligible;
 
   const externalCommandId = `ai-core-agent-${randomUUID()}`;
   const submitted = await submitCodingBridgeCommand({
@@ -116,6 +111,7 @@ export async function dispatchExternalAgentWork(input: {
       requestedAt: new Date().toISOString(),
       executionBoundary: "role-scoped",
       requiredCapability,
+      coldStart,
       criticalActionsRequireAiCoreApproval: true,
     },
   });
