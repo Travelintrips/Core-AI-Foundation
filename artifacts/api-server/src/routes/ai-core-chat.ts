@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -89,6 +89,7 @@ import { streamCloudChatNoFallback } from "../services/aiChatStreamingService.js
 import { getProviderApiKey } from "../services/aiSecretService.js";
 import { deactivateRegisteredModel } from "../services/aiModelService.js";
 import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
+import { waitForCodingWhatsappDelivery } from "../services/codingWhatsappNotificationService.js";
 import {
   appendLearningsToMessage,
   promoteExplicitChatLearning,
@@ -2080,6 +2081,131 @@ router.post("/ai/core-chat/voice-clone/speak", async (req, res): Promise<void> =
     });
   } catch (error) {
     res.status(503).json({ error: safeProviderFailure(error) });
+  }
+});
+
+router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
+  const secret = (process.env["AI_CODING_WA_INCOMING_SECRET"] ?? "").trim();
+  const senderConfig = (
+    process.env["AI_CORE_WA_ALLOWED_SENDERS"] ??
+    process.env["AI_CODING_WA_ALLOWED_SENDERS"] ??
+    ""
+  ).trim();
+  const sender = senderConfig
+    .split(",")
+    .map((value) => value.replace(/\D/g, ""))
+    .find(Boolean) ?? "";
+
+  if (!secret || !sender) {
+    res.status(503).json({
+      ok: false,
+      error: "AI_CORE_WA_E2E_NOT_CONFIGURED",
+      configured: {
+        incomingSecret: Boolean(secret),
+        allowedSender: Boolean(sender),
+      },
+    });
+    return;
+  }
+
+  const incomingMessageId = `e2e-${randomUUID()}`;
+  const payload = {
+    event: "message.received",
+    ...(process.env["AI_CORE_WA_E2E_DEVICE_ID"]?.trim()
+      ? { deviceId: process.env["AI_CORE_WA_E2E_DEVICE_ID"]!.trim() }
+      : {}),
+    senderPhone: sender,
+    message: {
+      key: {
+        id: incomingMessageId,
+        remoteJid: `${sender}@s.whatsapp.net`,
+        fromMe: false,
+      },
+      message: {
+        conversation: "halo",
+      },
+    },
+  };
+
+  const rawBody = Buffer.from(JSON.stringify(payload), "utf8");
+  const signature = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const port = (process.env["PORT"] ?? "3000").trim() || "3000";
+
+  try {
+    const webhookResponse = await fetch(
+      `http://127.0.0.1:${port}/api/ai/coding/whatsapp/webhook`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-cst-wa-signature": signature,
+        },
+        body: rawBody,
+        signal: AbortSignal.timeout(90_000),
+      },
+    );
+    const webhookBody = await webhookResponse.json().catch(() => null) as
+      | Record<string, unknown>
+      | null;
+
+    const outboundMessageId =
+      webhookBody && typeof webhookBody["messageId"] === "string"
+        ? webhookBody["messageId"]
+        : null;
+    if (
+      !webhookResponse.ok ||
+      webhookBody?.["kind"] !== "AI_CORE_CHAT" ||
+      webhookBody?.["replied"] !== true ||
+      !outboundMessageId
+    ) {
+      res.status(502).json({
+        ok: false,
+        error: "AI_CORE_WA_E2E_WEBHOOK_FAILED",
+        webhookStatus: webhookResponse.status,
+        kind: webhookBody?.["kind"] ?? null,
+        replied: webhookBody?.["replied"] ?? false,
+        route: webhookBody?.["route"] ?? null,
+      });
+      return;
+    }
+
+    const delivery = await waitForCodingWhatsappDelivery(outboundMessageId, {
+      timeoutMs: 45_000,
+      pollIntervalMs: 1_000,
+    });
+    if (delivery.status !== "sent") {
+      res.status(502).json({
+        ok: false,
+        error: "AI_CORE_WA_E2E_DELIVERY_FAILED",
+        webhookStatus: webhookResponse.status,
+        route: webhookBody?.["route"] ?? null,
+        delivery,
+        senderSuffix: sender.slice(-4),
+      });
+      return;
+    }
+
+    res.status(200).json({
+      ok: true,
+      webhookStatus: webhookResponse.status,
+      route: webhookBody?.["route"] ?? null,
+      provider: webhookBody?.["provider"] ?? null,
+      model: webhookBody?.["model"] ?? null,
+      senderSuffix: sender.slice(-4),
+      delivery: {
+        status: delivery.status,
+        messageId: delivery.messageId,
+        sentAt: delivery.sentAt ?? null,
+        waMessageId: delivery.waMessageId ?? null,
+      },
+    });
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      error: "AI_CORE_WA_E2E_REQUEST_FAILED",
+      detail: safeProviderFailure(error),
+      senderSuffix: sender.slice(-4),
+    });
   }
 });
 
