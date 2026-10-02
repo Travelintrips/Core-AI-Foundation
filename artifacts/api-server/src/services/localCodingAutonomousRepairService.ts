@@ -882,6 +882,44 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       }
     }
 
+    const candidateApprovalAdvanced =
+      /AI candidate patch is not eligible for explicit approval/i.test(message);
+
+    if (candidateApprovalAdvanced) {
+      const graph = await getLatestCodingTaskGraph(taskId).catch(() => null);
+      const review = graph?.workstreams.find((item) => item.status === "REVIEW_REQUIRED");
+      const execution =
+        review?.resultJson && isRecord(review.resultJson.workstreamAiExecution)
+          ? review.resultJson.workstreamAiExecution
+          : null;
+      const alreadyAdvanced =
+        execution?.status === "CANDIDATE_READY" &&
+        (execution.reviewStatus === "APPROVED" ||
+          execution.nextAction === "REVIEW_WORKSTREAM" ||
+          execution.commitCreated === true ||
+          execution.pushed === true);
+
+      if (alreadyAdvanced) {
+        const action = "CONTINUE_AFTER_AI_PATCH_APPROVAL_RACE";
+        await setState(taskId, "ACTIVE", action, null);
+        await logAudit(
+          "coding-autonomous",
+          "ai_patch_approval_race_advanced",
+          taskId,
+          "coding_task",
+          "success",
+          {
+            workstreamId: review?.id ?? null,
+            reviewStatus: execution?.reviewStatus ?? null,
+            nextAction: execution?.nextAction ?? null,
+            commitCreated: execution?.commitCreated ?? null,
+            pushed: execution?.pushed ?? null,
+          },
+        ).catch(() => undefined);
+        return { taskId, status: "ACTIVE", action };
+      }
+    }
+
     const handoffApprovalAdvanced =
       /Coding task is not at the APPROVE_AI_HANDOFF gate/i.test(message) &&
       state?.task.status === "READY_REVIEW" &&
