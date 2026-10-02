@@ -721,7 +721,9 @@ export async function continueCodingOrchestration(
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
     if (localPlan?.status === "AI_REQUIRED") {
-      let autonomousState: Awaited<ReturnType<typeof getAutonomousCodingTaskStatus>>;
+      let autonomousState:
+        | Awaited<ReturnType<typeof getAutonomousCodingTaskStatus>>
+        | null;
       let autonomousStateReadable = true;
 
       try {
