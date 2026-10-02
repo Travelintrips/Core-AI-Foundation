@@ -72,6 +72,7 @@ import { useLang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useCodingTaskPolling } from "./codingWorkspacePolling";
 import { codingRunPresentationError, codingRunPresentationStatus } from "./codingRunPresentation";
+import { deriveCodingLiveProgress, formatCodingElapsed } from "./codingLiveProgress";
 
 const taskSchema = z.object({
   projectName: z.string().trim().min(1, "Project is required").max(200),
@@ -409,11 +410,14 @@ type RepositoryAnalyzerUiResult = {
     sessionId?: string;
     status?: string;
     nextAction?: string;
+    activeAnalyzerJobId?: number;
     stages: Array<{
       id?: string;
       label?: string;
       status?: string;
       detail?: string;
+      startedAt?: string;
+      completedAt?: string;
     }>;
   };
   implementationPlan?: {
@@ -1308,6 +1312,7 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             sessionId: typeof orchestrationValue.sessionId === "string" ? orchestrationValue.sessionId : undefined,
             status: typeof orchestrationValue.status === "string" ? orchestrationValue.status : undefined,
             nextAction: typeof orchestrationValue.nextAction === "string" ? orchestrationValue.nextAction : undefined,
+            activeAnalyzerJobId: typeof orchestrationValue.activeAnalyzerJobId === "number" ? orchestrationValue.activeAnalyzerJobId : undefined,
             stages: Array.isArray(orchestrationValue.stages)
               ? orchestrationValue.stages.filter(
                   (item): item is NonNullable<RepositoryAnalyzerUiResult["orchestration"]>["stages"][number] =>
@@ -1806,6 +1811,15 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const [commitPending, setCommitPending] = useState(false);
   const [prVerifyPending, setPrVerifyPending] = useState(false);
   const [mergePending, setMergePending] = useState(false);
+  const [progressNow, setProgressNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const activeStatus = detail?.task?.status;
+    if (!activeStatus || !ACTIVE_STATUSES.has(activeStatus)) return;
+    setProgressNow(Date.now());
+    const timer = window.setInterval(() => setProgressNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [detail?.task?.status]);
 
   useEffect(() => {
     if (detail?.task) {
@@ -1843,23 +1857,20 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const displayedResultSummary = analyzerResult?.localPatchApproval
     ? task.resultSummary
     : analyzerResult?.summary ?? task.resultSummary;
-  const activeOrchestrationStage = analyzerResult?.orchestration?.stages.find(
-    (stage) => stage.status === "RUNNING",
+  const liveProgress = deriveCodingLiveProgress({
+    taskStatus: task.status,
+    runStatus: activeRun?.status ?? null,
+    agentName: activeRun?.agentName ?? null,
+    runStartedAt: activeRun?.startedAt ?? null,
+    orchestration: analyzerResult?.orchestration ?? null,
+  });
+  const activeRunProgressLabel = liveProgress.label;
+  const activeRunProgressDetail = liveProgress.detail;
+  const showLiveProgress = ACTIVE_STATUSES.has(task.status) || hasActiveRun;
+  const activeRunElapsed = formatCodingElapsed(
+    liveProgress.startedAt ?? activeRun?.startedAt ?? null,
+    progressNow,
   );
-  const activeRunProgressLabel =
-    activeOrchestrationStage?.label ??
-    (task.status === CodingTaskStatus.ANALYZING
-      ? "Analyzing repository"
-      : task.status === CodingTaskStatus.CODING
-        ? "Preparing coding work"
-        : task.status === CodingTaskStatus.TESTING
-          ? "Running verification"
-          : task.status === CodingTaskStatus.COMMITTING
-            ? "Preparing reviewed changes"
-            : activeRun?.agentName ?? "Agent running");
-  const activeRunProgressDetail =
-    activeOrchestrationStage?.detail ??
-    "The run is active in the background. This panel refreshes automatically.";
   const canApprovePlan =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
@@ -3631,7 +3642,39 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
             });
             return <div key={run.id} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-run-${run.id}`}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm text-slate-300">{run.agentName}</span><span className={cn("text-[10px] font-semibold uppercase tracking-wider", displayedRunStatus === "FAILED" ? "text-rose-300" : displayedRunStatus === "COMPLETED" ? "text-emerald-300" : "text-amber-300")}>{t(`pages.codingWorkspace.runStatuses.${displayedRunStatus.toLowerCase()}`)}</span></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-600">{run.startedAt ? formatDate(run.startedAt, lang, true) : "—"}{run.finishedAt && <><span>→</span>{formatDate(run.finishedAt, lang, true)}</>}</div>{displayedRunError && <p className="mt-2 text-xs leading-5 text-rose-300">{displayedRunError}</p>}{run.logs && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-cyan-300">{t("pages.codingWorkspace.runLogs")}</summary><pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 font-mono text-[10px] leading-5 text-slate-500">{run.logs}</pre></details>}</div>;
           })}</div>}</section>
-          <section className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium text-slate-200">{t("pages.codingWorkspace.runAgent")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{t("pages.codingWorkspace.runAgentHint")}</p>{hasActiveRun && <div className="mt-3 rounded-md border border-cyan-300/10 bg-[#07101d] px-3 py-2" data-testid="coding-agent-progress"><div className="flex items-center gap-2 text-[11px] font-medium text-cyan-200"><CircleDot className="size-3 animate-pulse" />{activeRunProgressLabel}</div><p className="mt-1 text-[10px] leading-4 text-slate-500">{activeRunProgressDetail}</p></div>}</div><Button onClick={runAgent} disabled={startCodingRun.isPending || !canRunAgent} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />Starting agent</> : hasActiveRun ? <><Clock3 />Agent running</> : explicitGateLocked ? <><LockKeyhole />Explicit gate required</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
+          <section className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium text-slate-200">{t("pages.codingWorkspace.runAgent")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{t("pages.codingWorkspace.runAgentHint")}</p>{showLiveProgress && (
+  <div className="mt-3 rounded-md border border-cyan-300/10 bg-[#07101d] px-3 py-3" data-testid="coding-agent-progress">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2 text-[11px] font-medium text-cyan-200">
+        <CircleDot className="size-3 animate-pulse" />
+        {activeRunProgressLabel}
+      </div>
+      <div className="font-mono text-[9px] text-slate-500">
+        {liveProgress.phase} · {liveProgress.percent}% · {activeRunElapsed}
+      </div>
+    </div>
+    <p className="mt-1.5 text-[10px] leading-4 text-slate-400">{activeRunProgressDetail}</p>
+    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+      <div
+        className="h-full rounded-full bg-cyan-300 transition-[width] duration-500"
+        style={{ width: `${Math.min(100, Math.max(0, liveProgress.percent))}%` }}
+      />
+    </div>
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[9px] text-slate-600">
+      <span>task {task.status}</span>
+      <span>run {activeRun?.status ?? "waiting"}</span>
+      <span>updated {formatDate(task.updatedAt, lang, true)}</span>
+      {analyzerResult?.orchestration?.nextAction && (
+        <span>next {analyzerResult.orchestration.nextAction}</span>
+      )}
+    </div>
+    {liveProgress.blockerJobId != null && (
+      <div className="mt-2 rounded border border-amber-300/15 bg-amber-300/[0.035] px-2 py-1.5 font-mono text-[9px] text-amber-200" data-testid="coding-progress-blocker">
+        waiting on analyzer job #{liveProgress.blockerJobId}
+      </div>
+    )}
+  </div>
+)}</div><Button onClick={runAgent} disabled={startCodingRun.isPending || !canRunAgent} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />Starting agent</> : hasActiveRun ? <><Clock3 />Agent running</> : explicitGateLocked ? <><LockKeyhole />Explicit gate required</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
           <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><FileCode2 className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.changes")}</div><span className="font-mono text-[10px] text-slate-600">{detail.changes.length.toString().padStart(2, "0")}</span></div>{detail.changes.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">{t("pages.codingWorkspace.noChanges")}</p> : <div className="space-y-2">{detail.changes.map((change) => <div key={change.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-change-${change.id}`}><span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold", change.changeType === "ADDED" ? "bg-emerald-400/10 text-emerald-300" : change.changeType === "DELETED" ? "bg-rose-400/10 text-rose-300" : "bg-cyan-400/10 text-cyan-300")}>{change.changeType === "ADDED" ? "+" : change.changeType === "DELETED" ? "−" : "M"}</span><div className="min-w-0 flex-1"><div className="truncate font-mono text-xs text-slate-300">{change.filePath}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">{t(`pages.codingWorkspace.changeTypes.${change.changeType.toLowerCase()}`)} · {formatDate(change.createdAt, lang)}</div></div></div>)}</div>}</section>
         </div>
          <section className="border-t border-white/[0.07] pt-5"><div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><GitCommitHorizontal className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.updateStatus")}</div><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.status")}</span><select value={status} onChange={(event) => setStatus(event.target.value as CodingTaskStatus)} disabled={explicitGateLocked} className="h-9 w-full rounded-md border border-white/10 bg-[#091222] px-3 text-xs text-slate-200 outline-none focus:border-cyan-300/50 disabled:cursor-not-allowed disabled:opacity-50" data-testid="select-coding-status">{STATUSES.map((item) => <option key={item} value={item}>{t(`pages.codingWorkspace.statuses.${item.toLowerCase()}`)}</option>)}</select></label><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.commitSha")}</span><div className="relative"><Copy className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={commitSha} onChange={(event) => setCommitSha(event.target.value)} disabled={explicitGateLocked} className="h-9 border-white/10 bg-[#091222] pl-9 font-mono text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50" placeholder="optional" data-testid="input-coding-commit-sha" /></div></label></div>{explicitGateLocked && <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-300"><LockKeyhole className="size-3" />Status and commit SHA are locked while <span className="font-mono">{currentNextAction}</span> requires its explicit gate action.</div>}<label className="mt-3 block space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.resultSummary")}</span><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} className="resize-y border-white/10 bg-[#091222] text-xs leading-5 text-slate-200 placeholder:text-slate-600" placeholder="Add a concise outcome for reviewers." data-testid="input-coding-result-summary" /></label><Button onClick={update} disabled={updateTask.isPending} className="mt-3 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-update-coding-task">{updateTask.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.updating")}</> : <><CheckCircle2 />{t("pages.codingWorkspace.saveUpdate")}</>}</Button></section>
@@ -3690,7 +3733,11 @@ export default function CodingWorkspace() {
     void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
   }, [detailQuery.refetch, queryClient]);
   useCodingTaskPolling(
-    Boolean(selectedId) && (hasActiveRun || queuedAiPolling),
+    Boolean(selectedId) && (
+      hasActiveRun ||
+      queuedAiPolling ||
+      Boolean(selectedPresentationStatus && ACTIVE_STATUSES.has(selectedPresentationStatus))
+    ),
     pollCodingTask,
   );
 
