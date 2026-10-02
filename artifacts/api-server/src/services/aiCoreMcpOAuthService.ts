@@ -32,7 +32,10 @@ export function isAllowedChatGptClient(clientId: string): boolean {
     /^https:\/\/chatgpt\.com\/oauth\/[^/]+\/client\.json$/.test(clientId);
 }
 
-export function isAllowedChatGptRedirect(uri: string): boolean {
+export function isAllowedChatGptRedirect(clientId: string, uri: string): boolean {
+  if (clientId === "https://chatgpt.com/oauth/codex/client.json") {
+    return uri === "http://127.0.0.1/callback" || uri === "http://localhost/callback";
+  }
   if (uri === "https://chatgpt.com/connector_platform_oauth_redirect") return true;
   return /^https:\/\/chatgpt\.com\/connector\/oauth\/[^/]+$/.test(uri);
 }
