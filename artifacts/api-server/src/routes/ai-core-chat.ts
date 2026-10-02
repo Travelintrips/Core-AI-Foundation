@@ -554,11 +554,60 @@ async function resolveLocalSelection(): Promise<
   return { ok: true, selection: local.selection };
 }
 
+function configuredCloudSelectionFallback(
+  workload: AiCoreWorkload,
+): ProductionCodingModelSelection | null {
+  const base = readProductionCodingModelConfig();
+  const provider = (
+    process.env["AI_CODING_PRIMARY_PROVIDER"] ||
+    base.provider ||
+    "openai"
+  ).trim().toLowerCase();
+  const model = (
+    process.env["AI_CODING_PRIMARY_MODEL"] ||
+    base.model ||
+    "gpt-5.6-sol"
+  ).trim();
+
+  if (isLocalProvider(provider) || !getProviderApiKey(provider)) return null;
+  if (!base.providerAllowlist.map((value) => value.trim().toLowerCase()).includes(provider)) {
+    return null;
+  }
+  if (base.modelAllowlist.length > 0 && !base.modelAllowlist.includes(model)) {
+    return null;
+  }
+
+  const workloadOutputCap =
+    workload === "CHAT"
+      ? 900
+      : workload === "REVIEW"
+        ? 1_400
+        : workload === "REASONING"
+          ? 2_400
+          : base.maxOutputTokens;
+
+  return {
+    model: {
+      modelId: model,
+      maxOutputTokens: Math.min(base.maxOutputTokens, workloadOutputCap),
+      capabilities: ["text"],
+    },
+    provider: { slug: provider },
+    timeoutMs: base.timeoutMs,
+    maxOutputTokens: Math.min(base.maxOutputTokens, workloadOutputCap),
+    selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
+  };
+}
+
 async function resolveCloudSelection(workload: AiCoreWorkload): Promise<
   | { ok: true; selection: ProductionCodingModelSelection }
   | { ok: false; message: string }
 > {
-  const workloadModel = await selectCloudModelForWorkload(workload).catch(() => null);
+  let modelRegistryTransientFailure = false;
+  const workloadModel = await selectCloudModelForWorkload(workload).catch((error: unknown) => {
+    modelRegistryTransientFailure = isTransientDatabaseConnectionError(error);
+    return null;
+  });
   if (workloadModel) {
     const baseConfig = readProductionCodingModelConfig();
     return {
@@ -592,16 +641,33 @@ async function resolveCloudSelection(workload: AiCoreWorkload): Promise<
     };
   }
 
-  const resolved = await resolveProductionCodingModel({
-    ...base,
-    provider,
-    model,
-  });
-  if (!resolved.ok) return { ok: false, message: resolved.message };
-  if (isLocalProvider(String(resolved.selection.provider.slug))) {
-    return { ok: false, message: "Cloud-only model resolution returned a local provider." };
+  try {
+    const resolved = await resolveProductionCodingModel({
+      ...base,
+      provider,
+      model,
+    });
+    if (!resolved.ok) return { ok: false, message: resolved.message };
+    if (isLocalProvider(String(resolved.selection.provider.slug))) {
+      return { ok: false, message: "Cloud-only model resolution returned a local provider." };
+    }
+    return { ok: true, selection: resolved.selection };
+  } catch (error) {
+    if (modelRegistryTransientFailure || isTransientDatabaseConnectionError(error)) {
+      const fallback = configuredCloudSelectionFallback(workload);
+      if (fallback) {
+        logger.warn(
+          { workload, provider: fallback.provider.slug, model: fallback.model.modelId },
+          "[ai-core-chat] model registry unavailable; using configured cloud fallback",
+        );
+        return { ok: true, selection: fallback };
+      }
+    }
+    return {
+      ok: false,
+      message: safeProviderFailure(error) || "Cloud model resolution failed.",
+    };
   }
-  return { ok: true, selection: resolved.selection };
 }
 
 function parseAdminDbPlan(raw: string): z.infer<typeof AdminDbPlan> {
@@ -2228,7 +2294,9 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
       body: JSON.stringify({
         model: ttsModel,
         voice: "alloy",
-        input: "halo",
+        // Keep the synthetic voice fixture deterministic so this E2E validates
+        // voice transcription + WhatsApp delivery without depending on model-registry DB health.
+        input: "status",
         response_format: "opus",
       }),
       signal: AbortSignal.timeout(60_000),
