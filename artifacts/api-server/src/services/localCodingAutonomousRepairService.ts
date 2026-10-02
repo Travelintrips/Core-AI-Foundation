@@ -25,7 +25,10 @@ import {
   materializeApprovedWorkstreamAiCandidate,
   prepareWorkstreamAiExecutionHandoff,
 } from "./localCodingWorkstreamAiExecutionService.js";
-import { completeReviewedCodingWorkstream } from "./localCodingMultiWorkerOrchestratorService.js";
+import {
+  completeReviewedCodingWorkstream,
+  retryFailedCodingWorkstream,
+} from "./localCodingMultiWorkerOrchestratorService.js";
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
@@ -362,6 +365,20 @@ async function processTaskGraph(
 
   const failed = snapshot.workstreams.find((item) => item.status === "FAILED");
   if (failed) {
+    const failure = failed.errorMessage ?? "";
+    const missingSyntheticRemoteBranch =
+      /Repository clone failed:/i.test(failure) &&
+      /Remote branch ai-core\/[^\\s]+ not found in upstream origin/i.test(failure);
+
+    if (missingSyntheticRemoteBranch && failed.attemptCount < 4) {
+      await reserveCycle();
+      await retryFailedCodingWorkstream(failed.id);
+      return {
+        handled: true,
+        action: `AUTO_RECOVER_MISSING_SYNTHETIC_BRANCH:${failed.key}`,
+      };
+    }
+
     return {
       handled: true,
       blocker:
