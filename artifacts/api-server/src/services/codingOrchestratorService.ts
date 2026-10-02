@@ -721,13 +721,38 @@ export async function continueCodingOrchestration(
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
     if (localPlan?.status === "AI_REQUIRED") {
-      const autonomousState = await getAutonomousCodingTaskStatus(input.task.id).catch(() => null);
+      let autonomousState: Awaited<ReturnType<typeof getAutonomousCodingTaskStatus>>;
+      let autonomousStateReadable = true;
+
+      try {
+        autonomousState = await getAutonomousCodingTaskStatus(input.task.id);
+      } catch (error) {
+        autonomousStateReadable = false;
+        autonomousState = null;
+        logger.warn(
+          { err: error, taskId: input.task.id },
+          "[coding-orchestrator] Autonomous state unreadable; fail-closed auto-enable deferred",
+        );
+        await logAudit(
+          "coding-orchestrator",
+          "autonomous_enable_deferred_state_unreadable",
+          input.task.id,
+          "coding_task",
+          "failure",
+          {
+            error: error instanceof Error
+              ? error.message.slice(0, 1000)
+              : String(error).slice(0, 1000),
+          },
+        ).catch(() => undefined);
+      }
+
       const explicitlyDisabled =
         String(autonomousState?.["status"] ?? "").toUpperCase() === "DISABLED";
 
-      if (!explicitlyDisabled) {
+      if (autonomousStateReadable && !explicitlyDisabled) {
         await enableAutonomousCodingTask(input.task.id, 40);
-      } else {
+      } else if (explicitlyDisabled) {
         logger.info(
           { taskId: input.task.id },
           "[coding-orchestrator] Autonomous enable skipped because the task was explicitly disabled",
