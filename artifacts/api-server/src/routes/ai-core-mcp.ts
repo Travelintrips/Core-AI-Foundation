@@ -307,8 +307,7 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
       }
       payload = {
         id: `internal-${identity.user.id}`,
-        ...(identity.user.name ? { name: identity.user.name } : {}),
-        ...(identity.user.email ? { email: identity.user.email } : {}),
+        email: identity.user.email,
         nickname: identity.user.email,
       };
     }
