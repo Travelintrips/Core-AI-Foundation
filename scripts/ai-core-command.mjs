@@ -55,7 +55,7 @@ export function createApi(secret, fetchImpl = fetch) {
       throw new Error('API path is outside the coding trigger scope.');
     }
     const response = await fetchImpl(API + path, {
-      method, redirect: 'error', signal: AbortSignal.timeout(30000),
+      method, redirect: 'error', signal: AbortSignal.timeout(method === 'GET' ? 60000 : 30000),
       headers: { 'Content-Type': 'application/json', 'x-admin-api-key': secret },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
