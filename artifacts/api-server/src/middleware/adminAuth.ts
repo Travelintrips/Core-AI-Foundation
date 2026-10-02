@@ -142,6 +142,9 @@ const PUBLIC_PATH_PREFIXES = [
  * showcase, live AI preview) and were incorrectly requiring ADMIN_API_KEY.
  */
 const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
+  // MCP owns its own bearer-token authentication using AI_CORE_CHAT_CONNECTOR_KEY.
+  { method: "POST", pattern: /^\/ai\/core-chat\/mcp$/ },
+  { method: "GET", pattern: /^\/ai\/core-chat\/mcp$/ },
   { method: "GET", pattern: /^\/ai\/core-chat\/connector\/openapi\.json$/ },
   // Service detail / quote / request-service (catalog.ts) — public because
   // assertServiceIsPubliclyRequestable() still gates the underlying
