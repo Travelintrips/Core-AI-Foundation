@@ -5,6 +5,7 @@ import { getInternalUserById } from "./internalAuthService.js";
 const ACCESS_TTL_SECONDS = 60 * 60;
 const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
 const CODE_TTL_SECONDS = 5 * 60;
+const EMAIL_LOGIN_TTL_SECONDS = 10 * 60;
 
 export const AI_CORE_MCP_SCOPES = [
   "ai_core.command",
@@ -74,6 +75,18 @@ type CodeClaims = {
   jti: string;
 };
 
+type EmailLoginClaims = {
+  purpose: "mcp_email_login";
+  sub: number;
+  clientId: string;
+  redirectUri: string;
+  codeChallenge: string;
+  scope: string;
+  resource: string;
+  state: string;
+  jti: string;
+};
+
 type TokenClaims = {
   purpose: "mcp_access" | "mcp_refresh";
   sub: number;
@@ -84,10 +97,41 @@ type TokenClaims = {
 };
 
 const usedCodes = new Map<string, number>();
+const usedEmailLogins = new Map<string, number>();
 
 function cleanupUsedCodes(): void {
   const now = Date.now();
   for (const [jti, expiresAt] of usedCodes) if (expiresAt <= now) usedCodes.delete(jti);
+  for (const [jti, expiresAt] of usedEmailLogins) if (expiresAt <= now) usedEmailLogins.delete(jti);
+}
+
+
+export function issueEmailLoginToken(input: Omit<EmailLoginClaims, "purpose" | "jti">): string {
+  return jwt.sign(
+    { ...input, purpose: "mcp_email_login", jti: randomUUID() } satisfies EmailLoginClaims,
+    secret(),
+    {
+      algorithm: "HS256",
+      issuer: oauthIssuer(),
+      audience: oauthResource(),
+      expiresIn: EMAIL_LOGIN_TTL_SECONDS,
+    },
+  );
+}
+
+export async function consumeEmailLoginToken(token: string): Promise<EmailLoginClaims> {
+  cleanupUsedCodes();
+  const decoded = jwt.verify(token, secret(), {
+    algorithms: ["HS256"],
+    issuer: oauthIssuer(),
+    audience: oauthResource(),
+  }) as unknown as EmailLoginClaims;
+  if (decoded.purpose !== "mcp_email_login") throw new Error("invalid_grant");
+  if (usedEmailLogins.has(decoded.jti)) throw new Error("invalid_grant");
+  const user = await getInternalUserById(decoded.sub);
+  if (!user || user.status !== "active" || user.accountType !== "internal") throw new Error("invalid_grant");
+  usedEmailLogins.set(decoded.jti, Date.now() + EMAIL_LOGIN_TTL_SECONDS * 1000);
+  return decoded;
 }
 
 export function issueAuthorizationCode(input: Omit<CodeClaims, "purpose" | "jti">): string {
