@@ -482,7 +482,10 @@ export async function waitForRemoteOllamaInvocation(
   // Repeated Economy retries could therefore occupy every remote worker slot
   // even though their HTTP callers had already returned NO_LLM. Cancel the
   // orphaned row and release only its claimed slot, preserving concurrent jobs.
-  await cancelRemoteOllamaInvocation(jobId).catch(() => undefined);
+  await withTransientDatabaseRetry(
+    () => cancelRemoteOllamaInvocation(jobId),
+    { attempts: 4, baseDelayMs: 250 },
+  ).catch(() => undefined);
   throw new Error("Remote Ollama invocation cancelled");
 }
 
