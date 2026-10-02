@@ -18,6 +18,19 @@ function loopbackBaseUrl(): string {
   return `http://127.0.0.1:${port}`;
 }
 
+export function resolveAiCoreInternalBaseUrl(): string {
+  const configured = (
+    process.env["AI_CORE_INTERNAL_BASE_URL"] ??
+    process.env["PUBLIC_APP_URL"] ??
+    ""
+  ).trim().replace(/\/$/, "");
+  if (configured) return configured;
+  if (process.env["NODE_ENV"] === "production") {
+    return "https://aicore.cstlogistic.co.id";
+  }
+  return loopbackBaseUrl();
+}
+
 function gatewayConfig() {
   return {
     baseUrl: (process.env["CST_WA_GATEWAY_URL"] ?? "").trim().replace(/\/$/, ""),
@@ -48,7 +61,7 @@ export async function requestAiCoreWhatsappChat(input: {
     10,
   ).catch(() => []);
 
-  const response = await fetch(`${loopbackBaseUrl()}/api/ai/core-chat/messages`, {
+  const response = await fetch(`${resolveAiCoreInternalBaseUrl()}/api/ai/core-chat/messages`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

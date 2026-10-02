@@ -90,6 +90,7 @@ import { getProviderApiKey } from "../services/aiSecretService.js";
 import { deactivateRegisteredModel } from "../services/aiModelService.js";
 import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerShellTaskService.js";
 import { waitForCodingWhatsappDelivery } from "../services/codingWhatsappNotificationService.js";
+import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import {
   appendLearningsToMessage,
   promoteExplicitChatLearning,
@@ -2129,11 +2130,9 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
 
   const rawBody = Buffer.from(JSON.stringify(payload), "utf8");
   const signature = createHmac("sha256", secret).update(rawBody).digest("hex");
-  const port = (process.env["PORT"] ?? "3000").trim() || "3000";
-
   try {
     const webhookResponse = await fetch(
-      `http://127.0.0.1:${port}/api/ai/coding/whatsapp/webhook`,
+      `${resolveAiCoreInternalBaseUrl()}/api/ai/coding/whatsapp/webhook`,
       {
         method: "POST",
         headers: {
