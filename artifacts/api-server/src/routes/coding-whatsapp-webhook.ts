@@ -10,6 +10,11 @@ import {
   decideCodingCriticalApproval,
   parseCriticalApprovalCommand,
 } from "../services/codingCriticalApprovalService.js";
+import {
+  buildWhatsappConversationId,
+  requestAiCoreWhatsappChat,
+  sendAiCoreWhatsappReply,
+} from "../services/aiCoreWhatsappChatService.js";
 
 const router = Router();
 
@@ -45,8 +50,12 @@ function normalizeDigits(value: string): string {
 }
 
 function allowedSenders(): Set<string> {
+  const configured =
+    process.env.AI_CORE_WA_ALLOWED_SENDERS ??
+    process.env.AI_CODING_WA_ALLOWED_SENDERS ??
+    "";
   return new Set(
-    (process.env.AI_CODING_WA_ALLOWED_SENDERS ?? "")
+    configured
       .split(",")
       .map((value) => normalizeDigits(value.trim()))
       .filter(Boolean),
@@ -80,6 +89,17 @@ function extractText(payload: IncomingEnvelope): string {
   ];
   const text = candidates.find((value): value is string => typeof value === "string");
   return text?.trim() ?? "";
+}
+
+function resolveReplyDestination(payload: IncomingEnvelope, senderDigits: string): string {
+  const remoteJid =
+    typeof payload.message?.key?.remoteJid === "string"
+      ? payload.message.key.remoteJid.trim()
+      : "";
+  if (/^[0-9]+(?:-[0-9]+)?@g\.us$/i.test(remoteJid)) {
+    return remoteJid;
+  }
+  return senderDigits;
 }
 
 function verifySignature(rawBody: Buffer, supplied: string | undefined, secret: string): boolean {
@@ -142,6 +162,10 @@ router.post(
     }
 
     const text = extractText(payload);
+    if (!text) {
+      res.status(202).json({ accepted: false, reason: "EMPTY_TEXT" });
+      return;
+    }
 
     const approvalCommand = parseCriticalApprovalCommand(text);
     if (approvalCommand) {
@@ -173,8 +197,73 @@ router.post(
       return;
     }
 
+    const messageId =
+      typeof payload.message?.key?.id === "string" && payload.message.key.id.trim()
+        ? payload.message.key.id.trim()
+        : crypto.createHash("sha256").update(body).digest("hex").slice(0, 32);
+
     if (!/^coding(?:\s|:)/i.test(text)) {
-      res.status(202).json({ accepted: false, reason: "NOT_A_CODING_COMMAND" });
+      if (process.env.AI_CORE_WA_CHAT_ENABLED === "false") {
+        res.status(202).json({ accepted: false, reason: "AI_CORE_WA_CHAT_DISABLED" });
+        return;
+      }
+
+      const destination = resolveReplyDestination(payload, sender);
+      const conversationId = buildWhatsappConversationId(sender, destination);
+      try {
+        const chat = await requestAiCoreWhatsappChat({
+          message: text,
+          conversationId,
+        });
+        const delivery = await sendAiCoreWhatsappReply({
+          to: destination,
+          deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
+          incomingMessageId: messageId,
+          text: chat.reply,
+        });
+
+        if (delivery.status !== "queued") {
+          logger.warn(
+            { delivery, route: chat.route, provider: chat.provider, model: chat.model },
+            "[ai-core-wa-chat] reply was not queued",
+          );
+          res.status(502).json({
+            accepted: true,
+            kind: "AI_CORE_CHAT",
+            replied: false,
+            route: chat.route,
+            delivery,
+          });
+          return;
+        }
+
+        logger.info(
+          {
+            route: chat.route,
+            provider: chat.provider,
+            model: chat.model,
+            messageId: delivery.messageId,
+          },
+          "[ai-core-wa-chat] reply queued",
+        );
+        res.status(200).json({
+          accepted: true,
+          kind: "AI_CORE_CHAT",
+          replied: true,
+          route: chat.route,
+          provider: chat.provider,
+          model: chat.model,
+          messageId: delivery.messageId,
+        });
+      } catch (error) {
+        logger.warn({ err: error }, "[ai-core-wa-chat] chat handling failed");
+        res.status(503).json({
+          accepted: true,
+          kind: "AI_CORE_CHAT",
+          replied: false,
+          error: "AI_CORE_WA_CHAT_FAILED",
+        });
+      }
       return;
     }
 
@@ -183,11 +272,6 @@ router.post(
       res.status(400).json({ error: "EMPTY_CODING_COMMAND" });
       return;
     }
-
-    const messageId =
-      typeof payload.message?.key?.id === "string" && payload.message.key.id.trim()
-        ? payload.message.key.id.trim()
-        : crypto.createHash("sha256").update(body).digest("hex").slice(0, 32);
 
     const result = await submitCodingBridgeCommand({
       externalCommandId: messageId,
