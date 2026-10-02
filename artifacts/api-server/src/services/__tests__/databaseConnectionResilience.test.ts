@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 process.env["SUPABASE_DEV_DATABASE_URL"] ??=
@@ -70,6 +71,19 @@ describe("database connection resilience", () => {
   });
 });
 
+
+describe("production startup database authentication gate", () => {
+  it("keeps DB-dependent runtimes stopped after permanent authentication failure", () => {
+    const source = readFileSync(
+      new URL("../../index.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("isDatabaseAuthenticationError");
+    expect(source).toContain("DB-dependent runtimes remain stopped");
+    expect(source).toContain("await pool.query(\"SELECT 1\")");
+  });
+});
 
 describe("production database URL resolution", () => {
   it("uses APP_ENV=production even when NODE_ENV is absent", async () => {
