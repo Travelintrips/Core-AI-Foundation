@@ -32,9 +32,11 @@ async function sendGatewayMessage(input: {
   idempotencyKey: string;
   clientMessageId: string;
   text: string;
+  to?: string;
 }): Promise<CodingWhatsappNotifyResult> {
   const configured = getCodingWhatsappConfigStatus();
-  const { baseUrl, apiKey, to } = config();
+  const { baseUrl, apiKey, to: defaultTo } = config();
+  const to = (input.to ?? defaultTo).trim();
   if (!baseUrl || !apiKey || !to) {
     return { status: "skipped", reason: "missing_config", configured };
   }
@@ -263,5 +265,27 @@ export async function sendCodingApprovalResult(input: {
     idempotencyKey: `ai-core-approval-result-${input.approvalId}-${input.status}`,
     clientMessageId: `${input.approvalId}-${input.status.toLowerCase()}`,
     text,
+  });
+}
+
+
+export async function sendAiCoreWhatsappChatReply(input: {
+  to: string;
+  inboundMessageId: string;
+  text: string;
+}): Promise<CodingWhatsappNotifyResult> {
+  const safeTo = input.to.replace(/\D/g, "");
+  if (!safeTo) {
+    return { status: "failed", error: "WhatsApp recipient is empty." };
+  }
+  const reply = input.text.trim().slice(0, 4_000);
+  if (!reply) {
+    return { status: "failed", error: "AI Core reply is empty." };
+  }
+  return sendGatewayMessage({
+    idempotencyKey: `ai-core-chat-${input.inboundMessageId}`,
+    clientMessageId: `ai-core-chat-${input.inboundMessageId}`,
+    text: reply,
+    to: safeTo,
   });
 }
