@@ -138,7 +138,10 @@ router.get(
 );
 
 router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
-  await Promise.all([
+  // Listing tasks is a read path and must stay responsive even when recovery
+  // work is slow or contending on production locks. Reconciliation is
+  // best-effort maintenance; run it without blocking the HTTP response.
+  void Promise.all([
     reconcileStaleMultiWorkerRuns().catch((error) => {
       logger.warn(
         { err: error },
@@ -151,7 +154,7 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
         "[coding-workspace] stale coding-run reconciliation failed",
       );
     }),
-  ]);
+  ]).catch(() => undefined);
 
   const tasks = await db
     .select()
