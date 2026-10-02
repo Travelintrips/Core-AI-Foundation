@@ -1,0 +1,26 @@
+name: ChatGPT AI Core Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Bounded command for AI Core handoff"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  emit-ai-core-event:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate command
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.command }}
+        run: |
+          test -n "$COMMAND"
+          test "${#COMMAND}" -le 2000
+          echo "ChatGPT command accepted for AI Core CI ingress."
+          echo "Command length: ${#COMMAND}"
