@@ -560,8 +560,9 @@ export async function recover(): Promise<void> {
             status: exhausted ? "failed" : "queued",
             errorMessage: "Job execution timeout",
             retryCount: nextRetryCount,
-            startedAt: exhausted ? undefined : null,
-            completedAt: exhausted ? now : null,
+            ...(exhausted
+              ? { completedAt: now }
+              : { startedAt: null, completedAt: null }),
             updatedAt: now,
           })
           .where(and(eq(aiJobsTable.id, jobId), eq(aiJobsTable.status, "running")));
