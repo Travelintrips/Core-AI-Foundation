@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   selectClaimable: vi.fn(),
   logAudit: vi.fn(),
   isTransientDatabaseConnectionError: vi.fn(),
+  getAvailableOllamaCodingSlots: vi.fn(),
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -38,6 +39,10 @@ vi.mock("../aiAuditService.js", () => ({
 
 vi.mock("../priorityEngine.js", () => ({
   computePriorityScore: vi.fn(() => 100),
+}));
+
+vi.mock("../ollamaWorkerRegistryService.js", () => ({
+  getAvailableOllamaCodingSlots: mocks.getAvailableOllamaCodingSlots,
 }));
 
 vi.mock("../repositoryAnalyzerService.js", () => ({
@@ -68,6 +73,7 @@ import {
   buildCodingWorkstreamBranchBinding,
   codingWorkstreamOwnsFile,
   executeCodingWorkstreamJob,
+  resolveCodingDispatchConcurrency,
 } from "../localCodingMultiWorkerExecutionService.js";
 
 const GRAPH_ID = "11111111-1111-4111-8111-111111111111";
@@ -93,6 +99,25 @@ function job() {
     },
   } as any;
 }
+
+describe("multi-worker Ollama capacity", () => {
+  it("uses all available Ollama slots when no explicit limit is requested", () => {
+    expect(resolveCodingDispatchConcurrency(undefined, 3)).toBe(3);
+  });
+
+  it("never exceeds available Ollama capacity", () => {
+    expect(resolveCodingDispatchConcurrency(5, 3)).toBe(3);
+    expect(resolveCodingDispatchConcurrency(8, 1)).toBe(1);
+  });
+
+  it("dispatches nothing when Ollama has no available slot", () => {
+    expect(resolveCodingDispatchConcurrency(5, 0)).toBe(0);
+  });
+
+  it("respects an operator limit lower than available capacity", () => {
+    expect(resolveCodingDispatchConcurrency(2, 3)).toBe(2);
+  });
+});
 
 describe("multi-worker execution branch isolation", () => {
   it("keeps clone source on the parent branch but binds child execution to its isolated branch/base SHA", () => {
