@@ -244,7 +244,7 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
             // schema attached so coding proposals are constrained at generation.
             responseFormat: {
               text: {
-                mimeType: "application/json",
+                mimeType: "APPLICATION_JSON",
                 schema: input.responseJsonSchema,
               },
             },
