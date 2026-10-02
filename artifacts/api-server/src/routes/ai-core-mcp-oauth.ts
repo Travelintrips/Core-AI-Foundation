@@ -15,6 +15,11 @@ import {
   oauthResource,
   refreshAccessToken,
 } from "../services/aiCoreMcpOAuthService.js";
+import {
+  approveMcpOauthPairing,
+  createMcpOauthPairing,
+  getMcpOauthPairing,
+} from "../services/aiCoreMcpPairingService.js";
 
 const router = Router();
 
@@ -100,6 +105,35 @@ function renderAuthorizePage(params: ReturnType<typeof oauthParams>, loggedInEma
 </body></html>`;
 }
 
+
+function renderPairingWaitPage(pairing: { id: string; code: string; expiresAt: Date }): string {
+  const waitUrl = `${oauthIssuer()}/api/ai/core-chat/oauth/pair/wait?id=${encodeURIComponent(pairing.id)}`;
+  const approveUrl = `${oauthIssuer()}/api/ai/core-chat/oauth/pair/approve?code=${encodeURIComponent(pairing.code)}`;
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="refresh" content="2;url=${escapeHtml(waitUrl)}">
+  <title>Pairing AI Core</title><style>body{font-family:system-ui;max-width:620px;margin:48px auto;padding:0 20px}.code{font-size:34px;font-weight:800;letter-spacing:6px;padding:18px;border:1px solid #ccc;border-radius:12px;text-align:center}a.button{display:inline-block;padding:12px 16px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-weight:700}.muted{color:#666}</style></head><body>
+  <h1>Hubungkan ChatGPT ke AI Core</h1>
+  <p>Browser OAuth terpisah dari session AI Core. Gunakan pairing berikut:</p>
+  <div class="code">${escapeHtml(pairing.code)}</div>
+  <p><a class="button" href="${escapeHtml(approveUrl)}" target="_blank" rel="noopener noreferrer">Approve di AI Core</a></p>
+  <p class="muted">Jika tombol membuka browser yang belum login, salin URL approval ke browser tempat AI Core sudah login. Halaman ini mengecek approval otomatis setiap 2 detik.</p>
+  <p class="muted">Pairing berlaku sampai ${escapeHtml(pairing.expiresAt.toISOString())}.</p>
+  </body></html>`;
+}
+
+function renderPairingApprovalPage(code: string, email: string): string {
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Approve Pairing AI Core</title><style>body{font-family:system-ui;max-width:560px;margin:48px auto;padding:0 20px}form{display:grid;gap:14px}button{padding:12px 16px;font-weight:700}.code{font-size:30px;font-weight:800;letter-spacing:5px}.muted{color:#666}</style></head><body>
+  <h1>Approve koneksi ChatGPT</h1>
+  <p>Login sebagai <strong>${escapeHtml(email)}</strong>.</p>
+  <p>Kode pairing:</p><div class="code">${escapeHtml(code)}</div>
+  <form method="post" action="/api/ai/core-chat/oauth/pair/approve">
+    <input type="hidden" name="code" value="${escapeHtml(code)}">
+    <button type="submit">Approve & Hubungkan</button>
+  </form>
+  <p class="muted">Setelah disetujui, kembali ke jendela OAuth. Jendela tersebut akan lanjut otomatis.</p>
+  </body></html>`;
+}
+
 router.get("/.well-known/oauth-protected-resource", (_req, res): void => {
   res.json({
     resource: oauthResource(),
@@ -130,7 +164,21 @@ router.get("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> 
   const error = validateAuthorizationRequest(params);
   if (error) { redirectWithError(res, params, error); return; }
   const user = await resolveSessionUser(req);
-  res.type("html").send(renderAuthorizePage(params, user?.email));
+  if (user) {
+    res.type("html").send(renderAuthorizePage(params, user.email));
+    return;
+  }
+
+  const scopes = normalizeScopes(params.scope);
+  const pairing = await createMcpOauthPairing({
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+    codeChallenge: params.codeChallenge,
+    scope: scopes.join(" "),
+    resource: params.resource,
+    state: params.state,
+  });
+  res.redirect(302, `/api/ai/core-chat/oauth/pair/wait?id=${encodeURIComponent(pairing.id)}`);
 });
 
 router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> => {
@@ -161,6 +209,77 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
   res.redirect(302, url.toString());
 });
 
+
+
+router.get("/api/ai/core-chat/oauth/pair/wait", async (req, res): Promise<void> => {
+  const id = readString(req.query["id"]);
+  const pairing = id ? await getMcpOauthPairing(id) : null;
+  if (!pairing) {
+    res.status(404).type("html").send("<p>Pairing tidak ditemukan. Mulai ulang Authenticate dari ChatGPT.</p>");
+    return;
+  }
+  if (pairing.expiresAt.getTime() <= Date.now()) {
+    res.status(410).type("html").send("<p>Pairing sudah kedaluwarsa. Mulai ulang Authenticate dari ChatGPT.</p>");
+    return;
+  }
+  if (pairing.status !== "approved" || !pairing.approvedUserId) {
+    res.type("html").send(renderPairingWaitPage(pairing));
+    return;
+  }
+
+  const user = await getInternalUserById(pairing.approvedUserId);
+  if (!user || user.status !== "active" || user.accountType !== "internal") {
+    res.status(403).type("html").send("<p>Akun approval tidak aktif.</p>");
+    return;
+  }
+
+  const code = issueAuthorizationCode({
+    sub: user.id,
+    clientId: pairing.clientId,
+    redirectUri: pairing.redirectUri,
+    codeChallenge: pairing.codeChallenge,
+    scope: pairing.scope,
+    resource: pairing.resource,
+  });
+  const url = new URL(pairing.redirectUri);
+  url.searchParams.set("code", code);
+  if (pairing.state) url.searchParams.set("state", pairing.state);
+  url.searchParams.set("iss", oauthIssuer());
+  res.redirect(302, url.toString());
+});
+
+router.get("/api/ai/core-chat/oauth/pair/approve", async (req, res): Promise<void> => {
+  const code = readString(req.query["code"]);
+  const user = await resolveSessionUser(req);
+  if (!user) {
+    res.status(401).type("html").send(`<p>Session AI Core belum terdeteksi di browser ini.</p><p><a href="/login" target="_blank" rel="noopener noreferrer">Login ke AI Core</a>, lalu buka kembali URL approval ini.</p><p>Kode pairing: <strong>${escapeHtml(code)}</strong></p>`);
+    return;
+  }
+  if (!code) {
+    res.status(400).type("html").send("<p>Kode pairing tidak valid.</p>");
+    return;
+  }
+  res.type("html").send(renderPairingApprovalPage(code, user.email));
+});
+
+router.post("/api/ai/core-chat/oauth/pair/approve", async (req, res): Promise<void> => {
+  const user = await resolveSessionUser(req);
+  if (!user) {
+    res.status(401).type("html").send("<p>Session AI Core tidak ditemukan. Login ulang lalu coba approve lagi.</p>");
+    return;
+  }
+  const code = readString(req.body?.code);
+  if (!/^\d{8}$/.test(code)) {
+    res.status(400).type("html").send("<p>Kode pairing tidak valid.</p>");
+    return;
+  }
+  const approved = await approveMcpOauthPairing(code, user.id);
+  if (!approved) {
+    res.status(400).type("html").send("<p>Pairing tidak ditemukan, sudah disetujui, atau kedaluwarsa.</p>");
+    return;
+  }
+  res.type("html").send("<h1>Pairing disetujui</h1><p>Kembali ke jendela OAuth. Koneksi ChatGPT akan dilanjutkan otomatis.</p>");
+});
 
 router.post("/api/ai/core-chat/oauth/token", async (req, res): Promise<void> => {
   try {
