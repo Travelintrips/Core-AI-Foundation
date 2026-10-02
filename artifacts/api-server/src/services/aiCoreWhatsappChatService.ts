@@ -20,15 +20,14 @@ function loopbackBaseUrl(): string {
 }
 
 export function resolveAiCoreInternalBaseUrl(): string {
-  const configured = (
-    process.env["AI_CORE_INTERNAL_BASE_URL"] ??
-    process.env["PUBLIC_APP_URL"] ??
-    ""
-  ).trim().replace(/\/$/, "");
+  const configured = (process.env["AI_CORE_INTERNAL_BASE_URL"] ?? "")
+    .trim()
+    .replace(/\/$/, "");
   if (configured) return configured;
-  if (process.env["NODE_ENV"] === "production") {
-    return "https://aicore.cstlogistic.co.id";
-  }
+
+  // WhatsApp inbound handling already runs inside the AI Core API process.
+  // Keep the chat hop on loopback by default instead of leaving the host,
+  // traversing DNS/TLS/reverse-proxy, and re-entering the same application.
   return loopbackBaseUrl();
 }
 
@@ -61,6 +60,44 @@ export function buildWhatsappConversationId(senderDigits: string, destination: s
     .digest("hex")
     .slice(0, 40);
   return `wa:${digest}`;
+}
+
+function canSkipWhatsappConversationContext(message: string): boolean {
+  const normalized = message.trim().toLowerCase().replace(/\s+/g, " ");
+  return /^(?:hello|hi|halo|hai|hey|help|bantuan|status|cek status|health|healthz|model|model status|routing|routing biaya|cost|biaya)$/.test(
+    normalized,
+  );
+}
+
+async function retrieveWhatsappContextFast(
+  conversationId: string,
+  message: string,
+): Promise<Awaited<ReturnType<typeof retrieveRecentChatContext>>> {
+  if (canSkipWhatsappConversationContext(message)) return [];
+
+  const lookup = retrieveRecentChatContext(
+    { sessionId: conversationId },
+    6,
+  ).catch(() => []);
+
+  // Recent context improves follow-ups, but a slow/cold database must not hold
+  // the WhatsApp reply path hostage. Fall back to a stateless answer quickly;
+  // the learning store remains the durable source for later turns.
+  const budgetMs = Math.max(
+    100,
+    Math.min(
+      1_000,
+      Number.parseInt(process.env["AI_CORE_WA_CONTEXT_BUDGET_MS"] ?? "300", 10) || 300,
+    ),
+  );
+  const timeout = new Promise<Awaited<ReturnType<typeof retrieveRecentChatContext>>>(
+    (resolve) => {
+      const timer = setTimeout(() => resolve([]), budgetMs);
+      timer.unref?.();
+    },
+  );
+
+  return Promise.race([lookup, timeout]);
 }
 
 type AiCoreWhatsappVoiceTranscription = {
@@ -241,10 +278,10 @@ export async function requestAiCoreWhatsappChat(input: {
     throw new Error("ADMIN_API_KEY is not configured for internal AI Core WhatsApp chat.");
   }
 
-  const context = await retrieveRecentChatContext(
-    { sessionId: input.conversationId },
-    10,
-  ).catch(() => []);
+  const context = await retrieveWhatsappContextFast(
+    input.conversationId,
+    input.message,
+  );
 
   const response = await fetch(`${resolveAiCoreInternalBaseUrl()}/api/ai/core-chat/messages`, {
     method: "POST",
