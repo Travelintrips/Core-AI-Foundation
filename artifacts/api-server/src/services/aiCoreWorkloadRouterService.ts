@@ -96,6 +96,8 @@ function normalize(input: string): string {
   return input
     .trim()
     .toLowerCase()
+    .replace(/[.!?…]+$/g, "")
+    .trim()
     .replace(/\s+/g, " ");
 }
 
