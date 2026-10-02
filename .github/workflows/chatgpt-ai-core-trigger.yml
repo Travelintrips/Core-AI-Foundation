@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   emit-ai-core-event:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[AI-CORE-CMD]')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[AI-CORE-CMD]') || contains(github.event.issue.labels.*.name, 'ai-handoff-approved')
     runs-on: ubuntu-latest
     steps:
       - name: Resolve and validate command
