@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { retrieveRecentChatContext } from "./aiCoreChatLearningService.js";
+import { getProviderApiKey } from "./aiSecretService.js";
 
 type AiCoreWhatsappChatResult = {
   reply: string;
@@ -62,9 +63,90 @@ export function buildWhatsappConversationId(senderDigits: string, destination: s
   return `wa:${digest}`;
 }
 
+export type AiCoreWhatsappChatSource = "text" | "whatsapp_voice";
+
+export async function transcribeAiCoreWhatsappVoice(input: {
+  audioBase64: string;
+  mimeType: string;
+}): Promise<{ text: string; provider: "openai"; model: string }> {
+  const apiKey = getProviderApiKey("openai");
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for WhatsApp voice transcription.");
+  }
+
+  const mimeType = input.mimeType.split(";")[0]?.trim().toLowerCase() || "audio/ogg";
+  if (!mimeType.startsWith("audio/")) {
+    throw new Error("WhatsApp voice payload is not audio.");
+  }
+
+  const audio = Buffer.from(input.audioBase64, "base64");
+  if (!audio.length) {
+    throw new Error("WhatsApp voice payload is empty.");
+  }
+  const maxBytes = Math.max(
+    256 * 1024,
+    Number(process.env["AI_CORE_WA_VOICE_MAX_BYTES"] ?? 6 * 1024 * 1024),
+  );
+  if (audio.length > maxBytes) {
+    throw new Error("WhatsApp voice payload exceeds the configured size limit.");
+  }
+
+  const model =
+    process.env["AI_CORE_TRANSCRIPTION_MODEL"]?.trim() || "gpt-4o-mini-transcribe";
+  const extension =
+    mimeType.includes("ogg") || mimeType.includes("opus")
+      ? "ogg"
+      : mimeType.includes("mpeg") || mimeType.includes("mp3")
+        ? "mp3"
+        : mimeType.includes("wav")
+          ? "wav"
+          : mimeType.includes("webm")
+            ? "webm"
+            : mimeType.includes("mp4") || mimeType.includes("m4a")
+              ? "m4a"
+              : "audio";
+
+  const form = new FormData();
+  form.set("model", model);
+  form.set("file", new Blob([audio], { type: mimeType }), `voice.${extension}`);
+  form.set("language", "id");
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  const payload = await response.json().catch(() => null) as
+    | Record<string, unknown>
+    | null;
+  if (!response.ok) {
+    const detail =
+      payload && typeof payload["error"] === "object"
+        ? JSON.stringify(payload["error"]).slice(0, 300)
+        : `HTTP ${response.status}`;
+    throw new Error(`WhatsApp voice transcription failed: ${detail}`);
+  }
+
+  const text =
+    payload && typeof payload["text"] === "string"
+      ? payload["text"].trim()
+      : "";
+  if (!text) {
+    throw new Error("WhatsApp voice transcription returned empty text.");
+  }
+
+  return { text, provider: "openai", model };
+}
+
 export async function requestAiCoreWhatsappChat(input: {
   message: string;
   conversationId: string;
+  source?: AiCoreWhatsappChatSource;
+  mode?: "auto" | "ask" | "agent";
 }): Promise<AiCoreWhatsappChatResult> {
   const adminKey = (process.env["ADMIN_API_KEY"] ?? "").trim();
   if (!adminKey) {
@@ -84,10 +166,10 @@ export async function requestAiCoreWhatsappChat(input: {
     },
     body: JSON.stringify({
       message: input.message,
-      mode: "ask",
+      mode: input.mode ?? "auto",
       modelPolicy: "smart",
       conversationId: input.conversationId,
-      source: "text",
+      source: input.source ?? "text",
       context,
     }),
     signal: AbortSignal.timeout(75_000),
