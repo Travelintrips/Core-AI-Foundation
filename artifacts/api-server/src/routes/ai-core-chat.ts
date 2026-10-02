@@ -2096,41 +2096,82 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
     .split(",")
     .map((value) => value.replace(/\D/g, ""))
     .find(Boolean) ?? "";
+  const ttsApiKey = getProviderApiKey("openai");
 
-  if (!secret || !sender) {
+  if (!secret || !sender || !ttsApiKey) {
     res.status(503).json({
       ok: false,
       error: "AI_CORE_WA_E2E_NOT_CONFIGURED",
       configured: {
         incomingSecret: Boolean(secret),
         allowedSender: Boolean(sender),
+        voiceFixtureProvider: Boolean(ttsApiKey),
       },
     });
     return;
   }
 
-  const incomingMessageId = `e2e-${randomUUID()}`;
-  const payload = {
-    event: "message.received",
-    ...(process.env["AI_CORE_WA_E2E_DEVICE_ID"]?.trim()
-      ? { deviceId: process.env["AI_CORE_WA_E2E_DEVICE_ID"]!.trim() }
-      : {}),
-    senderPhone: sender,
-    message: {
-      key: {
-        id: incomingMessageId,
-        remoteJid: `${sender}@s.whatsapp.net`,
-        fromMe: false,
+  const incomingMessageId = `e2e-voice-${randomUUID()}`;
+
+  try {
+    const ttsModel =
+      process.env["AI_CORE_WA_E2E_TTS_MODEL"]?.trim() || "gpt-4o-mini-tts";
+    const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ttsApiKey}`,
+        "content-type": "application/json",
+        accept: "audio/ogg",
+      },
+      body: JSON.stringify({
+        model: ttsModel,
+        voice: "alloy",
+        input: "halo",
+        response_format: "opus",
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!ttsResponse.ok) {
+      throw new Error(
+        `WhatsApp voice E2E fixture generation failed (HTTP ${ttsResponse.status}).`,
+      );
+    }
+    const audio = Buffer.from(await ttsResponse.arrayBuffer());
+    if (!audio.length || audio.length > 2 * 1024 * 1024) {
+      throw new Error("WhatsApp voice E2E fixture has an invalid size.");
+    }
+
+    const payload = {
+      event: "message.received",
+      ...(process.env["AI_CORE_WA_E2E_DEVICE_ID"]?.trim()
+        ? { deviceId: process.env["AI_CORE_WA_E2E_DEVICE_ID"]!.trim() }
+        : {}),
+      senderPhone: sender,
+      voiceNote: {
+        mimeType: "audio/ogg; codecs=opus",
+        base64: audio.toString("base64"),
+        ptt: true,
+        seconds: 1,
+        byteLength: audio.length,
       },
       message: {
-        conversation: "halo",
+        key: {
+          id: incomingMessageId,
+          remoteJid: `${sender}@s.whatsapp.net`,
+          fromMe: false,
+        },
+        message: {
+          audioMessage: {
+            mimetype: "audio/ogg; codecs=opus",
+            ptt: true,
+            seconds: 1,
+          },
+        },
       },
-    },
-  };
+    };
 
-  const rawBody = Buffer.from(JSON.stringify(payload), "utf8");
-  const signature = createHmac("sha256", secret).update(rawBody).digest("hex");
-  try {
+    const rawBody = Buffer.from(JSON.stringify(payload), "utf8");
+    const signature = createHmac("sha256", secret).update(rawBody).digest("hex");
     const webhookResponse = await fetch(
       `${resolveAiCoreInternalBaseUrl()}/api/ai/coding/whatsapp/webhook`,
       {
@@ -2140,7 +2181,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
           "x-cst-wa-signature": signature,
         },
         body: rawBody,
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(120_000),
       },
     );
     const webhookBody = await webhookResponse.json().catch(() => null) as
@@ -2155,14 +2196,17 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
       !webhookResponse.ok ||
       webhookBody?.["kind"] !== "AI_CORE_CHAT" ||
       webhookBody?.["replied"] !== true ||
+      webhookBody?.["inputSource"] !== "whatsapp_voice" ||
       !outboundMessageId
     ) {
       res.status(502).json({
         ok: false,
         error: "AI_CORE_WA_E2E_WEBHOOK_FAILED",
+        mode: "voice_note",
         webhookStatus: webhookResponse.status,
         kind: webhookBody?.["kind"] ?? null,
         replied: webhookBody?.["replied"] ?? false,
+        inputSource: webhookBody?.["inputSource"] ?? null,
         route: webhookBody?.["route"] ?? null,
       });
       return;
@@ -2176,6 +2220,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
       res.status(502).json({
         ok: false,
         error: "AI_CORE_WA_E2E_DELIVERY_FAILED",
+        mode: "voice_note",
         webhookStatus: webhookResponse.status,
         route: webhookBody?.["route"] ?? null,
         delivery,
@@ -2186,6 +2231,9 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
 
     res.status(200).json({
       ok: true,
+      mode: "voice_note",
+      inputSource: "whatsapp_voice",
+      fixtureModel: ttsModel,
       webhookStatus: webhookResponse.status,
       route: webhookBody?.["route"] ?? null,
       provider: webhookBody?.["provider"] ?? null,
@@ -2202,6 +2250,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
     res.status(503).json({
       ok: false,
       error: "AI_CORE_WA_E2E_REQUEST_FAILED",
+      mode: "voice_note",
       detail: safeProviderFailure(error),
       senderSuffix: sender.slice(-4),
     });

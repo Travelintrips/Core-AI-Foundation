@@ -207,6 +207,8 @@ jobs:
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-wa-e2e", "utf8"));
           if (value.ok !== true) throw new Error("WhatsApp E2E did not report ok=true");
+          if (value.mode !== "voice_note") throw new Error("WhatsApp E2E did not exercise voice-note mode");
+          if (value.inputSource !== "whatsapp_voice") throw new Error("WhatsApp E2E did not reach WhatsApp voice input path");
           if (value.delivery?.status !== "sent") throw new Error("WhatsApp E2E delivery was not sent");
           if (value.webhookStatus !== 200) throw new Error("WhatsApp webhook did not return 200");
           if (typeof value.senderSuffix !== "string" || value.senderSuffix.length < 2) {
@@ -214,6 +216,8 @@ jobs:
           }
           console.log(
             "ai_core_whatsapp_e2e=PASS"+
+            " mode="+String(value.mode ?? "unknown")+
+            " inputSource="+String(value.inputSource ?? "unknown")+
             " route="+String(value.route ?? "unknown")+
             " delivery="+String(value.delivery?.status ?? "unknown")+
             " senderSuffix="+value.senderSuffix

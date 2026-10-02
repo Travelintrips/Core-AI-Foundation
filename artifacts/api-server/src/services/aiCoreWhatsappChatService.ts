@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { retrieveRecentChatContext } from "./aiCoreChatLearningService.js";
+import { getProviderApiKey } from "./aiSecretService.js";
 
 type AiCoreWhatsappChatResult = {
   reply: string;
@@ -62,9 +63,178 @@ export function buildWhatsappConversationId(senderDigits: string, destination: s
   return `wa:${digest}`;
 }
 
+type AiCoreWhatsappVoiceTranscription = {
+  text: string;
+  provider: "openai" | "gemini";
+  model: string;
+};
+
+const MAX_WHATSAPP_VOICE_BYTES = 8 * 1024 * 1024;
+
+function normalizeAudioMimeType(value: string): string {
+  return value.split(";")[0]?.trim().toLowerCase() || "audio/ogg";
+}
+
+function audioFileExtension(mimeType: string): string {
+  switch (normalizeAudioMimeType(mimeType)) {
+    case "audio/mpeg":
+    case "audio/mp3":
+      return "mp3";
+    case "audio/mp4":
+    case "audio/x-m4a":
+    case "audio/m4a":
+      return "m4a";
+    case "audio/wav":
+    case "audio/x-wav":
+      return "wav";
+    case "audio/webm":
+      return "webm";
+    case "audio/ogg":
+    case "audio/opus":
+      return "ogg";
+    default:
+      return "bin";
+  }
+}
+
+function decodeWhatsappVoiceBase64(value: string): Buffer {
+  const audio = Buffer.from(value, "base64");
+  if (!audio.length) throw new Error("WhatsApp voice note kosong.");
+  if (audio.length > MAX_WHATSAPP_VOICE_BYTES) {
+    throw new Error("WhatsApp voice note terlalu besar untuk diproses.");
+  }
+  return audio;
+}
+
+async function transcribeWithOpenAi(
+  audio: Buffer,
+  mimeType: string,
+): Promise<AiCoreWhatsappVoiceTranscription> {
+  const apiKey = getProviderApiKey("openai");
+  if (!apiKey) throw new Error("OPENAI_NOT_CONFIGURED");
+
+  const model = process.env["AI_CORE_WA_TRANSCRIBE_MODEL"]?.trim() || "gpt-transcribe";
+  const form = new FormData();
+  form.append("model", model);
+  form.append(
+    "file",
+    new Blob([new Uint8Array(audio)], { type: normalizeAudioMimeType(mimeType) }),
+    `voice-note.${audioFileExtension(mimeType)}`,
+  );
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+    signal: AbortSignal.timeout(60_000),
+  });
+  const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+  if (!response.ok) {
+    const detail =
+      payload && typeof payload["error"] === "object" && payload["error"] !== null
+        ? String((payload["error"] as Record<string, unknown>)["message"] ?? "")
+        : `HTTP ${response.status}`;
+    throw new Error(`OPENAI_TRANSCRIBE_FAILED:${detail.slice(0, 200)}`);
+  }
+  const text = payload && typeof payload["text"] === "string" ? payload["text"].trim() : "";
+  if (!text) throw new Error("OPENAI_TRANSCRIBE_EMPTY");
+  return { text, provider: "openai", model };
+}
+
+function extractGeminiText(payload: Record<string, unknown> | null): string {
+  const candidates = Array.isArray(payload?.["candidates"]) ? payload?.["candidates"] as unknown[] : [];
+  const parts: string[] = [];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const content = (candidate as Record<string, unknown>)["content"];
+    if (!content || typeof content !== "object" || Array.isArray(content)) continue;
+    const candidateParts = Array.isArray((content as Record<string, unknown>)["parts"])
+      ? (content as Record<string, unknown>)["parts"] as unknown[]
+      : [];
+    for (const part of candidateParts) {
+      if (!part || typeof part !== "object" || Array.isArray(part)) continue;
+      const text = (part as Record<string, unknown>)["text"];
+      if (typeof text === "string" && text.trim()) parts.push(text.trim());
+    }
+  }
+  return parts.join("\n").trim();
+}
+
+async function transcribeWithGemini(
+  audio: Buffer,
+  mimeType: string,
+): Promise<AiCoreWhatsappVoiceTranscription> {
+  const apiKey = getProviderApiKey("gemini");
+  if (!apiKey) throw new Error("GEMINI_NOT_CONFIGURED");
+
+  const model = process.env["AI_CORE_WA_VOICE_GEMINI_MODEL"]?.trim() || "gemini-2.5-flash";
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [
+            {
+              text:
+                "Transkripsikan voice note ini secara verbatim. Kembalikan hanya teks ucapan, tanpa penjelasan, tanpa markdown.",
+            },
+            {
+              inlineData: {
+                mimeType: normalizeAudioMimeType(mimeType),
+                data: audio.toString("base64"),
+              },
+            },
+          ],
+        }],
+        generationConfig: { temperature: 0 },
+      }),
+      signal: AbortSignal.timeout(60_000),
+    },
+  );
+  const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+  if (!response.ok) throw new Error(`GEMINI_TRANSCRIBE_FAILED:HTTP_${response.status}`);
+  const text = extractGeminiText(payload);
+  if (!text) throw new Error("GEMINI_TRANSCRIBE_EMPTY");
+  return { text, provider: "gemini", model };
+}
+
+export async function transcribeAiCoreWhatsappVoiceNote(input: {
+  audioBase64: string;
+  mimeType: string;
+}): Promise<AiCoreWhatsappVoiceTranscription> {
+  const audio = decodeWhatsappVoiceBase64(input.audioBase64);
+  const failures: string[] = [];
+
+  try {
+    return await transcribeWithOpenAi(audio, input.mimeType);
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    return await transcribeWithGemini(audio, input.mimeType);
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error));
+  }
+
+  const configured =
+    Boolean(getProviderApiKey("openai")) || Boolean(getProviderApiKey("gemini"));
+  if (!configured) {
+    throw new Error("Voice transcription provider belum dikonfigurasi.");
+  }
+  throw new Error(
+    "Voice note gagal ditranskripsikan: " +
+      failures.map((value) => value.replace(/[\r\n\t]+/g, " ").slice(0, 160)).join(" | "),
+  );
+}
+
 export async function requestAiCoreWhatsappChat(input: {
   message: string;
   conversationId: string;
+  source?: "text" | "whatsapp_voice";
 }): Promise<AiCoreWhatsappChatResult> {
   const adminKey = (process.env["ADMIN_API_KEY"] ?? "").trim();
   if (!adminKey) {
@@ -87,7 +257,7 @@ export async function requestAiCoreWhatsappChat(input: {
       mode: "ask",
       modelPolicy: "smart",
       conversationId: input.conversationId,
-      source: "text",
+      source: input.source ?? "text",
       context,
     }),
     signal: AbortSignal.timeout(75_000),
