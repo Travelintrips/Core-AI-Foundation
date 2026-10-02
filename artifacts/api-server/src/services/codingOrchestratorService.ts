@@ -77,6 +77,7 @@ interface CodingOrchestrationInput {
 }
 
 const ORCHESTRATION_RECOVERY_POLL_MS = 8_000;
+const REPOSITORY_ANALYZER_CLAIM_FAILOVER_MS = 15_000;
 const WAIT_REPOSITORY_ANALYZER_SLOT = "WAIT_REPOSITORY_ANALYZER_SLOT";
 let orchestrationRecoveryTimer: NodeJS.Timeout | null = null;
 let orchestrationRecoveryRunning = false;
@@ -612,6 +613,29 @@ export async function continueCodingOrchestration(
       { finalizeCodingRun: false },
     );
     if (!analysis) {
+      // Another executor may have won the claim between a watchdog status check
+      // and the on-demand compare-and-set. Do not fail the coding task while
+      // that executor legitimately owns the analyzer job.
+      const [currentJob] = await withTransientDatabaseRetry(
+        () => db
+          .select()
+          .from(aiJobsTable)
+          .where(eq(aiJobsTable.id, queuedJob.id))
+          .limit(1),
+        { attempts: 3, baseDelayMs: 150 },
+      );
+      if (currentJob && currentJob.status !== "queued") {
+        logger.info(
+          {
+            jobId: queuedJob.id,
+            jobStatus: currentJob.status,
+            taskId: input.task.id,
+            codingRunId: input.run.id,
+          },
+          "[coding-orchestrator] Repository Analyzer claim is owned by another executor",
+        );
+        return;
+      }
       throw new Error("Repository Analyzer job was not claimed by the Coding Orchestrator");
     }
 
@@ -759,6 +783,78 @@ export async function continueCodingOrchestration(
     }
     await failOrchestration(input, sessionId, stages, error);
   }
+}
+
+function scheduleRepositoryAnalyzerClaimFailover(
+  input: CodingOrchestrationInput,
+  sessionId: string,
+  queuedJob: AiJob,
+  stages: CodingStage[],
+): void {
+  const timer = setTimeout(() => {
+    void (async () => {
+      try {
+        const [currentJob] = await withTransientDatabaseRetry(
+          () => db
+            .select()
+            .from(aiJobsTable)
+            .where(eq(aiJobsTable.id, queuedJob.id))
+            .limit(1),
+          { attempts: 3, baseDelayMs: 150 },
+        );
+
+        // The dedicated child/remote worker claimed or completed the job in
+        // time. The watchdog is intentionally a no-op in the healthy path.
+        if (!currentJob || currentJob.status !== "queued") return;
+
+        logger.warn(
+          {
+            jobId: currentJob.id,
+            taskId: input.task.id,
+            codingRunId: input.run.id,
+            failoverAfterMs: REPOSITORY_ANALYZER_CLAIM_FAILOVER_MS,
+          },
+          "[coding-orchestrator] Repository Analyzer was not claimed; failing over to bounded in-process execution",
+        );
+
+        await logAudit(
+          "coding-orchestrator",
+          "repository_analyzer_claim_failover",
+          input.task.id,
+          "coding_task",
+          "success",
+          {
+            sessionId,
+            codingRunId: input.run.id,
+            jobId: currentJob.id,
+            failoverAfterMs: REPOSITORY_ANALYZER_CLAIM_FAILOVER_MS,
+          },
+        ).catch(() => undefined);
+
+        // executeRepositoryAnalyzerJobOnDemand performs the authoritative
+        // queued -> running compare-and-set. If another executor races this
+        // watchdog, continueCodingOrchestration re-checks ownership and exits
+        // without poisoning the task.
+        await continueCodingOrchestration(
+          input,
+          sessionId,
+          currentJob,
+          stages,
+        );
+      } catch (error) {
+        logger.error(
+          {
+            err: error,
+            jobId: queuedJob.id,
+            taskId: input.task.id,
+            codingRunId: input.run.id,
+          },
+          "[coding-orchestrator] Repository Analyzer claim failover failed",
+        );
+      }
+    })();
+  }, REPOSITORY_ANALYZER_CLAIM_FAILOVER_MS);
+  timer.unref();
 }
 
 /**
@@ -978,9 +1074,14 @@ export async function startCodingOrchestration(
     throw error;
   }
 
-  // In remote mode the API is enqueue-only. A separately supervised CPU worker
-  // polls the durable queue and executes Repository Analyzer work outside the
-  // production API host/resource pool.
+  // A dedicated analyzer is preferred, but availability must not depend on a
+  // child/remote worker silently dying before it claims the durable row. A
+  // short watchdog provides bounded in-process failover only when the job is
+  // still unclaimed; healthy dedicated execution remains unchanged.
+  scheduleRepositoryAnalyzerClaimFailover(input, sessionId, queuedJob, stages);
+
+  // In remote mode the API remains enqueue-first. The watchdog above is only a
+  // bounded safety net when the separately supervised CPU worker is unavailable.
   const analyzerMode = process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase();
   if (analyzerMode === "remote") {
     logger.info(
