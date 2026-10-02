@@ -7,6 +7,7 @@ import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import ChangePassword from "@/pages/change-password";
+import ResetPassword from "@/pages/reset-password";
 import { InternalAuthProvider } from "@/hooks/use-internal-auth";
 import { RequireAuth } from "@/components/require-auth";
 import { LangProvider } from "@/lib/i18n";
@@ -253,6 +254,7 @@ function AppRoutes() {
 
   if (pathname === "/login") return <Login />;
   if (pathname === "/change-password") return <ChangePassword />;
+  if (pathname === "/reset-password") return <ResetPassword />;
 
   return (
     <Switch>
@@ -261,6 +263,7 @@ function AppRoutes() {
       {/* These routes remain for client-side navigation after initial load. */}
       <Route path="/login" component={Login} />
       <Route path="/change-password" component={ChangePassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       {/* Everything else is the internal portal — requires an active staff session */}
       <Route>
         <RequireAuth>
