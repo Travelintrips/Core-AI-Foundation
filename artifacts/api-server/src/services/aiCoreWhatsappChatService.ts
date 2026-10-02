@@ -38,6 +38,21 @@ function gatewayConfig() {
   };
 }
 
+function resolveReplyDeviceId(inboundDeviceId?: string | null): string | null {
+  const configured = (process.env["AI_CORE_WA_REPLY_DEVICE_ID"] ?? "").trim();
+  if (configured) return configured;
+
+  if (process.env["AI_CORE_WA_REPLY_USE_INBOUND_DEVICE"] === "true") {
+    return inboundDeviceId?.trim() || null;
+  }
+
+  // By default, let the gateway choose the device assigned to this API client
+  // (or its configured default). The inbound device can belong to a different
+  // client scope, which would make an otherwise valid AI Core reply fail with
+  // DEVICE_NOT_ASSIGNED / DEVICE_ACCESS_DENIED.
+  return null;
+}
+
 export function buildWhatsappConversationId(senderDigits: string, destination: string): string {
   const digest = crypto
     .createHash("sha256")
@@ -119,6 +134,7 @@ export async function sendAiCoreWhatsappReply(input: {
 
   const clientMessageId = `aicore-chat-${input.incomingMessageId}`.slice(0, 160);
   const idempotencyKey = `ai-core-chat-${input.incomingMessageId}`.slice(0, 200);
+  const replyDeviceId = resolveReplyDeviceId(input.deviceId);
 
   try {
     const response = await fetch(`${baseUrl}/v1/messages`, {
@@ -130,11 +146,13 @@ export async function sendAiCoreWhatsappReply(input: {
       },
       body: JSON.stringify({
         type: "text",
-        ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+        ...(replyDeviceId ? { deviceId: replyDeviceId } : {}),
         to: input.to,
         text: input.text.slice(0, 10_000),
         clientMessageId,
-        replyToProviderMessageId: input.incomingMessageId.slice(0, 200),
+        ...(replyDeviceId
+          ? { replyToProviderMessageId: input.incomingMessageId.slice(0, 200) }
+          : {}),
       }),
       signal: AbortSignal.timeout(10_000),
     });
