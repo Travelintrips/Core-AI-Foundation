@@ -549,9 +549,21 @@ export async function recover(): Promise<void> {
           logger.error({ err, jobId }, "[dispatcher] Failed to retry stuck job");
         }
       } else {
+        const retryCount = Number(row["retry_count"] ?? 0);
+        const maxRetry = Number(row["max_retry"] ?? 0);
+        const nextRetryCount = retryCount + 1;
+        const exhausted = nextRetryCount > maxRetry;
+
         await db
           .update(aiJobsTable)
-          .set({ status: "queued", startedAt: null, updatedAt: now })
+          .set({
+            status: exhausted ? "failed" : "queued",
+            errorMessage: "Job execution timeout",
+            retryCount: nextRetryCount,
+            startedAt: exhausted ? undefined : null,
+            completedAt: exhausted ? now : null,
+            updatedAt: now,
+          })
           .where(and(eq(aiJobsTable.id, jobId), eq(aiJobsTable.status, "running")));
       }
 
@@ -559,6 +571,8 @@ export async function recover(): Promise<void> {
         startedAt: row["started_at"],
         timeoutMs: _settings.jobTimeoutMs,
         hadWorker: !!holder,
+        retryCount: Number(row["retry_count"] ?? 0),
+        maxRetry: Number(row["max_retry"] ?? 0),
       });
     }
   } catch (err) {
