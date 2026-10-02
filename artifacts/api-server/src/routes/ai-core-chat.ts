@@ -10,6 +10,7 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
+import { logger } from "../lib/logger.js";
 import {
   createConstrainedCodingProviderAdapter,
 } from "../services/localCodingAiExecutionGateService.js";
