@@ -92,8 +92,11 @@ import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerSh
 import {
   appendLearningsToMessage,
   promoteExplicitChatLearning,
+  promoteOpenAiTeacherExample,
   recordChatLearningEvent,
   retrieveChatLearnings,
+  retrieveOpenAiTeacherAnswer,
+  type ChatLearningScope,
 } from "../services/aiCoreChatLearningService.js";
 import {
   buildConversationPrompt,
@@ -938,11 +941,31 @@ async function deterministicReply(
   return null;
 }
 
+async function promoteTeacherFromResult(
+  question: string,
+  scope: ChatLearningScope | null,
+  result: Record<string, unknown>,
+): Promise<void> {
+  if (!scope) return;
+  if (String(result["provider"] ?? "").trim().toLowerCase() !== "openai") return;
+  const answer = typeof result["reply"] === "string" ? result["reply"] : "";
+  const model = typeof result["model"] === "string" ? result["model"] : "unknown";
+  if (!answer.trim()) return;
+  await promoteOpenAiTeacherExample({
+    question,
+    answer,
+    scope,
+    provider: "openai",
+    model,
+  }).catch(() => false);
+}
+
 async function answerAskMode(
   message: string,
   policy: ChatPolicy,
   context: AdminDbConversationMessage[] = [],
   routingMessage = message,
+  teacherScope: ChatLearningScope | null = null,
 ): Promise<Record<string, unknown>> {
   const workload = classifyAiCoreWorkload(routingMessage);
   const conversationalMessage = buildConversationPrompt(message, context);
@@ -1020,16 +1043,40 @@ async function answerAskMode(
     };
   }
 
+  if (teacherScope && context.length === 0) {
+    const learned = await retrieveOpenAiTeacherAnswer(routingMessage, teacherScope).catch(() => null);
+    if (learned) {
+      return {
+        kind: "answer",
+        route: "LEARNED_MEMORY",
+        provider: null,
+        model: null,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        estimatedCostUsd: 0,
+        ...routingMeta,
+        reply: learned.answer,
+        learnedFrom: {
+          provider: learned.provider,
+          model: learned.model,
+          similarity: learned.similarity,
+          learnedAt: learned.learnedAt,
+        },
+      };
+    }
+  }
+
   if (policy === "smart") {
     const cloud = await resolveCloudSelection(workload.workload);
     if (cloud.ok) {
       try {
         const result = await invokeChatModel(cloud.selection, conversationalMessage);
+        await promoteTeacherFromResult(routingMessage, teacherScope, result);
         return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
       } catch (cloudError) {
         await quarantineRetiredCloudModel(cloud.selection, cloudError);
         const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
         if (cloudFallback.ok) {
+          await promoteTeacherFromResult(routingMessage, teacherScope, cloudFallback.result);
           return {
             kind: "answer",
             route: "CLOUD_FALLBACK",
@@ -1134,11 +1181,13 @@ async function answerAskMode(
     }
     try {
       const result = await invokeChatModel(cloud.selection, conversationalMessage);
+      await promoteTeacherFromResult(routingMessage, teacherScope, result);
       return { kind: "answer", route: "CLOUD", ...routingMeta, ...result };
     } catch (error) {
       await quarantineRetiredCloudModel(cloud.selection, error);
       const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
       if (cloudFallback.ok) {
+        await promoteTeacherFromResult(routingMessage, teacherScope, cloudFallback.result);
         return {
           kind: "answer",
           route: "CLOUD_FALLBACK",
@@ -1181,11 +1230,13 @@ async function answerAskMode(
 
   try {
     const result = await invokeChatModel(cloud.selection, conversationalMessage);
+    await promoteTeacherFromResult(routingMessage, teacherScope, result);
     return { kind: "answer", route: "CLOUD_FALLBACK", ...routingMeta, ...result };
   } catch (error) {
     await quarantineRetiredCloudModel(cloud.selection, error);
     const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
     if (cloudFallback.ok) {
+      await promoteTeacherFromResult(routingMessage, teacherScope, cloudFallback.result);
       return {
         kind: "answer",
         route: "CLOUD_FALLBACK",
@@ -1252,6 +1303,7 @@ async function streamAskMode(
   signal: AbortSignal,
   context: AdminDbConversationMessage[] = [],
   routingMessage = message,
+  teacherScope: ChatLearningScope | null = null,
 ): Promise<void> {
   const workload = classifyAiCoreWorkload(routingMessage);
   const conversationalMessage = buildConversationPrompt(message, context);
@@ -1310,8 +1362,31 @@ async function streamAskMode(
     workload.workload === "CODING" ||
     (policy !== "smart" && policy !== "cloud")
   ) {
-    writeBufferedChatStream(res, await answerAskMode(message, policy, context));
+    writeBufferedChatStream(res, await answerAskMode(message, policy, context, routingMessage, teacherScope));
     return;
+  }
+
+  if (teacherScope && context.length === 0) {
+    const learned = await retrieveOpenAiTeacherAnswer(routingMessage, teacherScope).catch(() => null);
+    if (learned) {
+      writeBufferedChatStream(res, {
+        kind: "answer",
+        route: "LEARNED_MEMORY",
+        provider: null,
+        model: null,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        estimatedCostUsd: 0,
+        ...routingMeta,
+        reply: learned.answer,
+        learnedFrom: {
+          provider: learned.provider,
+          model: learned.model,
+          similarity: learned.similarity,
+          learnedAt: learned.learnedAt,
+        },
+      });
+      return;
+    }
   }
 
   const cloud = await resolveCloudSelection(workload.workload);
@@ -1323,6 +1398,7 @@ async function streamAskMode(
   const provider = String(cloud.selection.provider.slug).trim().toLowerCase();
   const model = String(cloud.selection.model.modelId).trim();
   let emittedText = false;
+  let completeReply = "";
 
   writeStreamEvent(res, "meta", {
     route: "CLOUD",
@@ -1359,11 +1435,18 @@ async function streamAskMode(
       onDelta: (text) => {
         if (!text || signal.aborted || res.writableEnded) return;
         emittedText = true;
+        completeReply += text;
         writeStreamEvent(res, "delta", { text });
       },
     });
 
     if (signal.aborted || res.writableEnded) return;
+
+    await promoteTeacherFromResult(routingMessage, teacherScope, {
+      provider,
+      model,
+      reply: completeReply,
+    });
 
     writeStreamEvent(res, "done", {
       usage: result.usage,
@@ -1387,7 +1470,7 @@ async function streamAskMode(
       safeProviderFailure(error) || "Cloud streaming invocation failed.";
 
     if (!emittedText && quarantined) {
-      const retry = await answerAskMode(message, policy, context);
+      const retry = await answerAskMode(message, policy, context, routingMessage, teacherScope);
       const retryModel =
         typeof retry["model"] === "string" ? retry["model"] : null;
       if (retryModel !== model || retry["route"] !== "CLOUD") {
@@ -1406,6 +1489,7 @@ async function streamAskMode(
     if (!emittedText) {
       const cloudFallback = await invokeCloudFallbackChain(cloud.selection, conversationalMessage);
       if (cloudFallback.ok) {
+        await promoteTeacherFromResult(routingMessage, teacherScope, cloudFallback.result);
         writeStreamEvent(res, "meta", {
           route: "CLOUD_FALLBACK",
           provider: String(cloudFallback.selection.provider.slug),
@@ -1717,6 +1801,7 @@ async function runInfrastructureOperation(
 async function runAutoMode(
   input: z.infer<typeof ChatRequest>,
   executionInput: z.infer<typeof ChatRequest> = input,
+  teacherScope: ChatLearningScope | null = null,
 ): Promise<Record<string, unknown>> {
   const parsedConversation = parseConversationCommand(input.message, input.context ?? []);
   if (parsedConversation.ambiguous) {
@@ -1800,7 +1885,13 @@ async function runAutoMode(
     if (remote) return { ...remote, ...routingMeta };
   }
 
-  const answer = await answerAskMode(executionInput.message, input.modelPolicy, input.context ?? [], input.message);
+  const answer = await answerAskMode(
+    executionInput.message,
+    input.modelPolicy,
+    input.context ?? [],
+    input.message,
+    teacherScope,
+  );
   return { ...routingMeta, ...answer };
 }
 
@@ -1853,6 +1944,16 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       visionModel: process.env["AI_CORE_VISION_MODEL"]?.trim() || "gpt-6-luna",
       providerConfigured: Boolean(getProviderApiKey("openai")),
       persisted: false,
+    },
+    learning: {
+      version: 2,
+      explicitRules: true,
+      openAiTeacherMemory: true,
+      teacherReuseRoute: "LEARNED_MEMORY",
+      teacherReuseCostTokens: 0,
+      teacherTtlDays: 30,
+      excludesDynamicQuestions: true,
+      secretsRedacted: true,
     },
     workloadRouting: describeAiCoreWorkloadRouting(),
     local: local.ok
@@ -2062,6 +2163,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       controller.signal,
       safeContext,
       safeMessage,
+      !parsed.data.image && safeContext.length === 0 ? scope : null,
     );
   } catch (error) {
     if (!controller.signal.aborted && !res.writableEnded) {
@@ -2139,8 +2241,13 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
               effectiveInput.modelPolicy,
               effectiveInput.context ?? [],
               rawInput.message,
+              !parsed.data.image && safeContext.length === 0 ? scope : null,
             )
-          : await runAutoMode(rawInput, effectiveInput);
+          : await runAutoMode(
+              rawInput,
+              effectiveInput,
+              !parsed.data.image && safeContext.length === 0 ? scope : null,
+            );
 
     const assistantContent =
       typeof result["reply"] === "string"
