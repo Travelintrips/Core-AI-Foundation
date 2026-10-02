@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { verifySessionToken, getInternalUserById, SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
 
@@ -15,6 +16,32 @@ import { verifySessionToken, getInternalUserById, SESSION_COOKIE_NAME } from "..
  * If ADMIN_API_KEY is not set in development, the middleware allows all traffic
  * (dev fail-open convenience).
  */
+const AI_CORE_CONNECTOR_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
+  { method: "POST", pattern: /^\/ai\/core-chat\/messages$/ },
+  { method: "GET", pattern: /^\/ai\/core-chat\/tasks\/[0-9a-f-]{36}\/progress$/i },
+];
+
+function safeEqualSecret(actual: string, expected: string): boolean {
+  const left = Buffer.from(actual);
+  const right = Buffer.from(expected);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function isAiCoreConnectorRoute(req: Request): boolean {
+  return AI_CORE_CONNECTOR_ROUTE_RULES.some(
+    (rule) => req.method === rule.method && rule.pattern.test(req.path),
+  );
+}
+
+function hasValidAiCoreConnectorKey(req: Request): boolean {
+  if (!isAiCoreConnectorRoute(req)) return false;
+  const configured = process.env["AI_CORE_CHAT_CONNECTOR_KEY"]?.trim();
+  if (!configured) return false;
+  const supplied = String(req.headers["x-ai-core-connector-key"] ?? "").trim();
+  if (!supplied) return false;
+  return safeEqualSecret(supplied, configured);
+}
+
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   // Short-circuit: already authenticated (e.g. by optionalSessionAuth upstream)
   if ((req as unknown as Record<string, unknown>).internalUser) {
@@ -34,6 +61,13 @@ export async function adminAuth(req: Request, res: Response, next: NextFunction)
         return;
       }
     }
+  }
+
+  // ── Path 2: dedicated AI Core Chat connector key ──────────────────────────
+  // Scoped to direct command submission + task progress only.
+  if (hasValidAiCoreConnectorKey(req)) {
+    next();
+    return;
   }
 
   // ── Path 2: ADMIN_API_KEY header ──────────────────────────────────────────
@@ -108,6 +142,7 @@ const PUBLIC_PATH_PREFIXES = [
  * showcase, live AI preview) and were incorrectly requiring ADMIN_API_KEY.
  */
 const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
+  { method: "GET", pattern: /^\/ai\/core-chat\/connector\/openapi\.json$/ },
   // Service detail / quote / request-service (catalog.ts) — public because
   // assertServiceIsPubliclyRequestable() still gates the underlying
   // category visibility server-side.

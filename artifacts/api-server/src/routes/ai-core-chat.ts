@@ -1898,6 +1898,104 @@ async function runAutoMode(
   return { ...routingMeta, ...answer };
 }
 
+router.get("/ai/core-chat/connector/openapi.json", (_req, res): void => {
+  const serverUrl =
+    process.env["AI_CORE_PUBLIC_BASE_URL"]?.trim() ||
+    process.env["PUBLIC_APP_URL"]?.trim() ||
+    "https://aicore.cstlogistic.co.id";
+
+  res.json({
+    openapi: "3.1.0",
+    info: {
+      title: "AI Core Direct Command Connector",
+      version: "1.0.0",
+      description:
+        "Scoped connector for submitting text instructions to AI Core Chat and reading coding-task progress. The connector key cannot access general admin/database endpoints.",
+    },
+    servers: [{ url: serverUrl.replace(/\/$/, "") + "/api" }],
+    components: {
+      securitySchemes: {
+        aiCoreConnectorKey: {
+          type: "apiKey",
+          in: "header",
+          name: "x-ai-core-connector-key",
+        },
+      },
+      schemas: {
+        CommandRequest: {
+          type: "object",
+          additionalProperties: false,
+          required: ["message", "mode"],
+          properties: {
+            message: { type: "string", minLength: 1, maxLength: 50000 },
+            mode: { type: "string", const: "agent" },
+            modelPolicy: {
+              type: "string",
+              enum: ["economy", "smart", "auto", "cloud"],
+              default: "smart",
+            },
+            projectName: { type: "string", default: "Core AI Foundation" },
+            repository: {
+              type: "string",
+              default: "Travelintrips/Core-AI-Foundation",
+            },
+            branch: { type: "string", default: "main" },
+            priority: { type: "integer", minimum: 0, maximum: 100, default: 50 },
+            conversationId: { type: "string" },
+            source: { type: "string", const: "text" },
+          },
+        },
+      },
+    },
+    security: [{ aiCoreConnectorKey: [] }],
+    paths: {
+      "/ai/core-chat/messages": {
+        post: {
+          operationId: "sendAiCoreCommand",
+          summary: "Send a text command directly to AI Core",
+          description:
+            "Submit an execution instruction through AI Core Chat agent mode. Returns a taskId/taskNumber when routed to Coding Orchestrator.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CommandRequest" },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Command handled synchronously" },
+            "202": { description: "Command accepted as an AI Core task" },
+            "400": { description: "Invalid request" },
+            "401": { description: "Invalid or missing connector key" },
+            "503": { description: "AI Core temporarily unavailable" },
+          },
+        },
+      },
+      "/ai/core-chat/tasks/{id}/progress": {
+        get: {
+          operationId: "getAiCoreTaskProgress",
+          summary: "Read AI Core coding-task progress",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": { description: "Current task progress" },
+            "400": { description: "Invalid task id" },
+            "401": { description: "Invalid or missing connector key" },
+            "404": { description: "Task not found" },
+          },
+        },
+      },
+    },
+  });
+});
+
 router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
   const [local] = await Promise.all([
     resolveLocalSelection().catch((error: unknown) => ({
