@@ -18,6 +18,7 @@ import {
   UpdateCodingTaskResponse,
 } from "@workspace/api-zod";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
+import { ensureGcpCodingWorkerStarted } from "../services/gcpCodingWorkerLifecycleService.js";
 import { logger } from "../lib/logger.js";
 import { approvePlanAndStartCoding } from "../services/codingAgentService.js";
 import {
@@ -440,6 +441,10 @@ router.post("/ai/coding/tasks/:id/run", async (req, res): Promise<void> => {
         .where(eq(aiCodingTasksTable.id, task.id));
 
       return { run: createdRun, task };
+    });
+
+    void ensureGcpCodingWorkerStarted().catch((error) => {
+      logger.warn({ err: error, taskId: task.id, runId: run.id }, "Failed to auto-start GCP coding worker");
     });
 
     // The durable run already exists at this point. Do not keep the HTTP
