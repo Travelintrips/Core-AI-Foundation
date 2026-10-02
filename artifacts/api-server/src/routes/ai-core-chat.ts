@@ -130,7 +130,7 @@ const ChatRequest = z.object({
 const VoiceCloneEnrollRequest = z.object({
   name: z.string().trim().min(1).max(120).default("AI Core - Suara Saya"),
   mimeType: z.string().trim().regex(/^audio\/[a-z0-9.+-]+$/i),
-  audioBase64: z.string().min(1).max(14_000_000),
+  audioBase64: z.string().min(1).max(8_500_000),
   consent: z.literal(true),
 }).strict();
 
@@ -332,8 +332,8 @@ function withImageContext(message: string, imageDescription: string): string {
 function decodeBase64Audio(value: string): Buffer {
   const buffer = Buffer.from(value, "base64");
   if (!buffer.length) throw new Error("Sampel suara kosong.");
-  if (buffer.length > 10 * 1024 * 1024) {
-    throw new Error("Sampel suara maksimal 10 MB.");
+  if (buffer.length > 6 * 1024 * 1024) {
+    throw new Error("Sampel suara maksimal 6 MB.");
   }
   return buffer;
 }
@@ -1940,7 +1940,7 @@ router.post("/ai/core-chat/voice-clone/speak", async (req, res): Promise<void> =
 
   try {
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(parsed.data.voiceId)}?output_format=mp3_44100_128&enable_logging=false`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(parsed.data.voiceId)}?output_format=mp3_44100_128`,
       {
         method: "POST",
         headers: {
