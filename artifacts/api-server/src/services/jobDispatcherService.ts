@@ -71,6 +71,21 @@ export interface TickResult {
   failed: number;
 }
 
+export function stuckJobRetryDisposition(input: {
+  retryCount: unknown;
+  maxRetry: unknown;
+}): { nextRetryCount: number; exhausted: boolean } {
+  const retryCount = Number(input.retryCount ?? 0);
+  const maxRetry = Number(input.maxRetry ?? 0);
+  const safeRetryCount = Number.isInteger(retryCount) && retryCount >= 0 ? retryCount : 0;
+  const safeMaxRetry = Number.isInteger(maxRetry) && maxRetry >= 0 ? maxRetry : 0;
+  const nextRetryCount = safeRetryCount + 1;
+  return {
+    nextRetryCount,
+    exhausted: nextRetryCount > safeMaxRetry,
+  };
+}
+
 // ── Dispatcher worker configs (Phase 5.2) ─────────────────────────────────────
 
 interface WorkerConfig {
@@ -549,9 +564,31 @@ export async function recover(): Promise<void> {
           logger.error({ err, jobId }, "[dispatcher] Failed to retry stuck job");
         }
       } else {
+        const disposition = stuckJobRetryDisposition({
+          retryCount: row["retry_count"],
+          maxRetry: row["max_retry"],
+        });
         await db
           .update(aiJobsTable)
-          .set({ status: "queued", startedAt: null, updatedAt: now })
+          .set(
+            disposition.exhausted
+              ? {
+                  status: "failed",
+                  retryCount: disposition.nextRetryCount,
+                  completedAt: now,
+                  errorMessage: "Job execution timeout",
+                  payloadJson: sql`COALESCE(payload_json, '{}'::jsonb) - '_claimedByWorkerId'`,
+                  updatedAt: now,
+                }
+              : {
+                  status: "queued",
+                  retryCount: disposition.nextRetryCount,
+                  startedAt: null,
+                  errorMessage: "Job execution timeout",
+                  payloadJson: sql`COALESCE(payload_json, '{}'::jsonb) - '_claimedByWorkerId'`,
+                  updatedAt: now,
+                },
+          )
           .where(and(eq(aiJobsTable.id, jobId), eq(aiJobsTable.status, "running")));
       }
 
@@ -559,6 +596,8 @@ export async function recover(): Promise<void> {
         startedAt: row["started_at"],
         timeoutMs: _settings.jobTimeoutMs,
         hadWorker: !!holder,
+        retryCount: row["retry_count"],
+        maxRetry: row["max_retry"],
       });
     }
   } catch (err) {
