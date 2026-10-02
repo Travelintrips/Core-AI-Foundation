@@ -107,7 +107,7 @@ export default function Login() {
               type="button"
               variant="outline"
               className="w-full"
-              disabled={submitting || devSubmitting || resetSubmitting || !email.trim()}
+              disabled={submitting || devSubmitting || resetSubmitting}
               onClick={handleResetPassword}
               data-testid="button-reset-password"
             >
