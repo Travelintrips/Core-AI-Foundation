@@ -63,6 +63,7 @@ const {
   configureIsolatedRepositoryWorkspace,
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
+  getRepositoryAnalyzerQueueClaimTimeoutMs,
   prepareRepositoryWorkspace,
 } = await import("../repositoryAnalyzerService.js");
 
@@ -291,6 +292,24 @@ describe("repository analyzer GitHub clone authentication", () => {
         "fatal: Remote branch missing does not exist",
       ),
     ).toBe(false);
+  });
+});
+
+describe("repository analyzer queue claim timeout", () => {
+  it("defaults to one minute and bounds configured values", () => {
+    expect(getRepositoryAnalyzerQueueClaimTimeoutMs({})).toBe(60_000);
+    expect(getRepositoryAnalyzerQueueClaimTimeoutMs({
+      REPOSITORY_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS: "45000",
+    })).toBe(45_000);
+    expect(getRepositoryAnalyzerQueueClaimTimeoutMs({
+      REPOSITORY_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS: "1000",
+    })).toBe(10_000);
+    expect(getRepositoryAnalyzerQueueClaimTimeoutMs({
+      REPOSITORY_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS: "9999999",
+    })).toBe(300_000);
+    expect(getRepositoryAnalyzerQueueClaimTimeoutMs({
+      REPOSITORY_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS: "invalid",
+    })).toBe(60_000);
   });
 });
 
