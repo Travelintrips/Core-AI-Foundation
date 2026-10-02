@@ -231,6 +231,48 @@ export function isAnalyzerBranchFromPriorWorkstreamAttempt(
   return false;
 }
 
+export function buildWorkstreamMaterializationClonePlan(input: {
+  parentBranch: string;
+  authorizedBranch: string;
+  ciRepairBranch?: string | null;
+}): {
+  sourceBranch: string;
+  isolatedBranchName: string;
+} {
+  const normalizeBranch = (
+    value: string | null | undefined,
+    label: string,
+  ): string => {
+    const branch = value?.trim() ?? "";
+    if (
+      !branch ||
+      !/^[A-Za-z0-9._/-]+$/.test(branch) ||
+      branch.startsWith("-")
+    ) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        `${label} repository branch is invalid for workstream materialization.`,
+        "INVALID_CONTEXT",
+      );
+    }
+    return branch;
+  };
+
+  const parentBranch = normalizeBranch(input.parentBranch, "Parent");
+  const authorizedBranch = normalizeBranch(
+    input.authorizedBranch,
+    "Authorized workstream",
+  );
+  const repairBranch = input.ciRepairBranch?.trim() ?? "";
+  const sourceBranch = repairBranch
+    ? normalizeBranch(repairBranch, "CI repair")
+    : parentBranch;
+
+  return {
+    sourceBranch,
+    isolatedBranchName: authorizedBranch,
+  };
+}
+
 function normalizeRepoPath(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
@@ -753,8 +795,7 @@ async function loadExecutionContext(
     .where(eq(aiCodingTasksTable.id, graph.taskId));
   if (
     !parentTask ||
-    childTask.repository !== parentTask.repository ||
-    childTask.branch !== parentTask.branch
+    childTask.repository !== parentTask.repository
   ) {
     throw new LocalCodingWorkstreamAiExecutionError(
       "Child coding task repository binding no longer matches its parent graph task.",
@@ -820,7 +861,10 @@ async function loadExecutionContext(
     childTask: {
       id: childTask.id,
       repository: childTask.repository,
-      branch: childTask.branch,
+      // The parent task owns the real remote source branch. Older child tasks
+      // may still contain a synthetic ai-core/* branch from pre-fix runs; never
+      // use that synthetic local branch as a remote clone source.
+      branch: parentTask.branch,
       projectName: childTask.projectName,
       instruction: childTask.instruction,
     },
@@ -2266,9 +2310,47 @@ export async function materializeApprovedWorkstreamAiCandidate(
     );
   }
 
+  const [graph] = await db
+    .select()
+    .from(aiCodingTaskGraphsTable)
+    .where(eq(aiCodingTaskGraphsTable.id, current.graphId));
+  if (!graph) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Coding task graph not found.",
+      "NOT_FOUND",
+    );
+  }
+
+  const [parentTask] = await db
+    .select()
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, graph.taskId));
+  if (!parentTask || parentTask.repository !== childTask.repository) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Parent coding task repository binding no longer matches the workstream child task.",
+      "STALE_CONTEXT",
+    );
+  }
+
+  const ciRepair = ciSelfRepairContext(current.resultJson);
+  const clonePlan = buildWorkstreamMaterializationClonePlan({
+    parentBranch: parentTask.branch,
+    authorizedBranch: branchName,
+    ciRepairBranch:
+      typeof ciRepair?.headBranch === "string" ? ciRepair.headBranch : null,
+  });
+
+  // Synthetic ai-core/* workstream names are local isolation/push targets.
+  // They do not exist on origin until materialization succeeds, so clone the
+  // real remote source branch and recreate the authorized branch locally at
+  // the exact approved base SHA.
   const workspace = await prepareRepositoryWorkspace(
     childTask.repository,
-    branchName,
+    clonePlan.sourceBranch,
+    {
+      isolatedBranchName: clonePlan.isolatedBranchName,
+      expectedBaseSha: baseSha,
+    },
   );
   if (!workspace.cleanup) {
     throw new LocalCodingWorkstreamAiExecutionError(
