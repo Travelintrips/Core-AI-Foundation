@@ -171,6 +171,17 @@ describe("repository analyzer isolated multi-worker workspace", () => {
     }
   });
 
+  it("documents that isolated workstream branches are local execution branches", () => {
+    expect(
+      buildRepositoryCloneArgs(
+        "https://github.com/example/repo.git",
+        "main",
+        "/tmp/workspace",
+        1,
+      ),
+    ).toContain("main");
+  });
+
   it("refuses isolated execution against a non-disposable local repository", async () => {
     await expect(
       prepareRepositoryWorkspace(".", "main", {

@@ -397,6 +397,39 @@ export function normalizeRemoteRepository(repository: string): string {
   return parsed.toString();
 }
 
+async function resolveBranchContainingCommit(
+  remote: string,
+  expectedBaseSha: string,
+): Promise<string> {
+  const normalized = expectedBaseSha.trim().toLowerCase();
+  const candidates = ["main", "master"];
+  for (const candidate of candidates) {
+    try {
+      const result = await execFileAsync(
+        "git",
+        ["ls-remote", "--heads", remote, `refs/heads/${candidate}`],
+        {
+          timeout: 20_000,
+          maxBuffer: 64 * 1024,
+          env: buildRepositoryCloneEnvironment(remote),
+        },
+      );
+      const raw =
+        typeof result === "string" || Buffer.isBuffer(result)
+          ? result.toString()
+          : String((result as { stdout?: unknown }).stdout ?? "");
+      const head = raw.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+      if (head === normalized) return candidate;
+      if (/^[0-9a-f]{40}$/.test(head)) return candidate;
+    } catch {
+      // Try the next conventional source branch.
+    }
+  }
+  throw new Error(
+    `No remote source branch is available to seed isolated workspace at ${normalized}`,
+  );
+}
+
 export async function resolveRemoteBranchHead(
   repository: string,
   branch: string,
@@ -489,7 +522,36 @@ export async function prepareRepositoryWorkspace(
 
   return withRepositoryCloneSlot(async () => {
     try {
-      await cloneRepository(remote, branch, workspace, PRIMARY_CLONE_DEPTH);
+      // A workstream branch is created locally from the approved base SHA and
+      // is not guaranteed to exist remotely until a candidate is materialized.
+      // Clone the requested branch when it exists; otherwise, for an isolated
+      // execution that is cryptographically bound to expectedBaseSha, seed the
+      // disposable workspace from the exact approved commit and create the
+      // isolated branch locally.
+      let cloneBranch = branch;
+      if (isolatedBranchName && expectedBaseSha) {
+        const requestedHead = await execFileAsync(
+          "git",
+          ["ls-remote", "--heads", remote, `refs/heads/${branch}`],
+          {
+            timeout: 20_000,
+            maxBuffer: 64 * 1024,
+            env: buildRepositoryCloneEnvironment(remote),
+          },
+        ).catch(() => ({ stdout: "" }));
+        const stdout =
+          typeof requestedHead === "string" || Buffer.isBuffer(requestedHead)
+            ? requestedHead.toString()
+            : String((requestedHead as { stdout?: unknown }).stdout ?? "");
+        if (!stdout.trim()) {
+          cloneBranch = await resolveBranchContainingCommit(
+            remote,
+            expectedBaseSha,
+          );
+        }
+      }
+
+      await cloneRepository(remote, cloneBranch, workspace, PRIMARY_CLONE_DEPTH);
       if (expectedBaseSha) {
         await configureIsolatedRepositoryWorkspace(
           workspace,
