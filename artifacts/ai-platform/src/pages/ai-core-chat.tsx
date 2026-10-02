@@ -114,7 +114,7 @@ const VOICE_PRESET_KEY = "ai_core_voice_preset_v1";
 const CLONED_VOICE_ID_KEY = "ai_core_cloned_voice_id_v1";
 const MAX_MESSAGES = 80;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_VOICE_SAMPLE_BYTES = 10 * 1024 * 1024;
+const MAX_VOICE_SAMPLE_BYTES = 6 * 1024 * 1024;
 
 type VoicePreset = "auto" | "male" | "female_soft" | "female_firm" | "cloned";
 type PendingImage = {
@@ -270,6 +270,7 @@ export default function AiCoreChat() {
   const [clonedVoiceId, setClonedVoiceId] = useState(() => loadClonedVoiceId());
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false);
   const [voiceCloneStatus, setVoiceCloneStatus] = useState("");
+  const [voiceCloneConsent, setVoiceCloneConsent] = useState(false);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [attachmentError, setAttachmentError] = useState("");
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -550,7 +551,7 @@ export default function AiCoreChat() {
       return;
     }
     if (file.size > MAX_VOICE_SAMPLE_BYTES) {
-      setVoiceCloneStatus("Sampel suara maksimal 10 MB.");
+      setVoiceCloneStatus("Sampel suara maksimal 6 MB.");
       return;
     }
     setVoiceCloneBusy(true);
@@ -563,7 +564,7 @@ export default function AiCoreChat() {
           name: "AI Core - Suara Saya",
           mimeType: file.type,
           audioBase64: base64,
-          consent: true,
+          consent: voiceCloneConsent,
         }),
       });
       setClonedVoiceId(result.voiceId);
@@ -1186,13 +1187,21 @@ export default function AiCoreChat() {
                       <option value="female_firm">Wanita Tegas</option>
                       {clonedVoiceId && <option value="cloned">Suara Saya</option>}
                     </select>
+                    <label className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[10px]" style={{ background: "#0D1730", color: "#8DA1C8", border: "1px solid #263765" }}>
+                      <input
+                        type="checkbox"
+                        checked={voiceCloneConsent}
+                        onChange={(event) => setVoiceCloneConsent(event.target.checked)}
+                      />
+                      Suara saya / saya berizin
+                    </label>
                     <button
                       type="button"
                       onClick={() => voiceSampleInputRef.current?.click()}
-                      disabled={voiceCloneBusy}
+                      disabled={voiceCloneBusy || !voiceCloneConsent}
                       className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
-                      title="Daftarkan sampel suara Anda sendiri atau suara yang Anda punya izin untuk gunakan"
+                      title={voiceCloneConsent ? "Daftarkan sampel suara (maksimal 6 MB)" : "Centang persetujuan kepemilikan/izin suara terlebih dahulu"}
                     >
                       {voiceCloneBusy ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
                       {clonedVoiceId ? "Ganti Suara Saya" : "Daftarkan Suara Saya"}
