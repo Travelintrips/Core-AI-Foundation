@@ -81,6 +81,35 @@ export function isTransientDatabaseConnectionError(error: unknown): boolean {
   return isTransientDatabaseConnectionErrorAtDepth(error, 0);
 }
 
+function isDatabaseAuthenticationErrorAtDepth(
+  error: unknown,
+  depth: number,
+): boolean {
+  if (depth > 4) return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown } | null;
+  const code = typeof candidate?.code === "string" ? candidate.code : "";
+  const message = String(candidate?.message ?? error ?? "").toLowerCase();
+
+  // 28P01 = invalid_password. Supavisor can also protect itself with a short
+  // circuit breaker after repeated failed handshakes; treat that state as the
+  // same permanent credential fault for the lifetime of this process.
+  if (
+    code === "28P01" ||
+    /password authentication failed|invalid password|too many authentication failures|circuit breaker.*auth_error|authentication failures.*temporarily blocked/.test(message)
+  ) {
+    return true;
+  }
+
+  const cause = candidate?.cause;
+  return cause != null && cause !== error
+    ? isDatabaseAuthenticationErrorAtDepth(cause, depth + 1)
+    : false;
+}
+
+export function isDatabaseAuthenticationError(error: unknown): boolean {
+  return isDatabaseAuthenticationErrorAtDepth(error, 0);
+}
+
 export async function withTransientDatabaseRetry<T>(
   operation: () => Promise<T>,
   options: { attempts?: number; baseDelayMs?: number } = {},
