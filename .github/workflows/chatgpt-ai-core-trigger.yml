@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   emit-ai-core-event:
@@ -24,3 +25,44 @@ jobs:
           test "${#COMMAND}" -le 2000
           echo "ChatGPT command accepted for AI Core CI ingress."
           echo "Command length: ${#COMMAND}"
+
+      - name: Validate GCP handoff configuration
+        shell: bash
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.GCP_AI_CORE_SERVICE_ACCOUNT }}
+          TOKEN_SECRET: ${{ vars.GCP_AI_CORE_TOKEN_SECRET }}
+          CONTROL_BRIDGE_URL: ${{ vars.AI_CORE_CONTROL_BRIDGE_URL }}
+        run: |
+          test -n "$WIF_PROVIDER"
+          test -n "$SERVICE_ACCOUNT"
+          test -n "$TOKEN_SECRET"
+          test -n "$CONTROL_BRIDGE_URL"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_AI_CORE_SERVICE_ACCOUNT }}
+
+      - name: Read AI Core token from Secret Manager
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            ai_core_token:${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AI_CORE_TOKEN_SECRET }}
+
+      - name: Send command to AI Core Control Bridge
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.command }}
+          CONTROL_BRIDGE_URL: ${{ vars.AI_CORE_CONTROL_BRIDGE_URL }}
+          AI_CORE_TOKEN: ${{ steps.secrets.outputs.ai_core_token }}
+        run: |
+          payload="$(jq -cn --arg command "$COMMAND" '{command:$command,source:"chatgpt-github-actions"}')"
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $AI_CORE_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$payload" \
+            "$CONTROL_BRIDGE_URL"
