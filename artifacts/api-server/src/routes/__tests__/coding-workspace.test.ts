@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockTransaction = vi.hoisted(() => vi.fn());
 const mockDbSelect = vi.hoisted(() => vi.fn());
+const mockSelectOrderBy = vi.hoisted(() => vi.fn());
 const mockSelectFor = vi.hoisted(() => vi.fn());
 const mockSelectLimit = vi.hoisted(() => vi.fn());
 const mockInsertValues = vi.hoisted(() => vi.fn());
@@ -144,6 +145,7 @@ const MockLocalCommitApprovalError = vi.hoisted(() => class extends Error {
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
   where: vi.fn(() => selectBuilder),
+  orderBy: mockSelectOrderBy,
   for: mockSelectFor,
   limit: mockSelectLimit,
 };
@@ -165,6 +167,7 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...conditions: unknown[]) => conditions),
   desc: vi.fn(),
   eq: vi.fn((...conditions: unknown[]) => conditions),
+  notLike: vi.fn((...conditions: unknown[]) => ["notLike", ...conditions]),
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -187,6 +190,7 @@ vi.mock("@workspace/db", () => ({
   },
   aiCodingTasksTable: {
     id: "codingTasks.id",
+    taskNumber: "codingTasks.taskNumber",
     createdAt: "codingTasks.createdAt",
   },
 }));
@@ -361,6 +365,26 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
 
     expect(response.status).toBe(400);
     expect(mockListCodingRepositoryBranches).not.toHaveBeenCalled();
+  });
+});
+
+describe("AI coding workspace task list", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDbSelect.mockReturnValue(selectBuilder);
+    mockSelectOrderBy.mockResolvedValue([task]);
+  });
+
+  it("keeps multi-worker child executions out of the top-level task queue", async () => {
+    const response = await request(app).get("/ai/coding/tasks");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(1);
+    expect(selectBuilder.where).toHaveBeenCalledWith([
+      "notLike",
+      "codingTasks.taskNumber",
+      "MW-%",
+    ]);
   });
 });
 
