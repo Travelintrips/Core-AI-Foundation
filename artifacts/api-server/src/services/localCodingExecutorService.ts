@@ -9,6 +9,7 @@ import {
   type VerificationCommandResult,
   type VerificationExecutor,
 } from "./localCodingEngineService.js";
+import { extractLocalCodingGitStdout } from "./localCodingGitOutputService.js";
 import {
   runLocalVerificationLoop,
   type LocalVerificationAttempt,
@@ -412,7 +413,7 @@ function applyOperation(content: string, operation: LocalEditOperation): string 
 }
 
 async function git(root: string, args: string[], trim = true): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, {
+  const result = await execFileAsync("git", args, {
     cwd: root,
     timeout: 15_000,
     maxBuffer: 2 * 1024 * 1024,
@@ -423,6 +424,7 @@ async function git(root: string, args: string[], trim = true): Promise<string> {
       LC_ALL: "C",
     },
   });
+  const stdout = extractLocalCodingGitStdout(result);
   return trim ? stdout.trim() : stdout;
 }
 
