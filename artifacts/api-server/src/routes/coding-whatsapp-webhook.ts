@@ -14,6 +14,7 @@ import {
   buildWhatsappConversationId,
   requestAiCoreWhatsappChat,
   sendAiCoreWhatsappReply,
+  transcribeAiCoreWhatsappVoiceNote,
 } from "../services/aiCoreWhatsappChatService.js";
 
 const router = Router();
@@ -25,6 +26,13 @@ type IncomingEnvelope = {
   receivedAt?: unknown;
   senderPhone?: unknown;
   senderPhoneJid?: unknown;
+  voiceNote?: {
+    mimeType?: unknown;
+    base64?: unknown;
+    ptt?: unknown;
+    seconds?: unknown;
+    byteLength?: unknown;
+  } | null;
   message?: {
     key?: {
       id?: unknown;
@@ -79,6 +87,28 @@ function senderCandidates(payload: IncomingEnvelope): string[] {
     .filter(Boolean);
 }
 
+type IncomingVoiceNote = {
+  mimeType: string;
+  base64: string;
+  seconds: number | null;
+};
+
+function extractVoiceNote(payload: IncomingEnvelope): IncomingVoiceNote | null {
+  const voice = payload.voiceNote;
+  if (!voice || voice.ptt !== true) return null;
+  if (typeof voice.base64 !== "string" || !voice.base64.trim()) return null;
+  const mimeType =
+    typeof voice.mimeType === "string" && voice.mimeType.trim()
+      ? voice.mimeType.trim()
+      : "audio/ogg; codecs=opus";
+  const secondsValue = Number(voice.seconds ?? 0);
+  return {
+    mimeType,
+    base64: voice.base64.trim(),
+    seconds: Number.isFinite(secondsValue) && secondsValue > 0 ? secondsValue : null,
+  };
+}
+
 function extractText(payload: IncomingEnvelope): string {
   const message = payload.message?.message;
   const candidates = [
@@ -115,7 +145,7 @@ function verifySignature(rawBody: Buffer, supplied: string | undefined, secret: 
 
 router.post(
   "/ai/coding/whatsapp/webhook",
-  raw({ type: "application/json", limit: "512kb" }),
+  raw({ type: "application/json", limit: "12mb" }),
   async (req, res): Promise<void> => {
     const secret = (process.env.AI_CODING_WA_INCOMING_SECRET ?? "").trim();
     if (!secret) {
@@ -161,13 +191,63 @@ router.post(
       return;
     }
 
-    const text = extractText(payload);
+    const messageId =
+      typeof payload.message?.key?.id === "string" && payload.message.key.id.trim()
+        ? payload.message.key.id.trim()
+        : crypto.createHash("sha256").update(body).digest("hex").slice(0, 32);
+
+    let text = extractText(payload);
+    let inputSource: "text" | "whatsapp_voice" = "text";
+    const voiceNote = extractVoiceNote(payload);
+
+    if (!text && voiceNote) {
+      try {
+        const transcription = await transcribeAiCoreWhatsappVoiceNote({
+          audioBase64: voiceNote.base64,
+          mimeType: voiceNote.mimeType,
+        });
+        text = transcription.text;
+        inputSource = "whatsapp_voice";
+        logger.info(
+          {
+            provider: transcription.provider,
+            model: transcription.model,
+            seconds: voiceNote.seconds,
+            senderSuffix: sender.slice(-4),
+          },
+          "[ai-core-wa-voice] voice note transcribed",
+        );
+      } catch (error) {
+        const destination = resolveReplyDestination(payload, sender);
+        const delivery = await sendAiCoreWhatsappReply({
+          to: destination,
+          deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
+          incomingMessageId: messageId,
+          text: "Voice note belum bisa diproses. Silakan kirim ulang beberapa saat lagi atau kirim sebagai teks.",
+        });
+        logger.warn(
+          { err: error, delivery, senderSuffix: sender.slice(-4) },
+          "[ai-core-wa-voice] transcription failed",
+        );
+        res.status(200).json({
+          accepted: true,
+          kind: "AI_CORE_VOICE_NOTE",
+          transcribed: false,
+          replied: delivery.status === "queued",
+        });
+        return;
+      }
+    }
+
     if (!text) {
       res.status(202).json({ accepted: false, reason: "EMPTY_TEXT" });
       return;
     }
 
-    const approvalCommand = parseCriticalApprovalCommand(text);
+    // Critical approvals intentionally stay text-only. A speech-to-text mistake
+    // must never authorize a guarded production action.
+    const approvalCommand =
+      inputSource === "text" ? parseCriticalApprovalCommand(text) : null;
     if (approvalCommand) {
       try {
         const approval = await decideCodingCriticalApproval({
@@ -197,11 +277,6 @@ router.post(
       return;
     }
 
-    const messageId =
-      typeof payload.message?.key?.id === "string" && payload.message.key.id.trim()
-        ? payload.message.key.id.trim()
-        : crypto.createHash("sha256").update(body).digest("hex").slice(0, 32);
-
     if (!/^coding(?:\s|:)/i.test(text)) {
       if (process.env.AI_CORE_WA_CHAT_ENABLED === "false") {
         res.status(202).json({ accepted: false, reason: "AI_CORE_WA_CHAT_DISABLED" });
@@ -214,6 +289,7 @@ router.post(
         const chat = await requestAiCoreWhatsappChat({
           message: text,
           conversationId,
+          source: inputSource,
         });
         const delivery = await sendAiCoreWhatsappReply({
           to: destination,
@@ -288,6 +364,7 @@ router.post(
         deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
         workerId: typeof payload.workerId === "string" ? payload.workerId : null,
         senderSuffix: sender.slice(-4),
+        inputSource,
       },
     });
 
