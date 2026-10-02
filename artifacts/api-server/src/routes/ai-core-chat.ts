@@ -832,7 +832,11 @@ async function deterministicReply(
   message: string,
   workload: AiCoreWorkloadRoute,
 ): Promise<Record<string, unknown> | null> {
-  const command = message.trim().toLowerCase();
+  const command = message
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?…]+$/g, "")
+    .trim();
   const routingMeta = {
     workload: workload.workload,
     costClass: workload.costClass,
