@@ -26,6 +26,26 @@ import {
 
 const execFileAsync = promisify(execFile);
 const CODING_ANALYZER_JOB_TYPE = "coding_repository_analyzer";
+const DEFAULT_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS = 60_000;
+const MIN_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS = 10_000;
+const MAX_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS = 5 * 60_000;
+
+export function getRepositoryAnalyzerQueueClaimTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const parsed = Number.parseInt(
+    env["REPOSITORY_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS"] ?? "",
+    10,
+  );
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS;
+  }
+  return Math.max(
+    MIN_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS,
+    Math.min(MAX_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS, parsed),
+  );
+}
+
 const MAX_FILES = 120;
 const MAX_READ_BYTES = 400_000;
 const MAX_FILE_BYTES = 80_000;
@@ -866,8 +886,10 @@ export async function executeRepositoryAnalyzerJobOnDemand(
  */
 export async function failStaleRepositoryAnalyzerRuns(
   staleAfterMs = 15 * 60 * 1000,
+  queuedStaleAfterMs = getRepositoryAnalyzerQueueClaimTimeoutMs(),
 ): Promise<number> {
   const cutoff = new Date(Date.now() - staleAfterMs);
+  const queuedCutoff = new Date(Date.now() - queuedStaleAfterMs);
   const staleRuns = await db
     .select({
       id: aiCodingRunsTable.id,
@@ -890,36 +912,70 @@ export async function failStaleRepositoryAnalyzerRuns(
     );
   }
 
-  // Orchestrated runs use the "Coding Orchestrator" agent name. Recover their
-  // abandoned queue rows only while the analyzer job is still active; a slow
-  // planner must not cause a completed analysis to be failed retroactively.
+  // Orchestrated runs use the "Coding Orchestrator" agent name. A queued job
+  // should be claimed almost immediately by either the dedicated child process
+  // or the remote analyzer. If it is still queued after the short claim
+  // timeout, the executor never actually started and the row must not hold the
+  // host-wide single-flight slot for the full running-job lifetime.
+  //
+  // Running/retrying jobs keep the generous staleAfterMs budget because real
+  // repository analysis can legitimately take much longer than queue claiming.
   const staleJobs = await db.execute(sql`
-    SELECT j.id, j.payload_json->>'codingRunId' AS run_id,
+    SELECT j.id, j.status,
+           j.payload_json->>'codingRunId' AS run_id,
            j.payload_json->>'codingTaskId' AS task_id
     FROM ai_platform.ai_jobs AS j
     JOIN ai_platform.ai_coding_runs AS r
       ON r.id::text = j.payload_json->>'codingRunId'
     WHERE j.job_type = 'coding_repository_analyzer'
-      AND j.status IN ('queued', 'running', 'retrying')
       AND r.status = 'RUNNING'
       AND r.agent_name = 'Coding Orchestrator'
-      AND COALESCE(j.started_at, j.created_at) < ${cutoff}
+      AND (
+        (j.status = 'queued' AND j.created_at < ${queuedCutoff})
+        OR
+        (
+          j.status IN ('running', 'retrying')
+          AND COALESCE(j.started_at, j.created_at) < ${cutoff}
+        )
+      )
   `);
   const rows = (staleJobs as unknown as {
-    rows?: Array<{ id: number; run_id: string; task_id: string }>;
+    rows?: Array<{
+      id: number;
+      status: "queued" | "running" | "retrying";
+      run_id: string;
+      task_id: string;
+    }>;
   }).rows ?? [];
   for (const job of rows) {
+    const queueClaimTimedOut = job.status === "queued";
+    const failureMessage = queueClaimTimedOut
+      ? `Repository Analyzer job ${job.id} was not claimed within ${queuedStaleAfterMs}ms and was recovered.`
+      : `Repository Analyzer job ${job.id} exceeded its bounded lifetime and was recovered.`;
+
     await failRepositoryAnalyzerRun(
       { codingRunId: job.run_id, codingTaskId: job.task_id },
-      `Repository Analyzer job ${job.id} exceeded its bounded lifetime and was recovered.`,
+      failureMessage,
     );
     await db.execute(sql`
       UPDATE ai_platform.ai_jobs
       SET status = 'failed', completed_at = COALESCE(completed_at, NOW()),
-          error_message = COALESCE(error_message, 'Stale Repository Analyzer job recovered'),
+          error_message = COALESCE(
+            error_message,
+            ${queueClaimTimedOut
+              ? "Repository Analyzer queue claim timeout"
+              : "Stale Repository Analyzer job recovered"}
+          ),
           updated_at = NOW()
-      WHERE id = ${job.id} AND status IN ('queued', 'running', 'retrying')
-        AND COALESCE(started_at, created_at) < ${cutoff}
+      WHERE id = ${job.id}
+        AND (
+          (status = 'queued' AND created_at < ${queuedCutoff})
+          OR
+          (
+            status IN ('running', 'retrying')
+            AND COALESCE(started_at, created_at) < ${cutoff}
+          )
+        )
     `);
   }
 
