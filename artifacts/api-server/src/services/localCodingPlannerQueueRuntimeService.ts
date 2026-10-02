@@ -117,5 +117,7 @@ export async function executeCodingMultiTaskPlannerJob(job: AiJob): Promise<Reco
     }).catch(() => undefined);
 
     throw error;
+  } finally {
+    clearTimeout(lifecycleTimeout);
   }
 }
