@@ -56,6 +56,39 @@ export async function recordChatLearningEvent(input: {
   });
 }
 
+export async function retrieveRecentChatConversation(
+  scope: ChatLearningScope,
+  limit = 10,
+): Promise<Array<{ role: "user" | "assistant"; text: string }>> {
+  if (!scope.sessionId) return [];
+
+  const rows = await db
+    .select({
+      content: aiMemoryTable.content,
+      metadata: aiMemoryTable.metadata,
+      createdAt: aiMemoryTable.createdAt,
+    })
+    .from(aiMemoryTable)
+    .where(
+      and(
+        eq(aiMemoryTable.agentId, "ai-core-chat"),
+        eq(aiMemoryTable.memoryType, "chat_event"),
+        eq(aiMemoryTable.sessionId, scope.sessionId),
+      ),
+    )
+    .orderBy(desc(aiMemoryTable.createdAt))
+    .limit(Math.max(1, Math.min(limit, 20)));
+
+  return rows
+    .reverse()
+    .flatMap((row) => {
+      const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+      const role = metadata["role"];
+      if (role !== "user" && role !== "assistant") return [];
+      return [{ role, text: redactLearningText(row.content).slice(-5_000) }];
+    });
+}
+
 function explicitDurableLearning(message: string): { key: string; content: string; importance: string } | null {
   const text = message.trim();
   const rule = /^(?:ingat|remember|mulai sekarang|from now on|selalu|always|jangan pernah|never)\b/i;
