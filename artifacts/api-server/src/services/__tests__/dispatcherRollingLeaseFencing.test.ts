@@ -1,6 +1,27 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+describe("dispatcher stuck-job retry fencing", () => {
+  it("terminally exhausts a no-retry job instead of requeueing it", async () => {
+    const { stuckJobRetryDisposition } = await import("../jobDispatcherService.js");
+
+    expect(stuckJobRetryDisposition({ retryCount: 0, maxRetry: 0 }))
+      .toEqual({ nextRetryCount: 1, exhausted: true });
+    expect(stuckJobRetryDisposition({ retryCount: 0, maxRetry: 2 }))
+      .toEqual({ nextRetryCount: 1, exhausted: false });
+  });
+
+  it("clears stale claimed-worker ownership in no-holder recovery", () => {
+    const source = readFileSync(
+      new URL("../jobDispatcherService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("disposition.exhausted");
+    expect(source).toContain("retryCount: disposition.nextRetryCount");
+    expect(source).toContain("COALESCE(payload_json, '{}'::jsonb) - '_claimedByWorkerId'");
+  });
+});
+
 describe("dispatcher rolling-deploy lease fencing", () => {
   it("fences live worker registration by unique process owner", () => {
     const clusterSource = readFileSync(
