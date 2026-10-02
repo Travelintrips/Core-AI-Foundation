@@ -44,14 +44,14 @@ function oauthParams(source: Record<string, unknown>) {
 function validateAuthorizationRequest(params: ReturnType<typeof oauthParams>): string | null {
   if (params.responseType !== "code") return "unsupported_response_type";
   if (!isAllowedChatGptClient(params.clientId)) return "invalid_client";
-  if (!isAllowedChatGptRedirect(params.redirectUri)) return "invalid_redirect_uri";
+  if (!isAllowedChatGptRedirect(params.clientId, params.redirectUri)) return "invalid_redirect_uri";
   if (!params.codeChallenge || params.codeChallengeMethod !== "S256") return "invalid_request";
   if (params.resource !== oauthResource()) return "invalid_target";
   return null;
 }
 
 function redirectWithError(res: Response, params: ReturnType<typeof oauthParams>, error: string): void {
-  if (!isAllowedChatGptRedirect(params.redirectUri)) {
+  if (!isAllowedChatGptRedirect(params.clientId, params.redirectUri)) {
     res.status(400).json({ error });
     return;
   }
