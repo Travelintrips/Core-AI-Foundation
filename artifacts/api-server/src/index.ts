@@ -68,6 +68,7 @@ const codingAutonomous =
   await import("./services/localCodingAutonomousRepairService.js");
 const codingOrchestrationRecovery =
   await import("./services/codingOrchestratorService.js");
+const { pool, isDatabaseAuthenticationError } = await import("@workspace/db");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 let _designBatchRecoveryStarted = false;
@@ -101,6 +102,31 @@ async function runStartupStep(
 }
 
 async function initializeRuntimeServices(): Promise<void> {
+  // A bad production database credential is not transient. Starting every
+  // database-backed poller in that state creates a retry storm that can keep
+  // Supavisor's authentication circuit breaker open. Keep HTTP liveness and
+  // readiness diagnostics available, but leave all DB-dependent runtimes
+  // stopped until the process is restarted with corrected credentials.
+  if (isProductionRuntime()) {
+    try {
+      await pool.query("SELECT 1");
+    } catch (err) {
+      if (isDatabaseAuthenticationError(err)) {
+        logger.error(
+          {
+            errorName: err instanceof Error ? err.name : "Error",
+            errorCode:
+              typeof (err as { code?: unknown } | null)?.code === "string"
+                ? (err as { code: string }).code
+                : undefined,
+          },
+          "[startup] Database authentication failed; DB-dependent runtimes remain stopped until credentials are corrected and the process is restarted",
+        );
+        return;
+      }
+    }
+  }
+
   // Run startup DB work sequentially. Hostinger performs rolling deploys and
   // can overlap processes briefly; firing every initializer concurrently caused
   // Supabase session-pool exhaustion during deploys.
