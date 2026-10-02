@@ -1,0 +1,70 @@
+name: WhatsApp E2E Once
+
+on:
+  push:
+    branches:
+      - test/wa-e2e-once-20261002-2105
+
+permissions:
+  contents: read
+
+jobs:
+  wa-e2e:
+    name: Verify AI Core WhatsApp round trip
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Run WhatsApp E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          code=$(curl --http1.1 --retry 1 --retry-delay 2 --retry-all-errors -L -sS \
+            -o /tmp/wa-e2e -w "%{http_code}" \
+            --connect-timeout 15 --max-time 120 \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/core-chat/whatsapp/e2e" || true)
+
+          echo "wa_e2e_http=${code:-curl-error}"
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/wa-e2e", "utf8"));
+          if (value.ok !== true) throw new Error("ok != true");
+          if (value.webhookStatus !== 200) throw new Error("webhookStatus != 200");
+          if (value.delivery?.status !== "sent") throw new Error("delivery != sent");
+          console.log(
+            "WA_E2E_PASS route="+String(value.route ?? "unknown")+
+            " delivery="+String(value.delivery.status)+
+            " senderSuffix="+String(value.senderSuffix ?? "")
+          );
+          NODE
+
+      - name: Print bounded failure diagnostic
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f /tmp/wa-e2e ]; then
+            node - <<'NODE'
+          const fs = require("fs");
+          const v = JSON.parse(fs.readFileSync("/tmp/wa-e2e","utf8"));
+          console.log(JSON.stringify({
+            ok: v.ok ?? false,
+            error: v.error ?? null,
+            detail: v.detail ?? null,
+            webhookStatus: v.webhookStatus ?? null,
+            route: v.route ?? null,
+            senderSuffix: v.senderSuffix ?? null,
+            deliveryStatus: v.delivery?.status ?? null,
+            deliveryError: v.delivery?.error ?? null
+          }));
+          NODE
+          fi
