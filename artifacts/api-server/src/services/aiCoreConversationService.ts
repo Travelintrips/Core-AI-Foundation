@@ -3,7 +3,7 @@ import {
   type AiCoreChatDispatchKind,
 } from "./aiCoreChatIntentService.js";
 
-export type ConversationSource = "text" | "voice" | "whatsapp_voice";
+export type ConversationSource = "text" | "voice" | "whatsapp" | "whatsapp_voice";
 export type ConversationRiskLevel = "READ_ONLY" | "MUTATING" | "CRITICAL";
 
 export interface ConversationContextMessage {
