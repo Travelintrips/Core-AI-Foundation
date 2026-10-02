@@ -189,10 +189,7 @@ jobs:
           NODE
 
       - name: Verify AI Core WhatsApp general chat E2E
-        if: >-
-          steps.target.outputs.stale != 'true' &&
-          (github.event_name == 'workflow_dispatch' ||
-           contains(github.event.workflow_run.head_commit.message, '[wa-e2e]'))
+        if: steps.target.outputs.stale != 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
