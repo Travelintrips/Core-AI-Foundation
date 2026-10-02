@@ -412,6 +412,71 @@ async function unlockDependents(
   }
 }
 
+
+export async function retryFailedCodingWorkstream(
+  workstreamId: string,
+): Promise<AiCodingWorkstream> {
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(aiCodingWorkstreamsTable)
+      .where(eq(aiCodingWorkstreamsTable.id, workstreamId))
+      .for("update");
+
+    if (!current) {
+      throw new LocalCodingMultiWorkerError(
+        "Coding workstream not found.",
+        "NOT_FOUND",
+      );
+    }
+    if (current.status !== "FAILED") {
+      throw new LocalCodingMultiWorkerError(
+        "Only a FAILED coding workstream can be retried.",
+        "NOT_READY",
+        { status: current.status },
+      );
+    }
+
+    const [updated] = await tx
+      .update(aiCodingWorkstreamsTable)
+      .set({
+        status: "READY",
+        workerId: null,
+        leaseToken: null,
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+        branchName: null,
+        childTaskId: null,
+        childRunId: null,
+        jobId: null,
+        headSha: null,
+        errorMessage: null,
+        completedAt: null,
+      })
+      .where(eq(aiCodingWorkstreamsTable.id, current.id))
+      .returning();
+
+    if (!updated) {
+      throw new LocalCodingMultiWorkerError(
+        "Failed coding workstream retry reset did not persist.",
+        "CLAIM_FAILED",
+      );
+    }
+
+    await tx
+      .update(aiCodingTaskGraphsTable)
+      .set({ status: "RUNNING", completedAt: null })
+      .where(
+        and(
+          eq(aiCodingTaskGraphsTable.id, current.graphId),
+          eq(aiCodingTaskGraphsTable.status, "FAILED"),
+        ),
+      );
+
+    return updated;
+  });
+}
+
 export async function completeCodingWorkstreamClaim(
   workstreamId: string,
   leaseToken: string,
