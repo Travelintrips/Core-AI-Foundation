@@ -1890,7 +1890,7 @@ router.post("/ai/core-chat/voice-clone/enroll", async (req, res): Promise<void> 
     form.append("name", parsed.data.name);
     form.append(
       "files",
-      new Blob([audio], { type: parsed.data.mimeType }),
+      new Blob([new Uint8Array(audio)], { type: parsed.data.mimeType }),
       "ai-core-voice-sample",
     );
     form.append("remove_background_noise", "false");
