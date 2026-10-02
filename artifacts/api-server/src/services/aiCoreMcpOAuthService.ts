@@ -34,7 +34,23 @@ export function isAllowedChatGptClient(clientId: string): boolean {
 
 export function isAllowedChatGptRedirect(clientId: string, uri: string): boolean {
   if (clientId === "https://chatgpt.com/oauth/codex/client.json") {
-    return uri === "http://127.0.0.1/callback" || uri === "http://localhost/callback";
+    try {
+      const parsed = new URL(uri);
+      const isLoopbackHost = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
+      const validPort = parsed.port === "" || (/^\d+$/.test(parsed.port) && Number(parsed.port) >= 1 && Number(parsed.port) <= 65535);
+      return (
+        parsed.protocol === "http:" &&
+        isLoopbackHost &&
+        validPort &&
+        parsed.pathname === "/callback" &&
+        parsed.username === "" &&
+        parsed.password === "" &&
+        parsed.search === "" &&
+        parsed.hash === ""
+      );
+    } catch {
+      return false;
+    }
   }
   if (uri === "https://chatgpt.com/connector_platform_oauth_redirect") return true;
   return /^https:\/\/chatgpt\.com\/connector\/oauth\/[^/]+$/.test(uri);
