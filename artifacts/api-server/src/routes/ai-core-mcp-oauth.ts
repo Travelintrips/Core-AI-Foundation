@@ -3,7 +3,6 @@ import {
   SESSION_COOKIE_NAME,
   verifySessionToken,
   getInternalUserById,
-  getInternalUserByEmail,
 } from "../services/internalAuthService.js";
 import {
   AI_CORE_MCP_SCOPES,
@@ -15,10 +14,7 @@ import {
   oauthIssuer,
   oauthResource,
   refreshAccessToken,
-  issueEmailLoginToken,
-  consumeEmailLoginToken,
 } from "../services/aiCoreMcpOAuthService.js";
-import { sendEmail } from "../services/emailService.js";
 
 const router = Router();
 
@@ -89,15 +85,16 @@ function renderAuthorizePage(params: ReturnType<typeof oauthParams>, loggedInEma
   ].join("");
   const identity = loggedInEmail
     ? `<p>Login sebagai <strong>${escapeHtml(loggedInEmail)}</strong>.</p>`
-    : `<label>Email<input name="email" type="email" autocomplete="email" required></label>
-       <p class="muted">Tidak perlu password. Kami akan mengirim link verifikasi sekali klik ke email ini.</p>`;
+    : `<p><strong>Session AI Core belum terdeteksi.</strong></p>
+       <p class="muted">Buka AI Core dan pastikan Anda sudah login di browser ini, lalu kembali ke halaman ini dan refresh.</p>
+       <p><a href="/login" target="_blank" rel="noopener noreferrer">Buka Login AI Core</a></p>`;
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hubungkan AI Core</title><style>body{font-family:system-ui;max-width:560px;margin:48px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:6px}input{padding:10px}button{padding:11px 16px;font-weight:600}li{margin:6px 0}.muted{color:#666}</style></head><body>
   <h1>Hubungkan ChatGPT ke AI Core</h1>
   <p>ChatGPT meminta akses ke AI Core internal.</p>
   <form method="post" action="/api/ai/core-chat/oauth/authorize">${hiddenFields}
     ${identity}
     <p>Izin yang diminta:</p><ul>${scopes.map((scope) => `<li>${escapeHtml(scope)}</li>`).join("")}</ul>
-    <button type="submit">${loggedInEmail ? "Izinkan & Hubungkan" : "Kirim Link & Hubungkan"}</button>
+    ${loggedInEmail ? '<button type="submit">Izinkan & Hubungkan</button>' : ''}
   </form>
   <p class="muted">Akses dapat dihentikan dengan menonaktifkan koneksi app di ChatGPT atau menonaktifkan akun internal.</p>
 </body></html>`;
@@ -145,35 +142,7 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
   const scopes = normalizeScopes(params.scope);
 
   if (!user) {
-    const email = readString(req.body?.email).toLowerCase();
-    const candidate = email ? await getInternalUserByEmail(email) : null;
-
-    if (candidate && candidate.status === "active" && candidate.accountType === "internal") {
-      const token = issueEmailLoginToken({
-        sub: candidate.id,
-        clientId: params.clientId,
-        redirectUri: params.redirectUri,
-        codeChallenge: params.codeChallenge,
-        scope: scopes.join(" "),
-        resource: params.resource,
-        state: params.state,
-      });
-      const verifyUrl = `${oauthIssuer()}/api/ai/core-chat/oauth/email-login?token=${encodeURIComponent(token)}`;
-      const sent = await sendEmail({
-        to: candidate.email,
-        subject: "Hubungkan ChatGPT ke AI Core",
-        html: `<p>Klik tombol berikut untuk memverifikasi login dan menghubungkan ChatGPT ke AI Core:</p><p><a href="${verifyUrl}">Verifikasi & Hubungkan ChatGPT</a></p><p>Link berlaku 10 menit dan hanya dapat digunakan sekali.</p>`,
-        module: "ai_core_mcp_oauth",
-        action: "passwordless_login_email",
-        resourceId: String(candidate.id),
-      });
-      if (!sent.ok) {
-        res.status(503).type("html").send(renderAuthorizePage(params) + "<p>Gagal mengirim email verifikasi. Silakan coba lagi.</p>");
-        return;
-      }
-    }
-
-    res.type("html").send(renderAuthorizePage(params) + "<p>Jika email terdaftar dan aktif, link verifikasi sudah dikirim. Buka email lalu klik <strong>Verifikasi & Hubungkan ChatGPT</strong>.</p>");
+    res.status(401).type("html").send(renderAuthorizePage(params) + "<p>Session AI Core belum terdeteksi. Login ke AI Core di browser ini, lalu refresh halaman Authenticate.</p>");
     return;
   }
 
@@ -192,32 +161,6 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
   res.redirect(302, url.toString());
 });
 
-
-router.get("/api/ai/core-chat/oauth/email-login", async (req, res): Promise<void> => {
-  try {
-    const token = readString(req.query["token"]);
-    if (!token) {
-      res.status(400).type("html").send("<p>Link login tidak valid.</p>");
-      return;
-    }
-    const verified = await consumeEmailLoginToken(token);
-    const code = issueAuthorizationCode({
-      sub: verified.sub,
-      clientId: verified.clientId,
-      redirectUri: verified.redirectUri,
-      codeChallenge: verified.codeChallenge,
-      scope: verified.scope,
-      resource: verified.resource,
-    });
-    const url = new URL(verified.redirectUri);
-    url.searchParams.set("code", code);
-    if (verified.state) url.searchParams.set("state", verified.state);
-    url.searchParams.set("iss", oauthIssuer());
-    res.redirect(302, url.toString());
-  } catch {
-    res.status(400).type("html").send("<p>Link login tidak valid atau sudah kedaluwarsa. Mulai ulang proses Authenticate dari ChatGPT.</p>");
-  }
-});
 
 router.post("/api/ai/core-chat/oauth/token", async (req, res): Promise<void> => {
   try {
