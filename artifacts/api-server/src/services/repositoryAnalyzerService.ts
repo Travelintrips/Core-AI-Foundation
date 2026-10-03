@@ -1089,7 +1089,7 @@ export async function failStaleRepositoryAnalyzerRuns(
       ON r.id::text = j.payload_json->>'codingRunId'
     WHERE j.job_type = 'coding_repository_analyzer'
       AND r.status = 'RUNNING'
-      AND r.agent_name = 'Coding Orchestrator'
+      AND r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')
       AND (
         (j.status = 'queued' AND j.created_at < ${queuedCutoff})
         OR
