@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   decideWorkstreamAiAutoRepair,
@@ -378,5 +379,25 @@ describe("workstream AI failure context preservation", () => {
       shouldRetry: false,
       reason: "NON_RETRYABLE_FAILURE",
     });
+  });
+});
+
+
+describe("workstream AI stale-job handoff revocation", () => {
+  it("scopes failure cleanup to the queued job claim attempt", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "payload.workstreamId,\n        new Date(),\n        payload.claimAttempt",
+    );
+    expect(source).toContain(
+      "workstreamId,\n    new Date(),\n    current.attemptCount",
+    );
+    expect(source).toContain(
+      "workstreamId,\n      new Date(),\n      lease.claimAttempt",
+    );
   });
 });

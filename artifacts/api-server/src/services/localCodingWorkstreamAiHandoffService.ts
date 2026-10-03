@@ -764,19 +764,34 @@ export async function consumeApprovedWorkstreamAiHandoff(
 export async function revokeWorkstreamAiHandoff(
   workstreamId: string,
   now = new Date(),
+  expectedClaimAttempt?: number,
 ): Promise<AiCodingWorkstreamAiHandoff> {
   return db.transaction(async (tx) => {
+    const conditions = [
+      eq(aiCodingWorkstreamAiHandoffsTable.workstreamId, workstreamId),
+    ];
+    if (expectedClaimAttempt !== undefined) {
+      conditions.push(
+        eq(aiCodingWorkstreamAiHandoffsTable.claimAttempt, expectedClaimAttempt),
+      );
+    }
+
     const [handoff] = await tx
       .select()
       .from(aiCodingWorkstreamAiHandoffsTable)
-      .where(eq(aiCodingWorkstreamAiHandoffsTable.workstreamId, workstreamId))
+      .where(and(...conditions))
       .orderBy(desc(aiCodingWorkstreamAiHandoffsTable.claimAttempt))
       .for("update");
 
     if (!handoff) {
       throw new LocalCodingWorkstreamAiHandoffError(
-        "Workstream AI handoff not found.",
+        expectedClaimAttempt === undefined
+          ? "Workstream AI handoff not found."
+          : "Workstream AI handoff for the expected claim attempt was not found.",
         "NOT_FOUND",
+        expectedClaimAttempt === undefined
+          ? undefined
+          : { expectedClaimAttempt },
       );
     }
     if (!["PREPARED", "APPROVED"].includes(handoff.status)) {
