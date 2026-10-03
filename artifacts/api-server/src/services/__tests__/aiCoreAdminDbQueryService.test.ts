@@ -203,10 +203,11 @@ describe("AI Core admin database query service", () => {
     expect(result?.sql).toContain("lower(\"status\"::text) IN ('paid')");
 
     const reply = result ? renderAdminSemanticQueryResult(result) : "";
-    expect(reply).toContain("Pendapatan sport center kemarin");
-    expect(reply.replace(/\s/g, "")).toContain("Rp1.250.000");
-    expect(reply).toContain("zona waktu Asia/Jakarta");
-    expect(reply).toContain("read-only Admin DB Query");
+    expect(reply).toBe("Pendapatan sport center kemarin: Rp1.250.000.");
+    expect(reply).not.toContain("record pada");
+    expect(reply).not.toContain("zona waktu");
+    expect(reply).not.toContain("Confidence semantic");
+    expect(reply).not.toContain("Admin DB Query");
   });
 
   it("renders an empty aggregate as zero instead of saying no rows were found", async () => {
