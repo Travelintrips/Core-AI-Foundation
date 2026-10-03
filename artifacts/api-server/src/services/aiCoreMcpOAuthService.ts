@@ -28,30 +28,94 @@ function secret(): string {
   return value;
 }
 
+const DYNAMIC_CLIENT_PREFIX = "aicore_dcr_";
+
+function isSafeChatGptRedirectUri(uri: string): boolean {
+  try {
+    const parsed = new URL(uri);
+    const isLoopbackHost = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
+    const validPort = parsed.port === "" || (/^\d+$/.test(parsed.port) && Number(parsed.port) >= 1 && Number(parsed.port) <= 65535);
+    if (
+      parsed.protocol === "http:" &&
+      isLoopbackHost &&
+      validPort &&
+      parsed.pathname === "/callback" &&
+      parsed.username === "" &&
+      parsed.password === "" &&
+      parsed.search === "" &&
+      parsed.hash === ""
+    ) {
+      return true;
+    }
+    if (
+      parsed.protocol === "https:" &&
+      parsed.hostname === "chatgpt.com" &&
+      (
+        parsed.pathname === "/connector_platform_oauth_redirect" ||
+        /^\/connector\/oauth\/[^/]+$/.test(parsed.pathname)
+      ) &&
+      parsed.username === "" &&
+      parsed.password === "" &&
+      parsed.hash === ""
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function decodeDynamicClient(clientId: string): DynamicClientClaims | null {
+  if (!clientId.startsWith(DYNAMIC_CLIENT_PREFIX)) return null;
+  try {
+    const decoded = jwt.verify(clientId.slice(DYNAMIC_CLIENT_PREFIX.length), secret(), {
+      algorithms: ["HS256"],
+      issuer: oauthIssuer(),
+      audience: oauthResource(),
+    }) as unknown as DynamicClientClaims;
+    if (decoded.purpose !== "mcp_dynamic_client" || !Array.isArray(decoded.redirectUris)) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+export function issueDynamicClientId(redirectUris: string[]): string {
+  const normalized = [...new Set(redirectUris.map((uri) => uri.trim()).filter(Boolean))];
+  if (!normalized.length || normalized.some((uri) => !isSafeChatGptRedirectUri(uri))) {
+    throw new Error("invalid_redirect_uri");
+  }
+  const token = jwt.sign(
+    {
+      purpose: "mcp_dynamic_client",
+      redirectUris: normalized,
+      jti: randomUUID(),
+    } satisfies DynamicClientClaims,
+    secret(),
+    {
+      algorithm: "HS256",
+      issuer: oauthIssuer(),
+      audience: oauthResource(),
+      expiresIn: 365 * 24 * 60 * 60,
+    },
+  );
+  return DYNAMIC_CLIENT_PREFIX + token;
+}
+
 export function isAllowedChatGptClient(clientId: string): boolean {
   return clientId === "https://chatgpt.com/oauth/client.json" ||
-    /^https:\/\/chatgpt\.com\/oauth\/[^/]+\/client\.json$/.test(clientId);
+    /^https:\/\/chatgpt\.com\/oauth\/[^/]+\/client\.json$/.test(clientId) ||
+    decodeDynamicClient(clientId) !== null;
 }
 
 export function isAllowedChatGptRedirect(clientId: string, uri: string): boolean {
+  const dynamic = decodeDynamicClient(clientId);
+  if (dynamic) {
+    return dynamic.redirectUris.includes(uri) && isSafeChatGptRedirectUri(uri);
+  }
   if (clientId === "https://chatgpt.com/oauth/codex/client.json") {
-    try {
-      const parsed = new URL(uri);
-      const isLoopbackHost = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
-      const validPort = parsed.port === "" || (/^\d+$/.test(parsed.port) && Number(parsed.port) >= 1 && Number(parsed.port) <= 65535);
-      return (
-        parsed.protocol === "http:" &&
-        isLoopbackHost &&
-        validPort &&
-        parsed.pathname === "/callback" &&
-        parsed.username === "" &&
-        parsed.password === "" &&
-        parsed.search === "" &&
-        parsed.hash === ""
-      );
-    } catch {
-      return false;
-    }
+    return isSafeChatGptRedirectUri(uri);
   }
   if (uri === "https://chatgpt.com/connector_platform_oauth_redirect") return true;
   return /^https:\/\/chatgpt\.com\/connector\/oauth\/[^/]+$/.test(uri);
@@ -93,6 +157,12 @@ type TokenClaims = {
   clientId: string;
   scope: string;
   resource: string;
+  jti: string;
+};
+
+type DynamicClientClaims = {
+  purpose: "mcp_dynamic_client";
+  redirectUris: string[];
   jti: string;
 };
 

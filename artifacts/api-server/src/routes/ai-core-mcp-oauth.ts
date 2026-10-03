@@ -8,6 +8,7 @@ import {
   AI_CORE_MCP_SCOPES,
   exchangeAuthorizationCode,
   issueAuthorizationCode,
+  issueDynamicClientId,
   isAllowedChatGptClient,
   isAllowedChatGptRedirect,
   normalizeScopes,
@@ -153,6 +154,7 @@ router.get("/.well-known/oauth-authorization-server", (_req, res): void => {
     authorization_response_iss_parameter_supported: true,
     authorization_endpoint: `${issuer}/api/ai/core-chat/oauth/authorize`,
     token_endpoint: `${issuer}/api/ai/core-chat/oauth/token`,
+    registration_endpoint: `${issuer}/api/ai/core-chat/oauth/register`,
     client_id_metadata_document_supported: true,
     token_endpoint_auth_methods_supported: ["none"],
     code_challenge_methods_supported: ["S256"],
@@ -160,6 +162,52 @@ router.get("/.well-known/oauth-authorization-server", (_req, res): void => {
     grant_types_supported: ["authorization_code", "refresh_token"],
     scopes_supported: AI_CORE_MCP_SCOPES,
   });
+});
+
+router.post("/api/ai/core-chat/oauth/register", (req, res): void => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const redirectUris = Array.isArray(body["redirect_uris"])
+    ? body["redirect_uris"].filter((value): value is string => typeof value === "string")
+    : [];
+  const tokenEndpointAuthMethod = readString(body["token_endpoint_auth_method"]) || "none";
+  const grantTypes = Array.isArray(body["grant_types"])
+    ? body["grant_types"].filter((value): value is string => typeof value === "string")
+    : ["authorization_code", "refresh_token"];
+  const responseTypes = Array.isArray(body["response_types"])
+    ? body["response_types"].filter((value): value is string => typeof value === "string")
+    : ["code"];
+
+  if (tokenEndpointAuthMethod !== "none") {
+    res.status(400).json({ error: "invalid_client_metadata", error_description: "Only public PKCE clients are supported." });
+    return;
+  }
+  if (!grantTypes.every((value) => ["authorization_code", "refresh_token"].includes(value))) {
+    res.status(400).json({ error: "invalid_client_metadata", error_description: "Unsupported grant type." });
+    return;
+  }
+  if (!responseTypes.length || !responseTypes.every((value) => value === "code")) {
+    res.status(400).json({ error: "invalid_client_metadata", error_description: "Only code response type is supported." });
+    return;
+  }
+
+  try {
+    const clientId = issueDynamicClientId(redirectUris);
+    res.status(201).json({
+      client_id: clientId,
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      redirect_uris: redirectUris,
+      token_endpoint_auth_method: "none",
+      grant_types: [...new Set(grantTypes)],
+      response_types: ["code"],
+      scope: AI_CORE_MCP_SCOPES.join(" "),
+      ...(typeof body["client_name"] === "string" ? { client_name: body["client_name"] } : {}),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "invalid_client_metadata";
+    res.status(400).json({
+      error: message === "invalid_redirect_uri" ? "invalid_redirect_uri" : "invalid_client_metadata",
+    });
+  }
 });
 
 router.get("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> => {
