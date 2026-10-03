@@ -193,7 +193,15 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
   const scopes = normalizeScopes(params.scope);
 
   if (!user) {
-    res.status(401).type("html").send(renderAuthorizePage(params) + "<p>Session AI Core belum terdeteksi. Login ke AI Core di browser ini, lalu refresh halaman Authenticate.</p>");
+    const pairing = await createMcpOauthPairing({
+      clientId: params.clientId,
+      redirectUri: params.redirectUri,
+      codeChallenge: params.codeChallenge,
+      scope: scopes.join(" "),
+      resource: params.resource,
+      state: params.state,
+    });
+    res.redirect(302, `/api/ai/core-chat/oauth/pair/wait?id=${encodeURIComponent(pairing.id)}`);
     return;
   }
 
