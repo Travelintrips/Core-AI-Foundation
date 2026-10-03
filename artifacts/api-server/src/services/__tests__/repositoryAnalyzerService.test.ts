@@ -300,6 +300,16 @@ describe("repository analyzer GitHub clone authentication", () => {
     ).toBe(true);
     expect(
       isRetryableRepositoryCloneResourceError(
+        "Command failed: git clone --depth 1 --branch main https://github.com/Travelintrips/Core-AI-Foundation.git /tmp/coding-analyzer-test\nCloning into '/tmp/coding-analyzer-test'...\n",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableRepositoryCloneResourceError(
+        "fatal: authentication failed for repository",
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableRepositoryCloneResourceError(
         "fatal: Remote branch missing does not exist",
       ),
     ).toBe(false);

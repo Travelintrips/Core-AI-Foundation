@@ -200,9 +200,19 @@ export function buildRepositoryCloneEnvironment(
 }
 
 export function isRetryableRepositoryCloneResourceError(detail: string): boolean {
-  return /unable to create thread|resource temporarily unavailable|invalid index-pack output|index-pack.*failed|timeout exceeded when trying to connect|connection (?:timed out|reset|refused)|could not resolve host|temporary failure in name resolution|gnutls recv error|tls connection was non-properly terminated|http\/2 stream .* was not closed cleanly|remote end hung up unexpectedly|early eof/i.test(
-    detail,
-  );
+  if (
+    /unable to create thread|resource temporarily unavailable|invalid index-pack output|index-pack.*failed|timeout exceeded when trying to connect|connection (?:timed out|reset|refused)|could not resolve host|temporary failure in name resolution|gnutls recv error|tls connection was non-properly terminated|http\/2 stream .* was not closed cleanly|remote end hung up unexpectedly|early eof/i.test(
+      detail,
+    )
+  ) {
+    return true;
+  }
+
+  const cloneStartedWithoutDiagnostic =
+    /Command failed: git clone/i.test(detail) &&
+    /Cloning into /i.test(detail) &&
+    !/fatal:|authentication failed|repository not found|could not read Username|remote branch .* not found/i.test(detail);
+  return cloneStartedWithoutDiagnostic;
 }
 
 export function buildRepositoryCloneArgs(
