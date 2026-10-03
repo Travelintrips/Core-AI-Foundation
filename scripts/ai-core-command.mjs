@@ -245,7 +245,7 @@ export async function main(env = process.env, fetchImpl = fetch) {
   const output = JSON.stringify(result, null, 2);
   console.log(output);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY,
-    `## AI Core command trigger\n\n\`\`\`json\n${output}\n\`\`\`\n\nAccepted is not completed. Production approval gates remain in force.\n`);
+    `## AI Core command trigger\n\n\`\`\`json\n${output}\n\`\`\`\n\n${result.result === 'TASK_COMPLETED' ? 'Task completed and is eligible for issue auto-close.' : 'Task is not complete yet; any required critical approval remains visible.'}\n`);
   if (command.issueNumber && env.GH_TOKEN) {
     const completed = result.result === 'TASK_COMPLETED';
     const body = completed
