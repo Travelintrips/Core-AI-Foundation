@@ -117,6 +117,25 @@ test('status and stop require a task from the allowlisted repository', async () 
   const valid = fakeApi({ tasks: [{ id, repository: REPOSITORY }] });
   assert.equal((await execute(resolve({ action: 'stop', task_id: id }), valid.api)).result, 'STOP_REQUESTED');
 });
+test('public health probes omit the admin header used on protected coding routes', async () => {
+  const calls = [];
+  const api = createApi('secret', async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ status: 'ok' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  });
+
+  await api('/healthz');
+  await api('/healthz/full');
+  await api('/ai/coding/tasks');
+
+  assert.equal(calls[0].options.headers['x-admin-api-key'], undefined);
+  assert.equal(calls[1].options.headers['x-admin-api-key'], undefined);
+  assert.equal(calls[2].options.headers['x-admin-api-key'], 'secret');
+});
+
 test('API fixes the destination, disallows redirects, and JSON-encodes instructions', async () => {
   const seen = [];
   const api = createApi('test-secret', async (url, options) => { seen.push({ url, options }); return { ok: true, status: 201, json: async () => ({ id }) }; });
