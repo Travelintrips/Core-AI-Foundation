@@ -449,31 +449,55 @@ export async function resolveRemoteBranchHead(
     throw new Error("Repository branch contains unsupported characters");
   }
 
-  const result = await execFileAsync(
-    "git",
-    ["ls-remote", "--heads", remote, `refs/heads/${branch}`],
-    {
-      timeout: 20_000,
-      maxBuffer: 64 * 1024,
-      env: buildRepositoryCloneEnvironment(remote),
-    },
-  );
-  const raw =
-    typeof result === "string" || Buffer.isBuffer(result)
-      ? result
-      : (result as { stdout?: unknown } | null | undefined)?.stdout;
-  const stdout = Buffer.isBuffer(raw)
-    ? raw.toString("utf8")
-    : raw instanceof Uint8Array
-      ? Buffer.from(raw).toString("utf8")
-      : typeof raw === "string"
-        ? raw
-        : "";
-  const head = stdout.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-  if (!/^[0-9a-f]{40}$/.test(head)) {
-    throw new Error(`Repository branch HEAD could not be resolved for ${branch}`);
-  }
-  return head;
+  return withRepositoryCloneSlot(async () => {
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const result = await execFileAsync(
+          "git",
+          ["ls-remote", "--heads", remote, `refs/heads/${branch}`],
+          {
+            timeout: 20_000,
+            maxBuffer: 64 * 1024,
+            env: buildRepositoryCloneEnvironment(remote),
+          },
+        );
+        const raw =
+          typeof result === "string" || Buffer.isBuffer(result)
+            ? result
+            : (result as { stdout?: unknown } | null | undefined)?.stdout;
+        const stdout = Buffer.isBuffer(raw)
+          ? raw.toString("utf8")
+          : raw instanceof Uint8Array
+            ? Buffer.from(raw).toString("utf8")
+            : typeof raw === "string"
+              ? raw
+              : "";
+        const head = stdout.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+        if (!/^[0-9a-f]{40}$/.test(head)) {
+          throw new Error(
+            `Repository branch HEAD could not be resolved for ${branch}`,
+          );
+        }
+        return head;
+      } catch (error) {
+        lastError = error;
+        const detail = error instanceof Error ? error.message : String(error);
+        if (
+          attempt >= 3 ||
+          !isRetryableRepositoryCloneResourceError(detail)
+        ) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Repository branch HEAD verification failed");
+  });
 }
 
 export async function prepareRepositoryWorkspace(
