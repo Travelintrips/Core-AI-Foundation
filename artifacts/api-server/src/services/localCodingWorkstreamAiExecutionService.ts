@@ -326,7 +326,11 @@ async function recoverExpiredAiControlClaim(workstreamId: string): Promise<void>
     return;
   }
 
-  await revokeWorkstreamAiHandoff(workstreamId).catch((error) => {
+  await revokeWorkstreamAiHandoff(
+    workstreamId,
+    new Date(),
+    current.attemptCount,
+  ).catch((error) => {
     if (
       error instanceof LocalCodingWorkstreamAiHandoffError &&
       ["NOT_FOUND", "CONSUMED", "REVOKED"].includes(error.code)
@@ -596,7 +600,11 @@ export async function approveWorkstreamAiExecutionHandoff(
     : [];
 
   if (!extended) {
-    await revokeWorkstreamAiHandoff(workstreamId).catch(() => undefined);
+    await revokeWorkstreamAiHandoff(
+      workstreamId,
+      new Date(),
+      lease.claimAttempt,
+    ).catch(() => undefined);
     throw new LocalCodingWorkstreamAiExecutionError(
       "Workstream claim expired while the AI handoff was being approved.",
       "LEASE_LOST",
@@ -1952,7 +1960,11 @@ export async function executeCodingWorkstreamAiJob(
     const repairDecision = decideWorkstreamAiAutoRepair(error, sourceResult);
 
     if (!consumed) {
-      await revokeWorkstreamAiHandoff(payload.workstreamId).catch(() => undefined);
+      await revokeWorkstreamAiHandoff(
+        payload.workstreamId,
+        new Date(),
+        payload.claimAttempt,
+      ).catch(() => undefined);
     }
     const failurePersisted = await persistExecutionFailure(
       payload,
