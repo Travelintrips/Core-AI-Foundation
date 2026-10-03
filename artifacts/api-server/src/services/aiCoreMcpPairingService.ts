@@ -112,14 +112,28 @@ export async function getMcpOauthPairing(id: string): Promise<McpOauthPairing | 
 
 export async function approveMcpOauthPairing(code: string, userId: number): Promise<boolean> {
   const result = await withTransientDatabaseRetry(
-    () => pool.query(
-      `UPDATE ai_platform.mcp_oauth_pairings
-          SET status = 'approved', approved_user_id = $2, approved_at = now()
-        WHERE code = $1
-          AND status = 'pending'
-          AND expires_at > now()`,
-      [code, userId],
-    ),
+    () => code
+      ? pool.query(
+          `UPDATE ai_platform.mcp_oauth_pairings
+              SET status = 'approved', approved_user_id = $2, approved_at = now()
+            WHERE code = $1
+              AND status = 'pending'
+              AND expires_at > now()`,
+          [code, userId],
+        )
+      : pool.query(
+          `UPDATE ai_platform.mcp_oauth_pairings
+              SET status = 'approved', approved_user_id = $1, approved_at = now()
+            WHERE id = (
+              SELECT id
+                FROM ai_platform.mcp_oauth_pairings
+               WHERE status = 'pending'
+                 AND expires_at > now()
+               ORDER BY created_at DESC
+               LIMIT 1
+            )`,
+          [userId],
+        ),
     { attempts: 3, baseDelayMs: 150 },
   );
   return (result.rowCount ?? 0) > 0;
