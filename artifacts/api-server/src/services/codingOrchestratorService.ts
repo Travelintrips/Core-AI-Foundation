@@ -1102,6 +1102,38 @@ export async function startCodingOrchestration(
   });
   child.unref();
   child.once("error", (error) => {
+    const spawnCode =
+      typeof (error as NodeJS.ErrnoException).code === "string"
+        ? (error as NodeJS.ErrnoException).code
+        : "";
+    const resourcePressure =
+      spawnCode === "EAGAIN" ||
+      /resource temporarily unavailable|cannot fork/i.test(error.message);
+
+    if (resourcePressure) {
+      logger.warn(
+        { err: error, jobId: queuedJob?.id, taskId: input.task.id, codingRunId: input.run.id },
+        "[coding-orchestrator] Dedicated Repository Analyzer spawn hit host process pressure; failing over in-process",
+      );
+      void continueCodingOrchestration(
+        input,
+        sessionId,
+        queuedJob!,
+        stages,
+      ).catch((fallbackError) => {
+        logger.error(
+          {
+            err: fallbackError,
+            jobId: queuedJob?.id,
+            taskId: input.task.id,
+            codingRunId: input.run.id,
+          },
+          "[coding-orchestrator] In-process Repository Analyzer spawn failover failed",
+        );
+      });
+      return;
+    }
+
     logger.error(
       { err: error, jobId: queuedJob?.id, taskId: input.task.id, codingRunId: input.run.id },
       "[coding-orchestrator] Failed to launch dedicated Repository Analyzer process",
