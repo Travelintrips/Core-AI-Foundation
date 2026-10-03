@@ -124,3 +124,20 @@ export async function approveMcpOauthPairing(code: string, userId: number): Prom
   );
   return (result.rowCount ?? 0) > 0;
 }
+
+
+export async function getLatestPendingMcpOauthPairing(): Promise<McpOauthPairing | null> {
+  const result = await withTransientDatabaseRetry(
+    () => pool.query<PairingRow>(
+      `SELECT id, code, status, client_id, redirect_uri, code_challenge, scope, resource, state, approved_user_id, expires_at
+         FROM ai_platform.mcp_oauth_pairings
+        WHERE status = 'pending'
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1`,
+    ),
+    { attempts: 3, baseDelayMs: 150 },
+  );
+  const row = result.rows[0];
+  return row ? mapRow(row) : null;
+}
