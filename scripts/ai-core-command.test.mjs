@@ -147,6 +147,29 @@ test('API fixes the destination, disallows redirects, and JSON-encodes instructi
   await assert.rejects(api('//attacker.example'), /scope/);
   await assert.rejects(api('/ai/coding/../../secrets'), /scope/);
 });
+test('GET probes retry transient transport failures but protected mutations stay single-shot', async () => {
+  let getCalls = 0;
+  const getApi = createApi('test-secret', async () => {
+    getCalls++;
+    if (getCalls === 1) throw new TypeError('fetch failed');
+    return { ok: true, status: 200, json: async () => ({ status: 'ok' }) };
+  });
+  const result = await getApi('/healthz');
+  assert.equal(result.status, 200);
+  assert.equal(getCalls, 2);
+
+  let postCalls = 0;
+  const postApi = createApi('test-secret', async () => {
+    postCalls++;
+    throw new TypeError('fetch failed');
+  });
+  await assert.rejects(
+    postApi('/ai/coding/tasks', { method: 'POST', body: {} }),
+    /fetch failed/,
+  );
+  assert.equal(postCalls, 1);
+});
+
 test('failed mutations are not retried and secret bodies are not logged', async () => {
   let calls = 0;
   const api = createApi('test-secret', async () => { calls++; return { ok: false, status: 401, json: async () => ({ secret: 'never-show-this' }) }; });
