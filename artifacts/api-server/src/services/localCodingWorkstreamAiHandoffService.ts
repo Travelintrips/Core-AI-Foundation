@@ -11,6 +11,10 @@ import {
 } from "@workspace/db";
 import { validateCodingMultiTaskPlanV1 } from "./localCodingMultiTaskPlannerService.js";
 import { hashCodingMultiTaskPlan } from "./localCodingTaskGraphService.js";
+import {
+  advisoryLockAcquired,
+  withNonBlockingAdvisoryRetry,
+} from "./nonBlockingAdvisoryLockRetryService.js";
 
 const DEFAULT_TTL_SECONDS = 900;
 const MIN_TTL_SECONDS = 60;
@@ -399,10 +403,14 @@ export async function prepareWorkstreamAiHandoff(
 ): Promise<{ handoff: AiCodingWorkstreamAiHandoff; created: boolean }> {
   const lockKey = `coding-workstream-ai-handoff:${workstreamId}`;
 
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
-    );
+  return withNonBlockingAdvisoryRetry(() =>
+    db.transaction(async (tx) => {
+      const lockResult = await tx.execute(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
+      );
+      if (!advisoryLockAcquired(lockResult)) {
+        return { acquired: false };
+      }
 
     const [workstream] = await tx
       .select()
@@ -452,7 +460,10 @@ export async function prepareWorkstreamAiHandoff(
         existing.packageHash.toLowerCase() === packageHash &&
         ["PREPARED", "APPROVED"].includes(existing.status)
       ) {
-        return { handoff: existing, created: false };
+        return {
+          acquired: true,
+          value: { handoff: existing, created: false },
+        };
       }
       throw new LocalCodingWorkstreamAiHandoffError(
         "This workstream claim attempt already has a terminal or stale AI handoff.",
@@ -487,8 +498,12 @@ export async function prepareWorkstreamAiHandoff(
         "INVALID_CONTEXT",
       );
     }
-    return { handoff, created: true };
-  });
+      return {
+        acquired: true,
+        value: { handoff, created: true },
+      };
+    }),
+  );
 }
 
 export async function approveWorkstreamAiHandoff(
