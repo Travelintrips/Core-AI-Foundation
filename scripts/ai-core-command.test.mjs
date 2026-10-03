@@ -216,6 +216,36 @@ test('GET probes retry transient transport failures but protected mutations stay
   assert.equal(postCalls, 1);
 });
 
+test('idempotent bridge command retries transient transport and 5xx failures', async () => {
+  let transportCalls = 0;
+  const transportApi = createApi('test-secret', async () => {
+    transportCalls++;
+    if (transportCalls < 3) throw new TypeError('fetch failed');
+    return { ok: true, status: 200, json: async () => ({ created: false }) };
+  });
+  const transportResult = await transportApi('/ai/coding/bridge/commands', {
+    method: 'POST',
+    body: { externalCommandId: 'issue-528' },
+  });
+  assert.equal(transportResult.status, 200);
+  assert.equal(transportCalls, 3);
+
+  let statusCalls = 0;
+  const statusApi = createApi('test-secret', async () => {
+    statusCalls++;
+    if (statusCalls === 1) {
+      return { ok: false, status: 503, json: async () => ({ error: 'temporary' }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ created: false }) };
+  });
+  const statusResult = await statusApi('/ai/coding/bridge/commands', {
+    method: 'POST',
+    body: { externalCommandId: 'issue-528' },
+  });
+  assert.equal(statusResult.status, 200);
+  assert.equal(statusCalls, 2);
+});
+
 test('failed mutations are not retried and secret bodies are not logged', async () => {
   let calls = 0;
   const api = createApi('test-secret', async () => { calls++; return { ok: false, status: 401, json: async () => ({ secret: 'never-show-this' }) }; });
