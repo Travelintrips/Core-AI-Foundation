@@ -313,7 +313,8 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
 
   const identity = await authenticate(req);
   if (!identity || !identity.scopes.has(requiredScope)) {
-    res.status(200).json(authRequiredResult(body.id ?? null, requiredScope));
+    res.setHeader("WWW-Authenticate", authChallenge(requiredScope));
+    res.status(401).json(authRequiredResult(body.id ?? null, requiredScope));
     return;
   }
 
@@ -354,7 +355,8 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
       );
     } else {
       if (!identity.user) {
-        res.status(200).json(authRequiredResult(body.id ?? null, "profile"));
+        res.setHeader("WWW-Authenticate", authChallenge("profile"));
+        res.status(401).json(authRequiredResult(body.id ?? null, "profile"));
         return;
       }
       payload = {
