@@ -2507,9 +2507,9 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
     return;
   }
 
-  if (parsed.data.mode !== "ask") {
+  if (parsed.data.mode === "agent") {
     res.status(400).json({
-      error: "Streaming endpoint is Ask Mode only; Agent Mode uses the control-plane endpoint.",
+      error: "Streaming endpoint supports Ask/Auto only; Agent Mode uses the control-plane endpoint.",
     });
     return;
   }
@@ -2538,7 +2538,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       role: "user",
       content: safeMessage,
       scope,
-      metadata: { mode: "ask", modelPolicy: parsed.data.modelPolicy, streaming: true, source: parsed.data.source, imageAttached: Boolean(parsed.data.image) },
+      metadata: { mode: parsed.data.mode, modelPolicy: parsed.data.modelPolicy, streaming: true, source: parsed.data.source, imageAttached: Boolean(parsed.data.image) },
     }).catch(() => undefined);
     await promoteExplicitChatLearning(safeMessage, scope).catch(() => false);
     const learnings = await retrieveChatLearnings(scope).catch(() => []);
@@ -2546,6 +2546,29 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
     if (parsed.data.image) {
       const vision = await analyzeChatImage(parsed.data.image, safeMessage);
       effectiveMessage = withImageContext(effectiveMessage, vision.description);
+    }
+
+    if (parsed.data.mode === "auto") {
+      const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
+      const effectiveInput = {
+        ...parsed.data,
+        message: effectiveMessage,
+        context: safeContext,
+      };
+      const dispatch = classifyAiCoreChatDispatch(rawInput.message);
+
+      if (
+        extractExplicitAdminMutationSql(rawInput.message) ||
+        dispatch.kind !== "ANSWER"
+      ) {
+        const result = await runAutoMode(
+          rawInput,
+          effectiveInput,
+          !parsed.data.image && safeContext.length === 0 ? scope : null,
+        );
+        writeBufferedChatStream(res, result);
+        return;
+      }
     }
 
     await streamAskMode(
