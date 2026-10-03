@@ -98,6 +98,20 @@ jobs:
           echo "coding_tasks_unauthenticated_http=$code"
           test "$code" = "401"
 
+      - name: Verify SMTP transport for login email
+        if: steps.target.outputs.stale != 'true'
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/email-diagnostic -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/internal/auth/email-diagnostics")
+          echo "email_diagnostics_http=$code"
+          cat /tmp/email-diagnostic
+          test "$code" = "200"
+          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/email-diagnostic","utf8")); if(v.ok!==true || v.category!=="OK") throw new Error("SMTP transport is not healthy"); console.log("smtp_transport=PASS");'
+
       - name: Verify authenticated Coding Workspace
         if: steps.target.outputs.stale != 'true'
         shell: bash

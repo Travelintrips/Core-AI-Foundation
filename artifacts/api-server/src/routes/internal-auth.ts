@@ -189,6 +189,23 @@ router.post("/internal/auth/request-password-reset", loginLimiter, async (req, r
     return;
   }
 
+  // Match magic-link behavior: never report a successful recovery request while
+  // the SMTP transport is unavailable. The check happens before account lookup
+  // so the response still does not reveal whether an email is registered.
+  const smtp = await verifyEmailTransport();
+  if (!smtp.ok) {
+    await logAudit("internal_auth", "password_reset_email", "smtp", "email", "failure", {
+      reason: "smtp_unavailable",
+      error: smtp.error,
+      ip: clientIp(req),
+    });
+    res.status(503).json({
+      ok: false,
+      error: "Layanan email sedang bermasalah. Silakan coba lagi beberapa saat lagi.",
+    });
+    return;
+  }
+
   const user = await getInternalUserByEmail(email);
   if (!user || user.status !== "active") {
     await logAudit("internal_auth", "password_reset_request", email, "internal_user", "failure", { reason: "not_found_or_inactive", ip: clientIp(req) });
@@ -208,6 +225,13 @@ router.post("/internal/auth/request-password-reset", loginLimiter, async (req, r
     resourceId: String(user.id),
   });
   await logAudit("internal_auth", "password_reset_request", String(user.id), "internal_user", sent.ok ? "success" : "failure", { ip: clientIp(req), emailSent: sent.ok });
+  if (!sent.ok) {
+    res.status(503).json({
+      ok: false,
+      error: "Layanan email sedang bermasalah. Silakan coba lagi beberapa saat lagi.",
+    });
+    return;
+  }
   res.json(generic);
 });
 
