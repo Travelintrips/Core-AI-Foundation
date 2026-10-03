@@ -491,3 +491,16 @@ describe("repository analyzer stale incident recovery contract", () => {
     );
   });
 });
+
+
+describe("repository remote HEAD resource-pressure recovery", () => {
+  it("serializes and retries transient ls-remote failures", () => {
+    const source = readFileSync(
+      new URL("../repositoryAnalyzerService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("return withRepositoryCloneSlot(async () => {");
+    expect(source).toContain("for (let attempt = 1; attempt <= 3; attempt += 1)");
+    expect(source).toContain("isRetryableRepositoryCloneResourceError(detail)");
+  });
+});
