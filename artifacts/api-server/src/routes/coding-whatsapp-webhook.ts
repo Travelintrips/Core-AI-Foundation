@@ -109,13 +109,59 @@ function extractVoiceNote(payload: IncomingEnvelope): IncomingVoiceNote | null {
   };
 }
 
+function unwrapIncomingMessageContent(value: unknown): Record<string, unknown> | null {
+  let content =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+
+  for (let depth = 0; content && depth < 6; depth += 1) {
+    const nestedCandidates = [
+      (content.ephemeralMessage as { message?: unknown } | undefined)?.message,
+      (content.viewOnceMessage as { message?: unknown } | undefined)?.message,
+      (content.viewOnceMessageV2 as { message?: unknown } | undefined)?.message,
+      (content.viewOnceMessageV2Extension as { message?: unknown } | undefined)?.message,
+      (content.documentWithCaptionMessage as { message?: unknown } | undefined)?.message,
+      (content.editedMessage as { message?: unknown } | undefined)?.message,
+    ];
+    const nested = nestedCandidates.find(
+      (candidate) => candidate && typeof candidate === "object" && !Array.isArray(candidate),
+    );
+    if (!nested) break;
+    content = nested as Record<string, unknown>;
+  }
+
+  return content;
+}
+
 function extractText(payload: IncomingEnvelope): string {
-  const message = payload.message?.message;
+  const message = unwrapIncomingMessageContent(payload.message?.message);
+  if (!message) return "";
+
+  const extendedTextMessage =
+    message.extendedTextMessage &&
+    typeof message.extendedTextMessage === "object" &&
+    !Array.isArray(message.extendedTextMessage)
+      ? (message.extendedTextMessage as { text?: unknown })
+      : null;
+  const imageMessage =
+    message.imageMessage &&
+    typeof message.imageMessage === "object" &&
+    !Array.isArray(message.imageMessage)
+      ? (message.imageMessage as { caption?: unknown })
+      : null;
+  const videoMessage =
+    message.videoMessage &&
+    typeof message.videoMessage === "object" &&
+    !Array.isArray(message.videoMessage)
+      ? (message.videoMessage as { caption?: unknown })
+      : null;
+
   const candidates = [
-    message?.conversation,
-    message?.extendedTextMessage?.text,
-    message?.imageMessage?.caption,
-    message?.videoMessage?.caption,
+    message.conversation,
+    extendedTextMessage?.text,
+    imageMessage?.caption,
+    videoMessage?.caption,
   ];
   const text = candidates.find((value): value is string => typeof value === "string");
   return text?.trim() ?? "";
