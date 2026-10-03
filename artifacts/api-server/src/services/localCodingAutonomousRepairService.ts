@@ -43,6 +43,7 @@ import { requestCodingCriticalApproval } from "./codingCriticalApprovalService.j
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
 import { purgeExpiredCodingTestTasks, reconcileStaleCodingRuns } from "./localCodingRunRecoveryService.js";
+import { isRetryableRepositoryCloneResourceError } from "./repositoryAnalyzerService.js";
 
 const DEFAULT_INTERVAL_MS = 8_000;
 const MIN_INTERVAL_MS = 2_000;
@@ -244,6 +245,69 @@ function workstreamAiRequired(result: Record<string, unknown> | null): boolean {
   if (!result) return false;
   const plan = isRecord(result.localExecutionPlan) ? result.localExecutionPlan : null;
   return plan?.status === "AI_REQUIRED";
+}
+
+function retryableRepositoryAnalyzerFailure(
+  state: Awaited<ReturnType<typeof loadTaskState>>,
+): string | null {
+  if (state.task.status !== "FAILED") return null;
+  const latestOrchestrator = state.runs.find(
+    (run) => run.agentName === "Coding Orchestrator" && run.status === "FAILED",
+  );
+  const error = normalizeRunError(latestOrchestrator?.errorMessage);
+  if (!error) return null;
+  return isRetryableRepositoryCloneResourceError(error) ? error : null;
+}
+
+async function restartRepositoryAnalysisAfterTransientFailure(
+  taskId: string,
+): Promise<void> {
+  const { task, run } = await db.transaction(async (tx) => {
+    const [task] = await tx
+      .select()
+      .from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, taskId))
+      .for("update");
+    if (!task) throw new Error("CODING_TASK_NOT_FOUND");
+
+    const [activeRun] = await tx
+      .select({ id: aiCodingRunsTable.id })
+      .from(aiCodingRunsTable)
+      .where(
+        and(
+          eq(aiCodingRunsTable.taskId, taskId),
+          eq(aiCodingRunsTable.status, "RUNNING"),
+        ),
+      )
+      .limit(1);
+    if (activeRun) {
+      throw new Error("Coding task already has an active run");
+    }
+
+    const [run] = await tx
+      .insert(aiCodingRunsTable)
+      .values({
+        taskId,
+        agentName: "Coding Orchestrator",
+        status: "RUNNING",
+        startedAt: new Date(),
+      })
+      .returning();
+    if (!run) throw new Error("Failed to create Coding Orchestrator retry run");
+
+    await tx
+      .update(aiCodingTasksTable)
+      .set({
+        status: "ANALYZING",
+        resultSummary: "Retrying Repository Analyzer after transient host resource pressure.",
+      })
+      .where(eq(aiCodingTasksTable.id, taskId));
+
+    return { task, run };
+  });
+
+  const { startCodingOrchestration } = await import("./codingOrchestratorService.js");
+  await startCodingOrchestration({ task, run });
 }
 
 export function hasLiveCodingWorkstreamClaim(
@@ -666,6 +730,26 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       const action = `WAIT_AI_EXECUTION_JOB:${state.activeAiJob.id}`;
       await setState(taskId, "WAITING", action);
       return { taskId, status: "WAITING", action };
+    }
+
+    const repositoryAnalyzerFailure = retryableRepositoryAnalyzerFailure(state);
+    if (repositoryAnalyzerFailure) {
+      await reserveActionCycle(taskId);
+      await restartRepositoryAnalysisAfterTransientFailure(taskId);
+      await setState(taskId, "WAITING", "RETRY_REPOSITORY_ANALYZER_RESOURCE_PRESSURE", null);
+      await logAudit(
+        "coding-autonomous",
+        "repository_analyzer_transient_failure_retried",
+        taskId,
+        "coding_task",
+        "success",
+        { error: repositoryAnalyzerFailure.slice(0, 1000) },
+      ).catch(() => undefined);
+      return {
+        taskId,
+        status: "WAITING",
+        action: "RETRY_REPOSITORY_ANALYZER_RESOURCE_PRESSURE",
+      };
     }
 
     const repeatedProposalFailure =

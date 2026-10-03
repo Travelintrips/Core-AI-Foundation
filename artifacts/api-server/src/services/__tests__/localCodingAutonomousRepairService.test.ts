@@ -498,3 +498,19 @@ describe("autonomous terminal task status", () => {
     expect(source).toContain('status: "COMPLETED" },');
   });
 });
+
+
+describe("autonomous repository analyzer resource-pressure recovery", () => {
+  it("restarts failed analyzer work instead of falling through to unsupported nextAction", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("retryableRepositoryAnalyzerFailure(state)");
+    expect(source).toContain("isRetryableRepositoryCloneResourceError(error)");
+    expect(source).toContain("RETRY_REPOSITORY_ANALYZER_RESOURCE_PRESSURE");
+    expect(source).toContain("restartRepositoryAnalysisAfterTransientFailure(taskId)");
+    expect(source).toContain('status: "ANALYZING"');
+  });
+});
