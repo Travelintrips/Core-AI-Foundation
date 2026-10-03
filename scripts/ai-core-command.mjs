@@ -55,15 +55,36 @@ export function createApi(secret, fetchImpl = fetch) {
       throw new Error('API path is outside the coding trigger scope.');
     }
     const isPublicHealthProbe = path === '/healthz' || path === '/healthz/full';
-    const response = await fetchImpl(API + path, {
-      method, redirect: 'error', signal: AbortSignal.timeout(method === 'GET' ? 60000 : 30000),
-      headers: isPublicHealthProbe
-        ? { 'Content-Type': 'application/json' }
-        : { 'Content-Type': 'application/json', 'x-admin-api-key': secret },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    const maxAttempts = method === 'GET' ? 3 : 1;
+    let response;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        response = await fetchImpl(API + path, {
+          method, redirect: 'error', signal: AbortSignal.timeout(method === 'GET' ? 60000 : 30000),
+          headers: isPublicHealthProbe
+            ? { 'Content-Type': 'application/json' }
+            : { 'Content-Type': 'application/json', 'x-admin-api-key': secret },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+      } catch (error) {
+        if (attempt >= maxAttempts) throw error;
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        continue;
+      }
+
+      const transientGetStatus =
+        method === 'GET' && [429, 500, 502, 503, 504].includes(response.status);
+      if (transientGetStatus && attempt < maxAttempts && !allowed.includes(response.status)) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        continue;
+      }
+      break;
+    }
+
+    if (!response) throw new Error(`AI Core ${method} ${path} did not return a response.`);
     if (!response.ok && !allowed.includes(response.status)) {
-      // Do not print response bodies, credentials, or task instructions to public logs.
+      // GET probes may retry transient transport/5xx failures. Mutations are never retried.
       throw new Error(`AI Core ${method} ${path} returned HTTP ${response.status}. No mutation is automatically retried.`);
     }
     let value;
