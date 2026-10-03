@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
+import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import {
   oauthIssuer,
   oauthResource,
