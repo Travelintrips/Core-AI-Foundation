@@ -112,6 +112,33 @@ import {
 const router = Router();
 const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] !== "false";
 
+const VOICE_WAKE_WORD = /^(?:hi|hai|hey)(?:\s|[,!.:;-]|$)/i;
+const VOICE_TERM_NORMALIZATIONS: Array<[RegExp, string]> = [
+  [/\bde[\s-]?ploy(?:ment)?\b/gi, "deployment"],
+  [/\bdi[\s-]?ploy(?:ment)?\b/gi, "deployment"],
+  [/\bdeplo+y\b/gi, "deploy"],
+  [/\ber+or\b/gi, "error"],
+  [/\bwa\s+gate\s*way\b/gi, "WA Gateway"],
+  [/\bwhats?\s*app\s+gate\s*way\b/gi, "WA Gateway"],
+  [/\bbiz\s*portal\b/gi, "BizPortal"],
+  [/\bai\s*core\b/gi, "AI Core"],
+  [/\bwork[\s-]?er\b/gi, "worker"],
+  [/\bp[\s.-]*r\b/gi, "PR"],
+  [/\bc[\s.-]*i\b/gi, "CI"],
+];
+
+function normalizeVoiceAgentCommand(message: string): { command: string; wakeWordMatched: boolean } {
+  const trimmed = message.trim();
+  if (!VOICE_WAKE_WORD.test(trimmed)) return { command: trimmed, wakeWordMatched: false };
+
+  let command = trimmed.replace(VOICE_WAKE_WORD, "").trim();
+  for (const [pattern, replacement] of VOICE_TERM_NORMALIZATIONS) {
+    command = command.replace(pattern, replacement);
+  }
+  command = command.replace(/\s{2,}/g, " ").trim();
+  return { command, wakeWordMatched: true };
+}
+
 const ChatRequest = z.object({
   message: z.string().trim().min(1).max(50_000),
   mode: z.enum(["auto", "ask", "agent"]).default(DEFAULT_AI_CORE_CHAT_MODE),
@@ -2608,17 +2635,18 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   }
 
   if (parsed.data.mode === "agent" && (parsed.data.source === "voice" || parsed.data.source === "whatsapp_voice")) {
-    const voiceMessage = parsed.data.message.trim();
-    if (!/^hi(?:\\s|[,!.:;-]|$)/i.test(voiceMessage)) {
+    const normalizedVoice = normalizeVoiceAgentCommand(parsed.data.message);
+    if (!normalizedVoice.wakeWordMatched) {
       res.status(403).json({
-        error: "Execution blocked: voice commands must begin with Hi.",
+        error: "Execution blocked: voice commands must begin with Hi, Hai, or Hey.",
         blocked: true,
         reason: "missing_voice_execution_prefix",
         requiredPrefix: "Hi",
+        acceptedSpeechVariants: ["Hi", "Hai", "Hey"],
       });
       return;
     }
-    parsed.data.message = voiceMessage.replace(/^hi(?:\\s*[,!.:;-]?\\s*)/i, "").trim();
+    parsed.data.message = normalizedVoice.command;
     if (!parsed.data.message) {
       res.status(400).json({ error: "Voice command is empty after Hi prefix." });
       return;
