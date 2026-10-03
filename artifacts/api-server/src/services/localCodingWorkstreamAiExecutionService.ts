@@ -2121,12 +2121,23 @@ async function runGit(
   repository: string,
   timeout = 30_000,
 ): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, {
+  const result = await execFileAsync("git", args, {
     cwd: root,
     timeout,
     maxBuffer: 4 * 1024 * 1024,
     env: gitCommandEnvironment(repository),
   });
+  const raw =
+    typeof result === "string" || Buffer.isBuffer(result)
+      ? result
+      : (result as { stdout?: unknown } | null | undefined)?.stdout;
+  const stdout = Buffer.isBuffer(raw)
+    ? raw.toString("utf8")
+    : raw instanceof Uint8Array
+      ? Buffer.from(raw).toString("utf8")
+      : typeof raw === "string"
+        ? raw
+        : "";
   return stdout.trim();
 }
 
