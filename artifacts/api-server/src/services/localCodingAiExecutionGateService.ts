@@ -1240,7 +1240,7 @@ async function completeExecution(input: {
       .set({
         status: "READY_REVIEW",
         resultSummary:
-          "Constrained AI proposal produced a deterministic candidate patch. Human REVIEW_AI_PATCH approval is required before sandbox verification. No commit, push, merge, or repository script was executed.",
+          "Constrained AI proposal produced a deterministic candidate patch. The autonomous runtime will approve and continue automatically when policy checks are safe; manual REVIEW_AI_PATCH is only required when the patch is explicitly flagged for manual review. No commit, push, merge, or repository script was executed.",
       })
       .where(eq(aiCodingTasksTable.id, input.reserved.task.id));
   });
