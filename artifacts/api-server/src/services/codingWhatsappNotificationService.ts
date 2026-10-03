@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { logger } from "../lib/logger.js";
 
 type CodingBridgeKind =
@@ -20,6 +21,37 @@ function config() {
   const apiKey = (process.env.CST_WA_GATEWAY_API_KEY ?? "").trim();
   const to = (process.env.AI_CODING_WA_NOTIFY_TO ?? "").trim();
   return { baseUrl, apiKey, to };
+}
+
+function approvalWebConfig() {
+  const publicBaseUrl = (
+    process.env.AI_CORE_PUBLIC_API_URL ??
+    process.env.PUBLIC_APP_URL ??
+    "https://aicore.cstlogistic.co.id"
+  ).trim().replace(/\/$/, "");
+  const signingSecret = (process.env.AI_CODING_WA_INCOMING_SECRET ?? "").trim();
+  return { publicBaseUrl, signingSecret };
+}
+
+function buildApprovalWebLink(
+  token: string,
+  decision: "APPROVE" | "REJECT",
+): string | null {
+  const { publicBaseUrl, signingSecret } = approvalWebConfig();
+  if (!publicBaseUrl || !signingSecret) return null;
+
+  const signature = crypto
+    .createHmac("sha256", signingSecret)
+    .update(`${token}:${decision}`)
+    .digest("hex");
+
+  const params = new URLSearchParams({
+    token,
+    decision,
+    sig: signature,
+  });
+
+  return `${publicBaseUrl}/api/ai/coding/whatsapp/approval?${params.toString()}`;
 }
 
 export type CodingWhatsappNotifyResult =
@@ -240,6 +272,9 @@ export async function sendCodingApprovalRequest(input: {
   token: string;
   expiresAt: string;
 }): Promise<CodingWhatsappNotifyResult> {
+  const approveLink = buildApprovalWebLink(input.token, "APPROVE");
+  const rejectLink = buildApprovalWebLink(input.token, "REJECT");
+
   const text = [
     "AI Core - APPROVAL REQUIRED",
     input.taskId ? `Task: ${input.taskId}` : "",
@@ -248,7 +283,10 @@ export async function sendCodingApprovalRequest(input: {
     `Berlaku sampai: ${input.expiresAt}`,
     "",
     "Pilih tindakan di bawah.",
-    `Jika tombol tidak tampil, balas: APPROVE ${input.token}`,
+    approveLink ? `✅ APPROVE: ${approveLink}` : "",
+    rejectLink ? `❌ REJECT: ${rejectLink}` : "",
+    "",
+    `Fallback teks: APPROVE ${input.token}`,
     `atau: REJECT ${input.token}`,
   ].filter(Boolean).join("\n");
 

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { Router, raw } from "express";
+import { Router, raw, urlencoded } from "express";
 import { appendCodingBridgeResponse, submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 import { logger } from "../lib/logger.js";
 import {
@@ -274,6 +274,165 @@ function verifySignature(rawBody: Buffer, supplied: string | undefined, secret: 
     return false;
   }
 }
+
+function verifyApprovalLinkSignature(input: {
+  token: string;
+  decision: "APPROVE" | "REJECT";
+  supplied: string;
+  secret: string;
+}): boolean {
+  const expected = crypto
+    .createHmac("sha256", input.secret)
+    .update(`${input.token}:${input.decision}`)
+    .digest("hex");
+
+  if (input.supplied.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(input.supplied, "utf8"),
+      Buffer.from(expected, "utf8"),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function htmlEscape(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      case "'": return "&#39;";
+      default: return char;
+    }
+  });
+}
+
+router.get(
+  "/ai/coding/whatsapp/approval",
+  async (req, res): Promise<void> => {
+    const secret = (process.env.AI_CODING_WA_INCOMING_SECRET ?? "").trim();
+    const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+    const decision =
+      req.query.decision === "APPROVE" || req.query.decision === "REJECT"
+        ? req.query.decision
+        : null;
+    const sig = typeof req.query.sig === "string" ? req.query.sig.trim() : "";
+
+    if (
+      !secret ||
+      !token ||
+      !decision ||
+      !sig ||
+      !verifyApprovalLinkSignature({
+        token,
+        decision,
+        supplied: sig,
+        secret,
+      })
+    ) {
+      res.status(400).type("html").send(
+        "<!doctype html><html><body><h2>Approval link tidak valid.</h2></body></html>",
+      );
+      return;
+    }
+
+    const escapedToken = htmlEscape(token);
+    const escapedSig = htmlEscape(sig);
+    const escapedDecision = htmlEscape(decision);
+    const actionLabel = decision === "APPROVE" ? "APPROVE" : "REJECT";
+
+    res
+      .status(200)
+      .type("html")
+      .send(`<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Core Approval</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f7fb;margin:0;padding:24px;color:#111}
+.card{max-width:520px;margin:40px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+button{width:100%;padding:16px;border:0;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;background:${decision === "APPROVE" ? "#16a34a" : "#dc2626"};color:white}
+.meta{color:#555;margin:12px 0 20px}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>AI Core Admin Approval</h2>
+<div class="meta">Konfirmasi tindakan: <strong>${actionLabel}</strong></div>
+<form method="post" action="/api/ai/coding/whatsapp/approval">
+<input type="hidden" name="token" value="${escapedToken}">
+<input type="hidden" name="decision" value="${escapedDecision}">
+<input type="hidden" name="sig" value="${escapedSig}">
+<button type="submit">Konfirmasi ${actionLabel}</button>
+</form>
+</div>
+</body>
+</html>`);
+  },
+);
+
+router.post(
+  "/ai/coding/whatsapp/approval",
+  urlencoded({ extended: false, limit: "32kb" }),
+  async (req, res): Promise<void> => {
+    const secret = (process.env.AI_CODING_WA_INCOMING_SECRET ?? "").trim();
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const decision =
+      req.body?.decision === "APPROVE" || req.body?.decision === "REJECT"
+        ? req.body.decision
+        : null;
+    const sig = typeof req.body?.sig === "string" ? req.body.sig.trim() : "";
+
+    if (
+      !secret ||
+      !token ||
+      !decision ||
+      !sig ||
+      !verifyApprovalLinkSignature({
+        token,
+        decision,
+        supplied: sig,
+        secret,
+      })
+    ) {
+      res.status(400).type("html").send(
+        "<!doctype html><html><body><h2>Approval link tidak valid.</h2></body></html>",
+      );
+      return;
+    }
+
+    try {
+      const approval = await decideCodingCriticalApproval({
+        token,
+        decision,
+        senderDigits: "",
+      });
+
+      res
+        .status(200)
+        .type("html")
+        .send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Core Approval</title></head><body style="font-family:system-ui,-apple-system,sans-serif;padding:24px"><h2>${decision === "APPROVE" ? "✅ Approval diterima" : "❌ Task ditolak"}</h2><p>Approval ID: ${htmlEscape(approval.id)}</p><p>Status: ${htmlEscape(approval.status)}</p><p>Halaman ini boleh ditutup.</p></body></html>`);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : String(error);
+      const status =
+        code === "APPROVAL_NOT_FOUND"
+          ? 404
+          : ["APPROVAL_EXPIRED", "APPROVAL_NOT_PENDING", "APPROVAL_RACE_LOST"].includes(code)
+            ? 409
+            : 500;
+
+      res
+        .status(status)
+        .type("html")
+        .send(`<!doctype html><html><body><h2>Approval tidak dapat diproses.</h2><p>${htmlEscape(code)}</p></body></html>`);
+    }
+  },
+);
 
 router.post(
   "/ai/coding/whatsapp/webhook",
