@@ -5,6 +5,10 @@ import { logAudit } from "./aiAuditService.js";
 import { computePriorityScore } from "./priorityEngine.js";
 import { assertApprovedAiHandoffFresh } from "./localCodingAiHandoffService.js";
 import { runAiExecutionToCompletion } from "./localCodingAiExecutionGateService.js";
+import {
+  advisoryLockAcquired,
+  withNonBlockingAdvisoryRetry,
+} from "./nonBlockingAdvisoryLockRetryService.js";
 
 export const CODING_AI_EXECUTION_JOB_TYPE = "coding_ai_execution";
 export const CODING_AI_EXECUTION_CAPABILITY = "coding_ai_execution";
@@ -96,54 +100,65 @@ export async function enqueueCodingAiExecution(
   const priority = clampPriority(options.priority);
   const lockKey = `${CODING_AI_EXECUTION_JOB_TYPE}:${payload.taskId}`;
 
-  const result = await db.transaction(async (tx) => {
-    // Serialize active-job discovery + insertion for this task. This closes
-    // the concurrent double-click race without introducing a global lock.
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
-    );
+  const result = await withNonBlockingAdvisoryRetry(() =>
+    db.transaction(async (tx) => {
+      // Never wait while holding a pooled connection. If another request owns
+      // this task-scoped lock, release the connection and retry outside the DB.
+      const lockResult = await tx.execute(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
+      );
+      if (!advisoryLockAcquired(lockResult)) {
+        return { acquired: false };
+      }
 
-    const existing = await findExistingCodingAiExecutionJob(tx, payload.taskId);
-    if (existing) {
-      return { job: existing, created: false };
-    }
+      const existing = await findExistingCodingAiExecutionJob(tx, payload.taskId);
+      if (existing) {
+        return {
+          acquired: true,
+          value: { job: existing, created: false },
+        };
+      }
 
-    const now = new Date();
-    const score = computePriorityScore({
-      basePriority: priority,
-      createdAt: now,
-      retryCount: 0,
-    });
-    const jobCode = `JOB-${randomUUID().slice(0, 8).toUpperCase()}`;
-    const payloadJson: Record<string, unknown> = {
-      taskId: payload.taskId,
-      packageHash: payload.packageHash,
-      ...(payload.requestedBy ? { requestedBy: payload.requestedBy } : {}),
-      ...(options.tenantId ? { _tenantId: options.tenantId } : {}),
-    };
-
-    const [job] = await tx
-      .insert(aiJobsTable)
-      .values({
-        jobCode,
-        jobType: CODING_AI_EXECUTION_JOB_TYPE,
-        requiredCapability: CODING_AI_EXECUTION_CAPABILITY,
-        payloadJson,
-        priority,
-        priorityScore: String(score),
-        maxRetry: 0,
-        retryStrategy: "manual",
-        status: "queued",
+      const now = new Date();
+      const score = computePriorityScore({
+        basePriority: priority,
+        createdAt: now,
         retryCount: 0,
-      })
-      .returning();
+      });
+      const jobCode = `JOB-${randomUUID().slice(0, 8).toUpperCase()}`;
+      const payloadJson: Record<string, unknown> = {
+        taskId: payload.taskId,
+        packageHash: payload.packageHash,
+        ...(payload.requestedBy ? { requestedBy: payload.requestedBy } : {}),
+        ...(options.tenantId ? { _tenantId: options.tenantId } : {}),
+      };
 
-    if (!job) {
-      throw new Error("Failed to create constrained AI execution job");
-    }
+      const [job] = await tx
+        .insert(aiJobsTable)
+        .values({
+          jobCode,
+          jobType: CODING_AI_EXECUTION_JOB_TYPE,
+          requiredCapability: CODING_AI_EXECUTION_CAPABILITY,
+          payloadJson,
+          priority,
+          priorityScore: String(score),
+          maxRetry: 0,
+          retryStrategy: "manual",
+          status: "queued",
+          retryCount: 0,
+        })
+        .returning();
 
-    return { job, created: true };
-  });
+      if (!job) {
+        throw new Error("Failed to create constrained AI execution job");
+      }
+
+      return {
+        acquired: true,
+        value: { job, created: true },
+      };
+    }),
+  );
 
   if (result.created) {
     await logAudit(
