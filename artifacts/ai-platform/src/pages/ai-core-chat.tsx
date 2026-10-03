@@ -119,6 +119,8 @@ const MAX_VOICE_SAMPLE_BYTES = 6 * 1024 * 1024;
 const VOICE_SILENCE_MS = 1_600;
 const VOICE_RESTART_DELAY_MS = 120;
 const STREAM_SPEECH_SOFT_LIMIT = 120;
+const VOICE_CLONE_READING_SCRIPT =
+  "Halo, ini adalah sampel suara saya untuk AI Core. Saya berbicara dengan suara normal, jelas, dan santai. AI Core membantu saya memeriksa pekerjaan, memahami informasi, dan menjalankan berbagai tugas. Kadang saya berbicara cepat, kadang lebih pelan, dan terkadang menggunakan istilah dalam bahasa Inggris. Tolong periksa pekerjaan yang sedang berjalan, lihat apakah ada masalah, dan beri tahu saya hasil akhirnya. Jika ada sesuatu yang belum jelas, tanyakan kembali kepada saya sebelum melanjutkan. Terima kasih.";
 
 type VoicePreset =
   | "auto"
@@ -303,6 +305,7 @@ export default function AiCoreChat() {
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false);
   const [voiceCloneStatus, setVoiceCloneStatus] = useState("");
   const [voiceCloneConsent, setVoiceCloneConsent] = useState(false);
+  const [showVoiceCloneGuide, setShowVoiceCloneGuide] = useState(false);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [attachmentError, setAttachmentError] = useState("");
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -1553,15 +1556,41 @@ export default function AiCoreChat() {
                     </label>
                     <button
                       type="button"
-                      onClick={() => voiceSampleInputRef.current?.click()}
+                      onClick={() => setShowVoiceCloneGuide((value) => !value)}
                       disabled={!voiceFeatureEnabled || voiceCloneBusy || !voiceCloneConsent}
                       className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
-                      title={voiceCloneConsent ? "Daftarkan sampel suara (maksimal 6 MB)" : "Centang persetujuan kepemilikan/izin suara terlebih dahulu"}
+                      title={voiceCloneConsent ? "Buka panduan sebelum merekam sampel suara" : "Centang persetujuan kepemilikan/izin suara terlebih dahulu"}
                     >
                       {voiceCloneBusy ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
                       {clonedVoiceId ? "Ganti Suara Saya" : "Daftarkan Suara Saya"}
                     </button>
+                    {showVoiceCloneGuide && (
+                      <div className="basis-full rounded-xl p-3 text-xs" style={{ background: "#0D1730", border: "1px solid #31446F", color: "#C9D5EC" }}>
+                        <div className="font-semibold" style={{ color: "#E7EDFA" }}>Panduan rekam Suara Saya</div>
+                        <div className="mt-1 text-[11px]" style={{ color: "#8DA1C8" }}>
+                          Rekam di ruangan tenang, gunakan suara normal, dan jaga jarak mikrofon sekitar 15–30 cm. Targetkan 1–3 menit; jangan memakai musik, filter suara, atau speaker.
+                        </div>
+                        <div className="mt-3 text-[10px] uppercase tracking-widest" style={{ color: "#7F92B8" }}>Baca teks ini</div>
+                        <div className="mt-1 rounded-lg p-3 leading-5 select-text" style={{ background: "#08101F", border: "1px solid #263765" }}>
+                          {VOICE_CLONE_READING_SCRIPT}
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => voiceSampleInputRef.current?.click()}
+                            className="h-9 rounded-xl px-3 flex items-center gap-1.5 text-[11px]"
+                            style={{ background: "#675ADB", color: "white" }}
+                          >
+                            <Mic className="size-3.5" />
+                            Mulai Rekam / Pilih Audio
+                          </button>
+                          <span className="text-[10px]" style={{ color: "#667AA2" }}>
+                            Setelah selesai, dengarkan hasilnya. Jika ada noise, suara terlalu kecil, atau banyak jeda, rekam ulang sebelum disimpan.
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     <div className="text-[10px]" style={{ color: "#536A94" }}>
                       {!voiceFeatureEnabled
                         ? "Voice sementara dinonaktifkan"
