@@ -2204,6 +2204,96 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
   });
 });
 
+router.get("/ai/core-chat/voices", async (_req, res): Promise<void> => {
+  if (!AI_CORE_VOICE_ENABLED) {
+    res.status(503).json({ error: "Voice sementara dinonaktifkan.", enabled: false });
+    return;
+  }
+  const apiKey = getProviderApiKey("elevenlabs");
+  if (!apiKey) {
+    res.status(503).json({ error: "Voice provider belum dikonfigurasi.", providerConfigured: false });
+    return;
+  }
+  try {
+    const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+      headers: { "xi-api-key": apiKey, accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      throw new Error(`ElevenLabs voice library failed (HTTP ${response.status}): ${safeProviderFailure(await response.text().catch(() => ""))}`);
+    }
+    const payload = await response.json() as { voices?: Array<Record<string, unknown>> };
+    const voices = (payload.voices ?? []).map((voice) => {
+      const labels = voice["labels"] && typeof voice["labels"] === "object"
+        ? voice["labels"] as Record<string, unknown>
+        : {};
+      return {
+        voiceId: typeof voice["voice_id"] === "string" ? voice["voice_id"] : "",
+        name: typeof voice["name"] === "string" ? voice["name"] : "Voice",
+        category: typeof voice["category"] === "string" ? voice["category"] : null,
+        gender: typeof labels["gender"] === "string" ? labels["gender"] : null,
+        age: typeof labels["age"] === "string" ? labels["age"] : null,
+        accent: typeof labels["accent"] === "string" ? labels["accent"] : null,
+        description: typeof labels["description"] === "string" ? labels["description"] : null,
+        previewUrl: typeof voice["preview_url"] === "string" ? voice["preview_url"] : null,
+      };
+    }).filter((voice) => voice.voiceId);
+    res.status(200).json({
+      provider: "elevenlabs",
+      voices,
+      defaultVoiceId: process.env["AI_CORE_DEFAULT_VOICE_ID"]?.trim() || null,
+    });
+  } catch (error) {
+    res.status(503).json({ error: safeProviderFailure(error) });
+  }
+});
+
+router.post("/ai/core-chat/voices/:voiceId/preview", async (req, res): Promise<void> => {
+  if (!AI_CORE_VOICE_ENABLED) {
+    res.status(503).json({ error: "Voice sementara dinonaktifkan.", enabled: false });
+    return;
+  }
+  const voiceId = String(req.params["voiceId"] ?? "").trim();
+  const text = typeof req.body?.text === "string" && req.body.text.trim()
+    ? req.body.text.trim().slice(0, 400)
+    : "Halo, ini contoh suara AI Core. Silakan pilih suara yang paling nyaman.";
+  if (!voiceId) {
+    res.status(400).json({ error: "voiceId wajib diisi." });
+    return;
+  }
+  const apiKey = getProviderApiKey("elevenlabs");
+  if (!apiKey) {
+    res.status(503).json({ error: "Voice provider belum dikonfigurasi." });
+    return;
+  }
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: { "xi-api-key": apiKey, "content-type": "application/json", accept: "audio/mpeg" },
+        body: JSON.stringify({
+          text,
+          model_id: process.env["AI_CORE_VOICE_CLONE_MODEL"]?.trim() || "eleven_multilingual_v2",
+        }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`ElevenLabs voice preview failed (HTTP ${response.status}): ${safeProviderFailure(await response.text().catch(() => ""))}`);
+    }
+    const audio = Buffer.from(await response.arrayBuffer());
+    res.status(200).json({
+      voiceId,
+      audioBase64: audio.toString("base64"),
+      mimeType: "audio/mpeg",
+      provider: "elevenlabs",
+    });
+  } catch (error) {
+    res.status(503).json({ error: safeProviderFailure(error) });
+  }
+});
+
 router.post("/ai/core-chat/voice-clone/enroll", async (req, res): Promise<void> => {
   if (!AI_CORE_VOICE_ENABLED) {
     res.status(503).json({ error: "Voice sementara dinonaktifkan.", enabled: false });
