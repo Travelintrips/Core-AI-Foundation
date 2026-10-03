@@ -55,7 +55,12 @@ export function createApi(secret, fetchImpl = fetch) {
       throw new Error('API path is outside the coding trigger scope.');
     }
     const isPublicHealthProbe = path === '/healthz' || path === '/healthz/full';
-    const maxAttempts = method === 'GET' ? 3 : 1;
+    const maxAttempts = method === 'GET' ? 6 : 1;
+    const baseHeaders = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'User-Agent': 'CST-AI-Core-GitHub-Trigger/1.0',
+    };
     let response;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -63,13 +68,16 @@ export function createApi(secret, fetchImpl = fetch) {
         response = await fetchImpl(API + path, {
           method, redirect: 'error', signal: AbortSignal.timeout(method === 'GET' ? 60000 : 30000),
           headers: isPublicHealthProbe
-            ? { 'Content-Type': 'application/json' }
-            : { 'Content-Type': 'application/json', 'x-admin-api-key': secret },
+            ? baseHeaders
+            : { ...baseHeaders, 'x-admin-api-key': secret },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
       } catch (error) {
-        if (attempt >= maxAttempts) throw error;
-        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        if (attempt >= maxAttempts) {
+          const causeCode = error?.cause?.code ? ` (${error.cause.code})` : '';
+          throw new Error(`AI Core ${method} ${path} transport failed after ${maxAttempts} attempt(s): ${error instanceof Error ? error.message : String(error)}${causeCode}`);
+        }
+        await new Promise(resolve => setTimeout(resolve, Math.min(attempt * 1000, 5000)));
         continue;
       }
 
