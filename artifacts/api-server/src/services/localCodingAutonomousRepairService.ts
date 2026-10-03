@@ -1309,13 +1309,32 @@ export async function startAutonomousCodingRuntime(): Promise<void> {
     logger.info("[coding-autonomous] Runtime disabled");
     return;
   }
-  await ensureCodingControlBridgeTables();
+
+  const interval = pollInterval();
+
+  // Register the timer before startup DB work. Hostinger rolling deploys can
+  // temporarily exhaust the Supabase session pool; a transient schema/init
+  // failure must not leave the autonomous runtime permanently disabled until
+  // the next deployment.
+  timer = setInterval(() => void autonomousTick(), interval);
+  timer.unref();
+
+  try {
+    await withTransientDatabaseRetry(
+      () => ensureCodingControlBridgeTables(),
+      { attempts: 5, baseDelayMs: 500 },
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "[coding-autonomous] Startup schema ensure failed; periodic tick will retry",
+    );
+  }
+
   await recoverOrphanedReadyReviewTasks().catch((error) => {
     logger.warn({ err: error }, "[coding-autonomous] orphan recovery failed");
   });
-  const interval = pollInterval();
-  timer = setInterval(() => void autonomousTick(), interval);
-  timer.unref();
+
   logger.info({ interval }, "[coding-autonomous] Runtime started");
   void autonomousTick();
 }
