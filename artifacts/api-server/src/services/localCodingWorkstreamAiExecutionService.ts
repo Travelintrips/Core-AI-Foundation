@@ -138,9 +138,13 @@ export function decideWorkstreamAiAutoRepair(
   const recoverable =
     gateKind === "INVALID_PROPOSAL" ||
     gateKind === "MODEL_FAILED" ||
+    gateKind === "APPLY_FAILED" ||
+    gateKind === "STALE_HEAD" ||
     workstreamCode === "MODEL_UNAVAILABLE" ||
     workstreamCode === "MODEL_FAILED" ||
-    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout/i.test(
+    workstreamCode === "STALE_CONTEXT" ||
+    workstreamCode === "MATERIALIZATION_FAILED" ||
+    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found 0|patch does not apply|does not match the reviewed AI candidate/i.test(
       message,
     );
 
@@ -2348,14 +2352,34 @@ export async function materializeApprovedWorkstreamAiCandidate(
         childTask.repository,
       ),
     );
-    if (
-      statusPaths.length !== changedFiles.length ||
-      statusPaths.some((file, index) => file !== changedFiles[index])
-    ) {
+    const normalizedStatusPaths = normalizedChangedFiles(statusPaths);
+    const normalizedCandidateFiles = normalizedChangedFiles(changedFiles);
+    const unexpectedStatusPaths = normalizedStatusPaths.filter(
+      (file) => !normalizedCandidateFiles.includes(file),
+    );
+    const missingCandidatePaths = normalizedCandidateFiles.filter(
+      (file) => !normalizedStatusPaths.includes(file),
+    );
+    if (unexpectedStatusPaths.length > 0) {
       throw new LocalCodingWorkstreamAiExecutionError(
         "Materialized patch changed files outside the stored candidate set.",
         "POLICY_REJECTED",
-        { expected: changedFiles, actual: statusPaths },
+        {
+          expected: normalizedCandidateFiles,
+          actual: normalizedStatusPaths,
+          unexpected: unexpectedStatusPaths,
+        },
+      );
+    }
+    if (missingCandidatePaths.length > 0) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Materialized patch no longer matches the stored candidate file set.",
+        "STALE_CONTEXT",
+        {
+          expected: normalizedCandidateFiles,
+          actual: normalizedStatusPaths,
+          missing: missingCandidatePaths,
+        },
       );
     }
 
@@ -2402,14 +2426,34 @@ export async function materializeApprovedWorkstreamAiCandidate(
         )
       ).split(/\r?\n/),
     );
-    if (
-      stagedFiles.length !== changedFiles.length ||
-      stagedFiles.some((file, index) => file !== changedFiles[index])
-    ) {
+    const normalizedStagedFiles = normalizedChangedFiles(stagedFiles);
+    const normalizedReviewedFiles = normalizedChangedFiles(changedFiles);
+    const unexpectedStagedFiles = normalizedStagedFiles.filter(
+      (file) => !normalizedReviewedFiles.includes(file),
+    );
+    const missingStagedFiles = normalizedReviewedFiles.filter(
+      (file) => !normalizedStagedFiles.includes(file),
+    );
+    if (unexpectedStagedFiles.length > 0) {
       throw new LocalCodingWorkstreamAiExecutionError(
-        "Staged candidate does not match the reviewed changed-file set.",
+        "Staged candidate contains files outside the reviewed changed-file set.",
         "POLICY_REJECTED",
-        { expected: changedFiles, actual: stagedFiles },
+        {
+          expected: normalizedReviewedFiles,
+          actual: normalizedStagedFiles,
+          unexpected: unexpectedStagedFiles,
+        },
+      );
+    }
+    if (missingStagedFiles.length > 0) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Staged candidate no longer matches the reviewed changed-file set.",
+        "STALE_CONTEXT",
+        {
+          expected: normalizedReviewedFiles,
+          actual: normalizedStagedFiles,
+          missing: missingStagedFiles,
+        },
       );
     }
 

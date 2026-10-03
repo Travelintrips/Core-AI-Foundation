@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   decideWorkstreamAiAutoRepair,
+  LocalCodingWorkstreamAiExecutionError,
   hashWorkstreamAnalyzerResult,
   manualAiPatchReviewReason,
   normalizeWorkstreamGitHeadOutput,
@@ -315,6 +316,35 @@ describe("workstream AI failure context preservation", () => {
       shouldRetry: false,
       previousRepairAttempts: 2,
       reason: "AUTOMATIC_REPAIR_BUDGET_EXHAUSTED",
+    });
+  });
+
+  it("auto-retries stale exact-replacement and materialization context failures", () => {
+    const exactReplacement = decideWorkstreamAiAutoRepair(
+      new Error("Deterministic AI proposal application failed: Exact replacement expected 1 occurrence(s), found 0"),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+      },
+    );
+    expect(exactReplacement).toMatchObject({
+      recoverable: true,
+      shouldRetry: true,
+      reason: "SAFE_AUTOMATIC_REPAIR",
+    });
+
+    const staleMaterialization = decideWorkstreamAiAutoRepair(
+      new LocalCodingWorkstreamAiExecutionError(
+        "Materialized patch no longer matches the stored candidate file set.",
+        "STALE_CONTEXT",
+      ),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+      },
+    );
+    expect(staleMaterialization).toMatchObject({
+      recoverable: true,
+      shouldRetry: true,
+      reason: "SAFE_AUTOMATIC_REPAIR",
     });
   });
 
