@@ -16,6 +16,16 @@ describe("remote Ollama worker service", () => {
     expect(REMOTE_OLLAMA_STALE_RUNNING_MS).toBe(70_000);
   });
 
+  it("retries caller-deadline cancellation bookkeeping on transient database failures", () => {
+    const source = readFileSync(
+      new URL("../remoteOllamaWorkerService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("() => cancelRemoteOllamaInvocation(jobId)");
+    expect(source).toContain("{ attempts: 4, baseDelayMs: 250 }");
+  });
+
   it("reconciles worker capacity after complete and retry bookkeeping", () => {
     const source = readFileSync(
       new URL("../remoteOllamaWorkerService.ts", import.meta.url),

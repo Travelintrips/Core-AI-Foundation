@@ -525,6 +525,7 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
   timeoutMs: number;
   maxOutputTokens: number;
   requestId?: string;
+  signal?: AbortSignal;
 }): Promise<GeneratedMultiTaskPlan> {
   const prompt = buildAutomatedMultiTaskPlannerPrompt(input.context);
   const response = await invokePlannerModelWithBoundedRetry({
@@ -634,6 +635,7 @@ export async function generateCodingMultiTaskPlanWithAdapter(input: {
       input.maxOutputTokens,
     ),
       timeoutMs: input.timeoutMs,
+      ...(input.signal ? { signal: input.signal } : {}),
     },
   });
 
@@ -911,7 +913,19 @@ async function waitForPreparedPlannerResult(
 export async function generateAndPersistCodingMultiTaskPlan(
   taskId: string,
   analysisOverride?: Record<string, unknown>,
+  options: { signal?: AbortSignal } = {},
 ): Promise<AutomatedMultiTaskPlanGenerationResult> {
+  const plannerSignal = options.signal;
+  const assertPlannerLifecycleActive = () => {
+    if (plannerSignal?.aborted) {
+      throw new AutomatedMultiTaskPlannerError(
+        "Constrained multi-task planner lifecycle deadline expired.",
+        "MODEL_FAILED",
+        { cancelled: true },
+      );
+    }
+  };
+  assertPlannerLifecycleActive();
   const latest = await getLatestCodingTaskGraph(taskId);
   if (latest?.graph.status === "PREPARED") {
     return existingPreparedGraphResult(latest);
@@ -942,6 +956,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
   let authority;
   const authorityDeadline = Date.now() + PLANNER_AUTHORITY_WAIT_MS;
   while (!authority) {
+    assertPlannerLifecycleActive();
     try {
       authority = await acquirePlannerAuthority({
         scope,
@@ -987,6 +1002,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
         throw mapAuthorityError(error);
       }
       await sleep(PLANNER_AUTHORITY_POLL_MS);
+      assertPlannerLifecycleActive();
     }
   }
 
@@ -1096,9 +1112,11 @@ export async function generateAndPersistCodingMultiTaskPlan(
       },
       timeoutMs: boundedPlannerTimeout(selection.timeoutMs),
       maxOutputTokens: selection.maxOutputTokens,
+      ...(plannerSignal ? { signal: plannerSignal } : {}),
     });
   } catch (error) {
     if (error instanceof AutomatedMultiTaskPlannerError) throw error;
+    assertPlannerLifecycleActive();
 
     await logAudit("automated-multi-task-planner", "model_target_failed", taskId, "coding_task", "failure", {
       stage: "model_invocation",
@@ -1171,6 +1189,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
             },
             timeoutMs: boundedPlannerTimeout(fallback.selection.timeoutMs),
             maxOutputTokens: fallback.selection.maxOutputTokens,
+            ...(plannerSignal ? { signal: plannerSignal } : {}),
           });
           selection = fallback.selection;
           selectedProviderSlug = fallbackProviderSlug;
@@ -1252,6 +1271,7 @@ export async function generateAndPersistCodingMultiTaskPlan(
                 },
                 timeoutMs: boundedPlannerTimeout(cloudSelection.timeoutMs),
                 maxOutputTokens: cloudSelection.maxOutputTokens,
+                ...(plannerSignal ? { signal: plannerSignal } : {}),
               });
               selection = cloudSelection;
               selectedProviderSlug = cloudProviderSlug;
@@ -1323,6 +1343,8 @@ export async function generateAndPersistCodingMultiTaskPlan(
       "MODEL_FAILED",
     );
   }
+
+  assertPlannerLifecycleActive();
 
   const heartbeatFailure = authorityHeartbeatFailure as Error | null;
   if (heartbeatFailure) {
