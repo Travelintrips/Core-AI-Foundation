@@ -144,7 +144,11 @@ export function decideWorkstreamAiAutoRepair(
     workstreamCode === "MODEL_FAILED" ||
     workstreamCode === "STALE_CONTEXT" ||
     workstreamCode === "MATERIALIZATION_FAILED" ||
-    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found 0|patch does not apply|does not match the reviewed AI candidate/i.test(
+    (error instanceof LocalCodingWorkstreamAiHandoffError &&
+      ["EXPIRED", "REVOKED", "CONSUMED", "NOT_READY", "STALE_CONTEXT"].includes(
+        error.code,
+      )) ||
+    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found 0|patch does not apply|does not match the reviewed AI candidate|handoff (?:is not approved|one-shot privilege is not available)/i.test(
       message,
     );
 
@@ -2074,7 +2078,11 @@ export async function recoverFailedCodingWorkstreamAiJob(
   const consumed = handoff?.status === "CONSUMED";
 
   if (!consumed) {
-    await revokeWorkstreamAiHandoff(payload.workstreamId).catch(() => undefined);
+    await revokeWorkstreamAiHandoff(
+      payload.workstreamId,
+      new Date(),
+      payload.claimAttempt,
+    ).catch(() => undefined);
   }
 
   const [workstream] = await db
