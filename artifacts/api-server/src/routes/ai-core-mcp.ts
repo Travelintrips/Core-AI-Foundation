@@ -11,7 +11,7 @@ import {
 
 const router = Router();
 const MCP_PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.1.0" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.2.0" };
 
 const SendCommandArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -22,6 +22,13 @@ const SendCommandArgs = z.object({
   priority: z.number().int().min(0).max(100).default(50),
   conversationId: z.string().trim().min(1).max(200).optional(),
 }).strict();
+
+function executionGatedMessage(message: string): string | null {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith("@")) return null;
+  const command = trimmed.slice(1).trim();
+  return command.length > 0 ? command : null;
+}
 
 const TaskProgressArgs = z.object({
   taskId: z.string().uuid(),
@@ -113,7 +120,7 @@ const tools = [
   {
     name: "send_ai_core_command",
     description:
-      "Send a text instruction directly to AI Core Agent Mode. This can cause code, configuration, deployment, or other operational changes.",
+      "Send a text instruction directly to AI Core Agent Mode. Execution requires the message to begin with @. This can cause code, configuration, deployment, or other operational changes.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -291,12 +298,24 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
     let payload: unknown;
     if (params.name === "send_ai_core_command") {
       const parsed = SendCommandArgs.parse(params.arguments ?? {});
+      const command = executionGatedMessage(parsed.message);
+      if (!command) {
+        res.status(200).json(
+          rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "Execution blocked: text commands must begin with @." }],
+            structuredContent: { blocked: true, reason: "missing_execution_prefix", requiredPrefix: "@" },
+            isError: true,
+          }),
+        );
+        return;
+      }
       payload = await callAiCore(
         "/ai/core-chat/messages",
         {
           method: "POST",
           body: JSON.stringify({
             ...parsed,
+            message: command,
             mode: "agent",
             source: "text",
           }),
