@@ -151,7 +151,7 @@ function ws(overrides: Record<string, unknown> = {}) {
 describe("multi-worker coding claim runtime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.execute.mockResolvedValue(undefined);
+    mocks.execute.mockResolvedValue({ rows: [{ acquired: true }] });
     mocks.graphFor.mockResolvedValue([{
       id: GRAPH_ID,
       taskId: TASK_ID,
@@ -264,6 +264,24 @@ describe("multi-worker coding claim runtime", () => {
     expect(claims[0]?.branchName).toBe(
       "ai-core/111111111111/ws-001-a1",
     );
+  });
+
+  it("returns no claims when another worker already owns the graph advisory lock", async () => {
+    mocks.execute.mockResolvedValueOnce({ rows: [{ acquired: false }] });
+
+    const claims = await claimReadyCodingWorkstreams(
+      GRAPH_ID,
+      "worker-1",
+      {
+        maxClaims: 2,
+        leaseSeconds: 120,
+        baseSha: BASE_SHA,
+      },
+    );
+
+    expect(claims).toEqual([]);
+    expect(mocks.graphFor).not.toHaveBeenCalled();
+    expect(mocks.claimSet).not.toHaveBeenCalled();
   });
 
   it("clears stale child bindings when reclaiming an expired execution", async () => {

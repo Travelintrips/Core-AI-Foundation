@@ -181,9 +181,15 @@ export async function claimReadyCodingWorkstreams(
   const lockKey = `coding-task-graph-claim:${graphId}`;
 
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
+    const lockResult = await tx.execute(
+      sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
     );
+    const acquired = Boolean(
+      (lockResult as { rows?: Array<{ acquired?: boolean }> }).rows?.[0]?.acquired,
+    );
+    if (!acquired) {
+      return [];
+    }
 
     const [graph] = await tx
       .select()
