@@ -348,6 +348,24 @@ describe("workstream AI failure context preservation", () => {
     });
   });
 
+  it("auto-retries stale workstream handoff races with a bounded budget", () => {
+    for (const message of [
+      "Workstream AI handoff is not approved.",
+      "Workstream AI handoff one-shot privilege is not available.",
+    ]) {
+      expect(
+        decideWorkstreamAiAutoRepair(
+          new Error(message),
+          { localExecutionPlan: { status: "AI_REQUIRED" } },
+        ),
+      ).toMatchObject({
+        recoverable: true,
+        shouldRetry: true,
+        reason: "SAFE_AUTOMATIC_REPAIR",
+      });
+    }
+  });
+
   it("does not auto-retry policy violations", () => {
     const decision = decideWorkstreamAiAutoRepair(
       new Error("AI candidate patch escaped its workstream ownership boundary."),
