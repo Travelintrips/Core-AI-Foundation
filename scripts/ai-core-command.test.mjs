@@ -216,6 +216,41 @@ test('GET probes retry transient transport failures but protected mutations stay
   assert.equal(postCalls, 1);
 });
 
+test('idempotent bridge command mutations retry transport failures with stable request identity', async () => {
+  const bodies = [];
+  let attempts = 0;
+  const api = createApi('secret', async (_url, options) => {
+    attempts += 1;
+    bodies.push(options.body);
+    if (attempts < 3) {
+      throw new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
+    }
+    return new Response(JSON.stringify({ created: false, command: { id: '11111111-1111-4111-8111-111111111111' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  });
+
+  const body = {
+    externalCommandId: 'issue-528',
+    source: 'github-trigger',
+    commandType: 'INSTRUCTION',
+    taskId: '22222222-2222-4222-8222-222222222222',
+    instruction: 'verify MCP',
+  };
+
+  const result = await api('/ai/coding/bridge/commands', {
+    method: 'POST',
+    retrySafeMutation: true,
+    body,
+  });
+
+  assert.equal(attempts, 3);
+  assert.equal(result.status, 200);
+  assert.equal(new Set(bodies).size, 1);
+  assert.equal(bodies[0], JSON.stringify(body));
+});
+
 test('failed mutations are not retried and secret bodies are not logged', async () => {
   let calls = 0;
   const api = createApi('test-secret', async () => { calls++; return { ok: false, status: 401, json: async () => ({ secret: 'never-show-this' }) }; });
