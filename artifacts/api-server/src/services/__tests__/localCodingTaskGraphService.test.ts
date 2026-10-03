@@ -143,7 +143,7 @@ function plan() {
 describe("durable coding task graph service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.execute.mockResolvedValue(undefined);
+    mocks.execute.mockResolvedValue({ rows: [{ acquired: true }] });
     mocks.latestLimit.mockResolvedValue([]);
     mocks.graphValues.mockImplementation(() => ({
       returning: mocks.graphReturning,
