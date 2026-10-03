@@ -280,7 +280,7 @@ router.post("/api/ai/core-chat/oauth/pair/approve", async (req, res): Promise<vo
     return;
   }
   const code = readString(req.body?.code);
-  if (!/^\d{8}$/.test(code)) {
+  if (code && !/^\d{8}$/.test(code)) {
     res.status(400).type("html").send("<p>Kode pairing tidak valid.</p>");
     return;
   }
