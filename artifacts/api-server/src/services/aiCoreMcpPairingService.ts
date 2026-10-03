@@ -1,5 +1,5 @@
 import { randomInt, randomUUID } from "node:crypto";
-import { pool } from "@workspace/db";
+import { pool, withTransientDatabaseRetry } from "@workspace/db";
 
 const PAIRING_TTL_MS = 10 * 60 * 1000;
 
@@ -59,21 +59,31 @@ export async function createMcpOauthPairing(input: {
   resource: string;
   state: string;
 }): Promise<McpOauthPairing> {
-  await pool.query(
-    "DELETE FROM ai_platform.mcp_oauth_pairings WHERE expires_at < now() - interval '1 hour'",
-  );
+  try {
+    await withTransientDatabaseRetry(
+      () => pool.query(
+        "DELETE FROM ai_platform.mcp_oauth_pairings WHERE expires_at < now() - interval '1 hour'",
+      ),
+      { attempts: 3, baseDelayMs: 150 },
+    );
+  } catch {
+    // Cleanup is best-effort and must never block a fresh OAuth pairing.
+  }
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const id = randomUUID();
     const code = generateCode();
     const expiresAt = new Date(Date.now() + PAIRING_TTL_MS);
     try {
-      const result = await pool.query<PairingRow>(
-        `INSERT INTO ai_platform.mcp_oauth_pairings
-          (id, code, client_id, redirect_uri, code_challenge, scope, resource, state, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING id, code, status, client_id, redirect_uri, code_challenge, scope, resource, state, approved_user_id, expires_at`,
-        [id, code, input.clientId, input.redirectUri, input.codeChallenge, input.scope, input.resource, input.state, expiresAt],
+      const result = await withTransientDatabaseRetry(
+        () => pool.query<PairingRow>(
+          `INSERT INTO ai_platform.mcp_oauth_pairings
+            (id, code, client_id, redirect_uri, code_challenge, scope, resource, state, expires_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           RETURNING id, code, status, client_id, redirect_uri, code_challenge, scope, resource, state, approved_user_id, expires_at`,
+          [id, code, input.clientId, input.redirectUri, input.codeChallenge, input.scope, input.resource, input.state, expiresAt],
+        ),
+        { attempts: 3, baseDelayMs: 150 },
       );
       return mapRow(result.rows[0]!);
     } catch (error) {
@@ -85,12 +95,15 @@ export async function createMcpOauthPairing(input: {
 }
 
 export async function getMcpOauthPairing(id: string): Promise<McpOauthPairing | null> {
-  const result = await pool.query<PairingRow>(
-    `SELECT id, code, status, client_id, redirect_uri, code_challenge, scope, resource, state, approved_user_id, expires_at
-       FROM ai_platform.mcp_oauth_pairings
-      WHERE id = $1
-      LIMIT 1`,
-    [id],
+  const result = await withTransientDatabaseRetry(
+    () => pool.query<PairingRow>(
+      `SELECT id, code, status, client_id, redirect_uri, code_challenge, scope, resource, state, approved_user_id, expires_at
+         FROM ai_platform.mcp_oauth_pairings
+        WHERE id = $1
+        LIMIT 1`,
+      [id],
+    ),
+    { attempts: 3, baseDelayMs: 150 },
   );
   const row = result.rows[0];
   if (!row) return null;
@@ -98,13 +111,16 @@ export async function getMcpOauthPairing(id: string): Promise<McpOauthPairing | 
 }
 
 export async function approveMcpOauthPairing(code: string, userId: number): Promise<boolean> {
-  const result = await pool.query(
-    `UPDATE ai_platform.mcp_oauth_pairings
-        SET status = 'approved', approved_user_id = $2, approved_at = now()
-      WHERE code = $1
-        AND status = 'pending'
-        AND expires_at > now()`,
-    [code, userId],
+  const result = await withTransientDatabaseRetry(
+    () => pool.query(
+      `UPDATE ai_platform.mcp_oauth_pairings
+          SET status = 'approved', approved_user_id = $2, approved_at = now()
+        WHERE code = $1
+          AND status = 'pending'
+          AND expires_at > now()`,
+      [code, userId],
+    ),
+    { attempts: 3, baseDelayMs: 150 },
   );
   return (result.rowCount ?? 0) > 0;
 }
