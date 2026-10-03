@@ -26,7 +26,7 @@ export function resolveCommand(event, env) {
       action: event.label.name === 'ai-audit' ? 'audit' : 'submit',
       instruction: `${event.issue.title ?? ''}\n\n${event.issue.body ?? ''}`.trim(),
       request_id: `issue-${issueNumber}`,
-      max_cycles: '5',
+      max_cycles: '20',
     };
   } else if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
     throw new Error('Unsupported trigger event.');
@@ -95,7 +95,78 @@ async function listTasks(api) {
   return result.value.filter(task => task.repository === REPOSITORY);
 }
 
-export async function execute(command, api) {
+const TERMINAL_TASK_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+const TERMINAL_AUTONOMOUS_STATUSES = new Set(['COMPLETED', 'BLOCKED', 'FAILED', 'DISABLED', 'APPROVAL_REQUIRED']);
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForTaskOutcome(command, api, options = {}) {
+  const waitMs = Number.isFinite(options.waitMs) ? Math.max(0, options.waitMs) : 12 * 60 * 1000;
+  const pollMs = Number.isFinite(options.pollMs) ? Math.max(0, options.pollMs) : 10_000;
+  const sleepImpl = options.sleepImpl ?? sleep;
+  const deadline = Date.now() + waitMs;
+
+  for (;;) {
+    const [state, detail] = await Promise.all([
+      api(`/ai/coding/tasks/${command.taskId}/autonomous`, { allowed: [404] }),
+      api(`/ai/coding/tasks/${command.taskId}`),
+    ]);
+    const task = detail.value?.task ?? {};
+    const autonomousStatus = state.status === 404 ? 'NOT_ENABLED' : String(state.value?.status ?? 'unknown');
+    const taskStatus = String(task.status ?? 'unknown');
+
+    if (taskStatus === 'COMPLETED' || autonomousStatus === 'COMPLETED') {
+      return {
+        action: command.action,
+        taskId: command.taskId,
+        result: 'TASK_COMPLETED',
+        status: taskStatus,
+        autonomousStatus,
+        resultSummary: task.resultSummary ?? null,
+        commitSha: task.commitSha ?? null,
+      };
+    }
+
+    if (['FAILED', 'CANCELLED'].includes(taskStatus) || ['BLOCKED', 'FAILED', 'DISABLED'].includes(autonomousStatus)) {
+      return {
+        action: command.action,
+        taskId: command.taskId,
+        result: 'TASK_BLOCKED',
+        status: taskStatus,
+        autonomousStatus,
+        resultSummary: task.resultSummary ?? null,
+      };
+    }
+
+    if (autonomousStatus === 'APPROVAL_REQUIRED') {
+      return {
+        action: command.action,
+        taskId: command.taskId,
+        result: 'TASK_APPROVAL_REQUIRED',
+        status: taskStatus,
+        autonomousStatus,
+        resultSummary: task.resultSummary ?? null,
+      };
+    }
+
+    if (Date.now() >= deadline) {
+      return {
+        action: command.action,
+        taskId: command.taskId,
+        result: 'TASK_ACCEPTED_NOT_COMPLETED',
+        status: taskStatus,
+        autonomousStatus,
+        resultSummary: task.resultSummary ?? null,
+      };
+    }
+
+    await sleepImpl(pollMs);
+  }
+}
+
+export async function execute(command, api, options = {}) {
   if (command.action === 'audit') return audit(api);
   if (['status', 'stop'].includes(command.action)) {
     const tasks = await listTasks(api);
@@ -104,9 +175,7 @@ export async function execute(command, api) {
       await api(`/ai/coding/tasks/${command.taskId}/autonomous/stop`, { method: 'POST', body: {} });
       return { action: 'stop', taskId: command.taskId, result: 'STOP_REQUESTED' };
     }
-    const state = await api(`/ai/coding/tasks/${command.taskId}/autonomous`, { allowed: [404] });
-    return { action: 'status', taskId: command.taskId, result: state.status === 404 ? 'NOT_ENABLED' : state.value.status,
-      enabled: state.value.enabled === true, cycles: state.value.cycle_count ?? null };
+    return waitForTaskOutcome(command, api, { waitMs: 0, ...options });
   }
   const readiness = await audit(api);
   if (!readiness.ready) throw new Error('AI Core is not ready. No coding task was created or started. Run audit for diagnostics.');
@@ -132,6 +201,9 @@ export async function execute(command, api) {
   const state = await api(`/ai/coding/tasks/${task.id}/autonomous`, { allowed: [404] });
   if (state.status !== 404) {
     // Reruns must not reset cycle budgets or restart completed/stopped tasks.
+    if (command.issueNumber) {
+      return waitForTaskOutcome({ ...command, taskId: task.id }, api, options);
+    }
     return { action: 'submit', taskId: task.id, result: 'EXISTING_TASK_NOT_RESTARTED', status: state.value.status };
   }
   const detail = await api(`/ai/coding/tasks/${task.id}`);
@@ -153,8 +225,16 @@ export async function execute(command, api) {
   }
   const started = await api(`/ai/coding/tasks/${task.id}/autonomous/start`, { method: 'POST', body: { maxCycles: command.maxCycles } });
   const blocked = ['BLOCKED', 'FAILED', 'DISABLED'].includes(started.value.cycle?.status);
+  if (blocked) {
+    return { action: 'submit', taskId: task.id, maxCycles: command.maxCycles,
+      result: 'TASK_BLOCKED', initialStatus: started.value.cycle?.status ?? 'unknown',
+      productionApprovalRequired: true };
+  }
+  if (command.issueNumber) {
+    return waitForTaskOutcome({ ...command, taskId: task.id }, api, options);
+  }
   return { action: 'submit', taskId: task.id, maxCycles: command.maxCycles,
-    result: blocked ? 'TASK_BLOCKED' : 'TASK_ACCEPTED_NOT_COMPLETED',
+    result: 'TASK_ACCEPTED_NOT_COMPLETED',
     initialStatus: started.value.cycle?.status ?? 'unknown', productionApprovalRequired: true };
 }
 
@@ -165,14 +245,27 @@ export async function main(env = process.env, fetchImpl = fetch) {
   const output = JSON.stringify(result, null, 2);
   console.log(output);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY,
-    `## AI Core command trigger\n\n\`\`\`json\n${output}\n\`\`\`\n\nAccepted is not completed. Production approval gates remain in force.\n`);
+    `## AI Core command trigger\n\n\`\`\`json\n${output}\n\`\`\`\n\n${result.result === 'TASK_COMPLETED' ? 'Task completed and is eligible for issue auto-close.' : 'Task is not complete yet; any required critical approval remains visible.'}\n`);
   if (command.issueNumber && env.GH_TOKEN) {
+    const completed = result.result === 'TASK_COMPLETED';
+    const body = completed
+      ? `AI Core final result:\n\n\`\`\`json\n${output}\n\`\`\`\n\nTask reached a verified terminal COMPLETED state. No additional human review is required for this completed task.`
+      : `AI Core current result:\n\n\`\`\`json\n${output}\n\`\`\`\n\nThe issue remains open until AI Core reaches COMPLETED. Critical approval gates such as merge/deploy/security remain visible when required.`;
     const response = await fetchImpl(`https://api.github.com/repos/${REPOSITORY}/issues/${command.issueNumber}/comments`, {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20000),
       headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: `AI Core trigger result (no manual Git operation required):\n\n\`\`\`json\n${output}\n\`\`\`\n\nThis confirms dispatch/audit only, not coding completion or deployment.` }),
+      body: JSON.stringify({ body }),
     });
     if (!response.ok) throw new Error(`Could not publish trigger result: GitHub HTTP ${response.status}. Do not resubmit the task blindly.`);
+
+    if (completed) {
+      const close = await fetchImpl(`https://api.github.com/repos/${REPOSITORY}/issues/${command.issueNumber}`, {
+        method: 'PATCH', redirect: 'error', signal: AbortSignal.timeout(20000),
+        headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'closed', state_reason: 'completed' }),
+      });
+      if (!close.ok) throw new Error(`Could not close completed issue: GitHub HTTP ${close.status}.`);
+    }
   }
   return result;
 }
