@@ -531,14 +531,14 @@ export async function prepareRepositoryWorkspace(
   await mkdir(workspace, { recursive: true });
 
   return withRepositoryCloneSlot(async () => {
+    // A workstream branch is created locally from the approved base SHA and
+    // is not guaranteed to exist remotely until a candidate is materialized.
+    // Clone the requested branch when it exists; otherwise, for an isolated
+    // execution that is cryptographically bound to expectedBaseSha, seed the
+    // disposable workspace from the exact approved commit and create the
+    // isolated branch locally.
+    let cloneBranch = branch;
     try {
-      // A workstream branch is created locally from the approved base SHA and
-      // is not guaranteed to exist remotely until a candidate is materialized.
-      // Clone the requested branch when it exists; otherwise, for an isolated
-      // execution that is cryptographically bound to expectedBaseSha, seed the
-      // disposable workspace from the exact approved commit and create the
-      // isolated branch locally.
-      let cloneBranch = branch;
       if (isolatedBranchName && expectedBaseSha) {
         const requestedHead = await execFileAsync(
           "git",
@@ -584,34 +584,62 @@ export async function prepareRepositoryWorkspace(
       logger.warn(
         {
           repository: remote,
-          branch,
+          branch: cloneBranch,
           primaryDepth: PRIMARY_CLONE_DEPTH,
           fallbackDepth: FALLBACK_CLONE_DEPTH,
         },
-        "[coding-analyzer] clone hit host resource pressure; retrying with minimal history",
+        "[coding-analyzer] clone hit host resource pressure; entering bounded backoff retry",
       );
 
-      await rm(workspace, { recursive: true, force: true });
-      await mkdir(workspace, { recursive: true });
+      let retryError: unknown = firstError;
+      const retryDelaysMs = [1_000, 2_000, 4_000];
+      for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+        await rm(workspace, { recursive: true, force: true });
+        await mkdir(workspace, { recursive: true });
+        await new Promise<void>((resolveDelay) =>
+          setTimeout(resolveDelay, retryDelaysMs[attempt]),
+        );
 
-      try {
-        await cloneRepository(remote, branch, workspace, FALLBACK_CLONE_DEPTH);
-        if (expectedBaseSha) {
-          await configureIsolatedRepositoryWorkspace(
+        try {
+          await cloneRepository(
+            remote,
+            cloneBranch,
             workspace,
-            expectedBaseSha,
-            isolatedBranchName ?? `analysis-${expectedBaseSha.slice(0, 12)}`,
+            FALLBACK_CLONE_DEPTH,
+          );
+          if (expectedBaseSha) {
+            await configureIsolatedRepositoryWorkspace(
+              workspace,
+              expectedBaseSha,
+              isolatedBranchName ?? `analysis-${expectedBaseSha.slice(0, 12)}`,
+            );
+          }
+          return { path: workspace, cleanup: true };
+        } catch (error) {
+          retryError = error;
+          const retryDetail =
+            error instanceof Error ? error.message : String(error);
+          if (!isRetryableRepositoryCloneResourceError(retryDetail)) {
+            break;
+          }
+          logger.warn(
+            {
+              repository: remote,
+              branch: cloneBranch,
+              attempt: attempt + 1,
+              nextDelayMs: retryDelaysMs[attempt + 1] ?? null,
+            },
+            "[coding-analyzer] transient clone retry failed under host resource pressure",
           );
         }
-        return { path: workspace, cleanup: true };
-      } catch (retryError) {
-        await rm(workspace, { recursive: true, force: true });
-        const retryDetail =
-          retryError instanceof Error ? retryError.message : String(retryError);
-        throw new Error(
-          `Repository clone failed after low-resource retry: ${retryDetail.slice(0, 500)}`,
-        );
       }
+
+      await rm(workspace, { recursive: true, force: true });
+      const retryDetail =
+        retryError instanceof Error ? retryError.message : String(retryError);
+      throw new Error(
+        `Repository clone failed after bounded low-resource retries: ${retryDetail.slice(0, 500)}`,
+      );
     }
   });
 }
