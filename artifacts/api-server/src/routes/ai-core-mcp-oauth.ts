@@ -66,9 +66,13 @@ function redirectWithError(res: Response, params: ReturnType<typeof oauthParams>
   res.redirect(302, url.toString());
 }
 
-async function resolveSessionUser(req: Request) {
+function resolveSessionPayload(req: Request) {
   const token = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
-  const payload = token ? verifySessionToken(token) : null;
+  return token ? verifySessionToken(token) : null;
+}
+
+async function resolveSessionUser(req: Request) {
+  const payload = resolveSessionPayload(req);
   const user = payload ? await getInternalUserById(payload.sub) : null;
   return user && user.status === "active" && user.accountType === "internal" ? user : null;
 }
@@ -77,7 +81,10 @@ function hidden(name: string, value: string): string {
   return `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`;
 }
 
-function renderAuthorizePage(params: ReturnType<typeof oauthParams>, loggedInEmail?: string): string {
+function renderAuthorizePage(
+  params: ReturnType<typeof oauthParams>,
+  options: { sessionDetected: boolean; email?: string },
+): string {
   const scopes = normalizeScopes(params.scope);
   const hiddenFields = [
     hidden("response_type", params.responseType),
@@ -89,8 +96,10 @@ function renderAuthorizePage(params: ReturnType<typeof oauthParams>, loggedInEma
     hidden("scope", scopes.join(" ")),
     hidden("resource", params.resource),
   ].join("");
-  const identity = loggedInEmail
-    ? `<p>Login sebagai <strong>${escapeHtml(loggedInEmail)}</strong>.</p>`
+  const identity = options.sessionDetected
+    ? options.email
+      ? `<p>Login sebagai <strong>${escapeHtml(options.email)}</strong>.</p>`
+      : `<p><strong>Session AI Core terdeteksi.</strong></p>`
     : `<p><strong>Session AI Core belum terdeteksi.</strong></p>
        <p class="muted">Buka AI Core dan pastikan Anda sudah login di browser ini, lalu kembali ke halaman ini dan refresh.</p>
        <p><a href="/login" target="_blank" rel="noopener noreferrer">Buka Login AI Core</a></p>`;
@@ -100,7 +109,7 @@ function renderAuthorizePage(params: ReturnType<typeof oauthParams>, loggedInEma
   <form method="post" action="/api/ai/core-chat/oauth/authorize">${hiddenFields}
     ${identity}
     <p>Izin yang diminta:</p><ul>${scopes.map((scope) => `<li>${escapeHtml(scope)}</li>`).join("")}</ul>
-    ${loggedInEmail ? '<button type="submit">Izinkan & Hubungkan</button>' : ''}
+    ${options.sessionDetected ? '<button type="submit">Izinkan & Hubungkan</button>' : ''}
   </form>
   <p class="muted">Akses dapat dihentikan dengan menonaktifkan koneksi app di ChatGPT atau menonaktifkan akun internal.</p>
 </body></html>`;
@@ -214,22 +223,45 @@ router.get("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> 
   const params = oauthParams(req.query as Record<string, unknown>);
   const error = validateAuthorizationRequest(params);
   if (error) { redirectWithError(res, params, error); return; }
-  const user = await resolveSessionUser(req);
-  if (user) {
-    res.type("html").send(renderAuthorizePage(params, user.email));
+
+  const session = resolveSessionPayload(req);
+  if (session) {
+    let email: string | undefined;
+    try {
+      const user = await getInternalUserById(session.sub);
+      if (user && user.status === "active" && user.accountType === "internal") {
+        email = user.email;
+      }
+    } catch (sessionLookupError) {
+      req.log?.warn?.(
+        { err: sessionLookupError },
+        "[mcp-oauth] authorize GET user lookup failed; using signed session only",
+      );
+    }
+    res.type("html").send(renderAuthorizePage(params, {
+      sessionDetected: true,
+      ...(email ? { email } : {}),
+    }));
     return;
   }
 
   const scopes = normalizeScopes(params.scope);
-  const pairing = await createMcpOauthPairing({
-    clientId: params.clientId,
-    redirectUri: params.redirectUri,
-    codeChallenge: params.codeChallenge,
-    scope: scopes.join(" "),
-    resource: params.resource,
-    state: params.state,
-  });
-  res.redirect(302, `/api/ai/core-chat/oauth/pair/wait?id=${encodeURIComponent(pairing.id)}`);
+  try {
+    const pairing = await createMcpOauthPairing({
+      clientId: params.clientId,
+      redirectUri: params.redirectUri,
+      codeChallenge: params.codeChallenge,
+      scope: scopes.join(" "),
+      resource: params.resource,
+      state: params.state,
+    });
+    res.redirect(302, `/api/ai/core-chat/oauth/pair/wait?id=${encodeURIComponent(pairing.id)}`);
+  } catch (pairingError) {
+    req.log?.error?.({ err: pairingError }, "[mcp-oauth] authorize GET pairing creation failed");
+    res.status(503).type("html").send(
+      "<h1>Koneksi sementara gagal</h1><p>AI Core sedang sibuk. Klik Authenticate lagi beberapa detik lagi.</p>",
+    );
+  }
 });
 
 router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> => {
@@ -240,10 +272,10 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
   const scopes = normalizeScopes(params.scope);
 
   try {
-    const user = await resolveSessionUser(req);
-    if (user) {
+    const session = resolveSessionPayload(req);
+    if (session) {
       const code = issueAuthorizationCode({
-        sub: user.id,
+        sub: session.sub,
         clientId: params.clientId,
         redirectUri: params.redirectUri,
         codeChallenge: params.codeChallenge,
