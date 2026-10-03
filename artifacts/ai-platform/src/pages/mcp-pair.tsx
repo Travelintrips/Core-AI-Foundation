@@ -12,8 +12,8 @@ export default function McpPairApproval() {
 
   async function approve() {
     const normalized = code.replace(/\D/g, "").slice(0, 8);
-    if (!/^\d{8}$/.test(normalized)) {
-      setMessage("Masukkan kode pairing 8 digit.");
+    if (normalized && !/^\d{8}$/.test(normalized)) {
+      setMessage("Kode pairing harus 8 digit.");
       return;
     }
     setSubmitting(true);
@@ -45,7 +45,7 @@ export default function McpPairApproval() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Hubungkan ChatGPT ke AI Core</CardTitle>
-          <CardDescription>Masukkan kode pairing yang tampil di jendela Authenticate ChatGPT.</CardDescription>
+          <CardDescription>Klik Approve & Hubungkan. Jika ada beberapa pairing aktif, Anda juga bisa memasukkan kode 8 digit dari jendela Authenticate ChatGPT.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
@@ -63,7 +63,7 @@ export default function McpPairApproval() {
             {approved ? "Sudah Disetujui" : submitting ? "Menyetujui..." : "Approve & Hubungkan"}
           </Button>
           <p className="text-center text-xs text-muted-foreground">
-            Approval hanya berlaku untuk pairing aktif dan akun internal AI Core yang sedang login.
+            Jika kode dikosongkan, AI Core otomatis memilih pairing ChatGPT terbaru yang masih aktif. Approval tetap hanya bisa dilakukan oleh akun internal AI Core yang sedang login.
           </p>
         </CardContent>
       </Card>
