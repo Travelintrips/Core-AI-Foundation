@@ -213,7 +213,7 @@ export async function persistCodingTaskGraph(
 
   return withTransientDatabaseRetry(
     () =>
-      withNonBlockingAdvisoryRetry(() =>
+      withNonBlockingAdvisoryRetry<{ graph: AiCodingTaskGraph; created: boolean }>(() =>
         db.transaction(async (tx) => {
           const lockResult = await tx.execute(
             sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
