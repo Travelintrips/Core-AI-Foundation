@@ -21,6 +21,7 @@ import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
 import aiCoreMcpOauthRouter from "./routes/ai-core-mcp-oauth.js";
+import { oauthNavigationCors } from "./middleware/oauthNavigationCors.js";
 
 const app: Express = express();
 
@@ -75,7 +76,7 @@ const allowedOrigins: string[] = [
 ];
 
 app.use(
-  cors({
+  oauthNavigationCors(cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (server-to-server, curl, Postman)
       if (!origin) { callback(null, true); return; }
@@ -92,7 +93,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization", "X-Admin-Api-Key", "x-admin-api-key"],
     credentials: true,
     maxAge: 86400,
-  }),
+  })),
 );
 
 // ── Request logging ──────────────────────────────────────────────────────────
