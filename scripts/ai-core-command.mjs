@@ -54,9 +54,12 @@ export function createApi(secret, fetchImpl = fetch) {
     if (!/^\/(healthz(?:\/full)?|ai\/coding\/[a-zA-Z0-9/_-]+)$/.test(path)) {
       throw new Error('API path is outside the coding trigger scope.');
     }
+    const isPublicHealthProbe = path === '/healthz' || path === '/healthz/full';
     const response = await fetchImpl(API + path, {
       method, redirect: 'error', signal: AbortSignal.timeout(method === 'GET' ? 60000 : 30000),
-      headers: { 'Content-Type': 'application/json', 'x-admin-api-key': secret },
+      headers: isPublicHealthProbe
+        ? { 'Content-Type': 'application/json' }
+        : { 'Content-Type': 'application/json', 'x-admin-api-key': secret },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok && !allowed.includes(response.status)) {
