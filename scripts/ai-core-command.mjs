@@ -17,22 +17,35 @@ export function resolveCommand(event, env) {
   if (env.GITHUB_EVENT_NAME === 'issues') {
     if (event.action !== 'labeled' || event.sender?.login !== OWNER ||
         event.issue?.user?.login !== OWNER || event.issue?.pull_request ||
-        !['ai-task', 'ai-audit'].includes(event.label?.name) ||
+        !['ai-task', 'ai-audit', 'ai-handoff-approved'].includes(event.label?.name) ||
         !Number.isSafeInteger(event.issue?.number) || event.issue.number < 1) {
-      throw new Error('Issue trigger is not an owner-authorized task or audit.');
+      throw new Error('Issue trigger is not an owner-authorized task, audit, or handoff approval.');
     }
     issueNumber = event.issue.number;
-    inputs = {
-      action: event.label.name === 'ai-audit' ? 'audit' : 'submit',
-      instruction: `${event.issue.title ?? ''}\n\n${event.issue.body ?? ''}`.trim(),
-      request_id: `issue-${issueNumber}`,
-      max_cycles: '20',
-    };
+    if (event.label.name === 'ai-handoff-approved') {
+      const body = String(event.issue.body ?? '');
+      const taskMatch = body.match(/^task_id:\s*([0-9a-f-]{36})\s*$/im);
+      const approvalMatch = body.match(/^approval_id:\s*([0-9a-f-]{36})\s*$/im);
+      inputs = {
+        action: 'approve_handoff',
+        task_id: taskMatch?.[1] ?? '',
+        approval_id: approvalMatch?.[1] ?? '',
+        request_id: `issue-${issueNumber}`,
+        max_cycles: '20',
+      };
+    } else {
+      inputs = {
+        action: event.label.name === 'ai-audit' ? 'audit' : 'submit',
+        instruction: `${event.issue.title ?? ''}\n\n${event.issue.body ?? ''}`.trim(),
+        request_id: `issue-${issueNumber}`,
+        max_cycles: '20',
+      };
+    }
   } else if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
     throw new Error('Unsupported trigger event.');
   }
   const action = inputs.action || 'audit';
-  if (!['audit', 'submit', 'status', 'stop'].includes(action)) throw new Error('Invalid action.');
+  if (!['audit', 'submit', 'status', 'stop', 'approve_handoff'].includes(action)) throw new Error('Invalid action.');
   const maxCycles = Number(inputs.max_cycles || '5');
   if (!Number.isInteger(maxCycles) || maxCycles < 5 || maxCycles > 20) {
     throw new Error('max_cycles must be an integer between 5 and 20.');
@@ -44,8 +57,10 @@ export function resolveCommand(event, env) {
     throw new Error('Task instruction must contain 1 to 19000 characters.');
   }
   const taskId = String(inputs.task_id ?? '').trim();
-  if (['status', 'stop'].includes(action) && !UUID.test(taskId)) throw new Error('A valid task_id is required.');
-  return { action, instruction, requestId, taskId, maxCycles, issueNumber };
+  if (['status', 'stop', 'approve_handoff'].includes(action) && !UUID.test(taskId)) throw new Error('A valid task_id is required.');
+  const approvalId = String(inputs.approval_id ?? '').trim();
+  if (action === 'approve_handoff' && !UUID.test(approvalId)) throw new Error('A valid approval_id is required.');
+  return { action, instruction, requestId, taskId, approvalId, maxCycles, issueNumber };
 }
 
 export function createApi(secret, fetchImpl = fetch) {
@@ -200,6 +215,29 @@ async function waitForTaskOutcome(command, api, options = {}) {
 
 export async function execute(command, api, options = {}) {
   if (command.action === 'audit') return audit(api);
+  if (command.action === 'approve_handoff') {
+    const tasks = await listTasks(api);
+    if (!tasks.some(task => task.id === command.taskId)) {
+      throw new Error('Task does not belong to this repository.');
+    }
+    const current = await api(`/ai/coding/bridge/critical-approvals/${command.approvalId}`);
+    const approval = current.value ?? {};
+    if (approval.taskId !== command.taskId) throw new Error('Critical approval is bound to a different task.');
+    if (approval.actionType !== 'WORKSTREAM_AI_HANDOFF') throw new Error('Critical approval is not a workstream AI handoff.');
+    if (approval.status !== 'PENDING') throw new Error(`Critical approval is not pending (status=${String(approval.status ?? 'unknown')}).`);
+    const decided = await api(`/ai/coding/bridge/critical-approvals/${command.approvalId}/decision`, {
+      method: 'POST',
+      body: { decision: 'APPROVE', actor: 'github-owner' },
+    });
+    return {
+      action: command.action,
+      taskId: command.taskId,
+      approvalId: command.approvalId,
+      result: 'HANDOFF_APPROVED',
+      accepted: decided.value?.accepted === true,
+      approvalStatus: decided.value?.approval?.status ?? null,
+    };
+  }
   if (['status', 'stop'].includes(command.action)) {
     const tasks = await listTasks(api);
     if (!tasks.some(task => task.id === command.taskId)) throw new Error('Task does not belong to this repository.');
