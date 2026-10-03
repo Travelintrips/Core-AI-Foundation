@@ -112,6 +112,7 @@ type TaskProgress = {
 const STORAGE_KEY = "ai_core_chat_history_v1";
 const CONVERSATION_KEY = "ai_core_conversation_id_v1";
 const VOICE_PRESET_KEY = "ai_core_voice_preset_v1";
+const VOICE_TRANSPORT_MODE_KEY = "ai_core_voice_transport_mode_v1";
 const CLONED_VOICE_ID_KEY = "ai_core_cloned_voice_id_v1";
 const MAX_MESSAGES = 80;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -119,6 +120,8 @@ const MAX_VOICE_SAMPLE_BYTES = 6 * 1024 * 1024;
 const VOICE_SILENCE_MS = 1_600;
 const VOICE_RESTART_DELAY_MS = 120;
 const STREAM_SPEECH_SOFT_LIMIT = 120;
+
+type VoiceTransportMode = "auto" | "standard" | "realtime";
 
 type VoicePreset =
   | "auto"
@@ -199,6 +202,17 @@ function loadHistory(): ChatMessage[] {
     return Array.isArray(parsed) ? (parsed as ChatMessage[]).slice(-MAX_MESSAGES) : [];
   } catch {
     return [];
+  }
+}
+
+function loadVoiceTransportMode(): VoiceTransportMode {
+  try {
+    const stored = localStorage.getItem(VOICE_TRANSPORT_MODE_KEY);
+    return stored === "standard" || stored === "realtime" || stored === "auto"
+      ? stored
+      : "auto";
+  } catch {
+    return "auto";
   }
 }
 
@@ -297,6 +311,7 @@ export default function AiCoreChat() {
   const [listening, setListening] = useState(false);
   const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(true);
   const [voiceError, setVoiceError] = useState("");
+  const [voiceTransportMode, setVoiceTransportMode] = useState<VoiceTransportMode>(() => loadVoiceTransportMode());
   const [voicePreset, setVoicePreset] = useState<VoicePreset>(() => loadVoicePreset());
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [clonedVoiceId, setClonedVoiceId] = useState(() => loadClonedVoiceId());
@@ -327,6 +342,13 @@ export default function AiCoreChat() {
     window.matchMedia("(display-mode: standalone)").matches ||
     new URLSearchParams(window.location.search).get("standalone") === "1";
   const voiceFeatureEnabled = config?.voice?.enabled === true;
+  const realtimeVoiceAvailable = false;
+  const effectiveVoiceTransportMode: Exclude<VoiceTransportMode, "auto"> =
+    voiceTransportMode === "auto"
+      ? realtimeVoiceAvailable
+        ? "realtime"
+        : "standard"
+      : voiceTransportMode;
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -358,6 +380,14 @@ export default function AiCoreChat() {
     }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VOICE_TRANSPORT_MODE_KEY, voiceTransportMode);
+    } catch {
+      // Voice transport preference remains usable for the current session.
+    }
+  }, [voiceTransportMode]);
 
   useEffect(() => {
     try {
@@ -732,6 +762,17 @@ export default function AiCoreChat() {
     setListening(false);
   }
 
+  function selectVoiceTransportMode(nextMode: VoiceTransportMode) {
+    if (nextMode === voiceTransportMode) return;
+    if (handsFreeRef.current) stopVoiceSession();
+    setVoiceTransportMode(nextMode);
+    if (nextMode === "realtime" && !realtimeVoiceAvailable) {
+      setVoiceError("Realtime full-duplex belum dikonfigurasi. Gunakan Auto atau Standard.");
+    } else {
+      setVoiceError("");
+    }
+  }
+
   function toggleListening() {
     if (!voiceFeatureEnabled) {
       setVoiceError("Voice sementara dinonaktifkan.");
@@ -739,6 +780,10 @@ export default function AiCoreChat() {
     }
     if (!voiceSupported) {
       setVoiceError("Speech recognition belum didukung browser ini.");
+      return;
+    }
+    if (effectiveVoiceTransportMode === "realtime" && !realtimeVoiceAvailable) {
+      setVoiceError("Realtime full-duplex belum dikonfigurasi. Pilih Auto atau Standard.");
       return;
     }
     if (handsFreeRef.current) {
@@ -1505,6 +1550,41 @@ export default function AiCoreChat() {
                     >
                       {handsFreeEnabled ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                     </button>
+                    <div
+                      className="h-9 rounded-xl p-0.5 flex items-center gap-0.5"
+                      style={{ background: "#0D1730", border: "1px solid #263765" }}
+                      title="Mode koneksi suara AI Core"
+                    >
+                      {(["auto", "standard", "realtime"] as VoiceTransportMode[]).map((option) => {
+                        const selected = voiceTransportMode === option;
+                        const unavailable = option === "realtime" && !realtimeVoiceAvailable;
+                        const label = option === "auto" ? "Auto" : option === "standard" ? "Standard" : "Realtime";
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => selectVoiceTransportMode(option)}
+                            disabled={!voiceFeatureEnabled || unavailable}
+                            className="h-7 rounded-lg px-2 text-[10px] font-medium disabled:opacity-40"
+                            style={{
+                              background: selected ? "#675ADB" : "transparent",
+                              color: selected ? "#FFFFFF" : "#8DA1C8",
+                            }}
+                            title={
+                              unavailable
+                                ? "Realtime full-duplex belum dikonfigurasi"
+                                : option === "auto"
+                                  ? "Auto memilih mode terbaik; fallback ke Standard bila Realtime belum tersedia"
+                                  : option === "standard"
+                                    ? "Standard memakai browser STT + streaming response + browser TTS"
+                                    : "Realtime memakai sesi audio full-duplex"
+                            }
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -1565,13 +1645,15 @@ export default function AiCoreChat() {
                     <div className="text-[10px]" style={{ color: "#536A94" }}>
                       {!voiceFeatureEnabled
                         ? "Voice sementara dinonaktifkan"
-                        : listening
-                          ? "Mendengarkan · tunggu jeda sekitar 1,6 detik untuk mengirim…"
-                          : handsFreeEnabled
-                            ? "Hands-free aktif · bicara tanpa tombol Send"
-                            : voiceSupported
-                              ? "Voice ready · tekan mic sekali untuk percakapan otomatis"
-                              : "Voice input perlu browser yang mendukung SpeechRecognition"}
+                        : voiceTransportMode === "realtime" && !realtimeVoiceAvailable
+                          ? "Realtime belum dikonfigurasi · pilih Auto atau Standard"
+                          : listening
+                            ? `Mendengarkan · ${effectiveVoiceTransportMode === "realtime" ? "Realtime" : "Standard"} · tunggu jeda sekitar 1,6 detik untuk mengirim…`
+                            : handsFreeEnabled
+                              ? `Hands-free aktif · mode ${effectiveVoiceTransportMode === "realtime" ? "Realtime" : "Standard"}`
+                              : voiceSupported
+                                ? `Voice ready · ${voiceTransportMode === "auto" ? `Auto → ${effectiveVoiceTransportMode === "realtime" ? "Realtime" : "Standard"}` : effectiveVoiceTransportMode === "realtime" ? "Realtime" : "Standard"}`
+                                : "Voice input perlu browser yang mendukung SpeechRecognition"}
                     </div>
                   </div>
                   <div className="text-[10px]" style={{ color: "#536A94" }}>
