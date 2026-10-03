@@ -201,7 +201,7 @@ export function buildRepositoryCloneEnvironment(
 
 export function isRetryableRepositoryCloneResourceError(detail: string): boolean {
   if (
-    /unable to create thread|resource temporarily unavailable|invalid index-pack output|index-pack.*failed|timeout exceeded when trying to connect|connection (?:timed out|reset|refused)|could not resolve host|temporary failure in name resolution|gnutls recv error|tls connection was non-properly terminated|http\/2 stream .* was not closed cleanly|remote end hung up unexpectedly|early eof/i.test(
+    /unable to create thread|resource temporarily unavailable|spawn git eagain|\beagain\b|invalid index-pack output|index-pack.*failed|timeout exceeded when trying to connect|connection (?:timed out|reset|refused)|could not resolve host|temporary failure in name resolution|gnutls recv error|tls connection was non-properly terminated|http\/2 stream .* was not closed cleanly|remote end hung up unexpectedly|early eof/i.test(
       detail,
     )
   ) {
