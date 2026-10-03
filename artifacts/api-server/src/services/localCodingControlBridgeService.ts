@@ -23,6 +23,93 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+const GITHUB_REPOSITORY = "Travelintrips/Core-AI-Foundation";
+
+function githubIssueNumberFromCommand(command: {
+  source?: string | null;
+  metadataJson?: unknown;
+}): number | null {
+  if (command.source !== "github-trigger" || !isRecord(command.metadataJson)) {
+    return null;
+  }
+  const value = command.metadataJson["issueNumber"];
+  return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null;
+}
+
+async function syncTerminalBridgeResponseToGitHub(input: {
+  responseId: string;
+  commandId: string;
+  taskId: string | null;
+  kind: "BLOCKER" | "COMPLETED" | "FAILED";
+}): Promise<void> {
+  const token = process.env["AI_CODING_GITHUB_TOKEN"]?.trim();
+  if (!token) return;
+
+  const [command] = await db
+    .select()
+    .from(aiCodingBridgeCommandsTable)
+    .where(eq(aiCodingBridgeCommandsTable.id, input.commandId))
+    .limit(1);
+  if (!command) return;
+
+  const issueNumber = githubIssueNumberFromCommand(command);
+  if (!issueNumber) return;
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "Content-Type": "application/json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+
+  const terminalLabel =
+    input.kind === "COMPLETED"
+      ? "completed"
+      : input.kind === "FAILED"
+        ? "failed"
+        : "blocked";
+  const commentResponse = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${issueNumber}/comments`,
+    {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({
+        body:
+          `AI Core terminal callback: **${terminalLabel.toUpperCase()}**\n\n` +
+          `- Task: ${input.taskId ?? "unknown"}\n` +
+          `- Bridge response: ${input.responseId}\n` +
+          `- Source: AI Core coding bridge\n\n` +
+          (input.kind === "COMPLETED"
+            ? "The originating AI Core task reached a terminal completed state."
+            : "The originating AI Core task requires follow-up and remains open."),
+      }),
+    },
+  );
+  if (!commentResponse.ok) {
+    throw new Error(
+      `GitHub terminal callback comment failed with HTTP ${commentResponse.status}`,
+    );
+  }
+
+  if (input.kind !== "COMPLETED") return;
+
+  const closeResponse = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${issueNumber}`,
+    {
+      method: "PATCH",
+      headers,
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({ state: "closed", state_reason: "completed" }),
+    },
+  );
+  if (!closeResponse.ok) {
+    throw new Error(
+      `GitHub terminal callback close failed with HTTP ${closeResponse.status}`,
+    );
+  }
+}
+
 export async function submitCodingBridgeCommand(input: {
   externalCommandId: string;
   instruction: string;
@@ -145,6 +232,19 @@ export async function appendCodingBridgeResponse(input: {
     kind: input.kind,
     message: input.message,
   });
+
+  if (
+    input.kind === "COMPLETED" ||
+    input.kind === "FAILED" ||
+    input.kind === "BLOCKER"
+  ) {
+    void syncTerminalBridgeResponseToGitHub({
+      responseId: response.id,
+      commandId: input.commandId,
+      taskId: input.taskId ?? null,
+      kind: input.kind,
+    }).catch(() => undefined);
+  }
 
   return response;
 }
