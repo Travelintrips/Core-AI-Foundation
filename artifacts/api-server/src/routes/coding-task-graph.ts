@@ -572,7 +572,11 @@ router.post(
       await materializeApprovedWorkstreamAiCandidate(
         params.data.workstreamId,
       );
-      await completeReviewedCodingWorkstream(params.data.workstreamId);
+      await completeReviewedCodingWorkstream(params.data.workstreamId, {
+        completeChildTask: true,
+        childTaskResultSummary:
+          "Reviewed coding workstream completed successfully.",
+      });
       const refreshed = await getLatestCodingTaskGraph(params.data.id);
       res.json(refreshed);
     } catch (error) {

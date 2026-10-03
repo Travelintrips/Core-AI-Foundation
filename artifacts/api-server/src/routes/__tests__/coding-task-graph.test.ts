@@ -507,7 +507,11 @@ describe("multi-worker coding task graph API", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.materializeAiPatch).toHaveBeenCalledWith(WS_ID);
-    expect(mocks.completeReviewed).toHaveBeenCalledWith(WS_ID);
+    expect(mocks.completeReviewed).toHaveBeenCalledWith(WS_ID, {
+      completeChildTask: true,
+      childTaskResultSummary:
+        "Reviewed coding workstream completed successfully.",
+    });
     expect(mocks.materializeAiPatch.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.completeReviewed.mock.invocationCallOrder[0],
     );
