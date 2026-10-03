@@ -412,6 +412,31 @@ describe("Coding Orchestrator", () => {
     expect(mockGenerateAndPersistCodingMultiTaskPlan).not.toHaveBeenCalled();
   });
 
+  it("fails over in-process when local analyzer spawn hits EAGAIN", async () => {
+    let spawnErrorHandler: ((error: Error) => void) | undefined;
+    mockSpawn.mockReturnValueOnce({
+      unref: vi.fn(),
+      once: vi.fn((event: string, handler: (error: Error) => void) => {
+        if (event === "error") spawnErrorHandler = handler;
+      }),
+    });
+
+    await startCodingOrchestration({ task: task as never, run: run as never });
+    expect(spawnErrorHandler).toBeTypeOf("function");
+
+    const error = Object.assign(
+      new Error("spawn /opt/alt/alt-nodejs22/root/usr/bin/node EAGAIN"),
+      { code: "EAGAIN" },
+    );
+    spawnErrorHandler!(error);
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 701, status: "queued" }),
+      { finalizeCodingRun: false },
+    );
+  });
+
   it("fails over in-process when a dedicated analyzer never claims the queued job", async () => {
     vi.useFakeTimers();
     vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "remote");
