@@ -43,7 +43,6 @@ import { requestCodingCriticalApproval } from "./codingCriticalApprovalService.j
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
 import { purgeExpiredCodingTestTasks, reconcileStaleCodingRuns } from "./localCodingRunRecoveryService.js";
-import { startCodingOrchestration } from "./codingOrchestratorService.js";
 import { isRetryableRepositoryCloneResourceError } from "./repositoryAnalyzerService.js";
 
 const DEFAULT_INTERVAL_MS = 8_000;
@@ -307,6 +306,7 @@ async function restartRepositoryAnalysisAfterTransientFailure(
     return { task, run };
   });
 
+  const { startCodingOrchestration } = await import("./codingOrchestratorService.js");
   await startCodingOrchestration({ task, run });
 }
 
