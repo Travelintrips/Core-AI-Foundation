@@ -76,7 +76,7 @@ const MAX_ALLOWED_FILES = 12;
 const MAX_SNIPPETS = 5;
 const MAX_FILE_BYTES = 250_000;
 const MAX_SNIPPET_CHARS = 6_000;
-const MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS = 2;
+const MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS = 3;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA40_RE = /^[0-9a-f]{40}$/i;
@@ -134,6 +134,8 @@ export function decideWorkstreamAiAutoRepair(
     error instanceof LocalCodingAiExecutionGateError ? error.kind : null;
   const workstreamCode =
     error instanceof LocalCodingWorkstreamAiExecutionError ? error.code : null;
+  const handoffCode =
+    error instanceof LocalCodingWorkstreamAiHandoffError ? error.code : null;
 
   const recoverable =
     gateKind === "INVALID_PROPOSAL" ||
@@ -144,7 +146,13 @@ export function decideWorkstreamAiAutoRepair(
     workstreamCode === "MODEL_FAILED" ||
     workstreamCode === "STALE_CONTEXT" ||
     workstreamCode === "MATERIALIZATION_FAILED" ||
-    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found 0|patch does not apply|does not match the reviewed AI candidate/i.test(
+    handoffCode === "NOT_READY" ||
+    handoffCode === "STALE_CLAIM" ||
+    handoffCode === "STALE_CONTEXT" ||
+    handoffCode === "EXPIRED" ||
+    handoffCode === "REVOKED" ||
+    handoffCode === "CONSUMED" ||
+    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found 0|patch does not apply|does not match the reviewed AI candidate|one-shot privilege is not available|Approved workstream AI handoff was not found/i.test(
       message,
     );
 
