@@ -2584,6 +2584,24 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     return;
   }
 
+  if (parsed.data.mode === "agent" && (parsed.data.source === "voice" || parsed.data.source === "whatsapp_voice")) {
+    const voiceMessage = parsed.data.message.trim();
+    if (!/^hi(?:\\s|[,!.:;-]|$)/i.test(voiceMessage)) {
+      res.status(403).json({
+        error: "Execution blocked: voice commands must begin with Hi.",
+        blocked: true,
+        reason: "missing_voice_execution_prefix",
+        requiredPrefix: "Hi",
+      });
+      return;
+    }
+    parsed.data.message = voiceMessage.replace(/^hi(?:\\s*[,!.:;-]?\\s*)/i, "").trim();
+    if (!parsed.data.message) {
+      res.status(400).json({ error: "Voice command is empty after Hi prefix." });
+      return;
+    }
+  }
+
   try {
     const scope = {
       sessionId: parsed.data.conversationId ?? null,
