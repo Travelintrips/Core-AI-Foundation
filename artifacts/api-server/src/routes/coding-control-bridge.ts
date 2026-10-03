@@ -8,6 +8,7 @@ import {
 } from "../services/codingWhatsappNotificationService.js";
 import { randomUUID } from "crypto";
 import {
+  decideCodingCriticalApprovalById,
   getCriticalApproval,
   requestCodingCriticalApproval,
 } from "../services/codingCriticalApprovalService.js";
@@ -61,7 +62,7 @@ router.post("/ai/coding/bridge/critical-approvals",async(req,res):Promise<void>=
  const p=z.object({
   taskId:Uuid.nullish(),
   commandId:Uuid.nullish(),
-  actionType:z.enum(["MERGE_PR","PRODUCTION_DEPLOY","PRODUCTION_DB_MIGRATION","DESTRUCTIVE_DB_CHANGE","SECURITY_CHANGE","PRODUCTION_SERVICE_RESTART"]),
+  actionType:z.enum(["WORKSTREAM_AI_HANDOFF","MERGE_PR","PRODUCTION_DEPLOY","PRODUCTION_DB_MIGRATION","DESTRUCTIVE_DB_CHANGE","SECURITY_CHANGE","PRODUCTION_SERVICE_RESTART"]),
   summary:z.string().min(1).max(4000),
   metadata:z.record(z.string(),z.unknown()).optional(),
   ttlMinutes:z.number().int().min(2).max(30).optional()
@@ -80,6 +81,33 @@ router.get("/ai/coding/bridge/critical-approvals/:id",async(req,res):Promise<voi
  const approval=await getCriticalApproval(p.data);
  if(!approval){res.status(404).json({error:"Critical approval not found"});return;}
  res.json(approval);
+});
+
+router.post("/ai/coding/bridge/critical-approvals/:id/decision",async(req,res):Promise<void>=>{
+ const id=Uuid.safeParse(req.params["id"]);
+ const body=z.object({
+  decision:z.enum(["APPROVE","REJECT"]),
+  actor:z.string().min(1).max(200).optional()
+ }).strict().safeParse(req.body??{});
+ if(!id.success){res.status(400).json({error:"Invalid approval id"});return;}
+ if(!body.success){res.status(400).json({error:body.error.message});return;}
+ try{
+  const approval=await decideCodingCriticalApprovalById({
+   approvalId:id.data,
+   decision:body.data.decision,
+   actor:body.data.actor??"admin-api"
+  });
+  res.json({accepted:true,approval});
+ }catch(error){
+  const code=error instanceof Error?error.message:String(error);
+  const status=
+   code==="APPROVAL_NOT_FOUND"
+    ?404
+    :["APPROVAL_EXPIRED","APPROVAL_NOT_PENDING","APPROVAL_RACE_LOST"].includes(code)
+      ?409
+      :500;
+  res.status(status).json({error:code});
+ }
 });
 
 router.get("/ai/coding/bridge/runtime-status",async(_req,res):Promise<void>=>{

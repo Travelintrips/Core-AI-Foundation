@@ -19,9 +19,7 @@ import {
 import { dispatchReadyCodingWorkstreams } from "./localCodingMultiWorkerExecutionService.js";
 import {
   approveWorkstreamAiCandidatePatch,
-  approveWorkstreamAiExecutionHandoff,
   manualAiPatchReviewReason,
-  enqueueWorkstreamAiExecution,
   materializeApprovedWorkstreamAiCandidate,
   prepareWorkstreamAiExecutionHandoff,
 } from "./localCodingWorkstreamAiExecutionService.js";
@@ -455,17 +453,30 @@ async function processTaskGraph(
 
       await reserveCycle();
       const prepared = await prepareWorkstreamAiExecutionHandoff(review.id);
-      const lease = await approveWorkstreamAiExecutionHandoff(
-        review.id,
-        prepared.handoffId,
-      );
-      await enqueueWorkstreamAiExecution(review.id, {
-        expectedPackageHash: lease.packageHash,
-        requestedBy: "autonomous-repair-loop",
+      const commandId = await commandIdForTask(taskId);
+      const approval = await requestCodingCriticalApproval({
+        taskId,
+        commandId,
+        actionType: "WORKSTREAM_AI_HANDOFF",
+        summary:
+          `Workstream ${review.key} membutuhkan izin admin sebelum model AI dipanggil. ` +
+          "Setujui untuk menjalankan constrained AI pada handoff yang telah disiapkan.",
+        metadata: {
+          graphId: snapshot.graph.id,
+          workstreamId: review.id,
+          workstreamKey: review.key,
+          handoffId: prepared.handoffId,
+          packageHash: prepared.packageHash,
+          claimAttempt: prepared.claimAttempt,
+          branchName: prepared.branchName,
+        },
       });
+
       return {
         handled: true,
-        action: `AUTO_RUN_WORKSTREAM_AI:${review.key}`,
+        action: approval.reused
+          ? `WAIT_WORKSTREAM_AI_APPROVAL:${review.key}`
+          : `REQUEST_WORKSTREAM_AI_APPROVAL:${review.key}`,
         waiting: true,
       };
     }

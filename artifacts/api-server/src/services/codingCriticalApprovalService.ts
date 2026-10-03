@@ -10,6 +10,7 @@ import {
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 
 export type CriticalApprovalActionType =
+  | "WORKSTREAM_AI_HANDOFF"
   | "MERGE_PR"
   | "PRODUCTION_DEPLOY"
   | "PRODUCTION_DB_MIGRATION"
@@ -229,12 +230,52 @@ export async function getCriticalApproval(id: string): Promise<CriticalApprovalR
   return normalizeRow(result.rows[0] as Record<string, unknown>);
 }
 
+function requiredMetadataString(
+  approval: CriticalApprovalRow,
+  key: string,
+): string {
+  const value = approval.metadata[key];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Critical approval metadata is missing ${key}`);
+  }
+  return value.trim();
+}
+
 async function executeApprovedAction(approval: CriticalApprovalRow): Promise<void> {
   if (!approval.taskId) {
     throw new Error("Critical approval does not have a coding task id");
   }
 
   switch (approval.actionType) {
+    case "WORKSTREAM_AI_HANDOFF": {
+      const workstreamId = requiredMetadataString(approval, "workstreamId");
+      const handoffId = requiredMetadataString(approval, "handoffId");
+      const expectedPackageHash = requiredMetadataString(
+        approval,
+        "packageHash",
+      ).toLowerCase();
+
+      const {
+        approveWorkstreamAiExecutionHandoff,
+        enqueueWorkstreamAiExecution,
+      } = await import("./localCodingWorkstreamAiExecutionService.js");
+
+      const lease = await approveWorkstreamAiExecutionHandoff(
+        workstreamId,
+        handoffId,
+      );
+      if (lease.packageHash.toLowerCase() !== expectedPackageHash) {
+        throw new Error(
+          "Approved workstream AI handoff package hash changed before execution.",
+        );
+      }
+
+      await enqueueWorkstreamAiExecution(workstreamId, {
+        expectedPackageHash: lease.packageHash,
+        requestedBy: `admin-approval:${approval.id}`,
+      });
+      return;
+    }
     case "MERGE_PR": {
       const { approveAndMergePullRequest } = await import(
         "./localCodingPullRequestGateService.js"
@@ -249,27 +290,21 @@ async function executeApprovedAction(approval: CriticalApprovalRow): Promise<voi
   }
 }
 
-export async function decideCodingCriticalApproval(input: {
-  token: string;
-  decision: "APPROVE" | "REJECT";
-  senderDigits: string;
-}): Promise<CriticalApprovalRow> {
-  await ensureCodingControlBridgeTables();
-  await expireStaleApprovals();
-
-  const current = await loadByToken(input.token);
-  if (!current) throw new Error("APPROVAL_NOT_FOUND");
+async function decideLoadedCriticalApproval(
+  current: CriticalApprovalRow,
+  decision: "APPROVE" | "REJECT",
+  actorSuffix: string | null,
+): Promise<CriticalApprovalRow> {
   if (current.status === "EXPIRED") throw new Error("APPROVAL_EXPIRED");
   if (current.status !== "PENDING") throw new Error("APPROVAL_NOT_PENDING");
 
-  const suffix = input.senderDigits.replace(/\D/g, "").slice(-4) || null;
-  const nextStatus = input.decision === "APPROVE" ? "APPROVED" : "REJECTED";
+  const nextStatus = decision === "APPROVE" ? "APPROVED" : "REJECTED";
 
   const updated = await db.execute(sql`
     UPDATE ai_platform.ai_coding_critical_approvals
     SET status = ${nextStatus},
         decided_at = NOW(),
-        decided_by_suffix = ${suffix}
+        decided_by_suffix = ${actorSuffix}
     WHERE id = ${current.id}::uuid
       AND status = 'PENDING'
       AND expires_at > NOW()
@@ -283,7 +318,7 @@ export async function decideCodingCriticalApproval(input: {
 
   await logAudit(
     "coding-orchestrator",
-    input.decision === "APPROVE"
+    decision === "APPROVE"
       ? "critical_approval_approved"
       : "critical_approval_rejected",
     approval.id,
@@ -292,11 +327,11 @@ export async function decideCodingCriticalApproval(input: {
     {
       taskId: approval.taskId,
       actionType: approval.actionType,
-      senderSuffix: suffix,
+      actorSuffix,
     },
   ).catch(() => undefined);
 
-  if (input.decision === "REJECT") {
+  if (decision === "REJECT") {
     await sendCodingApprovalResult({
       approvalId: approval.id,
       taskId: approval.taskId,
@@ -350,6 +385,39 @@ export async function decideCodingCriticalApproval(input: {
   }
 }
 
+export async function decideCodingCriticalApproval(input: {
+  token: string;
+  decision: "APPROVE" | "REJECT";
+  senderDigits: string;
+}): Promise<CriticalApprovalRow> {
+  await ensureCodingControlBridgeTables();
+  await expireStaleApprovals();
+
+  const current = await loadByToken(input.token);
+  if (!current) throw new Error("APPROVAL_NOT_FOUND");
+
+  const suffix = input.senderDigits.replace(/\D/g, "").slice(-4) || null;
+  return decideLoadedCriticalApproval(current, input.decision, suffix);
+}
+
+export async function decideCodingCriticalApprovalById(input: {
+  approvalId: string;
+  decision: "APPROVE" | "REJECT";
+  actor?: string | null;
+}): Promise<CriticalApprovalRow> {
+  await ensureCodingControlBridgeTables();
+  await expireStaleApprovals();
+
+  const current = await getCriticalApproval(input.approvalId);
+  if (!current) throw new Error("APPROVAL_NOT_FOUND");
+
+  const suffix =
+    typeof input.actor === "string" && input.actor.trim()
+      ? input.actor.replace(/\s+/g, "-").slice(-32)
+      : "admin-api";
+
+  return decideLoadedCriticalApproval(current, input.decision, suffix);
+}
 
 export async function finalizeCodingCriticalApproval(input: {
   taskId: string;
