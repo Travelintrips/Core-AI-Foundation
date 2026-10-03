@@ -246,7 +246,11 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
     res.status(200).json(
       rpcResult(body.id ?? null, {
         protocolVersion: MCP_PROTOCOL_VERSION,
-        capabilities: { tools: { listChanged: false } },
+        capabilities: {
+          tools: { listChanged: false },
+          resources: { subscribe: false, listChanged: false },
+          prompts: { listChanged: false },
+        },
         serverInfo: SERVER_INFO,
       }),
     );
@@ -260,6 +264,25 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
 
   if (body.method === "tools/list") {
     res.status(200).json(rpcResult(body.id ?? null, { tools }));
+    return;
+  }
+
+  // ChatGPT/Codex currently probes the standard MCP discovery methods even
+  // when this server only exposes tools. Return valid empty collections
+  // instead of -32601 so the host keeps the MCP connection healthy and
+  // continues through tool discovery.
+  if (body.method === "resources/list") {
+    res.status(200).json(rpcResult(body.id ?? null, { resources: [] }));
+    return;
+  }
+
+  if (body.method === "resources/templates/list") {
+    res.status(200).json(rpcResult(body.id ?? null, { resourceTemplates: [] }));
+    return;
+  }
+
+  if (body.method === "prompts/list") {
+    res.status(200).json(rpcResult(body.id ?? null, { prompts: [] }));
     return;
   }
 
