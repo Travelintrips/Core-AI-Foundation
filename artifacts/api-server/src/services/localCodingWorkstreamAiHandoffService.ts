@@ -403,7 +403,7 @@ export async function prepareWorkstreamAiHandoff(
 ): Promise<{ handoff: AiCodingWorkstreamAiHandoff; created: boolean }> {
   const lockKey = `coding-workstream-ai-handoff:${workstreamId}`;
 
-  return withNonBlockingAdvisoryRetry(() =>
+  return withNonBlockingAdvisoryRetry<{ handoff: AiCodingWorkstreamAiHandoff; created: boolean }>(() =>
     db.transaction(async (tx) => {
       const lockResult = await tx.execute(
         sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
