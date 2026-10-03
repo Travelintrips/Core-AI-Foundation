@@ -12,17 +12,30 @@ import { logAudit } from "./aiAuditService.js";
 let transporter: Transporter | null = null;
 let transporterError: string | null = null;
 
+const DEFAULT_SMTP_HOST = "smtp.hostinger.com";
+const DEFAULT_SMTP_PORT = 465;
+const DEFAULT_SMTP_USER = "info@cstlogistic.co.id";
+
+function resolveSmtpRuntimeConfig() {
+  const host = process.env["SMTP_HOST"]?.trim() || DEFAULT_SMTP_HOST;
+  const port = Number(process.env["SMTP_PORT"] ?? DEFAULT_SMTP_PORT);
+  const user =
+    process.env["SMTP_USER"]?.trim() ||
+    process.env["SMTP_FROM"]?.trim() ||
+    DEFAULT_SMTP_USER;
+  const pass = process.env["SMTP_PASS"]?.trim() || "";
+  const from = process.env["SMTP_FROM"]?.trim() || user;
+  return { host, port, user, pass, from };
+}
+
 function getTransporter(): Transporter | null {
   if (transporter) return transporter;
   if (transporterError) return null;
 
-  const host = process.env["SMTP_HOST"];
-  const port = Number(process.env["SMTP_PORT"] ?? 587);
-  const user = process.env["SMTP_USER"];
-  const pass = process.env["SMTP_PASS"];
+  const { host, port, user, pass } = resolveSmtpRuntimeConfig();
 
-  if (!host || !user || !pass) {
-    transporterError = "SMTP not configured (missing SMTP_HOST/SMTP_USER/SMTP_PASS)";
+  if (!pass) {
+    transporterError = "SMTP not configured (missing SMTP_PASS)";
     return null;
   }
 
@@ -105,12 +118,11 @@ export function classifyEmailTransportError(error: string | undefined): EmailTra
 }
 
 export async function getEmailTransportDiagnostic(): Promise<EmailTransportDiagnostic> {
-  const host = process.env["SMTP_HOST"]?.trim() || null;
-  const port = Number(process.env["SMTP_PORT"] ?? 587);
-  const userConfigured = Boolean(process.env["SMTP_USER"]?.trim());
-  const passConfigured = Boolean(process.env["SMTP_PASS"]?.trim());
-  const fromConfigured = Boolean(process.env["SMTP_FROM"]?.trim());
-  const configured = Boolean(host && userConfigured && passConfigured);
+  const { host, port, user, pass, from } = resolveSmtpRuntimeConfig();
+  const userConfigured = Boolean(user);
+  const passConfigured = Boolean(pass);
+  const fromConfigured = Boolean(from);
+  const configured = passConfigured;
 
   const verified = await verifyEmailTransport();
   return {
@@ -144,7 +156,7 @@ export async function sendEmail(params: {
     return { ok: false, error };
   }
 
-  const from = process.env["SMTP_FROM"] || process.env["SMTP_USER"];
+  const { from } = resolveSmtpRuntimeConfig();
 
   try {
     const info = await t.sendMail({ from, to, subject, html, text: text ?? htmlToText(html) });
