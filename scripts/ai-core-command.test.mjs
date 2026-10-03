@@ -134,6 +134,10 @@ test('public health probes omit the admin header used on protected coding routes
   assert.equal(calls[0].options.headers['x-admin-api-key'], undefined);
   assert.equal(calls[1].options.headers['x-admin-api-key'], undefined);
   assert.equal(calls[2].options.headers['x-admin-api-key'], 'secret');
+  for (const call of calls) {
+    assert.equal(call.options.headers.Accept, 'application/json');
+    assert.equal(call.options.headers['User-Agent'], 'CST-AI-Core-GitHub-Trigger/1.0');
+  }
 });
 
 test('API fixes the destination, disallows redirects, and JSON-encodes instructions', async () => {
