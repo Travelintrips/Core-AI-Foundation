@@ -1402,7 +1402,7 @@ async function persistCandidate(input: {
     .set({
       status: "READY_REVIEW",
       resultSummary:
-        "Per-workstream constrained AI produced a deterministic candidate patch. Explicit REVIEW_AI_PATCH approval is required. No scripts, network, commit, push, or merge were executed.",
+        "Per-workstream constrained AI produced a deterministic candidate patch. The autonomous runtime will approve and continue automatically when policy checks are safe; manual REVIEW_AI_PATCH is only required when explicitly flagged. No scripts, network, commit, push, or merge were executed.",
     })
     .where(eq(aiCodingTasksTable.id, input.payload.childTaskId));
 }
