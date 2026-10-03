@@ -49,6 +49,18 @@ type IncomingEnvelope = {
       extendedTextMessage?: { text?: unknown } | null;
       imageMessage?: { caption?: unknown } | null;
       videoMessage?: { caption?: unknown } | null;
+      buttonsResponseMessage?: {
+        selectedButtonId?: unknown;
+        selectedDisplayText?: unknown;
+      } | null;
+      templateButtonReplyMessage?: {
+        selectedId?: unknown;
+        selectedDisplayText?: unknown;
+      } | null;
+      listResponseMessage?: {
+        title?: unknown;
+        singleSelectReply?: { selectedRowId?: unknown } | null;
+      } | null;
     } | null;
   } | null;
 };
@@ -156,12 +168,45 @@ function extractText(payload: IncomingEnvelope): string {
     !Array.isArray(message.videoMessage)
       ? (message.videoMessage as { caption?: unknown })
       : null;
+  const buttonsResponseMessage =
+    message.buttonsResponseMessage &&
+    typeof message.buttonsResponseMessage === "object" &&
+    !Array.isArray(message.buttonsResponseMessage)
+      ? (message.buttonsResponseMessage as {
+          selectedButtonId?: unknown;
+          selectedDisplayText?: unknown;
+        })
+      : null;
+  const templateButtonReplyMessage =
+    message.templateButtonReplyMessage &&
+    typeof message.templateButtonReplyMessage === "object" &&
+    !Array.isArray(message.templateButtonReplyMessage)
+      ? (message.templateButtonReplyMessage as {
+          selectedId?: unknown;
+          selectedDisplayText?: unknown;
+        })
+      : null;
+  const listResponseMessage =
+    message.listResponseMessage &&
+    typeof message.listResponseMessage === "object" &&
+    !Array.isArray(message.listResponseMessage)
+      ? (message.listResponseMessage as {
+          title?: unknown;
+          singleSelectReply?: { selectedRowId?: unknown } | null;
+        })
+      : null;
 
   const candidates = [
+    buttonsResponseMessage?.selectedButtonId,
+    templateButtonReplyMessage?.selectedId,
+    listResponseMessage?.singleSelectReply?.selectedRowId,
     message.conversation,
     extendedTextMessage?.text,
     imageMessage?.caption,
     videoMessage?.caption,
+    buttonsResponseMessage?.selectedDisplayText,
+    templateButtonReplyMessage?.selectedDisplayText,
+    listResponseMessage?.title,
   ];
   const text = candidates.find((value): value is string => typeof value === "string");
   return text?.trim() ?? "";

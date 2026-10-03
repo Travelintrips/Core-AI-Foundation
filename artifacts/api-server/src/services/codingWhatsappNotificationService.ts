@@ -32,6 +32,8 @@ async function sendGatewayMessage(input: {
   idempotencyKey: string;
   clientMessageId: string;
   text: string;
+  buttons?: Array<{ id: string; label: string }>;
+  footer?: string;
 }): Promise<CodingWhatsappNotifyResult> {
   const configured = getCodingWhatsappConfigStatus();
   const { baseUrl, apiKey, to } = config();
@@ -47,11 +49,23 @@ async function sendGatewayMessage(input: {
         "content-type": "application/json",
         "idempotency-key": input.idempotencyKey,
       },
-      body: JSON.stringify({
-        to,
-        text: input.text,
-        clientMessageId: input.clientMessageId,
-      }),
+      body: JSON.stringify(
+        input.buttons?.length
+          ? {
+              type: "buttons",
+              to,
+              text: input.text,
+              ...(input.footer ? { footer: input.footer } : {}),
+              buttons: input.buttons,
+              clientMessageId: input.clientMessageId,
+            }
+          : {
+              type: "text",
+              to,
+              text: input.text,
+              clientMessageId: input.clientMessageId,
+            },
+      ),
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -233,7 +247,8 @@ export async function sendCodingApprovalRequest(input: {
     input.summary.trim(),
     `Berlaku sampai: ${input.expiresAt}`,
     "",
-    `Balas: APPROVE ${input.token}`,
+    "Pilih tindakan di bawah.",
+    `Jika tombol tidak tampil, balas: APPROVE ${input.token}`,
     `atau: REJECT ${input.token}`,
   ].filter(Boolean).join("\n");
 
@@ -241,6 +256,11 @@ export async function sendCodingApprovalRequest(input: {
     idempotencyKey: `ai-core-approval-${input.approvalId}`,
     clientMessageId: input.approvalId,
     text,
+    footer: "AI Core Admin Approval",
+    buttons: [
+      { id: `APPROVE ${input.token}`, label: "✅ APPROVE" },
+      { id: `REJECT ${input.token}`, label: "❌ REJECT" },
+    ],
   });
 }
 
