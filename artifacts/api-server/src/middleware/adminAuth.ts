@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { verifySessionToken, getInternalUserById, SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
+import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 
 /**
  * Admin API key middleware.
@@ -36,10 +37,10 @@ function isAiCoreConnectorRoute(req: Request): boolean {
 function hasValidAiCoreConnectorKey(req: Request): boolean {
   if (!isAiCoreConnectorRoute(req)) return false;
   const configured = process.env["AI_CORE_CHAT_CONNECTOR_KEY"]?.trim();
-  if (!configured) return false;
   const supplied = String(req.headers["x-ai-core-connector-key"] ?? "").trim();
   if (!supplied) return false;
-  return safeEqualSecret(supplied, configured);
+  if (configured && safeEqualSecret(supplied, configured)) return true;
+  return isAllowedLocalMcpServiceToken(supplied);
 }
 
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -142,7 +143,7 @@ const PUBLIC_PATH_PREFIXES = [
  * showcase, live AI preview) and were incorrectly requiring ADMIN_API_KEY.
  */
 const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
-  // MCP owns its own bearer-token authentication using AI_CORE_CHAT_CONNECTOR_KEY.
+  // MCP owns its own bearer-token authentication (connector key or local service token).
   { method: "POST", pattern: /^\/ai\/core-chat\/mcp$/ },
   { method: "GET", pattern: /^\/ai\/core-chat\/mcp$/ },
   { method: "GET", pattern: /^\/ai\/core-chat\/connector\/openapi\.json$/ },
