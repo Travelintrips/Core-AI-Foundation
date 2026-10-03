@@ -70,7 +70,9 @@ export function createApi(secret, fetchImpl = fetch) {
       throw new Error('API path is outside the coding trigger scope.');
     }
     const isPublicHealthProbe = path === '/healthz' || path === '/healthz/full';
-    const maxAttempts = method === 'GET' ? 6 : 1;
+    const isIdempotentBridgeCommand =
+      method === 'POST' && path === '/ai/coding/bridge/commands';
+    const maxAttempts = method === 'GET' ? 6 : isIdempotentBridgeCommand ? 4 : 1;
     const baseHeaders = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -96,9 +98,10 @@ export function createApi(secret, fetchImpl = fetch) {
         continue;
       }
 
-      const transientGetStatus =
-        method === 'GET' && [429, 500, 502, 503, 504].includes(response.status);
-      if (transientGetStatus && attempt < maxAttempts && !allowed.includes(response.status)) {
+      const transientRetryStatus =
+        (method === 'GET' || isIdempotentBridgeCommand) &&
+        [429, 500, 502, 503, 504].includes(response.status);
+      if (transientRetryStatus && attempt < maxAttempts && !allowed.includes(response.status)) {
         await new Promise(resolve => setTimeout(resolve, attempt * 1000));
         continue;
       }
@@ -107,8 +110,12 @@ export function createApi(secret, fetchImpl = fetch) {
 
     if (!response) throw new Error(`AI Core ${method} ${path} did not return a response.`);
     if (!response.ok && !allowed.includes(response.status)) {
-      // GET probes may retry transient transport/5xx failures. Mutations are never retried.
-      throw new Error(`AI Core ${method} ${path} returned HTTP ${response.status}. No mutation is automatically retried.`);
+      throw new Error(
+        `AI Core ${method} ${path} returned HTTP ${response.status}. ` +
+        (isIdempotentBridgeCommand
+          ? 'Idempotent bridge-command retries are exhausted.'
+          : 'No non-idempotent mutation is automatically retried.'),
+      );
     }
     let value;
     try { value = await response.json(); } catch { throw new Error(`AI Core ${path} returned invalid JSON.`); }
