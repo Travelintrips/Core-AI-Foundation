@@ -306,6 +306,16 @@ describe("repository analyzer GitHub clone authentication", () => {
     ).toBe(true);
     expect(
       isRetryableRepositoryCloneResourceError(
+        "Repository clone failed: spawn git EAGAIN",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableRepositoryCloneResourceError(
+        "spawn git EAGAIN",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableRepositoryCloneResourceError(
         "fatal: authentication failed for repository",
       ),
     ).toBe(false);
