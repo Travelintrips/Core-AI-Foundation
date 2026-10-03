@@ -555,18 +555,40 @@ async function resolveLocalSelection(): Promise<
   return { ok: true, selection: local.selection };
 }
 
+function chatWorkloadOutputCap(
+  workload: AiCoreWorkload,
+  configuredMax: number,
+): number {
+  const workloadOutputCap =
+    workload === "CHAT"
+      ? 900
+      : workload === "REVIEW"
+        ? 1_400
+        : workload === "REASONING"
+          ? 2_400
+          : configuredMax;
+  return Math.min(configuredMax, workloadOutputCap);
+}
+
+function configuredChatPrimaryProvider(): string {
+  return (process.env["AI_CORE_CHAT_PRIMARY_PROVIDER"]?.trim() || "openai")
+    .toLowerCase();
+}
+
+function configuredChatPrimaryModel(): string | null {
+  const model = process.env["AI_CORE_CHAT_PRIMARY_MODEL"]?.trim();
+  return model || null;
+}
+
 function configuredCloudSelectionFallback(
   workload: AiCoreWorkload,
 ): ProductionCodingModelSelection | null {
   const base = readProductionCodingModelConfig();
-  const provider = (
-    process.env["AI_CODING_PRIMARY_PROVIDER"] ||
-    base.provider ||
-    "openai"
-  ).trim().toLowerCase();
+  const provider = configuredChatPrimaryProvider();
   const model = (
-    process.env["AI_CODING_PRIMARY_MODEL"] ||
-    base.model ||
+    configuredChatPrimaryModel() ||
+    process.env["AI_CODING_PRIMARY_MODEL"]?.trim() ||
+    (base.provider === provider ? base.model : undefined) ||
     "gpt-5.6-sol"
   ).trim();
 
@@ -578,24 +600,17 @@ function configuredCloudSelectionFallback(
     return null;
   }
 
-  const workloadOutputCap =
-    workload === "CHAT"
-      ? 900
-      : workload === "REVIEW"
-        ? 1_400
-        : workload === "REASONING"
-          ? 2_400
-          : base.maxOutputTokens;
+  const maxOutputTokens = chatWorkloadOutputCap(workload, base.maxOutputTokens);
 
   return {
     model: {
       modelId: model,
-      maxOutputTokens: Math.min(base.maxOutputTokens, workloadOutputCap),
+      maxOutputTokens,
       capabilities: ["text"],
     },
     provider: { slug: provider },
     timeoutMs: base.timeoutMs,
-    maxOutputTokens: Math.min(base.maxOutputTokens, workloadOutputCap),
+    maxOutputTokens,
     selectionReason: "EXPLICIT_PROVIDER_AND_MODEL",
   };
 }
@@ -604,71 +619,86 @@ async function resolveCloudSelection(workload: AiCoreWorkload): Promise<
   | { ok: true; selection: ProductionCodingModelSelection }
   | { ok: false; message: string }
 > {
+  const base = readProductionCodingModelConfig();
+  const primaryProvider = configuredChatPrimaryProvider();
+  const primaryModel = configuredChatPrimaryModel();
   let modelRegistryTransientFailure = false;
+  let primaryFailure = "";
+
+  if (!isLocalProvider(primaryProvider) && getProviderApiKey(primaryProvider)) {
+    try {
+      const resolvedPrimary = await resolveProductionCodingModel({
+        ...base,
+        provider: primaryProvider,
+        model: primaryModel ?? undefined,
+      });
+      if (resolvedPrimary.ok) {
+        const maxOutputTokens = chatWorkloadOutputCap(
+          workload,
+          resolvedPrimary.selection.maxOutputTokens,
+        );
+        return {
+          ok: true,
+          selection: {
+            ...resolvedPrimary.selection,
+            maxOutputTokens,
+            model: {
+              ...resolvedPrimary.selection.model,
+              maxOutputTokens,
+            },
+          },
+        };
+      }
+      primaryFailure = resolvedPrimary.message;
+    } catch (error) {
+      modelRegistryTransientFailure = isTransientDatabaseConnectionError(error);
+      primaryFailure = safeProviderFailure(error);
+    }
+  } else {
+    primaryFailure = isLocalProvider(primaryProvider)
+      ? "AI Core Chat primary provider must be a cloud provider."
+      : `AI Core Chat primary provider ${primaryProvider} is not configured with an API key.`;
+  }
+
   const workloadModel = await selectCloudModelForWorkload(workload).catch((error: unknown) => {
-    modelRegistryTransientFailure = isTransientDatabaseConnectionError(error);
+    modelRegistryTransientFailure =
+      modelRegistryTransientFailure || isTransientDatabaseConnectionError(error);
     return null;
   });
   if (workloadModel) {
-    const baseConfig = readProductionCodingModelConfig();
     return {
       ok: true,
       selection: {
         model: workloadModel.model,
         provider: workloadModel.provider,
-        timeoutMs: baseConfig.timeoutMs,
+        timeoutMs: base.timeoutMs,
         maxOutputTokens: workloadModel.maxOutputTokens,
         selectionReason: "AUTO_CODING_CAPABILITY",
       },
     };
   }
 
-  const base = readProductionCodingModelConfig();
-  const provider = (
-    process.env["AI_CODING_PRIMARY_PROVIDER"] ||
-    base.provider ||
-    "openai"
-  ).trim().toLowerCase();
-  const model = (
-    process.env["AI_CODING_PRIMARY_MODEL"] ||
-    base.model ||
-    "gpt-5.6-sol"
-  ).trim();
-
-  if (isLocalProvider(provider)) {
-    return {
-      ok: false,
-      message: "Configured primary coding provider is local; no cloud-only target is configured.",
-    };
-  }
-
   try {
-    const resolved = await resolveProductionCodingModel({
-      ...base,
-      provider,
-      model,
-    });
-    if (!resolved.ok) return { ok: false, message: resolved.message };
-    if (isLocalProvider(String(resolved.selection.provider.slug))) {
-      return { ok: false, message: "Cloud-only model resolution returned a local provider." };
-    }
-    return { ok: true, selection: resolved.selection };
-  } catch (error) {
-    if (modelRegistryTransientFailure || isTransientDatabaseConnectionError(error)) {
-      const fallback = configuredCloudSelectionFallback(workload);
-      if (fallback) {
+    const fallback = configuredCloudSelectionFallback(workload);
+    if (fallback) {
+      if (modelRegistryTransientFailure) {
         logger.warn(
           { workload, provider: fallback.provider.slug, model: fallback.model.modelId },
-          "[ai-core-chat] model registry unavailable; using configured cloud fallback",
+          "[ai-core-chat] model registry unavailable; using configured chat-primary fallback",
         );
-        return { ok: true, selection: fallback };
       }
+      return { ok: true, selection: fallback };
     }
-    return {
-      ok: false,
-      message: safeProviderFailure(error) || "Cloud model resolution failed.",
-    };
+  } catch (error) {
+    primaryFailure = [primaryFailure, safeProviderFailure(error)].filter(Boolean).join(" | ");
   }
+
+  return {
+    ok: false,
+    message:
+      primaryFailure ||
+      "No configured AI Core Chat cloud model is available.",
+  };
 }
 
 function parseAdminDbPlan(raw: string): z.infer<typeof AdminDbPlan> {
@@ -1007,7 +1037,7 @@ async function deterministicReply(
       estimatedCostUsd: 0,
       ...routingMeta,
       reply:
-        `Routing coding saat ini: primary ${String(config["primaryProvider"])} / ${String(config["primaryModel"])}, fallback ${String(config["fallbackProvider"])} / ${String(config["fallbackModel"])}. Ask Mode Economy tetap memprioritaskan local AI tanpa cloud.`,
+        `AI Core Chat primary: ${configuredChatPrimaryProvider()} / ${configuredChatPrimaryModel() ?? "active OpenAI model dari registry"}. Rekam jejak OpenAI yang valid dicek lebih dulu. Routing coding: primary ${String(config["primaryProvider"])} / ${String(config["primaryModel"])}, fallback ${String(config["fallbackProvider"])} / ${String(config["fallbackModel"])}. Ask Mode Economy tetap memprioritaskan local AI tanpa cloud.`,
       modelConfig: config,
     };
   }
@@ -2089,7 +2119,13 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       criticalApprovalPreserved: true,
     },
     defaultModelPolicy: "smart",
-    routing: ["NO_LLM", "DATA_TOOL", "SMART_CLOUD", "LOCAL", "CLOUD"],
+    routing: ["NO_LLM", "DATA_TOOL", "LEARNED_MEMORY", "SMART_CLOUD", "LOCAL", "CLOUD"],
+    chatPrimary: {
+      provider: configuredChatPrimaryProvider(),
+      model: configuredChatPrimaryModel(),
+      providerConfigured: Boolean(getProviderApiKey(configuredChatPrimaryProvider())),
+      strategy: "history-first -> OpenAI-primary -> cloud fallback -> local fallback",
+    },
     streaming: {
       enabled: true,
       endpoint: "/api/ai/core-chat/messages/stream",
