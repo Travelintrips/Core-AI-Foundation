@@ -1,3 +1,4 @@
+# Hostinger native Git deployment trigger marker
 name: Hostinger Production Verify
 
 on:
