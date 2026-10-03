@@ -61,6 +61,13 @@ type IncomingEnvelope = {
         title?: unknown;
         singleSelectReply?: { selectedRowId?: unknown } | null;
       } | null;
+      interactiveResponseMessage?: {
+        body?: { text?: unknown } | null;
+        nativeFlowResponseMessage?: {
+          name?: unknown;
+          paramsJson?: unknown;
+        } | null;
+      } | null;
     } | null;
   } | null;
 };
@@ -146,6 +153,26 @@ function unwrapIncomingMessageContent(value: unknown): Record<string, unknown> |
   return content;
 }
 
+function nativeFlowResponseId(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const response = value as {
+    nativeFlowResponseMessage?: {
+      paramsJson?: unknown;
+    } | null;
+  };
+  const paramsJson = response.nativeFlowResponseMessage?.paramsJson;
+  if (typeof paramsJson !== "string" || !paramsJson.trim()) return null;
+
+  try {
+    const parsed = JSON.parse(paramsJson) as { id?: unknown };
+    return typeof parsed.id === "string" && parsed.id.trim()
+      ? parsed.id.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function extractText(payload: IncomingEnvelope): string {
   const message = unwrapIncomingMessageContent(payload.message?.message);
   if (!message) return "";
@@ -195,8 +222,21 @@ function extractText(payload: IncomingEnvelope): string {
           singleSelectReply?: { selectedRowId?: unknown } | null;
         })
       : null;
+  const interactiveResponseMessage =
+    message.interactiveResponseMessage &&
+    typeof message.interactiveResponseMessage === "object" &&
+    !Array.isArray(message.interactiveResponseMessage)
+      ? (message.interactiveResponseMessage as {
+          body?: { text?: unknown } | null;
+          nativeFlowResponseMessage?: {
+            name?: unknown;
+            paramsJson?: unknown;
+          } | null;
+        })
+      : null;
 
   const candidates = [
+    nativeFlowResponseId(interactiveResponseMessage),
     buttonsResponseMessage?.selectedButtonId,
     templateButtonReplyMessage?.selectedId,
     listResponseMessage?.singleSelectReply?.selectedRowId,
@@ -207,6 +247,7 @@ function extractText(payload: IncomingEnvelope): string {
     buttonsResponseMessage?.selectedDisplayText,
     templateButtonReplyMessage?.selectedDisplayText,
     listResponseMessage?.title,
+    interactiveResponseMessage?.body?.text,
   ];
   const text = candidates.find((value): value is string => typeof value === "string");
   return text?.trim() ?? "";
