@@ -1176,7 +1176,30 @@ async function buildSyntheticContextLease(
   const allowed = new Set(allowedFiles);
   const findings = Array.isArray(analyzer.findings) ? analyzer.findings : [];
   const ciRepair = ciSelfRepairContext(analyzer);
+  const priorAiExecution =
+    isRecord(analyzer.workstreamAiExecution) &&
+    analyzer.workstreamAiExecution.status === "FAILED"
+      ? analyzer.workstreamAiExecution
+      : null;
+  const priorAiFailure =
+    priorAiExecution && typeof priorAiExecution.error === "string"
+      ? priorAiExecution.error.trim()
+      : "";
+  const priorAiRepairAttempt =
+    priorAiExecution &&
+    typeof priorAiExecution.autoRepairAttempt === "number" &&
+    Number.isInteger(priorAiExecution.autoRepairAttempt)
+      ? priorAiExecution.autoRepairAttempt
+      : 0;
   const diagnostics = [
+    ...(priorAiFailure
+      ? [{
+          command: "workstream-ai-auto-repair",
+          kind: "previous_ai_failure",
+          message:
+            `Previous constrained AI attempt ${Math.max(1, priorAiRepairAttempt)} failed and MUST NOT be repeated verbatim: ${priorAiFailure.slice(0, 1_200)}. Re-read the current snippets below and generate exact search text that exists in the approved base SHA. If an exact replacement anchor is not present, choose a different bounded operation rather than inventing stale text.`,
+        }]
+      : []),
     ...(ciRepair
       ? [{
           command: "github-ci",
