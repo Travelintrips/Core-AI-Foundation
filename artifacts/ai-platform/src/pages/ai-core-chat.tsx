@@ -116,6 +116,9 @@ const CLONED_VOICE_ID_KEY = "ai_core_cloned_voice_id_v1";
 const MAX_MESSAGES = 80;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_VOICE_SAMPLE_BYTES = 6 * 1024 * 1024;
+const VOICE_SILENCE_MS = 1_600;
+const VOICE_RESTART_DELAY_MS = 120;
+const STREAM_SPEECH_SOFT_LIMIT = 120;
 
 type VoicePreset =
   | "auto"
@@ -308,6 +311,17 @@ export default function AiCoreChat() {
   const [lastInputSource, setLastInputSource] = useState<"text" | "voice">("text");
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const handsFreeRef = useRef(false);
+  const busyRef = useRef(false);
+  const listeningRef = useRef(false);
+  const voiceTranscriptRef = useRef("");
+  const voiceSilenceTimerRef = useRef<number | null>(null);
+  const recognitionRestartTimerRef = useRef<number | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const streamInterruptedRef = useRef(false);
+  const streamedSpeechBufferRef = useRef("");
+  const speechQueueRef = useRef<string[]>([]);
+  const speechQueueActiveRef = useRef(false);
+  const resumeListeningAfterSpeechRef = useRef(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredPwaInstallPrompt());
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -364,6 +378,13 @@ export default function AiCoreChat() {
   useEffect(() => {
     return () => {
       handsFreeRef.current = false;
+      if (voiceSilenceTimerRef.current !== null) {
+        window.clearTimeout(voiceSilenceTimerRef.current);
+      }
+      if (recognitionRestartTimerRef.current !== null) {
+        window.clearTimeout(recognitionRestartTimerRef.current);
+      }
+      streamAbortRef.current?.abort();
       recognitionRef.current?.abort();
       window.speechSynthesis?.cancel();
     };
@@ -453,61 +474,261 @@ export default function AiCoreChat() {
     }
   }
 
+  function clearVoiceSilenceTimer() {
+    if (voiceSilenceTimerRef.current !== null) {
+      window.clearTimeout(voiceSilenceTimerRef.current);
+      voiceSilenceTimerRef.current = null;
+    }
+  }
+
+  function clearRecognitionRestartTimer() {
+    if (recognitionRestartTimerRef.current !== null) {
+      window.clearTimeout(recognitionRestartTimerRef.current);
+      recognitionRestartTimerRef.current = null;
+    }
+  }
+
+  function cancelQueuedVoiceOutput() {
+    streamedSpeechBufferRef.current = "";
+    speechQueueRef.current = [];
+    resumeListeningAfterSpeechRef.current = false;
+    speechQueueActiveRef.current = false;
+    window.speechSynthesis?.cancel();
+  }
+
+  function maybeResumeHandsFreeListening() {
+    if (
+      !resumeListeningAfterSpeechRef.current ||
+      !handsFreeRef.current ||
+      busyRef.current ||
+      speechQueueActiveRef.current ||
+      speechQueueRef.current.length > 0
+    ) {
+      return;
+    }
+    resumeListeningAfterSpeechRef.current = false;
+    window.setTimeout(() => startListening(), 250);
+  }
+
+  function pumpSpeechQueue() {
+    if (
+      speechQueueActiveRef.current ||
+      speechQueueRef.current.length === 0 ||
+      !voiceFeatureEnabled ||
+      !voiceReplyEnabled ||
+      voicePreset === "cloned" ||
+      !("speechSynthesis" in window)
+    ) {
+      maybeResumeHandsFreeListening();
+      return;
+    }
+
+    const text = speechQueueRef.current.shift()?.trim();
+    if (!text) {
+      pumpSpeechQueue();
+      return;
+    }
+
+    speechQueueActiveRef.current = true;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "id-ID";
+    const tuning = voiceTuning(voicePreset);
+    utterance.rate = tuning.rate;
+    utterance.pitch = tuning.pitch;
+    const voice = selectedVoice(voicePreset);
+    if (voice) utterance.voice = voice;
+
+    const done = () => {
+      speechQueueActiveRef.current = false;
+      if (speechQueueRef.current.length > 0) {
+        pumpSpeechQueue();
+      } else {
+        maybeResumeHandsFreeListening();
+      }
+    };
+    utterance.onend = done;
+    utterance.onerror = done;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function takeStreamSpeechChunk(force: boolean): string | null {
+    const buffer = streamedSpeechBufferRef.current.trimStart();
+    if (!buffer) {
+      streamedSpeechBufferRef.current = "";
+      return null;
+    }
+
+    let cut = -1;
+    const sentence = buffer.match(/[.!?…](?:\s|$)/);
+    if (sentence && typeof sentence.index === "number" && sentence.index >= 18) {
+      cut = sentence.index + 1;
+    } else if (!force && buffer.length >= STREAM_SPEECH_SOFT_LIMIT) {
+      const preferred = buffer.slice(0, STREAM_SPEECH_SOFT_LIMIT + 1);
+      cut = Math.max(
+        preferred.lastIndexOf(", "),
+        preferred.lastIndexOf("; "),
+        preferred.lastIndexOf(" "),
+      );
+      if (cut < 48) cut = STREAM_SPEECH_SOFT_LIMIT;
+    } else if (force) {
+      cut = buffer.length;
+    }
+
+    if (cut <= 0) return null;
+    const chunk = buffer.slice(0, cut).trim();
+    streamedSpeechBufferRef.current = buffer.slice(cut).trimStart();
+    return chunk || null;
+  }
+
+  function queueStreamSpeechDelta(delta: string) {
+    if (
+      !delta ||
+      !voiceReplyEnabled ||
+      voicePreset === "cloned" ||
+      !handsFreeRef.current
+    ) {
+      return;
+    }
+    streamedSpeechBufferRef.current += delta;
+    while (true) {
+      const chunk = takeStreamSpeechChunk(false);
+      if (!chunk) break;
+      speechQueueRef.current.push(chunk);
+    }
+    pumpSpeechQueue();
+  }
+
+  function flushStreamSpeech() {
+    if (!voiceReplyEnabled || voicePreset === "cloned") {
+      streamedSpeechBufferRef.current = "";
+      return;
+    }
+    const chunk = takeStreamSpeechChunk(true);
+    if (chunk) speechQueueRef.current.push(chunk);
+    pumpSpeechQueue();
+  }
+
+  function finalizeVoiceTurn() {
+    clearVoiceSilenceTimer();
+    const transcript = voiceTranscriptRef.current.trim();
+    if (!handsFreeRef.current || !transcript || busyRef.current) return;
+
+    voiceTranscriptRef.current = "";
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    listeningRef.current = false;
+    setListening(false);
+    void submit(undefined, transcript, "voice");
+  }
+
+  function scheduleVoiceTurnSubmit() {
+    clearVoiceSilenceTimer();
+    voiceSilenceTimerRef.current = window.setTimeout(
+      finalizeVoiceTurn,
+      VOICE_SILENCE_MS,
+    );
+  }
+
+  function scheduleRecognitionRestart() {
+    clearRecognitionRestartTimer();
+    if (!handsFreeRef.current || busyRef.current) return;
+    recognitionRestartTimerRef.current = window.setTimeout(() => {
+      recognitionRestartTimerRef.current = null;
+      if (handsFreeRef.current && !busyRef.current && !listeningRef.current) {
+        startListening();
+      }
+    }, VOICE_RESTART_DELAY_MS);
+  }
+
   function startListening() {
-    if (!voiceFeatureEnabled || !voiceSupported || busy || listening) return;
+    if (
+      !voiceFeatureEnabled ||
+      !voiceSupported ||
+      busyRef.current ||
+      listeningRef.current ||
+      !handsFreeRef.current
+    ) {
+      return;
+    }
     const Constructor = speechRecognitionConstructor();
     if (!Constructor) return;
 
-    let capturedTranscript = "";
-    let submitted = false;
+    clearRecognitionRestartTimer();
+    const sessionBase = voiceTranscriptRef.current.trim();
     const recognition = new Constructor();
     recognition.lang = "id-ID";
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
-      let transcript = "";
-      let hasFinalResult = false;
+      let currentSessionTranscript = "";
       for (let index = 0; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        transcript += result?.[0]?.transcript ?? "";
-        hasFinalResult ||= result?.isFinal === true;
+        currentSessionTranscript += event.results[index]?.[0]?.transcript ?? "";
       }
-      capturedTranscript = transcript.trim();
-      if (capturedTranscript) {
-        setInput(capturedTranscript);
-        setLastInputSource("voice");
-      }
-      if (handsFreeRef.current && hasFinalResult && capturedTranscript && !submitted) {
-        submitted = true;
-        recognition.stop();
-        void submit(undefined, capturedTranscript);
-      }
+      const combined = [sessionBase, currentSessionTranscript.trim()]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!combined) return;
+      voiceTranscriptRef.current = combined;
+      setInput(combined);
+      setLastInputSource("voice");
+      scheduleVoiceTurnSubmit();
     };
     recognition.onerror = (event) => {
       const errorCode = event.error || "unknown error";
-      if (errorCode !== "aborted") {
+      listeningRef.current = false;
+      setListening(false);
+      if (!["aborted", "no-speech"].includes(errorCode)) {
         setVoiceError("Microphone/STT gagal: " + errorCode);
       }
-      setListening(false);
     };
     recognition.onend = () => {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      listeningRef.current = false;
       setListening(false);
-      if (handsFreeRef.current && capturedTranscript && !submitted) {
-        submitted = true;
-        void submit(undefined, capturedTranscript);
-      }
+      scheduleRecognitionRestart();
     };
     recognitionRef.current = recognition;
     setVoiceError("");
+    listeningRef.current = true;
     setListening(true);
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (error) {
+      recognitionRef.current = null;
+      listeningRef.current = false;
+      setListening(false);
+      setVoiceError(
+        "Microphone/STT gagal dimulai: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
+      scheduleRecognitionRestart();
+    }
+  }
+
+  function interruptVoiceReply() {
+    streamInterruptedRef.current = true;
+    streamAbortRef.current?.abort();
+    cancelQueuedVoiceOutput();
+    busyRef.current = false;
+    setBusy(false);
+    clearVoiceSilenceTimer();
+    voiceTranscriptRef.current = "";
+    window.setTimeout(() => startListening(), 80);
   }
 
   function stopVoiceSession() {
     handsFreeRef.current = false;
     setHandsFreeEnabled(false);
+    clearVoiceSilenceTimer();
+    clearRecognitionRestartTimer();
+    voiceTranscriptRef.current = "";
     recognitionRef.current?.abort();
-    window.speechSynthesis?.cancel();
+    recognitionRef.current = null;
+    listeningRef.current = false;
+    cancelQueuedVoiceOutput();
     setListening(false);
   }
 
@@ -521,11 +742,16 @@ export default function AiCoreChat() {
       return;
     }
     if (handsFreeRef.current) {
+      if (busyRef.current || speechQueueActiveRef.current || window.speechSynthesis?.speaking) {
+        interruptVoiceReply();
+        return;
+      }
       stopVoiceSession();
       return;
     }
     handsFreeRef.current = true;
     setHandsFreeEnabled(true);
+    voiceTranscriptRef.current = "";
     startListening();
   }
 
@@ -662,13 +888,17 @@ export default function AiCoreChat() {
     );
   }
 
-  async function submit(event?: FormEvent, overrideText?: string) {
+  async function submit(
+    event?: FormEvent,
+    overrideText?: string,
+    overrideSource?: "text" | "voice",
+  ) {
     event?.preventDefault();
     const text = (overrideText ?? input).trim();
     const image = pendingImage;
-    if ((!text && !image) || busy) return;
+    if ((!text && !image) || busyRef.current) return;
     const submittedText = text || "Analisis gambar ini.";
-    const inputSource = lastInputSource;
+    const inputSource = overrideSource ?? lastInputSource;
 
     const context = messages
       .filter((message) => !message.error && message.text.trim())
@@ -699,9 +929,10 @@ export default function AiCoreChat() {
     setInput("");
     setPendingImage(null);
     setLastInputSource("text");
+    busyRef.current = true;
     setBusy(true);
 
-    if (mode === "ask") {
+    if (mode === "ask" || mode === "auto") {
       const assistantId = messageId();
       append({
         id: assistantId,
@@ -712,19 +943,32 @@ export default function AiCoreChat() {
       });
       setStreamingMessageId(assistantId);
 
+      let completeStreamReply = "";
+      const streamController = new AbortController();
+      streamAbortRef.current = streamController;
+      streamInterruptedRef.current = false;
+      streamedSpeechBufferRef.current = "";
+      speechQueueRef.current = [];
+      resumeListeningAfterSpeechRef.current = false;
+
       try {
         await apiEventStream(
           "/api/ai/core-chat/messages/stream",
           {
             method: "POST",
+            signal: streamController.signal,
             body: JSON.stringify({
               message: submittedText,
-              mode: "ask",
+              mode,
               modelPolicy: policy,
               conversationId,
               source: inputSource,
               context,
               ...(image ? { image: { mimeType: image.mimeType, base64: image.base64 } } : {}),
+              projectName: projectName.trim(),
+              repository: repository.trim(),
+              branch: branch.trim(),
+              priority,
             }),
           },
           ({ event: streamEvent, data }) => {
@@ -768,10 +1012,14 @@ export default function AiCoreChat() {
             }
 
             if (streamEvent === "delta" && typeof value.text === "string") {
+              completeStreamReply += value.text;
               updateMessage(assistantId, (message) => ({
                 ...message,
                 text: message.text + value.text,
               }));
+              if (inputSource === "voice") {
+                queueStreamSpeechDelta(value.text);
+              }
               return;
             }
 
@@ -839,14 +1087,36 @@ export default function AiCoreChat() {
           },
         );
       } catch (error) {
-        updateMessage(assistantId, (message) => ({
-          ...message,
-          text: message.text || requestFailureText(error),
-          error: !message.text,
-        }));
+        const interrupted =
+          streamInterruptedRef.current ||
+          (error instanceof DOMException && error.name === "AbortError");
+        if (!interrupted) {
+          updateMessage(assistantId, (message) => ({
+            ...message,
+            text: message.text || requestFailureText(error),
+            error: !message.text,
+          }));
+        }
       } finally {
+        const interrupted = streamInterruptedRef.current;
+        streamAbortRef.current = null;
         setStreamingMessageId(null);
+        busyRef.current = false;
         setBusy(false);
+
+        if (inputSource === "voice" && handsFreeRef.current && !interrupted) {
+          resumeListeningAfterSpeechRef.current = true;
+          if (voicePreset === "cloned" && completeStreamReply.trim()) {
+            speakReply(completeStreamReply, () => {
+              resumeListeningAfterSpeechRef.current = false;
+              if (handsFreeRef.current) window.setTimeout(() => startListening(), 250);
+            });
+          } else {
+            flushStreamSpeech();
+            maybeResumeHandsFreeListening();
+          }
+        }
+        streamInterruptedRef.current = false;
       }
       return;
     }
@@ -909,7 +1179,12 @@ export default function AiCoreChat() {
         window.setTimeout(() => startListening(), 500);
       }
     } finally {
+      busyRef.current = false;
       setBusy(false);
+      if (inputSource === "voice" && handsFreeRef.current) {
+        resumeListeningAfterSpeechRef.current = true;
+        maybeResumeHandsFreeListening();
+      }
     }
   }
 
@@ -1215,10 +1490,18 @@ export default function AiCoreChat() {
                     <button
                       type="button"
                       onClick={toggleListening}
-                      disabled={busy || !voiceSupported || !voiceFeatureEnabled}
+                      disabled={!voiceSupported || !voiceFeatureEnabled}
                       className="size-9 rounded-xl flex items-center justify-center disabled:opacity-40"
                       style={{ background: handsFreeEnabled ? "#4C1D2B" : "#101831", color: handsFreeEnabled ? "#FDA4AF" : "#9D91FB", border: "1px solid #263765" }}
-                      title={voiceSupported ? (handsFreeEnabled ? "Hentikan percakapan hands-free" : "Mulai percakapan hands-free") : "Speech recognition tidak tersedia"}
+                      title={
+                        voiceSupported
+                          ? handsFreeEnabled && busy
+                            ? "Potong jawaban AI Core dan lanjut bicara"
+                            : handsFreeEnabled
+                              ? "Hentikan percakapan hands-free"
+                              : "Mulai percakapan hands-free"
+                          : "Speech recognition tidak tersedia"
+                      }
                     >
                       {handsFreeEnabled ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                     </button>
@@ -1283,7 +1566,7 @@ export default function AiCoreChat() {
                       {!voiceFeatureEnabled
                         ? "Voice sementara dinonaktifkan"
                         : listening
-                          ? "Mendengarkan Bahasa Indonesia…"
+                          ? "Mendengarkan · tunggu jeda sekitar 1,6 detik untuk mengirim…"
                           : handsFreeEnabled
                             ? "Hands-free aktif · bicara tanpa tombol Send"
                             : voiceSupported
