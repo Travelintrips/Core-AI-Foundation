@@ -108,15 +108,18 @@ function renderAuthorizePage(params: ReturnType<typeof oauthParams>, loggedInEma
 
 function renderPairingWaitPage(pairing: { id: string; code: string; expiresAt: Date }): string {
   const waitUrl = `${oauthIssuer()}/api/ai/core-chat/oauth/pair/wait?id=${encodeURIComponent(pairing.id)}`;
-  const approveUrl = `${oauthIssuer()}/api/ai/core-chat/oauth/pair/approve?code=${encodeURIComponent(pairing.code)}`;
+  const approvalPageUrl = `${oauthIssuer()}/mcp-pair?code=${encodeURIComponent(pairing.code)}`;
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="refresh" content="2;url=${escapeHtml(waitUrl)}">
-  <title>Pairing AI Core</title><style>body{font-family:system-ui;max-width:620px;margin:48px auto;padding:0 20px}.code{font-size:34px;font-weight:800;letter-spacing:6px;padding:18px;border:1px solid #ccc;border-radius:12px;text-align:center}a.button{display:inline-block;padding:12px 16px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-weight:700}.muted{color:#666}</style></head><body>
+  <title>Pairing AI Core</title><style>body{font-family:system-ui;max-width:620px;margin:48px auto;padding:0 20px}.code{font-size:34px;font-weight:800;letter-spacing:6px;padding:18px;border:1px solid #ccc;border-radius:12px;text-align:center}a.button,button.button{display:inline-block;padding:12px 16px;background:#111;color:#fff;text-decoration:none;border:0;border-radius:8px;font-weight:700;cursor:pointer}.muted{color:#666}.url{word-break:break-all;font-family:ui-monospace,monospace;font-size:12px;padding:10px;background:#f4f4f4;border-radius:8px}</style></head><body>
   <h1>Hubungkan ChatGPT ke AI Core</h1>
-  <p>Browser OAuth terpisah dari session AI Core. Gunakan pairing berikut:</p>
+  <p>Kode pairing:</p>
   <div class="code">${escapeHtml(pairing.code)}</div>
-  <p><a class="button" href="${escapeHtml(approveUrl)}" target="_blank" rel="noopener noreferrer">Approve di AI Core</a></p>
-  <p class="muted">Jika tombol membuka browser yang belum login, salin URL approval ke browser tempat AI Core sudah login. Halaman ini mengecek approval otomatis setiap 2 detik.</p>
+  <p><strong>Buka AI Core di browser tempat Anda sudah login</strong>, lalu buka halaman <code>/mcp-pair</code> dan masukkan kode di atas.</p>
+  <p><a class="button" href="${escapeHtml(approvalPageUrl)}" target="_blank" rel="noopener noreferrer">Buka Halaman Pairing AI Core</a></p>
+  <p class="url" id="approval-url">${escapeHtml(approvalPageUrl)}</p>
+  <p><button class="button" type="button" onclick="navigator.clipboard.writeText(document.getElementById('approval-url').textContent || '')">Salin Link Approval</button></p>
+  <p class="muted">Halaman ini mengecek approval otomatis setiap 2 detik. Setelah approval berhasil, koneksi akan lanjut sendiri ke ChatGPT.</p>
   <p class="muted">Pairing berlaku sampai ${escapeHtml(pairing.expiresAt.toISOString())}.</p>
   </body></html>`;
 }
