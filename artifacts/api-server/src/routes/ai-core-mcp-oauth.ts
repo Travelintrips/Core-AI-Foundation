@@ -185,14 +185,36 @@ router.get("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> 
 });
 
 router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> => {
-  const params = oauthParams(req.body as Record<string, unknown>);
+  const params = oauthParams((req.body ?? {}) as Record<string, unknown>);
   const error = validateAuthorizationRequest(params);
   if (error) { redirectWithError(res, params, error); return; }
 
-  const user = await resolveSessionUser(req);
   const scopes = normalizeScopes(params.scope);
 
-  if (!user) {
+  try {
+    const user = await resolveSessionUser(req);
+
+    if (user) {
+      const code = issueAuthorizationCode({
+        sub: user.id,
+        clientId: params.clientId,
+        redirectUri: params.redirectUri,
+        codeChallenge: params.codeChallenge,
+        scope: scopes.join(" "),
+        resource: params.resource,
+      });
+      const url = new URL(params.redirectUri);
+      url.searchParams.set("code", code);
+      if (params.state) url.searchParams.set("state", params.state);
+      url.searchParams.set("iss", oauthIssuer());
+      res.redirect(302, url.toString());
+      return;
+    }
+  } catch (sessionError) {
+    console.error("[mcp-oauth] authorize POST session path failed; falling back to pairing", sessionError);
+  }
+
+  try {
     const pairing = await createMcpOauthPairing({
       clientId: params.clientId,
       redirectUri: params.redirectUri,
@@ -202,24 +224,13 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
       state: params.state,
     });
     res.redirect(302, `/api/ai/core-chat/oauth/pair/wait?id=${encodeURIComponent(pairing.id)}`);
-    return;
+  } catch (pairingError) {
+    console.error("[mcp-oauth] authorize POST pairing fallback failed", pairingError);
+    res.status(503).type("html").send(
+      "<h1>Koneksi sementara gagal</h1><p>AI Core tidak dapat membuat sesi OAuth saat ini. Silakan klik Authenticate lagi beberapa detik lagi.</p>",
+    );
   }
-
-  const code = issueAuthorizationCode({
-    sub: user.id,
-    clientId: params.clientId,
-    redirectUri: params.redirectUri,
-    codeChallenge: params.codeChallenge,
-    scope: scopes.join(" "),
-    resource: params.resource,
-  });
-  const url = new URL(params.redirectUri);
-  url.searchParams.set("code", code);
-  if (params.state) url.searchParams.set("state", params.state);
-  url.searchParams.set("iss", oauthIssuer());
-  res.redirect(302, url.toString());
 });
-
 
 
 router.get("/api/ai/core-chat/oauth/pair/wait", async (req, res): Promise<void> => {
