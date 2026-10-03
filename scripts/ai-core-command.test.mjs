@@ -50,7 +50,9 @@ test('non-owner and unauthorized rerun are rejected', () => {
 test('only owner-authored labeled issues are accepted', () => {
   const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
   assert.equal(resolveCommand(issue, issueEnv).action, 'audit');
-  assert.equal(resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv).action, 'submit');
+  const taskCommand = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
+  assert.equal(taskCommand.action, 'submit');
+  assert.equal(taskCommand.maxCycles, 20);
   for (const bad of [
     { ...issue, sender: { login: 'outsider' } },
     { ...issue, label: { name: 'random-label' } },
@@ -78,6 +80,20 @@ test('submission is bounded and accepted is not reported as completed', async ()
   assert.equal(f.calls.find(call => call.path.endsWith('/start')).body.maxCycles, 5);
   assert.ok(!f.calls.some(call => /approve-merge|deploy/.test(call.path)));
 });
+test('owner issue reruns surface a completed AI Core task as TASK_COMPLETED', async () => {
+  const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
+  const command = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
+  const instruction = command.instruction + '\n\nExecution policy: Use an isolated working branch. Preserve production approval gates. Do not bypass tests, access secrets, force-push, or directly modify production. Submit verified changes as a pull request.';
+  const f = fakeApi({
+    tasks: [{ id, repository: REPOSITORY, projectName: 'GitHub Trigger issue-321', instruction }],
+    state404: false,
+  });
+  const result = await execute(command, f.api, { waitMs: 0 });
+  assert.equal(result.result, 'TASK_COMPLETED');
+  assert.equal(result.autonomousStatus, 'COMPLETED');
+  assert.ok(!f.calls.some(call => call.path.endsWith('/start')));
+});
+
 test('matching request reruns do not recreate or restart completed tasks', async () => {
   const command = resolve({ action: 'submit', instruction: 'Add unit test', request_id: 'stable' });
   const first = fakeApi();
