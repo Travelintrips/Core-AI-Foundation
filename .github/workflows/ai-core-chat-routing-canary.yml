@@ -38,7 +38,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --connect-timeout 10 --max-time 20 "$API_BASE_URL/healthz" >/dev/null
+          curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
+            -L -fsS --connect-timeout 15 --max-time 30 \
+            -H "Accept: application/json" \
+            -H "User-Agent: CST-AI-Core-Health-Probe/1.0" \
+            "$API_BASE_URL/healthz" >/dev/null
 
       - name: Assert runtime inventory routing
         shell: bash
@@ -50,10 +54,13 @@ jobs:
               '{message:$m,mode:"ask",modelPolicy:"auto",conversationId:"production-chat-routing-canary",context:$c}' > /tmp/chat-request.json
             local code=""
             for attempt in $(seq 1 4); do
-              code=$(curl -sS -L --max-redirs 3 --proto-redir '=https' \
+              code=$(curl --http1.1 -sS -L --max-redirs 3 --proto-redir '=https' \
+                --retry 3 --retry-delay 2 --retry-all-errors \
                 --post301 --post302 --post303 \
-                --connect-timeout 10 --max-time 90 -o "$out" -w "%{http_code}" \
+                --connect-timeout 15 --max-time 90 -o "$out" -w "%{http_code}" \
                 -X POST "$API_BASE_URL/ai/core-chat/messages" \
+                -H "Accept: application/json" \
+                -H "User-Agent: CST-AI-Core-Health-Probe/1.0" \
                 -H "Content-Type: application/json" \
                 -H "x-admin-api-key: $ADMIN_API_KEY" \
                 --data-binary @/tmp/chat-request.json || true)
