@@ -60,6 +60,10 @@ import {
 } from "./repositoryAnalyzerService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
 import { upsertIncident } from "./incidentAutoRepairService.js";
+import {
+  advisoryLockAcquired,
+  withNonBlockingAdvisoryRetry,
+} from "./nonBlockingAdvisoryLockRetryService.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -353,8 +357,14 @@ async function claimWorkstreamForAi(
   const expiresAt = new Date(now.getTime() + AI_PHASE_LEASE_MS);
   const lockKey = "coding-workstream-ai-claim:" + workstreamId;
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+  return withNonBlockingAdvisoryRetry(() =>
+    db.transaction(async (tx) => {
+      const lockResult = await tx.execute(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
+      );
+      if (!advisoryLockAcquired(lockResult)) {
+        return { acquired: false };
+      }
 
     const [workstream] = await tx
       .select()
@@ -464,8 +474,12 @@ async function claimWorkstreamForAi(
         "LEASE_LOST",
       );
     }
-    return claimed;
-  });
+      return {
+        acquired: true,
+        value: claimed,
+      };
+    }),
+  );
 }
 
 async function releaseAiClaim(
@@ -907,14 +921,25 @@ export async function enqueueWorkstreamAiExecution(
     ":" +
     String(workstream.attemptCount);
 
-  const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
-    const existing = await findActiveWorkstreamAiJob(
-      tx,
-      workstream.id,
-      workstream.attemptCount,
-    );
-    if (existing) return existing;
+  const result = await withNonBlockingAdvisoryRetry(() =>
+    db.transaction(async (tx) => {
+      const lockResult = await tx.execute(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
+      );
+      if (!advisoryLockAcquired(lockResult)) {
+        return { acquired: false };
+      }
+      const existing = await findActiveWorkstreamAiJob(
+        tx,
+        workstream.id,
+        workstream.attemptCount,
+      );
+      if (existing) {
+        return {
+          acquired: true,
+          value: existing,
+        };
+      }
 
     const now = new Date();
     const [job] = await tx
@@ -947,8 +972,12 @@ export async function enqueueWorkstreamAiExecution(
         "INVALID_CONTEXT",
       );
     }
-    return job;
-  });
+      return {
+        acquired: true,
+        value: job,
+      };
+    }),
+  );
 
   await logAudit(
     "coding-multi-worker",

@@ -227,7 +227,7 @@ describe("per-workstream AI handoff lifecycle", () => {
     mocks.selectResults.length = 0;
     mocks.insertResults.length = 0;
     mocks.updateResults.length = 0;
-    mocks.txExecute.mockResolvedValue(undefined);
+    mocks.txExecute.mockResolvedValue({ rows: [{ acquired: true }] });
   });
 
   it("prepares one idempotent package for the current worker claim attempt", async () => {

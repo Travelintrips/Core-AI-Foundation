@@ -77,7 +77,7 @@ const PACKAGE_HASH = "a".repeat(64);
 describe("AI coding queue runtime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.txExecute.mockResolvedValue(undefined);
+    mocks.txExecute.mockResolvedValue({ rows: [{ acquired: true }] });
     mocks.existingLimit.mockResolvedValue([]);
     mocks.insertValues.mockImplementation(() => ({
       returning: mocks.insertReturning,

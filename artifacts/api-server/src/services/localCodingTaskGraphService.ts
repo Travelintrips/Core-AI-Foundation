@@ -13,6 +13,10 @@ import {
   validateCodingMultiTaskPlanV1,
   type CodingMultiTaskPlanV1,
 } from "./localCodingMultiTaskPlannerService.js";
+import {
+  advisoryLockAcquired,
+  withNonBlockingAdvisoryRetry,
+} from "./nonBlockingAdvisoryLockRetryService.js";
 
 export class LocalCodingTaskGraphError extends Error {
   constructor(
@@ -207,10 +211,16 @@ export async function persistCodingTaskGraph(
   const planHash = hashCodingMultiTaskPlan(plan);
   const lockKey = `coding-task-graph:${taskId}`;
 
-  return withTransientDatabaseRetry(() => db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
-    );
+  return withTransientDatabaseRetry(
+    () =>
+      withNonBlockingAdvisoryRetry<{ graph: AiCodingTaskGraph; created: boolean }>(() =>
+        db.transaction(async (tx) => {
+          const lockResult = await tx.execute(
+            sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`,
+          );
+          if (!advisoryLockAcquired(lockResult)) {
+            return { acquired: false };
+          }
 
     const [latest] = await tx
       .select()
@@ -219,9 +229,12 @@ export async function persistCodingTaskGraph(
       .orderBy(desc(aiCodingTaskGraphsTable.version))
       .limit(1);
 
-    if (latest?.planHash === planHash) {
-      return { graph: latest, created: false };
-    }
+          if (latest?.planHash === planHash) {
+            return {
+              acquired: true,
+              value: { graph: latest, created: false },
+            };
+          }
     if (latest && ["APPROVED", "RUNNING"].includes(latest.status)) {
       throw new LocalCodingTaskGraphError(
         "An approved or running coding task graph must be completed/cancelled before replanning.",
@@ -300,8 +313,14 @@ export async function persistCodingTaskGraph(
       await tx.insert(aiCodingWorkstreamDependenciesTable).values(dependencyRows);
     }
 
-    return { graph, created: true };
-  }), { attempts: 4, baseDelayMs: 200 });
+          return {
+            acquired: true,
+            value: { graph, created: true },
+          };
+        }),
+      ),
+    { attempts: 4, baseDelayMs: 200 },
+  );
 }
 
 export async function approveCodingTaskGraph(
