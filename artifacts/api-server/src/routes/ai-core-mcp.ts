@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
@@ -37,19 +37,6 @@ function bearerToken(req: Request): string {
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
 }
 
-const MCP_LOCAL_SERVICE_TOKEN_SHA256 = new Set([
-  "0db2299b580ba314f10f1311c046763f98ac578020aaf12117cdff7426f03b91",
-]);
-
-function isAllowedLocalServiceToken(token: string): boolean {
-  if (!token) return false;
-  const digest = createHash("sha256").update(token, "utf8").digest("hex");
-  for (const expected of MCP_LOCAL_SERVICE_TOKEN_SHA256) {
-    if (safeEqualSecret(digest, expected)) return true;
-  }
-  return false;
-}
-
 type McpIdentity =
   | { kind: "legacy"; connectorKey: string; scopes: Set<string>; user: null }
   | {
@@ -64,14 +51,19 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
   if (!supplied) return null;
 
   const connectorKey = process.env["AI_CORE_CHAT_CONNECTOR_KEY"]?.trim() ?? "";
-  if (
-    (connectorKey && safeEqualSecret(supplied, connectorKey)) ||
-    isAllowedLocalServiceToken(supplied)
-  ) {
-    if (!connectorKey) return null;
+  if (connectorKey && safeEqualSecret(supplied, connectorKey)) {
     return {
       kind: "legacy",
       connectorKey,
+      scopes: new Set(["ai_core.command", "ai_core.progress", "profile"]),
+      user: null,
+    };
+  }
+
+  if (isAllowedLocalMcpServiceToken(supplied)) {
+    return {
+      kind: "legacy",
+      connectorKey: supplied,
       scopes: new Set(["ai_core.command", "ai_core.progress", "profile"]),
       user: null,
     };
