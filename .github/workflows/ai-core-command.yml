@@ -44,7 +44,7 @@ jobs:
         github.event.issue.user.login == 'Travelintrips'))
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
