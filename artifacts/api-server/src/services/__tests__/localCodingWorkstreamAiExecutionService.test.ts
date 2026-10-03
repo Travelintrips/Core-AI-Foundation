@@ -296,7 +296,7 @@ describe("workstream AI failure context preservation", () => {
       shouldRetry: true,
       previousRepairAttempts: 0,
       nextRepairAttempt: 1,
-      maxRepairAttempts: 2,
+      maxRepairAttempts: 3,
       reason: "SAFE_AUTOMATIC_REPAIR",
     });
 
@@ -306,7 +306,7 @@ describe("workstream AI failure context preservation", () => {
         localExecutionPlan: { status: "AI_REQUIRED" },
         workstreamAiExecution: {
           status: "FAILED",
-          autoRepairAttempt: 2,
+          autoRepairAttempt: 3,
         },
       },
     );
@@ -314,7 +314,7 @@ describe("workstream AI failure context preservation", () => {
     expect(exhausted).toMatchObject({
       recoverable: true,
       shouldRetry: false,
-      previousRepairAttempts: 2,
+      previousRepairAttempts: 3,
       reason: "AUTOMATIC_REPAIR_BUDGET_EXHAUSTED",
     });
   });
@@ -344,6 +344,23 @@ describe("workstream AI failure context preservation", () => {
     expect(staleMaterialization).toMatchObject({
       recoverable: true,
       shouldRetry: true,
+      reason: "SAFE_AUTOMATIC_REPAIR",
+    });
+  });
+
+  it("auto-retries consumed or unavailable one-shot handoff races with a fresh bounded handoff", () => {
+    const unavailable = decideWorkstreamAiAutoRepair(
+      new Error("Workstream AI handoff one-shot privilege is not available."),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+      },
+    );
+    expect(unavailable).toMatchObject({
+      recoverable: true,
+      shouldRetry: true,
+      previousRepairAttempts: 0,
+      nextRepairAttempt: 1,
+      maxRepairAttempts: 3,
       reason: "SAFE_AUTOMATIC_REPAIR",
     });
   });
