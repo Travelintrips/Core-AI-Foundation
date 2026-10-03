@@ -5,6 +5,7 @@ import { REPOSITORY, resolveCommand, createApi, execute } from './ai-core-comman
 const env = { GITHUB_REPOSITORY: REPOSITORY, GITHUB_ACTOR: 'Travelintrips',
   GITHUB_TRIGGERING_ACTOR: 'Travelintrips', GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_RUN_ID: '1234' };
 const id = 'a1234567-1234-1234-1234-123456789abc';
+const approvalId = 'b1234567-1234-1234-1234-123456789abc';
 const resolve = inputs => resolveCommand({ inputs }, env);
 const issue = { action: 'labeled', sender: { login: 'Travelintrips' }, label: { name: 'ai-audit' },
   issue: { number: 321, title: 'Audit trigger', body: 'Read-only test', user: { login: 'Travelintrips' } } };
@@ -19,6 +20,12 @@ function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initial
     if (path === '/ai/coding/tasks') return options.method === 'POST'
       ? { status: 201, value: { id, ...options.body } } : { status: 200, value: tasks };
     if (path === `/ai/coding/tasks/${id}`) return { status: 200, value: { task: { id, repository: REPOSITORY, status: 'PENDING' }, runs } };
+    if (path === `/ai/coding/bridge/critical-approvals/${approvalId}`) {
+      return { status: 200, value: { id: approvalId, taskId: id, actionType: 'WORKSTREAM_AI_HANDOFF', status: 'PENDING' } };
+    }
+    if (path === `/ai/coding/bridge/critical-approvals/${approvalId}/decision`) {
+      return { status: 200, value: { accepted: true, approval: { id: approvalId, taskId: id, actionType: 'WORKSTREAM_AI_HANDOFF', status: 'EXECUTING' } } };
+    }
     if (path.endsWith('/run')) return { status: 201, value: { id } };
     if (path.endsWith('/start')) return { status: 202, value: { cycle: { status: initialStatus } } };
     if (path.endsWith('/autonomous')) return { status: state404 ? 404 : 200, value: { status: 'COMPLETED', enabled: false } };
@@ -61,6 +68,41 @@ test('only owner-authored labeled issues are accepted', () => {
     { ...issue, action: 'edited' },
   ]) assert.throws(() => resolveCommand(bad, issueEnv), /owner-authorized/);
 });
+test('owner handoff approval label is strictly bound to task and approval IDs', async () => {
+  const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
+  const approvalIssue = {
+    ...issue,
+    label: { name: 'ai-handoff-approved' },
+    issue: {
+      ...issue.issue,
+      number: 654,
+      title: 'Approve bounded handoff',
+      body: `task_id: ${id}\napproval_id: ${approvalId}`,
+    },
+  };
+  const command = resolveCommand(approvalIssue, issueEnv);
+  assert.equal(command.action, 'approve_handoff');
+  assert.equal(command.taskId, id);
+  assert.equal(command.approvalId, approvalId);
+
+  const f = fakeApi({ tasks: [{ id, repository: REPOSITORY }] });
+  const result = await execute(command, f.api);
+  assert.equal(result.result, 'HANDOFF_APPROVED');
+  assert.equal(result.accepted, true);
+  const decision = f.calls.find(call => call.path.endsWith('/decision'));
+  assert.equal(decision.method, 'POST');
+  assert.deepEqual(decision.body, { decision: 'APPROVE', actor: 'github-owner' });
+});
+
+test('handoff approval issue rejects malformed identifiers', () => {
+  const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
+  assert.throws(() => resolveCommand({
+    ...issue,
+    label: { name: 'ai-handoff-approved' },
+    issue: { ...issue.issue, body: 'task_id: nope\napproval_id: also-nope' },
+  }, issueEnv), /task_id/);
+});
+
 test('input budgets, IDs, instruction limits, and actions are validated', () => {
   for (const max_cycles of ['0', '4', '21', '5.5', 'NaN']) assert.throws(() => resolve({ max_cycles }), /max_cycles/);
   for (const request_id of ['../secret', 'a b', '${{secrets.ADMIN_API_KEY}}']) assert.throws(() => resolve({ request_id }), /request_id/);
