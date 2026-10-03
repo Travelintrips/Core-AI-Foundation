@@ -2269,6 +2269,10 @@ export async function materializeApprovedWorkstreamAiCandidate(
   const workspace = await prepareRepositoryWorkspace(
     childTask.repository,
     branchName,
+    {
+      isolatedBranchName: branchName,
+      expectedBaseSha: baseSha,
+    },
   );
   if (!workspace.cleanup) {
     throw new LocalCodingWorkstreamAiExecutionError(
