@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -476,5 +477,17 @@ describe("repository analyzer execution", () => {
       status: "FAILED",
       resultSummary: "Repository Analyzer failed: branch was not found",
     });
+  });
+});
+
+describe("repository analyzer stale incident recovery contract", () => {
+  it("allows stale Incident Auto-Repair analyzer jobs to release the single-flight slot", () => {
+    const source = readFileSync(
+      new URL("../repositoryAnalyzerService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain(
+      "r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')",
+    );
   });
 });
