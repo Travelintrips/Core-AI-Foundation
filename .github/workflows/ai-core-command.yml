@@ -40,7 +40,7 @@ jobs:
       github.repository == 'Travelintrips/Core-AI-Foundation' &&
       github.actor == 'Travelintrips' &&
       (github.event_name == 'workflow_dispatch' ||
-       ((github.event.label.name == 'ai-task' || github.event.label.name == 'ai-audit') &&
+       ((github.event.label.name == 'ai-task' || github.event.label.name == 'ai-audit' || github.event.label.name == 'ai-handoff-approved') &&
         github.event.issue.user.login == 'Travelintrips'))
     runs-on: ubuntu-latest
     environment: production
