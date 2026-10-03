@@ -65,12 +65,12 @@ export function resolveCommand(event, env) {
 
 export function createApi(secret, fetchImpl = fetch) {
   if (!secret?.trim()) throw new Error('ADMIN_API_KEY is not configured.');
-  return async (path, { method = 'GET', body, allowed = [] } = {}) => {
+  return async (path, { method = 'GET', body, allowed = [], retrySafeMutation = false } = {}) => {
     if (!/^\/(healthz(?:\/full)?|ai\/coding\/[a-zA-Z0-9/_-]+)$/.test(path)) {
       throw new Error('API path is outside the coding trigger scope.');
     }
     const isPublicHealthProbe = path === '/healthz' || path === '/healthz/full';
-    const maxAttempts = method === 'GET' ? 6 : 1;
+    const maxAttempts = method === 'GET' ? 6 : retrySafeMutation ? 3 : 1;
     const baseHeaders = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -96,9 +96,10 @@ export function createApi(secret, fetchImpl = fetch) {
         continue;
       }
 
-      const transientGetStatus =
-        method === 'GET' && [429, 500, 502, 503, 504].includes(response.status);
-      if (transientGetStatus && attempt < maxAttempts && !allowed.includes(response.status)) {
+      const transientRetryableStatus =
+        (method === 'GET' || retrySafeMutation) &&
+        [429, 500, 502, 503, 504].includes(response.status);
+      if (transientRetryableStatus && attempt < maxAttempts && !allowed.includes(response.status)) {
         await new Promise(resolve => setTimeout(resolve, attempt * 1000));
         continue;
       }
@@ -107,7 +108,9 @@ export function createApi(secret, fetchImpl = fetch) {
 
     if (!response) throw new Error(`AI Core ${method} ${path} did not return a response.`);
     if (!response.ok && !allowed.includes(response.status)) {
-      // GET probes may retry transient transport/5xx failures. Mutations are never retried.
+      // GET probes may retry transient failures. Mutations retry only when the caller
+      // explicitly proves request-level idempotency (for example, bridge commands
+      // keyed by source + externalCommandId).
       throw new Error(`AI Core ${method} ${path} returned HTTP ${response.status}. No mutation is automatically retried.`);
     }
     let value;
@@ -262,7 +265,7 @@ export async function execute(command, api, options = {}) {
     task = created.value;
   }
   if (!UUID.test(task?.id ?? '')) throw new Error('AI Core did not return a valid task ID. Inspect tasks before retrying.');
-  await api('/ai/coding/bridge/commands', { method: 'POST', body: {
+  await api('/ai/coding/bridge/commands', { method: 'POST', retrySafeMutation: true, body: {
     externalCommandId: command.requestId, source: 'github-trigger', commandType: 'INSTRUCTION',
     taskId: task.id, instruction,
     authority: { allowCommit: true, allowPush: true, allowMerge: false, allowProductionDeploy: false },
