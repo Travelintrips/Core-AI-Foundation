@@ -27,6 +27,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DNS_LIST"
   | "HOSTINGER_DNS_SUBDOMAIN_CREATE"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
+  | "HOSTINGER_HOSTING_DISCOVERY"
   | "EXTERNAL_AGENT_STATUS";
 
 export type AiCoreInfrastructureResult = {
@@ -60,6 +61,12 @@ export function detectAiCoreInfrastructureOperation(
   if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
       /\b(cek|status|health|registry|terdaftar|registered|aktif)\b/i.test(text)) {
     return "EXTERNAL_AGENT_STATUS";
+  }
+
+  if (/\b(hostinger|hpanel)\b/i.test(text) &&
+      /\b(cari|find|discover|discovery|list|daftar|cek|check|lihat)\b/i.test(text) &&
+      /\b(hosting username|hosting domain|hosting account|website|websites|akun hosting|domain hosting)\b/i.test(text)) {
+    return "HOSTINGER_HOSTING_DISCOVERY";
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomain\b/i.test(text)) {
@@ -503,6 +510,7 @@ async function callHostinger(
     "HOSTINGER_SUBDOMAIN_LIST",
     "HOSTINGER_DNS_LIST",
     "HOSTINGER_DOMAIN_AVAILABILITY",
+    "HOSTINGER_HOSTING_DISCOVERY",
   ]);
   const mutating = !readOnly.has(operation);
   return {
