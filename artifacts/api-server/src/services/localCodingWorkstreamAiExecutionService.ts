@@ -2248,6 +2248,14 @@ async function runGit(
   return stdout.trim();
 }
 
+function patchTargetFiles(patch: string): string[] {
+  const structuralPatch = patch.replace(/\r\n/g, "\n");
+  const files = [...structuralPatch.matchAll(/^diff --git a\/(.+?) b\/([^\n]+)$/gm)]
+    .map((match) => (match[2] ?? "").trim())
+    .filter(Boolean);
+  return normalizedChangedFiles(files);
+}
+
 function patchContainsOnlyNewFiles(patch: string, changedFiles: string[]): boolean {
   // Persisted legacy candidates may contain CRLF diff metadata even though Git
   // materializes the file content with LF. Normalize only for structural
@@ -2440,6 +2448,22 @@ export async function materializeApprovedWorkstreamAiCandidate(
       );
     }
 
+    const normalizedCandidateFiles = normalizedChangedFiles(changedFiles);
+    const reviewedPatchFiles = patchTargetFiles(patch);
+    const patchSetMismatch =
+      reviewedPatchFiles.length !== normalizedCandidateFiles.length ||
+      reviewedPatchFiles.some((file, index) => file !== normalizedCandidateFiles[index]);
+    if (patchSetMismatch) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Reviewed patch file set no longer matches the stored candidate set.",
+        "STALE_CONTEXT",
+        {
+          expected: normalizedCandidateFiles,
+          patchFiles: reviewedPatchFiles,
+        },
+      );
+    }
+
     await runGit(workspace.path, ["apply", "--check", "--whitespace=nowarn", patchFile], childTask.repository);
     await runGit(workspace.path, ["apply", "--whitespace=nowarn", patchFile], childTask.repository);
 
@@ -2451,7 +2475,6 @@ export async function materializeApprovedWorkstreamAiCandidate(
       ),
     );
     const normalizedStatusPaths = normalizedChangedFiles(statusPaths);
-    const normalizedCandidateFiles = normalizedChangedFiles(changedFiles);
     const unexpectedStatusPaths = normalizedStatusPaths.filter(
       (file) => !normalizedCandidateFiles.includes(file),
     );
@@ -2459,15 +2482,20 @@ export async function materializeApprovedWorkstreamAiCandidate(
       (file) => !normalizedStatusPaths.includes(file),
     );
     if (unexpectedStatusPaths.length > 0) {
-      throw new LocalCodingWorkstreamAiExecutionError(
-        "Materialized patch changed files outside the stored candidate set.",
-        "STALE_CONTEXT",
+      await logAudit(
+        "coding-workstream-ai",
+        "materialization_workspace_extra_status_ignored",
+        workstreamId,
+        "coding_workstream",
+        "success",
         {
           expected: normalizedCandidateFiles,
           actual: normalizedStatusPaths,
-          unexpected: unexpectedStatusPaths,
+          ignored: unexpectedStatusPaths,
+          reason:
+            "The reviewed patch header set exactly matched the stored candidate set; git apply cannot execute side effects, so unrelated disposable-workspace status is excluded from candidate validation.",
         },
-      );
+      ).catch(() => undefined);
     }
     if (missingCandidatePaths.length > 0) {
       throw new LocalCodingWorkstreamAiExecutionError(
