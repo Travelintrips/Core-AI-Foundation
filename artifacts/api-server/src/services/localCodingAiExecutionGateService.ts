@@ -152,8 +152,19 @@ function sha256Json(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 }
 
+export function normalizeGitHeadOutput(raw: unknown): string {
+  const stdout = Buffer.isBuffer(raw)
+    ? raw.toString("utf8")
+    : raw instanceof Uint8Array
+      ? Buffer.from(raw).toString("utf8")
+      : typeof raw === "string"
+        ? raw
+        : "";
+  return stdout.trim().toLowerCase();
+}
+
 async function gitHead(root: string): Promise<string> {
-  const result = await execFileAsync("git", ["rev-parse", "HEAD"], {
+  const result = await execFileAsync("git", ["rev-parse", "--verify", "HEAD^{commit}"], {
     cwd: root,
     timeout: 15_000,
     maxBuffer: 1_000_000,
@@ -165,12 +176,20 @@ async function gitHead(root: string): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  const stdout = String(result.stdout ?? "");
-  const normalized = stdout.trim().toLowerCase();
+  const normalized = normalizeGitHeadOutput(
+    (result as { stdout?: unknown } | null | undefined)?.stdout,
+  );
   if (!/^[0-9a-f]{40}$/.test(normalized)) {
     throw new LocalCodingAiExecutionGateError(
       "git rev-parse HEAD returned an invalid or empty commit SHA",
       "INVALID_CONTEXT",
+      {
+        stdoutType:
+          result && typeof (result as { stdout?: unknown }).stdout === "object"
+            ? (result as { stdout?: unknown }).stdout?.constructor?.name ?? "object"
+            : typeof (result as { stdout?: unknown } | null | undefined)?.stdout,
+        stdoutLength: normalized.length,
+      },
     );
   }
   return normalized;
