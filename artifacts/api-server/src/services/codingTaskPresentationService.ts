@@ -11,10 +11,6 @@ export function codingTaskPresentationStatus(input: {
     return "ANALYZING";
   }
 
-  if (input.autonomousStatus === "COMPLETED") {
-    return "COMPLETED";
-  }
-
   if (
     input.autonomousStatus === "ACTIVE" ||
     input.autonomousStatus === "WAITING"
@@ -29,5 +25,8 @@ export function codingTaskPresentationStatus(input: {
     return "FAILED";
   }
 
+  // Autonomous bookkeeping alone is not terminal implementation evidence.
+  // Persisted task status must only become COMPLETED after the runtime proves
+  // the requested work actually reached its final verified outcome.
   return input.taskStatus;
 }
