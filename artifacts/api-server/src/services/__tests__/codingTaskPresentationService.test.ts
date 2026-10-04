@@ -48,17 +48,17 @@ describe("coding task presentation status", () => {
     ).toBe("ANALYZING");
   });
 
-  it("shows autonomous completion as COMPLETED even if the persisted task is still READY_REVIEW", () => {
+  it("does not treat autonomous bookkeeping COMPLETED as implementation completion", () => {
     expect(
       codingTaskPresentationStatus({
         taskStatus: "READY_REVIEW",
         autonomousStatus: "COMPLETED",
         hasActiveRun: false,
       }),
-    ).toBe("COMPLETED");
+    ).toBe("READY_REVIEW");
   });
 
-  it("keeps non-review task states unchanged", () => {
+  it("keeps persisted terminal task states unchanged", () => {
     expect(
       codingTaskPresentationStatus({
         taskStatus: "COMPLETED",
