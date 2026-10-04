@@ -23,9 +23,10 @@ import {
 } from "../services/localCodingControlBridgeService.js";
 
 const router = Router();
-// MCP hosts must receive a protocol version they actually advertised.
-// Do not upgrade a client to a protocol version it did not request.
-const MCP_PROTOCOL_VERSION = "2025-06-18";
+// MCP Events require protocol 2026-07-28. Keep older ChatGPT MCP versions
+// available for non-event clients and always echo an explicitly supported request.
+const MCP_PROTOCOL_VERSION = "2026-07-28";
+const COMPAT_MCP_PROTOCOL_VERSION = "2025-06-18";
 const LEGACY_MCP_PROTOCOL_VERSION = "2025-03-26";
 const SERVER_INFO = { name: "ai-core-direct-command", version: "1.4.0" };
 
@@ -360,7 +361,7 @@ const tools = [
         leaseSeconds: { type: "integer", minimum: 30, maximum: 300, default: 300 },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
     annotations: {
       title: "Subscribe AI Core Events",
       readOnlyHint: false,
@@ -382,7 +383,7 @@ const tools = [
         limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
     annotations: {
       title: "Read AI Core Events",
       readOnlyHint: true,
@@ -403,7 +404,7 @@ const tools = [
         responseId: { type: "string", format: "uuid" },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
     annotations: {
       title: "Acknowledge AI Core Event",
       readOnlyHint: false,
@@ -424,7 +425,7 @@ const tools = [
         conversationId: { type: "string", minLength: 1, maxLength: 200 },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
     annotations: {
       title: "Unsubscribe AI Core Events",
       readOnlyHint: false,
@@ -515,7 +516,11 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     res.status(200).json(
       rpcResult(body.id ?? null, {
         resultType: "complete",
-        supportedVersions: [MCP_PROTOCOL_VERSION, LEGACY_MCP_PROTOCOL_VERSION],
+        supportedVersions: [
+          MCP_PROTOCOL_VERSION,
+          COMPAT_MCP_PROTOCOL_VERSION,
+          LEGACY_MCP_PROTOCOL_VERSION,
+        ],
         capabilities: {
           tools: {},
           events: {},
@@ -537,6 +542,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         : MCP_PROTOCOL_VERSION;
     const negotiatedProtocolVersion =
       requestedProtocolVersion === MCP_PROTOCOL_VERSION ||
+      requestedProtocolVersion === COMPAT_MCP_PROTOCOL_VERSION ||
       requestedProtocolVersion === LEGACY_MCP_PROTOCOL_VERSION
         ? requestedProtocolVersion
         : MCP_PROTOCOL_VERSION;

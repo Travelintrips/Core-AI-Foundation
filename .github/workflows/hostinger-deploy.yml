@@ -157,8 +157,8 @@ jobs:
           }
           for (const tool of tools.filter((tool) => expected.slice(2, 6).includes(tool.name))) {
             const scopes = tool?.securitySchemes?.[0]?.scopes;
-            if (!Array.isArray(scopes) || !scopes.includes("ai_core.progress")) {
-              throw new Error("Event tool not exposed on existing progress scope: " + tool.name);
+            if (!Array.isArray(scopes) || !scopes.includes("ai_core.events")) {
+              throw new Error("Event tool not exposed on dedicated ai_core.events scope: " + tool.name);
             }
           }
           console.log("mcp_tool_discovery=PASS count="+tools.length);
