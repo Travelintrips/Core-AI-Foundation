@@ -203,10 +203,8 @@ describe("AI Core Hostinger infrastructure control", () => {
     });
 
     expect(result.mutating).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const [discoveryUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const [subdomainUrl, init] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(discoveryUrl).toBe("https://developers.hostinger.com/api/hosting/v1/websites");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [subdomainUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(subdomainUrl).toBe(
       "https://developers.hostinger.com/api/hosting/v1/accounts/u684045296/websites/sportcenter.travelintrips.co.id/subdomains",
     );
