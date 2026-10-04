@@ -87,6 +87,7 @@ type CoreConfig = {
     enabled: boolean;
     cloneProviderConfigured?: boolean;
     libraryProvider?: string;
+    libraryProviderConfigured?: boolean;
     libraryEndpoint?: string;
     realtime?: {
       available: boolean;
@@ -1235,6 +1236,7 @@ export default function AiCoreChat() {
         }),
       });
       setClonedVoiceId(result.voiceId);
+      setSelectedLibraryVoiceId("");
       setVoicePreset("cloned");
       try {
         localStorage.setItem(CLONED_VOICE_ID_KEY, result.voiceId);
@@ -1938,6 +1940,7 @@ export default function AiCoreChat() {
                     <select
                       value={voicePreset}
                       onChange={(event) => {
+                        cancelQueuedVoiceOutput();
                         setSelectedLibraryVoiceId("");
                         setVoicePreset(event.target.value as VoicePreset);
                       }}
@@ -1954,14 +1957,18 @@ export default function AiCoreChat() {
                     <button
                       type="button"
                       onClick={openVoiceLibrary}
-                      disabled={!voiceFeatureEnabled}
+                      disabled={!voiceFeatureEnabled || config?.voice?.libraryProviderConfigured === false}
                       className="h-9 max-w-[190px] rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
                       style={{
                         background: selectedLibraryVoiceId ? "#1D254D" : "#101831",
                         color: selectedLibraryVoiceId ? "#D8D1FF" : "#B8AEFF",
                         border: selectedLibraryVoiceId ? "1px solid #675ADB" : "1px solid #263765",
                       }}
-                      title="Buka library suara ElevenLabs untuk mode Standard"
+                      title={
+                        config?.voice?.libraryProviderConfigured === false
+                          ? "ElevenLabs belum dikonfigurasi"
+                          : "Buka library suara ElevenLabs untuk mode Standard"
+                      }
                       data-testid="button-open-voice-library"
                     >
                       <Library className="size-3.5 shrink-0" />
