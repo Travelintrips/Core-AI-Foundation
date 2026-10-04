@@ -108,6 +108,7 @@ import {
   sanitizeConversationContext,
   type ConversationSource,
 } from "../services/aiCoreConversationService.js";
+import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 
 const router = Router();
 const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] !== "false";
@@ -1816,6 +1817,26 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
 
     return { task: updatedTask ?? createdTask, run: createdRun };
   });
+
+  if (input.conversationId) {
+    await submitCodingBridgeCommand({
+      externalCommandId: `chatgpt-mcp-events:${task.id}`,
+      instruction: "Passive lifecycle event binding for AI Core task.",
+      taskId: task.id,
+      source: "chatgpt-mcp-events",
+      commandType: "EVENT_BINDING",
+      metadata: {
+        conversationId: input.conversationId,
+        passiveEventBinding: true,
+        eventTypes: ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"],
+      },
+    }).catch((error) => {
+      logger.warn(
+        { error, taskId: task.id, conversationId: input.conversationId },
+        "[ai-core-chat] failed to create passive MCP event binding",
+      );
+    });
+  }
 
   try {
     await startCodingOrchestration({ task, run });
