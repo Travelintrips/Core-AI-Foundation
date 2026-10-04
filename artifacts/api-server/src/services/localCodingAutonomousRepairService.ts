@@ -687,12 +687,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
   if (!row || !row.enabled || row.status === "DISABLED") {
     return { taskId, status: "DISABLED", action: "NOOP" };
   }
-  if (["COMPLETED", "BLOCKED", "FAILED", "APPROVAL_REQUIRED"].includes(row.status)) {
-    return { taskId, status: row.status, action: row.last_action ?? "NOOP" };
-  }
-
-  try {
-    const state = await loadTaskState(taskId);
+  if (["BLOCKED", "APPROVAL_REQUIRED"].includes(row.status)) {\n    return { taskId, status: row.status, action: row.last_action ?? "NOOP" };\n  }\n\n  try {\n    const state = await loadTaskState(taskId);\n\n    // Reconcile terminal autonomous bookkeeping instead of trusting a stale\n    // FAILED/COMPLETED marker forever. This lets a later successful retry\n    // promote the task, while still requiring terminal completion evidence.\n    if (row.status === "FAILED" && (state.activeRun || state.activeAiJob)) {\n      await setState(taskId, "WAITING", "RECOVER_RETRY_IN_PROGRESS", null);\n    }
 
     const completionVerified = hasVerifiedCompletionEvidence({
       nextAction: state.nextAction,
