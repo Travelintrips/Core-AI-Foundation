@@ -24,6 +24,8 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DOCKER_UPDATE"
   | "HOSTINGER_SUBDOMAIN_LIST"
   | "HOSTINGER_SUBDOMAIN_CREATE"
+  | "HOSTINGER_DNS_LIST"
+  | "HOSTINGER_DNS_SUBDOMAIN_CREATE"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "EXTERNAL_AGENT_STATUS";
 
@@ -61,8 +63,22 @@ export function detectAiCoreInfrastructureOperation(
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomain\b/i.test(text)) {
-    if (/\b(buat|create|add|tambah)\b/i.test(text)) return "HOSTINGER_SUBDOMAIN_CREATE";
-    if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) return "HOSTINGER_SUBDOMAIN_LIST";
+    if (/\b(buat|create|add|tambah)\b/i.test(text)) {
+      if (/\b(hosting|website)\b/i.test(text) || /(?:^|\s)username\s*=/i.test(text)) {
+        return "HOSTINGER_SUBDOMAIN_CREATE";
+      }
+      return "HOSTINGER_DNS_SUBDOMAIN_CREATE";
+    }
+    if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) {
+      if (/\b(dns|zone|record)\b/i.test(text)) return "HOSTINGER_DNS_LIST";
+      return "HOSTINGER_SUBDOMAIN_LIST";
+    }
+  }
+
+  if (/\b(hostinger|hpanel)\b/i.test(text) &&
+      /\b(dns|zone|record)\b/i.test(text) &&
+      /\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) {
+    return "HOSTINGER_DNS_LIST";
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
@@ -289,7 +305,67 @@ async function callHostinger(
 
   let data: unknown = null;
 
-  if (operation === "HOSTINGER_DOMAIN_AVAILABILITY") {
+  if (operation === "HOSTINGER_DNS_LIST" || operation === "HOSTINGER_DNS_SUBDOMAIN_CREATE") {
+    const dnsDomain = valueOf("domain") || hostingDomain;
+    if (!dnsDomain) throw new Error("DNS operations require domain=<domain>.");
+    const zonePath = `/dns/v1/zones/${encodeURIComponent(dnsDomain)}`;
+
+    if (operation === "HOSTINGER_DNS_LIST") {
+      const result = await firstSuccessful(zonePath, "GET");
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger DNS list failed with HTTP ${result.status}.`);
+      }
+      data = result.data;
+    } else {
+      const subdomain = valueOf("subdomain");
+      const target = valueOf("target") || valueOf("content");
+      const requestedType = valueOf("type").toUpperCase();
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(subdomain)) {
+        throw new Error("DNS subdomain create requires a valid subdomain=<prefix>.");
+      }
+      if (!target) throw new Error("DNS subdomain create requires target=<IPv4, IPv6, or hostname>.");
+
+      const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(target);
+      const ipv6 = /^[0-9a-f:]+$/i.test(target) && target.includes(":");
+      const type = requestedType || (ipv4 ? "A" : ipv6 ? "AAAA" : "CNAME");
+      if (!["A", "AAAA", "CNAME"].includes(type)) {
+        throw new Error("DNS subdomain create supports only A, AAAA, or CNAME.");
+      }
+      const ttlRaw = valueOf("ttl");
+      const ttl = ttlRaw ? Number.parseInt(ttlRaw, 10) : 300;
+      if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400) {
+        throw new Error("DNS ttl must be an integer between 60 and 86400.");
+      }
+
+      const body = {
+        overwrite: false,
+        zone: [{
+          name: subdomain,
+          type,
+          ttl,
+          records: [{ content: target }],
+        }],
+      };
+      const validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
+      if (validation.status < 200 || validation.status >= 300) {
+        throw new Error(`Hostinger DNS validation failed with HTTP ${validation.status}.`);
+      }
+      const result = await firstSuccessful(zonePath, "PUT", body);
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger DNS update failed with HTTP ${result.status}.`);
+      }
+      data = {
+        domain: dnsDomain,
+        subdomain,
+        type,
+        target,
+        ttl,
+        overwrite: false,
+        validation: validation.data,
+        result: result.data,
+      };
+    }
+  } else if (operation === "HOSTINGER_DOMAIN_AVAILABILITY") {
     const rawDomain = valueOf("name") || hostingDomain;
     const tlds = (valueOf("tlds") || "com").split("|").map((v) => v.replace(/^\./, "").trim()).filter(Boolean);
     const bareName = rawDomain.includes(".") ? rawDomain.split(".")[0] : rawDomain;
@@ -425,6 +501,7 @@ async function callHostinger(
     "HOSTINGER_DOCKER_CONTAINERS",
     "HOSTINGER_DOCKER_LOGS",
     "HOSTINGER_SUBDOMAIN_LIST",
+    "HOSTINGER_DNS_LIST",
     "HOSTINGER_DOMAIN_AVAILABILITY",
   ]);
   const mutating = !readOnly.has(operation);
