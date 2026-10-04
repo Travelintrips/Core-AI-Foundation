@@ -639,6 +639,12 @@ export async function executeCodingWorkstreamJob(
       payload.leaseToken,
     );
 
+    // Close the child analyzer run before publishing a terminal/reviewable
+    // workstream state. Recovery scans may observe REVIEW_REQUIRED immediately;
+    // publishing that state first can make a healthy RUNNING child look stale
+    // and incorrectly mark it FAILED.
+    await completeRepositoryAnalyzerRun(result);
+
     await markCodingWorkstreamReviewRequired(
       payload.workstreamId,
       payload.leaseToken,
@@ -647,8 +653,6 @@ export async function executeCodingWorkstreamJob(
         resultJson: result,
       },
     );
-
-    await completeRepositoryAnalyzerRun(result);
 
     const localExecution =
       result.localExecution &&
