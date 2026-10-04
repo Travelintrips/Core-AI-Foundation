@@ -1955,6 +1955,32 @@ async function runAutoMode(
   executionInput: z.infer<typeof ChatRequest> = input,
   teacherScope: ChatLearningScope | null = null,
 ): Promise<Record<string, unknown>> {
+  // Universal execution gate: only messages explicitly prefixed with @ may
+  // enter any mutating/control-plane path. Everything else stays conversational.
+  if (!input.message.trim().startsWith("@")) {
+    return await answerAskMode(
+      executionInput.message,
+      input.modelPolicy,
+      input.context ?? [],
+      input.message,
+      teacherScope,
+    );
+  }
+
+  const commandMessage = input.message.trim().slice(1).trim();
+  if (!commandMessage) {
+    return {
+      kind: "validation",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      reply: "Perintah setelah @ tidak boleh kosong.",
+    };
+  }
+  input = { ...input, message: commandMessage };
+  executionInput = { ...executionInput, message: commandMessage };
   const parsedConversation = parseConversationCommand(input.message, input.context ?? []);
   if (parsedConversation.ambiguous) {
     return {
@@ -2742,6 +2768,16 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   const parsed = ChatRequest.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
+    res.status(403).json({
+      error: "Execution blocked: commands must begin with @.",
+      blocked: true,
+      reason: "missing_execution_prefix",
+      requiredPrefix: "@",
+    });
     return;
   }
 

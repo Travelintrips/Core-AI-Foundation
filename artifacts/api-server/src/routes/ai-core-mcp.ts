@@ -33,8 +33,9 @@ const SendCommandArgs = z.object({
 function executionGatedMessage(message: string): string | null {
   const trimmed = message.trim();
   if (!trimmed.startsWith("@")) return null;
-  const command = trimmed.slice(1).trim();
-  return command.length > 0 ? command : null;
+  // Keep the prefix intact. /ai/core-chat/messages is the canonical universal
+  // execution gate and strips @ exactly once before routing.
+  return trimmed.length > 1 && trimmed.slice(1).trim().length > 0 ? trimmed : null;
 }
 
 const TaskProgressArgs = z.object({
