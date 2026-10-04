@@ -440,11 +440,14 @@ describe("autonomous action budget behavior", () => {
     expect(autonomous.last_error).toBeNull();
   });
 
-  it("observes completion even when the action budget is exhausted", async () => {
+  it("does not accept persisted COMPLETED while implementation gates are still pending", async () => {
     const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
     autonomous.cycle_count = 40;
     task.status = "COMPLETED";
-    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ status: "COMPLETED" });
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({
+      status: "ACTIVE",
+      action: "RECOVER_FALSE_COMPLETION",
+    });
     expect(autonomous.cycle_count).toBe(40);
   });
 
@@ -530,15 +533,73 @@ describe("autonomous action budget behavior", () => {
 
 
 describe("autonomous terminal task status", () => {
-  it("persists COMPLETED when the verified orchestration reaches DONE", () => {
+  it("requires explicit terminal evidence before persisting COMPLETED", async () => {
+    const { hasVerifiedCompletionEvidence } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      hasVerifiedCompletionEvidence({
+        nextAction: "DONE",
+        taskCommitSha: null,
+        instruction: "Implement the feature end-to-end",
+        payload: {},
+        runs: [],
+      }),
+    ).toBe(false);
+
+    expect(
+      hasVerifiedCompletionEvidence({
+        nextAction: "DONE",
+        taskCommitSha: "a".repeat(40),
+        instruction: "Implement the feature end-to-end",
+        payload: {},
+        runs: [],
+      }),
+    ).toBe(true);
+
+    expect(
+      hasVerifiedCompletionEvidence({
+        nextAction: "DONE",
+        taskCommitSha: null,
+        instruction: "Implement the feature end-to-end",
+        payload: {
+          localMergeApproval: {
+            status: "MERGED",
+            mergeCommitSha: "b".repeat(40),
+          },
+        },
+        runs: [],
+      }),
+    ).toBe(true);
+  });
+
+  it("allows explicit verification-only tasks to finish without a source commit", async () => {
+    const { hasVerifiedCompletionEvidence } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      hasVerifiedCompletionEvidence({
+        nextAction: "DONE",
+        taskCommitSha: null,
+        instruction: "Jangan ubah file. Verifikasi lifecycle status dan jalankan test.",
+        payload: {},
+        runs: [{ agentName: "Test Agent", status: "COMPLETED" }],
+      }),
+    ).toBe(true);
+  });
+
+  it("reopens old false terminal rows at startup", () => {
     const source = readFileSync(
       new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain('state.task.status !== "COMPLETED"');
-    expect(source).toContain('status: "COMPLETED"');
-    expect(source).toContain('status: "COMPLETED" },');
+    expect(source).toContain("recoverFalseCompletedCodingTasks");
+    expect(source).toContain("'RECOVER_FALSE_COMPLETION'");
+    expect(source).toContain("state.nextAction === \"DONE\" && completionVerified");
+    expect(source).toContain("COMPLETION_EVIDENCE_MISSING");
   });
 });
 
