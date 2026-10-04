@@ -73,11 +73,13 @@ import {
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
   executeAdminSemanticQuery,
+  executeAdminWorkerStatusQuery,
   extractAdminDbSemanticIntent,
   extractExplicitAdminMutationSql,
   extractExplicitReadOnlySql,
   formatAdminDbSchemaCatalog,
   inspectAdminDbSchemaCatalog,
+  isAdminWorkerStatusQuery,
   sanitizeAdminDbError,
   renderAdminDbMutationResult,
   renderAdminDbQueryResult,
@@ -748,6 +750,31 @@ async function tryRunAdminDbQuery(
   policy: ChatPolicy,
   context: AdminDbConversationMessage[] = [],
 ): Promise<Record<string, unknown> | null> {
+  if (isAdminWorkerStatusQuery(message)) {
+    const workerStatus = await executeAdminWorkerStatusQuery();
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: renderAdminDbQueryResult(workerStatus),
+      databaseQuery: {
+        sql: workerStatus.sql,
+        rowCount: workerStatus.rowCount,
+        truncated: workerStatus.truncated,
+        elapsedMs: workerStatus.elapsedMs,
+        sourceDatabaseId: workerStatus.sourceDatabaseId,
+        reason: "Deterministic AI worker runtime inventory query.",
+        access: "ADMIN_READ_ONLY",
+      },
+      data: workerStatus.rows,
+    };
+  }
+
   const semanticQuery = await executeAdminSemanticQuery(message, context);
   if (semanticQuery) {
     return {

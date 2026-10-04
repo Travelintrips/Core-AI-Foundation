@@ -1025,6 +1025,21 @@ export async function executeAdminNaturalTextLookup(
   };
 }
 
+export function isAdminWorkerStatusQuery(message: string): boolean {
+  const value = normalizeSemanticText(message);
+  if (!/\bworker\b/.test(value)) return false;
+  return /\b(status|sibuk|busy|aktif|active|available|idle|offline|unavailable|tersedia|terpakai|dipakai|job|assignment)\b/.test(value);
+}
+
+export async function executeAdminWorkerStatusQuery(): Promise<AdminDbQueryExecution> {
+  // Keep worker inventory deterministic. The generic NL planner previously
+  // invented w.worker_id even though ai_platform.ai_workers uses id.
+  return executeAdminReadOnlySql(
+    "SELECT id AS worker_id, worker_name, worker_type, status, current_job, running_jobs, max_concurrent_jobs, last_heartbeat, lease_owner, lease_expires_at " +
+    "FROM ai_platform.ai_workers ORDER BY worker_name"
+  );
+}
+
 export function shouldAttemptAdminDbQuery(message: string): boolean {
   const value = message.trim();
   if (!value || MUTATION.test(value)) return false;

@@ -43,6 +43,8 @@ import {
   extractExplicitAdminMutationSql,
   getAdminDbSchemaCatalog,
   inspectAdminDbSchemaCatalog,
+  isAdminWorkerStatusQuery,
+  executeAdminWorkerStatusQuery,
   sanitizeAdminDbError,
   renderAdminSemanticQueryResult,
   shouldAttemptAdminDbQuery,
@@ -82,6 +84,23 @@ describe("AI Core admin database query service", () => {
       },
       inheritedFromContext: false,
     });
+  });
+
+  it("detects worker runtime status questions for deterministic inventory lookup", async () => {
+    expect(isAdminWorkerStatusQuery("cek apakah worker nya pada sibuk")).toBe(true);
+    expect(isAdminWorkerStatusQuery("worker mana yang available sekarang")).toBe(true);
+    expect(isAdminWorkerStatusQuery("jelaskan apa itu worker")).toBe(false);
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ worker_id: 7, worker_name: "coding-1", status: "busy" }] });
+
+    const result = await executeAdminWorkerStatusQuery();
+    expect(result.rows).toEqual([{ worker_id: 7, worker_name: "coding-1", status: "busy" }]);
+    expect(result.sql).toContain("id AS worker_id");
+    expect(result.sql).not.toContain("w.worker_id");
   });
 
   it("never inherits financial semantics into AI runtime inventory questions", () => {
