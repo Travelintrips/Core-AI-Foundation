@@ -49,15 +49,7 @@ describe("coding task presentation status", () => {
     ).toBe("ANALYZING");
   });
 
-  it("does not treat autonomous bookkeeping COMPLETED as implementation completion", () => {
-    expect(
-      codingTaskPresentationStatus({
-        taskStatus: "READY_REVIEW",
-        autonomousStatus: "COMPLETED",
-        hasActiveRun: false,
-      }),
-    ).toBe("READY_REVIEW");
-  });
+  it("shows verified autonomous completion over stale READY_REVIEW and FAILED", () => {\n    for (const taskStatus of ["READY_REVIEW", "FAILED"]) {\n      expect(\n        codingTaskPresentationStatus({\n          taskStatus,\n          autonomousStatus: "COMPLETED",\n          hasActiveRun: false,\n        }),\n      ).toBe("COMPLETED");\n    }\n  });\n\n  it("shows a retry in progress over stale FAILED", () => {\n    expect(\n      codingTaskPresentationStatus({\n        taskStatus: "FAILED",\n        autonomousStatus: "ACTIVE",\n        hasActiveRun: false,\n      }),\n    ).toBe("ANALYZING");\n    expect(\n      codingTaskPresentationStatus({\n        taskStatus: "FAILED",\n        autonomousStatus: "FAILED",\n        hasActiveRun: true,\n      }),\n    ).toBe("ANALYZING");\n  });
 
   it("keeps persisted terminal task states unchanged", () => {
     expect(
