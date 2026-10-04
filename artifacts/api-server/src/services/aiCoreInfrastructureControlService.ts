@@ -2,7 +2,7 @@ import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
 
 const GCP_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 const GCP_COMPUTE_API = "https://compute.googleapis.com/compute/v1";
-const HOSTINGER_API_BASE = "https://developers.hostinger.com/api";
+const HOSTINGER_API_BASES = ["https://developers.hostinger.com/api", "https://api.hostinger.com/api"] as const;
 
 export type AiCoreInfrastructureOperation =
   | "GCP_VM_STATUS"
@@ -162,6 +162,7 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     token: (env["HOSTINGER_API_TOKEN"] ?? "").trim(),
     vmId: (env["HOSTINGER_VPS_ID"] ?? "").trim(),
     dockerProject: (env["HOSTINGER_DOCKER_PROJECT"] ?? "").trim(),
+    apiBase: (env["HOSTINGER_API_BASE"] ?? "").trim().replace(/\\/$/, ""),
   };
 }
 
@@ -174,40 +175,101 @@ async function callHostinger(
     throw new Error("Hostinger control plane requires HOSTINGER_API_TOKEN and HOSTINGER_VPS_ID.");
   }
 
-  const vmBase = `${HOSTINGER_API_BASE}/vps/v1/virtual-machines/${encodeURIComponent(config.vmId)}`;
-  let path = vmBase;
+  const bases = Array.from(new Set([config.apiBase, ...HOSTINGER_API_BASES].filter(Boolean)));
   let method = "GET";
+  let suffix = "";
 
-  if (operation === "HOSTINGER_VPS_START") { path += "/start"; method = "POST"; }
-  if (operation === "HOSTINGER_VPS_STOP") { path += "/stop"; method = "POST"; }
-  if (operation === "HOSTINGER_VPS_RESTART") { path += "/restart"; method = "POST"; }
+  if (operation === "HOSTINGER_VPS_START") { suffix = "/start"; method = "POST"; }
+  if (operation === "HOSTINGER_VPS_STOP") { suffix = "/stop"; method = "POST"; }
+  if (operation === "HOSTINGER_VPS_RESTART") { suffix = "/restart"; method = "POST"; }
 
   if (operation === "HOSTINGER_DOCKER_STATUS" || operation === "HOSTINGER_DOCKER_RESTART") {
     if (!config.dockerProject) {
       throw new Error("HOSTINGER_DOCKER_PROJECT is required for Docker project operations.");
     }
-    path += `/docker/${encodeURIComponent(config.dockerProject)}`;
+    suffix = `/docker/${encodeURIComponent(config.dockerProject)}`;
     if (operation === "HOSTINGER_DOCKER_RESTART") {
-      path += "/restart";
+      suffix += "/restart";
       method = "POST";
     }
   }
 
-  const response = await fetch(path, {
-    method,
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    signal: AbortSignal.timeout(20_000),
-  });
+  const request = async (url: string, requestMethod = method) => {
+    const response = await fetch(url, {
+      method: requestMethod,
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    const bodyText = await response.text();
+    let data: unknown = bodyText;
+    try { data = bodyText ? JSON.parse(bodyText) : null; } catch { /* text response */ }
+    return { response, data };
+  };
 
-  const bodyText = await response.text();
-  let data: unknown = bodyText;
-  try { data = bodyText ? JSON.parse(bodyText) : null; } catch { /* text response */ }
-  if (!response.ok) {
-    throw new Error(`Hostinger operation failed with HTTP ${response.status}.`);
+  let data: unknown = null;
+  let lastStatus = 404;
+  for (const base of bases) {
+    const vmBase = `${base}/vps/v1/virtual-machines/${encodeURIComponent(config.vmId)}`;
+    const result = await request(vmBase + suffix);
+    lastStatus = result.response.status;
+    if (result.response.ok) {
+      data = result.data;
+      lastStatus = 200;
+      break;
+    }
+    if (result.response.status !== 404) {
+      throw new Error(`Hostinger operation failed with HTTP ${result.response.status}.`);
+    }
+  }
+
+  if (lastStatus === 404 && operation === "HOSTINGER_VPS_STATUS") {
+    for (const base of bases) {
+      const discovered = await request(`${base}/vps/v1/virtual-machines`, "GET");
+      if (!discovered.response.ok) {
+        if (discovered.response.status === 404) continue;
+        throw new Error(`Hostinger VPS discovery failed with HTTP ${discovered.response.status}.`);
+      }
+      const payload = discovered.data as { data?: unknown[] } | unknown[] | null;
+      const machines = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+          ? (payload as { data: unknown[] }).data
+          : [];
+      const exact = machines.find((machine) =>
+        machine && typeof machine === "object" && String((machine as { id?: unknown }).id ?? "") === config.vmId);
+      if (exact) {
+        data = exact;
+        lastStatus = 200;
+        break;
+      }
+      if (machines.length === 1) {
+        data = {
+          ...(machines[0] as Record<string, unknown>),
+          configured_vps_id: config.vmId,
+          discovered_vps_id: (machines[0] as { id?: unknown }).id ?? null,
+          configuration_warning: "HOSTINGER_VPS_ID does not match the only VPS accessible by this token.",
+        };
+        lastStatus = 200;
+        break;
+      }
+      if (machines.length > 1) {
+        data = {
+          configured_vps_id: config.vmId,
+          accessible_virtual_machines: machines,
+          configuration_warning: "HOSTINGER_VPS_ID was not found; multiple VPS instances are accessible.",
+        };
+        lastStatus = 200;
+        break;
+      }
+    }
+  }
+
+  if (lastStatus !== 200) {
+    throw new Error(`Hostinger operation failed with HTTP ${lastStatus}. Verify HOSTINGER_VPS_ID or set HOSTINGER_API_BASE.`);
   }
 
   const mutating =
