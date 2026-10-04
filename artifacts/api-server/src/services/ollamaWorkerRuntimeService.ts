@@ -9,6 +9,7 @@ import {
   shutdownOllamaWorker,
 } from "./ollamaWorkerRegistryService.js";
 import { logger } from "../lib/logger.js";
+import { stopGcpOllamaVmIfIdle } from "./gcpOllamaVmLifecycleService.js";
 
 const DEFAULT_HEARTBEAT_MS = 10_000;
 const MIN_HEARTBEAT_MS = 2_000;
@@ -54,6 +55,22 @@ interface RuntimeState {
 let state: RuntimeState | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let heartbeatInFlight = false;
+let idleShutdownTimer: NodeJS.Timeout | null = null;
+let idleShutdownInFlight = false;
+const IDLE_SHUTDOWN_CHECK_MS = 60_000;
+
+async function idleShutdownTick(): Promise<void> {
+  if (idleShutdownInFlight) return;
+  idleShutdownInFlight = true;
+  try {
+    const stopped = await stopGcpOllamaVmIfIdle();
+    if (stopped) logger.info("[ollama-worker] GCP Ollama VM stopped after idle timeout");
+  } catch (error) {
+    logger.warn({ err: error }, "[ollama-worker] Idle shutdown check failed");
+  } finally {
+    idleShutdownInFlight = false;
+  }
+}
 
 function envTrue(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
@@ -380,6 +397,13 @@ export async function startOllamaWorkerRuntime(
 
   heartbeatTimer.unref?.();
 
+  // Check once per minute; the lifecycle service only stops the VM after the
+  // configured idle window (5 minutes by default) and never while jobs run.
+  idleShutdownTimer = setInterval(() => {
+    void idleShutdownTick();
+  }, IDLE_SHUTDOWN_CHECK_MS);
+  idleShutdownTimer.unref?.();
+
   logger.info(
     {
       workerId: state.workerId,
@@ -431,6 +455,11 @@ export function getOllamaWorkerRuntimeStatus(): Record<string, unknown> {
 }
 
 export async function shutdownOllamaWorkerRuntime(): Promise<void> {
+  if (idleShutdownTimer) {
+    clearInterval(idleShutdownTimer);
+    idleShutdownTimer = null;
+  }
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
