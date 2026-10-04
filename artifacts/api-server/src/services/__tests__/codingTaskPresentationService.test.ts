@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { codingTaskPresentationStatus } from "../codingTaskPresentationService.js";
 
@@ -67,4 +68,16 @@ describe("coding task presentation status", () => {
       }),
     ).toBe("COMPLETED");
   });
+  it("workspace list query includes active autonomous states for presentation mapping", () => {
+    const source = readFileSync(
+      new URL("../../routes/coding-workspace.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "a.status IN ('ACTIVE', 'WAITING', 'COMPLETED', 'FAILED', 'BLOCKED')",
+    );
+    expect(source).toContain("WHERE a.enabled = TRUE");
+  });
+
 });
