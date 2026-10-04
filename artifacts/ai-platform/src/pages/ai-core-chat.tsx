@@ -334,6 +334,8 @@ export default function AiCoreChat() {
   const voiceTranscriptRef = useRef("");
   const voiceSilenceTimerRef = useRef<number | null>(null);
   const recognitionRestartTimerRef = useRef<number | null>(null);
+  const voiceTurnSubmittingRef = useRef(false);
+  const lastVoiceSubmitRef = useRef<{ transcript: string; at: number } | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamInterruptedRef = useRef(false);
   const streamedSpeechBufferRef = useRef("");
@@ -644,14 +646,26 @@ export default function AiCoreChat() {
   function finalizeVoiceTurn() {
     clearVoiceSilenceTimer();
     const transcript = voiceTranscriptRef.current.trim();
-    if (!handsFreeRef.current || !transcript || busyRef.current) return;
+    if (!handsFreeRef.current || !transcript || busyRef.current || voiceTurnSubmittingRef.current) return;
 
+    const normalizedTranscript = transcript.toLocaleLowerCase("id-ID").replace(/\s+/g, " ").trim();
+    const now = Date.now();
+    const lastSubmit = lastVoiceSubmitRef.current;
+    if (lastSubmit && lastSubmit.transcript === normalizedTranscript && now - lastSubmit.at < 4_000) {
+      voiceTranscriptRef.current = "";
+      return;
+    }
+    lastVoiceSubmitRef.current = { transcript: normalizedTranscript, at: now };
+    voiceTurnSubmittingRef.current = true;
     voiceTranscriptRef.current = "";
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     listeningRef.current = false;
     setListening(false);
-    void submit(undefined, transcript, "voice");
+    void submit(undefined, transcript, "voice").finally(() => {
+      voiceTurnSubmittingRef.current = false;
+      if (handsFreeRef.current) maybeResumeHandsFreeListening();
+    });
   }
 
   function scheduleVoiceTurnSubmit() {
@@ -664,10 +678,10 @@ export default function AiCoreChat() {
 
   function scheduleRecognitionRestart() {
     clearRecognitionRestartTimer();
-    if (!handsFreeRef.current || busyRef.current) return;
+    if (!handsFreeRef.current || busyRef.current || voiceTurnSubmittingRef.current) return;
     recognitionRestartTimerRef.current = window.setTimeout(() => {
       recognitionRestartTimerRef.current = null;
-      if (handsFreeRef.current && !busyRef.current && !listeningRef.current) {
+      if (handsFreeRef.current && !busyRef.current && !voiceTurnSubmittingRef.current && !listeningRef.current) {
         startListening();
       }
     }, VOICE_RESTART_DELAY_MS);
