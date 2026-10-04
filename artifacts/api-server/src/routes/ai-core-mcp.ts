@@ -23,8 +23,10 @@ import {
 } from "../services/localCodingControlBridgeService.js";
 
 const router = Router();
-const MCP_PROTOCOL_VERSION = "2026-07-28";
-const LEGACY_MCP_PROTOCOL_VERSION = "2025-06-18";
+// MCP hosts must receive a protocol version they actually advertised.
+// Do not upgrade a client to a protocol version it did not request.
+const MCP_PROTOCOL_VERSION = "2025-06-18";
+const LEGACY_MCP_PROTOCOL_VERSION = "2025-03-26";
 const SERVER_INFO = { name: "ai-core-direct-command", version: "1.4.0" };
 
 const SendCommandArgs = z.object({
@@ -534,8 +536,9 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         ? (body.params as { protocolVersion: string }).protocolVersion
         : MCP_PROTOCOL_VERSION;
     const negotiatedProtocolVersion =
+      requestedProtocolVersion === MCP_PROTOCOL_VERSION ||
       requestedProtocolVersion === LEGACY_MCP_PROTOCOL_VERSION
-        ? LEGACY_MCP_PROTOCOL_VERSION
+        ? requestedProtocolVersion
         : MCP_PROTOCOL_VERSION;
     res.status(200).json(
       rpcResult(body.id ?? null, {
