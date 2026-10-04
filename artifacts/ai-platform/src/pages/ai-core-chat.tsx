@@ -9,10 +9,13 @@ import {
   Download,
   ExternalLink,
   Loader2,
+  Library,
   MessageSquareText,
   Mic,
   MicOff,
   ImagePlus,
+  Play,
+  Search,
   AudioLines,
   X,
   Send,
@@ -82,6 +85,9 @@ type CoreConfig = {
   streaming?: { enabled: boolean; endpoint?: string; defaultPolicy?: string };
   voice?: {
     enabled: boolean;
+    cloneProviderConfigured?: boolean;
+    libraryProvider?: string;
+    libraryEndpoint?: string;
     realtime?: {
       available: boolean;
       transport?: string;
@@ -125,6 +131,7 @@ const CONVERSATION_KEY = "ai_core_conversation_id_v1";
 const VOICE_PRESET_KEY = "ai_core_voice_preset_v1";
 const VOICE_TRANSPORT_MODE_KEY = "ai_core_voice_transport_mode_v1";
 const CLONED_VOICE_ID_KEY = "ai_core_cloned_voice_id_v1";
+const VOICE_LIBRARY_ID_KEY = "ai_core_voice_library_id_v1";
 const MAX_MESSAGES = 80;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_VOICE_SAMPLE_BYTES = 6 * 1024 * 1024;
@@ -159,6 +166,23 @@ const VOICE_PRESET_OPTIONS: Array<{ value: VoicePreset; label: string }> = [
   { value: "female_firm", label: "Wanita Tegas" },
   { value: "female_cheerful", label: "Wanita Ceria" },
 ];
+
+type VoiceLibraryItem = {
+  voiceId: string;
+  name: string;
+  category: string | null;
+  gender: string | null;
+  age: string | null;
+  accent: string | null;
+  description: string | null;
+  previewUrl: string | null;
+};
+
+type VoiceLibraryResponse = {
+  provider: string;
+  voices: VoiceLibraryItem[];
+  defaultVoiceId: string | null;
+};
 type PendingImage = {
   name: string;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
@@ -259,6 +283,14 @@ function loadClonedVoiceId(): string {
   }
 }
 
+function loadVoiceLibraryId(): string {
+  try {
+    return localStorage.getItem(VOICE_LIBRARY_ID_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -327,6 +359,13 @@ export default function AiCoreChat() {
   const [voiceTransportMode, setVoiceTransportMode] = useState<VoiceTransportMode>(() => loadVoiceTransportMode());
   const [voicePreset, setVoicePreset] = useState<VoicePreset>(() => loadVoicePreset());
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedLibraryVoiceId, setSelectedLibraryVoiceId] = useState(() => loadVoiceLibraryId());
+  const [voiceLibrary, setVoiceLibrary] = useState<VoiceLibraryItem[]>([]);
+  const [voiceLibraryOpen, setVoiceLibraryOpen] = useState(false);
+  const [voiceLibraryLoading, setVoiceLibraryLoading] = useState(false);
+  const [voiceLibraryError, setVoiceLibraryError] = useState("");
+  const [voiceLibrarySearch, setVoiceLibrarySearch] = useState("");
+  const [voicePreviewingId, setVoicePreviewingId] = useState<string | null>(null);
   const [clonedVoiceId, setClonedVoiceId] = useState(() => loadClonedVoiceId());
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false);
   const [voiceCloneStatus, setVoiceCloneStatus] = useState("");
@@ -350,6 +389,7 @@ export default function AiCoreChat() {
   const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
   const realtimeStreamRef = useRef<MediaStream | null>(null);
   const realtimeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const voicePlaybackAudioRef = useRef<HTMLAudioElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamInterruptedRef = useRef(false);
   const streamedSpeechBufferRef = useRef("");
@@ -372,6 +412,17 @@ export default function AiCoreChat() {
         ? "realtime"
         : "standard"
       : voiceTransportMode;
+  const selectedLibraryVoice =
+    voiceLibrary.find((voice) => voice.voiceId === selectedLibraryVoiceId) ?? null;
+  const filteredVoiceLibrary = useMemo(() => {
+    const query = voiceLibrarySearch.trim().toLowerCase();
+    if (!query) return voiceLibrary;
+    return voiceLibrary.filter((voice) =>
+      [voice.name, voice.category, voice.gender, voice.age, voice.accent, voice.description]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [voiceLibrary, voiceLibrarySearch]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -419,6 +470,18 @@ export default function AiCoreChat() {
       // Voice preference remains usable for the current session.
     }
   }, [voicePreset]);
+
+  useEffect(() => {
+    try {
+      if (selectedLibraryVoiceId) {
+        localStorage.setItem(VOICE_LIBRARY_ID_KEY, selectedLibraryVoiceId);
+      } else {
+        localStorage.removeItem(VOICE_LIBRARY_ID_KEY);
+      }
+    } catch {
+      // Voice library preference remains usable for the current session.
+    }
+  }, [selectedLibraryVoiceId]);
 
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
