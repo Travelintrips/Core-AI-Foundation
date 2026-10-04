@@ -166,31 +166,11 @@ describe("AI Core Hostinger infrastructure control", () => {
   });
 
   it("resolves a multi-domain hosting target without HOSTINGER_HOSTING_DOMAIN", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        data: [
-          {
-            domain: "sportcenter.travelintrips.co.id",
-            username: "u684045296",
-            order_id: 200827112,
-            website_type: "wordpress",
-            is_enabled: true,
-            root_directory: "/home/u684045296/domains/travelintrips.co.id/public_html/sportcenter",
-          },
-          {
-            domain: "cstlogistic.co.id",
-            username: "u684045296",
-            order_id: 200827112,
-            website_type: "nodejs",
-            is_enabled: true,
-            root_directory: "/home/u684045296/domains/cstlogistic.co.id/public_html",
-          },
-        ],
-        meta: { total: 2 },
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([
         { subdomain: "api", root_directory: "public_html/api" },
-      ]), { status: 200 }));
+      ]), { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await executeAiCoreInfrastructureOperation({
@@ -214,6 +194,9 @@ describe("AI Core Hostinger infrastructure control", () => {
         username: "u684045296",
         domain: "sportcenter.travelintrips.co.id",
       },
+      subdomains: [
+        { subdomain: "api", root_directory: "public_html/api" },
+      ],
     });
   });
 
