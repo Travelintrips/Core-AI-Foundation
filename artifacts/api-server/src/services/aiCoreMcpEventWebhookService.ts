@@ -591,6 +591,14 @@ function lifecycleEventType(input: {
   ) {
     return explicit as TerminalEventType;
   }
+  const haystack = `${JSON.stringify(input.checkpoint ?? {})} ${JSON.stringify(input.metadata ?? {})}`.toLowerCase();
+  if (/\bmerge(?:d)?\b/.test(haystack)) return "MERGED";
+  if (
+    /\bdeploy(?:ed|ment)?\b/.test(haystack) &&
+    /(success|succeed|completed|selesai|deployed)/.test(haystack)
+  ) {
+    return "DEPLOYED";
+  }
   if (input.kind === "COMPLETED") return "COMPLETED";
   if (input.kind === "FAILED") return "FAILED";
   if (input.kind === "BLOCKER") return "BLOCKED";
