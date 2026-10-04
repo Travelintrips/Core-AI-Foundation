@@ -137,8 +137,9 @@ export function signStandardWebhook(
 }
 
 function canonicalize(value: unknown): string {
+  if (value === undefined) return "null";
   if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? "null";
   }
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalize(item)).join(",")}]`;
