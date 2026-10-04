@@ -19,6 +19,8 @@ import {
 import { dispatchReadyCodingWorkstreams } from "./localCodingMultiWorkerExecutionService.js";
 import {
   approveWorkstreamAiCandidatePatch,
+  approveWorkstreamAiExecutionHandoff,
+  enqueueWorkstreamAiExecution,
   manualAiPatchReviewReason,
   materializeApprovedWorkstreamAiCandidate,
   prepareWorkstreamAiExecutionHandoff,
@@ -38,8 +40,10 @@ import {
 import { enqueueCodingAiExecution } from "./localCodingAiQueueRuntimeService.js";
 import { approveAndValidateAiPatch } from "./localCodingAiPatchApprovalService.js";
 import { approveCommitAndCreatePullRequest } from "./localCodingCommitApprovalService.js";
-import { startPullRequestVerification } from "./localCodingPullRequestGateService.js";
-import { requestCodingCriticalApproval } from "./codingCriticalApprovalService.js";
+import {
+  autoMergeVerifiedPullRequest,
+  startPullRequestVerification,
+} from "./localCodingPullRequestGateService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
 import { purgeExpiredCodingTestTasks, reconcileStaleCodingRuns } from "./localCodingRunRecoveryService.js";
@@ -517,30 +521,18 @@ async function processTaskGraph(
 
       await reserveCycle();
       const prepared = await prepareWorkstreamAiExecutionHandoff(review.id);
-      const commandId = await commandIdForTask(taskId);
-      const approval = await requestCodingCriticalApproval({
-        taskId,
-        commandId,
-        actionType: "WORKSTREAM_AI_HANDOFF",
-        summary:
-          `Workstream ${review.key} membutuhkan izin admin sebelum model AI dipanggil. ` +
-          "Setujui untuk menjalankan constrained AI pada handoff yang telah disiapkan.",
-        metadata: {
-          graphId: snapshot.graph.id,
-          workstreamId: review.id,
-          workstreamKey: review.key,
-          handoffId: prepared.handoffId,
-          packageHash: prepared.packageHash,
-          claimAttempt: prepared.claimAttempt,
-          branchName: prepared.branchName,
-        },
+      const approved = await approveWorkstreamAiExecutionHandoff(
+        review.id,
+        prepared.handoffId,
+      );
+      await enqueueWorkstreamAiExecution(review.id, {
+        expectedPackageHash: approved.packageHash,
+        requestedBy: "autonomous-repair-loop",
       });
 
       return {
         handled: true,
-        action: approval.reused
-          ? `WAIT_WORKSTREAM_AI_APPROVAL:${review.key}`
-          : `REQUEST_WORKSTREAM_AI_APPROVAL:${review.key}`,
+        action: `AUTO_APPROVE_RUN_WORKSTREAM_AI:${review.key}`,
         waiting: true,
       };
     }
@@ -630,47 +622,6 @@ async function processTaskGraph(
   }
 
   return { handled: false };
-}
-
-async function requestMergeApproval(
-  taskId: string,
-  payload: Record<string, unknown>,
-): Promise<void> {
-  const commit = isRecord(payload.localCommitApproval)
-    ? payload.localCommitApproval
-    : {};
-  const verification = isRecord(payload.prVerification)
-    ? payload.prVerification
-    : {};
-
-  const pullRequestNumber =
-    typeof commit.pullRequestNumber === "number"
-      ? commit.pullRequestNumber
-      : typeof verification.pullRequestNumber === "number"
-        ? verification.pullRequestNumber
-        : null;
-  const pullRequestUrl =
-    typeof commit.pullRequestUrl === "string"
-      ? commit.pullRequestUrl
-      : typeof verification.pullRequestUrl === "string"
-        ? verification.pullRequestUrl
-        : null;
-
-  await requestCodingCriticalApproval({
-    taskId,
-    actionType: "MERGE_PR",
-    summary: pullRequestNumber
-      ? `PR #${pullRequestNumber} sudah lolos verification dan menunggu persetujuan merge.`
-      : "Pull request sudah lolos verification dan menunggu persetujuan merge.",
-    metadata: {
-      pullRequestNumber,
-      pullRequestUrl,
-      headSha:
-        typeof verification.headSha === "string" ? verification.headSha : null,
-      baseSha:
-        typeof verification.baseSha === "string" ? verification.baseSha : null,
-    },
-  });
 }
 
 export async function runAutonomousCodingCycle(taskId: string): Promise<{
@@ -900,18 +851,13 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         return { taskId, status: "WAITING", action: "AUTO_VERIFY_PR" };
 
       case "APPROVE_MERGE":
-        await requestMergeApproval(taskId, state.payload);
-        await setState(taskId, "APPROVAL_REQUIRED", "WAIT_WA_MERGE_APPROVAL");
-        await report(
-          taskId,
-          "CHECKPOINT",
-          "PR sudah lolos CI. AI Core berhenti di critical gate dan menunggu approval merge melalui WhatsApp.",
-          { nextAction: "APPROVE_MERGE" },
-        );
+        await reserveCycle();
+        await autoMergeVerifiedPullRequest(taskId);
+        await setState(taskId, "WAITING", "AUTO_MERGE_VERIFIED_PR");
         return {
           taskId,
-          status: "APPROVAL_REQUIRED",
-          action: "WAIT_WA_MERGE_APPROVAL",
+          status: "WAITING",
+          action: "AUTO_MERGE_VERIFIED_PR",
         };
 
       default: {
