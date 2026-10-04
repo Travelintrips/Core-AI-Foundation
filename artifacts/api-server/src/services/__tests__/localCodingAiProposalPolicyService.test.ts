@@ -243,6 +243,20 @@ describe("Local Coding AI Proposal Policy", () => {
     const operations = paths.map((path) => ({ kind: "replace_file", path, content: "x" }));
     const result = await validate(makeProposal(pkg, operations), makeHandoff(pkg));
     expect(codes(result)).toContain("TOO_MANY_FILES");
+    expect(codes(result)).not.toContain("HANDOFF_POLICY_INVALID");
+  });
+
+  it("rejects a handoff that exceeds the expanded candidate-file bound", async () => {
+    const paths = Array.from(
+      { length: AI_PROPOSAL_POLICY_LIMITS.maxAllowedFiles + 1 },
+      (_, index) => "src/context-" + index + ".ts",
+    );
+    for (const path of paths) await writeFile(join(root, path), "x", "utf8");
+    const pkg = makePackage(paths);
+    const result = await validate(
+      makeProposal(pkg, [{ kind: "replace_file", path: paths[0], content: "x" }]),
+      makeHandoff(pkg),
+    );
     expect(codes(result)).toContain("HANDOFF_POLICY_INVALID");
   });
 
