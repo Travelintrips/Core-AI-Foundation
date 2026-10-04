@@ -297,7 +297,7 @@ describe("workstream AI failure context preservation", () => {
   it("auto-retries candidate-set drift discovered during materialization", () => {
     const candidateSetDrift = decideWorkstreamAiAutoRepair(
       new LocalCodingWorkstreamAiExecutionError(
-        "Materialized patch changed files outside the stored candidate set.",
+        "Reviewed patch file set no longer matches the stored candidate set.",
         "STALE_CONTEXT",
       ),
       {
@@ -411,8 +411,10 @@ describe("workstream AI materialization recovery wiring", () => {
       '["STALE_CONTEXT", "MATERIALIZATION_FAILED"].includes(autoAdvanceError.code)',
     );
     expect(source).toContain(
-      '"Materialized patch changed files outside the stored candidate set.",\n        "STALE_CONTEXT"',
+      '"Reviewed patch file set no longer matches the stored candidate set.",\n        "STALE_CONTEXT"',
     );
+    expect(source).toContain("const reviewedPatchFiles = patchTargetFiles(patch)");
+    expect(source).toContain('"materialization_workspace_extra_status_ignored"');
   });
 });
 
