@@ -22,6 +22,7 @@ import {
   invokeConstrainedAiProposal,
   invokeProductionCodingAiProposal,
   normalizeBoundedSchemaRepairOutput,
+  normalizeGitHeadOutput,
   validateAndApplyAiProposal,
 } from "../localCodingAiExecutionGateService.js";
 import type { ProductionCodingModelSelection } from "../localCodingAiProductionModelService.js";
@@ -161,6 +162,15 @@ afterEach(async () => {
     const root = cleanup.pop();
     if (root) await rm(root, { recursive: true, force: true });
   }
+});
+
+describe("git HEAD normalization", () => {
+  it("accepts string and buffer stdout from child_process", () => {
+    const sha = "A".repeat(40);
+    expect(normalizeGitHeadOutput(sha + "\n")).toBe("a".repeat(40));
+    expect(normalizeGitHeadOutput(Buffer.from(sha + "\n", "utf8"))).toBe("a".repeat(40));
+    expect(normalizeGitHeadOutput(new Uint8Array(Buffer.from(sha, "utf8")))).toBe("a".repeat(40));
+  });
 });
 
 describe("Local Coding AI Execution Gate integration", () => {
