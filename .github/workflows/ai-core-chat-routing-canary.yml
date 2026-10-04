@@ -38,11 +38,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
-            -L -fsS --connect-timeout 15 --max-time 30 \
-            -H "Accept: application/json" \
-            -H "User-Agent: CST-AI-Core-Health-Probe/1.0" \
-            "$API_BASE_URL/healthz" >/dev/null
+          # Hostinger's public edge can intermittently blackhole a GitHub runner
+          # even after the production verification job has just succeeded.
+          # Use bounded backoff here so the routing canary tests routing rather
+          # than failing immediately on a short-lived edge/network condition.
+          code=""
+          for attempt in $(seq 1 6); do
+            code=$(curl --http1.1 -sS -L --max-redirs 3 --proto-redir '=https' \
+              --connect-timeout 15 --max-time 30 -o /tmp/healthz -w "%{http_code}" \
+              -H "Accept: application/json" \
+              -H "User-Agent: CST-AI-Core-Health-Probe/1.0" \
+              "$API_BASE_URL/healthz" || true)
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            if [ "$code" = "000" ] || [ "$code" = "502" ] || [ "$code" = "503" ] || [ "$code" = "504" ] || [ -z "$code" ]; then
+              echo "Transient AI Core health HTTP ${code:-curl-error} (attempt $attempt/6); retrying..."
+              sleep $((attempt * 10))
+              continue
+            fi
+            echo "::error::AI Core health returned non-retryable HTTP $code"
+            cat /tmp/healthz 2>/dev/null || true
+            exit 1
+          done
+          echo "::error::AI Core health remained unreachable after bounded retries"
+          exit 1
 
       - name: Assert runtime inventory routing
         shell: bash
