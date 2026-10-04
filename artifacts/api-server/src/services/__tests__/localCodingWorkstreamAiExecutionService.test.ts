@@ -375,6 +375,26 @@ describe("workstream AI failure context preservation", () => {
 });
 
 
+describe("workstream AI materialization baseline status", () => {
+  it("ignores pre-existing workspace status when validating materialized candidate files", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("const baselineStatusPaths = normalizedChangedFiles(");
+    expect(source).toContain(
+      "const materializedStatusPaths = normalizedStatusPaths.filter(",
+    );
+    expect(source).toContain(
+      "(file) => !baselineStatusPaths.includes(file)",
+    );
+    expect(source).toContain(
+      "const unexpectedStatusPaths = materializedStatusPaths.filter(",
+    );
+  });
+});
+
 describe("workstream AI materialization recovery wiring", () => {
   it("bubbles recoverable materialization failures into the bounded auto-repair path", () => {
     const source = readFileSync(

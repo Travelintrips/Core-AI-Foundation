@@ -2416,6 +2416,16 @@ export async function materializeApprovedWorkstreamAiCandidate(
   try {
     await writeFile(patchFile, patch, { encoding: "utf8", flag: "wx" });
 
+    const baselineStatusPaths = normalizedChangedFiles(
+      parseGitStatusPaths(
+        await runGit(
+          workspace.path,
+          ["status", "--porcelain=v1", "--untracked-files=normal"],
+          childTask.repository,
+        ),
+      ),
+    );
+
     await runGit(workspace.path, ["apply", "--check", "--whitespace=nowarn", patchFile], childTask.repository);
     await runGit(workspace.path, ["apply", "--whitespace=nowarn", patchFile], childTask.repository);
 
@@ -2428,7 +2438,10 @@ export async function materializeApprovedWorkstreamAiCandidate(
     );
     const normalizedStatusPaths = normalizedChangedFiles(statusPaths);
     const normalizedCandidateFiles = normalizedChangedFiles(changedFiles);
-    const unexpectedStatusPaths = normalizedStatusPaths.filter(
+    const materializedStatusPaths = normalizedStatusPaths.filter(
+      (file) => !baselineStatusPaths.includes(file),
+    );
+    const unexpectedStatusPaths = materializedStatusPaths.filter(
       (file) => !normalizedCandidateFiles.includes(file),
     );
     const missingCandidatePaths = normalizedCandidateFiles.filter(
@@ -2440,7 +2453,9 @@ export async function materializeApprovedWorkstreamAiCandidate(
         "STALE_CONTEXT",
         {
           expected: normalizedCandidateFiles,
+          baseline: baselineStatusPaths,
           actual: normalizedStatusPaths,
+          materialized: materializedStatusPaths,
           unexpected: unexpectedStatusPaths,
         },
       );
