@@ -172,7 +172,8 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
                AND r.status = 'RUNNING'
            ) AS has_active_run
     FROM ai_platform.ai_coding_autonomous_tasks AS a
-    WHERE a.status IN ('FAILED', 'BLOCKED')
+    WHERE a.enabled = TRUE
+      AND a.status IN ('ACTIVE', 'WAITING', 'COMPLETED', 'FAILED', 'BLOCKED')
   `);
 
   const presentationByTask = new Map(
