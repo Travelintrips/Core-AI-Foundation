@@ -80,7 +80,18 @@ type CoreConfig = {
   autonomous: { configured: boolean; running: boolean; pollIntervalMs: number };
   codingModel: Record<string, unknown>;
   streaming?: { enabled: boolean; endpoint?: string; defaultPolicy?: string };
-  voice?: { enabled: boolean };
+  voice?: {
+    enabled: boolean;
+    realtime?: {
+      available: boolean;
+      transport?: string;
+      provider?: string;
+      model?: string;
+      voice?: string;
+      sessionEndpoint?: string;
+      fallback?: string;
+    };
+  };
 };
 
 
@@ -332,10 +343,13 @@ export default function AiCoreChat() {
   const busyRef = useRef(false);
   const listeningRef = useRef(false);
   const voiceTranscriptRef = useRef("");
-  const voiceSilenceTimerRef = useRef<number | null>(null);
-  const recognitionRestartTimerRef = useRef<number | null>(null);
   const voiceTurnSubmittingRef = useRef(false);
   const lastVoiceSubmitRef = useRef<{ transcript: string; at: number } | null>(null);
+  const voiceSilenceTimerRef = useRef<number | null>(null);
+  const recognitionRestartTimerRef = useRef<number | null>(null);
+  const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
+  const realtimeStreamRef = useRef<MediaStream | null>(null);
+  const realtimeAudioRef = useRef<HTMLAudioElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamInterruptedRef = useRef(false);
   const streamedSpeechBufferRef = useRef("");
@@ -347,7 +361,11 @@ export default function AiCoreChat() {
     window.matchMedia("(display-mode: standalone)").matches ||
     new URLSearchParams(window.location.search).get("standalone") === "1";
   const voiceFeatureEnabled = config?.voice?.enabled === true;
-  const realtimeVoiceAvailable = false;
+  const realtimeVoiceAvailable =
+    voiceFeatureEnabled &&
+    config?.voice?.realtime?.available === true &&
+    typeof RTCPeerConnection !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia);
   const effectiveVoiceTransportMode: Exclude<VoiceTransportMode, "auto"> =
     voiceTransportMode === "auto"
       ? realtimeVoiceAvailable
@@ -421,6 +439,12 @@ export default function AiCoreChat() {
       }
       streamAbortRef.current?.abort();
       recognitionRef.current?.abort();
+      realtimePeerRef.current?.close();
+      realtimeStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (realtimeAudioRef.current) {
+        realtimeAudioRef.current.srcObject = null;
+        realtimeAudioRef.current.remove();
+      }
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -646,7 +670,12 @@ export default function AiCoreChat() {
   function finalizeVoiceTurn() {
     clearVoiceSilenceTimer();
     const transcript = voiceTranscriptRef.current.trim();
-    if (!handsFreeRef.current || !transcript || busyRef.current || voiceTurnSubmittingRef.current) return;
+    if (
+      !handsFreeRef.current ||
+      !transcript ||
+      busyRef.current ||
+      voiceTurnSubmittingRef.current
+    ) return;
 
     const normalizedTranscript = transcript.toLocaleLowerCase("id-ID").replace(/\s+/g, " ").trim();
     const now = Date.now();
@@ -655,8 +684,9 @@ export default function AiCoreChat() {
       voiceTranscriptRef.current = "";
       return;
     }
-    lastVoiceSubmitRef.current = { transcript: normalizedTranscript, at: now };
+
     voiceTurnSubmittingRef.current = true;
+    lastVoiceSubmitRef.current = { transcript: normalizedTranscript, at: now };
     voiceTranscriptRef.current = "";
     recognitionRef.current?.stop();
     recognitionRef.current = null;
@@ -664,7 +694,9 @@ export default function AiCoreChat() {
     setListening(false);
     void submit(undefined, transcript, "voice").finally(() => {
       voiceTurnSubmittingRef.current = false;
-      if (handsFreeRef.current) maybeResumeHandsFreeListening();
+      if (handsFreeRef.current && !busyRef.current && !listeningRef.current) {
+        scheduleRecognitionRestart();
+      }
     });
   }
 
@@ -681,7 +713,7 @@ export default function AiCoreChat() {
     if (!handsFreeRef.current || busyRef.current || voiceTurnSubmittingRef.current) return;
     recognitionRestartTimerRef.current = window.setTimeout(() => {
       recognitionRestartTimerRef.current = null;
-      if (handsFreeRef.current && !busyRef.current && !voiceTurnSubmittingRef.current && !listeningRef.current) {
+      if (handsFreeRef.current && !busyRef.current && !listeningRef.current) {
         startListening();
       }
     }, VOICE_RESTART_DELAY_MS);
@@ -779,6 +811,105 @@ export default function AiCoreChat() {
     setListening(false);
   }
 
+  async function startRealtimeVoiceSession(): Promise<void> {
+    if (!realtimeVoiceAvailable) {
+      throw new Error("Realtime full-duplex belum tersedia pada konfigurasi server ini.");
+    }
+    if (realtimePeerRef.current) return;
+
+    const endpoint = config?.voice?.realtime?.sessionEndpoint || "/api/ai/core-chat/realtime/session";
+    const session = await apiFetch<{
+      clientSecret: string;
+      model: string;
+      webrtcUrl: string;
+    }>(endpoint, { method: "POST" });
+
+    const peer = new RTCPeerConnection();
+    const audio = new Audio();
+    audio.autoplay = true;
+    peer.ontrack = (event) => {
+      audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      void audio.play().catch(() => undefined);
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    stream.getAudioTracks().forEach((track) => peer.addTrack(track, stream));
+
+    const events = peer.createDataChannel("oai-events");
+    events.addEventListener("open", () => {
+      events.send(JSON.stringify({
+        type: "session.update",
+        session: {
+          audio: {
+            input: {
+              turn_detection: {
+                type: "semantic_vad",
+                create_response: true,
+                interrupt_response: true,
+              },
+            },
+          },
+        },
+      }));
+    });
+    events.addEventListener("message", (event) => {
+      try {
+        const payload = JSON.parse(String(event.data)) as Record<string, unknown>;
+        if (payload["type"] === "error") {
+          setVoiceError("Realtime provider mengirim error. Auto akan memakai Standard bila sesi terputus.");
+        }
+      } catch {
+        // Ignore non-JSON realtime telemetry.
+      }
+    });
+
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    const response = await fetch(session.webrtcUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.clientSecret}`,
+        "Content-Type": "application/sdp",
+      },
+      body: offer.sdp,
+    });
+    if (!response.ok) {
+      stream.getTracks().forEach((track) => track.stop());
+      peer.close();
+      throw new Error(`Realtime WebRTC handshake gagal (HTTP ${response.status}).`);
+    }
+    await peer.setRemoteDescription({ type: "answer", sdp: await response.text() });
+
+    peer.onconnectionstatechange = () => {
+      if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
+        stopRealtimeVoiceSession();
+        if (voiceTransportMode === "auto" && handsFreeRef.current) startListening();
+      }
+    };
+    realtimePeerRef.current = peer;
+    realtimeStreamRef.current = stream;
+    realtimeAudioRef.current = audio;
+    setListening(true);
+    listeningRef.current = true;
+    setVoiceError("");
+  }
+
+  function stopRealtimeVoiceSession() {
+    realtimePeerRef.current?.close();
+    realtimePeerRef.current = null;
+    realtimeStreamRef.current?.getTracks().forEach((track) => track.stop());
+    realtimeStreamRef.current = null;
+    if (realtimeAudioRef.current) {
+      realtimeAudioRef.current.srcObject = null;
+      realtimeAudioRef.current.remove();
+      realtimeAudioRef.current = null;
+    }
+    listeningRef.current = false;
+    setListening(false);
+  }
+
   function selectVoiceTransportMode(nextMode: VoiceTransportMode) {
     if (nextMode === voiceTransportMode) return;
     if (handsFreeRef.current) stopVoiceSession();
@@ -814,7 +945,18 @@ export default function AiCoreChat() {
     handsFreeRef.current = true;
     setHandsFreeEnabled(true);
     voiceTranscriptRef.current = "";
-    startListening();
+    if (effectiveVoiceTransportMode === "realtime") {
+      void startRealtimeVoiceSession().catch((error) => {
+        setVoiceError(
+          (error instanceof Error ? error.message : String(error)) +
+          (voiceTransportMode === "auto" ? " Fallback ke Standard." : ""),
+        );
+        if (voiceTransportMode === "auto") startListening();
+        else stopVoiceSession();
+      });
+    } else {
+      startListening();
+    }
   }
 
   function speakReply(text: string, onFinished?: () => void) {
