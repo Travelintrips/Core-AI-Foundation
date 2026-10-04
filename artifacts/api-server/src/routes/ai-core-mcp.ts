@@ -508,13 +508,41 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     return;
   }
 
-  if (body.method === "initialize") {
+  if (body.method === "server/discover") {
     setDiscoveryHeaders(res);
     res.status(200).json(
       rpcResult(body.id ?? null, {
-        protocolVersion: MCP_PROTOCOL_VERSION,
+        resultType: "complete",
+        supportedVersions: [MCP_PROTOCOL_VERSION, LEGACY_MCP_PROTOCOL_VERSION],
+        capabilities: {
+          tools: {},
+          events: {},
+        },
+        serverInfo: SERVER_INFO,
+      }),
+    );
+    return;
+  }
+
+  if (body.method === "initialize") {
+    setDiscoveryHeaders(res);
+    const requestedProtocolVersion =
+      body.params &&
+      typeof body.params === "object" &&
+      "protocolVersion" in body.params &&
+      typeof (body.params as { protocolVersion?: unknown }).protocolVersion === "string"
+        ? (body.params as { protocolVersion: string }).protocolVersion
+        : MCP_PROTOCOL_VERSION;
+    const negotiatedProtocolVersion =
+      requestedProtocolVersion === LEGACY_MCP_PROTOCOL_VERSION
+        ? LEGACY_MCP_PROTOCOL_VERSION
+        : MCP_PROTOCOL_VERSION;
+    res.status(200).json(
+      rpcResult(body.id ?? null, {
+        protocolVersion: negotiatedProtocolVersion,
         capabilities: {
           tools: { listChanged: true },
+          events: {},
           resources: { subscribe: false, listChanged: false },
           prompts: { listChanged: false },
         },
@@ -533,6 +561,91 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     setDiscoveryHeaders(res);
     res.status(200).json(rpcResult(body.id ?? null, { tools }));
     return;
+  }
+
+  if (
+    body.method === "events/list" ||
+    body.method === "events/subscribe" ||
+    body.method === "events/unsubscribe"
+  ) {
+    const identity = await authenticate(req);
+    if (!identity || !identity.scopes.has("ai_core.events")) {
+      res.setHeader("WWW-Authenticate", authChallenge("ai_core.events"));
+      res.status(401).json(authRequiredResult(body.id ?? null, "ai_core.events"));
+      return;
+    }
+
+    try {
+      if (body.method === "events/list") {
+        setDiscoveryHeaders(res);
+        res.status(200).json(
+          rpcResult(body.id ?? null, {
+            events: nativeEvents,
+            nextCursor: null,
+          }),
+        );
+        return;
+      }
+
+      if (body.method === "events/subscribe") {
+        const parsed = NativeEventSubscribeParams.parse(body.params ?? {});
+        const subscription = await subscribeAiCoreMcpEvent({
+          principalId: identityPrincipalId(identity),
+          eventName: parsed.name,
+          arguments: parsed.arguments,
+          callbackUrl: parsed.delivery.url,
+          secret: parsed.delivery.secret,
+          ttlMs: parsed.ttlMs,
+        });
+        res.status(200).json(
+          rpcResult(body.id ?? null, {
+            id: subscription.id,
+            refreshBefore: subscription.refreshBefore,
+            cursor: null,
+            truncated: false,
+          }),
+        );
+        return;
+      }
+
+      const parsed = NativeEventUnsubscribeParams.parse(body.params ?? {});
+      await unsubscribeAiCoreMcpEvent({
+        principalId: identityPrincipalId(identity),
+        eventName: parsed.name,
+        arguments: parsed.arguments,
+        callbackUrl: parsed.delivery.url,
+      });
+      res.status(200).json(rpcResult(body.id ?? null, {}));
+      return;
+    } catch (error) {
+      if (error instanceof McpCallbackEndpointError) {
+        res.status(200).json(
+          rpcError(
+            body.id ?? null,
+            -32015,
+            "CallbackEndpointError",
+            { reason: error.reason },
+          ),
+        );
+        return;
+      }
+      if (error instanceof z.ZodError) {
+        res.status(200).json(
+          rpcError(body.id ?? null, -32602, "Invalid params", {
+            issues: error.issues,
+          }),
+        );
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : "MCP event request failed";
+      res.status(200).json(
+        rpcError(body.id ?? null, -32603, "Internal error", {
+          message: message.slice(0, 500),
+        }),
+      );
+      return;
+    }
   }
 
   // ChatGPT/Codex currently probes the standard MCP discovery methods even
