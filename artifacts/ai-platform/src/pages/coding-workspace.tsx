@@ -3832,7 +3832,9 @@ export default function CodingWorkspace() {
         : false;
 
   useEffect(() => {
-    const allowedIds = new Set(selectableVisibleTasks.map((task) => task.id));
+    const allowedIds = new Set(
+      visibleTasks.filter(canDeleteCodingTask).map((task) => task.id),
+    );
     setSelectedTaskIds((current) => {
       const next = new Set([...current].filter((id) => allowedIds.has(id)));
       if (
@@ -4159,8 +4161,8 @@ export default function CodingWorkspace() {
                       checked={selectAllState}
                       disabled={selectableVisibleTasks.length === 0 || bulkDeletePending}
                       onCheckedChange={(checked) => toggleAllVisibleTasks(checked === true)}
-                      aria-label="Pilih semua tugas yang tampil"
-                      title="Pilih semua tugas yang tampil"
+                      aria-label="Pilih semua tugas yang dapat dihapus"
+                      title="Pilih semua tugas yang dapat dihapus"
                       className="border-cyan-300/40 data-[state=checked]:bg-cyan-300 data-[state=checked]:text-[#062028] data-[state=indeterminate]:bg-cyan-300 data-[state=indeterminate]:text-[#062028]"
                       data-testid="checkbox-select-all-coding-tasks"
                     />
