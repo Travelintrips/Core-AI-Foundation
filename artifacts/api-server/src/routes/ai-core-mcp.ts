@@ -17,7 +17,7 @@ import {
 
 const router = Router();
 const MCP_PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.3.1" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.3.2" };
 
 const SendCommandArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -235,7 +235,7 @@ const tools = [
         leaseSeconds: { type: "integer", minimum: 30, maximum: 300, default: 300 },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
     annotations: {
       title: "Subscribe AI Core Events",
       readOnlyHint: false,
@@ -257,7 +257,7 @@ const tools = [
         limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
     annotations: {
       title: "Read AI Core Events",
       readOnlyHint: true,
@@ -278,7 +278,7 @@ const tools = [
         responseId: { type: "string", format: "uuid" },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
     annotations: {
       title: "Acknowledge AI Core Event",
       readOnlyHint: false,
@@ -299,7 +299,7 @@ const tools = [
         conversationId: { type: "string", minLength: 1, maxLength: 200 },
       },
     },
-    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
     annotations: {
       title: "Unsubscribe AI Core Events",
       readOnlyHint: false,
