@@ -49,7 +49,34 @@ describe("coding task presentation status", () => {
     ).toBe("ANALYZING");
   });
 
-  it("shows verified autonomous completion over stale READY_REVIEW and FAILED", () => {\n    for (const taskStatus of ["READY_REVIEW", "FAILED"]) {\n      expect(\n        codingTaskPresentationStatus({\n          taskStatus,\n          autonomousStatus: "COMPLETED",\n          hasActiveRun: false,\n        }),\n      ).toBe("COMPLETED");\n    }\n  });\n\n  it("shows a retry in progress over stale FAILED", () => {\n    expect(\n      codingTaskPresentationStatus({\n        taskStatus: "FAILED",\n        autonomousStatus: "ACTIVE",\n        hasActiveRun: false,\n      }),\n    ).toBe("ANALYZING");\n    expect(\n      codingTaskPresentationStatus({\n        taskStatus: "FAILED",\n        autonomousStatus: "FAILED",\n        hasActiveRun: true,\n      }),\n    ).toBe("ANALYZING");\n  });
+  it("shows verified autonomous completion over stale READY_REVIEW and FAILED", () => {
+    for (const taskStatus of ["READY_REVIEW", "FAILED"]) {
+      expect(
+        codingTaskPresentationStatus({
+          taskStatus,
+          autonomousStatus: "COMPLETED",
+          hasActiveRun: false,
+        }),
+      ).toBe("COMPLETED");
+    }
+  });
+
+  it("shows a retry in progress over stale FAILED", () => {
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "FAILED",
+        autonomousStatus: "ACTIVE",
+        hasActiveRun: false,
+      }),
+    ).toBe("ANALYZING");
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "FAILED",
+        autonomousStatus: "FAILED",
+        hasActiveRun: true,
+      }),
+    ).toBe("ANALYZING");
+  });
 
   it("keeps persisted terminal task states unchanged", () => {
     expect(
