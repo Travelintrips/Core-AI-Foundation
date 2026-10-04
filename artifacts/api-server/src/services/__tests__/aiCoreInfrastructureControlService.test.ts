@@ -18,6 +18,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger list docker projects", "HOSTINGER_DOCKER_LIST"],
     ["Hostinger cek logs docker project=myapp", "HOSTINGER_DOCKER_LOGS"],
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
+    ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger stop docker project=myapp", "HOSTINGER_DOCKER_STOP"],
     ["Hostinger buat subdomain domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_CREATE"],
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
