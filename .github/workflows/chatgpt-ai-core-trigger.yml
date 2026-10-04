@@ -7,8 +7,6 @@ on:
         description: "Bounded command for AI Core handoff"
         required: true
         type: string
-  issues:
-    types: [opened]
 
 permissions:
   contents: read
@@ -16,7 +14,7 @@ permissions:
 
 jobs:
   emit-ai-core-event:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[AI-CORE-CMD]') || contains(github.event.issue.labels.*.name, 'ai-handoff-approved')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Resolve and validate command
@@ -24,14 +22,8 @@ jobs:
         shell: bash
         env:
           DISPATCH_COMMAND: ${{ inputs.command }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          if [ "${{ github.event_name }}" = "issues" ]; then
-            command="${ISSUE_BODY:-}"
-          else
-            command="${DISPATCH_COMMAND:-}"
-          fi
+          command="${DISPATCH_COMMAND:-}"
           test -n "$command"
           test "${#command}" -le 2000
           {

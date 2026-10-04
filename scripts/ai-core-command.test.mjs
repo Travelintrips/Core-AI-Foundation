@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { REPOSITORY, resolveCommand, createApi, execute } from './ai-core-command.mjs';
+import { REPOSITORY, resolveCommand, createApi, audit, execute } from './ai-core-command.mjs';
 
 const env = { GITHUB_REPOSITORY: REPOSITORY, GITHUB_ACTOR: 'Travelintrips',
   GITHUB_TRIGGERING_ACTOR: 'Travelintrips', GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_RUN_ID: '1234' };
@@ -41,6 +41,32 @@ test('default dispatch audits without creating tasks', async () => {
   assert.equal(f.calls.length, 3);
   assert.ok(f.calls.every(call => !call.method));
 });
+test('edge-blocked public health probes do not block a ready authenticated control bridge', async () => {
+  const api = async (path, options = {}) => {
+    if (path === '/healthz' || path === '/healthz/full') {
+      assert.deepEqual(options.allowed, [403, 503]);
+      return { status: 403, value: { error: 'edge blocked' } };
+    }
+    if (path === '/ai/coding/bridge/runtime-status') {
+      return {
+        status: 200,
+        value: {
+          ready: true,
+          autonomous: { configured: true, running: true },
+          dependencies: { githubConfigured: true },
+        },
+      };
+    }
+    throw new Error('unexpected path');
+  };
+
+  const result = await audit(api);
+  assert.equal(result.ready, true);
+  assert.equal(result.health, 'edge_blocked');
+  assert.equal(result.readiness, 'edge_blocked');
+  assert.equal(result.result, 'READY_FOR_BOUNDED_TASKS');
+});
+
 test('degraded readiness remains visible and prevents submission', async () => {
   const f = fakeApi({ ready: false });
   const audit = await execute(resolve({}), f.api);
