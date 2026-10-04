@@ -17,7 +17,7 @@ import {
 
 const router = Router();
 const MCP_PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.3.0" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.3.1" };
 
 const SendCommandArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -131,6 +131,14 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
   } catch {
     return null;
   }
+}
+
+function setDiscoveryHeaders(res: import("express").Response): void {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Vary", "Authorization");
+  res.setHeader("X-MCP-Server-Version", SERVER_INFO.version);
 }
 
 function rpcResult(id: unknown, result: unknown) {
@@ -378,11 +386,12 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
   }
 
   if (body.method === "initialize") {
+    setDiscoveryHeaders(res);
     res.status(200).json(
       rpcResult(body.id ?? null, {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: {
-          tools: { listChanged: false },
+          tools: { listChanged: true },
           resources: { subscribe: false, listChanged: false },
           prompts: { listChanged: false },
         },
@@ -398,6 +407,7 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
   }
 
   if (body.method === "tools/list") {
+    setDiscoveryHeaders(res);
     res.status(200).json(rpcResult(body.id ?? null, { tools }));
     return;
   }
