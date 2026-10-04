@@ -27,10 +27,10 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.3.1");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.3.2");
     expect(response.body.result.serverInfo).toEqual({
       name: "ai-core-direct-command",
-      version: "1.3.1",
+      version: "1.3.2",
     });
     expect(response.body.result.capabilities).toEqual({
       tools: { listChanged: true },
@@ -63,8 +63,9 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.3.1");
-    expect(response.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
+    expect(response.headers["x-mcp-server-version"]).toBe("1.3.2");
+    const toolNames = response.body.result.tools.map((tool: { name: string }) => tool.name);
+    expect(toolNames).toEqual(
       expect.arrayContaining([
         "send_ai_core_command",
         "get_ai_core_task_progress",
@@ -75,5 +76,14 @@ describe("AI Core MCP discovery compatibility", () => {
         "get_profile",
       ]),
     );
+    for (const name of [
+      "subscribe_ai_core_events",
+      "read_ai_core_events",
+      "ack_ai_core_event",
+      "unsubscribe_ai_core_events",
+    ]) {
+      const tool = response.body.result.tools.find((item: { name: string }) => item.name === name);
+      expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.progress"] }]);
+    }
   });
 });
