@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { REPOSITORY, resolveCommand, createApi, execute } from './ai-core-command.mjs';
+import { REPOSITORY, resolveCommand, createApi, audit, execute } from './ai-core-command.mjs';
 
 const env = { GITHUB_REPOSITORY: REPOSITORY, GITHUB_ACTOR: 'Travelintrips',
   GITHUB_TRIGGERING_ACTOR: 'Travelintrips', GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_RUN_ID: '1234' };
