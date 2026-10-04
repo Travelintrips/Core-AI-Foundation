@@ -114,7 +114,7 @@ jobs:
           const result = body?.result;
           if (result?.resultType !== "complete") throw new Error("MCP server/discover did not return a complete result");
           const versions = Array.isArray(result?.supportedVersions) ? result.supportedVersions : [];
-          if (!versions.includes("2026-07-28")) throw new Error("MCP 2.0 protocol version is not live");
+          if (!versions.includes("2025-06-18")) throw new Error("Supported MCP protocol version 2025-06-18 is not live");
           if (!result?.capabilities || typeof result.capabilities.events !== "object") {
             throw new Error("Native MCP events capability is not live");
           }
