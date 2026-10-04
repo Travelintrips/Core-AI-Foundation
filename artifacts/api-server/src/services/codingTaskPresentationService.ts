@@ -8,7 +8,18 @@ export function codingTaskPresentationStatus(input: {
   }
 
   if (input.hasActiveRun) {
-    return input.taskStatus;
+    return "ANALYZING";
+  }
+
+  if (input.autonomousStatus === "COMPLETED") {
+    return "COMPLETED";
+  }
+
+  if (
+    input.autonomousStatus === "ACTIVE" ||
+    input.autonomousStatus === "WAITING"
+  ) {
+    return "ANALYZING";
   }
 
   if (

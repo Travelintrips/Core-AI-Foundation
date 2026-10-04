@@ -20,14 +20,42 @@ describe("coding task presentation status", () => {
     ).toBe("FAILED");
   });
 
-  it("does not mask an active recovery run as failed", () => {
+  it("shows active autonomous work as ANALYZING instead of READY_REVIEW", () => {
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        autonomousStatus: "WAITING",
+        hasActiveRun: false,
+      }),
+    ).toBe("ANALYZING");
+
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        autonomousStatus: "ACTIVE",
+        hasActiveRun: false,
+      }),
+    ).toBe("ANALYZING");
+  });
+
+  it("does not mask an active recovery run as READY_REVIEW", () => {
     expect(
       codingTaskPresentationStatus({
         taskStatus: "READY_REVIEW",
         autonomousStatus: "FAILED",
         hasActiveRun: true,
       }),
-    ).toBe("READY_REVIEW");
+    ).toBe("ANALYZING");
+  });
+
+  it("shows autonomous completion as COMPLETED even if the persisted task is still READY_REVIEW", () => {
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        autonomousStatus: "COMPLETED",
+        hasActiveRun: false,
+      }),
+    ).toBe("COMPLETED");
   });
 
   it("keeps non-review task states unchanged", () => {
