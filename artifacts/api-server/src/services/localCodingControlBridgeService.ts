@@ -7,6 +7,7 @@ import {
   db,
 } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
+import { enqueueAiCoreMcpBridgeLifecycleEvent } from "./aiCoreMcpEventWebhookService.js";
 import { notifyCodingBridgeResponse } from "./codingWhatsappNotificationService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
@@ -243,6 +244,15 @@ export async function appendCodingBridgeResponse(input: {
       commandId: input.commandId,
       taskId: input.taskId ?? null,
       kind: input.kind,
+    }).catch(() => undefined);
+    void enqueueAiCoreMcpBridgeLifecycleEvent({
+      responseId: response.id,
+      taskId: input.taskId ?? null,
+      kind: input.kind,
+      message: input.message,
+      checkpoint: input.checkpoint ?? {},
+      metadata: input.metadata ?? {},
+      createdAt: response.createdAt,
     }).catch(() => undefined);
   }
 
