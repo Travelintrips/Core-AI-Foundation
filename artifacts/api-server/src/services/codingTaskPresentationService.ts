@@ -3,10 +3,7 @@ export function codingTaskPresentationStatus(input: {
   autonomousStatus?: string | null;
   hasActiveRun?: boolean;
 }): string {
-  if (input.taskStatus !== "READY_REVIEW") {
-    return input.taskStatus;
-  }
-
+  // A live run/recovery always wins over stale persisted terminal state.
   if (input.hasActiveRun) {
     return "ANALYZING";
   }
@@ -18,15 +15,24 @@ export function codingTaskPresentationStatus(input: {
     return "ANALYZING";
   }
 
+  // Verified autonomous completion is authoritative for stale FAILED or
+  // READY_REVIEW rows. The autonomous runtime only reaches COMPLETED after
+  // hasVerifiedCompletionEvidence() succeeds.
+  if (
+    input.autonomousStatus === "COMPLETED" &&
+    (input.taskStatus === "FAILED" || input.taskStatus === "READY_REVIEW")
+  ) {
+    return "COMPLETED";
+  }
+
   if (
     input.autonomousStatus === "FAILED" ||
     input.autonomousStatus === "BLOCKED"
   ) {
-    return "FAILED";
+    if (input.taskStatus === "READY_REVIEW" || input.taskStatus === "FAILED") {
+      return "FAILED";
+    }
   }
 
-  // Autonomous bookkeeping alone is not terminal implementation evidence.
-  // Persisted task status must only become COMPLETED after the runtime proves
-  // the requested work actually reached its final verified outcome.
   return input.taskStatus;
 }
