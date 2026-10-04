@@ -267,6 +267,35 @@ function availabilityFromRow(
   };
 }
 
+export async function getAvailableOllamaCodingSlots(): Promise<number> {
+  const raw = await db.execute(sql`
+    SELECT COALESCE(
+      SUM(GREATEST(max_concurrent_jobs - running_jobs, 0)),
+      0
+    ) AS available_slots
+    FROM ai_platform.ai_workers
+    WHERE provider_slug = ${OLLAMA_WORKER_PROVIDER}
+      AND runtime_kind = ${OLLAMA_WORKER_RUNTIME_KIND}
+      AND endpoint_url IS NOT NULL
+      AND status IN ('online', 'idle', 'busy')
+      AND lease_expires_at IS NOT NULL
+      AND lease_expires_at > NOW()
+      AND capabilities @> ${JSON.stringify([
+        OLLAMA_INFERENCE_CAPABILITY,
+        OLLAMA_CODING_CAPABILITY,
+      ])}::jsonb
+  `);
+
+  const value =
+    (raw as unknown as { rows?: Array<{ available_slots?: unknown }> })
+      .rows?.[0]?.available_slots;
+  const slots = Number(value ?? 0);
+
+  return Number.isFinite(slots) && slots > 0
+    ? Math.floor(slots)
+    : 0;
+}
+
 export async function getOllamaWorkerAvailability(
   modelId: string,
 ): Promise<OllamaWorkerAvailability | null> {

@@ -14,6 +14,7 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { computePriorityScore } from "./priorityEngine.js";
+import { getAvailableOllamaCodingSlots } from "./ollamaWorkerRegistryService.js";
 import {
   completeRepositoryAnalyzerRun,
   executeRepositoryAnalyzerJob,
@@ -84,6 +85,21 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+export function resolveCodingDispatchConcurrency(
+  requestedMaxParallel: number | undefined,
+  availableOllamaSlots: number,
+): number {
+  const available = Math.max(
+    0,
+    Math.min(8, Math.floor(Number.isFinite(availableOllamaSlots) ? availableOllamaSlots : 0)),
+  );
+  if (available === 0) return 0;
+  if (!Number.isFinite(requestedMaxParallel)) return available;
+
+  const requested = Math.max(1, Math.min(8, Math.floor(requestedMaxParallel!)));
+  return Math.min(requested, available);
 }
 
 function validateBaseSha(value: string): string {
@@ -535,12 +551,43 @@ export async function dispatchReadyCodingWorkstreams(
   const workerPoolId =
     options.workerPoolId?.trim() || "coding-workstream-pool";
   const manualReview = await markManualReviewWorkstreams(graphId);
+  const availableOllamaSlots = await getAvailableOllamaCodingSlots();
+  const effectiveMaxParallel = resolveCodingDispatchConcurrency(
+    options.maxParallel,
+    availableOllamaSlots,
+  );
+
+  if (effectiveMaxParallel === 0) {
+    const [graph] = await db
+      .select()
+      .from(aiCodingTaskGraphsTable)
+      .where(eq(aiCodingTaskGraphsTable.id, graphId));
+
+    await logAudit(
+      "coding-multi-worker",
+      "workstream_dispatch_waiting_for_ollama_capacity",
+      graphId,
+      "coding_task_graph",
+      "success",
+      {
+        requestedMaxParallel: options.maxParallel ?? null,
+        availableOllamaSlots,
+      },
+    ).catch(() => undefined);
+
+    return {
+      graphId,
+      graphStatus: graph?.status ?? "RUNNING",
+      dispatched: [],
+      manualReview,
+    };
+  }
 
   const claims = await claimReadyCodingWorkstreams(
     graphId,
     workerPoolId,
     {
-      maxClaims: options.maxParallel,
+      maxClaims: effectiveMaxParallel,
       leaseSeconds: options.leaseSeconds,
       baseSha,
       requireOwnershipPaths: true,
