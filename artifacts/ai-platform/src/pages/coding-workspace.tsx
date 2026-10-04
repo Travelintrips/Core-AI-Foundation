@@ -130,6 +130,9 @@ type CodingMonitorSnapshot = {
       busyOrUnavailable: boolean;
       lastHeartbeat: string;
       capabilities: string[];
+      providerSlug: string | null;
+      modelId: string | null;
+      runtimeKind: string | null;
     }>;
   };
 };
@@ -4002,7 +4005,8 @@ export default function CodingWorkspace() {
                 <div key={worker.id} className="rounded-lg border border-white/[0.05] bg-black/10 px-3 py-2" data-testid={`coding-worker-${worker.id}`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate font-mono text-[10px] text-slate-300">{worker.workerName}</div>
+                      <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-slate-600">Worker</div>
+                      <div className="mt-0.5 truncate font-mono text-[10px] text-slate-200">{worker.workerName}</div>
                       <div className="mt-0.5 text-[9px] text-slate-600">{worker.workerType}</div>
                     </div>
                     <span className={cn(
@@ -4015,6 +4019,26 @@ export default function CodingWorkspace() {
                     )}>
                       {worker.available ? "available" : worker.active ? "busy" : "unavailable"}
                     </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                    <div className="rounded-md border border-white/[0.04] bg-white/[0.015] px-2 py-1.5">
+                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-700">Provider</div>
+                      <div className="mt-0.5 truncate font-mono text-[9px] text-cyan-200" title={worker.providerSlug ?? "Not configured"}>
+                        {worker.providerSlug ?? "not configured"}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-white/[0.04] bg-white/[0.015] px-2 py-1.5">
+                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-700">Model</div>
+                      <div className="mt-0.5 truncate font-mono text-[9px] text-slate-300" title={worker.modelId ?? "Not configured"}>
+                        {worker.modelId ?? "not configured"}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-white/[0.04] bg-white/[0.015] px-2 py-1.5">
+                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-700">Runtime</div>
+                      <div className="mt-0.5 truncate font-mono text-[9px] text-slate-400" title={worker.runtimeKind ?? "Not configured"}>
+                        {worker.runtimeKind ?? "not configured"}
+                      </div>
+                    </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[8px] text-slate-600">
                     <span>jobs {worker.runningJobs}/{worker.maxConcurrentJobs}</span>
