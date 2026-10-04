@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, notLike, sql } from "drizzle-orm";
 import {
   db,
   aiCodeChangesTable,
@@ -161,6 +161,7 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
   const tasks = await db
     .select()
     .from(aiCodingTasksTable)
+    .where(notLike(aiCodingTasksTable.taskNumber, "MW-%"))
     .orderBy(desc(aiCodingTasksTable.createdAt));
 
   const autonomousPresentation = await db.execute(sql`
