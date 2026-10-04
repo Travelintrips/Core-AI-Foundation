@@ -383,6 +383,22 @@ describe("workstream AI failure context preservation", () => {
 });
 
 
+describe("workstream AI stale completed graph recovery", () => {
+  it("reopens a stale COMPLETED graph before constrained AI claims unresolved review work", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('if (graphStatus === "COMPLETED")');
+    expect(source).toContain('status: "RUNNING"');
+    expect(source).toContain("completedAt: null");
+    expect(source).toContain(
+      "Coding task graph is not active for constrained AI work.",
+    );
+  });
+});
+
 describe("workstream AI stale-job handoff revocation", () => {
   it("scopes failure cleanup to the queued job claim attempt", () => {
     const source = readFileSync(

@@ -237,6 +237,36 @@ describe("repository analyzer GitHub clone authentication", () => {
     ).toBe("x-access-token:" + token);
   });
 
+  it("falls back to standard GitHub token environment variables for worker git access", () => {
+    for (const tokenName of ["GITHUB_TOKEN", "GH_TOKEN"] as const) {
+      const token = "github_pat_fallback_secret";
+      const env = buildRepositoryCloneEnvironment(
+        "https://github.com/Travelintrips/Core-AI-Foundation.git",
+        {
+          PATH: "/usr/bin",
+          [tokenName]: token,
+        } as NodeJS.ProcessEnv,
+      );
+
+      const configs = Array.from(
+        { length: Number(env.GIT_CONFIG_COUNT) },
+        (_, index) => [
+          env[`GIT_CONFIG_KEY_${index}`],
+          env[`GIT_CONFIG_VALUE_${index}`],
+        ],
+      );
+      const authorization = configs.find(([key]) => key === "http.extraHeader");
+
+      expect(authorization?.[1]).toContain("AUTHORIZATION: basic ");
+      expect(
+        Buffer.from(
+          String(authorization?.[1]).replace("AUTHORIZATION: basic ", ""),
+          "base64",
+        ).toString("utf8"),
+      ).toBe("x-access-token:" + token);
+    }
+  });
+
   it("does not attach the GitHub token to GitLab clones", () => {
     const env = buildRepositoryCloneEnvironment(
       "https://gitlab.com/example/repo.git",
