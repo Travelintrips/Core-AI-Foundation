@@ -62,6 +62,8 @@ const { reconcileStaleMultiWorkerRuns } =
   await import("./services/localCodingMultiWorkerRecoveryService.js");
 const { ensureCodingControlBridgeTables } =
   await import("./services/codingControlBridgeSchemaService.js");
+const mcpEvents =
+  await import("./services/aiCoreMcpEventWebhookService.js");
 const { ensureAgentServiceTokenBootstrap } =
   await import("./services/agentServiceTokenBootstrapService.js");
 const codingAutonomous =
@@ -133,6 +135,7 @@ async function initializeRuntimeServices(): Promise<void> {
   await runStartupStep("[observability] Table init", () => ensureObservabilityTables());
   await runStartupStep("[submit-idempotency] Table init", () => ensureSubmitIdempotencyTable());
   await runStartupStep("[coding-bridge] Table init", () => ensureCodingControlBridgeTables());
+  await runStartupStep("[mcp-events] Table init", () => mcpEvents.ensureAiCoreMcpEventTables());
   await runStartupStep("[agent-runtime] Scoped token bootstrap", () => ensureAgentServiceTokenBootstrap());
   await runStartupStep("[material-library] Table/seed init", async () => {
     await ensureMaterialLibraryTables();
@@ -175,6 +178,10 @@ async function initializeRuntimeServices(): Promise<void> {
   await runStartupStep(
     "[coding-autonomous] Runtime start",
     () => codingAutonomous.startAutonomousCodingRuntime(),
+  );
+  await runStartupStep(
+    "[mcp-events] Delivery runtime start",
+    () => mcpEvents.startAiCoreMcpEventDeliveryRuntime(),
   );
 
   // Resume only repository-analysis runs already requested by a user. This
