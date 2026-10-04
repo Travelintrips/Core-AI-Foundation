@@ -19,5 +19,11 @@ describe("GCP Ollama VM lifecycle config", () => {
     expect(config.projectId).toBe("ollama-project");
     expect(config.zone).toBe("asia-northeast1-c");
     expect(config.instanceName).toBe("gpu-worker");
+    expect(config.idleShutdownMs).toBe(5 * 60_000);
+  });
+
+  it("supports an explicit idle shutdown timeout with a one minute floor", () => {
+    expect(readGcpOllamaVmConfig({ GCP_OLLAMA_IDLE_SHUTDOWN_MS: "300000" }).idleShutdownMs).toBe(300000);
+    expect(readGcpOllamaVmConfig({ GCP_OLLAMA_IDLE_SHUTDOWN_MS: "1000" }).idleShutdownMs).toBe(60000);
   });
 });
