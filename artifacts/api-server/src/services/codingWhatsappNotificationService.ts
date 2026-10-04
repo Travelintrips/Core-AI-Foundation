@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { logger } from "../lib/logger.js";
 
 type CodingBridgeKind =
@@ -29,29 +28,13 @@ function approvalWebConfig() {
     process.env.PUBLIC_APP_URL ??
     "https://aicore.cstlogistic.co.id"
   ).trim().replace(/\/$/, "");
-  const signingSecret = (process.env.AI_CODING_WA_INCOMING_SECRET ?? "").trim();
-  return { publicBaseUrl, signingSecret };
+  return { publicBaseUrl };
 }
 
-function buildApprovalWebLink(
-  token: string,
-  decision: "APPROVE" | "REJECT",
-): string | null {
-  const { publicBaseUrl, signingSecret } = approvalWebConfig();
-  if (!publicBaseUrl || !signingSecret) return null;
-
-  const signature = crypto
-    .createHmac("sha256", signingSecret)
-    .update(`${token}:${decision}`)
-    .digest("hex");
-
-  const params = new URLSearchParams({
-    token,
-    decision,
-    sig: signature,
-  });
-
-  return `${publicBaseUrl}/api/ai/coding/whatsapp/approval?${params.toString()}`;
+function buildApprovalWebLink(token: string): string | null {
+  const { publicBaseUrl } = approvalWebConfig();
+  if (!publicBaseUrl) return null;
+  return `${publicBaseUrl}/api/a/${encodeURIComponent(token)}`;
 }
 
 export type CodingWhatsappNotifyResult =
@@ -272,8 +255,7 @@ export async function sendCodingApprovalRequest(input: {
   token: string;
   expiresAt: string;
 }): Promise<CodingWhatsappNotifyResult> {
-  const approveLink = buildApprovalWebLink(input.token, "APPROVE");
-  const rejectLink = buildApprovalWebLink(input.token, "REJECT");
+  const approvalLink = buildApprovalWebLink(input.token);
 
   const text = [
     "AI Core - APPROVAL REQUIRED",
@@ -282,12 +264,7 @@ export async function sendCodingApprovalRequest(input: {
     input.summary.trim(),
     `Berlaku sampai: ${input.expiresAt}`,
     "",
-    "Pilih tindakan di bawah.",
-    approveLink ? `✅ APPROVE: ${approveLink}` : "",
-    rejectLink ? `❌ REJECT: ${rejectLink}` : "",
-    "",
-    `Fallback teks: APPROVE ${input.token}`,
-    `atau: REJECT ${input.token}`,
+    approvalLink ? `👉 Buka Approval: ${approvalLink}` : "",
   ].filter(Boolean).join("\n");
 
   // Baileys interactive/native-flow messages can render as an undecryptable
