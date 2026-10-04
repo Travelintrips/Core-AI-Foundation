@@ -94,6 +94,52 @@ function parseJson(value: string | null): Record<string, unknown> {
   }
 }
 
+
+function validCommitSha(value: unknown): boolean {
+  return typeof value === "string" && /^[0-9a-f]{40}$/i.test(value);
+}
+
+function verificationOnlyInstruction(instruction: string | null | undefined): boolean {
+  const normalized = (instruction ?? "").toLowerCase();
+  return (
+    /\b(jangan|tidak)\s+(ubah|mengubah)\s+file\b/.test(normalized) ||
+    /\bdo not (change|modify|edit) (any )?files?\b/.test(normalized) ||
+    /\bverify|verification|test lifecycle|canary\b/.test(normalized) &&
+      /\bno (code )?changes?\b/.test(normalized)
+  );
+}
+
+export function hasVerifiedCompletionEvidence(input: {
+  nextAction: string | null;
+  taskCommitSha?: string | null;
+  instruction?: string | null;
+  payload: Record<string, unknown>;
+  runs: Array<{ agentName?: string | null; status?: string | null }>;
+}): boolean {
+  if (input.nextAction !== "DONE") return false;
+
+  const merge = isRecord(input.payload.localMergeApproval)
+    ? input.payload.localMergeApproval
+    : null;
+  if (merge?.status === "MERGED" && validCommitSha(merge.mergeCommitSha)) {
+    return true;
+  }
+
+  if (validCommitSha(input.taskCommitSha)) {
+    return true;
+  }
+
+  if (verificationOnlyInstruction(input.instruction)) {
+    return input.runs.some(
+      (run) =>
+        run.status === "COMPLETED" &&
+        /test|verification|review/i.test(run.agentName ?? ""),
+    );
+  }
+
+  return false;
+}
+
 function envTrue(value: string | undefined): boolean {
   return /^(1|true|yes|on)$/i.test(value?.trim() ?? "");
 }
@@ -648,7 +694,15 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
   try {
     const state = await loadTaskState(taskId);
 
-    if (state.task.status === "COMPLETED" || state.nextAction === "DONE") {
+    const completionVerified = hasVerifiedCompletionEvidence({
+      nextAction: state.nextAction,
+      taskCommitSha: state.task.commitSha,
+      instruction: state.task.instruction,
+      payload: state.payload,
+      runs: state.runs,
+    });
+
+    if (state.nextAction === "DONE" && completionVerified) {
       if (state.task.status !== "COMPLETED") {
         await db
           .update(aiCodingTasksTable)
@@ -663,9 +717,46 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         taskId,
         "COMPLETED",
         state.task.resultSummary || "Coding task selesai.",
-        { status: "COMPLETED" },
+        { status: "COMPLETED", completionVerified: true },
       );
       return { taskId, status: "COMPLETED", action: "COMPLETE" };
+    }
+
+    if (state.nextAction === "DONE" && !completionVerified) {
+      const message =
+        "Completion ditolak karena belum ada bukti terminal: merge/commit terverifikasi atau verification-only run yang eksplisit.";
+      if (state.task.status === "COMPLETED") {
+        await db
+          .update(aiCodingTasksTable)
+          .set({ status: "READY_REVIEW", resultSummary: message })
+          .where(eq(aiCodingTasksTable.id, taskId));
+      }
+      await setState(taskId, "BLOCKED", "COMPLETION_EVIDENCE_MISSING", message);
+      await report(taskId, "BLOCKER", message, {
+        status: "READY_REVIEW",
+        nextAction: state.nextAction,
+      });
+      return { taskId, status: "BLOCKED", action: "COMPLETION_EVIDENCE_MISSING" };
+    }
+
+    if (state.task.status === "COMPLETED" && state.nextAction !== "DONE") {
+      await db
+        .update(aiCodingTasksTable)
+        .set({
+          status: "READY_REVIEW",
+          resultSummary:
+            state.task.resultSummary ||
+            "Task reopened because downstream implementation gates are still pending.",
+        })
+        .where(eq(aiCodingTasksTable.id, taskId));
+      await setState(taskId, "ACTIVE", "RECOVER_FALSE_COMPLETION", null);
+      await report(
+        taskId,
+        "CHECKPOINT",
+        "Task sebelumnya ditandai COMPLETED sebelum gate implementasi selesai. Status dibuka kembali untuk melanjutkan pipeline.",
+        { nextAction: state.nextAction },
+      );
+      return { taskId, status: "ACTIVE", action: "RECOVER_FALSE_COMPLETION" };
     }
 
     if (state.activeRun) {
@@ -1196,6 +1287,58 @@ async function temporalOrchestratorActive(): Promise<boolean> {
 }
 
 
+export async function recoverFalseCompletedCodingTasks(limit = 100): Promise<number> {
+  const bounded = Math.max(1, Math.min(250, Math.floor(limit)));
+  const candidates = await db
+    .select({ id: aiCodingTasksTable.id })
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.status, "COMPLETED"))
+    .orderBy(desc(aiCodingTasksTable.updatedAt))
+    .limit(bounded);
+
+  let recovered = 0;
+  for (const candidate of candidates) {
+    const state = await loadTaskState(candidate.id).catch(() => null);
+    if (!state || !state.nextAction || state.nextAction === "DONE") continue;
+
+    const result = await db.execute(sql`
+      UPDATE ai_platform.ai_coding_tasks
+      SET status = 'READY_REVIEW',
+          result_summary = COALESCE(
+            NULLIF(result_summary, ''),
+            'Task reopened because downstream implementation gates are still pending.'
+          ),
+          updated_at = NOW()
+      WHERE id = ${candidate.id}::uuid
+        AND status = 'COMPLETED'
+      RETURNING id
+    `);
+    if (!result.rows?.length) continue;
+
+    await db.execute(sql`
+      UPDATE ai_platform.ai_coding_autonomous_tasks
+      SET enabled = TRUE,
+          status = 'ACTIVE',
+          last_action = 'RECOVER_FALSE_COMPLETION',
+          last_error = NULL,
+          completed_at = NULL,
+          updated_at = NOW()
+      WHERE task_id = ${candidate.id}::uuid
+        AND status = 'COMPLETED'
+        AND cycle_count < max_cycles
+    `);
+
+    recovered += 1;
+    logger.warn(
+      { taskId: candidate.id, nextAction: state.nextAction },
+      "[coding-autonomous] reopened false COMPLETED task with pending implementation gates",
+    );
+  }
+
+  return recovered;
+}
+
+
 export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
   const candidates = await db
     .select({ id: aiCodingTasksTable.id })
@@ -1205,11 +1348,18 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
     .limit(20);
 
   const recoverable = new Set([
+    "APPROVE_PLAN",
+    "REVIEW_LOCAL_PATCH",
+    "RUN_SANDBOX_VERIFICATION",
+    "LOCAL_RECOVERY_REQUIRED",
     "AI_REQUIRED",
     "APPROVE_TASK_GRAPH",
     "APPROVE_AI_HANDOFF",
     "AI_HANDOFF_APPROVED",
     "REVIEW_AI_PATCH",
+    "APPROVE_COMMIT",
+    "REVIEW_PR",
+    "APPROVE_MERGE",
   ]);
 
   for (const candidate of candidates) {
@@ -1360,6 +1510,10 @@ export async function startAutonomousCodingRuntime(): Promise<void> {
       "[coding-autonomous] Startup schema ensure failed; periodic tick will retry",
     );
   }
+
+  await recoverFalseCompletedCodingTasks().catch((error) => {
+    logger.warn({ err: error }, "[coding-autonomous] false completion recovery failed");
+  });
 
   await recoverOrphanedReadyReviewTasks().catch((error) => {
     logger.warn({ err: error }, "[coding-autonomous] orphan recovery failed");
