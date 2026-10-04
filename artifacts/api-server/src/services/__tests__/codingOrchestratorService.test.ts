@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockInsertValues = vi.hoisted(() => vi.fn());
@@ -132,6 +133,21 @@ const run = {
   logs: null,
   errorMessage: null,
 };
+
+describe("Coding Orchestrator autonomous fail-closed policy", () => {
+  it("does not treat an unreadable autonomous state as permission to enable", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("autonomous_enable_deferred_state_unreadable");
+    expect(source).toContain("if (autonomousStateReadable && !explicitlyDisabled)");
+    expect(source).not.toContain(
+      "getAutonomousCodingTaskStatus(input.task.id).catch(() => null)",
+    );
+  });
+});
 
 describe("Coding Orchestrator AI gate monotonicity", () => {
   it("preserves handoff gates that already advanced beyond AI_REQUIRED", () => {
