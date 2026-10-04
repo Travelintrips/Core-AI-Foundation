@@ -99,7 +99,7 @@ test('only owner-authored labeled issues are accepted', () => {
   assert.equal(resolveCommand(issue, issueEnv).action, 'audit');
   const taskCommand = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
   assert.equal(taskCommand.action, 'submit');
-  assert.equal(taskCommand.maxCycles, 20);
+  assert.equal(taskCommand.maxCycles, 60);
   for (const bad of [
     { ...issue, sender: { login: 'outsider' } },
     { ...issue, label: { name: 'random-label' } },
@@ -171,7 +171,7 @@ test('handoff approval issue rejects malformed identifiers', () => {
 });
 
 test('input budgets, IDs, instruction limits, and actions are validated', () => {
-  for (const max_cycles of ['0', '4', '21', '5.5', 'NaN']) assert.throws(() => resolve({ max_cycles }), /max_cycles/);
+  for (const max_cycles of ['0', '4', '101', '5.5', 'NaN']) assert.throws(() => resolve({ max_cycles }), /max_cycles/);
   for (const request_id of ['../secret', 'a b', '${{secrets.ADMIN_API_KEY}}']) assert.throws(() => resolve({ request_id }), /request_id/);
   assert.throws(() => resolve({ action: 'deploy' }), /Invalid action/);
   assert.throws(() => resolve({ action: 'submit', instruction: '' }), /instruction/);
@@ -188,16 +188,18 @@ test('submission is bounded and accepted is not reported as completed', async ()
   const f = fakeApi();
   const result = await execute(resolve({ action: 'submit', instruction: 'Add unit test', request_id: 'test-123' }), f.api);
   assert.equal(result.result, 'TASK_ACCEPTED_NOT_COMPLETED');
-  assert.equal(result.productionApprovalRequired, true);
+  assert.equal(result.productionApprovalRequired, false);
   const create = f.calls.find(call => call.path === '/ai/coding/tasks' && call.method === 'POST');
   assert.equal(create.body.repository, REPOSITORY);
-  assert.match(create.body.instruction, /Preserve production approval gates/);
+  assert.match(create.body.instruction, /owner-authorized autonomous coding task/);
+  assert.match(create.body.instruction, /merge it automatically only after all required checks pass/);
   assert.equal(f.calls.find(call => call.path.endsWith('/start')).body.maxCycles, 5);
   assert.ok(!f.calls.some(call => /approve-merge|deploy/.test(call.path)));
   const bridge = f.calls.find(call => call.path === '/ai/coding/bridge/commands' && call.method === 'POST');
-  assert.equal(bridge.body.authority.allowMerge, false);
-  assert.equal(bridge.body.authority.allowProductionDeploy, false);
+  assert.equal(bridge.body.authority.allowMerge, true);
+  assert.equal(bridge.body.authority.allowProductionDeploy, true);
   assert.equal(bridge.body.metadata.autonomousE2E, false);
+  assert.equal(bridge.body.metadata.ownerAuthorizedAutonomous, true);
 });
 test('explicit autonomous E2E mode grants merge and production deploy authority only for that task', async () => {
   const f = fakeApi();
@@ -233,10 +235,22 @@ test('production E2E canary follows successful Hostinger production verification
   assert.doesNotMatch(source, /cron:\s*"0 16 \* \* \*"/);
 });
 
+test('successful production control-plane canary finalizes its verification-only task', () => {
+  const source = readFileSync(
+    new URL('../.github/workflows/coding-control-plane-e2e-canary.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /Finalize successful verification-only canary/);
+  assert.match(source, /-X PATCH "\$API_BASE_URL\/ai\/coding\/tasks\/\$task"/);
+  assert.match(source, /status:"COMPLETED"/);
+  assert.match(source, /verification-only task/);
+});
+
 test('owner issue reruns surface a completed AI Core task as TASK_COMPLETED', async () => {
   const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
   const command = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
-  const instruction = command.instruction + '\n\nExecution policy: Use an isolated working branch. Preserve production approval gates. Do not bypass tests, access secrets, force-push, or directly modify production. Submit verified changes as a pull request.';
+  const instruction = command.instruction + '\n\nExecution policy: This is an owner-authorized autonomous coding task. Use an isolated working branch. Do not bypass tests, access secrets, force-push, weaken security controls, or directly modify production. Complete the implementation end-to-end: create the patch, run required verification/CI, commit, push, open a pull request, and merge it automatically only after all required checks pass. After merge, allow the normal production deployment workflow to run. Do not stop for ordinary human review; only fail closed for an actual critical security/destructive-operation safeguard.';
   const f = fakeApi({
     tasks: [{ id, repository: REPOSITORY, projectName: 'GitHub Trigger issue-321', instruction }],
     state404: false,

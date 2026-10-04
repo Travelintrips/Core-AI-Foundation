@@ -151,14 +151,16 @@ describe("autonomous coding explicit stop", () => {
 });
 
 describe("autonomous coding cycle budget", () => {
-  it("never widens an existing cycle budget during re-enable", () => {
+  it("keeps internal re-enable bounded but lets explicit owner restart renew an exhausted budget", () => {
     const source = readFileSync(
       new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
       "utf8",
     );
 
     expect(source).toContain("max_cycles = LEAST(");
-    expect(source).toContain("ai_platform.ai_coding_autonomous_tasks.max_cycles");
+    expect(source).toContain("ELSE GREATEST(");
+    expect(source).toContain("status IN ('BLOCKED', 'FAILED', 'DISABLED')");
+    expect(source).toContain("THEN 0");
     expect(source).toContain("EXCLUDED.max_cycles");
   });
 });
