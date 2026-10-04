@@ -18,7 +18,8 @@ export async function recordAiCoreMcpTerminalResult(input: {
   const status = result.status ?? execution?.status;
   if (status && !["COMPLETED", "FAILED", "SUCCESS", "SUCCEEDED"].includes(String(status))) return;
   const failed = status === "FAILED" || result.error ||
-    ["validation", "clarification"].includes(String(result.kind)) || result.route === "NO_LLM";
+    ["validation", "clarification"].includes(String(result.kind)) ||
+    (result.route === "NO_LLM" && result.workload !== "DETERMINISTIC");
   const eventType = failed ? "FAILED" : "COMPLETED";
   const { command } = await submitCodingBridgeCommand({
     externalCommandId: `chatgpt-mcp-result:${randomUUID()}`,

@@ -37,7 +37,17 @@ describe("MCP terminal result events", () => {
     expect(bridge.append).not.toHaveBeenCalled();
   });
 
-  it("does not publish a NO_LLM answer as success", async () => {
+  it("publishes a successful deterministic greeting without an LLM as completed", async () => {
+    await recordAiCoreMcpTerminalResult({ conversationId: "conversation-a", instruction: "halo", payload: { kind: "answer", route: "NO_LLM", workload: "DETERMINISTIC", reply: "Halo. AI Core Chat aktif." } });
+    expect(bridge.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "COMPLETED" }));
+  });
+
+  it("still reports explicit deterministic failures as failed", async () => {
+    await recordAiCoreMcpTerminalResult({ conversationId: "conversation-a", instruction: "health", payload: { kind: "answer", route: "NO_LLM", workload: "DETERMINISTIC", status: "FAILED" } });
+    expect(bridge.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "FAILED" }));
+  });
+
+  it("does not publish an unavailable NO_LLM answer as success", async () => {
     await recordAiCoreMcpTerminalResult({ conversationId: "conversation-a", instruction: "ping", payload: { kind: "answer", route: "NO_LLM", reply: "unavailable" } });
     expect(bridge.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "FAILED" }));
   });
