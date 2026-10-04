@@ -93,6 +93,9 @@ interface WorkerConfig {
   workerType: string;
   capabilities: string[];
   maxConcurrentJobs: number;
+  providerSlug: string;
+  modelId: string;
+  runtimeKind: string;
 }
 
 const DISPATCHER_WORKERS: WorkerConfig[] = [
@@ -101,6 +104,9 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     workerType:        "text_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["text_worker"]!,
     maxConcurrentJobs: 3,
+    providerSlug:       "dynamic",
+    modelId:            "per-job",
+    runtimeKind:        "dispatcher",
   },
   {
     suffix:            "2",
@@ -113,6 +119,9 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
       "custom",
     ],
     maxConcurrentJobs: 3,
+    providerSlug:       "dynamic",
+    modelId:            "per-job",
+    runtimeKind:        "dispatcher",
   },
   {
     // Sprint P2.1.1 — dedicated worker for background archiving / optimization /
@@ -121,6 +130,9 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     workerType:        "storage_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["storage_worker"]!,
     maxConcurrentJobs: 4,
+    providerSlug:       "internal",
+    modelId:            "n/a",
+    runtimeKind:        "dispatcher",
   },
   {
     // Coding workstream jobs are executed by the Core AI process itself.
@@ -131,6 +143,9 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     workerType:        "coding_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["coding_worker"]!,
     maxConcurrentJobs: 5,
+    providerSlug:       "dynamic",
+    modelId:            "per-job",
+    runtimeKind:        "dispatcher",
   },
 ];
 
@@ -140,6 +155,9 @@ if (process.env["BLENDER_WORKER_RUNTIME_ENABLED"] === "true") {
     workerType: "3d_worker",
     capabilities: WORKER_TYPE_CAPABILITIES["3d_worker"]!,
     maxConcurrentJobs: 1,
+    providerSlug: "internal",
+    modelId: "blender",
+    runtimeKind: "dispatcher",
   });
 }
 
@@ -266,6 +284,9 @@ export async function ensureWorkers(): Promise<void> {
       version: "5.2.0",
       capabilities: cfg.capabilities,
       maxConcurrentJobs: cfg.maxConcurrentJobs,
+      providerSlug: cfg.providerSlug,
+      modelId: cfg.modelId,
+      runtimeKind: cfg.runtimeKind,
       leaseOwner: LEASE_OWNER,
       heartbeatToken: token,
       leaseTtlMs: DEFAULT_LEASE_TTL_MS,

@@ -115,6 +115,7 @@ type CodingMonitorSnapshot = {
     active: number;
     available: number;
     busyUnavailable: number;
+    retiredLegacy?: number;
     details: Array<{
       id: number;
       workerName: string;
@@ -4068,12 +4069,19 @@ export default function CodingWorkspace() {
                 Queue, model execution, dan worker dihitung dari job state + heartbeat/lease aktual.
               </div>
             </div>
-            <div className="font-mono text-[9px] text-slate-600">
-              {monitor
-                ? `updated ${formatDate(monitor.refreshedAt, lang, true)}`
-                : monitorError
-                  ? "monitor unavailable"
-                  : "loading live state…"}
+            <div className="text-right font-mono text-[9px] text-slate-600">
+              <div>
+                {monitor
+                  ? `updated ${formatDate(monitor.refreshedAt, lang, true)}`
+                  : monitorError
+                    ? "monitor unavailable"
+                    : "loading live state…"}
+              </div>
+              {monitor?.workers.retiredLegacy ? (
+                <div className="mt-0.5 text-[8px] text-slate-700">
+                  legacy retired hidden {monitor.workers.retiredLegacy}
+                </div>
+              ) : null}
             </div>
           </div>
 

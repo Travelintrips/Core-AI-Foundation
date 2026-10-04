@@ -304,15 +304,23 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
       heartbeatFresh &&
       !["offline", "stale"].includes(worker.status);
     const available = active && worker.availableSlots > 0;
+    const legacyPlaceholder = /^worker-(alpha|beta|gamma)$/i.test(worker.workerName);
     return {
       ...worker,
       heartbeatFresh,
       heartbeatAgeMs,
       active,
       available,
+      legacyPlaceholder,
       busyOrUnavailable: !available,
     };
   });
+  const operationalWorkerDetails = workerDetails.filter(
+    (worker) => !worker.legacyPlaceholder,
+  );
+  const retiredLegacyWorkers = workerDetails.filter(
+    (worker) => worker.legacyPlaceholder,
+  ).length;
 
   res.json({
     refreshedAt: new Date().toISOString(),
@@ -324,12 +332,13 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
       trueReadyReview: Number(taskRow["true_ready_review"] ?? 0),
     },
     workers: {
-      active: workerDetails.filter((worker) => worker.active).length,
-      available: workerDetails.filter((worker) => worker.available).length,
-      busyUnavailable: workerDetails.filter(
+      active: operationalWorkerDetails.filter((worker) => worker.active).length,
+      available: operationalWorkerDetails.filter((worker) => worker.available).length,
+      busyUnavailable: operationalWorkerDetails.filter(
         (worker) => worker.busyOrUnavailable,
       ).length,
-      details: workerDetails,
+      retiredLegacy: retiredLegacyWorkers,
+      details: operationalWorkerDetails,
     },
   });
 });
