@@ -21,6 +21,7 @@ import {
   Github,
   GitCommitHorizontal,
   History,
+  WalletCards,
   Loader2,
   LockKeyhole,
   Plus,
@@ -137,6 +138,17 @@ type CodingMonitorSnapshot = {
       runtimeKind: string | null;
     }>;
   };
+};
+
+type GcpUsageSnapshot = {
+  configured: boolean;
+  range: "daily" | "monthly";
+  currency: string;
+  projectId: string;
+  totalCost: number;
+  totalUsageHours: number;
+  message?: string;
+  series: Array<{ period: string; cost: number; usageHours: number }>;
 };
 
 const STATUSES = Object.values(CodingTaskStatus) as CodingTaskStatus[];
@@ -1495,11 +1507,11 @@ function GitHubRepositoryPicker({
         >
           <span className="flex min-w-0 items-center gap-2">
             <Github className="size-4 shrink-0 text-slate-500" />
-            <span className={cn("truncate", !value && "text-slate-600")}>
+            <span className={cn("truncate", !value && "text-slate-400")}>
               {value || "Cari repository GitHub…"}
             </span>
           </span>
-          <ChevronDown className="size-4 shrink-0 text-slate-600" />
+          <ChevronDown className="size-4 shrink-0 text-slate-400" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -1509,7 +1521,7 @@ function GitHubRepositoryPicker({
         <Command className="bg-transparent text-slate-100">
           <CommandInput
             placeholder="Cari owner / repository…"
-            className="text-slate-100 placeholder:text-slate-600"
+            className="text-slate-100 placeholder:text-slate-400"
             data-testid="input-search-github-repositories"
           />
           <CommandList className="max-h-72">
@@ -1559,7 +1571,7 @@ function GitHubRepositoryPicker({
                         <div className="truncate text-xs font-medium">
                           {repository.fullName}
                         </div>
-                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-600">
+                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400">
                           <span>{repository.private ? "Private" : "Public"}</span>
                           <span>·</span>
                           <span>default: {repository.defaultBranch}</span>
@@ -1573,7 +1585,7 @@ function GitHubRepositoryPicker({
           </CommandList>
         </Command>
         {!error && connectionMode && (
-          <div className="border-t border-white/[0.06] px-3 py-2 text-[10px] text-slate-600">
+          <div className="border-t border-white/[0.06] px-3 py-2 text-[10px] text-slate-400">
             {connectionMode === "authenticated"
               ? "GitHub authenticated · public + private repository"
               : "GitHub public · private repository membutuhkan token server"}
@@ -1656,12 +1668,12 @@ function GitHubBranchPicker({
           data-testid="button-coding-branch-picker"
         >
           <span className="flex min-w-0 items-center gap-2">
-            <GitBranch className="size-4 shrink-0 text-slate-600" />
-            <span className={cn("truncate", !value && "text-slate-600")}>
+            <GitBranch className="size-4 shrink-0 text-slate-400" />
+            <span className={cn("truncate", !value && "text-slate-400")}>
               {value || (repository ? "Pilih branch…" : "Pilih repository dulu")}
             </span>
           </span>
-          <ChevronDown className="size-4 shrink-0 text-slate-600" />
+          <ChevronDown className="size-4 shrink-0 text-slate-400" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -1671,7 +1683,7 @@ function GitHubBranchPicker({
         <Command className="bg-transparent text-slate-100">
           <CommandInput
             placeholder="Cari branch…"
-            className="text-slate-100 placeholder:text-slate-600"
+            className="text-slate-100 placeholder:text-slate-400"
             data-testid="input-search-github-branches"
           />
           <CommandList className="max-h-64">
@@ -1771,7 +1783,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-6 py-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <FormField control={form.control} name="projectName" render={({ field }) => (
-                <FormItem><FormLabel className="text-slate-300">{t("pages.codingWorkspace.project")} <span className="text-cyan-300">*</span></FormLabel><FormControl><Input {...field} placeholder={t("pages.codingWorkspace.projectPlaceholder")} className="border-white/10 bg-[#091222] text-slate-100 placeholder:text-slate-600" data-testid="input-coding-project" /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel className="text-slate-300">{t("pages.codingWorkspace.project")} <span className="text-cyan-300">*</span></FormLabel><FormControl><Input {...field} placeholder={t("pages.codingWorkspace.projectPlaceholder")} className="border-white/10 bg-[#091222] text-slate-100 placeholder:text-slate-400" data-testid="input-coding-project" /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="repository" render={({ field }) => (
                 <FormItem>
@@ -1799,7 +1811,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
                       disabled={createTask.isPending}
                     />
                   </FormControl>
-                  <p className="text-[10px] text-slate-600">Search repository GitHub. Repo public tetap tersedia tanpa token; repo private muncul saat credential server aktif.</p>
+                  <p className="text-[10px] text-slate-400">Search repository GitHub. Repo public tetap tersedia tanpa token; repo private muncul saat credential server aktif.</p>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -1822,7 +1834,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
               )} />
             </div>
             <FormField control={form.control} name="instruction" render={({ field }) => (
-              <FormItem><FormLabel className="text-slate-300">{t("pages.codingWorkspace.instruction")} <span className="text-cyan-300">*</span></FormLabel><FormControl><Textarea {...field} rows={7} placeholder={t("pages.codingWorkspace.instructionPlaceholder")} className="resize-y border-white/10 bg-[#091222] leading-6 text-slate-100 placeholder:text-slate-600" data-testid="input-coding-instruction" /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel className="text-slate-300">{t("pages.codingWorkspace.instruction")} <span className="text-cyan-300">*</span></FormLabel><FormControl><Textarea {...field} rows={7} placeholder={t("pages.codingWorkspace.instructionPlaceholder")} className="resize-y border-white/10 bg-[#091222] leading-6 text-slate-100 placeholder:text-slate-400" data-testid="input-coding-instruction" /></FormControl><FormMessage /></FormItem>
             )} />
             <DialogFooter className="gap-2 border-t border-white/[0.07] pt-5">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="text-slate-400 hover:bg-white/5 hover:text-slate-200" data-testid="button-cancel-coding-task">{t("common.actions.cancel")}</Button>
@@ -2462,10 +2474,10 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     <Card className="overflow-hidden border-cyan-300/15 bg-[#0c1628] shadow-xl shadow-cyan-950/10" data-testid={`panel-coding-task-${task.id}`}>
       <CardHeader className="border-b border-white/[0.07] bg-[linear-gradient(135deg,rgba(32,211,193,0.08),transparent_55%)] p-5 pb-4">
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0"><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-cyan-300"><span className="size-1.5 rounded-full bg-cyan-300" />{task.taskNumber}</div><h2 className="truncate font-display text-xl text-slate-100">{task.projectName}</h2><div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-slate-500"><GitBranch className="size-3.5 shrink-0 text-slate-600" /><span className="truncate">{task.repository}</span><span className="text-slate-700">/</span><span className="truncate text-slate-400">{task.branch}</span></div></div>
+          <div className="min-w-0"><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-cyan-300"><span className="size-1.5 rounded-full bg-cyan-300" />{task.taskNumber}</div><h2 className="truncate font-display text-xl text-slate-100">{task.projectName}</h2><div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-slate-500"><GitBranch className="size-3.5 shrink-0 text-slate-400" /><span className="truncate">{task.repository}</span><span className="text-slate-400">/</span><span className="truncate text-slate-400">{task.branch}</span></div></div>
           <button type="button" onClick={onClose} className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200" aria-label={t("pages.codingWorkspace.close")} data-testid="button-close-coding-detail"><XCircle className="size-4" /></button>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2"><StatusBadge status={displayedTaskStatus} label={t(`pages.codingWorkspace.statuses.${displayedTaskStatus.toLowerCase()}`)} /><span className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-slate-500">P{task.priority}</span><span className="text-xs text-slate-600">{formatDate(task.createdAt, lang, true)}</span></div>
+        <div className="mt-4 flex flex-wrap items-center gap-2"><StatusBadge status={displayedTaskStatus} label={t(`pages.codingWorkspace.statuses.${displayedTaskStatus.toLowerCase()}`)} /><span className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-slate-500">P{task.priority}</span><span className="text-xs text-slate-400">{formatDate(task.createdAt, lang, true)}</span></div>
       </CardHeader>
       <CardContent className="space-y-6 p-5">
         <section><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><TerminalSquare className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.instruction")}</div><p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-[#091222] p-3 text-sm leading-6 text-slate-300">{task.instruction}</p></section>
@@ -2491,11 +2503,11 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
               {analyzerResult && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border border-white/[0.06] bg-[#091222] p-3">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-600">Files inspected</div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400">Files inspected</div>
                     <div className="mt-1 font-mono text-lg text-cyan-300">{analyzerResult.filesInspected.length}</div>
                   </div>
                   <div className="rounded-lg border border-white/[0.06] bg-[#091222] p-3">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-600">Findings</div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400">Findings</div>
                     <div className="mt-1 font-mono text-lg text-cyan-300">{analyzerResult.findings.length}</div>
                   </div>
                 </div>
@@ -2519,14 +2531,14 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                       ["Tests", analyzerResult.contextPackage.relatedTests.length],
                     ].map(([label, count]) => (
                       <div key={String(label)} className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
-                        <div className="text-[9px] uppercase tracking-wider text-slate-600">{String(label)}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">{String(label)}</div>
                         <div className="mt-1 font-mono text-sm text-cyan-300">{String(count)}</div>
                       </div>
                     ))}
                   </div>
                   {analyzerResult.contextPackage.keywords.length > 0 && (
                     <div>
-                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Task keywords</div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">Task keywords</div>
                       <div className="flex flex-wrap gap-1.5">
                         {analyzerResult.contextPackage.keywords.map((keyword) => (
                           <span key={keyword} className="rounded border border-white/[0.06] px-1.5 py-0.5 font-mono text-[9px] text-slate-400">{keyword}</span>
@@ -2536,7 +2548,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   )}
                   {analyzerResult.contextPackage.relevantFiles.length > 0 && (
                     <div>
-                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Top relevant files</div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">Top relevant files</div>
                       <div className="space-y-1">
                         {analyzerResult.contextPackage.relevantFiles.slice(0, 8).map((file, index) => (
                           <div key={`${file.path ?? "file"}-${index}`} className="flex items-center justify-between gap-3 text-[10px]">
@@ -2549,7 +2561,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   )}
                   {analyzerResult.contextPackage.verificationCommands.length > 0 && (
                     <div>
-                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Safe verification commands</div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">Safe verification commands</div>
                       <div className="flex flex-wrap gap-1.5">
                         {analyzerResult.contextPackage.verificationCommands.map((command) => (
                           <code key={command} className="rounded border border-emerald-300/10 bg-emerald-300/[0.035] px-2 py-1 text-[9px] text-emerald-300">{command}</code>
@@ -2597,7 +2609,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   )}
                   {(analyzerResult.localExecution?.changedFiles.length ?? analyzerResult.localExecutionPlan.targetFiles.length) > 0 && (
                     <div>
-                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">
                         {analyzerResult.localExecution?.changedFiles.length ? "Changed files" : "Target files"}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -2613,22 +2625,22 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   {analyzerResult.localExecution && (
                     <div className="grid gap-2 sm:grid-cols-3" data-testid="panel-local-verification-summary">
                       <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
-                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Verification attempts</div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Verification attempts</div>
                         <div className="mt-1 font-mono text-sm text-emerald-300">{analyzerResult.localExecution.verificationAttempts.length}</div>
                       </div>
                       <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
-                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Auto-fixes</div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Auto-fixes</div>
                         <div className="mt-1 font-mono text-sm text-emerald-300">{analyzerResult.localExecution.autoFixes.length}</div>
                       </div>
                       <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
-                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Repo scripts</div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Repo scripts</div>
                         <div className="mt-1 font-mono text-sm text-slate-300">{analyzerResult.localExecution.scriptsExecuted ? "executed" : "fail-closed"}</div>
                       </div>
                     </div>
                   )}
                   {analyzerResult.localExecution?.autoFixes.length ? (
                     <div>
-                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Deterministic auto-fixes</div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">Deterministic auto-fixes</div>
                       <div className="flex flex-wrap gap-1.5">
                         {analyzerResult.localExecution.autoFixes.map((fix) => (
                           <code key={fix} className="rounded border border-emerald-300/10 bg-emerald-300/[0.035] px-2 py-1 text-[9px] text-emerald-300">{fix}</code>
@@ -2638,7 +2650,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   ) : null}
                   {analyzerResult.localExecution?.verificationAttempts.some((attempt) => attempt.staticIssues.length > 0) && (
                     <div className="space-y-1.5">
-                      <div className="text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Static verification issues</div>
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">Static verification issues</div>
                       {analyzerResult.localExecution.verificationAttempts.flatMap((attempt) =>
                         attempt.staticIssues.map((issue, index) => (
                           <div key={`${attempt.attempt ?? 0}-${issue.file ?? "file"}-${index}`} className="rounded-md border border-rose-300/10 bg-rose-300/[0.03] p-2 text-[10px] leading-4 text-rose-200">
@@ -2652,7 +2664,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   )}
                   {analyzerResult.localExecution?.patch && (
                     <div>
-                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">Review-only patch</div>
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">Review-only patch</div>
                       <pre className="max-h-80 overflow-auto whitespace-pre rounded-md border border-white/[0.06] bg-[#07101d] p-3 font-mono text-[10px] leading-4 text-slate-300" data-testid="text-local-coding-patch">
                         {analyzerResult.localExecution.patch}
                       </pre>
@@ -2703,7 +2715,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                       {analyzerResult.sandboxVerification && (
                         <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-sandbox-verification">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Sandbox verification</div>
+                            <div className="text-[9px] uppercase tracking-wider text-slate-400">Sandbox verification</div>
                             <span className={cn(
                               "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
                               analyzerResult.sandboxVerification.status === "PASSED"
@@ -2717,15 +2729,15 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                           </div>
                           <div className="mt-2 grid gap-2 sm:grid-cols-3">
                             <div>
-                              <div className="text-[9px] uppercase text-slate-600">Runtime</div>
+                              <div className="text-[9px] uppercase text-slate-400">Runtime</div>
                               <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.sandboxVerification.runtime ?? "docker"}</div>
                             </div>
                             <div>
-                              <div className="text-[9px] uppercase text-slate-600">Network</div>
+                              <div className="text-[9px] uppercase text-slate-400">Network</div>
                               <div className="mt-1 font-mono text-[10px] text-emerald-300">{analyzerResult.sandboxVerification.network ?? "none"}</div>
                             </div>
                             <div>
-                              <div className="text-[9px] uppercase text-slate-600">Scripts</div>
+                              <div className="text-[9px] uppercase text-slate-400">Scripts</div>
                               <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.sandboxVerification.commands.length}</div>
                             </div>
                           </div>
@@ -2790,15 +2802,15 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                               </div>
                               <div className="mt-2 grid gap-2 sm:grid-cols-3">
                                 <div>
-                                  <div className="text-[9px] uppercase text-slate-600">Focus files</div>
+                                  <div className="text-[9px] uppercase text-slate-400">Focus files</div>
                                   <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.failureRecoveryContext.focusFiles.length}</div>
                                 </div>
                                 <div>
-                                  <div className="text-[9px] uppercase text-slate-600">Symbols</div>
+                                  <div className="text-[9px] uppercase text-slate-400">Symbols</div>
                                   <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.failureRecoveryContext.focusSymbols.length}</div>
                                 </div>
                                 <div>
-                                  <div className="text-[9px] uppercase text-slate-600">Related tests</div>
+                                  <div className="text-[9px] uppercase text-slate-400">Related tests</div>
                                   <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.failureRecoveryContext.relatedTests.length}</div>
                                 </div>
                               </div>
@@ -2838,7 +2850,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                               {analyzerResult.localRecovery && (
                                 <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-local-recovery-result">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="text-[9px] uppercase tracking-wider text-slate-600">Local recovery executor</div>
+                                    <div className="text-[9px] uppercase tracking-wider text-slate-400">Local recovery executor</div>
                                     <span className={cn(
                                       "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
                                       analyzerResult.localRecovery.status === "RECOVERY_PATCH_READY"
@@ -2852,15 +2864,15 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   </div>
                                   <div className="mt-2 grid gap-2 sm:grid-cols-3">
                                     <div>
-                                      <div className="text-[9px] uppercase text-slate-600">Attempts</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Attempts</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.localRecovery.attempts.length}</div>
                                     </div>
                                     <div>
-                                      <div className="text-[9px] uppercase text-slate-600">Sandbox</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Sandbox</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.localRecovery.sandboxVerification ?? "—"}</div>
                                     </div>
                                     <div>
-                                      <div className="text-[9px] uppercase text-slate-600">AI invoked</div>
+                                      <div className="text-[9px] uppercase text-slate-400">AI invoked</div>
                                       <div className="mt-1 font-mono text-[10px] text-emerald-300">{analyzerResult.localRecovery.aiInvoked ? "yes" : "no"}</div>
                                     </div>
                                   </div>
@@ -2926,7 +2938,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                               ? "border-emerald-300/15 bg-emerald-300/[0.04] text-emerald-300"
                                               : active
                                                 ? "border-cyan-300/25 bg-cyan-300/[0.06] text-cyan-200"
-                                                : "border-white/[0.05] bg-white/[0.015] text-slate-600",
+                                                : "border-white/[0.05] bg-white/[0.015] text-slate-400",
                                           )}
                                         >
                                           <span className={cn(
@@ -2969,25 +2981,25 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   </div>
                                   <div className="mt-2 grid gap-2 sm:grid-cols-4">
                                     <div>
-                                      <div className="text-[9px] uppercase text-slate-600">Allowed files</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Allowed files</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiHandoff.package?.allowedFiles.length ?? 0}</div>
                                     </div>
                                     <div>
-                                      <div className="text-[9px] uppercase text-slate-600">Diagnostics</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Diagnostics</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiHandoff.package?.diagnostics.length ?? 0}</div>
                                     </div>
                                     <div>
-                                      <div className="text-[9px] uppercase text-slate-600">Snippets</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Snippets</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiHandoff.package?.snippets.length ?? 0}</div>
                                     </div>
                                     <div>
-                                      <div className="text-[9px] uppercase text-slate-600">Model invoked</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Model invoked</div>
                                       <div className="mt-1 font-mono text-[10px] text-emerald-300">{analyzerResult.aiHandoff.modelInvoked ? "yes" : "no"}</div>
                                     </div>
                                   </div>
                                   {analyzerResult.aiHandoff.packageHash && (
                                     <div className="mt-2">
-                                      <div className="text-[9px] uppercase text-slate-600">Package hash</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Package hash</div>
                                       <div
                                         className="mt-1 font-mono text-[10px] text-slate-300"
                                         title={analyzerResult.aiHandoff.packageHash}
@@ -2999,7 +3011,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   )}
                                   {analyzerResult.aiHandoff.expiresAt && (
                                     <div className="mt-2">
-                                      <div className="text-[9px] uppercase text-slate-600">Approval lease expires</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Approval lease expires</div>
                                       <div className={cn(
                                         "mt-1 font-mono text-[10px]",
                                         handoffExpired ? "text-rose-300" : "text-amber-300",
@@ -3011,7 +3023,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   )}
                                   {analyzerResult.aiHandoff.revokedAt && (
                                     <div className="mt-2">
-                                      <div className="text-[9px] uppercase text-slate-600">Revoked</div>
+                                      <div className="text-[9px] uppercase text-slate-400">Revoked</div>
                                       <div className="mt-1 font-mono text-[10px] text-rose-300">
                                         {new Date(analyzerResult.aiHandoff.revokedAt).toLocaleString()}
                                       </div>
@@ -3026,7 +3038,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   ) : null}
                                   {analyzerResult.aiHandoff.package?.diagnostics.length ? (
                                     <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-ai-handoff-diagnostics">
-                                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-600">
+                                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
                                         Diagnostics
                                       </div>
                                       <div className="max-h-40 space-y-1 overflow-auto">
@@ -3117,7 +3129,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
 
                                   <div className="grid gap-2 sm:grid-cols-3">
                                     <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                                      <div className="text-[9px] uppercase tracking-wider text-slate-600">Policy validation</div>
+                                      <div className="text-[9px] uppercase tracking-wider text-slate-400">Policy validation</div>
                                       <div className={cn(
                                         "mt-1 flex items-center gap-1.5 font-mono text-[10px]",
                                         analyzerResult.aiExecution.policyValidation?.ok === true
@@ -3137,11 +3149,11 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                       </div>
                                     </div>
                                     <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                                      <div className="text-[9px] uppercase tracking-wider text-slate-600">Operations</div>
+                                      <div className="text-[9px] uppercase tracking-wider text-slate-400">Operations</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-300">{analyzerResult.aiExecution.proposal?.operationCount ?? 0}</div>
                                     </div>
                                     <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                                      <div className="text-[9px] uppercase tracking-wider text-slate-600">Changed files</div>
+                                      <div className="text-[9px] uppercase tracking-wider text-slate-400">Changed files</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-300">
                                         {analyzerResult.aiExecution.patch?.changedFiles.length ?? analyzerResult.aiExecution.proposal?.changedFiles.length ?? 0}
                                       </div>
@@ -3150,7 +3162,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
 
                                   {analyzerResult.aiExecution.proposal?.summary && (
                                     <div>
-                                      <div className="mb-1 text-[9px] uppercase tracking-wider text-slate-600">Proposal summary</div>
+                                      <div className="mb-1 text-[9px] uppercase tracking-wider text-slate-400">Proposal summary</div>
                                       <p className="text-[10px] leading-4 text-slate-300">{analyzerResult.aiExecution.proposal.summary}</p>
                                       {analyzerResult.aiExecution.proposal.rationale && (
                                         <p className="mt-1 text-[10px] leading-4 text-slate-500">{analyzerResult.aiExecution.proposal.rationale}</p>
@@ -3160,7 +3172,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
 
                                   {(analyzerResult.aiExecution.patch?.changedFiles.length || analyzerResult.aiExecution.proposal?.changedFiles.length) ? (
                                     <div>
-                                      <div className="mb-1.5 text-[9px] uppercase tracking-wider text-slate-600">Changed files</div>
+                                      <div className="mb-1.5 text-[9px] uppercase tracking-wider text-slate-400">Changed files</div>
                                       <div className="flex flex-wrap gap-1.5">
                                         {(analyzerResult.aiExecution.patch?.changedFiles.length
                                           ? analyzerResult.aiExecution.patch.changedFiles
@@ -3190,19 +3202,19 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   {analyzerResult.aiExecution.model && (
                                     <div className="grid gap-2 sm:grid-cols-4" data-testid="panel-ai-model-metadata">
                                       <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Provider / model</div>
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Provider / model</div>
                                         <div className="mt-1 truncate font-mono text-[9px] text-cyan-300">
                                           {analyzerResult.aiExecution.model.provider ?? "—"} / {analyzerResult.aiExecution.model.model ?? "—"}
                                         </div>
                                       </div>
                                       <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Tokens in / out / total</div>
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Tokens in / out / total</div>
                                         <div className="mt-1 font-mono text-[9px] text-slate-300">
                                           {analyzerResult.aiExecution.model.inputTokens ?? "—"} / {analyzerResult.aiExecution.model.outputTokens ?? "—"} / {analyzerResult.aiExecution.model.totalTokens ?? "—"}
                                         </div>
                                       </div>
                                       <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Latency</div>
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Latency</div>
                                         <div className="mt-1 font-mono text-[10px] text-slate-300">
                                           {typeof analyzerResult.aiExecution.model.latencyMs === "number"
                                             ? `${analyzerResult.aiExecution.model.latencyMs} ms`
@@ -3210,7 +3222,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                         </div>
                                       </div>
                                       <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                                        <div className="text-[9px] uppercase tracking-wider text-slate-600">Invocation</div>
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Invocation</div>
                                         <div className="mt-1 font-mono text-[9px] text-slate-300">
                                           {analyzerResult.aiExecution.model.attempts ?? 1} attempt · {analyzerResult.aiExecution.model.retries ?? 0} retry
                                         </div>
@@ -3272,15 +3284,15 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                       {analyzerResult.localCommitApproval?.status === "PUBLISHED" && (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="panel-local-commit-published">
                           <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Task branch</div>
+                            <div className="text-[9px] uppercase tracking-wider text-slate-400">Task branch</div>
                             <div className="mt-1 truncate font-mono text-[10px] text-cyan-300">{analyzerResult.localCommitApproval.branch ?? "—"}</div>
                           </div>
                           <div className="rounded border border-white/[0.06] bg-[#07101d] p-2">
-                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Commit</div>
+                            <div className="text-[9px] uppercase tracking-wider text-slate-400">Commit</div>
                             <div className="mt-1 truncate font-mono text-[10px] text-emerald-300">{analyzerResult.localCommitApproval.commitSha?.slice(0, 12) ?? "—"}</div>
                           </div>
                           <div className="sm:col-span-2 rounded border border-white/[0.06] bg-[#07101d] p-2">
-                            <div className="text-[9px] uppercase tracking-wider text-slate-600">Pull request</div>
+                            <div className="text-[9px] uppercase tracking-wider text-slate-400">Pull request</div>
                             {analyzerResult.localCommitApproval.pullRequestUrl?.startsWith("https://github.com/") ? (
                               <a
                                 href={analyzerResult.localCommitApproval.pullRequestUrl}
@@ -3328,7 +3340,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                           {analyzerResult.prVerification && (
                             <div className="sm:col-span-2 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-pr-verification">
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="text-[9px] uppercase tracking-wider text-slate-600">PR integrity + CI</div>
+                                <div className="text-[9px] uppercase tracking-wider text-slate-400">PR integrity + CI</div>
                                 <span className={cn(
                                   "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
                                   analyzerResult.prVerification.status === "PASSED"
@@ -3389,7 +3401,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                           {finding.severity ?? "info"}
                         </span>
                         <span className="text-xs font-medium text-slate-200">{finding.title ?? "Repository finding"}</span>
-                        {finding.file && <span className="font-mono text-[10px] text-slate-600">{finding.file}</span>}
+                        {finding.file && <span className="font-mono text-[10px] text-slate-400">{finding.file}</span>}
                       </div>
                       {finding.detail && <p className="mt-2 text-xs leading-5 text-slate-400">{finding.detail}</p>}
                     </div>
@@ -3414,7 +3426,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Orchestrator stages</div>
                     {analyzerResult.orchestration.sessionId && (
-                      <span className="font-mono text-[9px] text-slate-600">{analyzerResult.orchestration.sessionId}</span>
+                      <span className="font-mono text-[9px] text-slate-400">{analyzerResult.orchestration.sessionId}</span>
                     )}
                   </div>
                   {analyzerResult.orchestration.stages.map((stage, index) => (
@@ -3475,7 +3487,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   ].map(([label, items]) => (
                     Array.isArray(items) && items.length > 0 ? (
                       <div key={String(label)}>
-                        <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-600">{String(label)}</div>
+                        <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-slate-400">{String(label)}</div>
                         <ul className="space-y-1 text-[11px] leading-5 text-slate-400">
                           {items.map((item, index) => <li key={`${String(label)}-${index}`}>• {item}</li>)}
                         </ul>
@@ -3483,7 +3495,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                     ) : null
                   ))}
                   {analyzerResult.planner?.modelUsed && (
-                    <div className="border-t border-white/[0.06] pt-2 font-mono text-[9px] text-slate-600">
+                    <div className="border-t border-white/[0.06] pt-2 font-mono text-[9px] text-slate-400">
                       Planner: {analyzerResult.planner.provider ?? "provider"} / {analyzerResult.planner.modelUsed}
                       {typeof analyzerResult.planner.totalTokens === "number" ? ` · ${analyzerResult.planner.totalTokens} tokens` : ""}
                     </div>
@@ -3492,7 +3504,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
               )}
             </div>
           ) : (
-            <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">
+            <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-400">
               {hasActiveRun
                 ? "Coding Orchestrator is running. Analyzer and Planner progress will appear here automatically."
                 : "No Coding Orchestrator result is available yet."}
@@ -3552,7 +3564,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
               </div>
             )}
             {codingResult && (
-              <div className="mt-3 flex flex-wrap gap-2 text-[9px] uppercase tracking-wider text-slate-600">
+              <div className="mt-3 flex flex-wrap gap-2 text-[9px] uppercase tracking-wider text-slate-400">
                 <span>Commit: {codingResult.commitCreated ? "yes" : "no"}</span>
                 <span>·</span>
                 <span>Push: {codingResult.pushed ? "yes" : "no"}</span>
@@ -3606,16 +3618,16 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                             {check.status ?? "UNKNOWN"}
                           </span>
                         </div>
-                        {check.detail && <p className="mt-1 text-[10px] leading-4 text-slate-600">{check.detail}</p>}
+                        {check.detail && <p className="mt-1 text-[10px] leading-4 text-slate-400">{check.detail}</p>}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-slate-600">Deterministic verification is pending.</p>
+                  <p className="text-[11px] text-slate-400">Deterministic verification is pending.</p>
                 )}
                 {testResult?.report?.proposedCommands && testResult.report.proposedCommands.length > 0 && (
                   <div className="mt-3 border-t border-white/[0.05] pt-2">
-                    <div className="mb-1 text-[9px] uppercase tracking-wider text-slate-600">Agent-suggested commands (not blindly executed)</div>
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-slate-400">Agent-suggested commands (not blindly executed)</div>
                     {testResult.report.proposedCommands.map((command, index) => (
                       <div key={`${command}-${index}`} className="font-mono text-[10px] text-slate-500">{command}</div>
                     ))}
@@ -3655,7 +3667,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   </div>
                 )}
                 {reviewResult && (
-                  <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.05] pt-2 text-[9px] uppercase tracking-wider text-slate-600">
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.05] pt-2 text-[9px] uppercase tracking-wider text-slate-400">
                     <span>Commit: {reviewResult.commitCreated ? "yes" : "no"}</span>
                     <span>·</span>
                     <span>Push: {reviewResult.pushed ? "yes" : "no"}</span>
@@ -3672,7 +3684,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
           </section>
         )}
         <div className="grid gap-5 xl:grid-cols-2">
-          <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><History className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.runs")}</div><span className="font-mono text-[10px] text-slate-600">{detail.runs.length.toString().padStart(2, "0")}</span></div>{detail.runs.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">{t("pages.codingWorkspace.noRuns")}</p> : <div className="space-y-2">{detail.runs.map((run, index) => {
+          <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><History className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.runs")}</div><span className="font-mono text-[10px] text-slate-400">{detail.runs.length.toString().padStart(2, "0")}</span></div>{detail.runs.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-400">{t("pages.codingWorkspace.noRuns")}</p> : <div className="space-y-2">{detail.runs.map((run, index) => {
             const displayedRunStatus = codingRunPresentationStatus({
               runStatus: run.status,
               agentName: run.agentName,
@@ -3685,7 +3697,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
               runErrorMessage: run.errorMessage,
               taskResultSummary: task.resultSummary,
             });
-            return <div key={run.id} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-run-${run.id}`}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm text-slate-300">{run.agentName}</span><span className={cn("text-[10px] font-semibold uppercase tracking-wider", displayedRunStatus === "FAILED" ? "text-rose-300" : displayedRunStatus === "COMPLETED" ? "text-emerald-300" : "text-amber-300")}>{t(`pages.codingWorkspace.runStatuses.${displayedRunStatus.toLowerCase()}`)}</span></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-600">{run.startedAt ? formatDate(run.startedAt, lang, true) : "—"}{run.finishedAt && <><span>→</span>{formatDate(run.finishedAt, lang, true)}</>}</div>{displayedRunError && <p className="mt-2 text-xs leading-5 text-rose-300">{displayedRunError}</p>}{run.logs && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-cyan-300">{t("pages.codingWorkspace.runLogs")}</summary><pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 font-mono text-[10px] leading-5 text-slate-500">{run.logs}</pre></details>}</div>;
+            return <div key={run.id} className="rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-run-${run.id}`}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm text-slate-300">{run.agentName}</span><span className={cn("text-[10px] font-semibold uppercase tracking-wider", displayedRunStatus === "FAILED" ? "text-rose-300" : displayedRunStatus === "COMPLETED" ? "text-emerald-300" : "text-amber-300")}>{t(`pages.codingWorkspace.runStatuses.${displayedRunStatus.toLowerCase()}`)}</span></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">{run.startedAt ? formatDate(run.startedAt, lang, true) : "—"}{run.finishedAt && <><span>→</span>{formatDate(run.finishedAt, lang, true)}</>}</div>{displayedRunError && <p className="mt-2 text-xs leading-5 text-rose-300">{displayedRunError}</p>}{run.logs && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-cyan-300">{t("pages.codingWorkspace.runLogs")}</summary><pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 font-mono text-[10px] leading-5 text-slate-500">{run.logs}</pre></details>}</div>;
           })}</div>}</section>
           <section className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium text-slate-200">{t("pages.codingWorkspace.runAgent")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{t("pages.codingWorkspace.runAgentHint")}</p>{showLiveProgress && (
   <div className="mt-3 rounded-md border border-cyan-300/10 bg-[#07101d] px-3 py-3" data-testid="coding-agent-progress">
@@ -3705,7 +3717,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
         style={{ width: `${Math.min(100, Math.max(0, liveProgress.percent))}%` }}
       />
     </div>
-    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[9px] text-slate-600">
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[9px] text-slate-400">
       <span>task {task.status}</span>
       <span>run {activeRun?.status ?? "waiting"}</span>
       <span>updated {formatDate(task.updatedAt, lang, true)}</span>
@@ -3720,9 +3732,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     )}
   </div>
 )}</div><Button onClick={runAgent} disabled={startCodingRun.isPending || !canRunAgent} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />Starting agent</> : hasActiveRun ? <><Clock3 />Agent running</> : explicitGateLocked ? <><LockKeyhole />Explicit gate required</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
-          <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><FileCode2 className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.changes")}</div><span className="font-mono text-[10px] text-slate-600">{detail.changes.length.toString().padStart(2, "0")}</span></div>{detail.changes.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-600">{t("pages.codingWorkspace.noChanges")}</p> : <div className="space-y-2">{detail.changes.map((change) => <div key={change.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-change-${change.id}`}><span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold", change.changeType === "ADDED" ? "bg-emerald-400/10 text-emerald-300" : change.changeType === "DELETED" ? "bg-rose-400/10 text-rose-300" : "bg-cyan-400/10 text-cyan-300")}>{change.changeType === "ADDED" ? "+" : change.changeType === "DELETED" ? "−" : "M"}</span><div className="min-w-0 flex-1"><div className="truncate font-mono text-xs text-slate-300">{change.filePath}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">{t(`pages.codingWorkspace.changeTypes.${change.changeType.toLowerCase()}`)} · {formatDate(change.createdAt, lang)}</div></div></div>)}</div>}</section>
+          <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><FileCode2 className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.changes")}</div><span className="font-mono text-[10px] text-slate-400">{detail.changes.length.toString().padStart(2, "0")}</span></div>{detail.changes.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-400">{t("pages.codingWorkspace.noChanges")}</p> : <div className="space-y-2">{detail.changes.map((change) => <div key={change.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-change-${change.id}`}><span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold", change.changeType === "ADDED" ? "bg-emerald-400/10 text-emerald-300" : change.changeType === "DELETED" ? "bg-rose-400/10 text-rose-300" : "bg-cyan-400/10 text-cyan-300")}>{change.changeType === "ADDED" ? "+" : change.changeType === "DELETED" ? "−" : "M"}</span><div className="min-w-0 flex-1"><div className="truncate font-mono text-xs text-slate-300">{change.filePath}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">{t(`pages.codingWorkspace.changeTypes.${change.changeType.toLowerCase()}`)} · {formatDate(change.createdAt, lang)}</div></div></div>)}</div>}</section>
         </div>
-         <section className="border-t border-white/[0.07] pt-5"><div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><GitCommitHorizontal className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.updateStatus")}</div><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.status")}</span><select value={status} onChange={(event) => setStatus(event.target.value as CodingTaskStatus)} disabled={explicitGateLocked} className="h-9 w-full rounded-md border border-white/10 bg-[#091222] px-3 text-xs text-slate-200 outline-none focus:border-cyan-300/50 disabled:cursor-not-allowed disabled:opacity-50" data-testid="select-coding-status">{STATUSES.map((item) => <option key={item} value={item}>{t(`pages.codingWorkspace.statuses.${item.toLowerCase()}`)}</option>)}</select></label><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.commitSha")}</span><div className="relative"><Copy className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={commitSha} onChange={(event) => setCommitSha(event.target.value)} disabled={explicitGateLocked} className="h-9 border-white/10 bg-[#091222] pl-9 font-mono text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50" placeholder="optional" data-testid="input-coding-commit-sha" /></div></label></div>{explicitGateLocked && <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-300"><LockKeyhole className="size-3" />Status and commit SHA are locked while <span className="font-mono">{currentNextAction}</span> requires its explicit gate action.</div>}<label className="mt-3 block space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.resultSummary")}</span><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} className="resize-y border-white/10 bg-[#091222] text-xs leading-5 text-slate-200 placeholder:text-slate-600" placeholder="Add a concise outcome for reviewers." data-testid="input-coding-result-summary" /></label><Button onClick={update} disabled={updateTask.isPending} className="mt-3 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-update-coding-task">{updateTask.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.updating")}</> : <><CheckCircle2 />{t("pages.codingWorkspace.saveUpdate")}</>}</Button></section>
+         <section className="border-t border-white/[0.07] pt-5"><div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><GitCommitHorizontal className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.updateStatus")}</div><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.status")}</span><select value={status} onChange={(event) => setStatus(event.target.value as CodingTaskStatus)} disabled={explicitGateLocked} className="h-9 w-full rounded-md border border-white/10 bg-[#091222] px-3 text-xs text-slate-200 outline-none focus:border-cyan-300/50 disabled:cursor-not-allowed disabled:opacity-50" data-testid="select-coding-status">{STATUSES.map((item) => <option key={item} value={item}>{t(`pages.codingWorkspace.statuses.${item.toLowerCase()}`)}</option>)}</select></label><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.commitSha")}</span><div className="relative"><Copy className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-400" /><Input value={commitSha} onChange={(event) => setCommitSha(event.target.value)} disabled={explicitGateLocked} className="h-9 border-white/10 bg-[#091222] pl-9 font-mono text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50" placeholder="optional" data-testid="input-coding-commit-sha" /></div></label></div>{explicitGateLocked && <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-300"><LockKeyhole className="size-3" />Status and commit SHA are locked while <span className="font-mono">{currentNextAction}</span> requires its explicit gate action.</div>}<label className="mt-3 block space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.resultSummary")}</span><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} className="resize-y border-white/10 bg-[#091222] text-xs leading-5 text-slate-200 placeholder:text-slate-400" placeholder="Add a concise outcome for reviewers." data-testid="input-coding-result-summary" /></label><Button onClick={update} disabled={updateTask.isPending} className="mt-3 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-update-coding-task">{updateTask.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.updating")}</> : <><CheckCircle2 />{t("pages.codingWorkspace.saveUpdate")}</>}</Button></section>
       </CardContent>
     </Card>
   );
@@ -3743,6 +3755,9 @@ export default function CodingWorkspace() {
   const [queuedAiBaselineRunCount, setQueuedAiBaselineRunCount] = useState<number | null>(null);
   const [monitor, setMonitor] = useState<CodingMonitorSnapshot | null>(null);
   const [monitorError, setMonitorError] = useState(false);
+  const [gcpRange, setGcpRange] = useState<"daily" | "monthly">("daily");
+  const [gcpUsage, setGcpUsage] = useState<GcpUsageSnapshot | null>(null);
+  const [gcpUsageError, setGcpUsageError] = useState(false);
   const { data: tasks, isLoading, isError, refetch } = useListCodingTasks();
   const activeFromRoute = params.id;
   const visibleTasks = useMemo(() => {
@@ -3813,6 +3828,21 @@ export default function CodingWorkspace() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadUsage = async () => {
+      try {
+        const response = await fetch(`/api/ai/coding/gcp-usage?range=${gcpRange}`, { credentials: "include", headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json() as GcpUsageSnapshot;
+        if (!cancelled) { setGcpUsage(payload); setGcpUsageError(false); }
+      } catch { if (!cancelled) setGcpUsageError(true); }
+    };
+    void loadUsage();
+    const timer = window.setInterval(() => void loadUsage(), 60_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [gcpRange]);
 
   const activeCount = (tasks ?? []).filter((task) => ACTIVE_STATUSES.has(task.status)).length;
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
@@ -4055,7 +4085,7 @@ export default function CodingWorkspace() {
                 <stat.icon className={cn("size-4", stat.tone)} />
                 <div>
                   <div className="font-mono text-xl font-semibold text-slate-100">{stat.value}</div>
-                  <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600">{stat.label}</div>
+                  <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-400">{stat.label}</div>
                 </div>
               </CardContent>
             </Card>
@@ -4065,11 +4095,11 @@ export default function CodingWorkspace() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-300">Live coding operations</div>
-              <div className="mt-1 text-[10px] text-slate-600">
+              <div className="mt-1 text-[10px] text-slate-400">
                 Queue, model execution, dan worker dihitung dari job state + heartbeat/lease aktual.
               </div>
             </div>
-            <div className="text-right font-mono text-[9px] text-slate-600">
+            <div className="text-right font-mono text-[9px] text-slate-400">
               <div>
                 {monitor
                   ? `updated ${formatDate(monitor.refreshedAt, lang, true)}`
@@ -4078,7 +4108,7 @@ export default function CodingWorkspace() {
                     : "loading live state…"}
               </div>
               {monitor?.workers.retiredLegacy ? (
-                <div className="mt-0.5 text-[8px] text-slate-700">
+                <div className="mt-0.5 text-[8px] text-slate-400">
                   legacy retired hidden {monitor.workers.retiredLegacy}
                 </div>
               ) : null}
@@ -4101,7 +4131,7 @@ export default function CodingWorkspace() {
                   <stat.icon className={cn("size-3.5", stat.tone)} />
                   <span className="font-mono text-lg font-semibold text-slate-100">{stat.value}</span>
                 </div>
-                <div className="mt-2 text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-600">{stat.label}</div>
+                <div className="mt-2 text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-400">{stat.label}</div>
               </div>
             ))}
           </div>
@@ -4112,9 +4142,9 @@ export default function CodingWorkspace() {
                 <div key={worker.id} className="rounded-lg border border-white/[0.05] bg-black/10 px-3 py-2" data-testid={`coding-worker-${worker.id}`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-slate-600">Worker</div>
+                      <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-slate-400">Worker</div>
                       <div className="mt-0.5 truncate font-mono text-[10px] text-slate-200">{worker.workerName}</div>
-                      <div className="mt-0.5 text-[9px] text-slate-600">{worker.workerType}</div>
+                      <div className="mt-0.5 text-[9px] text-slate-400">{worker.workerType}</div>
                     </div>
                     <span className={cn(
                       "rounded-full border px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wider",
@@ -4129,25 +4159,25 @@ export default function CodingWorkspace() {
                   </div>
                   <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
                     <div className="rounded-md border border-white/[0.04] bg-white/[0.015] px-2 py-1.5">
-                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-700">Provider</div>
+                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-400">Provider</div>
                       <div className="mt-0.5 truncate font-mono text-[9px] text-cyan-200" title={worker.providerSlug ?? "Not configured"}>
                         {worker.providerSlug ?? "not configured"}
                       </div>
                     </div>
                     <div className="rounded-md border border-white/[0.04] bg-white/[0.015] px-2 py-1.5">
-                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-700">Model</div>
+                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-400">Model</div>
                       <div className="mt-0.5 truncate font-mono text-[9px] text-slate-300" title={worker.modelId ?? "Not configured"}>
                         {worker.modelId ?? "not configured"}
                       </div>
                     </div>
                     <div className="rounded-md border border-white/[0.04] bg-white/[0.015] px-2 py-1.5">
-                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-700">Runtime</div>
+                      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-slate-400">Runtime</div>
                       <div className="mt-0.5 truncate font-mono text-[9px] text-slate-400" title={worker.runtimeKind ?? "Not configured"}>
                         {worker.runtimeKind ?? "not configured"}
                       </div>
                     </div>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[8px] text-slate-600">
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[8px] text-slate-400">
                     <span>jobs {worker.runningJobs}/{worker.maxConcurrentJobs}</span>
                     <span>slots {worker.availableSlots}</span>
                     <span>lease {worker.leaseValid ? "ok" : "expired"}</span>
@@ -4157,6 +4187,24 @@ export default function CodingWorkspace() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="mb-5 rounded-xl border border-white/[0.09] bg-[#0b1425]/90 p-4" data-testid="gcp-usage-cost-panel">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200"><WalletCards className="size-4" />GCP Usage & Cost</div>
+              <div className="mt-1 text-[11px] text-slate-300">Jam pemakaian dan biaya aktual project Ollama dari Cloud Billing export.</div>
+            </div>
+            <div className="flex rounded-lg border border-white/10 bg-[#08111f] p-1">
+              {(["daily", "monthly"] as const).map((range) => <button key={range} type="button" onClick={() => setGcpRange(range)} className={cn("rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider", gcpRange === range ? "bg-cyan-300 text-[#062028]" : "text-slate-300 hover:text-white")}>{range}</button>)}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/[0.07] bg-[#08111f] p-3"><div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total cost</div><div className="mt-1 font-mono text-xl font-semibold text-slate-50">{gcpUsage ? new Intl.NumberFormat(lang === "id" ? "id-ID" : "en-US", { style: "currency", currency: gcpUsage.currency || "USD", maximumFractionDigits: 2 }).format(gcpUsage.totalCost) : "—"}</div></div>
+            <div className="rounded-lg border border-white/[0.07] bg-[#08111f] p-3"><div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Usage hours</div><div className="mt-1 font-mono text-xl font-semibold text-slate-50">{gcpUsage ? gcpUsage.totalUsageHours.toFixed(2) : "—"} h</div></div>
+            <div className="rounded-lg border border-white/[0.07] bg-[#08111f] p-3"><div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Project</div><div className="mt-1 truncate font-mono text-sm font-semibold text-cyan-100">{gcpUsage?.projectId || "—"}</div></div>
+          </div>
+          {gcpUsage?.configured && gcpUsage.series.length > 0 ? <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-[10px]"><thead className="text-slate-300"><tr><th className="py-2">Period</th><th className="py-2">Hours</th><th className="py-2">Cost</th></tr></thead><tbody>{gcpUsage.series.map((row) => <tr key={row.period} className="border-t border-white/[0.06] text-slate-200"><td className="py-2 font-mono">{row.period}</td><td className="py-2 font-mono">{Number(row.usageHours).toFixed(2)}</td><td className="py-2 font-mono">{new Intl.NumberFormat(lang === "id" ? "id-ID" : "en-US", { style: "currency", currency: gcpUsage.currency || "USD", maximumFractionDigits: 2 }).format(Number(row.cost))}</td></tr>)}</tbody></table></div> : <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2 text-[10px] text-amber-100">{gcpUsageError ? "GCP billing data unavailable." : gcpUsage?.message ?? "Loading billing data…"}</div>}
         </section>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
@@ -4182,7 +4230,7 @@ export default function CodingWorkspace() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-slate-600">{t("pages.codingWorkspace.taskQueueHint")}</p>
+                  <p className="mt-1 text-xs text-slate-400">{t("pages.codingWorkspace.taskQueueHint")}</p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                   <Button
@@ -4198,7 +4246,7 @@ export default function CodingWorkspace() {
                     Hapus terpilih{selectedVisibleTasks.length > 0 ? ` (${selectedVisibleTasks.length})` : ""}
                   </Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => void deleteFailedTasks()} disabled={failedTasks.length === 0 || bulkDeletePending} className="border-rose-400/20 bg-rose-400/[0.04] text-rose-300 hover:bg-rose-400/10 hover:text-rose-200" data-testid="button-delete-failed-coding-tasks">{bulkDeletePending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}Hapus gagal{failedTasks.length > 0 ? ` (${failedTasks.length})` : ""}</Button>
-                  <div className="relative w-full sm:w-56"><Search className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("common.actions.search")} className="h-9 border-white/10 bg-[#091222] pl-9 text-xs text-slate-200 placeholder:text-slate-600" aria-label={t("common.actions.search")} data-testid="input-search-coding-tasks" /></div>
+                  <div className="relative w-full sm:w-56"><Search className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-400" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("common.actions.search")} className="h-9 border-white/10 bg-[#091222] pl-9 text-xs text-slate-200 placeholder:text-slate-400" aria-label={t("common.actions.search")} data-testid="input-search-coding-tasks" /></div>
                 </div>
               </div>
             </CardHeader>
@@ -4245,18 +4293,18 @@ export default function CodingWorkspace() {
                             />
                             <div className="min-w-0">
                               <div className="font-mono text-xs font-semibold text-cyan-300">{task.taskNumber}</div>
-                              <div className="mt-1 hidden items-center gap-1.5 text-[10px] text-slate-600 sm:flex"><Clock3 className="size-3" />{formatDate(task.createdAt, lang)}</div>
+                              <div className="mt-1 hidden items-center gap-1.5 text-[10px] text-slate-400 sm:flex"><Clock3 className="size-3" />{formatDate(task.createdAt, lang)}</div>
                             </div>
                           </div>
-                          <ChevronRight className="size-4 text-slate-700 transition-transform group-hover:translate-x-0.5 sm:hidden" />
+                          <ChevronRight className="size-4 text-slate-400 transition-transform group-hover:translate-x-0.5 sm:hidden" />
                         </div>
-                        <div className="min-w-0"><div className="truncate text-sm font-medium text-slate-200">{task.projectName}</div><div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-600"><span className="truncate">{task.repository}</span><span className="text-slate-700">·</span><span className="truncate text-slate-500">{task.branch}</span></div></div>
+                        <div className="min-w-0"><div className="truncate text-sm font-medium text-slate-200">{task.projectName}</div><div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-400"><span className="truncate">{task.repository}</span><span className="text-slate-400">·</span><span className="truncate text-slate-500">{task.branch}</span></div></div>
                         <div><StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} /></div>
-                        <div className="flex items-center justify-between gap-2 text-xs text-slate-600 sm:justify-end">
+                        <div className="flex items-center justify-between gap-2 text-xs text-slate-400 sm:justify-end">
                           <span className="sm:hidden">{formatDate(task.createdAt, lang)}</span>
                           <span className="font-mono text-[10px] text-slate-500">P{task.priority}</span>
                           {taskDeletable && (
-                            <Button type="button" variant="ghost" size="icon" disabled={deletingTaskIds.has(task.id) || bulkDeletePending} onClick={(event) => { event.stopPropagation(); void deleteTask(task); }} className="size-8 text-slate-600 hover:bg-rose-400/10 hover:text-rose-300" aria-label={`Hapus ${task.taskNumber}`} title="Hapus tugas" data-testid={`button-delete-coding-task-${task.id}`}>{deletingTaskIds.has(task.id) ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}</Button>
+                            <Button type="button" variant="ghost" size="icon" disabled={deletingTaskIds.has(task.id) || bulkDeletePending} onClick={(event) => { event.stopPropagation(); void deleteTask(task); }} className="size-8 text-slate-400 hover:bg-rose-400/10 hover:text-rose-300" aria-label={`Hapus ${task.taskNumber}`} title="Hapus tugas" data-testid={`button-delete-coding-task-${task.id}`}>{deletingTaskIds.has(task.id) ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}</Button>
                           )}
                         </div>
                       </div>
@@ -4276,7 +4324,7 @@ export default function CodingWorkspace() {
             presentationStatus={selectedPresentationStatus}
           /> : <Card className="min-h-[420px] border-white/[0.08] bg-[#0c1628]"><CardContent className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{isLoading ? t("pages.codingWorkspace.loading") : t("pages.codingWorkspace.selectTask")}</p></CardContent></Card>}</div>
         </div>
-        <div className="mt-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-slate-700"><div className="h-px flex-1 bg-white/[0.05]" /><span>Travelintrips engineering / coding intake</span><div className="h-px flex-1 bg-white/[0.05]" /></div>
+        <div className="mt-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-slate-400"><div className="h-px flex-1 bg-white/[0.05]" /><span>Travelintrips engineering / coding intake</span><div className="h-px flex-1 bg-white/[0.05]" /></div>
       </div>
       <CreateTaskDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={openFreshTask} />
     </div>
