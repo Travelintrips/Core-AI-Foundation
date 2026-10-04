@@ -1937,7 +1937,10 @@ export default function AiCoreChat() {
                     </button>
                     <select
                       value={voicePreset}
-                      onChange={(event) => setVoicePreset(event.target.value as VoicePreset)}
+                      onChange={(event) => {
+                        setSelectedLibraryVoiceId("");
+                        setVoicePreset(event.target.value as VoicePreset);
+                      }}
                       className="h-9 rounded-xl px-2 text-[11px] outline-none"
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
                       disabled={!voiceFeatureEnabled}
@@ -1950,6 +1953,24 @@ export default function AiCoreChat() {
                     </select>
                     <button
                       type="button"
+                      onClick={openVoiceLibrary}
+                      disabled={!voiceFeatureEnabled}
+                      className="h-9 max-w-[190px] rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
+                      style={{
+                        background: selectedLibraryVoiceId ? "#1D254D" : "#101831",
+                        color: selectedLibraryVoiceId ? "#D8D1FF" : "#B8AEFF",
+                        border: selectedLibraryVoiceId ? "1px solid #675ADB" : "1px solid #263765",
+                      }}
+                      title="Buka library suara ElevenLabs untuk mode Standard"
+                      data-testid="button-open-voice-library"
+                    >
+                      <Library className="size-3.5 shrink-0" />
+                      <span className="truncate">
+                        {selectedLibraryVoice?.name ?? (selectedLibraryVoiceId ? "Library aktif" : "Library Suara")}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => speakReply("Halo, ini contoh suara AI Core. Saya siap membantu Anda.")}
                       disabled={!voiceFeatureEnabled || !voiceReplyEnabled}
                       className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
@@ -1959,6 +1980,146 @@ export default function AiCoreChat() {
                       <Volume2 className="size-3.5" />
                       Preview
                     </button>
+                    {voiceLibraryOpen && (
+                      <div
+                        className="basis-full rounded-xl p-3"
+                        style={{ background: "#0D1730", border: "1px solid #31446F" }}
+                        data-testid="voice-library-panel"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: "#E7EDFA" }}>
+                              <Library className="size-3.5" />
+                              Voice Library
+                              <span className="rounded-full px-2 py-0.5 text-[9px]" style={{ background: "#1B2B4A", color: "#8FB8FF" }}>
+                                ElevenLabs · Standard
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[10px]" style={{ color: "#7F92B8" }}>
+                              Pilih suara provider untuk jawaban Standard. Realtime tetap memakai voice OpenAI Realtime.
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {selectedLibraryVoiceId && (
+                              <button
+                                type="button"
+                                onClick={clearLibraryVoice}
+                                className="h-7 rounded-lg px-2 text-[10px]"
+                                style={{ color: "#FCA5A5", border: "1px solid #513047" }}
+                              >
+                                Pakai suara browser
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void loadVoiceLibrary()}
+                              disabled={voiceLibraryLoading}
+                              className="h-7 rounded-lg px-2 text-[10px] disabled:opacity-40"
+                              style={{ color: "#9DB0D2", border: "1px solid #263765" }}
+                            >
+                              {voiceLibraryLoading ? "Memuat…" : "Refresh"}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="relative mt-3">
+                          <Search className="pointer-events-none absolute left-3 top-2.5 size-3.5" style={{ color: "#63779E" }} />
+                          <input
+                            value={voiceLibrarySearch}
+                            onChange={(event) => setVoiceLibrarySearch(event.target.value)}
+                            placeholder="Cari nama, gender, accent, atau karakter suara…"
+                            className="h-9 w-full rounded-xl bg-transparent pl-9 pr-3 text-xs outline-none"
+                            style={{ color: "#DCE5F7", border: "1px solid #263765" }}
+                            data-testid="input-search-voice-library"
+                          />
+                        </div>
+
+                        {voiceLibraryError && (
+                          <div className="mt-3 rounded-lg px-3 py-2 text-[11px]" style={{ background: "#2A1420", color: "#FDA4AF", border: "1px solid #5B2638" }}>
+                            {voiceLibraryError}
+                          </div>
+                        )}
+
+                        {voiceLibraryLoading && voiceLibrary.length === 0 ? (
+                          <div className="mt-3 flex items-center gap-2 py-5 text-xs" style={{ color: "#8DA1C8" }}>
+                            <Loader2 className="size-4 animate-spin" />
+                            Memuat library suara…
+                          </div>
+                        ) : (
+                          <div className="mt-3 grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                            {filteredVoiceLibrary.map((voice) => {
+                              const selected = selectedLibraryVoiceId === voice.voiceId;
+                              const previewing = voicePreviewingId === voice.voiceId;
+                              const meta = [voice.gender, voice.age, voice.accent, voice.category]
+                                .filter(Boolean)
+                                .join(" · ");
+                              return (
+                                <div
+                                  key={voice.voiceId}
+                                  className="rounded-xl p-3"
+                                  style={{
+                                    background: selected ? "#171D3C" : "#08101F",
+                                    border: selected ? "1px solid #675ADB" : "1px solid #263765",
+                                  }}
+                                  data-testid={`voice-library-item-${voice.voiceId}`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="truncate text-xs font-semibold" style={{ color: selected ? "#D8D1FF" : "#E7EDFA" }}>
+                                        {voice.name}
+                                      </div>
+                                      <div className="mt-1 truncate text-[9px] uppercase tracking-wide" style={{ color: "#63779E" }}>
+                                        {meta || "provider voice"}
+                                      </div>
+                                    </div>
+                                    {selected && (
+                                      <span className="rounded-full px-2 py-0.5 text-[9px]" style={{ background: "#675ADB", color: "#FFFFFF" }}>
+                                        Dipakai
+                                      </span>
+                                    )}
+                                  </div>
+                                  {voice.description && (
+                                    <div className="mt-2 line-clamp-2 text-[10px] leading-4" style={{ color: "#8DA1C8" }}>
+                                      {voice.description}
+                                    </div>
+                                  )}
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => void playLibraryVoice(
+                                        voice.voiceId,
+                                        "Halo, ini contoh suara AI Core. Silakan pilih suara yang paling nyaman.",
+                                        "preview",
+                                      )}
+                                      disabled={Boolean(voicePreviewingId)}
+                                      className="h-7 rounded-lg px-2 flex items-center gap-1 text-[10px] disabled:opacity-40"
+                                      style={{ color: "#AFC6F2", border: "1px solid #30466E" }}
+                                    >
+                                      {previewing ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+                                      Preview
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => selectLibraryVoice(voice)}
+                                      disabled={selected}
+                                      className="h-7 rounded-lg px-2 text-[10px] font-medium disabled:opacity-50"
+                                      style={{ background: selected ? "#27305D" : "#675ADB", color: "#FFFFFF" }}
+                                    >
+                                      {selected ? "Dipilih" : "Gunakan"}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {!voiceLibraryLoading && filteredVoiceLibrary.length === 0 && (
+                              <div className="col-span-full rounded-lg border border-dashed px-3 py-6 text-center text-[11px]" style={{ borderColor: "#263765", color: "#63779E" }}>
+                                {voiceLibrary.length === 0 ? "Library suara belum tersedia dari provider." : "Tidak ada suara yang cocok dengan pencarian."}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <label className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[10px]" style={{ background: "#0D1730", color: "#8DA1C8", border: "1px solid #263765" }}>
                       <input
                         type="checkbox"
