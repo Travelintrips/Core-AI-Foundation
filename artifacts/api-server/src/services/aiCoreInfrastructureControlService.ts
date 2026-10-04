@@ -385,7 +385,7 @@ async function callHostinger(
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Hostinger DNS list failed with HTTP ${result.status}.`);
       }
-      data = { target, subdomains: result.data };
+      data = result.data;
     } else {
       const subdomain = valueOf("subdomain");
       const target = valueOf("target") || valueOf("content");
