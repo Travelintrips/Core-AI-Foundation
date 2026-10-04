@@ -1008,7 +1008,14 @@ export default function AiCoreChat() {
   function openVoiceLibrary() {
     const next = !voiceLibraryOpen;
     setVoiceLibraryOpen(next);
-    if (next && voiceLibrary.length === 0) {
+    if (!next) return;
+    if (config?.voice?.libraryProviderConfigured === false) {
+      setVoiceLibraryError(
+        "ElevenLabs belum dikonfigurasi. Tambahkan provider key agar Voice Library dapat dimuat.",
+      );
+      return;
+    }
+    if (voiceLibrary.length === 0) {
       void loadVoiceLibrary();
     }
   }
@@ -1957,7 +1964,7 @@ export default function AiCoreChat() {
                     <button
                       type="button"
                       onClick={openVoiceLibrary}
-                      disabled={!voiceFeatureEnabled || config?.voice?.libraryProviderConfigured === false}
+                      disabled={!voiceFeatureEnabled}
                       className="h-9 max-w-[190px] rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
                       style={{
                         background: selectedLibraryVoiceId ? "#1D254D" : "#101831",
