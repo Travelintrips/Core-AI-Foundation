@@ -32,6 +32,7 @@ describe("AI Core MCP discovery compatibility", () => {
       name: "ai-core-direct-command",
       version: "1.4.0",
     });
+    expect(response.body.result.protocolVersion).toBe("2025-06-18");
     expect(response.body.result.capabilities).toEqual({
       tools: { listChanged: true },
       events: {},
@@ -65,7 +66,7 @@ describe("AI Core MCP discovery compatibility", () => {
     expect(response.status).toBe(200);
     expect(response.body.result).toMatchObject({
       resultType: "complete",
-      supportedVersions: ["2025-06-18", "2025-03-26"],
+      supportedVersions: ["2026-07-28", "2025-06-18", "2025-03-26"],
       capabilities: { tools: {}, events: {} },
       serverInfo: {
         name: "ai-core-direct-command",
@@ -89,7 +90,7 @@ describe("AI Core MCP discovery compatibility", () => {
       });
 
     expect(response.status).toBe(200);
-    expect(response.body.result.protocolVersion).toBe("2025-06-18");
+    expect(response.body.result.protocolVersion).toBe("2026-07-28");
     expect(response.body.result.capabilities.events).toEqual({});
   });
 
@@ -120,7 +121,7 @@ describe("AI Core MCP discovery compatibility", () => {
       "unsubscribe_ai_core_events",
     ]) {
       const tool = response.body.result.tools.find((item: { name: string }) => item.name === name);
-      expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.progress"] }]);
+      expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.events"] }]);
     }
   });
 });
