@@ -290,15 +290,15 @@ export async function sendCodingApprovalRequest(input: {
     `atau: REJECT ${input.token}`,
   ].filter(Boolean).join("\n");
 
+  // Baileys interactive/native-flow messages can render as an undecryptable
+  // "waiting for this message" placeholder on some WhatsApp clients. Approval
+  // messages must remain readable and actionable, so send them as normal text
+  // with signed HTTPS approve/reject links. The manual token command remains a
+  // final fallback.
   return sendGatewayMessage({
     idempotencyKey: `ai-core-approval-${input.approvalId}`,
     clientMessageId: input.approvalId,
     text,
-    footer: "AI Core Admin Approval",
-    buttons: [
-      { id: `APPROVE ${input.token}`, label: "✅ APPROVE" },
-      { id: `REJECT ${input.token}`, label: "❌ REJECT" },
-    ],
   });
 }
 
