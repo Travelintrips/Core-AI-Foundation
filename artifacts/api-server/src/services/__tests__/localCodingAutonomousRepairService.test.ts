@@ -22,6 +22,7 @@ vi.mock("../localCodingWorkstreamAiExecutionService.js", () => ({
   approveWorkstreamAiCandidatePatch: vi.fn(),
   approveWorkstreamAiExecutionHandoff: vi.fn(),
   enqueueWorkstreamAiExecution: vi.fn(),
+  manualAiPatchReviewReason: vi.fn(() => null),
   materializeApprovedWorkstreamAiCandidate: vi.fn(),
   prepareWorkstreamAiExecutionHandoff: vi.fn(),
 }));
@@ -37,7 +38,10 @@ vi.mock("../localCodingAiHandoffService.js", () => ({
 vi.mock("../localCodingAiQueueRuntimeService.js", () => ({ enqueueCodingAiExecution: vi.fn() }));
 vi.mock("../localCodingAiPatchApprovalService.js", () => ({ approveAndValidateAiPatch: vi.fn() }));
 vi.mock("../localCodingCommitApprovalService.js", () => ({ approveCommitAndCreatePullRequest: vi.fn() }));
-vi.mock("../localCodingPullRequestGateService.js", () => ({ startPullRequestVerification: vi.fn() }));
+vi.mock("../localCodingPullRequestGateService.js", () => ({
+  autoMergeVerifiedPullRequest: vi.fn(),
+  startPullRequestVerification: vi.fn(),
+}));
 vi.mock("../codingCriticalApprovalService.js", () => ({ requestCodingCriticalApproval: vi.fn() }));
 vi.mock("../codingControlBridgeSchemaService.js", () => ({ ensureCodingControlBridgeTables: vi.fn() }));
 vi.mock("../localCodingRunRecoveryService.js", () => ({
@@ -156,6 +160,45 @@ describe("autonomous coding cycle budget", () => {
     expect(source).toContain("max_cycles = LEAST(");
     expect(source).toContain("ai_platform.ai_coding_autonomous_tasks.max_cycles");
     expect(source).toContain("EXCLUDED.max_cycles");
+  });
+});
+
+describe("autonomous success completion policy", () => {
+  it("auto-approves bounded workstream AI handoffs instead of requesting human approval", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("approveWorkstreamAiExecutionHandoff(");
+    expect(source).toContain("enqueueWorkstreamAiExecution(review.id");
+    expect(source).toContain("AUTO_APPROVE_RUN_WORKSTREAM_AI");
+    expect(source).not.toContain("REQUEST_WORKSTREAM_AI_APPROVAL");
+  });
+
+  it("automatically merges a PR after verification reaches APPROVE_MERGE", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('case "APPROVE_MERGE":');
+    expect(source).toContain("autoMergeVerifiedPullRequest(taskId)");
+    expect(source).toContain("AUTO_MERGE_VERIFIED_PR");
+    expect(source).not.toContain("WAIT_WA_MERGE_APPROVAL");
+  });
+
+  it("marks automatic merge metadata and final task status as COMPLETED", () => {
+    const source = readFileSync(
+      new URL("../localCodingPullRequestGateService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("autoMerged: automatic");
+    expect(source).toContain('status: "COMPLETED"');
+    expect(source).toContain('nextAction: "DONE"');
+    expect(source).toContain("autoMergeVerifiedPullRequest");
+    expect(source).not.toContain("requestCodingCriticalApproval({");
   });
 });
 
