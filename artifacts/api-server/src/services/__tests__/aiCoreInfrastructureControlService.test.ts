@@ -37,6 +37,11 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["GCP stop VM setelah check status", "GCP_VM_STOP"],
     ["GCP cek status VM, jangan start", "GCP_VM_STATUS"],
     ["GCP read-only check status VM; jangan restart", "GCP_VM_STATUS"],
+    ["GCP start VM karena TERMINATED. Jangan restart/reset.", "GCP_VM_START"],
+    ["GCP nyalakan VM, jangan reboot", "GCP_VM_START"],
+    ["GCP restart VM, jangan stop", "GCP_VM_RESTART"],
+    ["GCP stop VM, jangan restart", "GCP_VM_STOP"],
+    ["GCP cek status VM, jangan start VM", "GCP_VM_STATUS"],
   ])("routes GCP action intent correctly for %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
