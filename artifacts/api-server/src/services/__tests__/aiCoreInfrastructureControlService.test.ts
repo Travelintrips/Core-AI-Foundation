@@ -25,6 +25,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger cek dns subdomain domain=example.com", "HOSTINGER_DNS_LIST"],
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
+    ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
   ])("detects %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
@@ -112,6 +113,45 @@ describe("AI Core Hostinger infrastructure control", () => {
     const [updateUrl, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(updateUrl).toBe("https://developers.hostinger.com/api/dns/v1/zones/example.com");
     expect(updateInit.method).toBe("PUT");
+  });
+
+  it("discovers hosting usernames and domains read-only", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        data: [
+          {
+            domain: "example.com",
+            username: "u123456789",
+            order_id: "order-1",
+            website_type: "nodejs",
+            is_enabled: true,
+            root_directory: "/home/u123456789/domains/example.com/public_html",
+          },
+        ],
+        meta: { total: 1 },
+      }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_HOSTING_DISCOVERY",
+      message: "Hostinger cari hosting username dan hosting domain",
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(result.mutating).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://developers.hostinger.com/api/hosting/v1/websites");
+    expect(init.method).toBe("GET");
+    expect(result.data).toMatchObject({
+      suggested_configuration: [
+        {
+          HOSTINGER_HOSTING_USERNAME: "u123456789",
+          HOSTINGER_HOSTING_DOMAIN: "example.com",
+        },
+      ],
+    });
   });
 
   it("checks domain availability without making a purchase", async () => {
