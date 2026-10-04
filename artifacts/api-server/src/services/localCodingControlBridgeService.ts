@@ -269,6 +269,76 @@ export async function acknowledgeCodingBridgeResponse(id: string) {
   return row ?? null;
 }
 
+export async function listPendingCodingBridgeResponsesForConversation(input: {
+  conversationId: string;
+  limit?: number;
+}) {
+  await ensureCodingControlBridgeTables();
+  const limit = Math.max(1, Math.min(100, input.limit ?? 50));
+  const result = await db.execute(sql`
+    SELECT
+      response.id,
+      response.command_id,
+      response.task_id,
+      response.kind,
+      response.message,
+      response.checkpoint_json,
+      response.metadata_json,
+      response.created_at
+    FROM ai_platform.ai_coding_bridge_responses AS response
+    JOIN ai_platform.ai_coding_bridge_commands AS command
+      ON command.id = response.command_id
+    WHERE response.acknowledged_at IS NULL
+      AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
+    ORDER BY response.created_at ASC
+    LIMIT ${limit}::integer
+  `);
+
+  return (result.rows ?? []).map((row) => ({
+    id: String(row["id"]),
+    commandId: String(row["command_id"]),
+    taskId: row["task_id"] ? String(row["task_id"]) : null,
+    kind: String(row["kind"] ?? ""),
+    message: String(row["message"] ?? ""),
+    checkpoint:
+      isRecord(row["checkpoint_json"]) ? row["checkpoint_json"] : {},
+    metadata:
+      isRecord(row["metadata_json"]) ? row["metadata_json"] : {},
+    createdAt: row["created_at"] ?? null,
+  }));
+}
+
+export async function subscribeCodingBridgeConversation(input: {
+  conversationId: string;
+  eventTypes?: string[];
+  leaseSeconds?: number;
+}) {
+  return renewCodingBridgePresence({
+    clientId: `chatgpt:${input.conversationId}`,
+    source: "chatgpt-mcp",
+    leaseSeconds: input.leaseSeconds,
+    metadata: {
+      conversationId: input.conversationId,
+      eventTypes: input.eventTypes ?? ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"],
+    },
+  });
+}
+
+export async function unsubscribeCodingBridgeConversation(
+  conversationId: string,
+): Promise<boolean> {
+  await ensureCodingControlBridgeTables();
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_bridge_presence
+    SET lease_expires_at = NOW(),
+        metadata_json = metadata_json || jsonb_build_object('unsubscribedAt', NOW()::text),
+        updated_at = NOW()
+    WHERE client_id = ${`chatgpt:${conversationId}`}::text
+    RETURNING client_id
+  `);
+  return Boolean(result.rows?.[0]);
+}
+
 export async function claimCodingBridgeCommand(input: {
   clientId: string;
   leaseSeconds?: number;
