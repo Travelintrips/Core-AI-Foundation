@@ -30,6 +30,17 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
 
+  it.each([
+    ["GCP start VM because status terakhir TERMINATED", "GCP_VM_START"],
+    ["Google Cloud nyalakan ollama vm, status sekarang TERMINATED", "GCP_VM_START"],
+    ["GCP restart VM setelah cek status", "GCP_VM_RESTART"],
+    ["GCP stop VM setelah check status", "GCP_VM_STOP"],
+    ["GCP cek status VM, jangan start", "GCP_VM_STATUS"],
+    ["GCP read-only check status VM; jangan restart", "GCP_VM_STATUS"],
+  ])("routes GCP action intent correctly for %s", (message, expected) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
   it("deploys a Docker Compose project with optional environment", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ accepted: true }), {
