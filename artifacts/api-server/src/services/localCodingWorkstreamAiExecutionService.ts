@@ -2416,7 +2416,14 @@ export async function materializeApprovedWorkstreamAiCandidate(
   try {
     await writeFile(patchFile, patch, { encoding: "utf8", flag: "wx" });
 
-    const baselineStatusPaths = normalizedChangedFiles(
+    // The materialization workspace is disposable and cryptographically bound
+    // to baseSha. Normalize it back to that exact commit before replaying the
+    // reviewed patch so stale/untracked clone artifacts cannot be mistaken for
+    // candidate changes.
+    await runGit(workspace.path, ["reset", "--hard", baseSha], childTask.repository);
+    await runGit(workspace.path, ["clean", "-fd"], childTask.repository);
+
+    const cleanStatusPaths = normalizedChangedFiles(
       parseGitStatusPaths(
         await runGit(
           workspace.path,
@@ -2425,6 +2432,13 @@ export async function materializeApprovedWorkstreamAiCandidate(
         ),
       ),
     );
+    if (cleanStatusPaths.length > 0) {
+      throw new LocalCodingWorkstreamAiExecutionError(
+        "Isolated materialization workspace could not be normalized to a clean base.",
+        "MATERIALIZATION_FAILED",
+        { baseSha, remainingStatusPaths: cleanStatusPaths },
+      );
+    }
 
     await runGit(workspace.path, ["apply", "--check", "--whitespace=nowarn", patchFile], childTask.repository);
     await runGit(workspace.path, ["apply", "--whitespace=nowarn", patchFile], childTask.repository);
@@ -2438,10 +2452,7 @@ export async function materializeApprovedWorkstreamAiCandidate(
     );
     const normalizedStatusPaths = normalizedChangedFiles(statusPaths);
     const normalizedCandidateFiles = normalizedChangedFiles(changedFiles);
-    const materializedStatusPaths = normalizedStatusPaths.filter(
-      (file) => !baselineStatusPaths.includes(file),
-    );
-    const unexpectedStatusPaths = materializedStatusPaths.filter(
+    const unexpectedStatusPaths = normalizedStatusPaths.filter(
       (file) => !normalizedCandidateFiles.includes(file),
     );
     const missingCandidatePaths = normalizedCandidateFiles.filter(
@@ -2453,9 +2464,7 @@ export async function materializeApprovedWorkstreamAiCandidate(
         "STALE_CONTEXT",
         {
           expected: normalizedCandidateFiles,
-          baseline: baselineStatusPaths,
           actual: normalizedStatusPaths,
-          materialized: materializedStatusPaths,
           unexpected: unexpectedStatusPaths,
         },
       );
