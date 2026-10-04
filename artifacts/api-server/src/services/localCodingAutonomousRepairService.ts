@@ -1213,10 +1213,19 @@ export async function enableAutonomousCodingTask(
                 THEN 'COMPLETED'
               ELSE 'ACTIVE'
             END,
-            max_cycles = LEAST(
-              ai_platform.ai_coding_autonomous_tasks.max_cycles,
-              EXCLUDED.max_cycles
-            ),
+            cycle_count = CASE
+              WHEN ai_platform.ai_coding_autonomous_tasks.status IN ('BLOCKED', 'FAILED', 'DISABLED')
+                THEN 0
+              ELSE ai_platform.ai_coding_autonomous_tasks.cycle_count
+            END,
+            max_cycles = CASE
+              WHEN ai_platform.ai_coding_autonomous_tasks.status = 'COMPLETED'
+                THEN ai_platform.ai_coding_autonomous_tasks.max_cycles
+              ELSE GREATEST(
+                ai_platform.ai_coding_autonomous_tasks.max_cycles,
+                EXCLUDED.max_cycles
+              )
+            END,
             last_error = NULL,
             updated_at = NOW()
       `
