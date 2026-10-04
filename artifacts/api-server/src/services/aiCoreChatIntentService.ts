@@ -52,7 +52,12 @@ export function detectRemoteWorkerPreset(
     return REPOSITORY_READONLY_CONTEXT.test(value) ? "review" : null;
   }
   if (/\b(build|compile)\b/i.test(value)) return "build";
-  if (/\b(test|testing|uji)\b/i.test(value)) return "test";
+  if (/\b(test|testing|uji)\b/i.test(value)) {
+    // Connectivity checks must not silently execute the repository's test suite.
+    const connectivity = /\b(koneksi|connection|connectivity|dua\s+arah|two[ -]way|ping|echo)\b/i.test(value);
+    const explicitSuite = /\b(?:jalankan|run|execute)\s+(?:(?:unit|integration|api|repository|repo)\s+)?tests?\b|\b(?:unit|integration|integrasi|api|repository|repo)\s+tests?\b|\btests?\s+(?:suite|api|repository|repo)\b/i.test(value);
+    return connectivity && !explicitSuite ? null : "test";
+  }
   if (/\b(cek|check|verify|verifikasi|validasi|status\s+repository|status\s+repo|periksa|inspect)\b/i.test(value)) {
     return REPOSITORY_READONLY_CONTEXT.test(value) ? "check" : null;
   }
