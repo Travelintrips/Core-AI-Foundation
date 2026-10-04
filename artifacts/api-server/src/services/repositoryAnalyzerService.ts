@@ -189,7 +189,10 @@ export function buildRepositoryCloneEnvironment(
     return cloneEnv;
   }
 
-  const token = env["AI_CODING_GITHUB_TOKEN"]?.trim();
+  const token =
+    env["AI_CODING_GITHUB_TOKEN"]?.trim() ||
+    env["GITHUB_TOKEN"]?.trim() ||
+    env["GH_TOKEN"]?.trim();
   if (!token) {
     return cloneEnv;
   }
