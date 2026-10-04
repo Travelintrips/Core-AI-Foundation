@@ -372,6 +372,41 @@ async function callHostinger(
         result: result.data,
       };
     }
+  } else if (operation === "HOSTINGER_HOSTING_DISCOVERY") {
+    const result = await firstSuccessful("/hosting/v1/websites", "GET");
+    if (result.status < 200 || result.status >= 300) {
+      throw new Error(`Hostinger hosting discovery failed with HTTP ${result.status}.`);
+    }
+    const payload = result.data as { data?: unknown[]; meta?: unknown } | unknown[] | null;
+    const websites = Array.isArray(payload)
+      ? payload
+      : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+        ? (payload as { data: unknown[] }).data
+        : [];
+    data = {
+      websites: websites.map((site) => {
+        const value = site && typeof site === "object" ? site as Record<string, unknown> : {};
+        return {
+          domain: value["domain"] ?? null,
+          username: value["username"] ?? null,
+          order_id: value["order_id"] ?? null,
+          website_type: value["website_type"] ?? null,
+          is_enabled: value["is_enabled"] ?? null,
+          root_directory: value["root_directory"] ?? null,
+        };
+      }),
+      suggested_configuration: websites
+        .filter((site) => site && typeof site === "object")
+        .map((site) => site as Record<string, unknown>)
+        .filter((site) => site["username"] && site["domain"])
+        .map((site) => ({
+          HOSTINGER_HOSTING_USERNAME: String(site["username"]),
+          HOSTINGER_HOSTING_DOMAIN: String(site["domain"]),
+        })),
+      meta: payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as { meta?: unknown }).meta ?? null
+        : null,
+    };
   } else if (operation === "HOSTINGER_DOMAIN_AVAILABILITY") {
     const rawDomain = valueOf("name") || hostingDomain;
     const tlds = (valueOf("tlds") || "com").split("|").map((v) => v.replace(/^\./, "").trim()).filter(Boolean);
