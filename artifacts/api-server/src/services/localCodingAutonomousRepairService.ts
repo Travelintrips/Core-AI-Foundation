@@ -1287,58 +1287,6 @@ async function temporalOrchestratorActive(): Promise<boolean> {
 }
 
 
-export async function recoverFalseCompletedCodingTasks(limit = 100): Promise<number> {
-  const bounded = Math.max(1, Math.min(250, Math.floor(limit)));
-  const candidates = await db
-    .select({ id: aiCodingTasksTable.id })
-    .from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.status, "COMPLETED"))
-    .orderBy(desc(aiCodingTasksTable.updatedAt))
-    .limit(bounded);
-
-  let recovered = 0;
-  for (const candidate of candidates) {
-    const state = await loadTaskState(candidate.id).catch(() => null);
-    if (!state || !state.nextAction || state.nextAction === "DONE") continue;
-
-    const result = await db.execute(sql`
-      UPDATE ai_platform.ai_coding_tasks
-      SET status = 'READY_REVIEW',
-          result_summary = COALESCE(
-            NULLIF(result_summary, ''),
-            'Task reopened because downstream implementation gates are still pending.'
-          ),
-          updated_at = NOW()
-      WHERE id = ${candidate.id}::uuid
-        AND status = 'COMPLETED'
-      RETURNING id
-    `);
-    if (!result.rows?.length) continue;
-
-    await db.execute(sql`
-      UPDATE ai_platform.ai_coding_autonomous_tasks
-      SET enabled = TRUE,
-          status = 'ACTIVE',
-          last_action = 'RECOVER_FALSE_COMPLETION',
-          last_error = NULL,
-          completed_at = NULL,
-          updated_at = NOW()
-      WHERE task_id = ${candidate.id}::uuid
-        AND status = 'COMPLETED'
-        AND cycle_count < max_cycles
-    `);
-
-    recovered += 1;
-    logger.warn(
-      { taskId: candidate.id, nextAction: state.nextAction },
-      "[coding-autonomous] reopened false COMPLETED task with pending implementation gates",
-    );
-  }
-
-  return recovered;
-}
-
-
 export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
   const candidates = await db
     .select({ id: aiCodingTasksTable.id })
@@ -1510,10 +1458,6 @@ export async function startAutonomousCodingRuntime(): Promise<void> {
       "[coding-autonomous] Startup schema ensure failed; periodic tick will retry",
     );
   }
-
-  await recoverFalseCompletedCodingTasks().catch((error) => {
-    logger.warn({ err: error }, "[coding-autonomous] false completion recovery failed");
-  });
 
   await recoverOrphanedReadyReviewTasks().catch((error) => {
     logger.warn({ err: error }, "[coding-autonomous] orphan recovery failed");
