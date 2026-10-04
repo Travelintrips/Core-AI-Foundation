@@ -77,6 +77,11 @@ export function detectAiCoreInfrastructureOperation(
       return "HOSTINGER_DOCKER_CONTAINERS";
     }
     if (/\b(create|buat|deploy|apply|pasang)\b/i.test(text)) return "HOSTINGER_DOCKER_DEPLOY";
+    if (/\b(?:env|environment)(?:\s+variables?)?\b/i.test(text) &&
+        /\b(update|ubah|ganti|set|apply|deploy|redeploy|perbarui)\b/i.test(text)) {
+      return "HOSTINGER_DOCKER_DEPLOY";
+    }
+    if (/\bupdate\s+env(?:ironment)?\s*=/i.test(text)) return "HOSTINGER_DOCKER_DEPLOY";
     if (/\b(update|redeploy|refresh|pull latest|perbarui)\b/i.test(text)) return "HOSTINGER_DOCKER_UPDATE";
     if (/\b(restart|reboot|mulai ulang)\b/i.test(text)) return "HOSTINGER_DOCKER_RESTART";
     if (/\b(stop|matikan|shutdown|hentikan)\b/i.test(text)) return "HOSTINGER_DOCKER_STOP";
