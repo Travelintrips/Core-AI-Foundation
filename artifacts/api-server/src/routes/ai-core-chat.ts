@@ -182,6 +182,10 @@ const VoiceCloneSpeakRequest = z.object({
   text: z.string().trim().min(1).max(1_200),
 }).strict();
 
+const VoiceLibrarySpeakRequest = z.object({
+  text: z.string().trim().min(1).max(1_200),
+}).strict();
+
 const TaskId = z.string().uuid();
 
 type ChatPolicy = z.infer<typeof ChatRequest>["modelPolicy"];
@@ -2247,6 +2251,9 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       presets: ["auto", "male", "female_soft", "female_firm", "cloned"],
       cloneProvider: "elevenlabs",
       cloneProviderConfigured: Boolean(getProviderApiKey("elevenlabs")),
+      libraryProvider: "elevenlabs",
+      libraryProviderConfigured: Boolean(getProviderApiKey("elevenlabs")),
+      libraryEndpoint: "/api/ai/core-chat/voices",
       transcriptEndpoint: "/api/ai/core-chat/messages",
       whatsappVoiceSourceReserved: true,
       secretsRedactedBeforePersistence: true,
@@ -2398,6 +2405,60 @@ router.post("/ai/core-chat/voices/:voiceId/preview", async (req, res): Promise<v
     );
     if (!response.ok) {
       throw new Error(`ElevenLabs voice preview failed (HTTP ${response.status}): ${safeProviderFailure(await response.text().catch(() => ""))}`);
+    }
+    const audio = Buffer.from(await response.arrayBuffer());
+    res.status(200).json({
+      voiceId,
+      audioBase64: audio.toString("base64"),
+      mimeType: "audio/mpeg",
+      provider: "elevenlabs",
+    });
+  } catch (error) {
+    res.status(503).json({ error: safeProviderFailure(error) });
+  }
+});
+
+router.post("/ai/core-chat/voices/:voiceId/speak", async (req, res): Promise<void> => {
+  if (!AI_CORE_VOICE_ENABLED) {
+    res.status(503).json({ error: "Voice sementara dinonaktifkan.", enabled: false });
+    return;
+  }
+  const voiceId = String(req.params["voiceId"] ?? "").trim();
+  if (voiceId.length < 4 || voiceId.length > 200) {
+    res.status(400).json({ error: "voiceId tidak valid." });
+    return;
+  }
+  const parsed = VoiceLibrarySpeakRequest.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Text voice library tidak valid." });
+    return;
+  }
+  const apiKey = getProviderApiKey("elevenlabs");
+  if (!apiKey) {
+    res.status(503).json({ error: "Voice provider belum dikonfigurasi." });
+    return;
+  }
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "content-type": "application/json",
+          accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text: parsed.data.text,
+          model_id: process.env["AI_CORE_VOICE_CLONE_MODEL"]?.trim() || "eleven_multilingual_v2",
+        }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `ElevenLabs voice synthesis failed (HTTP ${response.status}): ${safeProviderFailure(await response.text().catch(() => ""))}`,
+      );
     }
     const audio = Buffer.from(await response.arrayBuffer());
     res.status(200).json({

@@ -9,10 +9,13 @@ import {
   Download,
   ExternalLink,
   Loader2,
+  Library,
   MessageSquareText,
   Mic,
   MicOff,
   ImagePlus,
+  Play,
+  Search,
   AudioLines,
   X,
   Send,
@@ -82,6 +85,10 @@ type CoreConfig = {
   streaming?: { enabled: boolean; endpoint?: string; defaultPolicy?: string };
   voice?: {
     enabled: boolean;
+    cloneProviderConfigured?: boolean;
+    libraryProvider?: string;
+    libraryProviderConfigured?: boolean;
+    libraryEndpoint?: string;
     realtime?: {
       available: boolean;
       transport?: string;
@@ -125,6 +132,7 @@ const CONVERSATION_KEY = "ai_core_conversation_id_v1";
 const VOICE_PRESET_KEY = "ai_core_voice_preset_v1";
 const VOICE_TRANSPORT_MODE_KEY = "ai_core_voice_transport_mode_v1";
 const CLONED_VOICE_ID_KEY = "ai_core_cloned_voice_id_v1";
+const VOICE_LIBRARY_ID_KEY = "ai_core_voice_library_id_v1";
 const MAX_MESSAGES = 80;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_VOICE_SAMPLE_BYTES = 6 * 1024 * 1024;
@@ -159,6 +167,23 @@ const VOICE_PRESET_OPTIONS: Array<{ value: VoicePreset; label: string }> = [
   { value: "female_firm", label: "Wanita Tegas" },
   { value: "female_cheerful", label: "Wanita Ceria" },
 ];
+
+type VoiceLibraryItem = {
+  voiceId: string;
+  name: string;
+  category: string | null;
+  gender: string | null;
+  age: string | null;
+  accent: string | null;
+  description: string | null;
+  previewUrl: string | null;
+};
+
+type VoiceLibraryResponse = {
+  provider: string;
+  voices: VoiceLibraryItem[];
+  defaultVoiceId: string | null;
+};
 type PendingImage = {
   name: string;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
@@ -259,6 +284,14 @@ function loadClonedVoiceId(): string {
   }
 }
 
+function loadVoiceLibraryId(): string {
+  try {
+    return localStorage.getItem(VOICE_LIBRARY_ID_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -327,6 +360,13 @@ export default function AiCoreChat() {
   const [voiceTransportMode, setVoiceTransportMode] = useState<VoiceTransportMode>(() => loadVoiceTransportMode());
   const [voicePreset, setVoicePreset] = useState<VoicePreset>(() => loadVoicePreset());
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedLibraryVoiceId, setSelectedLibraryVoiceId] = useState(() => loadVoiceLibraryId());
+  const [voiceLibrary, setVoiceLibrary] = useState<VoiceLibraryItem[]>([]);
+  const [voiceLibraryOpen, setVoiceLibraryOpen] = useState(false);
+  const [voiceLibraryLoading, setVoiceLibraryLoading] = useState(false);
+  const [voiceLibraryError, setVoiceLibraryError] = useState("");
+  const [voiceLibrarySearch, setVoiceLibrarySearch] = useState("");
+  const [voicePreviewingId, setVoicePreviewingId] = useState<string | null>(null);
   const [clonedVoiceId, setClonedVoiceId] = useState(() => loadClonedVoiceId());
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false);
   const [voiceCloneStatus, setVoiceCloneStatus] = useState("");
@@ -350,6 +390,7 @@ export default function AiCoreChat() {
   const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
   const realtimeStreamRef = useRef<MediaStream | null>(null);
   const realtimeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const voicePlaybackAudioRef = useRef<HTMLAudioElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamInterruptedRef = useRef(false);
   const streamedSpeechBufferRef = useRef("");
@@ -372,6 +413,17 @@ export default function AiCoreChat() {
         ? "realtime"
         : "standard"
       : voiceTransportMode;
+  const selectedLibraryVoice =
+    voiceLibrary.find((voice) => voice.voiceId === selectedLibraryVoiceId) ?? null;
+  const filteredVoiceLibrary = useMemo(() => {
+    const query = voiceLibrarySearch.trim().toLowerCase();
+    if (!query) return voiceLibrary;
+    return voiceLibrary.filter((voice) =>
+      [voice.name, voice.category, voice.gender, voice.age, voice.accent, voice.description]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [voiceLibrary, voiceLibrarySearch]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -421,6 +473,18 @@ export default function AiCoreChat() {
   }, [voicePreset]);
 
   useEffect(() => {
+    try {
+      if (selectedLibraryVoiceId) {
+        localStorage.setItem(VOICE_LIBRARY_ID_KEY, selectedLibraryVoiceId);
+      } else {
+        localStorage.removeItem(VOICE_LIBRARY_ID_KEY);
+      }
+    } catch {
+      // Voice library preference remains usable for the current session.
+    }
+  }, [selectedLibraryVoiceId]);
+
+  useEffect(() => {
     if (!("speechSynthesis" in window)) return;
     const syncVoices = () => setAvailableVoices(window.speechSynthesis.getVoices());
     syncVoices();
@@ -444,6 +508,11 @@ export default function AiCoreChat() {
       if (realtimeAudioRef.current) {
         realtimeAudioRef.current.srcObject = null;
         realtimeAudioRef.current.remove();
+      }
+      if (voicePlaybackAudioRef.current) {
+        voicePlaybackAudioRef.current.pause();
+        voicePlaybackAudioRef.current.src = "";
+        voicePlaybackAudioRef.current = null;
       }
       window.speechSynthesis?.cancel();
     };
@@ -552,6 +621,12 @@ export default function AiCoreChat() {
     speechQueueRef.current = [];
     resumeListeningAfterSpeechRef.current = false;
     speechQueueActiveRef.current = false;
+    if (voicePlaybackAudioRef.current) {
+      voicePlaybackAudioRef.current.pause();
+      voicePlaybackAudioRef.current.src = "";
+      voicePlaybackAudioRef.current = null;
+    }
+    setVoicePreviewingId(null);
     window.speechSynthesis?.cancel();
   }
 
@@ -575,7 +650,7 @@ export default function AiCoreChat() {
       speechQueueRef.current.length === 0 ||
       !voiceFeatureEnabled ||
       !voiceReplyEnabled ||
-      voicePreset === "cloned" ||
+      (voicePreset === "cloned" || Boolean(selectedLibraryVoiceId)) ||
       !("speechSynthesis" in window)
     ) {
       maybeResumeHandsFreeListening();
@@ -643,7 +718,7 @@ export default function AiCoreChat() {
     if (
       !delta ||
       !voiceReplyEnabled ||
-      voicePreset === "cloned" ||
+      (voicePreset === "cloned" || Boolean(selectedLibraryVoiceId)) ||
       !handsFreeRef.current
     ) {
       return;
@@ -658,7 +733,7 @@ export default function AiCoreChat() {
   }
 
   function flushStreamSpeech() {
-    if (!voiceReplyEnabled || voicePreset === "cloned") {
+    if (!voiceReplyEnabled || voicePreset === "cloned" || selectedLibraryVoiceId) {
       streamedSpeechBufferRef.current = "";
       return;
     }
@@ -910,6 +985,99 @@ export default function AiCoreChat() {
     setListening(false);
   }
 
+  async function loadVoiceLibrary() {
+    if (!voiceFeatureEnabled || voiceLibraryLoading) return;
+    setVoiceLibraryLoading(true);
+    setVoiceLibraryError("");
+    try {
+      const result = await apiFetch<VoiceLibraryResponse>("/api/ai/core-chat/voices");
+      setVoiceLibrary(result.voices);
+      if (
+        selectedLibraryVoiceId &&
+        !result.voices.some((voice) => voice.voiceId === selectedLibraryVoiceId)
+      ) {
+        setSelectedLibraryVoiceId("");
+      }
+    } catch (error) {
+      setVoiceLibraryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setVoiceLibraryLoading(false);
+    }
+  }
+
+  function openVoiceLibrary() {
+    const next = !voiceLibraryOpen;
+    setVoiceLibraryOpen(next);
+    if (!next) return;
+    if (config?.voice?.libraryProviderConfigured === false) {
+      setVoiceLibraryError(
+        "ElevenLabs belum dikonfigurasi. Tambahkan provider key agar Voice Library dapat dimuat.",
+      );
+      return;
+    }
+    if (voiceLibrary.length === 0) {
+      void loadVoiceLibrary();
+    }
+  }
+
+  function selectLibraryVoice(voice: VoiceLibraryItem) {
+    cancelQueuedVoiceOutput();
+    setSelectedLibraryVoiceId(voice.voiceId);
+    setVoicePreset("auto");
+    if (voiceTransportMode !== "standard") {
+      selectVoiceTransportMode("standard");
+    } else {
+      setVoiceError("");
+    }
+  }
+
+  function clearLibraryVoice() {
+    cancelQueuedVoiceOutput();
+    setSelectedLibraryVoiceId("");
+  }
+
+  async function playLibraryVoice(
+    voiceId: string,
+    text: string,
+    endpoint: "preview" | "speak" = "preview",
+    onFinished?: () => void,
+  ) {
+    const done = () => {
+      setVoicePreviewingId((current) => current === voiceId ? null : current);
+      if (voicePlaybackAudioRef.current) {
+        voicePlaybackAudioRef.current = null;
+      }
+      onFinished?.();
+    };
+    setVoiceError("");
+    setVoicePreviewingId(voiceId);
+    try {
+      if (voicePlaybackAudioRef.current) {
+        voicePlaybackAudioRef.current.pause();
+        voicePlaybackAudioRef.current.src = "";
+        voicePlaybackAudioRef.current = null;
+      }
+      const result = await apiFetch<{ audioBase64: string; mimeType: string }>(
+        `/api/ai/core-chat/voices/${encodeURIComponent(voiceId)}/${endpoint}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ text }),
+        },
+      );
+      const audio = new Audio(`data:${result.mimeType};base64,${result.audioBase64}`);
+      voicePlaybackAudioRef.current = audio;
+      audio.onended = done;
+      audio.onerror = done;
+      await audio.play();
+    } catch (error) {
+      setVoiceError(
+        "Voice library gagal diputar: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
+      done();
+    }
+  }
+
   function selectVoiceTransportMode(nextMode: VoiceTransportMode) {
     if (nextMode === voiceTransportMode) return;
     if (handsFreeRef.current) stopVoiceSession();
@@ -968,6 +1136,16 @@ export default function AiCoreChat() {
       return;
     }
 
+    if (selectedLibraryVoiceId) {
+      void playLibraryVoice(
+        selectedLibraryVoiceId,
+        text.slice(0, 1_200),
+        "speak",
+        done,
+      );
+      return;
+    }
+
     if (voicePreset === "cloned" && clonedVoiceId) {
       void apiFetch<{ audioBase64: string; mimeType: string }>("/api/ai/core-chat/voice-clone/speak", {
         method: "POST",
@@ -975,8 +1153,15 @@ export default function AiCoreChat() {
       })
         .then((result) => {
           const audio = new Audio(`data:${result.mimeType};base64,${result.audioBase64}`);
-          audio.onended = done;
-          audio.onerror = done;
+          voicePlaybackAudioRef.current = audio;
+          const finish = () => {
+            if (voicePlaybackAudioRef.current === audio) {
+              voicePlaybackAudioRef.current = null;
+            }
+            done();
+          };
+          audio.onended = finish;
+          audio.onerror = finish;
           return audio.play();
         })
         .catch((error) => {
@@ -1058,6 +1243,7 @@ export default function AiCoreChat() {
         }),
       });
       setClonedVoiceId(result.voiceId);
+      setSelectedLibraryVoiceId("");
       setVoicePreset("cloned");
       try {
         localStorage.setItem(CLONED_VOICE_ID_KEY, result.voiceId);
@@ -1310,7 +1496,7 @@ export default function AiCoreChat() {
 
         if (inputSource === "voice" && handsFreeRef.current && !interrupted) {
           resumeListeningAfterSpeechRef.current = true;
-          if (voicePreset === "cloned" && completeStreamReply.trim()) {
+          if ((voicePreset === "cloned" || selectedLibraryVoiceId) && completeStreamReply.trim()) {
             speakReply(completeStreamReply, () => {
               resumeListeningAfterSpeechRef.current = false;
               if (handsFreeRef.current) window.setTimeout(() => startListening(), 250);
@@ -1760,7 +1946,11 @@ export default function AiCoreChat() {
                     </button>
                     <select
                       value={voicePreset}
-                      onChange={(event) => setVoicePreset(event.target.value as VoicePreset)}
+                      onChange={(event) => {
+                        cancelQueuedVoiceOutput();
+                        setSelectedLibraryVoiceId("");
+                        setVoicePreset(event.target.value as VoicePreset);
+                      }}
                       className="h-9 rounded-xl px-2 text-[11px] outline-none"
                       style={{ background: "#101831", color: "#B8AEFF", border: "1px solid #263765" }}
                       disabled={!voiceFeatureEnabled}
@@ -1773,6 +1963,28 @@ export default function AiCoreChat() {
                     </select>
                     <button
                       type="button"
+                      onClick={openVoiceLibrary}
+                      disabled={!voiceFeatureEnabled}
+                      className="h-9 max-w-[190px] rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
+                      style={{
+                        background: selectedLibraryVoiceId ? "#1D254D" : "#101831",
+                        color: selectedLibraryVoiceId ? "#D8D1FF" : "#B8AEFF",
+                        border: selectedLibraryVoiceId ? "1px solid #675ADB" : "1px solid #263765",
+                      }}
+                      title={
+                        config?.voice?.libraryProviderConfigured === false
+                          ? "ElevenLabs belum dikonfigurasi"
+                          : "Buka library suara ElevenLabs untuk mode Standard"
+                      }
+                      data-testid="button-open-voice-library"
+                    >
+                      <Library className="size-3.5 shrink-0" />
+                      <span className="truncate">
+                        {selectedLibraryVoice?.name ?? (selectedLibraryVoiceId ? "Library aktif" : "Library Suara")}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => speakReply("Halo, ini contoh suara AI Core. Saya siap membantu Anda.")}
                       disabled={!voiceFeatureEnabled || !voiceReplyEnabled}
                       className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[11px] disabled:opacity-40"
@@ -1782,6 +1994,146 @@ export default function AiCoreChat() {
                       <Volume2 className="size-3.5" />
                       Preview
                     </button>
+                    {voiceLibraryOpen && (
+                      <div
+                        className="basis-full rounded-xl p-3"
+                        style={{ background: "#0D1730", border: "1px solid #31446F" }}
+                        data-testid="voice-library-panel"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: "#E7EDFA" }}>
+                              <Library className="size-3.5" />
+                              Voice Library
+                              <span className="rounded-full px-2 py-0.5 text-[9px]" style={{ background: "#1B2B4A", color: "#8FB8FF" }}>
+                                ElevenLabs · Standard
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[10px]" style={{ color: "#7F92B8" }}>
+                              Pilih suara provider untuk jawaban Standard. Realtime tetap memakai voice OpenAI Realtime.
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {selectedLibraryVoiceId && (
+                              <button
+                                type="button"
+                                onClick={clearLibraryVoice}
+                                className="h-7 rounded-lg px-2 text-[10px]"
+                                style={{ color: "#FCA5A5", border: "1px solid #513047" }}
+                              >
+                                Pakai suara browser
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void loadVoiceLibrary()}
+                              disabled={voiceLibraryLoading}
+                              className="h-7 rounded-lg px-2 text-[10px] disabled:opacity-40"
+                              style={{ color: "#9DB0D2", border: "1px solid #263765" }}
+                            >
+                              {voiceLibraryLoading ? "Memuat…" : "Refresh"}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="relative mt-3">
+                          <Search className="pointer-events-none absolute left-3 top-2.5 size-3.5" style={{ color: "#63779E" }} />
+                          <input
+                            value={voiceLibrarySearch}
+                            onChange={(event) => setVoiceLibrarySearch(event.target.value)}
+                            placeholder="Cari nama, gender, accent, atau karakter suara…"
+                            className="h-9 w-full rounded-xl bg-transparent pl-9 pr-3 text-xs outline-none"
+                            style={{ color: "#DCE5F7", border: "1px solid #263765" }}
+                            data-testid="input-search-voice-library"
+                          />
+                        </div>
+
+                        {voiceLibraryError && (
+                          <div className="mt-3 rounded-lg px-3 py-2 text-[11px]" style={{ background: "#2A1420", color: "#FDA4AF", border: "1px solid #5B2638" }}>
+                            {voiceLibraryError}
+                          </div>
+                        )}
+
+                        {voiceLibraryLoading && voiceLibrary.length === 0 ? (
+                          <div className="mt-3 flex items-center gap-2 py-5 text-xs" style={{ color: "#8DA1C8" }}>
+                            <Loader2 className="size-4 animate-spin" />
+                            Memuat library suara…
+                          </div>
+                        ) : (
+                          <div className="mt-3 grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                            {filteredVoiceLibrary.map((voice) => {
+                              const selected = selectedLibraryVoiceId === voice.voiceId;
+                              const previewing = voicePreviewingId === voice.voiceId;
+                              const meta = [voice.gender, voice.age, voice.accent, voice.category]
+                                .filter(Boolean)
+                                .join(" · ");
+                              return (
+                                <div
+                                  key={voice.voiceId}
+                                  className="rounded-xl p-3"
+                                  style={{
+                                    background: selected ? "#171D3C" : "#08101F",
+                                    border: selected ? "1px solid #675ADB" : "1px solid #263765",
+                                  }}
+                                  data-testid={`voice-library-item-${voice.voiceId}`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="truncate text-xs font-semibold" style={{ color: selected ? "#D8D1FF" : "#E7EDFA" }}>
+                                        {voice.name}
+                                      </div>
+                                      <div className="mt-1 truncate text-[9px] uppercase tracking-wide" style={{ color: "#63779E" }}>
+                                        {meta || "provider voice"}
+                                      </div>
+                                    </div>
+                                    {selected && (
+                                      <span className="rounded-full px-2 py-0.5 text-[9px]" style={{ background: "#675ADB", color: "#FFFFFF" }}>
+                                        Dipakai
+                                      </span>
+                                    )}
+                                  </div>
+                                  {voice.description && (
+                                    <div className="mt-2 line-clamp-2 text-[10px] leading-4" style={{ color: "#8DA1C8" }}>
+                                      {voice.description}
+                                    </div>
+                                  )}
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => void playLibraryVoice(
+                                        voice.voiceId,
+                                        "Halo, ini contoh suara AI Core. Silakan pilih suara yang paling nyaman.",
+                                        "preview",
+                                      )}
+                                      disabled={Boolean(voicePreviewingId)}
+                                      className="h-7 rounded-lg px-2 flex items-center gap-1 text-[10px] disabled:opacity-40"
+                                      style={{ color: "#AFC6F2", border: "1px solid #30466E" }}
+                                    >
+                                      {previewing ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+                                      Preview
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => selectLibraryVoice(voice)}
+                                      disabled={selected}
+                                      className="h-7 rounded-lg px-2 text-[10px] font-medium disabled:opacity-50"
+                                      style={{ background: selected ? "#27305D" : "#675ADB", color: "#FFFFFF" }}
+                                    >
+                                      {selected ? "Dipilih" : "Gunakan"}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {!voiceLibraryLoading && filteredVoiceLibrary.length === 0 && (
+                              <div className="col-span-full rounded-lg border border-dashed px-3 py-6 text-center text-[11px]" style={{ borderColor: "#263765", color: "#63779E" }}>
+                                {voiceLibrary.length === 0 ? "Library suara belum tersedia dari provider." : "Tidak ada suara yang cocok dengan pencarian."}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <label className="h-9 rounded-xl px-2.5 flex items-center gap-1.5 text-[10px]" style={{ background: "#0D1730", color: "#8DA1C8", border: "1px solid #263765" }}>
                       <input
                         type="checkbox"
