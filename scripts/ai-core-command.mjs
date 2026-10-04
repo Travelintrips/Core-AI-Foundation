@@ -6,6 +6,7 @@ const OWNER = 'Travelintrips';
 const API = 'https://aicore.cstlogistic.co.id/api';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POLICY = '\n\nExecution policy: Use an isolated working branch. Preserve production approval gates. Do not bypass tests, access secrets, force-push, or directly modify production. Submit verified changes as a pull request.';
+const AUTONOMOUS_E2E_POLICY = '\n\nExecution policy: This is an explicit owner-authorized autonomous E2E validation. Use an isolated working branch. Do not bypass tests, access secrets, force-push, or weaken security controls. Keep the change strictly within the requested canary scope. If verification is green, you may commit, push, open a pull request, merge that verified pull request, and allow the normal production deployment workflow to run. Critical security controls remain mandatory.';
 const DEFAULT_ISSUE_WAIT_MS = 2 * 60 * 1000;
 const DEFAULT_POLL_MS = 10_000;
 
@@ -16,6 +17,7 @@ export function resolveCommand(event, env) {
   }
   let inputs = event.inputs ?? {};
   let issueNumber = null;
+  let autonomousE2E = false;
   if (env.GITHUB_EVENT_NAME === 'issues') {
     if (event.action !== 'labeled' || event.sender?.login !== OWNER ||
         event.issue?.user?.login !== OWNER || event.issue?.pull_request ||
@@ -36,6 +38,10 @@ export function resolveCommand(event, env) {
         max_cycles: '20',
       };
     } else {
+      const body = String(event.issue.body ?? '');
+      autonomousE2E =
+        event.label.name === 'ai-task' &&
+        /^autonomous_e2e:\s*true\s*$/im.test(body);
       inputs = {
         action: event.label.name === 'ai-audit' ? 'audit' : 'submit',
         instruction: `${event.issue.title ?? ''}\n\n${event.issue.body ?? ''}`.trim(),
@@ -62,7 +68,7 @@ export function resolveCommand(event, env) {
   if (['status', 'stop', 'approve_handoff'].includes(action) && !UUID.test(taskId)) throw new Error('A valid task_id is required.');
   const approvalId = String(inputs.approval_id ?? '').trim();
   if (action === 'approve_handoff' && !UUID.test(approvalId)) throw new Error('A valid approval_id is required.');
-  return { action, instruction, requestId, taskId, approvalId, maxCycles, issueNumber };
+  return { action, instruction, requestId, taskId, approvalId, maxCycles, issueNumber, autonomousE2E };
 }
 
 export function createApi(secret, fetchImpl = fetch) {
@@ -284,7 +290,7 @@ export async function execute(command, api, options = {}) {
   const readiness = await audit(api);
   if (!readiness.ready) throw new Error('AI Core is not ready. No coding task was created or started. Run audit for diagnostics.');
   const projectName = `GitHub Trigger ${command.requestId}`;
-  const instruction = command.instruction + POLICY;
+  const instruction = command.instruction + (command.autonomousE2E ? AUTONOMOUS_E2E_POLICY : POLICY);
   const matches = (await listTasks(api)).filter(task => task.projectName === projectName);
   if (matches.length > 1) throw new Error('Multiple tasks share request_id; refusing a duplicate dispatch.');
   let task = matches[0];
@@ -299,8 +305,18 @@ export async function execute(command, api, options = {}) {
   await api('/ai/coding/bridge/commands', { method: 'POST', body: {
     externalCommandId: command.requestId, source: 'github-trigger', commandType: 'INSTRUCTION',
     taskId: task.id, instruction,
-    authority: { allowCommit: true, allowPush: true, allowMerge: false, allowProductionDeploy: false },
-    metadata: { repository: REPOSITORY, requestId: command.requestId, issueNumber: command.issueNumber },
+    authority: {
+      allowCommit: true,
+      allowPush: true,
+      allowMerge: command.autonomousE2E === true,
+      allowProductionDeploy: command.autonomousE2E === true,
+    },
+    metadata: {
+      repository: REPOSITORY,
+      requestId: command.requestId,
+      issueNumber: command.issueNumber,
+      autonomousE2E: command.autonomousE2E === true,
+    },
   } });
   const state = await api(`/ai/coding/tasks/${task.id}/autonomous`, { allowed: [404] });
   if (state.status !== 404) {
@@ -332,14 +348,14 @@ export async function execute(command, api, options = {}) {
   if (blocked) {
     return { action: 'submit', taskId: task.id, maxCycles: command.maxCycles,
       result: 'TASK_BLOCKED', initialStatus: started.value.cycle?.status ?? 'unknown',
-      productionApprovalRequired: true };
+      productionApprovalRequired: command.autonomousE2E !== true };
   }
   if (command.issueNumber) {
     return waitForTaskOutcome({ ...command, taskId: task.id }, api, options);
   }
   return { action: 'submit', taskId: task.id, maxCycles: command.maxCycles,
     result: 'TASK_ACCEPTED_NOT_COMPLETED',
-    initialStatus: started.value.cycle?.status ?? 'unknown', productionApprovalRequired: true };
+    initialStatus: started.value.cycle?.status ?? 'unknown', productionApprovalRequired: command.autonomousE2E !== true };
 }
 
 export async function main(env = process.env, fetchImpl = fetch) {
