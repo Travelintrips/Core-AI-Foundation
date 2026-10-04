@@ -1,4 +1,5 @@
 name: Coding WA Smoke
+# Trigger plain-text WhatsApp delivery verification after approval-message fix.
 
 on:
   workflow_dispatch:
