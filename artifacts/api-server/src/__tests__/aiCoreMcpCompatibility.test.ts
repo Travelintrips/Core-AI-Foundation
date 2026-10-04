@@ -27,13 +27,14 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.3.2");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.4.0");
     expect(response.body.result.serverInfo).toEqual({
       name: "ai-core-direct-command",
-      version: "1.3.2",
+      version: "1.4.0",
     });
     expect(response.body.result.capabilities).toEqual({
       tools: { listChanged: true },
+      events: {},
       resources: { subscribe: false, listChanged: false },
       prompts: { listChanged: false },
     });
@@ -56,6 +57,42 @@ describe("AI Core MCP discovery compatibility", () => {
     });
   });
 
+  it("advertises MCP 2.0 native event support through server/discover", async () => {
+    const response = await request(app())
+      .post("/api/ai/core-chat/mcp")
+      .send({ jsonrpc: "2.0", id: 30, method: "server/discover", params: {} });
+
+    expect(response.status).toBe(200);
+    expect(response.body.result).toMatchObject({
+      resultType: "complete",
+      supportedVersions: ["2026-07-28", "2025-06-18"],
+      capabilities: { tools: {}, events: {} },
+      serverInfo: {
+        name: "ai-core-direct-command",
+        version: "1.4.0",
+      },
+    });
+  });
+
+  it("negotiates MCP 2.0 when requested", async () => {
+    const response = await request(app())
+      .post("/api/ai/core-chat/mcp")
+      .send({
+        jsonrpc: "2.0",
+        id: 31,
+        method: "initialize",
+        params: {
+          protocolVersion: "2026-07-28",
+          capabilities: {},
+          clientInfo: { name: "test", version: "2" },
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.result.protocolVersion).toBe("2026-07-28");
+    expect(response.body.result.capabilities.events).toEqual({});
+  });
+
   it("continues to expose AI Core tools", async () => {
     const response = await request(app())
       .post("/api/ai/core-chat/mcp")
@@ -63,7 +100,7 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.3.2");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.4.0");
     const toolNames = response.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(
       expect.arrayContaining([
@@ -96,7 +133,7 @@ it("exposes the same live tool registry on the fresh v2 endpoint", async () => {
 
   expect(response.status).toBe(200);
   expect(response.headers["cache-control"]).toContain("no-store");
-  expect(response.headers["x-mcp-server-version"]).toBe("1.3.2");
+  expect(response.headers["x-mcp-server-version"]).toBe("1.4.0");
   expect(response.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
     expect.arrayContaining([
       "send_ai_core_command",

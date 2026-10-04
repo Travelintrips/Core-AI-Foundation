@@ -1,9 +1,15 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
+import {
+  AI_CORE_TERMINAL_EVENT_NAME,
+  McpCallbackEndpointError,
+  subscribeAiCoreMcpEvent,
+  unsubscribeAiCoreMcpEvent,
+} from "../services/aiCoreMcpEventWebhookService.js";
 import {
   oauthIssuer,
   oauthResource,
@@ -17,8 +23,9 @@ import {
 } from "../services/localCodingControlBridgeService.js";
 
 const router = Router();
-const MCP_PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.3.2" };
+const MCP_PROTOCOL_VERSION = "2026-07-28";
+const LEGACY_MCP_PROTOCOL_VERSION = "2025-06-18";
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.4.0" };
 
 const SendCommandArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -58,6 +65,110 @@ const AckEventArgs = z.object({
 const UnsubscribeEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
 }).strict();
+
+const NativeTerminalEventType = z.enum([
+  "COMPLETED",
+  "FAILED",
+  "BLOCKED",
+  "MERGED",
+  "DEPLOYED",
+]);
+const NativeTerminalEventArguments = z.object({
+  taskId: z.string().uuid().optional(),
+  repository: z.string().trim().min(1).max(500).optional(),
+  projectName: z.string().trim().min(1).max(200).optional(),
+  eventTypes: z.array(NativeTerminalEventType).min(1).max(5).optional(),
+}).strict();
+const NativeEventSubscribeParams = z.object({
+  name: z.literal(AI_CORE_TERMINAL_EVENT_NAME),
+  arguments: NativeTerminalEventArguments.default({}),
+  delivery: z.object({
+    mode: z.literal("webhook"),
+    url: z.string().url(),
+    secret: z.string().min(1).max(512),
+  }).strict(),
+  cursor: z.null().optional().default(null),
+  ttlMs: z.union([z.number().int().positive(), z.null()]).optional(),
+}).strict();
+const NativeEventUnsubscribeParams = z.object({
+  name: z.literal(AI_CORE_TERMINAL_EVENT_NAME),
+  arguments: NativeTerminalEventArguments.default({}),
+  delivery: z.object({
+    mode: z.literal("webhook"),
+    url: z.string().url(),
+  }).strict(),
+}).strict();
+
+const nativeEvents = [
+  {
+    name: AI_CORE_TERMINAL_EVENT_NAME,
+    description:
+      "Emitted when an AI Core coding task reaches a terminal or intervention-worthy lifecycle state so ChatGPT can report the result without polling.",
+    delivery: ["webhook"],
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        taskId: {
+          type: "string",
+          format: "uuid",
+          description: "Optional AI Core task UUID to monitor.",
+        },
+        repository: {
+          type: "string",
+          description: "Optional repository filter such as Travelintrips/Core-AI-Foundation.",
+        },
+        projectName: {
+          type: "string",
+          description: "Optional AI Core project-name filter.",
+        },
+        eventTypes: {
+          type: "array",
+          minItems: 1,
+          maxItems: 5,
+          items: {
+            type: "string",
+            enum: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
+          },
+          description: "Optional lifecycle states to deliver.",
+        },
+      },
+    },
+    payloadSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "response_id",
+        "task_id",
+        "task_number",
+        "project_name",
+        "repository",
+        "branch",
+        "event_type",
+        "status",
+        "message",
+        "result_summary",
+        "workspace_url",
+      ],
+      properties: {
+        response_id: { type: "string", format: "uuid" },
+        task_id: { type: ["string", "null"], format: "uuid" },
+        task_number: { type: ["string", "null"] },
+        project_name: { type: ["string", "null"] },
+        repository: { type: ["string", "null"] },
+        branch: { type: ["string", "null"] },
+        event_type: {
+          type: "string",
+          enum: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
+        },
+        status: { type: "string" },
+        message: { type: "string" },
+        result_summary: { type: ["string", "null"] },
+        workspace_url: { type: ["string", "null"] },
+      },
+    },
+  },
+] as const;
 
 function classifyLifecycleEvent(input: {
   kind: string;
@@ -133,6 +244,16 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
   } catch {
     return null;
   }
+}
+
+function identityPrincipalId(identity: McpIdentity): string {
+  if (identity.kind === "oauth" && identity.user) {
+    return `oauth:${identity.user.id}`;
+  }
+  return `legacy:${createHash("sha256")
+    .update(identity.connectorKey)
+    .digest("hex")
+    .slice(0, 40)}`;
 }
 
 function setDiscoveryHeaders(res: import("express").Response): void {
@@ -387,13 +508,41 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     return;
   }
 
-  if (body.method === "initialize") {
+  if (body.method === "server/discover") {
     setDiscoveryHeaders(res);
     res.status(200).json(
       rpcResult(body.id ?? null, {
-        protocolVersion: MCP_PROTOCOL_VERSION,
+        resultType: "complete",
+        supportedVersions: [MCP_PROTOCOL_VERSION, LEGACY_MCP_PROTOCOL_VERSION],
+        capabilities: {
+          tools: {},
+          events: {},
+        },
+        serverInfo: SERVER_INFO,
+      }),
+    );
+    return;
+  }
+
+  if (body.method === "initialize") {
+    setDiscoveryHeaders(res);
+    const requestedProtocolVersion =
+      body.params &&
+      typeof body.params === "object" &&
+      "protocolVersion" in body.params &&
+      typeof (body.params as { protocolVersion?: unknown }).protocolVersion === "string"
+        ? (body.params as { protocolVersion: string }).protocolVersion
+        : MCP_PROTOCOL_VERSION;
+    const negotiatedProtocolVersion =
+      requestedProtocolVersion === LEGACY_MCP_PROTOCOL_VERSION
+        ? LEGACY_MCP_PROTOCOL_VERSION
+        : MCP_PROTOCOL_VERSION;
+    res.status(200).json(
+      rpcResult(body.id ?? null, {
+        protocolVersion: negotiatedProtocolVersion,
         capabilities: {
           tools: { listChanged: true },
+          events: {},
           resources: { subscribe: false, listChanged: false },
           prompts: { listChanged: false },
         },
@@ -412,6 +561,91 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     setDiscoveryHeaders(res);
     res.status(200).json(rpcResult(body.id ?? null, { tools }));
     return;
+  }
+
+  if (
+    body.method === "events/list" ||
+    body.method === "events/subscribe" ||
+    body.method === "events/unsubscribe"
+  ) {
+    const identity = await authenticate(req);
+    if (!identity || !identity.scopes.has("ai_core.events")) {
+      res.setHeader("WWW-Authenticate", authChallenge("ai_core.events"));
+      res.status(401).json(authRequiredResult(body.id ?? null, "ai_core.events"));
+      return;
+    }
+
+    try {
+      if (body.method === "events/list") {
+        setDiscoveryHeaders(res);
+        res.status(200).json(
+          rpcResult(body.id ?? null, {
+            events: nativeEvents,
+            nextCursor: null,
+          }),
+        );
+        return;
+      }
+
+      if (body.method === "events/subscribe") {
+        const parsed = NativeEventSubscribeParams.parse(body.params ?? {});
+        const subscription = await subscribeAiCoreMcpEvent({
+          principalId: identityPrincipalId(identity),
+          eventName: parsed.name,
+          arguments: parsed.arguments,
+          callbackUrl: parsed.delivery.url,
+          secret: parsed.delivery.secret,
+          ttlMs: parsed.ttlMs,
+        });
+        res.status(200).json(
+          rpcResult(body.id ?? null, {
+            id: subscription.id,
+            refreshBefore: subscription.refreshBefore,
+            cursor: null,
+            truncated: false,
+          }),
+        );
+        return;
+      }
+
+      const parsed = NativeEventUnsubscribeParams.parse(body.params ?? {});
+      await unsubscribeAiCoreMcpEvent({
+        principalId: identityPrincipalId(identity),
+        eventName: parsed.name,
+        arguments: parsed.arguments,
+        callbackUrl: parsed.delivery.url,
+      });
+      res.status(200).json(rpcResult(body.id ?? null, {}));
+      return;
+    } catch (error) {
+      if (error instanceof McpCallbackEndpointError) {
+        res.status(200).json(
+          rpcError(
+            body.id ?? null,
+            -32015,
+            "CallbackEndpointError",
+            { reason: error.reason },
+          ),
+        );
+        return;
+      }
+      if (error instanceof z.ZodError) {
+        res.status(200).json(
+          rpcError(body.id ?? null, -32602, "Invalid params", {
+            issues: error.issues,
+          }),
+        );
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : "MCP event request failed";
+      res.status(200).json(
+        rpcError(body.id ?? null, -32603, "Internal error", {
+          message: message.slice(0, 500),
+        }),
+      );
+      return;
+    }
   }
 
   // ChatGPT/Codex currently probes the standard MCP discovery methods even
