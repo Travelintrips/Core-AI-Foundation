@@ -2286,6 +2286,28 @@ async function legacyCreateFileResultHash(
 
 function parseGitStatusPaths(raw: string): string[] {
   const paths: string[] = [];
+
+  // Porcelain -z is the only unambiguous form for filenames containing
+  // whitespace, quotes, backslashes, or non-ASCII characters. For rename/copy
+  // records Git emits the destination path first and the source path as the
+  // following NUL-delimited field; candidate validation cares about the
+  // destination/current path.
+  if (raw.includes("\0")) {
+    const records = raw.split("\0");
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index] ?? "";
+      if (!record) continue;
+      const status = record.slice(0, 2);
+      const path = record.length >= 4 ? record.slice(3) : "";
+      if (path) paths.push(path.replace(/\\/g, "/"));
+      if (/[RC]/.test(status)) {
+        index += 1;
+      }
+    }
+    return [...new Set(paths)].sort();
+  }
+
+  // Keep legacy line parsing for persisted/test inputs that predate -z.
   for (const line of raw.split(/\r?\n/)) {
     if (!line.trim()) continue;
     const value = line.length >= 4 ? line.slice(3).trim() : "";
@@ -2435,7 +2457,7 @@ export async function materializeApprovedWorkstreamAiCandidate(
       parseGitStatusPaths(
         await runGit(
           workspace.path,
-          ["status", "--porcelain=v1", "--untracked-files=normal"],
+          ["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
           childTask.repository,
         ),
       ),
@@ -2470,7 +2492,7 @@ export async function materializeApprovedWorkstreamAiCandidate(
     const statusPaths = parseGitStatusPaths(
       await runGit(
         workspace.path,
-        ["status", "--porcelain=v1", "--untracked-files=normal"],
+        ["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
         childTask.repository,
       ),
     );
