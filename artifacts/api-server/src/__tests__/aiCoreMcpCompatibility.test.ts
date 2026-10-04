@@ -60,6 +60,10 @@ describe("AI Core MCP discovery compatibility", () => {
       expect.arrayContaining([
         "send_ai_core_command",
         "get_ai_core_task_progress",
+        "subscribe_ai_core_events",
+        "read_ai_core_events",
+        "ack_ai_core_event",
+        "unsubscribe_ai_core_events",
         "get_profile",
       ]),
     );
