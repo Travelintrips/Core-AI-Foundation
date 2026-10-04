@@ -32,7 +32,7 @@ describe("MCP command two-way routing", () => {
     expect(response.body.result.isError).toBeFalsy();
     const init = vi.mocked(fetch).mock.calls[0][1];
     expect(JSON.parse(String(init?.body))).toMatchObject({ mode: "auto", message: "@ Uji koneksi MCP", conversationId: "conversation-a" });
-    expect(mocks.record).toHaveBeenCalledWith({ conversationId: "conversation-a", instruction: "Uji koneksi MCP", payload: { kind: "answer", reply: "OK" } });
+    expect(mocks.record).toHaveBeenCalledWith({ conversationId: "conversation-a", instruction: "@ Uji koneksi MCP", payload: { kind: "answer", reply: "OK" } });
   });
   it("preserves the execution prefix gate", async () => {
     const response = await send("Uji koneksi MCP");
