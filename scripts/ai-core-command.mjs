@@ -6,6 +6,8 @@ const OWNER = 'Travelintrips';
 const API = 'https://aicore.cstlogistic.co.id/api';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POLICY = '\n\nExecution policy: Use an isolated working branch. Preserve production approval gates. Do not bypass tests, access secrets, force-push, or directly modify production. Submit verified changes as a pull request.';
+const DEFAULT_ISSUE_WAIT_MS = 2 * 60 * 1000;
+const DEFAULT_POLL_MS = 10_000;
 
 export function resolveCommand(event, env) {
   if (env.GITHUB_REPOSITORY !== REPOSITORY || env.GITHUB_ACTOR !== OWNER ||
@@ -182,8 +184,8 @@ function sleep(ms) {
 }
 
 async function waitForTaskOutcome(command, api, options = {}) {
-  const waitMs = Number.isFinite(options.waitMs) ? Math.max(0, options.waitMs) : 12 * 60 * 1000;
-  const pollMs = Number.isFinite(options.pollMs) ? Math.max(0, options.pollMs) : 10_000;
+  const waitMs = Number.isFinite(options.waitMs) ? Math.max(0, options.waitMs) : DEFAULT_ISSUE_WAIT_MS;
+  const pollMs = Number.isFinite(options.pollMs) ? Math.max(0, options.pollMs) : DEFAULT_POLL_MS;
   const sleepImpl = options.sleepImpl ?? sleep;
   const deadline = Date.now() + waitMs;
 

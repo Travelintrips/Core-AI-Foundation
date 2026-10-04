@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { REPOSITORY, resolveCommand, createApi, audit, execute } from './ai-core-command.mjs';
 
 const env = { GITHUB_REPOSITORY: REPOSITORY, GITHUB_ACTOR: 'Travelintrips',
@@ -150,6 +151,12 @@ test('input budgets, IDs, instruction limits, and actions are validated', () => 
   assert.throws(() => resolve({ action: 'submit', instruction: 'x'.repeat(19001) }), /instruction/);
   assert.throws(() => resolve({ action: 'stop', task_id: '../main' }), /task_id/);
 });
+test('issue-triggered commands use a short bounded wait instead of holding GitHub Actions for 12 minutes', () => {
+  const source = readFileSync(new URL('./ai-core-command.mjs', import.meta.url), 'utf8');
+  assert.match(source, /DEFAULT_ISSUE_WAIT_MS = 2 \* 60 \* 1000/);
+  assert.doesNotMatch(source, /12 \* 60 \* 1000/);
+});
+
 test('submission is bounded and accepted is not reported as completed', async () => {
   const f = fakeApi();
   const result = await execute(resolve({ action: 'submit', instruction: 'Add unit test', request_id: 'test-123' }), f.api);
