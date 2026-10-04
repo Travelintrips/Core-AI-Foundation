@@ -1914,6 +1914,13 @@ export async function executeCodingWorkstreamAiJob(
         nextAction = "COMPLETED";
         autoAdvanced = true;
       } catch (autoAdvanceError) {
+        const materializationContextFailure =
+          autoAdvanceError instanceof LocalCodingWorkstreamAiExecutionError &&
+          ["STALE_CONTEXT", "MATERIALIZATION_FAILED"].includes(autoAdvanceError.code);
+        if (materializationContextFailure) {
+          throw autoAdvanceError;
+        }
+
         nextAction = "REVIEW_AI_PATCH";
         await logAudit(
           "coding-multi-worker",
@@ -2430,7 +2437,7 @@ export async function materializeApprovedWorkstreamAiCandidate(
     if (unexpectedStatusPaths.length > 0) {
       throw new LocalCodingWorkstreamAiExecutionError(
         "Materialized patch changed files outside the stored candidate set.",
-        "POLICY_REJECTED",
+        "STALE_CONTEXT",
         {
           expected: normalizedCandidateFiles,
           actual: normalizedStatusPaths,
