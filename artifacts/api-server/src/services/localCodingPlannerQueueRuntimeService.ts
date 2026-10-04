@@ -6,6 +6,7 @@ import { logger } from "../lib/logger.js";
 import { AutomatedMultiTaskPlannerError, generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
 
 export const CODING_MULTI_TASK_PLANNER_JOB_TYPE = "coding_multi_task_planner";
+export const CODING_MULTI_TASK_PLANNER_EXECUTION_BUDGET_MS = 165_000;
 
 function taskIdFrom(job: AiJob): string {
   const value = (job.payloadJson as Record<string, unknown> | null)?.["taskId"];
@@ -49,18 +50,28 @@ export async function executeCodingMultiTaskPlannerJob(job: AiJob): Promise<Reco
   const taskId = taskIdFrom(job);
   const startedAt = Date.now();
   const stage = "planner_execution";
+  const controller = new AbortController();
+  const lifecycleTimeout = setTimeout(
+    () => controller.abort(),
+    CODING_MULTI_TASK_PLANNER_EXECUTION_BUDGET_MS,
+  );
+  lifecycleTimeout.unref?.();
 
   await logAudit("coding-multi-task-planner", "planner_job_started", String(job.id), "ai_job", "success", {
     jobId: job.id,
     taskId,
     stage,
-    timeoutBudgetMs: 150_000,
+    timeoutBudgetMs: CODING_MULTI_TASK_PLANNER_EXECUTION_BUDGET_MS,
     retryCount: job.retryCount,
     maxRetry: job.maxRetry,
   }).catch(() => undefined);
 
   try {
-    const result = await generateAndPersistCodingMultiTaskPlan(taskId);
+    const result = await generateAndPersistCodingMultiTaskPlan(
+      taskId,
+      undefined,
+      { signal: controller.signal },
+    );
     await logAudit("coding-multi-task-planner", "planner_job_completed", String(job.id), "ai_job", "success", {
       jobId: job.id,
       taskId,
@@ -106,5 +117,7 @@ export async function executeCodingMultiTaskPlannerJob(job: AiJob): Promise<Reco
     }).catch(() => undefined);
 
     throw error;
+  } finally {
+    clearTimeout(lifecycleTimeout);
   }
 }
