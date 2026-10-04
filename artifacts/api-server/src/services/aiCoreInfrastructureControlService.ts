@@ -162,7 +162,7 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     token: (env["HOSTINGER_API_TOKEN"] ?? "").trim(),
     vmId: (env["HOSTINGER_VPS_ID"] ?? "").trim(),
     dockerProject: (env["HOSTINGER_DOCKER_PROJECT"] ?? "").trim(),
-    apiBase: (env["HOSTINGER_API_BASE"] ?? "").trim().replace(/\\/$/, ""),
+    apiBase: (env["HOSTINGER_API_BASE"] ?? "").trim().replace(/\/$/, ""),
   };
 }
 
