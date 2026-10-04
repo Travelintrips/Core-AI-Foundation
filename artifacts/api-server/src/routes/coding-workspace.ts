@@ -165,17 +165,20 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
     .orderBy(desc(aiCodingTasksTable.createdAt));
 
   const autonomousPresentation = await db.execute(sql`
-    SELECT a.task_id,
+    SELECT t.id AS task_id,
            a.status AS autonomous_status,
            EXISTS (
              SELECT 1
              FROM ai_platform.ai_coding_runs AS r
-             WHERE r.task_id = a.task_id
+             WHERE r.task_id = t.id
                AND r.status = 'RUNNING'
            ) AS has_active_run
-    FROM ai_platform.ai_coding_autonomous_tasks AS a
-    WHERE a.enabled = TRUE
-      AND a.status IN ('ACTIVE', 'WAITING', 'COMPLETED', 'FAILED', 'BLOCKED')
+    FROM ai_platform.ai_coding_tasks AS t
+    LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a
+      ON a.task_id = t.id
+     AND a.enabled = TRUE
+     AND a.status IN ('ACTIVE', 'WAITING', 'COMPLETED', 'FAILED', 'BLOCKED')
+    WHERE t.task_number NOT LIKE 'MW-%'
   `);
 
   const presentationByTask = new Map(
