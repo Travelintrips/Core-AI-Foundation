@@ -3,6 +3,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
+import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
 import {
   oauthIssuer,
   oauthResource,
@@ -170,7 +171,7 @@ const tools = [
   {
     name: "send_ai_core_command",
     description:
-      "Send a text instruction directly to AI Core Agent Mode. Execution requires the message to begin with @. This can cause code, configuration, deployment, or other operational changes.",
+      "Send a text instruction to AI Core with automatic routing to answers, read-only workers, or the coding control plane. Execution requires the message to begin with @. This can cause code, configuration, deployment, or other operational changes.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -487,12 +488,20 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           body: JSON.stringify({
             ...parsed,
             message: command,
-            mode: "agent",
+            mode: "auto",
             source: "text",
           }),
         },
         identity.connectorKey,
       );
+      await recordAiCoreMcpTerminalResult({
+        conversationId: parsed.conversationId,
+        instruction: command,
+        payload,
+      }).catch(() => {
+        // Preserve the completed command result so clients do not retry execution.
+        payload = { ...(payload as Record<string, unknown>), eventDeliveryError: "The command returned, but its durable event could not be saved." };
+      });
     } else if (params.name === "get_ai_core_task_progress") {
       const parsed = TaskProgressArgs.parse(params.arguments ?? {});
       payload = await callAiCore(

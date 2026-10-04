@@ -7,6 +7,18 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it.each([
+    "Uji koneksi dua arah saja. Balas dengan AI_CORE_TWO_WAY_OK. Jangan mengubah file, konfigurasi, repository, atau melakukan deployment.",
+    "Test two-way connection and echo OK",
+    "Uji koneksi MCP",
+  ])("keeps connectivity checks out of repository execution: %s", (message) => {
+    expect(detectRemoteWorkerPreset(message)).toBeNull();
+    expect(classifyAiCoreChatDispatch(message).kind).toBe("ANSWER");
+  });
+
+  it("still runs an explicitly requested suite while checking connectivity", () => {
+    expect(detectRemoteWorkerPreset("Cek koneksi lalu jalankan test API server")).toBe("test");
+  });
   it("defaults to one automatic chat mode", () => {
     expect(DEFAULT_AI_CORE_CHAT_MODE).toBe("auto");
   });
