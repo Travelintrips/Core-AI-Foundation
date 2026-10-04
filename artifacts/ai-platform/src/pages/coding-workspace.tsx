@@ -100,6 +100,40 @@ type CodingGitHubBranch = {
   commitSha: string;
 };
 
+
+type CodingMonitorSnapshot = {
+  refreshedAt: string;
+  jobs: {
+    active: number;
+    waitingQueued: number;
+    codingModelRunning: number;
+    failedBlocked: number;
+    trueReadyReview: number;
+  };
+  workers: {
+    active: number;
+    available: number;
+    busyUnavailable: number;
+    details: Array<{
+      id: number;
+      workerName: string;
+      workerType: string;
+      status: string;
+      runningJobs: number;
+      availableSlots: number;
+      maxConcurrentJobs: number;
+      leaseValid: boolean;
+      heartbeatFresh: boolean;
+      heartbeatAgeMs: number;
+      active: boolean;
+      available: boolean;
+      busyOrUnavailable: boolean;
+      lastHeartbeat: string;
+      capabilities: string[];
+    }>;
+  };
+};
+
 const STATUSES = Object.values(CodingTaskStatus) as CodingTaskStatus[];
 const ACTIVE_STATUSES = new Set<CodingTaskStatus>([
   CodingTaskStatus.PENDING,
@@ -3695,6 +3729,8 @@ export default function CodingWorkspace() {
   const [deletingTaskIds, setDeletingTaskIds] = useState<Set<string>>(new Set());
   const [bulkDeletePending, setBulkDeletePending] = useState(false);
   const [queuedAiBaselineRunCount, setQueuedAiBaselineRunCount] = useState<number | null>(null);
+  const [monitor, setMonitor] = useState<CodingMonitorSnapshot | null>(null);
+  const [monitorError, setMonitorError] = useState(false);
   const { data: tasks, isLoading, isError, refetch } = useListCodingTasks();
   const activeFromRoute = params.id;
   const visibleTasks = useMemo(() => {
@@ -3737,6 +3773,34 @@ export default function CodingWorkspace() {
   useEffect(() => {
     setQueuedAiBaselineRunCount(null);
   }, [selectedId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMonitor = async () => {
+      try {
+        const response = await fetch("/api/ai/coding/monitor", {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = (await response.json()) as CodingMonitorSnapshot;
+        if (!cancelled) {
+          setMonitor(payload);
+          setMonitorError(false);
+        }
+      } catch {
+        if (!cancelled) setMonitorError(true);
+      }
+    };
+
+    void loadMonitor();
+    const timer = window.setInterval(() => void loadMonitor(), 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const activeCount = (tasks ?? []).filter((task) => ACTIVE_STATUSES.has(task.status)).length;
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
@@ -3894,6 +3958,76 @@ export default function CodingWorkspace() {
             </Card>
           ))}
         </div>
+        <section className="mb-6 rounded-xl border border-white/[0.07] bg-[#0b1425]/70 p-4" data-testid="coding-live-monitor">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-300">Live coding operations</div>
+              <div className="mt-1 text-[10px] text-slate-600">
+                Queue, model execution, dan worker dihitung dari job state + heartbeat/lease aktual.
+              </div>
+            </div>
+            <div className="font-mono text-[9px] text-slate-600">
+              {monitor
+                ? `updated ${formatDate(monitor.refreshedAt, lang, true)}`
+                : monitorError
+                  ? "monitor unavailable"
+                  : "loading live state…"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+            {[
+              { label: "Jobs Active", value: monitor?.jobs.active ?? 0, icon: CircleDot, tone: "text-amber-300" },
+              { label: "Waiting / Queued", value: monitor?.jobs.waitingQueued ?? 0, icon: Clock3, tone: "text-slate-300" },
+              { label: "Coding / Model", value: monitor?.jobs.codingModelRunning ?? 0, icon: Bot, tone: "text-cyan-300" },
+              { label: "Worker Active", value: monitor?.workers.active ?? 0, icon: TerminalSquare, tone: "text-emerald-300" },
+              { label: "Worker Available", value: monitor?.workers.available ?? 0, icon: CheckCircle2, tone: "text-emerald-300" },
+              { label: "Busy / Unavailable", value: monitor?.workers.busyUnavailable ?? 0, icon: ShieldAlert, tone: "text-amber-300" },
+              { label: "Failed / Blocked", value: monitor?.jobs.failedBlocked ?? 0, icon: XCircle, tone: "text-rose-300" },
+              { label: "True Ready Review", value: monitor?.jobs.trueReadyReview ?? 0, icon: ArrowUpRight, tone: "text-violet-300" },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-lg border border-white/[0.06] bg-[#08111f] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <stat.icon className={cn("size-3.5", stat.tone)} />
+                  <span className="font-mono text-lg font-semibold text-slate-100">{stat.value}</span>
+                </div>
+                <div className="mt-2 text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-600">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {monitor?.workers.details && monitor.workers.details.length > 0 && (
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {monitor.workers.details.map((worker) => (
+                <div key={worker.id} className="rounded-lg border border-white/[0.05] bg-black/10 px-3 py-2" data-testid={`coding-worker-${worker.id}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-mono text-[10px] text-slate-300">{worker.workerName}</div>
+                      <div className="mt-0.5 text-[9px] text-slate-600">{worker.workerType}</div>
+                    </div>
+                    <span className={cn(
+                      "rounded-full border px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wider",
+                      worker.available
+                        ? "border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-300"
+                        : worker.active
+                          ? "border-amber-300/20 bg-amber-300/[0.06] text-amber-300"
+                          : "border-rose-300/20 bg-rose-300/[0.06] text-rose-300",
+                    )}>
+                      {worker.available ? "available" : worker.active ? "busy" : "unavailable"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[8px] text-slate-600">
+                    <span>jobs {worker.runningJobs}/{worker.maxConcurrentJobs}</span>
+                    <span>slots {worker.availableSlots}</span>
+                    <span>lease {worker.leaseValid ? "ok" : "expired"}</span>
+                    <span>heartbeat {Math.round(worker.heartbeatAgeMs / 1000)}s</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
           <Card className="min-w-0 overflow-hidden border-white/[0.08] bg-[#0b1425]/85">
             <CardHeader className="border-b border-white/[0.07] p-4 sm:p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><h2 className="font-display text-base text-slate-100">{t("pages.codingWorkspace.taskQueue")}</h2><span className="rounded-full bg-cyan-300/10 px-2 py-0.5 font-mono text-[10px] text-cyan-300">{visibleTasks.length}</span></div><p className="mt-1 text-xs text-slate-600">{t("pages.codingWorkspace.taskQueueHint")}</p></div><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><Button type="button" variant="outline" size="sm" onClick={() => void deleteFailedTasks()} disabled={failedTasks.length === 0 || bulkDeletePending} className="border-rose-400/20 bg-rose-400/[0.04] text-rose-300 hover:bg-rose-400/10 hover:text-rose-200" data-testid="button-delete-failed-coding-tasks">{bulkDeletePending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}Hapus gagal{failedTasks.length > 0 ? ` (${failedTasks.length})` : ""}</Button><div className="relative w-full sm:w-56"><Search className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("common.actions.search")} className="h-9 border-white/10 bg-[#091222] pl-9 text-xs text-slate-200 placeholder:text-slate-600" aria-label={t("common.actions.search")} data-testid="input-search-coding-tasks" /></div></div></div></CardHeader>
