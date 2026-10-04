@@ -65,6 +65,7 @@ import { reconcileStaleCodingRuns } from "../services/localCodingRunRecoveryServ
 import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
 import { getWorkerCapacity } from "../services/workerClusterService.js";
+import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
 
 const router = Router();
 
@@ -209,6 +210,16 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
   });
 
   res.json(ListCodingTasksResponse.parse(presentedTasks));
+});
+
+router.get("/ai/coding/gcp-usage", async (req, res): Promise<void> => {
+  const range = req.query["range"] === "monthly" ? "monthly" : "daily";
+  try {
+    res.json(await getGcpWorkspaceCostUsage(range));
+  } catch (error) {
+    logger.warn({ err: error }, "[coding-workspace] GCP billing usage query failed");
+    res.status(502).json({ error: error instanceof Error ? error.message : "GCP billing usage unavailable" });
+  }
 });
 
 router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
