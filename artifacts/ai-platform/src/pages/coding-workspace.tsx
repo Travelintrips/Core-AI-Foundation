@@ -49,6 +49,7 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -138,6 +139,12 @@ type CodingMonitorSnapshot = {
 };
 
 const STATUSES = Object.values(CodingTaskStatus) as CodingTaskStatus[];
+
+const canDeleteCodingTask = (task: CodingTask) =>
+  task.status === CodingTaskStatus.PENDING ||
+  task.status === CodingTaskStatus.FAILED ||
+  task.status === CodingTaskStatus.READY_REVIEW ||
+  task.status === CodingTaskStatus.COMPLETED;
 const ACTIVE_STATUSES = new Set<CodingTaskStatus>([
   CodingTaskStatus.PENDING,
   CodingTaskStatus.ANALYZING,
@@ -3730,6 +3737,7 @@ export default function CodingWorkspace() {
   const [search, setSearch] = useState("");
   const [taskFilter, setTaskFilter] = useState<"all" | "active" | "ready" | "completed">("all");
   const [deletingTaskIds, setDeletingTaskIds] = useState<Set<string>>(new Set());
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [bulkDeletePending, setBulkDeletePending] = useState(false);
   const [queuedAiBaselineRunCount, setQueuedAiBaselineRunCount] = useState<number | null>(null);
   const [monitor, setMonitor] = useState<CodingMonitorSnapshot | null>(null);
@@ -3809,6 +3817,34 @@ export default function CodingWorkspace() {
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
   const completedCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.COMPLETED).length;
   const failedTasks = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.FAILED);
+  const selectableVisibleTasks = visibleTasks.filter(canDeleteCodingTask);
+  const selectedVisibleTasks = selectableVisibleTasks.filter((task) =>
+    selectedTaskIds.has(task.id),
+  );
+  const allVisibleSelected =
+    selectableVisibleTasks.length > 0 &&
+    selectedVisibleTasks.length === selectableVisibleTasks.length;
+  const selectAllState: boolean | "indeterminate" =
+    allVisibleSelected
+      ? true
+      : selectedVisibleTasks.length > 0
+        ? "indeterminate"
+        : false;
+
+  useEffect(() => {
+    const allowedIds = new Set(selectableVisibleTasks.map((task) => task.id));
+    setSelectedTaskIds((current) => {
+      const next = new Set([...current].filter((id) => allowedIds.has(id)));
+      if (
+        next.size === current.size &&
+        [...next].every((id) => current.has(id))
+      ) {
+        return current;
+      }
+      return next;
+    });
+  }, [visibleTasks]);
+
 
   const pollCodingTask = useCallback(() => {
     void detailQuery.refetch();
@@ -3830,18 +3866,34 @@ export default function CodingWorkspace() {
   };
   const openFreshTask = (task: CodingTask) => setLocation(`/coding-workspace/${task.id}`);
   const refresh = () => {
+    setSelectedTaskIds(new Set());
     queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
     refetch();
   };
 
-  const canDeleteTask = (task: CodingTask) =>
-    task.status === CodingTaskStatus.PENDING ||
-    task.status === CodingTaskStatus.FAILED ||
-    task.status === CodingTaskStatus.READY_REVIEW ||
-    task.status === CodingTaskStatus.COMPLETED;
+  const toggleTaskSelection = (taskId: string, checked: boolean) => {
+    setSelectedTaskIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(taskId);
+      else next.delete(taskId);
+      return next;
+    });
+  };
 
-  const deleteTask = async (task: CodingTask, skipConfirm = false) => {
-    if (!canDeleteTask(task) || deletingTaskIds.has(task.id)) return false;
+  const toggleAllVisibleTasks = (checked: boolean) => {
+    setSelectedTaskIds(
+      checked
+        ? new Set(selectableVisibleTasks.map((task) => task.id))
+        : new Set(),
+    );
+  };
+
+  const deleteTask = async (
+    task: CodingTask,
+    skipConfirm = false,
+    suppressFeedback = false,
+  ) => {
+    if (!canDeleteCodingTask(task) || deletingTaskIds.has(task.id)) return false;
     if (
       !skipConfirm &&
       !window.confirm(
@@ -3868,21 +3920,31 @@ export default function CodingWorkspace() {
       if (selectedId === task.id) {
         setLocation("/coding-workspace");
       }
-      await queryClient.invalidateQueries({
-        queryKey: getListCodingTasksQueryKey(),
+      setSelectedTaskIds((current) => {
+        if (!current.has(task.id)) return current;
+        const next = new Set(current);
+        next.delete(task.id);
+        return next;
       });
-      toast({
-        title: "Tugas dihapus",
-        description: `${task.taskNumber} sudah dihapus dari antrean.`,
-      });
+      if (!suppressFeedback) {
+        await queryClient.invalidateQueries({
+          queryKey: getListCodingTasksQueryKey(),
+        });
+        toast({
+          title: "Tugas dihapus",
+          description: `${task.taskNumber} sudah dihapus dari antrean.`,
+        });
+      }
       return true;
     } catch (error) {
-      toast({
-        title: "Gagal menghapus tugas",
-        description:
-          error instanceof Error ? error.message : "Penghapusan tugas gagal.",
-        variant: "destructive",
-      });
+      if (!suppressFeedback) {
+        toast({
+          title: "Gagal menghapus tugas",
+          description:
+            error instanceof Error ? error.message : "Penghapusan tugas gagal.",
+          variant: "destructive",
+        });
+      }
       return false;
     } finally {
       setDeletingTaskIds((current) => {
@@ -3907,11 +3969,46 @@ export default function CodingWorkspace() {
     let deletedCount = 0;
     try {
       for (const task of failedTasks) {
-        if (await deleteTask(task, true)) deletedCount += 1;
+        if (await deleteTask(task, true, true)) deletedCount += 1;
       }
+      setSelectedTaskIds(new Set());
+      await queryClient.invalidateQueries({
+        queryKey: getListCodingTasksQueryKey(),
+      });
       toast({
         title: "Pembersihan selesai",
         description: `${deletedCount} dari ${failedTasks.length} tugas gagal berhasil dihapus.`,
+      });
+    } finally {
+      setBulkDeletePending(false);
+    }
+  };
+
+  const deleteSelectedTasks = async () => {
+    if (selectedVisibleTasks.length === 0 || bulkDeletePending) return;
+    const tasksToDelete = [...selectedVisibleTasks];
+    if (
+      !window.confirm(
+        `Hapus ${tasksToDelete.length} tugas terpilih? Riwayat run dan perubahan terkait akan ikut dihapus.`,
+      )
+    ) {
+      return;
+    }
+
+    setBulkDeletePending(true);
+    let deletedCount = 0;
+    try {
+      for (const task of tasksToDelete) {
+        if (await deleteTask(task, true, true)) deletedCount += 1;
+      }
+      setSelectedTaskIds(new Set());
+      await queryClient.invalidateQueries({
+        queryKey: getListCodingTasksQueryKey(),
+      });
+      toast({
+        title: "Penghapusan massal selesai",
+        description: `${deletedCount} dari ${tasksToDelete.length} tugas terpilih berhasil dihapus.`,
+        variant: deletedCount === tasksToDelete.length ? "default" : "destructive",
       });
     } finally {
       setBulkDeletePending(false);
