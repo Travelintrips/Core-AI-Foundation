@@ -8,10 +8,16 @@ import {
   oauthResource,
   verifyMcpAccessToken,
 } from "../services/aiCoreMcpOAuthService.js";
+import {
+  acknowledgeCodingBridgeResponse,
+  listPendingCodingBridgeResponsesForConversation,
+  subscribeCodingBridgeConversation,
+  unsubscribeCodingBridgeConversation,
+} from "../services/localCodingControlBridgeService.js";
 
 const router = Router();
 const MCP_PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.2.0" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.3.0" };
 
 const SendCommandArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -33,6 +39,42 @@ function executionGatedMessage(message: string): string | null {
 const TaskProgressArgs = z.object({
   taskId: z.string().uuid(),
 }).strict();
+
+const EventTypes = z.enum(["COMPLETED", "FAILED", "MERGED", "DEPLOYED"]);
+const SubscribeEventsArgs = z.object({
+  conversationId: z.string().trim().min(1).max(200),
+  eventTypes: z.array(EventTypes).min(1).max(4).default(["COMPLETED", "FAILED", "MERGED", "DEPLOYED"]),
+  leaseSeconds: z.number().int().min(30).max(300).default(300),
+}).strict();
+const ReadEventsArgs = z.object({
+  conversationId: z.string().trim().min(1).max(200),
+  limit: z.number().int().min(1).max(100).default(50),
+}).strict();
+const AckEventArgs = z.object({
+  responseId: z.string().uuid(),
+}).strict();
+const UnsubscribeEventsArgs = z.object({
+  conversationId: z.string().trim().min(1).max(200),
+}).strict();
+
+function classifyLifecycleEvent(input: {
+  kind: string;
+  message: string;
+  checkpoint: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}): "COMPLETED" | "FAILED" | "MERGED" | "DEPLOYED" | null {
+  const explicit = [input.checkpoint["eventType"], input.metadata["eventType"]]
+    .find((value) => typeof value === "string");
+  if (typeof explicit === "string" && ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"].includes(explicit)) {
+    return explicit as "COMPLETED" | "FAILED" | "MERGED" | "DEPLOYED";
+  }
+  if (input.kind === "COMPLETED") return "COMPLETED";
+  if (input.kind === "FAILED") return "FAILED";
+  const haystack = `${input.message} ${JSON.stringify(input.checkpoint)} ${JSON.stringify(input.metadata)}`.toLowerCase();
+  if (/\bmerge(?:d)?\b/.test(haystack)) return "MERGED";
+  if (/\bdeploy(?:ed|ment)?\b/.test(haystack) && /(success|succeed|completed|selesai|deployed)/.test(haystack)) return "DEPLOYED";
+  return null;
+}
 
 function safeEqualSecret(actual: string, expected: string): boolean {
   const left = Buffer.from(actual);
@@ -63,7 +105,7 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
     return {
       kind: "legacy",
       connectorKey,
-      scopes: new Set(["ai_core.command", "ai_core.progress", "profile"]),
+      scopes: new Set(["ai_core.command", "ai_core.progress", "ai_core.events", "profile"]),
       user: null,
     };
   }
@@ -72,7 +114,7 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
     return {
       kind: "legacy",
       connectorKey: supplied,
-      scopes: new Set(["ai_core.command", "ai_core.progress", "profile"]),
+      scopes: new Set(["ai_core.command", "ai_core.progress", "ai_core.events", "profile"]),
       user: null,
     };
   }
@@ -160,6 +202,99 @@ const tools = [
     annotations: {
       title: "Get AI Core Task Progress",
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "subscribe_ai_core_events",
+    description:
+      "Create or renew a durable lifecycle-event subscription for this ChatGPT conversation.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["conversationId"],
+      properties: {
+        conversationId: { type: "string", minLength: 1, maxLength: 200 },
+        eventTypes: {
+          type: "array",
+          items: { type: "string", enum: ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"] },
+          minItems: 1,
+          maxItems: 4,
+          default: ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"],
+        },
+        leaseSeconds: { type: "integer", minimum: 30, maximum: 300, default: 300 },
+      },
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    annotations: {
+      title: "Subscribe AI Core Events",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "read_ai_core_events",
+    description:
+      "Read pending durable AI Core lifecycle events for a ChatGPT conversation.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["conversationId"],
+      properties: {
+        conversationId: { type: "string", minLength: 1, maxLength: 200 },
+        limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+      },
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    annotations: {
+      title: "Read AI Core Events",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "ack_ai_core_event",
+    description:
+      "Acknowledge one durable AI Core lifecycle event after it has been delivered.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["responseId"],
+      properties: {
+        responseId: { type: "string", format: "uuid" },
+      },
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    annotations: {
+      title: "Acknowledge AI Core Event",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "unsubscribe_ai_core_events",
+    description:
+      "Disable the lifecycle-event subscription for a ChatGPT conversation.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["conversationId"],
+      properties: {
+        conversationId: { type: "string", minLength: 1, maxLength: 200 },
+      },
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
+    annotations: {
+      title: "Unsubscribe AI Core Events",
+      readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
@@ -302,9 +437,11 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
       ? "ai_core.command"
       : params.name === "get_ai_core_task_progress"
         ? "ai_core.progress"
-        : params.name === "get_profile"
-          ? "profile"
-          : "";
+        : ["subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event", "unsubscribe_ai_core_events"].includes(params.name)
+          ? "ai_core.events"
+          : params.name === "get_profile"
+            ? "profile"
+            : "";
 
   if (!requiredScope) {
     res.status(200).json(rpcError(body.id ?? null, -32602, `Unknown tool: ${params.name}`));
@@ -353,6 +490,41 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
         { method: "GET" },
         identity.connectorKey,
       );
+    } else if (params.name === "subscribe_ai_core_events") {
+      const parsed = SubscribeEventsArgs.parse(params.arguments ?? {});
+      const subscription = await subscribeCodingBridgeConversation(parsed);
+      payload = {
+        subscribed: true,
+        conversationId: parsed.conversationId,
+        eventTypes: parsed.eventTypes,
+        leaseExpiresAt: subscription.leaseExpiresAt,
+        clientId: subscription.clientId,
+      };
+    } else if (params.name === "read_ai_core_events") {
+      const parsed = ReadEventsArgs.parse(params.arguments ?? {});
+      const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
+      payload = {
+        conversationId: parsed.conversationId,
+        events: rows
+          .map((row) => ({
+            ...row,
+            eventType: classifyLifecycleEvent({
+              kind: row.kind,
+              message: row.message,
+              checkpoint: row.checkpoint,
+              metadata: row.metadata,
+            }),
+          }))
+          .filter((row) => row.eventType !== null),
+      };
+    } else if (params.name === "ack_ai_core_event") {
+      const parsed = AckEventArgs.parse(params.arguments ?? {});
+      const acknowledged = await acknowledgeCodingBridgeResponse(parsed.responseId);
+      payload = { acknowledged: Boolean(acknowledged), responseId: parsed.responseId };
+    } else if (params.name === "unsubscribe_ai_core_events") {
+      const parsed = UnsubscribeEventsArgs.parse(params.arguments ?? {});
+      const unsubscribed = await unsubscribeCodingBridgeConversation(parsed.conversationId);
+      payload = { unsubscribed, conversationId: parsed.conversationId };
     } else {
       if (!identity.user) {
         res.setHeader("WWW-Authenticate", authChallenge("profile"));

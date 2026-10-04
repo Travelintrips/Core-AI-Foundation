@@ -10,6 +10,7 @@ const EMAIL_LOGIN_TTL_SECONDS = 10 * 60;
 export const AI_CORE_MCP_SCOPES = [
   "ai_core.command",
   "ai_core.progress",
+  "ai_core.events",
   "profile",
   "offline_access",
 ] as const;
@@ -124,7 +125,7 @@ export function isAllowedChatGptRedirect(clientId: string, uri: string): boolean
 export function normalizeScopes(scope: string | undefined): string[] {
   const requested = (scope ?? "").split(/\s+/).map((x) => x.trim()).filter(Boolean);
   const allowed = new Set<string>(AI_CORE_MCP_SCOPES);
-  const result = requested.length ? requested.filter((x) => allowed.has(x)) : ["ai_core.command", "ai_core.progress", "profile", "offline_access"];
+  const result = requested.length ? requested.filter((x) => allowed.has(x)) : ["ai_core.command", "ai_core.progress", "ai_core.events", "profile", "offline_access"];
   return [...new Set(result)];
 }
 

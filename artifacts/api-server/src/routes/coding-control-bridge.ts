@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, renewCodingBridgePresence, submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
+import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
   getCodingWhatsappConfigStatus,
   notifyCodingBridgeResponse,
@@ -26,6 +26,32 @@ router.post("/ai/coding/bridge/responses/:id/ack",async(req,res):Promise<void>=>
 router.post("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.object({commandId:Uuid,taskId:Uuid.nullish(),kind:z.enum(["ACK","PROGRESS","CHECKPOINT","BLOCKER","COMPLETED","FAILED"]),message:z.string().min(1).max(50000),checkpoint:z.record(z.string(),z.unknown()).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}res.status(201).json(await appendCodingBridgeResponse(p.data));});
 router.post("/ai/coding/bridge/presence/:clientId/heartbeat",async(req,res):Promise<void>=>{const p=z.object({clientId:z.string().min(1).max(200),source:z.string().min(1).max(50).optional(),leaseSeconds:z.number().int().min(30).max(300).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse({...req.body,clientId:req.params["clientId"]});if(!p.success){res.status(400).json({error:p.error.message});return;}res.json(await renewCodingBridgePresence(p.data));});
 router.get("/ai/coding/bridge/presence/:clientId",async(req,res):Promise<void>=>{const clientId=req.params["clientId"];if(!clientId||clientId.length>200){res.status(400).json({error:"Invalid clientId"});return;}res.json(await getCodingBridgeAvailability(clientId));});
+
+
+router.post("/ai/coding/bridge/subscriptions",async(req,res):Promise<void>=>{
+ const p=z.object({
+  conversationId:z.string().min(1).max(200),
+  eventTypes:z.array(z.enum(["COMPLETED","FAILED","MERGED","DEPLOYED"])).min(1).max(4).optional(),
+  leaseSeconds:z.number().int().min(30).max(300).optional()
+ }).strict().safeParse(req.body??{});
+ if(!p.success){res.status(400).json({error:p.error.message});return;}
+ const subscription=await subscribeCodingBridgeConversation(p.data);
+ res.status(201).json({subscription});
+});
+router.get("/ai/coding/bridge/subscriptions/:conversationId/events",async(req,res):Promise<void>=>{
+ const conversationId=String(req.params["conversationId"]??"").trim();
+ const limit=z.coerce.number().int().min(1).max(100).optional().safeParse(req.query["limit"]);
+ if(!conversationId||conversationId.length>200){res.status(400).json({error:"Invalid conversationId"});return;}
+ if(!limit.success){res.status(400).json({error:limit.error.message});return;}
+ const events=await listPendingCodingBridgeResponsesForConversation({conversationId,limit:limit.data??50});
+ res.json({conversationId,events,total:events.length});
+});
+router.delete("/ai/coding/bridge/subscriptions/:conversationId",async(req,res):Promise<void>=>{
+ const conversationId=String(req.params["conversationId"]??"").trim();
+ if(!conversationId||conversationId.length>200){res.status(400).json({error:"Invalid conversationId"});return;}
+ const unsubscribed=await unsubscribeCodingBridgeConversation(conversationId);
+ res.json({conversationId,unsubscribed});
+});
 
 
 
