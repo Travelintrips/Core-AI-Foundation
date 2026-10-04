@@ -90,6 +90,51 @@ jobs:
             sleep 10
           done
 
+      - name: Verify live MCP tool discovery
+        if: steps.target.outputs.stale != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload='{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
+            -sS -D /tmp/mcp-tools.headers -o /tmp/mcp-tools.json -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: CST-AI-Core-MCP-Discovery-Probe/1.0" \
+            --data-binary "$payload" \
+            "$API_BASE_URL/ai/core-chat/mcp?v=1.3.2")
+          echo "mcp_tools_http=$code"
+          test "$code" = "200"
+          node - <<'NODE'
+          const fs = require("fs");
+          const body = JSON.parse(fs.readFileSync("/tmp/mcp-tools.json", "utf8"));
+          const tools = body?.result?.tools;
+          if (!Array.isArray(tools)) throw new Error("MCP tools/list did not return tools array");
+          const names = new Set(tools.map((tool) => tool.name));
+          const expected = [
+            "send_ai_core_command",
+            "get_ai_core_task_progress",
+            "subscribe_ai_core_events",
+            "read_ai_core_events",
+            "ack_ai_core_event",
+            "unsubscribe_ai_core_events",
+            "get_profile",
+          ];
+          for (const name of expected) {
+            if (!names.has(name)) throw new Error("Missing live MCP tool: " + name);
+          }
+          for (const tool of tools.filter((tool) => expected.slice(2, 6).includes(tool.name))) {
+            const scopes = tool?.securitySchemes?.[0]?.scopes;
+            if (!Array.isArray(scopes) || !scopes.includes("ai_core.progress")) {
+              throw new Error("Event tool not exposed on existing progress scope: " + tool.name);
+            }
+          }
+          console.log("mcp_tool_discovery=PASS count="+tools.length);
+          NODE
+          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.3\.2' /tmp/mcp-tools.headers
+          grep -Eqi '^cache-control:.*no-store' /tmp/mcp-tools.headers
+
       - name: Verify admin auth guard
         if: steps.target.outputs.stale != 'true'
         shell: bash
