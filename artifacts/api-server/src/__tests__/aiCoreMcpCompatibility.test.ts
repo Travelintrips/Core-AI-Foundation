@@ -26,8 +26,14 @@ describe("AI Core MCP discovery compatibility", () => {
       });
 
     expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.3.1");
+    expect(response.body.result.serverInfo).toEqual({
+      name: "ai-core-direct-command",
+      version: "1.3.1",
+    });
     expect(response.body.result.capabilities).toEqual({
-      tools: { listChanged: false },
+      tools: { listChanged: true },
       resources: { subscribe: false, listChanged: false },
       prompts: { listChanged: false },
     });
@@ -56,6 +62,8 @@ describe("AI Core MCP discovery compatibility", () => {
       .send({ jsonrpc: "2.0", id: 3, method: "tools/list" });
 
     expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.3.1");
     expect(response.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
       expect.arrayContaining([
         "send_ai_core_command",
