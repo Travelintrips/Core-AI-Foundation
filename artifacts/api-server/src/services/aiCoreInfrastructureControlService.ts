@@ -84,8 +84,9 @@ function gcpConfig(env: NodeJS.ProcessEnv = process.env) {
     zone: (env["GCP_OLLAMA_VM_ZONE"] ?? "").trim(),
     instanceName: (env["GCP_OLLAMA_VM_INSTANCE"] ?? "").trim(),
     credentialJson:
-      (env["GCP_OLLAMA_COMPUTE_SA_JSON"] ??
-        env["GCP_SECRET_MANAGER_BOOTSTRAP_JSON"] ??
+      (env["GCP_AI_CORE_COMPUTE_SA_JSON"] ??
+        env["GCP_CODING_WORKER_COMPUTE_SA_JSON"] ??
+        env["GCP_OLLAMA_COMPUTE_SA_JSON"] ??
         "").trim(),
   };
 }
