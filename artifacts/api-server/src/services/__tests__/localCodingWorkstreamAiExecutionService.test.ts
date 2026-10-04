@@ -400,6 +400,22 @@ describe("workstream AI materialization workspace sanitation", () => {
   });
 });
 
+describe("workstream AI materialization git status parsing", () => {
+  it("uses NUL-delimited porcelain status so candidate paths are not corrupted by Git quoting", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      '["status", "--porcelain=v1", "-z", "--untracked-files=normal"]',
+    );
+    expect(source).toContain('if (raw.includes("\\0"))');
+    expect(source).toContain('const records = raw.split("\\0")');
+    expect(source).toContain('if (/[RC]/.test(status))');
+  });
+});
+
 describe("workstream AI materialization recovery wiring", () => {
   it("bubbles recoverable materialization failures into the bounded auto-repair path", () => {
     const source = readFileSync(
