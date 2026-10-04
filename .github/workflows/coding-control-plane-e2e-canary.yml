@@ -624,6 +624,28 @@ jobs:
           test "$code" = "409"
           jq -e '.code == "STALE_FENCE" or .code == "NOT_HOLDER"' /tmp/stale.json >/dev/null
 
+      - name: Finalize successful verification-only canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          task="${{ steps.task.outputs.task_id }}"
+          body=$(jq -nc '{
+            status:"COMPLETED",
+            resultSummary:"Production Control Plane E2E canary completed successfully. Planner fencing, graph approval, bounded dispatch, Mission Control, observability provenance, and stale-fence rejection were verified. This is a verification-only task; no repository patch, commit, push, or merge was required."
+          }')
+          code=$(curl -sS -o /tmp/finalize-task.json -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -X PATCH "$API_BASE_URL/ai/coding/tasks/$task" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$body" || true)
+          if [ "$code" != "200" ]; then
+            echo "::error::Could not finalize successful canary task (HTTP=$code)"
+            cat /tmp/finalize-task.json 2>/dev/null || true
+            exit 1
+          fi
+          jq -e '.status == "COMPLETED"' /tmp/finalize-task.json >/dev/null
+
       - name: Canary safety summary
         shell: bash
         run: |
