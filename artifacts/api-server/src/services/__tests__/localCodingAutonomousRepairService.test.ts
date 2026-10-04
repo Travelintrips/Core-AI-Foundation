@@ -588,15 +588,15 @@ describe("autonomous terminal task status", () => {
     ).toBe(true);
   });
 
-  it("reopens old false terminal rows at startup", () => {
+  it("keeps historical terminal rows from being replayed blindly", () => {
     const source = readFileSync(
       new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain("recoverFalseCompletedCodingTasks");
-    expect(source).toContain("'RECOVER_FALSE_COMPLETION'");
-    expect(source).toContain("state.nextAction === \"DONE\" && completionVerified");
+    expect(source).not.toContain("recoverFalseCompletedCodingTasks");
+    expect(source).toContain('"RECOVER_FALSE_COMPLETION"');
+    expect(source).toContain('state.nextAction === "DONE" && completionVerified');
     expect(source).toContain("COMPLETION_EVIDENCE_MISSING");
   });
 });
