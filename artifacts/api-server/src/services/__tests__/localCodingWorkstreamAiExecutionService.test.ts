@@ -188,49 +188,23 @@ describe("per-workstream constrained AI execution contract", () => {
     ).toBeNull();
   });
 
-  it("keeps high-risk or warned AI patches behind manual review", () => {
-    expect(
-      manualAiPatchReviewReason(
-        ["scripts/migrations/001-risky.sql"],
-        [],
-      ),
-    ).toMatch(/high-risk path/i);
+  it("auto-advances warning-free AI patches even on formerly high-risk paths", () => {
+    for (const file of [
+      "scripts/migrations/001-risky.sql",
+      "artifacts/api-server/src/services/auth/tokenService.ts",
+      "artifacts/api-server/src/middleware/adminAuth.ts",
+      "artifacts/api-server/src/middleware/securityHardening.ts",
+      "integration/migrations/team-07.sql",
+      "lib/db/migrations/add-observability-tables.sql",
+      ".github/workflows/ci.yml",
+      "deploy/production/docker-compose.yml",
+      "package.json",
+    ]) {
+      expect(manualAiPatchReviewReason([file], [])).toBeNull();
+    }
+  });
 
-    expect(
-      manualAiPatchReviewReason(
-        ["artifacts/api-server/src/services/auth/tokenService.ts"],
-        [],
-      ),
-    ).toMatch(/high-risk path/i);
-
-    expect(
-      manualAiPatchReviewReason(
-        ["artifacts/api-server/src/middleware/adminAuth.ts"],
-        [],
-      ),
-    ).toMatch(/high-risk path/i);
-
-    expect(
-      manualAiPatchReviewReason(
-        ["artifacts/api-server/src/middleware/securityHardening.ts"],
-        [],
-      ),
-    ).toMatch(/high-risk path/i);
-
-    expect(
-      manualAiPatchReviewReason(
-        ["integration/migrations/team-07.sql"],
-        [],
-      ),
-    ).toMatch(/high-risk path/i);
-
-    expect(
-      manualAiPatchReviewReason(
-        ["lib/db/migrations/add-observability-tables.sql"],
-        [],
-      ),
-    ).toMatch(/high-risk path/i);
-
+  it("still blocks autonomous advancement when policy or verification warnings exist", () => {
     expect(
       manualAiPatchReviewReason(
         ["artifacts/api-server/src/services/exampleService.ts"],
