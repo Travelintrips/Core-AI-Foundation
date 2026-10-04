@@ -439,11 +439,40 @@ async function claimWorkstreamForAi(
         "NOT_FOUND",
       );
     }
-    if (!["APPROVED", "RUNNING"].includes(graph.status)) {
+
+    // A graph can be marked COMPLETED by a stale finalization race while an
+    // AI_REQUIRED workstream is still REVIEW_REQUIRED. That state is
+    // internally inconsistent: constrained AI must be allowed to finish the
+    // unresolved workstream before integration can be considered complete.
+    // Recover the graph transactionally instead of failing forever with
+    // "task graph is not active".
+    let graphStatus = graph.status;
+    if (graphStatus === "COMPLETED") {
+      const [reopened] = await tx
+        .update(aiCodingTaskGraphsTable)
+        .set({
+          status: "RUNNING",
+          completedAt: null,
+          startedAt: graph.startedAt ?? now,
+        })
+        .where(
+          and(
+            eq(aiCodingTaskGraphsTable.id, graph.id),
+            eq(aiCodingTaskGraphsTable.status, "COMPLETED"),
+          ),
+        )
+        .returning();
+
+      if (reopened) {
+        graphStatus = reopened.status;
+      }
+    }
+
+    if (!["APPROVED", "RUNNING"].includes(graphStatus)) {
       throw new LocalCodingWorkstreamAiExecutionError(
         "Coding task graph is not active for constrained AI work.",
         "NOT_READY",
-        { graphStatus: graph.status },
+        { graphStatus },
       );
     }
 
