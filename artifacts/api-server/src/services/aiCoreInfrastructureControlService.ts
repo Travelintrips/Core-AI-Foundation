@@ -484,7 +484,7 @@ async function callHostinger(
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Hostinger subdomain list failed with HTTP ${result.status}.`);
       }
-      data = result.data;
+      data = { target, subdomains: result.data };
     } else {
       const subdomain = valueOf("subdomain");
       if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(subdomain)) {
