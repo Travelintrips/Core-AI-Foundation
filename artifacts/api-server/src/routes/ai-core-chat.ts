@@ -111,6 +111,12 @@ import {
   type ConversationSource,
 } from "../services/aiCoreConversationService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
+import {
+  createAiCoreRealtimeSession,
+  DEFAULT_AI_CORE_REALTIME_MODEL,
+  DEFAULT_AI_CORE_REALTIME_VOICE,
+  isAiCoreRealtimeVoiceConfigured,
+} from "../services/aiCoreRealtimeVoiceService.js";
 
 const router = Router();
 const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] !== "false";
@@ -2244,6 +2250,18 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       transcriptEndpoint: "/api/ai/core-chat/messages",
       whatsappVoiceSourceReserved: true,
       secretsRedactedBeforePersistence: true,
+      realtime: {
+        available: isAiCoreRealtimeVoiceConfigured(),
+        transport: "webrtc",
+        provider: "openai",
+        model: DEFAULT_AI_CORE_REALTIME_MODEL,
+        voice: DEFAULT_AI_CORE_REALTIME_VOICE,
+        sessionEndpoint: "/api/ai/core-chat/realtime/session",
+        ephemeralCredentials: true,
+        semanticVad: true,
+        bargeIn: true,
+        fallback: "standard",
+      },
     },
     imageUpload: {
       enabled: true,
@@ -2276,6 +2294,31 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
     codingModel: modelConfig,
     secretsExposed: false,
   });
+});
+
+router.post("/ai/core-chat/realtime/session", async (_req, res): Promise<void> => {
+  if (!AI_CORE_VOICE_ENABLED) {
+    res.status(503).json({ error: "Voice sementara dinonaktifkan.", available: false });
+    return;
+  }
+  if (!isAiCoreRealtimeVoiceConfigured()) {
+    res.status(503).json({ error: "Realtime voice belum dikonfigurasi.", available: false, provider: "openai" });
+    return;
+  }
+  try {
+    const session = await createAiCoreRealtimeSession();
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+    res.status(201).json({
+      available: true, transport: "webrtc", provider: "openai",
+      model: session.model, voice: session.voice,
+      clientSecret: session.clientSecret, expiresAt: session.expiresAt,
+      webrtcUrl: session.webrtcUrl,
+    });
+  } catch (error) {
+    logger.warn({ err: safeProviderFailure(error) }, "[ai-core-chat] realtime session creation failed");
+    res.status(503).json({ error: safeProviderFailure(error), available: false });
+  }
 });
 
 router.get("/ai/core-chat/voices", async (_req, res): Promise<void> => {
