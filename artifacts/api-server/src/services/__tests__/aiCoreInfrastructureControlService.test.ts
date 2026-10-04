@@ -165,6 +165,60 @@ describe("AI Core Hostinger infrastructure control", () => {
     });
   });
 
+  it("resolves a multi-domain hosting target without HOSTINGER_HOSTING_DOMAIN", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [
+          {
+            domain: "sportcenter.travelintrips.co.id",
+            username: "u684045296",
+            order_id: 200827112,
+            website_type: "wordpress",
+            is_enabled: true,
+            root_directory: "/home/u684045296/domains/travelintrips.co.id/public_html/sportcenter",
+          },
+          {
+            domain: "cstlogistic.co.id",
+            username: "u684045296",
+            order_id: 200827112,
+            website_type: "nodejs",
+            is_enabled: true,
+            root_directory: "/home/u684045296/domains/cstlogistic.co.id/public_html",
+          },
+        ],
+        meta: { total: 2 },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { subdomain: "api", root_directory: "public_html/api" },
+      ]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_SUBDOMAIN_LIST",
+      message: "Hostinger cek subdomain domain=sportcenter.travelintrips.co.id",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_HOSTING_USERNAME: "u684045296",
+      },
+    });
+
+    expect(result.mutating).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [discoveryUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [subdomainUrl, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(discoveryUrl).toBe("https://developers.hostinger.com/api/hosting/v1/websites");
+    expect(subdomainUrl).toBe(
+      "https://developers.hostinger.com/api/hosting/v1/accounts/u684045296/websites/sportcenter.travelintrips.co.id/subdomains",
+    );
+    expect(init.method).toBe("GET");
+    expect(result.data).toMatchObject({
+      target: {
+        username: "u684045296",
+        domain: "sportcenter.travelintrips.co.id",
+      },
+    });
+  });
+
   it("checks domain availability without making a purchase", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ available: true }), { status: 200 }),
