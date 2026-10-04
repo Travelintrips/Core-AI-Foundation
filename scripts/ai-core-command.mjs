@@ -124,17 +124,29 @@ export function createApi(secret, fetchImpl = fetch) {
 }
 
 export async function audit(api) {
-  const health = await api('/healthz', { allowed: [503] });
-  const full = await api('/healthz/full', { allowed: [503] });
+  // Public health probes may be blocked by the edge/WAF for GitHub-hosted runners
+  // even while the authenticated control bridge is healthy. Treat HTTP 403 as
+  // an edge-only probe result, but continue to require the protected runtime
+  // status endpoint to report ready=true before any coding mutation is allowed.
+  const health = await api('/healthz', { allowed: [403, 503] });
+  const full = await api('/healthz/full', { allowed: [403, 503] });
   const runtime = await api('/ai/coding/bridge/runtime-status', { allowed: [503] });
-  const ready = health.status === 200 && health.value.status === 'ok' &&
-    full.status === 200 && full.value.status === 'ok' &&
-    runtime.status === 200 && runtime.value.ready === true;
+
+  const probeHealthyOrEdgeBlocked = (response) =>
+    response.status === 403 ||
+    (response.status === 200 && response.value?.status === 'ok');
+
+  const ready =
+    probeHealthyOrEdgeBlocked(health) &&
+    probeHealthyOrEdgeBlocked(full) &&
+    runtime.status === 200 &&
+    runtime.value.ready === true;
+
   return {
     action: 'audit', ready,
-    health: health.value.status ?? 'unknown',
-    readiness: full.value.status ?? 'unknown',
-    database: full.value.checks?.db?.status ?? 'unknown',
+    health: health.status === 403 ? 'edge_blocked' : (health.value.status ?? 'unknown'),
+    readiness: full.status === 403 ? 'edge_blocked' : (full.value.status ?? 'unknown'),
+    database: full.status === 200 ? (full.value.checks?.db?.status ?? 'unknown') : 'edge_blocked',
     autonomousConfigured: runtime.value.autonomous?.configured === true,
     autonomousRunning: runtime.value.autonomous?.running === true,
     githubConfigured: runtime.value.dependencies?.githubConfigured === true,
