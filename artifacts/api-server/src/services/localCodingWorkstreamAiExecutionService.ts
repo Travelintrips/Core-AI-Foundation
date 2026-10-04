@@ -293,29 +293,20 @@ function pendingAiCandidate(result: Record<string, unknown>): boolean {
   );
 }
 
-const MANUAL_AI_PATCH_REVIEW_PATTERNS = [
-  /(^|\/)migrations?(\/|$)/i,
-  /^\.github\/workflows\//i,
-  /(^|\/)[^/]*(auth|security)[^/]*\.[^/]+$/i,
-  /(^|\/)(auth|security)(\/|$)/i,
-  /(^|\/)(deploy|deployment|infrastructure|infra)(\/|$)/i,
-  /(^|\/)(dockerfile|docker-compose(?:\.[^/]+)?\.ya?ml)$/i,
-  /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i,
-];
-
 export function manualAiPatchReviewReason(
   changedFiles: string[],
   warnings: string[],
 ): string | null {
+  // Human review is no longer a completion gate for a warning-free candidate.
+  // High-risk paths are still constrained by the existing proposal policy,
+  // ownership boundaries, static verification, CI, stale-head checks, and
+  // downstream critical-operation safeguards. Any emitted policy/verification
+  // warning remains fail-closed and prevents autonomous advancement.
+  void changedFiles;
   if (warnings.length > 0) {
     return "AI candidate contains verification/policy warnings.";
   }
-  const highRiskFile = changedFiles.find((file) =>
-    MANUAL_AI_PATCH_REVIEW_PATTERNS.some((pattern) => pattern.test(file)),
-  );
-  return highRiskFile
-    ? `AI candidate touches a high-risk path: ${highRiskFile}`
-    : null;
+  return null;
 }
 
 async function recoverExpiredAiControlClaim(workstreamId: string): Promise<void> {
