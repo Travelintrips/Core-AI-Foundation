@@ -108,6 +108,33 @@ test('only owner-authored labeled issues are accepted', () => {
     { ...issue, action: 'edited' },
   ]) assert.throws(() => resolveCommand(bad, issueEnv), /owner-authorized/);
 });
+test('autonomous E2E authority requires an explicit owner ai-task marker', () => {
+  const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
+  const marked = {
+    ...issue,
+    label: { name: 'ai-task' },
+    issue: {
+      ...issue.issue,
+      number: 777,
+      title: 'Autonomous E2E canary',
+      body: 'autonomous_e2e: true\nChange only the dedicated canary marker.',
+    },
+  };
+
+  const taskCommand = resolveCommand(marked, issueEnv);
+  assert.equal(taskCommand.action, 'submit');
+  assert.equal(taskCommand.autonomousE2E, true);
+
+  const ordinaryTask = resolveCommand({
+    ...marked,
+    issue: { ...marked.issue, body: 'Change only the dedicated canary marker.' },
+  }, issueEnv);
+  assert.equal(ordinaryTask.autonomousE2E, false);
+
+  const auditCommand = resolveCommand({ ...marked, label: { name: 'ai-audit' } }, issueEnv);
+  assert.equal(auditCommand.autonomousE2E, false);
+});
+
 test('owner handoff approval label is strictly bound to task and approval IDs', async () => {
   const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
   const approvalIssue = {
@@ -167,7 +194,45 @@ test('submission is bounded and accepted is not reported as completed', async ()
   assert.match(create.body.instruction, /Preserve production approval gates/);
   assert.equal(f.calls.find(call => call.path.endsWith('/start')).body.maxCycles, 5);
   assert.ok(!f.calls.some(call => /approve-merge|deploy/.test(call.path)));
+  const bridge = f.calls.find(call => call.path === '/ai/coding/bridge/commands' && call.method === 'POST');
+  assert.equal(bridge.body.authority.allowMerge, false);
+  assert.equal(bridge.body.authority.allowProductionDeploy, false);
+  assert.equal(bridge.body.metadata.autonomousE2E, false);
 });
+test('explicit autonomous E2E mode grants merge and production deploy authority only for that task', async () => {
+  const f = fakeApi();
+  const command = {
+    ...resolve({ action: 'submit', instruction: 'Update only docs/ai-core-autonomous-e2e-canary.md', request_id: 'e2e-test' }),
+    autonomousE2E: true,
+  };
+  const result = await execute(command, f.api);
+  const bridge = f.calls.find(call => call.path === '/ai/coding/bridge/commands' && call.method === 'POST');
+
+  assert.equal(result.result, 'TASK_ACCEPTED_NOT_COMPLETED');
+  assert.equal(result.productionApprovalRequired, false);
+  assert.deepEqual(bridge.body.authority, {
+    allowCommit: true,
+    allowPush: true,
+    allowMerge: true,
+    allowProductionDeploy: true,
+  });
+  assert.equal(bridge.body.metadata.autonomousE2E, true);
+  assert.match(bridge.body.instruction, /explicit owner-authorized autonomous E2E validation/);
+});
+
+test('production E2E canary follows successful Hostinger production verification, not a daily schedule', () => {
+  const source = readFileSync(
+    new URL('../.github/workflows/coding-control-plane-e2e-canary.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /workflow_run:/);
+  assert.match(source, /workflows: \["Hostinger Production Verify"\]/);
+  assert.match(source, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(source, /github\.event\.workflow_run\.head_branch == 'main'/);
+  assert.doesNotMatch(source, /cron:\s*"0 16 \* \* \*"/);
+});
+
 test('owner issue reruns surface a completed AI Core task as TASK_COMPLETED', async () => {
   const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
   const command = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
