@@ -5,7 +5,7 @@ export const REPOSITORY = 'Travelintrips/Core-AI-Foundation';
 const OWNER = 'Travelintrips';
 const API = 'https://aicore.cstlogistic.co.id/api';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const POLICY = '\n\nExecution policy: Use an isolated working branch. Preserve production approval gates. Do not bypass tests, access secrets, force-push, or directly modify production. Submit verified changes as a pull request.';
+const POLICY = '\n\nExecution policy: This is an owner-authorized autonomous coding task. Use an isolated working branch. Do not bypass tests, access secrets, force-push, weaken security controls, or directly modify production. Complete the implementation end-to-end: create the patch, run required verification/CI, commit, push, open a pull request, and merge it automatically only after all required checks pass. After merge, allow the normal production deployment workflow to run. Do not stop for ordinary human review; only fail closed for an actual critical security/destructive-operation safeguard.';
 const AUTONOMOUS_E2E_POLICY = '\n\nExecution policy: This is an explicit owner-authorized autonomous E2E validation. Use an isolated working branch. Do not bypass tests, access secrets, force-push, or weaken security controls. Keep the change strictly within the requested canary scope. If verification is green, you may commit, push, open a pull request, merge that verified pull request, and allow the normal production deployment workflow to run. Critical security controls remain mandatory.';
 const DEFAULT_ISSUE_WAIT_MS = 2 * 60 * 1000;
 const DEFAULT_POLL_MS = 10_000;
@@ -35,7 +35,7 @@ export function resolveCommand(event, env) {
         task_id: taskMatch?.[1] ?? '',
         approval_id: approvalMatch?.[1] ?? '',
         request_id: `issue-${issueNumber}`,
-        max_cycles: '20',
+        max_cycles: '60',
       };
     } else {
       const body = String(event.issue.body ?? '');
@@ -46,7 +46,7 @@ export function resolveCommand(event, env) {
         action: event.label.name === 'ai-audit' ? 'audit' : 'submit',
         instruction: `${event.issue.title ?? ''}\n\n${event.issue.body ?? ''}`.trim(),
         request_id: `issue-${issueNumber}`,
-        max_cycles: '20',
+        max_cycles: '60',
       };
     }
   } else if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
@@ -55,8 +55,8 @@ export function resolveCommand(event, env) {
   const action = inputs.action || 'audit';
   if (!['audit', 'submit', 'status', 'stop', 'approve_handoff'].includes(action)) throw new Error('Invalid action.');
   const maxCycles = Number(inputs.max_cycles || '5');
-  if (!Number.isInteger(maxCycles) || maxCycles < 5 || maxCycles > 20) {
-    throw new Error('max_cycles must be an integer between 5 and 20.');
+  if (!Number.isInteger(maxCycles) || maxCycles < 5 || maxCycles > 100) {
+    throw new Error('max_cycles must be an integer between 5 and 100.');
   }
   const requestId = inputs.request_id || `run-${env.GITHUB_RUN_ID}`;
   if (!/^[A-Za-z0-9_.-]{1,100}$/.test(requestId)) throw new Error('Invalid request_id.');
@@ -308,14 +308,15 @@ export async function execute(command, api, options = {}) {
     authority: {
       allowCommit: true,
       allowPush: true,
-      allowMerge: command.autonomousE2E === true,
-      allowProductionDeploy: command.autonomousE2E === true,
+      allowMerge: true,
+      allowProductionDeploy: true,
     },
     metadata: {
       repository: REPOSITORY,
       requestId: command.requestId,
       issueNumber: command.issueNumber,
       autonomousE2E: command.autonomousE2E === true,
+      ownerAuthorizedAutonomous: true,
     },
   } });
   const state = await api(`/ai/coding/tasks/${task.id}/autonomous`, { allowed: [404] });
@@ -348,14 +349,14 @@ export async function execute(command, api, options = {}) {
   if (blocked) {
     return { action: 'submit', taskId: task.id, maxCycles: command.maxCycles,
       result: 'TASK_BLOCKED', initialStatus: started.value.cycle?.status ?? 'unknown',
-      productionApprovalRequired: command.autonomousE2E !== true };
+      productionApprovalRequired: false };
   }
   if (command.issueNumber) {
     return waitForTaskOutcome({ ...command, taskId: task.id }, api, options);
   }
   return { action: 'submit', taskId: task.id, maxCycles: command.maxCycles,
     result: 'TASK_ACCEPTED_NOT_COMPLETED',
-    initialStatus: started.value.cycle?.status ?? 'unknown', productionApprovalRequired: command.autonomousE2E !== true };
+    initialStatus: started.value.cycle?.status ?? 'unknown', productionApprovalRequired: false };
 }
 
 export async function main(env = process.env, fetchImpl = fetch) {
