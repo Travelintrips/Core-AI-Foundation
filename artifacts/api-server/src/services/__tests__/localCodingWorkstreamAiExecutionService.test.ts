@@ -294,6 +294,24 @@ describe("workstream AI failure context preservation", () => {
     });
   });
 
+  it("auto-retries candidate-set drift discovered during materialization", () => {
+    const candidateSetDrift = decideWorkstreamAiAutoRepair(
+      new LocalCodingWorkstreamAiExecutionError(
+        "Materialized patch changed files outside the stored candidate set.",
+        "STALE_CONTEXT",
+      ),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+      },
+    );
+
+    expect(candidateSetDrift).toMatchObject({
+      recoverable: true,
+      shouldRetry: true,
+      reason: "SAFE_AUTOMATIC_REPAIR",
+    });
+  });
+
   it("auto-retries stale exact-replacement and materialization context failures", () => {
     const exactReplacement = decideWorkstreamAiAutoRepair(
       new Error("Deterministic AI proposal application failed: Exact replacement expected 1 occurrence(s), found 0"),
@@ -356,6 +374,22 @@ describe("workstream AI failure context preservation", () => {
   });
 });
 
+
+describe("workstream AI materialization recovery wiring", () => {
+  it("bubbles recoverable materialization failures into the bounded auto-repair path", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      '["STALE_CONTEXT", "MATERIALIZATION_FAILED"].includes(autoAdvanceError.code)',
+    );
+    expect(source).toContain(
+      '"Materialized patch changed files outside the stored candidate set.",\n        "STALE_CONTEXT"',
+    );
+  });
+});
 
 describe("workstream AI stale completed graph recovery", () => {
   it("reopens a stale COMPLETED graph before constrained AI claims unresolved review work", () => {
