@@ -235,6 +235,18 @@ test('production E2E canary follows successful Hostinger production verification
   assert.doesNotMatch(source, /cron:\s*"0 16 \* \* \*"/);
 });
 
+test('successful production control-plane canary finalizes its verification-only task', () => {
+  const source = readFileSync(
+    new URL('../.github/workflows/coding-control-plane-e2e-canary.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /Finalize successful verification-only canary/);
+  assert.match(source, /-X PATCH "\$API_BASE_URL\/ai\/coding\/tasks\/\$task"/);
+  assert.match(source, /status:"COMPLETED"/);
+  assert.match(source, /verification-only task/);
+});
+
 test('owner issue reruns surface a completed AI Core task as TASK_COMPLETED', async () => {
   const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
   const command = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
