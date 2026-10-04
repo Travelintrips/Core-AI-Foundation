@@ -255,15 +255,32 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
              OR autonomous_status IN ('ACTIVE', 'WAITING')
         )::int AS jobs_active,
         COUNT(*) FILTER (
-          WHERE status = 'FAILED'
-             OR autonomous_status IN ('FAILED', 'BLOCKED')
+          WHERE has_active_run = FALSE
+            AND (
+              autonomous_status = 'FAILED'
+              OR (
+                status = 'FAILED'
+                AND (
+                  autonomous_status IS NULL
+                  OR autonomous_status IN ('APPROVAL_REQUIRED', 'DISABLED')
+                )
+              )
+            )
         )::int AS failed_blocked,
         COUNT(*) FILTER (
-          WHERE status = 'READY_REVIEW'
-            AND has_active_run = FALSE
+          WHERE has_active_run = FALSE
             AND (
-              autonomous_status IS NULL
-              OR autonomous_status IN ('APPROVAL_REQUIRED', 'DISABLED')
+              (
+                status = 'READY_REVIEW'
+                AND (
+                  autonomous_status IS NULL
+                  OR autonomous_status IN ('APPROVAL_REQUIRED', 'DISABLED', 'BLOCKED')
+                )
+              )
+              OR (
+                status = 'FAILED'
+                AND autonomous_status = 'BLOCKED'
+              )
             )
         )::int AS true_ready_review
       FROM task_state
