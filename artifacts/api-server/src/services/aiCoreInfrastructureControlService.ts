@@ -13,8 +13,18 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_VPS_START"
   | "HOSTINGER_VPS_STOP"
   | "HOSTINGER_VPS_RESTART"
+  | "HOSTINGER_DOCKER_LIST"
   | "HOSTINGER_DOCKER_STATUS"
+  | "HOSTINGER_DOCKER_CONTAINERS"
+  | "HOSTINGER_DOCKER_LOGS"
+  | "HOSTINGER_DOCKER_DEPLOY"
+  | "HOSTINGER_DOCKER_START"
+  | "HOSTINGER_DOCKER_STOP"
   | "HOSTINGER_DOCKER_RESTART"
+  | "HOSTINGER_DOCKER_UPDATE"
+  | "HOSTINGER_SUBDOMAIN_LIST"
+  | "HOSTINGER_SUBDOMAIN_CREATE"
+  | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "EXTERNAL_AGENT_STATUS";
 
 export type AiCoreInfrastructureResult = {
@@ -50,14 +60,42 @@ export function detectAiCoreInfrastructureOperation(
     return "EXTERNAL_AGENT_STATUS";
   }
 
+  if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomain\b/i.test(text)) {
+    if (/\b(buat|create|add|tambah)\b/i.test(text)) return "HOSTINGER_SUBDOMAIN_CREATE";
+    if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) return "HOSTINGER_SUBDOMAIN_LIST";
+  }
+
+  if (/\b(hostinger|hpanel)\b/i.test(text) &&
+      /\b(domain)\b/i.test(text) &&
+      /\b(available|availability|tersedia|ketersediaan|cek|check)\b/i.test(text)) {
+    return "HOSTINGER_DOMAIN_AVAILABILITY";
+  }
+
+  if (/\b(hostinger|hpanel|vps)\b/i.test(text) && /\b(docker|compose|container|project)\b/i.test(text)) {
+    if (/\b(log|logs)\b/i.test(text)) return "HOSTINGER_DOCKER_LOGS";
+    if (/\b(container|containers)\b/i.test(text) && /\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) {
+      return "HOSTINGER_DOCKER_CONTAINERS";
+    }
+    if (/\b(create|buat|deploy|apply|pasang)\b/i.test(text)) return "HOSTINGER_DOCKER_DEPLOY";
+    if (/\b(?:env|environment)(?:\s+variables?)?\b/i.test(text) &&
+        /\b(update|ubah|ganti|set|apply|deploy|redeploy|perbarui)\b/i.test(text)) {
+      return "HOSTINGER_DOCKER_DEPLOY";
+    }
+    if (/\bupdate\s+env(?:ironment)?\s*=/i.test(text)) return "HOSTINGER_DOCKER_DEPLOY";
+    if (/\b(update|redeploy|refresh|pull latest|perbarui)\b/i.test(text)) return "HOSTINGER_DOCKER_UPDATE";
+    if (/\b(restart|reboot|mulai ulang)\b/i.test(text)) return "HOSTINGER_DOCKER_RESTART";
+    if (/\b(stop|matikan|shutdown|hentikan)\b/i.test(text)) return "HOSTINGER_DOCKER_STOP";
+    if (/\b(start|nyalakan|hidupkan|jalankan)\b/i.test(text)) return "HOSTINGER_DOCKER_START";
+    if (/\b(list|daftar)\b/i.test(text) && /\b(project|docker)\b/i.test(text)) return "HOSTINGER_DOCKER_LIST";
+    if (/\b(read[ -]?only|hanya baca|cek|check|status|health|inspect|periksa|lihat)\b/i.test(text)) {
+      return "HOSTINGER_DOCKER_STATUS";
+    }
+  }
+
   const action = actionOf(text);
   if (!action) return null;
 
   if (/\b(hostinger|hpanel|vps)\b/i.test(text)) {
-    if (/\b(docker|compose|container|project)\b/i.test(text)) {
-      if (action === "restart") return "HOSTINGER_DOCKER_RESTART";
-      if (action === "status") return "HOSTINGER_DOCKER_STATUS";
-    }
     if (action === "restart") return "HOSTINGER_VPS_RESTART";
     if (action === "start") return "HOSTINGER_VPS_START";
     if (action === "stop") return "HOSTINGER_VPS_STOP";
@@ -164,6 +202,8 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     token: (env["HOSTINGER_API_TOKEN"] ?? "").trim(),
     vmId: (env["HOSTINGER_VPS_ID"] ?? "").trim(),
     dockerProject: (env["HOSTINGER_DOCKER_PROJECT"] ?? "").trim(),
+    hostingUsername: (env["HOSTINGER_HOSTING_USERNAME"] ?? "").trim(),
+    hostingDomain: (env["HOSTINGER_HOSTING_DOMAIN"] ?? "").trim(),
     apiBase: (env["HOSTINGER_API_BASE"] ?? "").trim().replace(/\/$/, ""),
   };
 }
@@ -171,32 +211,38 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
 async function callHostinger(
   operation: AiCoreInfrastructureOperation,
   env: NodeJS.ProcessEnv,
+  message = "",
 ): Promise<AiCoreInfrastructureResult> {
   const config = hostingerConfig(env);
-  if (!config.token || !config.vmId) {
-    throw new Error("Hostinger control plane requires HOSTINGER_API_TOKEN and HOSTINGER_VPS_ID.");
+  if (!config.token) {
+    throw new Error("Hostinger control plane requires HOSTINGER_API_TOKEN.");
   }
 
+  const valueOf = (key: string): string => {
+    const escaped = key.replace(/[.*+?^$\{\}()|[\]\\]/g, "\\$&");
+    const match = message.match(new RegExp(
+      `(?:^|\\s)${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s,;]+))`,
+      "i",
+    ));
+    return (match?.[1] ?? match?.[2] ?? match?.[3] ?? "").trim();
+  };
+  const boolOf = (key: string): boolean | undefined => {
+    const value = valueOf(key).toLowerCase();
+    if (!value) return undefined;
+    if (["1", "true", "yes", "ya"].includes(value)) return true;
+    if (["0", "false", "no", "tidak"].includes(value)) return false;
+    throw new Error(`${key} must be true or false.`);
+  };
+  const project = valueOf("project") || config.dockerProject;
+  const hostingUsername = valueOf("username") || config.hostingUsername;
+  const hostingDomain = valueOf("domain") || config.hostingDomain;
   const bases = Array.from(new Set([config.apiBase, ...HOSTINGER_API_BASES].filter(Boolean)));
-  let method = "GET";
-  let suffix = "";
 
-  if (operation === "HOSTINGER_VPS_START") { suffix = "/start"; method = "POST"; }
-  if (operation === "HOSTINGER_VPS_STOP") { suffix = "/stop"; method = "POST"; }
-  if (operation === "HOSTINGER_VPS_RESTART") { suffix = "/restart"; method = "POST"; }
-
-  if (operation === "HOSTINGER_DOCKER_STATUS" || operation === "HOSTINGER_DOCKER_RESTART") {
-    if (!config.dockerProject) {
-      throw new Error("HOSTINGER_DOCKER_PROJECT is required for Docker project operations.");
-    }
-    suffix = `/docker/${encodeURIComponent(config.dockerProject)}`;
-    if (operation === "HOSTINGER_DOCKER_RESTART") {
-      suffix += "/restart";
-      method = "POST";
-    }
-  }
-
-  const request = async (url: string, requestMethod = method) => {
+  const request = async (
+    url: string,
+    requestMethod = "GET",
+    body?: Record<string, unknown>,
+  ) => {
     const response = await fetch(url, {
       method: requestMethod,
       headers: {
@@ -205,6 +251,7 @@ async function callHostinger(
         "Content-Type": "application/json",
         "User-Agent": "CST-AI-Core-Hostinger/1.0",
       },
+      ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(20_000),
     });
     const bodyText = await response.text();
@@ -213,78 +260,173 @@ async function callHostinger(
     return { response, data };
   };
 
-  let data: unknown = null;
-  let lastStatus = 404;
-  for (const base of bases) {
-    const vmBase = `${base}/vps/v1/virtual-machines/${encodeURIComponent(config.vmId)}`;
-    const result = await request(vmBase + suffix);
-    lastStatus = result.response.status;
-    if (result.response.ok) {
-      data = result.data;
-      lastStatus = 200;
-      break;
-    }
-    if (result.response.status !== 404) {
-      throw new Error(`Hostinger operation failed with HTTP ${result.response.status}.`);
-    }
-  }
-
-  if (lastStatus === 404 && operation === "HOSTINGER_VPS_STATUS") {
+  const firstSuccessful = async (
+    path: string,
+    method = "GET",
+    body?: Record<string, unknown>,
+  ) => {
+    let lastStatus = 404;
+    let lastData: unknown = null;
     for (const base of bases) {
-      const discovered = await request(`${base}/vps/v1/virtual-machines`, "GET");
-      if (!discovered.response.ok) {
-        if (discovered.response.status === 404) continue;
-        throw new Error(`Hostinger VPS discovery failed with HTTP ${discovered.response.status}.`);
+      const result = await request(base + path, method, body);
+      lastStatus = result.response.status;
+      lastData = result.data;
+      if (result.response.ok) return { status: result.response.status, data: result.data };
+      if (result.response.status !== 404) {
+        throw new Error(`Hostinger operation failed with HTTP ${result.response.status}.`);
       }
-      const payload = discovered.data as { data?: unknown[] } | unknown[] | null;
-      const machines = Array.isArray(payload)
-        ? payload
-        : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
-          ? (payload as { data: unknown[] }).data
-          : [];
-      const exact = machines.find((machine) =>
-        machine && typeof machine === "object" && String((machine as { id?: unknown }).id ?? "") === config.vmId);
-      if (exact) {
-        data = exact;
-        lastStatus = 200;
-        break;
+    }
+    return { status: lastStatus, data: lastData };
+  };
+
+  let data: unknown = null;
+
+  if (operation === "HOSTINGER_DOMAIN_AVAILABILITY") {
+    const rawDomain = valueOf("name") || hostingDomain;
+    const tlds = (valueOf("tlds") || "com").split("|").map((v) => v.replace(/^\./, "").trim()).filter(Boolean);
+    const bareName = rawDomain.includes(".") ? rawDomain.split(".")[0] : rawDomain;
+    if (!bareName) throw new Error("Domain availability requires name=<domain-name>.");
+    const result = await firstSuccessful("/domains/v1/availability", "POST", {
+      domain: bareName,
+      tlds,
+      with_alternatives: boolOf("alternatives") ?? false,
+    });
+    if (result.status < 200 || result.status >= 300) {
+      throw new Error(`Hostinger domain availability failed with HTTP ${result.status}.`);
+    }
+    data = result.data;
+  } else if (operation === "HOSTINGER_SUBDOMAIN_LIST" || operation === "HOSTINGER_SUBDOMAIN_CREATE") {
+    if (!hostingUsername || !hostingDomain) {
+      throw new Error("Subdomain operations require HOSTINGER_HOSTING_USERNAME and HOSTINGER_HOSTING_DOMAIN, or username= and domain=.");
+    }
+    const path =
+      `/hosting/v1/accounts/${encodeURIComponent(hostingUsername)}/websites/${encodeURIComponent(hostingDomain)}/subdomains`;
+    if (operation === "HOSTINGER_SUBDOMAIN_LIST") {
+      const result = await firstSuccessful(path, "GET");
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger subdomain list failed with HTTP ${result.status}.`);
       }
-      if (machines.length === 1) {
-        data = {
-          ...(machines[0] as Record<string, unknown>),
-          configured_vps_id: config.vmId,
-          discovered_vps_id: (machines[0] as { id?: unknown }).id ?? null,
-          configuration_warning: "HOSTINGER_VPS_ID does not match the only VPS accessible by this token.",
-        };
-        lastStatus = 200;
-        break;
+      data = result.data;
+    } else {
+      const subdomain = valueOf("subdomain");
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(subdomain)) {
+        throw new Error("Subdomain create requires a valid subdomain=<prefix>.");
       }
-      if (machines.length > 1) {
-        data = {
-          configured_vps_id: config.vmId,
-          accessible_virtual_machines: machines,
-          configuration_warning: "HOSTINGER_VPS_ID was not found; multiple VPS instances are accessible.",
-        };
-        lastStatus = 200;
-        break;
+      const directory = valueOf("directory");
+      const usePublic = boolOf("public");
+      const body: Record<string, unknown> = { subdomain };
+      if (directory) body.directory = directory;
+      if (usePublic !== undefined) body.is_using_public_directory = usePublic;
+      const result = await firstSuccessful(path, "POST", body);
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger subdomain create failed with HTTP ${result.status}.`);
+      }
+      data = result.data;
+    }
+  } else {
+    if (!config.vmId) {
+      throw new Error("Hostinger VPS/Docker operations require HOSTINGER_VPS_ID.");
+    }
+    const vmBase = `/vps/v1/virtual-machines/${encodeURIComponent(config.vmId)}`;
+
+    if (operation === "HOSTINGER_DOCKER_LIST") {
+      const result = await firstSuccessful(`${vmBase}/docker`, "GET");
+      if (result.status < 200 || result.status >= 300) throw new Error(`Hostinger Docker list failed with HTTP ${result.status}.`);
+      data = result.data;
+    } else if (operation.startsWith("HOSTINGER_DOCKER_")) {
+      if (operation !== "HOSTINGER_DOCKER_DEPLOY" && !project) {
+        throw new Error("Docker operation requires HOSTINGER_DOCKER_PROJECT or project=<name>.");
+      }
+      if (project && !/^[A-Za-z0-9_-]+$/.test(project)) {
+        throw new Error("Docker project name may contain only letters, numbers, dashes, and underscores.");
+      }
+
+      if (operation === "HOSTINGER_DOCKER_DEPLOY") {
+        const deployProject = project || valueOf("project");
+        const content = valueOf("content");
+        const environment = valueOf("env");
+        if (!deployProject || !content) {
+          throw new Error("Docker deploy requires project=<name> and content=<compose URL or raw YAML>.");
+        }
+        const body: Record<string, unknown> = { project_name: deployProject, content };
+        if (environment) body.environment = environment;
+        const result = await firstSuccessful(`${vmBase}/docker`, "POST", body);
+        if (result.status < 200 || result.status >= 300) throw new Error(`Hostinger Docker deploy failed with HTTP ${result.status}.`);
+        data = result.data;
+      } else {
+        const encodedProject = encodeURIComponent(project);
+        const suffix =
+          operation === "HOSTINGER_DOCKER_CONTAINERS" ? "/containers" :
+          operation === "HOSTINGER_DOCKER_LOGS" ? "/logs" :
+          operation === "HOSTINGER_DOCKER_START" ? "/start" :
+          operation === "HOSTINGER_DOCKER_STOP" ? "/stop" :
+          operation === "HOSTINGER_DOCKER_RESTART" ? "/restart" :
+          operation === "HOSTINGER_DOCKER_UPDATE" ? "/update" : "";
+        const method = ["HOSTINGER_DOCKER_START","HOSTINGER_DOCKER_STOP","HOSTINGER_DOCKER_RESTART","HOSTINGER_DOCKER_UPDATE"].includes(operation)
+          ? "POST" : "GET";
+        const result = await firstSuccessful(`${vmBase}/docker/${encodedProject}${suffix}`, method);
+        if (result.status < 200 || result.status >= 300) throw new Error(`Hostinger Docker operation failed with HTTP ${result.status}.`);
+        data = result.data;
+      }
+    } else {
+      let suffix = "";
+      let method = "GET";
+      if (operation === "HOSTINGER_VPS_START") { suffix = "/start"; method = "POST"; }
+      if (operation === "HOSTINGER_VPS_STOP") { suffix = "/stop"; method = "POST"; }
+      if (operation === "HOSTINGER_VPS_RESTART") { suffix = "/restart"; method = "POST"; }
+
+      let result = await firstSuccessful(vmBase + suffix, method);
+      if (result.status === 404 && operation === "HOSTINGER_VPS_STATUS") {
+        result = await firstSuccessful("/vps/v1/virtual-machines", "GET");
+        const payload = result.data as { data?: unknown[] } | unknown[] | null;
+        const machines = Array.isArray(payload)
+          ? payload
+          : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+            ? (payload as { data: unknown[] }).data
+            : [];
+        const exact = machines.find((machine) =>
+          machine && typeof machine === "object" && String((machine as { id?: unknown }).id ?? "") === config.vmId);
+        if (exact) data = exact;
+        else if (machines.length === 1) {
+          data = {
+            ...(machines[0] as Record<string, unknown>),
+            configured_vps_id: config.vmId,
+            discovered_vps_id: (machines[0] as { id?: unknown }).id ?? null,
+            configuration_warning: "HOSTINGER_VPS_ID does not match the only VPS accessible by this token.",
+          };
+        } else if (machines.length > 1) {
+          data = {
+            configured_vps_id: config.vmId,
+            accessible_virtual_machines: machines,
+            configuration_warning: "HOSTINGER_VPS_ID was not found; multiple VPS instances are accessible.",
+          };
+        }
+      } else {
+        data = result.data;
+      }
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger operation failed with HTTP ${result.status}. Verify HOSTINGER_VPS_ID or set HOSTINGER_API_BASE.`);
       }
     }
   }
 
-  if (lastStatus !== 200) {
-    throw new Error(`Hostinger operation failed with HTTP ${lastStatus}. Verify HOSTINGER_VPS_ID or set HOSTINGER_API_BASE.`);
-  }
-
-  const mutating =
-    operation !== "HOSTINGER_VPS_STATUS" &&
-    operation !== "HOSTINGER_DOCKER_STATUS";
+  const readOnly = new Set<AiCoreInfrastructureOperation>([
+    "HOSTINGER_VPS_STATUS",
+    "HOSTINGER_DOCKER_LIST",
+    "HOSTINGER_DOCKER_STATUS",
+    "HOSTINGER_DOCKER_CONTAINERS",
+    "HOSTINGER_DOCKER_LOGS",
+    "HOSTINGER_SUBDOMAIN_LIST",
+    "HOSTINGER_DOMAIN_AVAILABILITY",
+  ]);
+  const mutating = !readOnly.has(operation);
   return {
     operation,
     provider: "hostinger",
     mutating,
     reply: mutating
       ? `Operasi ${operation} diterima Hostinger.`
-      : `Status Hostinger berhasil dibaca.`,
+      : `Status Hostinger untuk ${operation} berhasil dibaca.`,
     data: safeJson(data),
   };
 }
@@ -292,6 +434,7 @@ async function callHostinger(
 export async function executeAiCoreInfrastructureOperation(input: {
   operation: AiCoreInfrastructureOperation;
   requestedBy?: string;
+  message?: string;
   env?: NodeJS.ProcessEnv;
 }): Promise<AiCoreInfrastructureResult> {
   const env = input.env ?? process.env;
@@ -310,7 +453,7 @@ export async function executeAiCoreInfrastructureOperation(input: {
   } else if (input.operation.startsWith("GCP_")) {
     result = await callGcp(input.operation, env);
   } else {
-    result = await callHostinger(input.operation, env);
+    result = await callHostinger(input.operation, env, input.message ?? "");
   }
 
   const { logAudit } = await import("./aiAuditService.js");

@@ -1971,6 +1971,7 @@ async function runInfrastructureOperation(
   const result = await executeAiCoreInfrastructureOperation({
     operation,
     requestedBy: "ai-core-chat",
+    message,
   });
 
   return {
