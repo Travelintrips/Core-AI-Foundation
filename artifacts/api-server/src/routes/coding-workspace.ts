@@ -64,6 +64,7 @@ import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorke
 import { reconcileStaleCodingRuns } from "../services/localCodingRunRecoveryService.js";
 import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
+import { getWorkerCapacity } from "../services/workerClusterService.js";
 
 const router = Router();
 
@@ -204,6 +205,112 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
   });
 
   res.json(ListCodingTasksResponse.parse(presentedTasks));
+});
+
+router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
+  const [jobSnapshot, taskSnapshot, workers] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE status IN ('queued', 'waiting', 'retrying')
+            AND job_type IN (
+              'coding_repository_analyzer',
+              'coding_ai_execution',
+              'coding_workstream_execution',
+              'coding_workstream_ai_execution',
+              'coding_multi_task_planner'
+            )
+        )::int AS waiting_queued,
+        COUNT(*) FILTER (
+          WHERE status = 'running'
+            AND job_type IN ('coding_ai_execution', 'coding_workstream_ai_execution')
+        )::int AS coding_model_running
+      FROM ai_platform.ai_jobs
+    `),
+    db.execute(sql`
+      WITH task_state AS (
+        SELECT
+          t.id,
+          t.status,
+          a.status AS autonomous_status,
+          EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_runs r
+            WHERE r.task_id = t.id
+              AND r.status = 'RUNNING'
+          ) AS has_active_run
+        FROM ai_platform.ai_coding_tasks t
+        LEFT JOIN ai_platform.ai_coding_autonomous_tasks a
+          ON a.task_id = t.id
+         AND a.enabled = TRUE
+      )
+      SELECT
+        COUNT(*) FILTER (
+          WHERE status IN ('PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING')
+             OR has_active_run
+             OR autonomous_status IN ('ACTIVE', 'WAITING')
+        )::int AS jobs_active,
+        COUNT(*) FILTER (
+          WHERE status = 'FAILED'
+             OR autonomous_status IN ('FAILED', 'BLOCKED')
+        )::int AS failed_blocked,
+        COUNT(*) FILTER (
+          WHERE status = 'READY_REVIEW'
+            AND has_active_run = FALSE
+            AND (
+              autonomous_status IS NULL
+              OR autonomous_status IN ('APPROVAL_REQUIRED', 'DISABLED')
+            )
+        )::int AS true_ready_review
+      FROM task_state
+    `),
+    getWorkerCapacity(),
+  ]);
+
+  const jobRow = (jobSnapshot.rows?.[0] ?? {}) as Record<string, unknown>;
+  const taskRow = (taskSnapshot.rows?.[0] ?? {}) as Record<string, unknown>;
+  const now = Date.now();
+  const heartbeatFreshMs = 90_000;
+  const workerDetails = workers.map((worker) => {
+    const heartbeatAgeMs = Math.max(
+      0,
+      now - new Date(worker.lastHeartbeat).getTime(),
+    );
+    const heartbeatFresh =
+      Number.isFinite(heartbeatAgeMs) && heartbeatAgeMs <= heartbeatFreshMs;
+    const active =
+      worker.leaseValid &&
+      heartbeatFresh &&
+      !["offline", "stale"].includes(worker.status);
+    const available = active && worker.availableSlots > 0;
+    return {
+      ...worker,
+      heartbeatFresh,
+      heartbeatAgeMs,
+      active,
+      available,
+      busyOrUnavailable: !available,
+    };
+  });
+
+  res.json({
+    refreshedAt: new Date().toISOString(),
+    jobs: {
+      active: Number(taskRow["jobs_active"] ?? 0),
+      waitingQueued: Number(jobRow["waiting_queued"] ?? 0),
+      codingModelRunning: Number(jobRow["coding_model_running"] ?? 0),
+      failedBlocked: Number(taskRow["failed_blocked"] ?? 0),
+      trueReadyReview: Number(taskRow["true_ready_review"] ?? 0),
+    },
+    workers: {
+      active: workerDetails.filter((worker) => worker.active).length,
+      available: workerDetails.filter((worker) => worker.available).length,
+      busyUnavailable: workerDetails.filter(
+        (worker) => worker.busyOrUnavailable,
+      ).length,
+      details: workerDetails,
+    },
+  });
 });
 
 router.post("/ai/coding/tasks", async (req, res): Promise<void> => {
