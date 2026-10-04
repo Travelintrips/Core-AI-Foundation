@@ -2,7 +2,7 @@ import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
 
 const GCP_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 const GCP_COMPUTE_API = "https://compute.googleapis.com/compute/v1";
-const HOSTINGER_API_BASES = ["https://developers.hostinger.com/api", "https://api.hostinger.com/api"] as const;
+const HOSTINGER_API_BASES = ["https://developers.hostinger.com/api"] as const;
 
 export type AiCoreInfrastructureOperation =
   | "GCP_VM_STATUS"
@@ -201,6 +201,7 @@ async function callHostinger(
         Authorization: `Bearer ${config.token}`,
         Accept: "application/json",
         "Content-Type": "application/json",
+        "User-Agent": "CST-AI-Core-Hostinger/1.0",
       },
       signal: AbortSignal.timeout(20_000),
     });
