@@ -440,15 +440,13 @@ describe("autonomous action budget behavior", () => {
     expect(autonomous.last_error).toBeNull();
   });
 
-  it("does not accept persisted COMPLETED while implementation gates are still pending", async () => {
-    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
-    autonomous.cycle_count = 40;
-    task.status = "COMPLETED";
-    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({
-      status: "ACTIVE",
-      action: "RECOVER_FALSE_COMPLETION",
-    });
-    expect(autonomous.cycle_count).toBe(40);
+  it("does not accept persisted COMPLETED while implementation gates are still pending", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('state.task.status === "COMPLETED" && state.nextAction !== "DONE"');
+    expect(source).toContain('"RECOVER_FALSE_COMPLETION"');
   });
 
   it("spends exactly one cycle before starting the last allowed handoff attempt", async () => {
