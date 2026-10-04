@@ -87,3 +87,25 @@ describe("AI Core MCP discovery compatibility", () => {
     }
   });
 });
+
+
+it("exposes the same live tool registry on the fresh v2 endpoint", async () => {
+  const response = await request(app())
+    .post("/api/ai/core-chat/mcp-v2")
+    .send({ jsonrpc: "2.0", id: 4, method: "tools/list" });
+
+  expect(response.status).toBe(200);
+  expect(response.headers["cache-control"]).toContain("no-store");
+  expect(response.headers["x-mcp-server-version"]).toBe("1.3.2");
+  expect(response.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
+    expect.arrayContaining([
+      "send_ai_core_command",
+      "get_ai_core_task_progress",
+      "subscribe_ai_core_events",
+      "read_ai_core_events",
+      "ack_ai_core_event",
+      "unsubscribe_ai_core_events",
+      "get_profile",
+    ]),
+  );
+});
