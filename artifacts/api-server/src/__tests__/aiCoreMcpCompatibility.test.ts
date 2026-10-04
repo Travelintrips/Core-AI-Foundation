@@ -65,7 +65,7 @@ describe("AI Core MCP discovery compatibility", () => {
     expect(response.status).toBe(200);
     expect(response.body.result).toMatchObject({
       resultType: "complete",
-      supportedVersions: ["2026-07-28", "2025-06-18"],
+      supportedVersions: ["2025-06-18", "2025-03-26"],
       capabilities: { tools: {}, events: {} },
       serverInfo: {
         name: "ai-core-direct-command",
@@ -89,7 +89,7 @@ describe("AI Core MCP discovery compatibility", () => {
       });
 
     expect(response.status).toBe(200);
-    expect(response.body.result.protocolVersion).toBe("2026-07-28");
+    expect(response.body.result.protocolVersion).toBe("2025-06-18");
     expect(response.body.result.capabilities.events).toEqual({});
   });
 
