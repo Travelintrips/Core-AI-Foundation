@@ -41,6 +41,19 @@ test('default dispatch audits without creating tasks', async () => {
   assert.equal(f.calls.length, 3);
   assert.ok(f.calls.every(call => !call.method));
 });
+test('allowed edge health responses may be non-JSON without aborting the trigger', async () => {
+  const fetchImpl = async () => ({
+    ok: false,
+    status: 403,
+    json: async () => { throw new SyntaxError('Unexpected token <'); },
+  });
+  const api = createApi('test-admin-secret', fetchImpl);
+  const result = await api('/healthz', { allowed: [403, 503] });
+
+  assert.equal(result.status, 403);
+  assert.equal(result.value.status, 'edge_blocked');
+});
+
 test('edge-blocked public health probes do not block a ready authenticated control bridge', async () => {
   const api = async (path, options = {}) => {
     if (path === '/healthz' || path === '/healthz/full') {

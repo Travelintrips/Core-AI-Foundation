@@ -118,7 +118,20 @@ export function createApi(secret, fetchImpl = fetch) {
       );
     }
     let value;
-    try { value = await response.json(); } catch { throw new Error(`AI Core ${path} returned invalid JSON.`); }
+    try {
+      value = await response.json();
+    } catch {
+      if (allowed.includes(response.status)) {
+        value = {
+          status:
+            isPublicHealthProbe && response.status === 403
+              ? 'edge_blocked'
+              : 'allowed_non_json_response',
+        };
+      } else {
+        throw new Error(`AI Core ${path} returned invalid JSON.`);
+      }
+    }
     return { status: response.status, value };
   };
 }
