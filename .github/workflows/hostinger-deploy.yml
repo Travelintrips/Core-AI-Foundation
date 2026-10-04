@@ -90,22 +90,53 @@ jobs:
             sleep 10
           done
 
-      - name: Verify live MCP tool discovery
+      - name: Verify live MCP discovery and native events
         if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          payload='{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
+          endpoint="$API_BASE_URL/ai/core-chat/mcp?v=1.4.0"
+
+          discover_payload='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}'
+          discover_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
+            -sS -D /tmp/mcp-discover.headers -o /tmp/mcp-discover.json -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: CST-AI-Core-MCP-Discovery-Probe/2.0" \
+            --data-binary "$discover_payload" \
+            "$endpoint")
+          echo "mcp_server_discover_http=$discover_code"
+          test "$discover_code" = "200"
+          node - <<'NODE'
+          const fs = require("fs");
+          const body = JSON.parse(fs.readFileSync("/tmp/mcp-discover.json", "utf8"));
+          const result = body?.result;
+          if (result?.resultType !== "complete") throw new Error("MCP server/discover did not return a complete result");
+          const versions = Array.isArray(result?.supportedVersions) ? result.supportedVersions : [];
+          if (!versions.includes("2026-07-28")) throw new Error("MCP 2.0 protocol version is not live");
+          if (!result?.capabilities || typeof result.capabilities.events !== "object") {
+            throw new Error("Native MCP events capability is not live");
+          }
+          if (result?.serverInfo?.version !== "1.4.0") {
+            throw new Error("Unexpected live MCP server version: " + String(result?.serverInfo?.version));
+          }
+          console.log("mcp_native_event_discovery=PASS");
+          NODE
+          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.4\.0' /tmp/mcp-discover.headers
+          grep -Eqi '^cache-control:.*no-store' /tmp/mcp-discover.headers
+
+          tools_payload='{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+          tools_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
             -sS -D /tmp/mcp-tools.headers -o /tmp/mcp-tools.json -w "%{http_code}" \
             --connect-timeout 15 --max-time 30 \
             -H "Accept: application/json" \
             -H "Content-Type: application/json" \
-            -H "User-Agent: CST-AI-Core-MCP-Discovery-Probe/1.0" \
-            --data-binary "$payload" \
-            "$API_BASE_URL/ai/core-chat/mcp?v=1.3.2")
-          echo "mcp_tools_http=$code"
-          test "$code" = "200"
+            -H "User-Agent: CST-AI-Core-MCP-Discovery-Probe/2.0" \
+            --data-binary "$tools_payload" \
+            "$endpoint")
+          echo "mcp_tools_http=$tools_code"
+          test "$tools_code" = "200"
           node - <<'NODE'
           const fs = require("fs");
           const body = JSON.parse(fs.readFileSync("/tmp/mcp-tools.json", "utf8"));
@@ -132,7 +163,7 @@ jobs:
           }
           console.log("mcp_tool_discovery=PASS count="+tools.length);
           NODE
-          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.3\.2' /tmp/mcp-tools.headers
+          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.4\.0' /tmp/mcp-tools.headers
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-tools.headers
 
       - name: Verify admin auth guard
