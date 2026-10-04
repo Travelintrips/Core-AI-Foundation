@@ -12,6 +12,7 @@ export const AI_PROPOSAL_POLICY_LIMITS = {
   maxOperationBytes: 128_000,
   maxOperations: 32,
   maxFiles: 12,
+  maxAllowedFiles: 80,
 } as const;
 
 export const AI_PROPOSAL_OPERATION_KINDS = [
@@ -467,7 +468,7 @@ export async function validateAiProposalPolicy(
     }
     allowedFiles.add(normalized.path);
   }
-  if (allowedFiles.size > AI_PROPOSAL_POLICY_LIMITS.maxFiles) {
+  if (allowedFiles.size > AI_PROPOSAL_POLICY_LIMITS.maxAllowedFiles) {
     pushError(errors, "HANDOFF_POLICY_INVALID", "Approved handoff exceeds the allowed file bound.");
   }
 
