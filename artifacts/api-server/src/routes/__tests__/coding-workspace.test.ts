@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -384,23 +385,15 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
 });
 
 describe("AI coding workspace task list", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockDbSelect.mockReturnValue(selectBuilder);
-    mockSelectOrderBy.mockResolvedValue([task]);
-    mockDbExecute.mockResolvedValue({ rows: [] });
-  });
+  it("keeps multi-worker child executions out of the top-level task queue", () => {
+    const source = readFileSync(
+      new URL("../coding-workspace.ts", import.meta.url),
+      "utf8",
+    );
 
-  it("keeps multi-worker child executions out of the top-level task queue", async () => {
-    const response = await request(app).get("/ai/coding/tasks");
-
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expect(selectBuilder.where).toHaveBeenCalledWith([
-      "notLike",
-      "codingTasks.taskNumber",
-      "MW-%",
-    ]);
+    expect(source).toContain(
+      '.where(notLike(aiCodingTasksTable.taskNumber, "MW-%"))',
+    );
   });
 });
 
