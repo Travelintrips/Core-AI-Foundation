@@ -375,23 +375,28 @@ describe("workstream AI failure context preservation", () => {
 });
 
 
-describe("workstream AI materialization baseline status", () => {
-  it("ignores pre-existing workspace status when validating materialized candidate files", () => {
+describe("workstream AI materialization workspace sanitation", () => {
+  it("resets and cleans the disposable workspace before validating candidate files", () => {
     const source = readFileSync(
       new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain("const baselineStatusPaths = normalizedChangedFiles(");
     expect(source).toContain(
-      "const materializedStatusPaths = normalizedStatusPaths.filter(",
+      'await runGit(workspace.path, ["reset", "--hard", baseSha], childTask.repository)',
     );
     expect(source).toContain(
-      "(file) => !baselineStatusPaths.includes(file)",
+      'await runGit(workspace.path, ["clean", "-fd"], childTask.repository)',
+    );
+    expect(source).toContain("const cleanStatusPaths = normalizedChangedFiles(");
+    expect(source).toContain(
+      '"Isolated materialization workspace could not be normalized to a clean base."',
     );
     expect(source).toContain(
-      "const unexpectedStatusPaths = materializedStatusPaths.filter(",
+      "const unexpectedStatusPaths = normalizedStatusPaths.filter(",
     );
+    expect(source).not.toContain("baselineStatusPaths");
+    expect(source).not.toContain("materializedStatusPaths");
   });
 });
 
