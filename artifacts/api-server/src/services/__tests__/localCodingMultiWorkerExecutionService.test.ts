@@ -206,6 +206,9 @@ describe("multi-worker execution boundary", () => {
       },
     );
     expect(mocks.completeAnalyzer).toHaveBeenCalledTimes(1);
+    expect(mocks.completeAnalyzer.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.markReview.mock.invocationCallOrder[0]!,
+    );
     expect(mocks.completeReviewed).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       graphId: GRAPH_ID,
