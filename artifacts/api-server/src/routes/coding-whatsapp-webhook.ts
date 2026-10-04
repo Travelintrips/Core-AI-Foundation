@@ -311,6 +311,99 @@ function htmlEscape(value: string): string {
 }
 
 router.get(
+  "/a/:token",
+  async (req, res): Promise<void> => {
+    const token =
+      typeof req.params["token"] === "string" ? req.params["token"].trim() : "";
+    if (!/^[A-Za-z0-9_-]{12,80}$/.test(token)) {
+      res.status(400).type("html").send(
+        "<!doctype html><html><body><h2>Approval link tidak valid.</h2></body></html>",
+      );
+      return;
+    }
+
+    const escapedToken = htmlEscape(token);
+    res
+      .status(200)
+      .type("html")
+      .send(`<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Core Approval</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f7fb;margin:0;padding:24px;color:#111}
+.card{max-width:520px;margin:40px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}
+button{width:100%;padding:16px;border:0;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;color:#fff}
+.approve{background:#16a34a}.reject{background:#dc2626}
+.meta{color:#555;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>AI Core Admin Approval</h2>
+<div class="meta">Pilih tindakan untuk approval ini.</div>
+<form method="post" action="/api/a/${escapedToken}">
+<div class="actions">
+<button class="approve" type="submit" name="decision" value="APPROVE">✅ APPROVE</button>
+<button class="reject" type="submit" name="decision" value="REJECT">❌ REJECT</button>
+</div>
+</form>
+</div>
+</body>
+</html>`);
+  },
+);
+
+router.post(
+  "/a/:token",
+  urlencoded({ extended: false, limit: "8kb" }),
+  async (req, res): Promise<void> => {
+    const token =
+      typeof req.params["token"] === "string" ? req.params["token"].trim() : "";
+    const decision =
+      req.body?.decision === "APPROVE" || req.body?.decision === "REJECT"
+        ? req.body.decision
+        : null;
+
+    if (!/^[A-Za-z0-9_-]{12,80}$/.test(token) || !decision) {
+      res.status(400).type("html").send(
+        "<!doctype html><html><body><h2>Approval tidak valid.</h2></body></html>",
+      );
+      return;
+    }
+
+    try {
+      const approval = await decideCodingCriticalApproval({
+        token,
+        decision,
+        senderDigits: "",
+      });
+
+      res
+        .status(200)
+        .type("html")
+        .send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Core Approval</title></head><body style="font-family:system-ui,-apple-system,sans-serif;padding:24px"><h2>${decision === "APPROVE" ? "✅ Approval diterima" : "❌ Task ditolak"}</h2><p>Status: ${htmlEscape(approval.status)}</p><p>Halaman ini boleh ditutup.</p></body></html>`);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : String(error);
+      const status =
+        code === "APPROVAL_NOT_FOUND"
+          ? 404
+          : ["APPROVAL_EXPIRED", "APPROVAL_NOT_PENDING", "APPROVAL_RACE_LOST"].includes(code)
+            ? 409
+            : 500;
+
+      res
+        .status(status)
+        .type("html")
+        .send(`<!doctype html><html><body><h2>Approval tidak dapat diproses.</h2><p>${htmlEscape(code)}</p></body></html>`);
+    }
+  },
+);
+
+router.get(
   "/ai/coding/whatsapp/approval",
   async (req, res): Promise<void> => {
     const secret = (process.env.AI_CODING_WA_INCOMING_SECRET ?? "").trim();
