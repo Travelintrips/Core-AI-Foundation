@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockTransaction = vi.hoisted(() => vi.fn());
 const mockDbSelect = vi.hoisted(() => vi.fn());
+const mockDbExecute = vi.hoisted(() => vi.fn());
+const mockSelectOrderBy = vi.hoisted(() => vi.fn());
 const mockSelectFor = vi.hoisted(() => vi.fn());
 const mockSelectLimit = vi.hoisted(() => vi.fn());
 const mockInsertValues = vi.hoisted(() => vi.fn());
@@ -144,6 +147,7 @@ const MockLocalCommitApprovalError = vi.hoisted(() => class extends Error {
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
   where: vi.fn(() => selectBuilder),
+  orderBy: mockSelectOrderBy,
   for: mockSelectFor,
   limit: mockSelectLimit,
 };
@@ -165,12 +169,14 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...conditions: unknown[]) => conditions),
   desc: vi.fn(),
   eq: vi.fn((...conditions: unknown[]) => conditions),
+  notLike: vi.fn((...conditions: unknown[]) => ["notLike", ...conditions]),
 }));
 
 vi.mock("@workspace/db", () => ({
   db: {
     transaction: mockTransaction,
     select: mockDbSelect,
+    execute: mockDbExecute,
     insert: vi.fn(),
     update: vi.fn(),
   },
@@ -187,6 +193,7 @@ vi.mock("@workspace/db", () => ({
   },
   aiCodingTasksTable: {
     id: "codingTasks.id",
+    taskNumber: "codingTasks.taskNumber",
     createdAt: "codingTasks.createdAt",
   },
 }));
@@ -254,6 +261,14 @@ vi.mock("../../services/localCodingGitHubDiscoveryService.js", () => ({
   getCodingGitHubDiscoveryMode: vi.fn(() => "public"),
   listAccessibleCodingRepositories: mockListAccessibleCodingRepositories,
   listCodingRepositoryBranches: mockListCodingRepositoryBranches,
+}));
+
+vi.mock("../../services/localCodingMultiWorkerRecoveryService.js", () => ({
+  reconcileStaleMultiWorkerRuns: vi.fn(async () => ({
+    inspected: 0,
+    recoveredWorkstreams: 0,
+    recoveredTasks: 0,
+  })),
 }));
 
 vi.mock("../../services/localCodingRunRecoveryService.js", () => ({
@@ -366,6 +381,19 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
 
     expect(response.status).toBe(400);
     expect(mockListCodingRepositoryBranches).not.toHaveBeenCalled();
+  });
+});
+
+describe("AI coding workspace task list", () => {
+  it("keeps multi-worker child executions out of the top-level task queue", () => {
+    const source = readFileSync(
+      new URL("../coding-workspace.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      '.where(notLike(aiCodingTasksTable.taskNumber, "MW-%"))',
+    );
   });
 });
 
