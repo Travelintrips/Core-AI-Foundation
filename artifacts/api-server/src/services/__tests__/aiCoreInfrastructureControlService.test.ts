@@ -165,6 +165,41 @@ describe("AI Core Hostinger infrastructure control", () => {
     });
   });
 
+  it("resolves a multi-domain hosting target without HOSTINGER_HOSTING_DOMAIN", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([
+        { subdomain: "api", root_directory: "public_html/api" },
+      ]), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_SUBDOMAIN_LIST",
+      message: "Hostinger cek subdomain domain=sportcenter.travelintrips.co.id",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_HOSTING_USERNAME: "u684045296",
+      },
+    });
+
+    expect(result.mutating).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [subdomainUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(subdomainUrl).toBe(
+      "https://developers.hostinger.com/api/hosting/v1/accounts/u684045296/websites/sportcenter.travelintrips.co.id/subdomains",
+    );
+    expect(init.method).toBe("GET");
+    expect(result.data).toMatchObject({
+      target: {
+        username: "u684045296",
+        domain: "sportcenter.travelintrips.co.id",
+      },
+      subdomains: [
+        { subdomain: "api", root_directory: "public_html/api" },
+      ],
+    });
+  });
+
   it("checks domain availability without making a purchase", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ available: true }), { status: 200 }),

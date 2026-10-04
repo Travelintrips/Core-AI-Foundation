@@ -263,7 +263,8 @@ async function callHostinger(
   };
   const project = valueOf("project") || config.dockerProject;
   const hostingUsername = valueOf("username") || config.hostingUsername;
-  const hostingDomain = valueOf("domain") || config.hostingDomain;
+  const explicitHostingDomain = valueOf("domain");
+  const hostingDomain = explicitHostingDomain || config.hostingDomain;
   const bases = Array.from(new Set([config.apiBase, ...HOSTINGER_API_BASES].filter(Boolean)));
 
   const request = async (
@@ -313,6 +314,62 @@ async function callHostinger(
     return { status: lastStatus, data: lastData };
   };
 
+  const discoverHostingWebsites = async () => {
+    const result = await firstSuccessful("/hosting/v1/websites", "GET");
+    if (result.status < 200 || result.status >= 300) {
+      throw new Error(`Hostinger hosting discovery failed with HTTP ${result.status}.`);
+    }
+    const payload = result.data as { data?: unknown[]; meta?: unknown } | unknown[] | null;
+    const websites = Array.isArray(payload)
+      ? payload
+      : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+        ? (payload as { data: unknown[] }).data
+        : [];
+    return { payload, websites };
+  };
+
+  const resolveHostingTarget = async () => {
+    const requestedDomain = explicitHostingDomain || config.hostingDomain;
+    const requestedUsername = valueOf("username") || config.hostingUsername;
+
+    if (requestedDomain && requestedUsername) {
+      return { domain: requestedDomain, username: requestedUsername };
+    }
+
+    const { websites } = await discoverHostingWebsites();
+    const normalized = websites
+      .filter((site) => site && typeof site === "object")
+      .map((site) => site as Record<string, unknown>);
+
+    if (requestedDomain) {
+      const exact = normalized.find((site) =>
+        String(site["domain"] ?? "").toLowerCase() === requestedDomain.toLowerCase()
+      );
+      if (!exact) {
+        throw new Error(`Hostinger hosting domain ${requestedDomain} was not found in accessible websites.`);
+      }
+      const username = String(exact["username"] ?? "").trim();
+      if (!username) {
+        throw new Error(`Hostinger hosting domain ${requestedDomain} has no usable hosting username.`);
+      }
+      return { domain: requestedDomain, username };
+    }
+
+    if (requestedUsername) {
+      const candidates = normalized.filter((site) => String(site["username"] ?? "") === requestedUsername);
+      if (candidates.length === 1) {
+        const domain = String(candidates[0]?.["domain"] ?? "").trim();
+        if (!domain) throw new Error("Resolved hosting website has no domain.");
+        return { domain, username: requestedUsername };
+      }
+      if (candidates.length > 1) {
+        throw new Error("Multiple Hostinger websites match this username. Specify domain=<domain>.");
+      }
+    }
+
+    throw new Error("Specify domain=<domain> for multi-domain Hostinger operations.");
+  };
+
   let data: unknown = null;
 
   if (operation === "HOSTINGER_DNS_LIST" || operation === "HOSTINGER_DNS_SUBDOMAIN_CREATE") {
@@ -325,7 +382,7 @@ async function callHostinger(
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Hostinger DNS list failed with HTTP ${result.status}.`);
       }
-      data = result.data;
+      data = { target, subdomains: result.data };
     } else {
       const subdomain = valueOf("subdomain");
       const target = valueOf("target") || valueOf("content");
@@ -376,16 +433,7 @@ async function callHostinger(
       };
     }
   } else if (operation === "HOSTINGER_HOSTING_DISCOVERY") {
-    const result = await firstSuccessful("/hosting/v1/websites", "GET");
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Hostinger hosting discovery failed with HTTP ${result.status}.`);
-    }
-    const payload = result.data as { data?: unknown[]; meta?: unknown } | unknown[] | null;
-    const websites = Array.isArray(payload)
-      ? payload
-      : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
-        ? (payload as { data: unknown[] }).data
-        : [];
+    const { payload, websites } = await discoverHostingWebsites();
     data = {
       websites: websites.map((site) => {
         const value = site && typeof site === "object" ? site as Record<string, unknown> : {};
@@ -425,11 +473,9 @@ async function callHostinger(
     }
     data = result.data;
   } else if (operation === "HOSTINGER_SUBDOMAIN_LIST" || operation === "HOSTINGER_SUBDOMAIN_CREATE") {
-    if (!hostingUsername || !hostingDomain) {
-      throw new Error("Subdomain operations require HOSTINGER_HOSTING_USERNAME and HOSTINGER_HOSTING_DOMAIN, or username= and domain=.");
-    }
+    const target = await resolveHostingTarget();
     const path =
-      `/hosting/v1/accounts/${encodeURIComponent(hostingUsername)}/websites/${encodeURIComponent(hostingDomain)}/subdomains`;
+      `/hosting/v1/accounts/${encodeURIComponent(target.username)}/websites/${encodeURIComponent(target.domain)}/subdomains`;
     if (operation === "HOSTINGER_SUBDOMAIN_LIST") {
       const result = await firstSuccessful(path, "GET");
       if (result.status < 200 || result.status >= 300) {
@@ -450,7 +496,7 @@ async function callHostinger(
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Hostinger subdomain create failed with HTTP ${result.status}.`);
       }
-      data = result.data;
+      data = { target, result: result.data };
     }
   } else {
     if (!config.vmId) {
