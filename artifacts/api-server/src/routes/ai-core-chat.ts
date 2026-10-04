@@ -1145,6 +1145,31 @@ async function answerAskMode(
   const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) return deterministic;
 
+  // Connection/health probes must stay deterministic. They are operational
+  // checks, not business-data lookups, and must never fall through to the
+  // Admin DB natural-language planner (which can invoke a model and timeout).
+  const normalizedRoutingMessage = routingMessage
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?…]+$/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (/^(?:cek|check|periksa|test|uji|verify|verifikasi)\s+(?:koneksi|connection)(?:\s+(?:mcp|ai core|aicore|mcp ai core|ai core mcp))?$/.test(normalizedRoutingMessage)) {
+    const runtime = getAutonomousRuntimeStatus();
+    return {
+      kind: "answer",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DETERMINISTIC",
+      costClass: "ZERO",
+      reply: `Koneksi AI Core sehat; MCP aktif dan runtime autonomous ${runtime.running ? "RUNNING" : "STOPPED"}. Pemeriksaan ini memakai 0 token LLM.`,
+      status: { mcp: "READY", autonomous: runtime },
+    };
+  }
+
   // Read-only data tools run before any LLM. They never accept mutation verbs and
   // only execute parameterized SELECT queries against known business tables.
   const dataTool = await tryRunAiCoreDataTool(routingMessage);
