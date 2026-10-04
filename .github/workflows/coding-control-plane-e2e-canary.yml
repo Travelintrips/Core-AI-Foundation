@@ -11,13 +11,9 @@ on:
         description: "40-character production repository base SHA used for bounded dispatch"
         required: true
         type: string
-  workflow_run:
-    workflows:
-      - Hostinger Production Verify
-    types:
-      - completed
-    branches:
-      - main
+  schedule:
+    # 23:00 WIB (UTC+7) = 16:00 UTC
+    - cron: "0 16 * * *"
 
 permissions:
   contents: read
@@ -39,55 +35,31 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.base_sha }}
+          BASE_SHA: ${{ github.event_name == 'schedule' && github.sha || inputs.base_sha }}
         run: |
           set -euo pipefail
-
-          if [ "${{ github.event_name }}" != "workflow_run" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Manual E2E run requested; bypassing automatic deploy de-duplication."
-            exit 0
-          fi
-
           [[ "$BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
-
-          curl -fsS --retry 3 --retry-delay 2 \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/coding-control-plane-e2e-canary.yml/runs?event=workflow_run&status=success&per_page=100" \
-            > /tmp/e2e-runs.json
-
-          prior_success=$(jq -r --arg sha "$BASE_SHA" --argjson current "$GITHUB_RUN_ID" '
-            [.workflow_runs[]? | select(.head_sha == $sha and .id != $current)] | length
-          ' /tmp/e2e-runs.json)
-
-          if [ "$prior_success" -gt 0 ]; then
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Control Plane E2E: production SHA $BASE_SHA already has a successful E2E canary."
-            exit 0
-          fi
-
           echo "should_run=true" >> "$GITHUB_OUTPUT"
-          echo "New production SHA $BASE_SHA has no successful E2E canary yet; running controlled E2E."
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "Scheduled daily Control Plane E2E run at 23:00 WIB."
+          else
+            echo "Manual Control Plane E2E run requested."
+          fi
 
   controlled-e2e:
     name: Controlled production E2E canary
     needs: deploy-gate
     if: >-
       needs.deploy-gate.outputs.should_run == 'true' &&
-      (
-        github.event_name == 'workflow_dispatch' ||
-        (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
-      )
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 35
     env:
       API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
       ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-      CONFIRMATION: ${{ github.event_name == 'workflow_run' && 'RUN_CONTROL_PLANE_E2E' || inputs.confirmation }}
-      BASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.base_sha }}
+      CONFIRMATION: ${{ github.event_name == 'schedule' && 'RUN_CONTROL_PLANE_E2E' || inputs.confirmation }}
+      BASE_SHA: ${{ github.event_name == 'schedule' && github.sha || inputs.base_sha }}
     steps:
       - name: Guard explicit execution
         shell: bash
