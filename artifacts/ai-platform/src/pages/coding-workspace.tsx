@@ -3691,6 +3691,7 @@ export default function CodingWorkspace() {
   const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [taskFilter, setTaskFilter] = useState<"all" | "active" | "ready" | "completed">("all");
   const [deletingTaskIds, setDeletingTaskIds] = useState<Set<string>>(new Set());
   const [bulkDeletePending, setBulkDeletePending] = useState(false);
   const [queuedAiBaselineRunCount, setQueuedAiBaselineRunCount] = useState<number | null>(null);
@@ -3698,9 +3699,23 @@ export default function CodingWorkspace() {
   const activeFromRoute = params.id;
   const visibleTasks = useMemo(() => {
     const source = tasks ?? [];
+    const filteredByStat = source.filter((task) => {
+      if (taskFilter === "active") return ACTIVE_STATUSES.has(task.status);
+      if (taskFilter === "ready") {
+        return task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED;
+      }
+      if (taskFilter === "completed") return task.status === CodingTaskStatus.COMPLETED;
+      return true;
+    });
     const query = search.trim().toLowerCase();
-    return query ? source.filter((task) => [task.taskNumber, task.projectName, task.repository, task.branch, task.status].some((value) => value.toLowerCase().includes(query))) : source;
-  }, [tasks, search]);
+    return query
+      ? filteredByStat.filter((task) =>
+          [task.taskNumber, task.projectName, task.repository, task.branch, task.status].some((value) =>
+            value.toLowerCase().includes(query),
+          ),
+        )
+      : filteredByStat;
+  }, [tasks, search, taskFilter]);
   const selectedId = activeFromRoute ?? visibleTasks[0]?.id;
   const selectedPresentationStatus =
     (tasks ?? []).find((task) => task.id === selectedId)?.status;
@@ -3742,6 +3757,10 @@ export default function CodingWorkspace() {
   );
 
   const selectTask = (task: CodingTask) => setLocation(`/coding-workspace/${task.id}`);
+  const selectStatFilter = (filter: "all" | "active" | "ready" | "completed") => {
+    setTaskFilter(filter);
+    if (activeFromRoute) setLocation("/coding-workspace");
+  };
   const openFreshTask = (task: CodingTask) => setLocation(`/coding-workspace/${task.id}`);
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
@@ -3841,11 +3860,43 @@ export default function CodingWorkspace() {
           <div className="flex items-center gap-2"><Button variant="ghost" onClick={refresh} className="text-slate-400 hover:bg-white/5 hover:text-slate-200" data-testid="button-refresh-coding-tasks"><RefreshCw className={cn("size-4", isLoading && "animate-spin")} />{t("pages.codingWorkspace.refresh")}</Button><Button onClick={() => setCreateOpen(true)} className="bg-cyan-300 text-[#062028] shadow-lg shadow-cyan-950/30 hover:bg-cyan-200" data-testid="button-open-create-coding-task"><Plus />{t("pages.codingWorkspace.newTask")}</Button></div>
         </header>
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[{ label: t("pages.codingWorkspace.total"), value: tasks?.length ?? 0, icon: Code2, tone: "text-cyan-300" }, { label: t("pages.codingWorkspace.active"), value: activeCount, icon: CircleDot, tone: "text-amber-300" }, { label: t("pages.codingWorkspace.ready"), value: readyCount, icon: ArrowUpRight, tone: "text-emerald-300" }, { label: t("pages.codingWorkspace.completed"), value: completedCount, icon: CheckCircle2, tone: "text-slate-300" }].map((stat) => <Card key={stat.label} className="border-white/[0.07] bg-[#0b1425]/80"><CardContent className="flex items-center gap-3 p-4"><stat.icon className={cn("size-4", stat.tone)} /><div><div className="font-mono text-xl font-semibold text-slate-100">{stat.value}</div><div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600">{stat.label}</div></div></CardContent></Card>)}
+          {[
+            { filter: "all" as const, label: t("pages.codingWorkspace.total"), value: tasks?.length ?? 0, icon: Code2, tone: "text-cyan-300" },
+            { filter: "active" as const, label: t("pages.codingWorkspace.active"), value: activeCount, icon: CircleDot, tone: "text-amber-300" },
+            { filter: "ready" as const, label: t("pages.codingWorkspace.ready"), value: readyCount, icon: ArrowUpRight, tone: "text-emerald-300" },
+            { filter: "completed" as const, label: t("pages.codingWorkspace.completed"), value: completedCount, icon: CheckCircle2, tone: "text-slate-300" },
+          ].map((stat) => (
+            <Card
+              key={stat.filter}
+              role="button"
+              tabIndex={0}
+              aria-pressed={taskFilter === stat.filter}
+              onClick={() => selectStatFilter(stat.filter)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  selectStatFilter(stat.filter);
+                }
+              }}
+              className={cn(
+                "cursor-pointer border-white/[0.07] bg-[#0b1425]/80 transition-all hover:-translate-y-0.5 hover:border-cyan-300/25 hover:bg-[#0e1a2e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50",
+                taskFilter === stat.filter && "border-cyan-300/35 bg-cyan-300/[0.07] shadow-[0_0_0_1px_rgba(103,232,249,0.08)]",
+              )}
+              data-testid={`stat-filter-${stat.filter}`}
+            >
+              <CardContent className="flex items-center gap-3 p-4">
+                <stat.icon className={cn("size-4", stat.tone)} />
+                <div>
+                  <div className="font-mono text-xl font-semibold text-slate-100">{stat.value}</div>
+                  <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600">{stat.label}</div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
           <Card className="min-w-0 overflow-hidden border-white/[0.08] bg-[#0b1425]/85">
-            <CardHeader className="border-b border-white/[0.07] p-4 sm:p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><h2 className="font-display text-base text-slate-100">{t("pages.codingWorkspace.taskQueue")}</h2><span className="rounded-full bg-cyan-300/10 px-2 py-0.5 font-mono text-[10px] text-cyan-300">{tasks?.length ?? 0}</span></div><p className="mt-1 text-xs text-slate-600">{t("pages.codingWorkspace.taskQueueHint")}</p></div><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><Button type="button" variant="outline" size="sm" onClick={() => void deleteFailedTasks()} disabled={failedTasks.length === 0 || bulkDeletePending} className="border-rose-400/20 bg-rose-400/[0.04] text-rose-300 hover:bg-rose-400/10 hover:text-rose-200" data-testid="button-delete-failed-coding-tasks">{bulkDeletePending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}Hapus gagal{failedTasks.length > 0 ? ` (${failedTasks.length})` : ""}</Button><div className="relative w-full sm:w-56"><Search className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("common.actions.search")} className="h-9 border-white/10 bg-[#091222] pl-9 text-xs text-slate-200 placeholder:text-slate-600" aria-label={t("common.actions.search")} data-testid="input-search-coding-tasks" /></div></div></div></CardHeader>
+            <CardHeader className="border-b border-white/[0.07] p-4 sm:p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><h2 className="font-display text-base text-slate-100">{t("pages.codingWorkspace.taskQueue")}</h2><span className="rounded-full bg-cyan-300/10 px-2 py-0.5 font-mono text-[10px] text-cyan-300">{visibleTasks.length}</span></div><p className="mt-1 text-xs text-slate-600">{t("pages.codingWorkspace.taskQueueHint")}</p></div><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><Button type="button" variant="outline" size="sm" onClick={() => void deleteFailedTasks()} disabled={failedTasks.length === 0 || bulkDeletePending} className="border-rose-400/20 bg-rose-400/[0.04] text-rose-300 hover:bg-rose-400/10 hover:text-rose-200" data-testid="button-delete-failed-coding-tasks">{bulkDeletePending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}Hapus gagal{failedTasks.length > 0 ? ` (${failedTasks.length})` : ""}</Button><div className="relative w-full sm:w-56"><Search className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-600" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("common.actions.search")} className="h-9 border-white/10 bg-[#091222] pl-9 text-xs text-slate-200 placeholder:text-slate-600" aria-label={t("common.actions.search")} data-testid="input-search-coding-tasks" /></div></div></div></CardHeader>
             <CardContent className="p-0">
               {isLoading ? <TaskSkeleton /> : isError ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><XCircle className="mb-4 size-8 text-rose-300" /><p className="font-display text-lg text-slate-100">{t("pages.codingWorkspace.errorTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{t("pages.codingWorkspace.errorHint")}</p><Button variant="outline" onClick={() => refetch()} className="mt-5 border-white/10 text-slate-300 hover:bg-white/5" data-testid="button-retry-coding-tasks"><RotateCcw />{t("pages.codingWorkspace.retry")}</Button></div> : visibleTasks.length === 0 ? <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyTitle")}</p><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{tasks?.length ? t("common.noResults") : t("pages.codingWorkspace.emptyHint")}</p>{!tasks?.length && <Button onClick={() => setCreateOpen(true)} className="mt-5 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-empty-create-coding-task"><Plus />{t("pages.codingWorkspace.newTask")}</Button>}</div> : <div className="divide-y divide-white/[0.05]">{visibleTasks.map((task) => <div key={task.id} role="button" tabIndex={0} onClick={() => selectTask(task)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectTask(task); } }} className={cn("group grid w-full cursor-pointer grid-cols-1 gap-3 px-4 py-4 text-left transition-colors hover:bg-cyan-300/[0.04] sm:grid-cols-[1.05fr_1.5fr_1fr_1fr] sm:items-center sm:gap-4 sm:px-5", selectedId === task.id && "bg-cyan-300/[0.06]")} data-testid={`row-coding-task-${task.id}`}><div className="flex items-center justify-between sm:block"><div className="font-mono text-xs font-semibold text-cyan-300">{task.taskNumber}</div><div className="mt-1 hidden items-center gap-1.5 text-[10px] text-slate-600 sm:flex"><Clock3 className="size-3" />{formatDate(task.createdAt, lang)}</div><ChevronRight className="size-4 text-slate-700 transition-transform group-hover:translate-x-0.5 sm:hidden" /></div><div className="min-w-0"><div className="truncate text-sm font-medium text-slate-200">{task.projectName}</div><div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-600"><span className="truncate">{task.repository}</span><span className="text-slate-700">·</span><span className="truncate text-slate-500">{task.branch}</span></div></div><div><StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} /></div><div className="flex items-center justify-between gap-2 text-xs text-slate-600 sm:justify-end"><span className="sm:hidden">{formatDate(task.createdAt, lang)}</span><span className="font-mono text-[10px] text-slate-500">P{task.priority}</span>{canDeleteTask(task) && <Button type="button" variant="ghost" size="icon" disabled={deletingTaskIds.has(task.id)} onClick={(event) => { event.stopPropagation(); void deleteTask(task); }} className="size-8 text-slate-600 hover:bg-rose-400/10 hover:text-rose-300" aria-label={`Hapus ${task.taskNumber}`} title="Hapus tugas" data-testid={`button-delete-coding-task-${task.id}`}>{deletingTaskIds.has(task.id) ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}</Button>}</div></div>)}</div>}
             </CardContent>
