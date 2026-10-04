@@ -20,9 +20,9 @@ on:
         description: Existing AI Core task UUID (required for status or stop)
         type: string
       max_cycles:
-        description: Autonomous cycle budget, from 5 to 20
+        description: Autonomous cycle budget, from 5 to 100
         type: string
-        default: '5'
+        default: '40'
   issues:
     types: [labeled]
 
