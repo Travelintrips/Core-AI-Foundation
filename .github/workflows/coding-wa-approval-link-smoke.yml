@@ -1,0 +1,37 @@
+name: Coding WA Approval Link Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/coding-wa-approval-link-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  approval-link-smoke:
+    name: Send safe WhatsApp approval-link test
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+    steps:
+      - name: Guard production credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+      - name: Create safe reject-only approval test
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload='{"actionType":"SECURITY_CHANGE","summary":"TEST ONLY — verifikasi tampilan short-link WhatsApp. Jangan APPROVE; pilih REJECT setelah halaman approval terbuka.","metadata":{"testOnly":true,"source":"github-actions","workflow":"Coding WA Approval Link Smoke"},"ttlMinutes":10}'
+          code=$(curl --http1.1 -sS -L             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 15 --max-time 60             -o /tmp/approval.json -w "%{http_code}"             -X POST             -H "Accept: application/json"             -H "User-Agent: CST-AI-Core-Health-Probe/1.0"             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             -d "$payload"             "$API_BASE_URL/ai/coding/bridge/critical-approvals")
+          echo "approval_create_http=$code"
+          test "$code" = "201" -o "$code" = "200"
+          node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/approval.json","utf8"));if(!v.approval?.id)throw new Error("approval id missing");console.log("approval_link_smoke=QUEUED approval_id="+v.approval.id+" reused="+String(v.reused));'
