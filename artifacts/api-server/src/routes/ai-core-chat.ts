@@ -2252,6 +2252,7 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       cloneProvider: "elevenlabs",
       cloneProviderConfigured: Boolean(getProviderApiKey("elevenlabs")),
       libraryProvider: "elevenlabs",
+      libraryProviderConfigured: Boolean(getProviderApiKey("elevenlabs")),
       libraryEndpoint: "/api/ai/core-chat/voices",
       transcriptEndpoint: "/api/ai/core-chat/messages",
       whatsappVoiceSourceReserved: true,
