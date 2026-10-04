@@ -30,10 +30,12 @@ function normalizedMessage(message: string): string {
 }
 
 function actionOf(text: string): "status" | "start" | "stop" | "restart" | null {
+  // Explicit read-only/status intent must win over incidental action words in
+  // descriptive text (for example: "cek status ... jangan start").
+  if (/\b(read[ -]?only|hanya baca|cek|check|status|health|inspect|periksa|lihat)\b/i.test(text)) return "status";
   if (/\b(restart|reboot|mulai ulang)\b/i.test(text)) return "restart";
   if (/\b(stop|matikan|shutdown|hentikan)\b/i.test(text)) return "stop";
   if (/\b(start|nyalakan|hidupkan|jalankan)\b/i.test(text)) return "start";
-  if (/\b(cek|check|status|health|inspect|periksa|lihat)\b/i.test(text)) return "status";
   return null;
 }
 
