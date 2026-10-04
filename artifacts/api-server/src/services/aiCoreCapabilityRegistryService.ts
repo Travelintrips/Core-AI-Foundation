@@ -53,6 +53,8 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
     (env["GCP_OLLAMA_VM_ZONE"] ?? "").trim() &&
     (env["GCP_OLLAMA_VM_INSTANCE"] ?? "").trim() &&
     (
+      (env["GCP_AI_CORE_COMPUTE_SA_JSON"] ?? "").trim() ||
+      (env["GCP_CODING_WORKER_COMPUTE_SA_JSON"] ?? "").trim() ||
       (env["GCP_OLLAMA_COMPUTE_SA_JSON"] ?? "").trim() ||
       (env["GCP_SECRET_MANAGER_BOOTSTRAP_JSON"] ?? "").trim()
     ),
@@ -123,13 +125,17 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
       provider: "gcp",
       label: "Google Cloud Compute",
       state: configuredState(gcpConfigured),
-      actions: ["status", "start", "stop", "restart"],
-      mutatingActions: ["start", "stop", "restart"],
+      actions: ["status", "start", "stop", "restart", "exec", "file-read", "file-write"],
+      mutatingActions: ["start", "stop", "restart", "exec", "file-write"],
       approvalRequiredActions: [],
       details: {
         projectConfigured: Boolean((env["GCP_OLLAMA_VM_PROJECT"] ?? "").trim()),
         instanceConfigured: Boolean((env["GCP_OLLAMA_VM_INSTANCE"] ?? "").trim()),
         credentialsExposed: false,
+        vmExecConfigured: Boolean(
+          (env["GCP_VM_EXEC_ENDPOINT"] ?? "").trim() &&
+          (env["GCP_VM_EXEC_TOKEN"] ?? "").trim()
+        ),
       },
     },
     {
