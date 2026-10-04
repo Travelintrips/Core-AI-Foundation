@@ -508,6 +508,11 @@ export default function AiCoreChat() {
         realtimeAudioRef.current.srcObject = null;
         realtimeAudioRef.current.remove();
       }
+      if (voicePlaybackAudioRef.current) {
+        voicePlaybackAudioRef.current.pause();
+        voicePlaybackAudioRef.current.src = "";
+        voicePlaybackAudioRef.current = null;
+      }
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -615,6 +620,12 @@ export default function AiCoreChat() {
     speechQueueRef.current = [];
     resumeListeningAfterSpeechRef.current = false;
     speechQueueActiveRef.current = false;
+    if (voicePlaybackAudioRef.current) {
+      voicePlaybackAudioRef.current.pause();
+      voicePlaybackAudioRef.current.src = "";
+      voicePlaybackAudioRef.current = null;
+    }
+    setVoicePreviewingId(null);
     window.speechSynthesis?.cancel();
   }
 
@@ -638,7 +649,7 @@ export default function AiCoreChat() {
       speechQueueRef.current.length === 0 ||
       !voiceFeatureEnabled ||
       !voiceReplyEnabled ||
-      voicePreset === "cloned" ||
+      (voicePreset === "cloned" || Boolean(selectedLibraryVoiceId)) ||
       !("speechSynthesis" in window)
     ) {
       maybeResumeHandsFreeListening();
@@ -706,7 +717,7 @@ export default function AiCoreChat() {
     if (
       !delta ||
       !voiceReplyEnabled ||
-      voicePreset === "cloned" ||
+      (voicePreset === "cloned" || Boolean(selectedLibraryVoiceId)) ||
       !handsFreeRef.current
     ) {
       return;
@@ -721,7 +732,7 @@ export default function AiCoreChat() {
   }
 
   function flushStreamSpeech() {
-    if (!voiceReplyEnabled || voicePreset === "cloned") {
+    if (!voiceReplyEnabled || voicePreset === "cloned" || selectedLibraryVoiceId) {
       streamedSpeechBufferRef.current = "";
       return;
     }
@@ -973,6 +984,92 @@ export default function AiCoreChat() {
     setListening(false);
   }
 
+  async function loadVoiceLibrary() {
+    if (!voiceFeatureEnabled || voiceLibraryLoading) return;
+    setVoiceLibraryLoading(true);
+    setVoiceLibraryError("");
+    try {
+      const result = await apiFetch<VoiceLibraryResponse>("/api/ai/core-chat/voices");
+      setVoiceLibrary(result.voices);
+      if (
+        selectedLibraryVoiceId &&
+        !result.voices.some((voice) => voice.voiceId === selectedLibraryVoiceId)
+      ) {
+        setSelectedLibraryVoiceId("");
+      }
+    } catch (error) {
+      setVoiceLibraryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setVoiceLibraryLoading(false);
+    }
+  }
+
+  function openVoiceLibrary() {
+    const next = !voiceLibraryOpen;
+    setVoiceLibraryOpen(next);
+    if (next && voiceLibrary.length === 0) {
+      void loadVoiceLibrary();
+    }
+  }
+
+  function selectLibraryVoice(voice: VoiceLibraryItem) {
+    cancelQueuedVoiceOutput();
+    setSelectedLibraryVoiceId(voice.voiceId);
+    setVoicePreset("auto");
+    if (voiceTransportMode !== "standard") {
+      selectVoiceTransportMode("standard");
+    } else {
+      setVoiceError("");
+    }
+  }
+
+  function clearLibraryVoice() {
+    cancelQueuedVoiceOutput();
+    setSelectedLibraryVoiceId("");
+  }
+
+  async function playLibraryVoice(
+    voiceId: string,
+    text: string,
+    endpoint: "preview" | "speak" = "preview",
+    onFinished?: () => void,
+  ) {
+    const done = () => {
+      setVoicePreviewingId((current) => current === voiceId ? null : current);
+      if (voicePlaybackAudioRef.current) {
+        voicePlaybackAudioRef.current = null;
+      }
+      onFinished?.();
+    };
+    setVoiceError("");
+    setVoicePreviewingId(voiceId);
+    try {
+      if (voicePlaybackAudioRef.current) {
+        voicePlaybackAudioRef.current.pause();
+        voicePlaybackAudioRef.current.src = "";
+        voicePlaybackAudioRef.current = null;
+      }
+      const result = await apiFetch<{ audioBase64: string; mimeType: string }>(
+        `/api/ai/core-chat/voices/${encodeURIComponent(voiceId)}/${endpoint}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ text }),
+        },
+      );
+      const audio = new Audio(`data:${result.mimeType};base64,${result.audioBase64}`);
+      voicePlaybackAudioRef.current = audio;
+      audio.onended = done;
+      audio.onerror = done;
+      await audio.play();
+    } catch (error) {
+      setVoiceError(
+        "Voice library gagal diputar: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
+      done();
+    }
+  }
+
   function selectVoiceTransportMode(nextMode: VoiceTransportMode) {
     if (nextMode === voiceTransportMode) return;
     if (handsFreeRef.current) stopVoiceSession();
@@ -1031,6 +1128,16 @@ export default function AiCoreChat() {
       return;
     }
 
+    if (selectedLibraryVoiceId) {
+      void playLibraryVoice(
+        selectedLibraryVoiceId,
+        text.slice(0, 1_200),
+        "speak",
+        done,
+      );
+      return;
+    }
+
     if (voicePreset === "cloned" && clonedVoiceId) {
       void apiFetch<{ audioBase64: string; mimeType: string }>("/api/ai/core-chat/voice-clone/speak", {
         method: "POST",
@@ -1038,8 +1145,15 @@ export default function AiCoreChat() {
       })
         .then((result) => {
           const audio = new Audio(`data:${result.mimeType};base64,${result.audioBase64}`);
-          audio.onended = done;
-          audio.onerror = done;
+          voicePlaybackAudioRef.current = audio;
+          const finish = () => {
+            if (voicePlaybackAudioRef.current === audio) {
+              voicePlaybackAudioRef.current = null;
+            }
+            done();
+          };
+          audio.onended = finish;
+          audio.onerror = finish;
           return audio.play();
         })
         .catch((error) => {
@@ -1373,7 +1487,7 @@ export default function AiCoreChat() {
 
         if (inputSource === "voice" && handsFreeRef.current && !interrupted) {
           resumeListeningAfterSpeechRef.current = true;
-          if (voicePreset === "cloned" && completeStreamReply.trim()) {
+          if ((voicePreset === "cloned" || selectedLibraryVoiceId) && completeStreamReply.trim()) {
             speakReply(completeStreamReply, () => {
               resumeListeningAfterSpeechRef.current = false;
               if (handsFreeRef.current) window.setTimeout(() => startListening(), 250);
