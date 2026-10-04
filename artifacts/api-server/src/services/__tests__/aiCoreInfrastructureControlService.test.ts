@@ -20,7 +20,9 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger stop docker project=myapp", "HOSTINGER_DOCKER_STOP"],
-    ["Hostinger buat subdomain domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_CREATE"],
+    ["Hostinger buat subdomain domain=example.com subdomain=api target=203.0.113.10", "HOSTINGER_DNS_SUBDOMAIN_CREATE"],
+    ["Hostinger buat hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_CREATE"],
+    ["Hostinger cek dns subdomain domain=example.com", "HOSTINGER_DNS_LIST"],
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
   ])("detects %s", (message, expected) => {
@@ -79,6 +81,37 @@ describe("AI Core Hostinger infrastructure control", () => {
       subdomain: "api",
       is_using_public_directory: true,
     });
+  });
+
+  it("validates then adds a VPS subdomain DNS record without overwriting existing records", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ valid: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DNS_SUBDOMAIN_CREATE",
+      message: "Hostinger buat subdomain domain=example.com subdomain=api target=203.0.113.10 ttl=300",
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(result.mutating).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [validateUrl, validateInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(validateUrl).toBe("https://developers.hostinger.com/api/dns/v1/zones/example.com/validate");
+    expect(validateInit.method).toBe("POST");
+    expect(JSON.parse(String(validateInit.body))).toEqual({
+      overwrite: false,
+      zone: [{
+        name: "api",
+        type: "A",
+        ttl: 300,
+        records: [{ content: "203.0.113.10" }],
+      }],
+    });
+    const [updateUrl, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(updateUrl).toBe("https://developers.hostinger.com/api/dns/v1/zones/example.com");
+    expect(updateInit.method).toBe("PUT");
   });
 
   it("checks domain availability without making a purchase", async () => {
