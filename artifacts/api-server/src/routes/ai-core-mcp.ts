@@ -367,7 +367,7 @@ async function callAiCore(path: string, init: RequestInit, key: string) {
   return payload;
 }
 
-router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
+router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Promise<void> => {
   const body = req.body as {
     jsonrpc?: unknown;
     id?: unknown;
@@ -448,7 +448,7 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
       : params.name === "get_ai_core_task_progress"
         ? "ai_core.progress"
         : ["subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event", "unsubscribe_ai_core_events"].includes(params.name)
-          ? "ai_core.events"
+          ? "ai_core.progress"
           : params.name === "get_profile"
             ? "profile"
             : "";
@@ -566,7 +566,7 @@ router.post("/ai/core-chat/mcp", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/ai/core-chat/mcp", (_req, res): void => {
+router.get(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], (_req, res): void => {
   res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${oauthIssuer()}/.well-known/oauth-protected-resource"`);
   res.status(405).json({
     error: "Use MCP Streamable HTTP POST requests.",
