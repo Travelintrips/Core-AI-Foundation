@@ -19,10 +19,7 @@ import {
   type PullRequestVerificationInput,
   type PullRequestVerificationResult,
 } from "./localCodingGitHubPullRequestService.js";
-import {
-  finalizeCodingCriticalApproval,
-  requestCodingCriticalApproval,
-} from "./codingCriticalApprovalService.js";
+import { finalizeCodingCriticalApproval } from "./codingCriticalApprovalService.js";
 
 export class LocalPullRequestGateError extends Error {
   constructor(
@@ -337,7 +334,7 @@ async function executePullRequestVerification(
           status: "PR_CREATED",
           resultSummary:
             verification.status === "PASSED"
-              ? `Pull request #${verification.pullRequestNumber} passed integrity and CI verification. Ready for explicit merge approval.`
+              ? `Pull request #${verification.pullRequestNumber} passed integrity and CI verification. Eligible for autonomous merge.`
               : `Pull request #${verification.pullRequestNumber} is ${verification.status.toLowerCase()}: ${verification.reason} Merge remains locked.`,
         })
         .where(eq(aiCodingTasksTable.id, context.task.id));
@@ -365,37 +362,6 @@ async function executePullRequestVerification(
       },
     );
 
-    if (verification.status === "PASSED") {
-      await requestCodingCriticalApproval({
-        taskId: context.task.id,
-        actionType: "MERGE_PR",
-        summary:
-          `PR #${verification.pullRequestNumber} sudah PASS integrity + CI. Merge ke ${context.verificationInput.baseBranch} memerlukan persetujuan Anda.`,
-        metadata: {
-          repository: context.task.repository,
-          pullRequestNumber: verification.pullRequestNumber,
-          pullRequestUrl: verification.pullRequestUrl,
-          baseBranch: context.verificationInput.baseBranch,
-          baseSha: verification.baseSha,
-          headSha: verification.headSha,
-        },
-      }).catch(async (approvalError) => {
-        await logAudit(
-          "coding-orchestrator",
-          "critical_approval_notification_failed",
-          context.task.id,
-          "coding_task",
-          "failure",
-          {
-            actionType: "MERGE_PR",
-            error:
-              approvalError instanceof Error
-                ? approvalError.message.slice(0, 700)
-                : String(approvalError).slice(0, 700),
-          },
-        ).catch(() => undefined);
-      });
-    }
   } catch (error) {
     const normalized = error instanceof Error ? error : new Error(String(error));
     await markReviewRunFailed(context, run, normalized);
@@ -493,10 +459,11 @@ export async function startPullRequestVerification(
   return run;
 }
 
-async function executeExplicitMerge(
+async function executeMerge(
   context: PullRequestGateContext,
   run: AiCodingRun,
   client: GitHubApiClient,
+  automatic: boolean,
 ): Promise<void> {
   try {
     const merged = await mergeVerifiedPullRequest(
@@ -516,8 +483,8 @@ async function executeExplicitMerge(
         sourceCommitSha: merged.sourceCommitSha,
         baseHeadSha: merged.baseSha,
         mergeCommitSha: merged.mergeCommitSha,
-        explicitApproval: true,
-        autoMerged: false,
+        explicitApproval: !automatic,
+        autoMerged: automatic,
         mergedAt: completedAt.toISOString(),
       },
       orchestration: {
@@ -539,8 +506,8 @@ async function executeExplicitMerge(
             pullRequestNumber: merged.pullRequestNumber,
             sourceCommitSha: merged.sourceCommitSha,
             mergeCommitSha: merged.mergeCommitSha,
-            explicitApproval: true,
-            autoMerged: false,
+            explicitApproval: !automatic,
+            autoMerged: automatic,
             nextAction: "DONE",
           }, null, 2),
         })
@@ -556,14 +523,16 @@ async function executeExplicitMerge(
         .set({
           status: "COMPLETED",
           resultSummary:
-            `Pull request #${merged.pullRequestNumber} merged after explicit approval. Merge commit ${merged.mergeCommitSha.slice(0, 12)}. No automatic merge was used.`,
+            automatic
+              ? `Pull request #${merged.pullRequestNumber} passed verification and was merged automatically. Merge commit ${merged.mergeCommitSha.slice(0, 12)}.`
+              : `Pull request #${merged.pullRequestNumber} merged after explicit approval. Merge commit ${merged.mergeCommitSha.slice(0, 12)}.`,
         })
         .where(eq(aiCodingTasksTable.id, context.task.id));
     });
 
     await logAudit(
       "coding-orchestrator",
-      "pull_request_explicitly_merged",
+      automatic ? "pull_request_automatically_merged" : "pull_request_explicitly_merged",
       context.task.id,
       "coding_task",
       "success",
@@ -572,8 +541,8 @@ async function executeExplicitMerge(
         pullRequestNumber: merged.pullRequestNumber,
         sourceCommitSha: merged.sourceCommitSha,
         mergeCommitSha: merged.mergeCommitSha,
-        explicitApproval: true,
-        autoMerged: false,
+        explicitApproval: !automatic,
+        autoMerged: automatic,
       },
     );
 
@@ -640,7 +609,7 @@ async function executeExplicitMerge(
         .set({
           status: "PR_CREATED",
           resultSummary:
-            "Explicit merge failed: " +
+            (automatic ? "Automatic merge failed: " : "Explicit merge failed: ") +
             normalized.message.slice(0, 500) +
             " Pull request must be verified again before another merge attempt.",
         })
@@ -669,8 +638,9 @@ async function executeExplicitMerge(
   }
 }
 
-export async function approveAndMergePullRequest(
+async function startVerifiedPullRequestMerge(
   taskId: string,
+  automatic: boolean,
 ): Promise<AiCodingRun> {
   const context = await loadPullRequestContext(taskId, "APPROVE_MERGE");
   const token = process.env["AI_CODING_GITHUB_TOKEN"]?.trim() ?? "";
@@ -714,7 +684,7 @@ export async function approveAndMergePullRequest(
       .insert(aiCodingRunsTable)
       .values({
         taskId,
-        agentName: "Pull Request Merge Gate",
+        agentName: automatic ? "Pull Request Auto Merge" : "Pull Request Merge Gate",
         status: "RUNNING",
         startedAt: new Date(),
       })
@@ -724,7 +694,9 @@ export async function approveAndMergePullRequest(
       .update(aiCodingTasksTable)
       .set({
         resultSummary:
-          "Explicit merge approval accepted. GitHub PR integrity and CI will be re-verified before merge.",
+          automatic
+            ? "Autonomous merge started after PR integrity and CI verification passed."
+            : "Explicit merge approval accepted. GitHub PR integrity and CI will be re-verified before merge.",
       })
       .where(eq(aiCodingTasksTable.id, taskId));
 
@@ -733,7 +705,9 @@ export async function approveAndMergePullRequest(
 
   await logAudit(
     "coding-orchestrator",
-    "pull_request_merge_approval_started",
+    automatic
+      ? "pull_request_auto_merge_started"
+      : "pull_request_merge_approval_started",
     taskId,
     "coding_task",
     "success",
@@ -745,6 +719,18 @@ export async function approveAndMergePullRequest(
     },
   );
 
-  void executeExplicitMerge(context, run, client);
+  void executeMerge(context, run, client, automatic);
   return run;
+}
+
+export async function approveAndMergePullRequest(
+  taskId: string,
+): Promise<AiCodingRun> {
+  return startVerifiedPullRequestMerge(taskId, false);
+}
+
+export async function autoMergeVerifiedPullRequest(
+  taskId: string,
+): Promise<AiCodingRun> {
+  return startVerifiedPullRequestMerge(taskId, true);
 }
