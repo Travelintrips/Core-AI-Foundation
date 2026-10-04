@@ -262,6 +262,14 @@ vi.mock("../../services/localCodingGitHubDiscoveryService.js", () => ({
   listCodingRepositoryBranches: mockListCodingRepositoryBranches,
 }));
 
+vi.mock("../../services/localCodingMultiWorkerRecoveryService.js", () => ({
+  reconcileStaleMultiWorkerRuns: vi.fn(async () => ({
+    inspected: 0,
+    recoveredWorkstreams: 0,
+    recoveredTasks: 0,
+  })),
+}));
+
 vi.mock("../../services/localCodingRunRecoveryService.js", () => ({
   reconcileStaleCodingRuns: vi.fn(async () => ({ inspected: 0, recoveredRuns: 0, recoveredTasks: 0 })),
 }));
