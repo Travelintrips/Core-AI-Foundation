@@ -25,12 +25,18 @@ export function codingTaskPresentationStatus(input: {
     return "COMPLETED";
   }
 
-  if (
-    input.autonomousStatus === "FAILED" ||
-    input.autonomousStatus === "BLOCKED"
-  ) {
+  if (input.autonomousStatus === "FAILED") {
     if (input.taskStatus === "READY_REVIEW" || input.taskStatus === "FAILED") {
       return "FAILED";
+    }
+  }
+
+  // BLOCKED means the autonomous runtime needs intervention, not that the
+  // underlying coding task necessarily failed. Present it as review-required
+  // so Workspace does not label recoverable/max-cycle blockers as "GAGAL".
+  if (input.autonomousStatus === "BLOCKED") {
+    if (input.taskStatus === "READY_REVIEW" || input.taskStatus === "FAILED") {
+      return "READY_REVIEW";
     }
   }
 
