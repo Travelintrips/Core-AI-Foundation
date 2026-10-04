@@ -241,7 +241,7 @@ async function validatedCallbackTarget(rawUrl: string): Promise<{
     url.hostname.startsWith("[") && url.hostname.endsWith("]")
       ? url.hostname.slice(1, -1)
       : url.hostname;
-  let addresses: Awaited<ReturnType<typeof lookup>>;
+  let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await lookup(hostname, { all: true, verbatim: true });
   } catch {
