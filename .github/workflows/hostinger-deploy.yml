@@ -340,23 +340,23 @@ jobs:
           if (!Array.isArray(workers)) throw new Error("Expected worker capacity array");
           const worker = workers.find((w) => w.workerName === "gcp-ollama-01");
           if (!worker) throw new Error("gcp-ollama-01 is not registered");
-          if (!["online", "idle", "busy"].includes(String(worker.status).toLowerCase())) {
-            throw new Error("gcp-ollama-01 is not online: " + String(worker.status));
-          }
-          if (worker.leaseValid !== true) throw new Error("gcp-ollama-01 lease is not valid");
           if (worker.providerSlug !== "ollama") throw new Error("Unexpected provider: " + String(worker.providerSlug));
           if (worker.modelId !== "qwen2.5-coder:7b") throw new Error("Unexpected model: " + String(worker.modelId));
-          // gcp-ollama-01 is a durable outbound pull worker. AI Core queues
-          // work for it and the worker invokes its loopback Ollama runtime;
-          // a public Ollama endpoint is intentionally not required.
           if (worker.runtimeKind !== "ollama_remote_pull") {
             throw new Error("Unexpected Ollama runtime: " + String(worker.runtimeKind));
           }
           if (worker.endpointUrl != null && worker.endpointUrl !== "") {
             throw new Error("Remote pull Ollama worker must not expose an endpoint");
           }
+          const status = String(worker.status).toLowerCase();
+          const awake = ["online", "idle", "busy"].includes(status) && worker.leaseValid === true;
+          const sleeping = status === "offline" && worker.leaseValid !== true;
+          if (!awake && !sleeping) {
+            throw new Error("gcp-ollama-01 is in an unexpected lifecycle state: " + status);
+          }
           console.log(
             "gcp_ollama_worker=PASS status="+worker.status+
+            " lifecycle="+(awake ? "awake" : "idle_shutdown")+
             " runningJobs="+String(worker.runningJobs)+
             " availableSlots="+String(worker.availableSlots)+
             " leaseValid="+String(worker.leaseValid)
