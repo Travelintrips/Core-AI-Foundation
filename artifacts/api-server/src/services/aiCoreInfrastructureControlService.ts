@@ -224,7 +224,9 @@ async function callHostinger(
       `(?:^|\\s)${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s,;]+))`,
       "i",
     ));
-    return (match?.[1] ?? match?.[2] ?? match?.[3] ?? "").trim();
+    const quoted = match?.[1] ?? match?.[2];
+    if (quoted !== undefined) return quoted.trim();
+    return (match?.[3] ?? "").trim().replace(/[.?!:]+$/, "");
   };
   const boolOf = (key: string): boolean | undefined => {
     const value = valueOf(key).toLowerCase();
@@ -273,7 +275,13 @@ async function callHostinger(
       lastData = result.data;
       if (result.response.ok) return { status: result.response.status, data: result.data };
       if (result.response.status !== 404) {
-        throw new Error(`Hostinger operation failed with HTTP ${result.response.status}.`);
+        const detail =
+          typeof result.data === "string"
+            ? result.data.slice(0, 500)
+            : JSON.stringify(result.data ?? {}).slice(0, 500);
+        throw new Error(
+          `Hostinger operation failed with HTTP ${result.response.status}${detail ? `: ${detail}` : "."}`,
+        );
       }
     }
     return { status: lastStatus, data: lastData };
