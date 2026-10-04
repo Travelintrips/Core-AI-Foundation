@@ -11,14 +11,18 @@ describe("coding task presentation status", () => {
         hasActiveRun: false,
       }),
     ).toBe("FAILED");
+  });
 
-    expect(
-      codingTaskPresentationStatus({
-        taskStatus: "READY_REVIEW",
-        autonomousStatus: "BLOCKED",
-        hasActiveRun: false,
-      }),
-    ).toBe("FAILED");
+  it("shows autonomous blockers as review-required instead of false failure", () => {
+    for (const taskStatus of ["READY_REVIEW", "FAILED"]) {
+      expect(
+        codingTaskPresentationStatus({
+          taskStatus,
+          autonomousStatus: "BLOCKED",
+          hasActiveRun: false,
+        }),
+      ).toBe("READY_REVIEW");
+    }
   });
 
   it("shows active autonomous work as ANALYZING instead of READY_REVIEW", () => {
@@ -96,7 +100,10 @@ describe("coding task presentation status", () => {
     expect(source).toContain(
       "a.status IN ('ACTIVE', 'WAITING', 'COMPLETED', 'FAILED', 'BLOCKED')",
     );
-    expect(source).toContain("WHERE a.enabled = TRUE");
+    expect(source).toContain("LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a");
+    expect(source).toContain("AND a.enabled = TRUE");
+    expect(source).toContain("FROM ai_platform.ai_coding_runs AS r");
   });
 
 });
+
