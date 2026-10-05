@@ -1,6 +1,8 @@
 name: Coding COMPLETED WhatsApp E2E
 
 on:
+  push:
+    branches: ["test/completed-wa-live-canary"]
   workflow_dispatch:
   workflow_run:
     workflows: ["Hostinger Production Verify"]
