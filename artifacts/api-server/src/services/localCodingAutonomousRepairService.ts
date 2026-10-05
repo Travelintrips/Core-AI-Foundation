@@ -1553,6 +1553,18 @@ export function readyReviewAutonomousRecoveryDecision(input: {
     };
   }
 
+  // Older rows can be BLOCKED without a persisted blocker reason. Preserve the
+  // pre-existing recovery behavior only for this reasonless legacy state and
+  // only while bounded action budget remains. Explicit policy/manual blockers
+  // were fenced above and are never reopened automatically.
+  if (!lastAction && !lastError && cycleCount < maxCycles) {
+    return {
+      reactivate: true,
+      extendBudget: false,
+      reason: "LEGACY_REASONLESS_BLOCKED",
+    };
+  }
+
   // Legacy tasks often spent their original 40-cycle budget on polling/races
   // before those accounting bugs were fixed. Give those tasks one bounded
   // second budget, but never extend beyond 80 cycles automatically.
