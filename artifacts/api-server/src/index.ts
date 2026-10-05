@@ -62,6 +62,8 @@ const { reconcileStaleMultiWorkerRuns } =
   await import("./services/localCodingMultiWorkerRecoveryService.js");
 const { ensureCodingControlBridgeTables } =
   await import("./services/codingControlBridgeSchemaService.js");
+const { ensureAiCoreChatInboxTable } =
+  await import("./services/aiCoreChatInboxService.js");
 const mcpEvents =
   await import("./services/aiCoreMcpEventWebhookService.js");
 const { ensureAgentServiceTokenBootstrap } =
@@ -135,6 +137,7 @@ async function initializeRuntimeServices(): Promise<void> {
   await runStartupStep("[observability] Table init", () => ensureObservabilityTables());
   await runStartupStep("[submit-idempotency] Table init", () => ensureSubmitIdempotencyTable());
   await runStartupStep("[coding-bridge] Table init", () => ensureCodingControlBridgeTables());
+  await runStartupStep("[ai-core-chat-inbox] Table init", () => ensureAiCoreChatInboxTable());
   await runStartupStep("[mcp-events] Table init", () => mcpEvents.ensureAiCoreMcpEventTables());
   await runStartupStep("[agent-runtime] Scoped token bootstrap", () => ensureAgentServiceTokenBootstrap());
   await runStartupStep("[material-library] Table/seed init", async () => {
