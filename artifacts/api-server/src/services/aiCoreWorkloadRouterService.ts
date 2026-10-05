@@ -102,7 +102,13 @@ function normalize(input: string): string {
 }
 
 const CRITICAL_ACTION =
-  /\b(deploy(?:ment)?\b.{0,80}\b(?:production|prod)\b|(?:production|prod)\b.{0,40}\bdeploy(?:ment)?\b|merge\b.{0,40}\b(?:pr|pull\s*request)\b|migrasi\b.{0,40}\b(?:database|db)\b|database\s+migration|drop\s+(?:table|database)|truncate\s+(?:table|database)|hapus\s+(?:table|database)|delete\s+(?:table|database)|restart\b.{0,40}\b(?:production|prod)\b|security\s+change|ubah\s+security|rotate\s+(?:secret|key|token))\b/i;
+  /\b(deploy(?:ment)?\b.{0,80}\b(?:production|prod)\b|(?:production|prod)\b.{0,40}\bdeploy(?:ment)?\b|migrasi\b.{0,40}\b(?:database|db)\b|database\s+migration|drop\s+(?:table|database)|truncate\s+(?:table|database)|hapus\s+(?:table|database)|delete\s+(?:table|database)|restart\b.{0,40}\b(?:production|prod)\b|security\s+change|ubah\s+security|rotate\s+(?:secret|key|token)|(?:ubah|edit|hapus|delete|rotate|grant|revoke)\b.{0,40}\b(?:iam|permission|role|secret|credential|billing))\b/i;
+
+const VERIFIED_DELIVERY_WORKFLOW =
+  /\b(?:merge\b.{0,40}\b(?:pr|pull\s*request)|(?:pr|pull\s*request)\b.{0,40}\bmerge|deploy\b.{0,40}\b(?:staging|stage)|(?:staging|stage)\b.{0,40}\bdeploy|commit|push)\b/i;
+
+const AUTONOMOUS_COMPLETION_POLICY =
+  /\b(?:kalau|jika|apabila|when|after|setelah)\b.{0,80}\b(?:selesai|sukses|success|verified|terverifikasi)|\b(?:tanpa|tidak perlu|no)\b.{0,40}\b(?:human|manual)\b.{0,30}\b(?:review|approval|persetujuan)|\b(?:auto|otomatis|automatically)\b.{0,40}\b(?:merge|deploy|commit|push|lanjut|continue)\b/i;
 
 const CODING_ACTION =
   /\b(perbaiki|fix|implement(?:asikan)?|buat(?:kan)?\s+(?:kode|fitur|endpoint|api|service|komponen|component|test|unit\s+test)|tambah(?:kan)?\s+(?:kode|fitur|endpoint|api|service|komponen|component|test|unit\s+test)|refactor|ubah\s+(?:kode|source|file)|edit\s+(?:kode|source|file)|patch|commit|push)\b/i;
@@ -155,7 +161,20 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
     return route("DETERMINISTIC");
   }
 
+  // A verified software-delivery workflow is coding orchestration, not itself a
+  // critical production mutation. The autonomous controller still enforces CI,
+  // verification and its own high-risk gates. Explicit production deploys and
+  // destructive/security operations remain CRITICAL_ACTION above.
+  if (
+    AUTONOMOUS_COMPLETION_POLICY.test(actionableText) &&
+    VERIFIED_DELIVERY_WORKFLOW.test(actionableText) &&
+    !CRITICAL_ACTION.test(actionableText)
+  ) {
+    return route("CODING");
+  }
+
   if (CRITICAL_ACTION.test(actionableText)) return route("CRITICAL_ACTION");
+  if (VERIFIED_DELIVERY_WORKFLOW.test(actionableText)) return route("CODING");
   if (CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText)) return route("CODING");
   if (REASONING.test(text)) return route("REASONING");
   if (REVIEW.test(text) && REVIEW_CONTEXT.test(text)) return route("REVIEW");
