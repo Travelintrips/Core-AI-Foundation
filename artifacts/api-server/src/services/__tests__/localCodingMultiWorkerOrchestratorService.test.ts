@@ -24,6 +24,7 @@ vi.mock("@workspace/db", () => {
     status: "ws.status",
     leaseToken: "ws.leaseToken",
     leaseExpiresAt: "ws.leaseExpiresAt",
+    claimedAt: "ws.claimedAt",
   };
   const dependencyTable = {
     graphId: "dep.graphId",
@@ -203,6 +204,25 @@ describe("multi-worker coding claim runtime", () => {
         (item) => item.workstreamKey,
       ),
     ).toEqual(["WS-002", "WS-004"]);
+  });
+
+  it("reclaims a hung workstream after the hard claim lifetime even when heartbeat keeps the lease fresh", () => {
+    const now = new Date("2026-09-24T12:30:00.000Z");
+    const hung = ws({
+      id: "hung",
+      workstreamKey: "WS-HUNG",
+      status: "RUNNING",
+      priority: 95,
+      leaseToken: "live-but-stale-claim",
+      leaseExpiresAt: new Date("2026-09-24T12:35:00.000Z"),
+      claimedAt: new Date("2026-09-24T12:00:00.000Z"),
+    });
+
+    expect(
+      selectClaimableCodingWorkstreams([hung], [], now).map(
+        (item) => item.workstreamKey,
+      ),
+    ).toEqual(["WS-HUNG"]);
   });
 
   it("does not reclaim malformed claimed state without a lease token", () => {
