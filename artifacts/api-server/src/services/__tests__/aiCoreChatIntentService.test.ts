@@ -178,6 +178,17 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.workload.workload).toBe("CODING");
   });
 
+  it.each([
+    "buat kalau sudah selesai tidak perlu lagi review manual dari human, lakukan tindakan selanjutnya: merge PR, deploy ke staging, commit langsung ke repository",
+    "setelah selesai merge PR, deploy ke staging, commit langsung ke repository",
+  ])("does not stop verified autonomous delivery policy at the generic critical approval gate: %s", (message) => {
+    const decision = classifyAiCoreChatDispatch(message);
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.workload.workload).toBe("CODING");
+    expect(decision.workload.requiresApproval).toBe(false);
+    expect(decision.reason).not.toContain("explicit approval gate");
+  });
+
   it("routes critical actions to the control plane while preserving approval", () => {
     const decision = classifyAiCoreChatDispatch(
       "Deploy perubahan ini ke production.",
