@@ -14,7 +14,7 @@ vi.mock("@workspace/db", () => ({
   aiCodingTasksTable: { table: "tasks" },
   aiJobsTable: { table: "jobs" },
 }));
-vi.mock("../aiAuditService.js", () => ({ logAudit: vi.fn() }));
+vi.mock("../aiAuditService.js", () => ({ logAudit: vi.fn(async () => undefined) }));
 vi.mock("../localCodingControlBridgeService.js", () => ({ appendCodingBridgeResponse: vi.fn() }));
 vi.mock("../localCodingTaskGraphService.js", () => ({ approveCodingTaskGraph: vi.fn(), getLatestCodingTaskGraph: vi.fn() }));
 vi.mock("../localCodingMultiWorkerExecutionService.js", () => ({
