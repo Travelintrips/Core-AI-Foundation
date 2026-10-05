@@ -67,3 +67,37 @@ describe("dispatcher rolling-deploy lease fencing", () => {
     expect(source).toContain("await ensureWorkers().catch");
   });
 });
+
+
+describe("dispatcher coding load balancing", () => {
+  it("registers two dispatcher-owned coding workers and keeps remote Ollama separate", () => {
+    const dispatcherSource = readFileSync(
+      new URL("../jobDispatcherService.ts", import.meta.url),
+      "utf8",
+    );
+    const remoteOllamaSource = readFileSync(
+      new URL("../remoteOllamaWorkerService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(dispatcherSource).toContain('suffix:            "4"');
+    expect(dispatcherSource).toContain('suffix:            "6"');
+    expect(
+      dispatcherSource.match(/workerType:\s+"coding_worker"/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
+    expect(dispatcherSource).toContain("round-robin plan");
+    expect(dispatcherSource).toContain(
+      "_settings.maxConcurrentJobs - currentRunning",
+    );
+
+    expect(remoteOllamaSource).toContain(
+      'export const REMOTE_OLLAMA_RUNTIME_KIND = "ollama_remote_pull"',
+    );
+    expect(remoteOllamaSource).toContain(
+      "claimRemoteOllamaInvocation",
+    );
+    expect(remoteOllamaSource).not.toContain(
+      "claimJob(workerId)",
+    );
+  });
+});
