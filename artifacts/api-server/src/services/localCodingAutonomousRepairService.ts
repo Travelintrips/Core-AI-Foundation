@@ -218,6 +218,19 @@ async function reserveActionCycle(taskId: string): Promise<void> {
   throw new AutonomousCycleStopped("BLOCKED", "MAX_CYCLES_REACHED");
 }
 
+async function refundReservedActionCycle(taskId: string): Promise<void> {
+  // Benign concurrency races can happen after a mutation slot was reserved but
+  // before this controller actually owns the transition. Put that slot back so
+  // polling/race deferrals cannot exhaust the autonomous repair budget.
+  await db.execute(sql`
+    UPDATE ai_platform.ai_coding_autonomous_tasks
+    SET cycle_count = GREATEST(cycle_count - 1, 0), updated_at = NOW()
+    WHERE task_id = ${taskId}::uuid
+      AND enabled = TRUE
+      AND status IN ('ACTIVE', 'WAITING')
+  `);
+}
+
 async function commandIdForTask(taskId: string): Promise<string | null> {
   const [row] = await db
     .select({ id: aiCodingBridgeCommandsTable.id })
@@ -1116,6 +1129,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         ? `WAIT_ACTIVE_RUN:${stillActive.agentName}`
         : "RETRY_AFTER_ACTIVE_RUN_RACE";
       const status: AutonomousStatus = stillActive ? "WAITING" : "ACTIVE";
+      await refundReservedActionCycle(taskId).catch(() => undefined);
       await setState(taskId, status, action, null);
       await logAudit(
         "coding-autonomous",
@@ -1147,6 +1161,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
           : "CONTINUE_WORKSTREAM_AI_RACE";
         const status: AutonomousStatus = liveClaim ? "WAITING" : "ACTIVE";
 
+        await refundReservedActionCycle(taskId).catch(() => undefined);
         await setState(taskId, status, action, null).catch(() => undefined);
         await logAudit(
           "coding-autonomous",
@@ -1188,6 +1203,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
 
       if (alreadyAdvanced) {
         const action = "CONTINUE_AFTER_AI_PATCH_APPROVAL_RACE";
+        await refundReservedActionCycle(taskId).catch(() => undefined);
         await setState(taskId, "ACTIVE", action, null);
         await logAudit(
           "coding-autonomous",
@@ -1213,6 +1229,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       state.nextAction === "AI_HANDOFF_APPROVED";
 
     if (handoffApprovalAdvanced) {
+      await refundReservedActionCycle(taskId).catch(() => undefined);
       await setState(taskId, "ACTIVE", "CONTINUE_AI_HANDOFF_APPROVED", null);
       await logAudit(
         "coding-autonomous",
@@ -1236,6 +1253,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
 
     if (handoffExecutionGateRegressed) {
       const action = "RECOVER_AI_HANDOFF_GATE_REGRESSION";
+      await refundReservedActionCycle(taskId).catch(() => undefined);
       await setState(taskId, "ACTIVE", action, null);
       await logAudit(
         "coding-autonomous",
