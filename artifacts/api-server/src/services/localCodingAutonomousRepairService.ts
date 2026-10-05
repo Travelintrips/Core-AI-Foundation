@@ -61,6 +61,7 @@ const MIN_INTERVAL_MS = 2_000;
 const MAX_INTERVAL_MS = 60_000;
 const DEFAULT_MAX_CYCLES = 40;
 const MAX_TASKS_PER_TICK = 8;
+const WORKSTREAM_AI_AUTO_ADVANCE_GRACE_MS = 60_000;
 export const TEMPORAL_CODING_ORCHESTRATOR_CLIENT_ID = "gcp-temporal-coding-orchestrator";
 
 type AutonomousStatus =
@@ -367,6 +368,22 @@ async function restartRepositoryAnalysisAfterTransientFailure(
   await startCodingOrchestration({ task, run });
 }
 
+export function shouldDeferWorkstreamAiCandidateAutoAdvance(
+  execution: Record<string, unknown> | null,
+  now = Date.now(),
+): boolean {
+  if (!execution || execution.status !== "CANDIDATE_READY") return false;
+  const createdAt =
+    typeof execution.createdAt === "string"
+      ? Date.parse(execution.createdAt)
+      : Number.NaN;
+  return (
+    Number.isFinite(createdAt) &&
+    now >= createdAt &&
+    now - createdAt < WORKSTREAM_AI_AUTO_ADVANCE_GRACE_MS
+  );
+}
+
 export function hasLiveCodingWorkstreamClaim(
   workstreams: Array<{ status: string; leaseExpiresAt: Date | string | null }>,
   now = new Date(),
@@ -552,6 +569,14 @@ async function processTaskGraph(
           };
         }
 
+        if (shouldDeferWorkstreamAiCandidateAutoAdvance(execution)) {
+          return {
+            handled: true,
+            action: `WAIT_WORKSTREAM_AI_AUTO_ADVANCE:${review.key}`,
+            waiting: true,
+          };
+        }
+
         await reserveCycle();
         await approveWorkstreamAiCandidatePatch(review.id);
         try {
@@ -585,6 +610,14 @@ async function processTaskGraph(
         execution?.status === "CANDIDATE_READY" &&
         execution.reviewStatus === "APPROVED"
       ) {
+        if (shouldDeferWorkstreamAiCandidateAutoAdvance(execution)) {
+          return {
+            handled: true,
+            action: `WAIT_WORKSTREAM_AI_AUTO_ADVANCE:${review.key}`,
+            waiting: true,
+          };
+        }
+
         await reserveCycle();
         try {
           await materializeApprovedWorkstreamAiCandidate(review.id);

@@ -101,6 +101,57 @@ describe("autonomous coding workstream lease handling", () => {
   });
 });
 
+describe("workstream AI auto-advance race grace", () => {
+  it("defers a fresh candidate so the producing job can finish auto-materialization", async () => {
+    const { shouldDeferWorkstreamAiCandidateAutoAdvance } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+    const now = Date.parse("2026-10-05T07:30:00.000Z");
+
+    expect(
+      shouldDeferWorkstreamAiCandidateAutoAdvance(
+        {
+          status: "CANDIDATE_READY",
+          reviewStatus: "PENDING",
+          createdAt: "2026-10-05T07:29:30.000Z",
+        },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("lets autonomous fallback take over after the bounded grace expires", async () => {
+    const { shouldDeferWorkstreamAiCandidateAutoAdvance } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+    const now = Date.parse("2026-10-05T07:30:31.000Z");
+
+    expect(
+      shouldDeferWorkstreamAiCandidateAutoAdvance(
+        {
+          status: "CANDIDATE_READY",
+          reviewStatus: "APPROVED",
+          createdAt: "2026-10-05T07:29:30.000Z",
+        },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not defer legacy candidates without a valid creation timestamp", async () => {
+    const { shouldDeferWorkstreamAiCandidateAutoAdvance } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      shouldDeferWorkstreamAiCandidateAutoAdvance({
+        status: "CANDIDATE_READY",
+        reviewStatus: "PENDING",
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("autonomous coding explicit stop", () => {
   it("persists DISABLED even when the autonomous row does not exist yet", () => {
     const source = readFileSync(
