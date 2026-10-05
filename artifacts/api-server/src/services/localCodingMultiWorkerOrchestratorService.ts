@@ -15,6 +15,9 @@ import {
 const MIN_LEASE_SECONDS = 30;
 const MAX_LEASE_SECONDS = 15 * 60;
 const MAX_PARALLEL_CLAIMS = 8;
+// A heartbeat proves liveness, but it must not let a hung analyzer hold a
+// workstream forever. Match the repository analyzer stale-run ceiling.
+export const MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS = 15 * 60 * 1000;
 const SHA_RE = /^[0-9a-f]{40}$/i;
 
 export class LocalCodingMultiWorkerError extends Error {
@@ -126,11 +129,16 @@ export function selectClaimableCodingWorkstreams(
       if (item.status === "PENDING" || item.status === "READY") return true;
       if (
         (item.status === "CLAIMED" || item.status === "RUNNING") &&
-        Boolean(item.leaseToken) &&
-        item.leaseExpiresAt &&
-        item.leaseExpiresAt.getTime() <= now.getTime()
+        Boolean(item.leaseToken)
       ) {
-        return true;
+        const leaseExpired =
+          Boolean(item.leaseExpiresAt) &&
+          item.leaseExpiresAt!.getTime() <= now.getTime();
+        const claimLifetimeExceeded =
+          Boolean(item.claimedAt) &&
+          item.claimedAt!.getTime() <=
+            now.getTime() - MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS;
+        if (leaseExpired || claimLifetimeExceeded) return true;
       }
       return false;
     })
@@ -160,10 +168,16 @@ function claimCondition(
     );
   }
 
+  const claimLifetimeCutoff = new Date(
+    now.getTime() - MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS,
+  );
   return and(
     eq(aiCodingWorkstreamsTable.id, workstream.id),
     eq(aiCodingWorkstreamsTable.leaseToken, leaseToken),
-    sql`${aiCodingWorkstreamsTable.leaseExpiresAt} <= ${now}`,
+    sql`(
+      ${aiCodingWorkstreamsTable.leaseExpiresAt} <= ${now}
+      OR ${aiCodingWorkstreamsTable.claimedAt} <= ${claimLifetimeCutoff}
+    )`,
   );
 }
 
@@ -246,11 +260,16 @@ export async function claimReadyCodingWorkstreams(
         attempt,
       );
 
-      const reclaimingExpiredExecution =
+      const reclaimingStaleExecution =
         (candidate.status === "CLAIMED" || candidate.status === "RUNNING") &&
         Boolean(candidate.leaseToken) &&
-        Boolean(candidate.leaseExpiresAt) &&
-        candidate.leaseExpiresAt!.getTime() <= now.getTime();
+        (
+          (Boolean(candidate.leaseExpiresAt) &&
+            candidate.leaseExpiresAt!.getTime() <= now.getTime()) ||
+          (Boolean(candidate.claimedAt) &&
+            candidate.claimedAt!.getTime() <=
+              now.getTime() - MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS)
+        );
 
       const [claimed] = await tx
         .update(aiCodingWorkstreamsTable)
@@ -266,7 +285,7 @@ export async function claimReadyCodingWorkstreams(
           headSha: null,
           attemptCount: attempt,
           errorMessage: null,
-          ...(reclaimingExpiredExecution
+          ...(reclaimingStaleExecution
             ? {
                 childTaskId: null,
                 childRunId: null,
