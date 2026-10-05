@@ -1290,25 +1290,38 @@ router.patch("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   }
 
   const { task, previousStatus } = transition;
-  if (
-    previousStatus !== task.status &&
-    (task.status === "COMPLETED" || task.status === "FAILED")
-  ) {
-    await reportCodingTaskTerminalTransition({
-      taskId: task.id,
-      status: task.status,
-      message:
-        task.resultSummary?.trim() ||
-        (task.status === "COMPLETED"
-          ? "Coding task selesai."
-          : "Coding task gagal."),
-      source: "coding-workspace-task-transition",
-    }).catch((error) => {
-      logger.warn(
-        { err: error, taskId: task.id, status: task.status },
-        "[coding-workspace] terminal lifecycle report failed",
+  if (task.status === "COMPLETED" || task.status === "FAILED") {
+    try {
+      await reportCodingTaskTerminalTransition({
+        taskId: task.id,
+        status: task.status,
+        message:
+          task.resultSummary?.trim() ||
+          (task.status === "COMPLETED"
+            ? "Coding task selesai."
+            : "Coding task gagal."),
+        source:
+          previousStatus === task.status
+            ? "coding-workspace-terminal-repair"
+            : "coding-workspace-task-transition",
+      });
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+          taskId: task.id,
+          status: task.status,
+          previousStatus,
+        },
+        "[coding-workspace] terminal lifecycle report failed after retries",
       );
-    });
+      res.status(503).json({
+        error:
+          "Coding task reached a terminal state but lifecycle reporting did not persist. Retry the same terminal update.",
+        task: UpdateCodingTaskResponse.parse(task),
+      });
+      return;
+    }
   }
 
   res.json(UpdateCodingTaskResponse.parse(task));
