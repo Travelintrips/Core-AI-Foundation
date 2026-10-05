@@ -38,6 +38,7 @@ import {
   startAiHandoffPreparation,
 } from "./localCodingAiHandoffService.js";
 import { enqueueCodingAiExecution } from "./localCodingAiQueueRuntimeService.js";
+import { enqueueCodingMultiTaskPlanner } from "./localCodingPlannerQueueRuntimeService.js";
 import { approveAndValidateAiPatch } from "./localCodingAiPatchApprovalService.js";
 import { approveCommitAndCreatePullRequest } from "./localCodingCommitApprovalService.js";
 import {
@@ -467,7 +468,16 @@ async function processTaskGraph(
   reserveCycle: () => Promise<void>,
 ): Promise<{ handled: boolean; action?: string; waiting?: boolean; blocker?: string }> {
   const snapshot = await getLatestCodingTaskGraph(taskId);
-  if (!snapshot) return { handled: false };
+  if (!snapshot) {
+    const queued = await enqueueCodingMultiTaskPlanner(taskId);
+    return {
+      handled: true,
+      action: queued.created
+        ? `AUTO_ENQUEUE_TASK_GRAPH_PLANNER:${queued.job.jobCode}`
+        : "WAIT_TASK_GRAPH_PLANNER",
+      waiting: true,
+    };
+  }
 
   if (snapshot.graph.status === "PREPARED") {
     await reserveCycle();
