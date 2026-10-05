@@ -285,6 +285,18 @@ describe("durable coding task graph service", () => {
     expect(result.created).toBe(true);
   });
 
+  it("persists the repository base SHA onto every new workstream", async () => {
+    const baseSha = "9d5502591cb9aaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    await persistCodingTaskGraph(TASK_ID, plan(), { baseSha });
+
+    expect(mocks.workstreamValues).toHaveBeenCalledWith([
+      expect.objectContaining({ workstreamKey: "WS-001", baseSha }),
+      expect.objectContaining({ workstreamKey: "WS-002", baseSha }),
+      expect.objectContaining({ workstreamKey: "WS-003", baseSha }),
+    ]);
+  });
+
   it("returns the existing graph for an identical plan hash without duplicating rows", async () => {
     const existing = {
       id: "existing",
