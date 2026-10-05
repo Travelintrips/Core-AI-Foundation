@@ -82,6 +82,27 @@ describe("AI Core Chat automatic dispatch", () => {
     });
   });
 
+  it("does not let incidental infrastructure examples hijack a coding-fix request", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Perbaiki routing intent AI Core. Tambahkan regression test seperti 'check GCP VM status' dan 'cek Ollama GPU aktif di production'.",
+    );
+
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.workload.workload).toBe("CODING");
+    expect(decision.infrastructureOperation).toBeNull();
+  });
+
+  it.each([
+    "cek apakah Ollama GPU aktif di production",
+    "cek worker yang aktif",
+    "audit production runtime read-only",
+    "check GCP VM status",
+  ])("keeps read-only runtime requests out of the coding control plane: %s", (message) => {
+    const decision = classifyAiCoreChatDispatch(message);
+    expect(decision.kind).not.toBe("CONTROL_PLANE");
+    expect(decision.workload.requiresAgent).toBe(false);
+  });
+
   it("routes explicit bounded OpenClaw delegation to the external-agent queue", () => {
     const decision = classifyAiCoreChatDispatch(
       "Gunakan OpenClaw untuk koordinasikan pemeriksaan integrasi ini.",
