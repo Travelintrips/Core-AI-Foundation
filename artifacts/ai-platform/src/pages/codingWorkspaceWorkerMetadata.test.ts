@@ -14,8 +14,15 @@ describe("coding workspace worker metadata presentation", () => {
     expect(source).toContain("WAITING_FOR_WORKER");
     expect(source).toContain("QUEUED");
     expect(source).toContain("WAITING_FOR_CAPACITY");
+    expect(source).toContain("BLOCKED");
     expect(source).toContain("OperationalStatusBadge");
     expect(source).toContain("monitor?.taskStates?.[task.id]");
+  });
+
+  it("keeps list lifecycle status synchronized with the five-second live monitor", () => {
+    expect(source).toContain("getListCodingTasksQueryKey()");
+    expect(source).toContain("queryClient.invalidateQueries");
+    expect(source).toContain("setInterval(() => void loadMonitor(), 5_000)");
   });
 
   it("surfaces worker activity from live lease-aware monitor data", () => {
