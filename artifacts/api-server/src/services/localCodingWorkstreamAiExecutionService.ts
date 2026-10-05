@@ -153,7 +153,7 @@ export function decideWorkstreamAiAutoRepair(
     handoffCode === "EXPIRED" ||
     handoffCode === "REVOKED" ||
     handoffCode === "CONSUMED" ||
-    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found \d+|patch does not apply|does not match the reviewed AI candidate|one-shot privilege is not available|Approved workstream AI handoff was not found|EXPIRED_HANDOFF/i.test(
+    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found \d+|patch does not apply|does not match the reviewed AI candidate|one-shot privilege is not available|Approved workstream AI handoff was not found|EXPIRED_HANDOFF|QC review requested revision:/i.test(
       message,
     );
 
@@ -280,7 +280,9 @@ export async function resetApprovedWorkstreamAiCandidateForAutoRepair(
       .set({
         status: "ANALYZING",
         resultSummary:
-          `AI Core is regenerating a bounded workstream candidate after recoverable materialization drift (attempt ${decision.nextRepairAttempt}/${decision.maxRepairAttempts}).`,
+          message.startsWith("QC review requested revision:")
+            ? `QC requested a bounded revision; AI Core is regenerating the workstream candidate (attempt ${decision.nextRepairAttempt}/${decision.maxRepairAttempts}).`
+            : `AI Core is regenerating a bounded workstream candidate after recoverable materialization drift (attempt ${decision.nextRepairAttempt}/${decision.maxRepairAttempts}).`,
       })
       .where(eq(aiCodingTasksTable.id, current.childTaskId))
       .catch(() => undefined);
@@ -288,7 +290,9 @@ export async function resetApprovedWorkstreamAiCandidateForAutoRepair(
 
   await logAudit(
     "coding-multi-worker",
-    "workstream_ai_materialization_auto_repair_reset",
+    message.startsWith("QC review requested revision:")
+      ? "workstream_ai_qc_revision_reset"
+      : "workstream_ai_materialization_auto_repair_reset",
     workstreamId,
     "coding_workstream",
     "success",
