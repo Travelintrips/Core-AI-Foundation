@@ -2061,9 +2061,17 @@ async function runInfrastructureOperation(
 
 function isGcpBillingStatusRequest(message: string): boolean {
   const text = message.trim().replace(/^@\s*/, "");
-  return /\b(?:gcp|google cloud)\b/i.test(text) &&
-    /\b(?:billing|billing export|bigquery|biaya|cost|usage cost|tagihan)\b/i.test(text) &&
-    /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat)\b/i.test(text);
+  const isBilling = /\b(?:gcp|google cloud)\b/i.test(text) &&
+    /\b(?:billing|billing export|bigquery|biaya|cost|usage cost|tagihan)\b/i.test(text);
+  if (!isBilling) return false;
+
+  // Mutation intent must never be swallowed by the deterministic read-only
+  // billing status handler, even when the same command also says cek/status.
+  if (/\b(?:aktifkan|enable|setup|set up|configure|konfigurasikan|buat|create|set|ubah|update|grant|beri|pasang|install|deploy|redeploy|restart)\b/i.test(text)) {
+    return false;
+  }
+
+  return /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat)\b/i.test(text);
 }
 
 async function runGcpBillingStatusOperation(
