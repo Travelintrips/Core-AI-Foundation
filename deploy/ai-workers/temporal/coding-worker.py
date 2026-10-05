@@ -10,7 +10,7 @@ from typing import Any
 from temporalio import activity, workflow
 from temporalio.client import Client
 from temporalio.exceptions import WorkflowAlreadyStartedError
-from temporalio.common import RetryPolicy
+from temporalio.common import RetryPolicy, WorkflowIDReusePolicy
 from temporalio.worker import Worker
 
 API_BASE = os.environ.get("AI_CORE_BASE_URL", "https://aicore.cstlogistic.co.id/api").rstrip("/")
@@ -92,11 +92,11 @@ class CodingTaskWorkflow:
             if str(result.get("status", "")).upper() in TERMINAL:
                 return result
             await workflow.sleep(CYCLE_SECONDS)
-        return {
-            "taskId": task_id,
-            "status": "BLOCKED",
-            "action": "TEMPORAL_MAX_ITERATIONS",
-        }
+        # Long-lived waits (worker cold start, bounded model execution, external
+        # verification) must not orphan an autonomous task after an arbitrary
+        # workflow loop count. Continue as a fresh Temporal run while preserving
+        # the same workflow identity and task state.
+        workflow.continue_as_new(task_id)
 
 
 async def _discover_and_start(client: Client) -> None:
@@ -123,6 +123,10 @@ async def _discover_and_start(client: Client) -> None:
                 task_id,
                 id=workflow_id,
                 task_queue=TASK_QUEUE,
+                # If a prior Temporal run closed unexpectedly while the DB task
+                # is still ACTIVE/WAITING, discovery must be able to recover it.
+                # A currently running workflow still conflicts on the same ID.
+                id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
             print(f"started Temporal workflow {workflow_id}", flush=True)
         except WorkflowAlreadyStartedError:
