@@ -738,7 +738,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         : params.name === "get_ai_core_task_progress"
           ? "ai_core.progress"
         : ["subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event", "unsubscribe_ai_core_events"].includes(params.name)
-          ? "ai_core.progress"
+          ? "ai_core.events"
           : params.name === "get_profile"
             ? "profile"
             : "";
