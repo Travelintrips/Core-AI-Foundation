@@ -205,7 +205,7 @@ export async function claimReadyCodingWorkstreams(
     }
     if (!["APPROVED", "RUNNING"].includes(graph.status)) {
       throw new LocalCodingMultiWorkerError(
-        "Coding task graph must be explicitly APPROVED before worker claims.",
+        "Coding task graph must be APPROVED before worker claims.",
         "NOT_READY",
         { status: graph.status },
       );
@@ -656,7 +656,7 @@ export async function completeReviewedCodingWorkstream(
     }
     if (current.status !== "REVIEW_REQUIRED") {
       throw new LocalCodingMultiWorkerError(
-        "Only REVIEW_REQUIRED workstreams can be explicitly completed.",
+        "Only REVIEW_REQUIRED workstreams can be completed.",
         "NOT_READY",
         { status: current.status },
       );
@@ -677,7 +677,7 @@ export async function completeReviewedCodingWorkstream(
     if (aiExecution?.status === "CANDIDATE_READY") {
       if (aiExecution.reviewStatus !== "APPROVED") {
         throw new LocalCodingMultiWorkerError(
-          "Workstream AI candidate must pass explicit REVIEW_AI_PATCH approval before completion.",
+          "Workstream AI candidate must pass REVIEW_AI_PATCH approval before completion.",
           "NOT_READY",
           { nextAction: "REVIEW_AI_PATCH" },
         );
@@ -817,8 +817,8 @@ export async function failCodingWorkstreamClaim(
       );
     }
 
-    // Fail closed: no new workstream may be claimed until a human/replanner
-    // explicitly resolves the failed graph.
+    // Fail closed: no new workstream may be claimed until autonomous recovery
+    // or a replanner resolves the failed graph.
     await tx
       .update(aiCodingTaskGraphsTable)
       .set({ status: "FAILED" })
