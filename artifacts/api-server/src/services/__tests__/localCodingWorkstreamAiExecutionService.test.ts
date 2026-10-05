@@ -416,6 +416,20 @@ describe("workstream AI materialization git status parsing", () => {
   });
 });
 
+describe("workstream AI concurrent materialization advance", () => {
+  it("treats a workstream already claimed, running, or completed as a benign race", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('["CLAIMED", "RUNNING", "COMPLETED"].includes(current.status)');
+    expect(source).toContain('reason: "CONCURRENT_ADVANCE"');
+    expect(source).toContain("concurrentAdvance: true");
+    expect(source).toContain('["CLAIMED", "RUNNING", "COMPLETED"].includes(advanced.status)');
+  });
+});
+
 describe("workstream AI materialization recovery wiring", () => {
   it("bubbles recoverable materialization failures into the bounded auto-repair path", () => {
     const source = readFileSync(
