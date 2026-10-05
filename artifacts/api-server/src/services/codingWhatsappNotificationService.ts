@@ -256,6 +256,17 @@ export function getCodingWhatsappConfigStatus() {
   };
 }
 
+export async function sendAdminWhatsappNotification(input: {
+  idempotencyKey: string;
+  text: string;
+}): Promise<CodingWhatsappNotifyResult> {
+  return sendGatewayMessage({
+    idempotencyKey: input.idempotencyKey.trim(),
+    clientMessageId: input.idempotencyKey.trim(),
+    text: input.text.trim(),
+  });
+}
+
 export async function notifyCodingBridgeResponse(input: {
   responseId: string;
   commandId: string;

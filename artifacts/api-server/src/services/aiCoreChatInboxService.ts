@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 
@@ -6,7 +7,8 @@ export type AiCoreInboxEventType =
   | "FAILED"
   | "BLOCKED"
   | "MERGED"
-  | "DEPLOYED";
+  | "DEPLOYED"
+  | "BILLING_ALERT";
 
 type BridgeKind =
   | "ACK"
@@ -22,6 +24,7 @@ const TERMINAL_EVENT_TYPES = new Set<AiCoreInboxEventType>([
   "BLOCKED",
   "MERGED",
   "DEPLOYED",
+  "BILLING_ALERT",
 ]);
 
 let ensurePromise: Promise<void> | null = null;
@@ -91,6 +94,15 @@ export async function ensureAiCoreChatInboxTable(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_task
         ON ai_platform.ai_core_chat_inbox_messages (task_id, created_at DESC)
       `);
+      await db.execute(sql`
+        ALTER TABLE ai_platform.ai_core_chat_inbox_messages
+        ADD COLUMN IF NOT EXISTS source_key text
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_source_key
+        ON ai_platform.ai_core_chat_inbox_messages (source_key)
+        WHERE source_key IS NOT NULL
+      `);
     })().catch((error) => {
       ensurePromise = null;
       throw error;
@@ -121,7 +133,9 @@ export async function enqueueAiCoreChatInboxMessage(input: {
           ? "Task membutuhkan perhatian"
           : eventType === "MERGED"
             ? "Perubahan sudah di-merge"
-            : "Deployment selesai";
+            : eventType === "DEPLOYED"
+              ? "Deployment selesai"
+              : "Billing provider membutuhkan perhatian";
 
   await db.execute(sql`
     INSERT INTO ai_platform.ai_core_chat_inbox_messages (
@@ -141,6 +155,39 @@ export async function enqueueAiCoreChatInboxMessage(input: {
       ${input.message.trim()}::text
     )
     ON CONFLICT (response_id) DO NOTHING
+  `);
+}
+
+export async function enqueueAiCoreSystemInboxAlert(input: {
+  sourceKey: string;
+  eventType: "BILLING_ALERT";
+  title: string;
+  message: string;
+}): Promise<void> {
+  await ensureAiCoreChatInboxTable();
+  const sourceKey = input.sourceKey.trim().slice(0, 240);
+  if (!sourceKey) throw new Error("System inbox alert requires sourceKey");
+
+  await db.execute(sql`
+    INSERT INTO ai_platform.ai_core_chat_inbox_messages (
+      response_id,
+      command_id,
+      task_id,
+      event_type,
+      title,
+      message,
+      source_key
+    )
+    VALUES (
+      ${randomUUID()}::uuid,
+      ${randomUUID()}::uuid,
+      NULL,
+      ${input.eventType}::text,
+      ${input.title.trim()}::text,
+      ${input.message.trim()}::text,
+      ${sourceKey}::text
+    )
+    ON CONFLICT DO NOTHING
   `);
 }
 

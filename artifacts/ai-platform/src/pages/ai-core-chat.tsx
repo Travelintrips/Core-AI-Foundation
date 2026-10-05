@@ -114,7 +114,7 @@ type InboxMessage = {
   projectName: string | null;
   repository: string | null;
   branch: string | null;
-  eventType: "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED";
+  eventType: "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED" | "BILLING_ALERT";
   title: string;
   message: string;
   resultSummary: string | null;
@@ -570,7 +570,7 @@ export default function AiCoreChat() {
 
         if (inboxInitializedRef.current) {
           for (const item of [...fresh].reverse()) {
-            const taskLabel = item.taskNumber ?? "AI Core task";
+            const taskLabel = item.taskNumber ?? item.title ?? "AI Core";
             const summary = item.resultSummary?.trim() || item.message.trim();
             append({
               id: `inbox-${item.id}`,
@@ -1811,7 +1811,7 @@ export default function AiCoreChat() {
               <div>
                 <div className="font-semibold text-sm">Inbox AI Core</div>
                 <div className="text-xs mt-0.5" style={{ color: "#7085AE" }}>
-                  Laporan terminal dari coding task. Pesan baru juga tampil otomatis di chat dan popup.
+                  Laporan task dan alert billing provider. Pesan baru juga tampil otomatis di chat dan popup.
                 </div>
               </div>
               <div className="flex items-center gap-1 text-xs" style={{ color: "#8195BD" }}>
@@ -1847,7 +1847,9 @@ export default function AiCoreChat() {
                         background:
                           item.eventType === "FAILED" || item.eventType === "BLOCKED"
                             ? "#EF4444"
-                            : "#10B981",
+                            : item.eventType === "BILLING_ALERT"
+                              ? "#F59E0B"
+                              : "#10B981",
                       }}
                     />
                     <div className="min-w-0 flex-1">

@@ -72,6 +72,8 @@ const codingAutonomous =
   await import("./services/localCodingAutonomousRepairService.js");
 const codingOrchestrationRecovery =
   await import("./services/codingOrchestratorService.js");
+const providerBilling =
+  await import("./services/aiProviderBillingService.js");
 const { pool, isDatabaseAuthenticationError } = await import("@workspace/db");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
@@ -186,6 +188,10 @@ async function initializeRuntimeServices(): Promise<void> {
     "[mcp-events] Delivery runtime start",
     () => mcpEvents.startAiCoreMcpEventDeliveryRuntime(),
   );
+  await runStartupStep(
+    "[provider-billing] Monitor start",
+    async () => providerBilling.startAiProviderBillingMonitor(),
+  );
 
   // Resume only repository-analysis runs already requested by a user. This
   // continuation also serves tasks whose autonomous approval/dispatch is off.
@@ -272,6 +278,7 @@ function shutdown(signal: string): void {
   sseManager.shutdown();
   healthAlerts.shutdown();
   incidentWatcher.shutdown();
+  providerBilling.stopAiProviderBillingMonitor();
   Promise.all([
     scheduler.shutdown(),
     jobDispatcher.shutdown(),
