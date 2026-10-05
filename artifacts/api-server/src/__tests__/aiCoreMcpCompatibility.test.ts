@@ -94,6 +94,20 @@ describe("AI Core MCP discovery compatibility", () => {
     expect(response.body.result.capabilities.events).toEqual({});
   });
 
+  it("defaults unknown or missing protocol versions to the ChatGPT-compatible version", async () => {
+    for (const params of [
+      { capabilities: {}, clientInfo: { name: "legacy-host", version: "1" } },
+      { protocolVersion: "2099-01-01", capabilities: {}, clientInfo: { name: "legacy-host", version: "1" } },
+    ]) {
+      const response = await request(app())
+        .post("/api/ai/core-chat/mcp")
+        .send({ jsonrpc: "2.0", id: 32, method: "initialize", params });
+
+      expect(response.status).toBe(200);
+      expect(response.body.result.protocolVersion).toBe("2025-06-18");
+    }
+  });
+
   it("continues to expose AI Core tools", async () => {
     const response = await request(app())
       .post("/api/ai/core-chat/mcp")
@@ -123,6 +137,8 @@ describe("AI Core MCP discovery compatibility", () => {
       const tool = response.body.result.tools.find((item: { name: string }) => item.name === name);
       expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.events"] }]);
     }
+    const subscribeTool = response.body.result.tools.find((item: { name: string }) => item.name === "subscribe_ai_core_events");
+    expect(subscribeTool.inputSchema.properties.eventTypes.items.enum).toContain("BLOCKED");
   });
 });
 
