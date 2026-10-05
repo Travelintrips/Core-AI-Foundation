@@ -11,7 +11,7 @@ const resolve = inputs => resolveCommand({ inputs }, env);
 const issue = { action: 'labeled', sender: { login: 'Travelintrips' }, label: { name: 'ai-audit' },
   issue: { number: 321, title: 'Audit trigger', body: 'Read-only test', user: { login: 'Travelintrips' } } };
 
-function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initialStatus = 'WAITING' } = {}) {
+function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initialStatus = 'WAITING', detailRepository = REPOSITORY } = {}) {
   const calls = [];
   const api = async (path, options = {}) => {
     calls.push({ path, ...options });
@@ -20,7 +20,7 @@ function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initial
     if (path.endsWith('/runtime-status')) return { status: 200, value: { ready, autonomous: { configured: true, running: true }, dependencies: { githubConfigured: true } } };
     if (path === '/ai/coding/tasks') return options.method === 'POST'
       ? { status: 201, value: { id, ...options.body } } : { status: 200, value: tasks };
-    if (path === `/ai/coding/tasks/${id}`) return { status: 200, value: { task: { id, repository: REPOSITORY, status: 'PENDING' }, runs } };
+    if (path === `/ai/coding/tasks/${id}`) return { status: 200, value: { task: { id, repository: detailRepository, status: 'PENDING' }, runs } };
     if (path === `/ai/coding/bridge/critical-approvals/${approvalId}`) {
       return { status: 200, value: { id: approvalId, taskId: id, actionType: 'WORKSTREAM_AI_HANDOFF', status: 'PENDING' } };
     }
@@ -173,6 +173,10 @@ test('handoff approval issue rejects malformed identifiers', () => {
 
 test('input budgets, IDs, instruction limits, and actions are validated', () => {
   for (const max_cycles of ['0', '4', '101', '5.5', 'NaN']) assert.throws(() => resolve({ max_cycles }), /max_cycles/);
+  assert.throws(
+    () => resolve({ action: 'submit', instruction: 'target_repository: Travelintrips/Unknown\nDo work' }),
+    /not allowlisted/,
+  );
   for (const request_id of ['../secret', 'a b', '${{secrets.ADMIN_API_KEY}}']) assert.throws(() => resolve({ request_id }), /request_id/);
   assert.throws(() => resolve({ action: 'deploy' }), /Invalid action/);
   assert.throws(() => resolve({ action: 'submit', instruction: '' }), /instruction/);
@@ -183,6 +187,24 @@ test('issue-triggered commands use a short bounded wait instead of holding GitHu
   const source = readFileSync(new URL('./ai-core-command.mjs', import.meta.url), 'utf8');
   assert.match(source, /DEFAULT_ISSUE_WAIT_MS = 2 \* 60 \* 1000/);
   assert.doesNotMatch(source, /12 \* 60 \* 1000/);
+});
+
+test('AI Task Hub can be selected as an explicitly allowlisted target repository', async () => {
+  const targetRepository = 'Travelintrips/AI-Task-Hub';
+  const f = fakeApi({ detailRepository: targetRepository });
+  const command = resolve({
+    action: 'submit',
+    request_id: 'ai-task-target-test',
+    instruction: 'target_repository: Travelintrips/AI-Task-Hub\nVerify Hostinger deployment',
+  });
+  const result = await execute(command, f.api);
+
+  assert.equal(command.targetRepository, targetRepository);
+  assert.equal(result.result, 'TASK_ACCEPTED_NOT_COMPLETED');
+  const create = f.calls.find(call => call.path === '/ai/coding/tasks' && call.method === 'POST');
+  assert.equal(create.body.repository, targetRepository);
+  const bridge = f.calls.find(call => call.path === '/ai/coding/bridge/commands' && call.method === 'POST');
+  assert.equal(bridge.body.metadata.repository, targetRepository);
 });
 
 test('submission is bounded and accepted is not reported as completed', async () => {

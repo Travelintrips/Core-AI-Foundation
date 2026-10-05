@@ -2,6 +2,10 @@ import { readFileSync, appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const REPOSITORY = 'Travelintrips/Core-AI-Foundation';
+export const ALLOWED_TARGET_REPOSITORIES = new Set([
+  REPOSITORY,
+  'Travelintrips/AI-Task-Hub',
+]);
 const OWNER = 'Travelintrips';
 const API = 'https://aicore.cstlogistic.co.id/api';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -9,6 +13,17 @@ const POLICY = '\n\nExecution policy: This is an owner-authorized autonomous cod
 const AUTONOMOUS_E2E_POLICY = '\n\nExecution policy: This is an explicit owner-authorized autonomous E2E validation. Use an isolated working branch. Do not bypass tests, access secrets, force-push, or weaken security controls. Keep the change strictly within the requested canary scope. If verification is green, you may commit, push, open a pull request, merge that verified pull request, and allow the normal production deployment workflow to run. Critical security controls remain mandatory.';
 const DEFAULT_ISSUE_WAIT_MS = 2 * 60 * 1000;
 const DEFAULT_POLL_MS = 10_000;
+
+function resolveTargetRepository(instruction) {
+  const match = String(instruction ?? '').match(
+    /^target_repository:\s*([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\s*$/im,
+  );
+  const repository = match?.[1] ?? REPOSITORY;
+  if (!ALLOWED_TARGET_REPOSITORIES.has(repository)) {
+    throw new Error('Target repository is not allowlisted.');
+  }
+  return repository;
+}
 
 export function resolveCommand(event, env) {
   if (env.GITHUB_REPOSITORY !== REPOSITORY || env.GITHUB_ACTOR !== OWNER ||
@@ -68,7 +83,8 @@ export function resolveCommand(event, env) {
   if (['status', 'stop', 'approve_handoff'].includes(action) && !UUID.test(taskId)) throw new Error('A valid task_id is required.');
   const approvalId = String(inputs.approval_id ?? '').trim();
   if (action === 'approve_handoff' && !UUID.test(approvalId)) throw new Error('A valid approval_id is required.');
-  return { action, instruction, requestId, taskId, approvalId, maxCycles, issueNumber, autonomousE2E };
+  const targetRepository = resolveTargetRepository(instruction);
+  return { action, instruction, requestId, taskId, approvalId, maxCycles, issueNumber, autonomousE2E, targetRepository };
 }
 
 export function createApi(secret, fetchImpl = fetch) {
@@ -176,10 +192,13 @@ export async function audit(api) {
   };
 }
 
-async function listTasks(api) {
+async function listTasks(api, repository = null) {
   const result = await api('/ai/coding/tasks');
   if (!Array.isArray(result.value)) throw new Error('Unexpected coding tasks response.');
-  return result.value.filter(task => task.repository === REPOSITORY);
+  return result.value.filter((task) => {
+    if (!ALLOWED_TARGET_REPOSITORIES.has(task.repository)) return false;
+    return repository ? task.repository === repository : true;
+  });
 }
 
 const TERMINAL_TASK_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -303,13 +322,14 @@ export async function execute(command, api, options = {}) {
   if (!readiness.ready) throw new Error('AI Core is not ready. No coding task was created or started. Run audit for diagnostics.');
   const projectName = `GitHub Trigger ${command.requestId}`;
   const instruction = command.instruction + (command.autonomousE2E ? AUTONOMOUS_E2E_POLICY : POLICY);
-  const matches = (await listTasks(api)).filter(task => task.projectName === projectName);
+  const matches = (await listTasks(api, command.targetRepository))
+    .filter(task => task.projectName === projectName);
   if (matches.length > 1) throw new Error('Multiple tasks share request_id; refusing a duplicate dispatch.');
   let task = matches[0];
   if (task && task.instruction !== instruction) throw new Error('request_id already belongs to a different instruction.');
   if (!task) {
     const created = await api('/ai/coding/tasks', { method: 'POST', body: {
-      projectName, repository: REPOSITORY, branch: 'main', instruction, priority: 50,
+      projectName, repository: command.targetRepository, branch: 'main', instruction, priority: 50,
     } });
     task = created.value;
   }
@@ -324,7 +344,7 @@ export async function execute(command, api, options = {}) {
       allowProductionDeploy: true,
     },
     metadata: {
-      repository: REPOSITORY,
+      repository: command.targetRepository,
       requestId: command.requestId,
       issueNumber: command.issueNumber,
       autonomousE2E: command.autonomousE2E === true,
@@ -340,7 +360,7 @@ export async function execute(command, api, options = {}) {
     return { action: 'submit', taskId: task.id, result: 'EXISTING_TASK_NOT_RESTARTED', status: state.value.status };
   }
   const detail = await api(`/ai/coding/tasks/${task.id}`);
-  if (detail.value.task?.repository !== REPOSITORY || !Array.isArray(detail.value.runs)) {
+  if (detail.value.task?.repository !== command.targetRepository || !Array.isArray(detail.value.runs)) {
     throw new Error('Unexpected task detail; refusing to initialize execution.');
   }
   if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(detail.value.task.status)) {
