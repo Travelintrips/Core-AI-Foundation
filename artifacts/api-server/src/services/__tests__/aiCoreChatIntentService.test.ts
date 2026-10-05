@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   classifyAiCoreChatDispatch,
@@ -209,5 +210,21 @@ describe("AI Core Chat automatic dispatch", () => {
 
   it("never sends mutating language to the read-only worker", () => {
     expect(detectRemoteWorkerPreset("cek repo lalu perbaiki file yang salah")).toBeNull();
+  });
+});
+
+
+describe("existing CWS lifecycle command wiring", () => {
+  it("routes named CWS lifecycle mutations to the existing-task handler before new task creation", () => {
+    const source = readFileSync(
+      new URL("../../routes/ai-core-chat.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("runExistingCodingTaskLifecycleCommand");
+    expect(source).toContain("EXISTING_CWS_TASK");
+    expect(source).toContain("disableAutonomousCodingTask(task.id)");
+    expect(source).toContain("enableAutonomousCodingTask(task.id, boundedMax, { forceDisabled: true })");
+    expect(source).toContain("Tidak ada task duplikat yang dibuat");
   });
 });
