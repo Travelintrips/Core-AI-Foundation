@@ -95,7 +95,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          endpoint="$API_BASE_URL/ai/core-chat/mcp?v=1.4.0"
+          endpoint="$API_BASE_URL/ai/core-chat/mcp?v=1.5.0"
 
           discover_payload='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}'
           discover_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
@@ -118,12 +118,12 @@ jobs:
           if (!result?.capabilities || typeof result.capabilities.events !== "object") {
             throw new Error("Native MCP events capability is not live");
           }
-          if (result?.serverInfo?.version !== "1.4.0") {
+          if (result?.serverInfo?.version !== "1.5.0") {
             throw new Error("Unexpected live MCP server version: " + String(result?.serverInfo?.version));
           }
           console.log("mcp_native_event_discovery=PASS");
           NODE
-          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.4\.0' /tmp/mcp-discover.headers
+          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.5\.0' /tmp/mcp-discover.headers
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-discover.headers
 
           tools_payload='{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
@@ -144,6 +144,7 @@ jobs:
           if (!Array.isArray(tools)) throw new Error("MCP tools/list did not return tools array");
           const names = new Set(tools.map((tool) => tool.name));
           const expected = [
+            "query_ai_core",
             "send_ai_core_command",
             "get_ai_core_task_progress",
             "subscribe_ai_core_events",
@@ -155,7 +156,15 @@ jobs:
           for (const name of expected) {
             if (!names.has(name)) throw new Error("Missing live MCP tool: " + name);
           }
-          for (const tool of tools.filter((tool) => expected.slice(2, 6).includes(tool.name))) {
+          const queryTool = tools.find((tool) => tool.name === "query_ai_core");
+          const queryScopes = queryTool?.securitySchemes?.[0]?.scopes;
+          if (!Array.isArray(queryScopes) || !queryScopes.includes("ai_core.progress")) {
+            throw new Error("query_ai_core is not exposed on read-only ai_core.progress scope");
+          }
+          if (queryTool?.annotations?.readOnlyHint !== true || queryTool?.annotations?.destructiveHint !== false) {
+            throw new Error("query_ai_core is not annotated as read-only");
+          }
+          for (const tool of tools.filter((tool) => expected.slice(3, 7).includes(tool.name))) {
             const scopes = tool?.securitySchemes?.[0]?.scopes;
             if (!Array.isArray(scopes) || !scopes.includes("ai_core.events")) {
               throw new Error("Event tool not exposed on dedicated ai_core.events scope: " + tool.name);
@@ -163,7 +172,7 @@ jobs:
           }
           console.log("mcp_tool_discovery=PASS count="+tools.length);
           NODE
-          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.4\.0' /tmp/mcp-tools.headers
+          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.5\.0' /tmp/mcp-tools.headers
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-tools.headers
 
       - name: Verify admin auth guard
