@@ -35,6 +35,7 @@ vi.mock("../aiCoreAdminDbConnectionService.js", () => {
 import {
   buildAdminDbUnresolvedAnswer,
   executeAdminMutationSql,
+  executeAdminMcpEventStatusQuery,
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
   executeAdminSemanticQuery,
@@ -44,6 +45,7 @@ import {
   extractExplicitAdminMutationSql,
   getAdminDbSchemaCatalog,
   inspectAdminDbSchemaCatalog,
+  isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
   isAiCoreAuditHistoryQuery,
   executeAdminWorkerStatusQuery,
@@ -103,6 +105,37 @@ describe("AI Core admin database query service", () => {
     expect(result.rows).toEqual([{ worker_id: 7, worker_name: "coding-1", status: "busy" }]);
     expect(result.sql).toContain("id AS worker_id");
     expect(result.sql).not.toContain("w.worker_id");
+  });
+
+  it("routes AI Core MCP event status checks to the dedicated event tables", async () => {
+    expect(isAdminMcpEventStatusQuery("apa event sudah ada")).toBe(true);
+    expect(isAdminMcpEventStatusQuery("cek status MCP events")).toBe(true);
+    expect(isAdminMcpEventStatusQuery("lihat event kalender besok")).toBe(false);
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{
+          active_subscriptions: "1",
+          total_deliveries: "2",
+          pending_deliveries: "0",
+          delivered_events: "2",
+          failed_or_terminated: "0",
+          latest_lifecycle_event: "COMPLETED",
+          latest_task_id: "52902096-a053-49fe-868b-1c6a90cf22d0",
+          latest_delivery_status: "DELIVERED",
+          latest_event_at: "2026-10-05T18:00:00.000Z",
+        }],
+      });
+
+    const result = await executeAdminMcpEventStatusQuery();
+    expect(result.rowCount).toBe(1);
+    expect(result.sql).toContain("ai_core_mcp_event_subscriptions");
+    expect(result.sql).toContain("ai_core_mcp_event_deliveries");
+    expect(result.sql).not.toContain("FROM ai_platform.ai_events");
+    expect(result.sql).not.toContain("e.subscription_id");
   });
 
   it("uses a deterministic created_at query for AI Core control-plane audit history", async () => {
