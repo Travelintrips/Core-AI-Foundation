@@ -844,3 +844,81 @@ describe("autonomous deterministic workstream child completion", () => {
     expect(window).toContain("Deterministic reviewed workstream completed automatically");
   });
 });
+
+describe("READY_REVIEW autonomous recovery policy", () => {
+  it("reactivates safe technical blockers without bypassing policy blockers", async () => {
+    const { readyReviewAutonomousRecoveryDecision } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 12,
+        maxCycles: 40,
+        lastAction: "TASK_GRAPH_BLOCKER",
+        lastError: "Workstream WS-001 failed: AI proposal policy rejected: EXPIRED_HANDOFF",
+      }),
+    ).toEqual({
+      reactivate: true,
+      extendBudget: false,
+      reason: "RECOVERABLE_TECHNICAL_BLOCKER",
+    });
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 12,
+        maxCycles: 40,
+        lastAction: "TASK_GRAPH_BLOCKER",
+        lastError: "AI proposal policy rejected: FORBIDDEN_GIT_ACTION",
+      }),
+    ).toEqual({
+      reactivate: false,
+      extendBudget: false,
+      reason: "POLICY_OR_MANUAL_REVIEW_BLOCKER",
+    });
+  });
+
+  it("gives legacy max-cycle tasks only one bounded second budget", async () => {
+    const { readyReviewAutonomousRecoveryDecision } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 40,
+        maxCycles: 40,
+        lastAction: "MAX_CYCLES_REACHED",
+        lastError: "Autonomous repair cycle limit reached.",
+      }),
+    ).toEqual({
+      reactivate: true,
+      extendBudget: true,
+      reason: "ONE_TIME_LEGACY_BUDGET_EXTENSION",
+    });
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 80,
+        maxCycles: 80,
+        lastAction: "MAX_CYCLES_REACHED",
+        lastError: "Autonomous repair cycle limit reached.",
+      }).reactivate,
+    ).toBe(false);
+  });
+
+  it("runs READY_REVIEW recovery periodically and processes oldest rows first", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("READY_REVIEW_RECOVERY_INTERVAL_MS = 60_000");
+    expect(source).toContain(".orderBy(aiCodingTasksTable.updatedAt)");
+    expect(source).toContain(".limit(50)");
+    expect(source).toContain("periodic READY_REVIEW recovery failed");
+  });
+});
