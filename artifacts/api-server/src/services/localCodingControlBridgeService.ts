@@ -8,7 +8,10 @@ import {
 } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
 import { enqueueAiCoreMcpBridgeLifecycleEvent } from "./aiCoreMcpEventWebhookService.js";
-import { notifyCodingBridgeResponse } from "./codingWhatsappNotificationService.js";
+import {
+  notifyCodingBridgeResponse,
+  waitForCodingWhatsappDelivery,
+} from "./codingWhatsappNotificationService.js";
 import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
@@ -187,6 +190,45 @@ export async function submitCodingBridgeCommand(input: {
   return { command, created: true };
 }
 
+async function deliverCodingBridgeWhatsappNotification(input: {
+  responseId: string;
+  commandId: string;
+  taskId?: string | null;
+  kind: "ACK" | "PROGRESS" | "CHECKPOINT" | "BLOCKER" | "COMPLETED" | "FAILED";
+  message: string;
+  checkpoint?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const dispatch = await notifyCodingBridgeResponse(input);
+  const delivery =
+    dispatch.status === "queued"
+      ? await waitForCodingWhatsappDelivery(dispatch.messageId, {
+          timeoutMs: 45_000,
+          pollIntervalMs: 1_000,
+        })
+      : null;
+
+  const [current] = await db
+    .select({ metadataJson: aiCodingBridgeResponsesTable.metadataJson })
+    .from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.id, input.responseId))
+    .limit(1);
+
+  await db
+    .update(aiCodingBridgeResponsesTable)
+    .set({
+      metadataJson: {
+        ...record(current?.metadataJson),
+        whatsappNotification: {
+          dispatch,
+          delivery,
+          auditedAt: new Date().toISOString(),
+        },
+      },
+    })
+    .where(eq(aiCodingBridgeResponsesTable.id, input.responseId));
+}
+
 export async function appendCodingBridgeResponse(input: {
   commandId: string;
   taskId?: string | null;
@@ -227,7 +269,7 @@ export async function appendCodingBridgeResponse(input: {
     },
   });
 
-  void notifyCodingBridgeResponse({
+  void deliverCodingBridgeWhatsappNotification({
     responseId: response.id,
     commandId: input.commandId,
     taskId: input.taskId ?? null,
@@ -235,7 +277,7 @@ export async function appendCodingBridgeResponse(input: {
     message: input.message,
     checkpoint: input.checkpoint ?? {},
     metadata: input.metadata ?? {},
-  });
+  }).catch(() => undefined);
 
   void enqueueAiCoreChatInboxMessage({
     responseId: response.id,
