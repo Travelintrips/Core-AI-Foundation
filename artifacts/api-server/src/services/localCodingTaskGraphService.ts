@@ -51,6 +51,7 @@ export interface CodingTaskGraphWorkstreamSnapshot {
   childRunId: string | null;
   jobId: number | null;
   leaseExpiresAt: Date | null;
+  claimedAt: Date | null;
   heartbeatAt: Date | null;
   baseSha: string | null;
   headSha: string | null;
@@ -164,6 +165,7 @@ async function loadGraphSnapshotById(
         childRunId: item.childRunId,
         jobId: item.jobId,
         leaseExpiresAt: item.leaseExpiresAt,
+        claimedAt: item.claimedAt,
         heartbeatAt: item.heartbeatAt,
         baseSha: item.baseSha,
         headSha: item.headSha,
