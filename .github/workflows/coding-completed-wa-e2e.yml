@@ -1,0 +1,142 @@
+name: Coding COMPLETED WhatsApp E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: Existing AI Core coding task UUID to drive to terminal completion
+        required: false
+        default: "f5640b42-c3c9-4c0c-b20b-03840ef5b2ae"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/coding-completed-wa-e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Verify coding COMPLETED to WhatsApp admin
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      API_BASE_URL: https://aicore.cstlogistic.co.id/api
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+      TASK_ID: "${{ github.event.inputs.task_id || 'f5640b42-c3c9-4c0c-b20b-03840ef5b2ae' }}"
+
+    steps:
+      - name: Verify production secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          test -n "$TASK_ID"
+
+      - name: Drive autonomous task to terminal completion
+        shell: bash
+        run: |
+          set -euo pipefail
+          completed=0
+          for attempt in $(seq 1 40); do
+            code=$(curl -sS -o /tmp/cycle.json -w "%{http_code}"               --retry 2 --retry-delay 1 --retry-all-errors               --connect-timeout 15 --max-time 90               -X POST               -H "x-admin-api-key: $ADMIN_API_KEY"               -H "content-type: application/json"               "$API_BASE_URL/ai/coding/tasks/$TASK_ID/autonomous/run-once")
+            echo "cycle_attempt=$attempt http=$code"
+            cat /tmp/cycle.json
+            test "$code" = "200"
+
+            code=$(curl -sS -o /tmp/progress.json -w "%{http_code}"               --retry 2 --retry-delay 1 --retry-all-errors               --connect-timeout 15 --max-time 60               -H "x-admin-api-key: $ADMIN_API_KEY"               "$API_BASE_URL/ai/core-chat/tasks/$TASK_ID/progress")
+            echo "progress_http=$code"
+            cat /tmp/progress.json
+            test "$code" = "200"
+
+            status=$(node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/progress.json","utf8"));process.stdout.write(String(v.task?.status||""))')
+            autonomous=$(node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/progress.json","utf8"));process.stdout.write(String(v.autonomous?.status||""))')
+            action=$(node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/progress.json","utf8"));process.stdout.write(String(v.autonomous?.last_action||v.autonomous?.lastAction||""))')
+            echo "task_status=$status autonomous_status=$autonomous action=$action"
+
+            if [ "$status" = "COMPLETED" ] && [ "$autonomous" = "COMPLETED" ]; then
+              completed=1
+              break
+            fi
+
+            if [ "$status" = "FAILED" ] || [ "$autonomous" = "FAILED" ] || [ "$autonomous" = "BLOCKED" ]; then
+              echo "Task reached terminal failure/block instead of COMPLETED" >&2
+              exit 3
+            fi
+
+            sleep 8
+          done
+
+          if [ "$completed" != "1" ]; then
+            echo "Task did not reach COMPLETED within bounded canary attempts" >&2
+            exit 4
+          fi
+
+          echo "coding_task_completed=PASS task_id=$TASK_ID"
+
+      - name: Verify automatic COMPLETED bridge response
+        id: bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/responses.json -w "%{http_code}"             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 15 --max-time 60             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/coding/bridge/responses?limit=100")
+          echo "bridge_responses_http=$code"
+          test "$code" = "200"
+
+          response_id=$(node - <<'NODE'
+          const fs=require("fs");
+          const taskId=process.env.TASK_ID;
+          const v=JSON.parse(fs.readFileSync("/tmp/responses.json","utf8"));
+          const rows=Array.isArray(v.responses)?v.responses:[];
+          const hit=rows.find(r => (r.taskId===taskId || r.task_id===taskId) && r.kind==="COMPLETED");
+          if(!hit){console.error(JSON.stringify(v));process.exit(2);}
+          process.stdout.write(String(hit.id));
+          NODE
+          )
+          echo "response_id=$response_id" >> "$GITHUB_OUTPUT"
+          echo "automatic_completed_bridge=PASS response_id=$response_id"
+
+      - name: Verify AI Core Inbox COMPLETED report
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/inbox.json -w "%{http_code}"             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 15 --max-time 60             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/core-chat/inbox?limit=100")
+          echo "inbox_http=$code"
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs=require("fs");
+          const taskId=process.env.TASK_ID;
+          const v=JSON.parse(fs.readFileSync("/tmp/inbox.json","utf8"));
+          const rows=Array.isArray(v.messages)?v.messages:[];
+          const hit=rows.find(r => r.taskId===taskId && r.eventType==="COMPLETED");
+          if(!hit){console.error(JSON.stringify(v));process.exit(2);}
+          console.log("inbox_completed=PASS id="+hit.id+" responseId="+hit.responseId);
+          NODE
+
+      - name: Verify production WhatsApp delivery is sent
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/wa.json -w "%{http_code}"             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 15 --max-time 90             -X POST             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "content-type: application/json"             -d '{}'             "$API_BASE_URL/ai/coding/bridge/whatsapp-test")
+          echo "whatsapp_test_http=$code"
+          cat /tmp/wa.json
+          test "$code" = "200"
+
+          node - <<'NODE'
+          const fs=require("fs");
+          const v=JSON.parse(fs.readFileSync("/tmp/wa.json","utf8"));
+          if(v.ok!==true || v.delivery?.status!=="sent"){
+            console.error("WhatsApp delivery was not sent",v);
+            process.exit(2);
+          }
+          console.log("whatsapp_delivery=PASS status="+v.delivery.status+" messageId="+v.delivery.messageId+" waMessageId="+(v.delivery.waMessageId||""));
+          NODE
+
+      - name: Summary
+        run: |
+          echo "Coding task COMPLETED: PASS"
+          echo "Automatic COMPLETED bridge response: PASS"
+          echo "AI Core Inbox COMPLETED report: PASS"
+          echo "WhatsApp production delivery: PASS"
