@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import {
   aiCodingRunsTable,
   aiCodingTaskGraphsTable,
@@ -87,6 +87,93 @@ export function expiredLeaseRecoveryDisposition() {
   };
 }
 
+async function reconcileTerminalMultiWorkerJobOrphans(
+  now: Date,
+): Promise<{ inspected: number; recoveredRuns: number; recoveredTasks: number }> {
+  const result = await db.execute(sql`
+    WITH terminal_jobs AS (
+      SELECT DISTINCT ON (r.id)
+        r.id AS run_id,
+        r.task_id,
+        j.id AS job_id,
+        j.status AS job_status,
+        COALESCE(
+          NULLIF(j.error_message, ''),
+          'Coding workstream job ended without an error message'
+        ) AS job_error
+      FROM ai_platform.ai_coding_runs AS r
+      JOIN ai_platform.ai_coding_tasks AS t
+        ON t.id = r.task_id
+      JOIN ai_platform.ai_jobs AS j
+        ON j.job_type = 'coding_workstream_execution'
+       AND j.payload_json->>'codingRunId' = r.id::text
+      WHERE r.agent_name LIKE 'Multi-Worker %'
+        AND r.status = 'RUNNING'
+        AND t.status = 'ANALYZING'
+        AND j.status IN ('failed', 'cancelled')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_jobs AS active
+          WHERE active.job_type = 'coding_workstream_execution'
+            AND active.payload_json->>'codingRunId' = r.id::text
+            AND active.status IN ('queued', 'waiting', 'running', 'retrying')
+        )
+      ORDER BY r.id, j.id DESC
+    ),
+    failed_runs AS (
+      UPDATE ai_platform.ai_coding_runs AS r
+      SET status = 'FAILED',
+          finished_at = ${now},
+          error_message = LEFT(
+            'Coding workstream job ' || terminal_jobs.job_id::text ||
+            ' ended as ' || terminal_jobs.job_status || ': ' ||
+            terminal_jobs.job_error,
+            2000
+          )
+      FROM terminal_jobs
+      WHERE r.id = terminal_jobs.run_id
+        AND r.status = 'RUNNING'
+      RETURNING r.task_id
+    ),
+    failed_tasks AS (
+      UPDATE ai_platform.ai_coding_tasks AS t
+      SET status = 'FAILED',
+          result_summary = LEFT(
+            'Coding workstream execution failed: ' || terminal_jobs.job_error,
+            500
+          ),
+          updated_at = ${now}
+      FROM terminal_jobs
+      WHERE t.id = terminal_jobs.task_id
+        AND t.status = 'ANALYZING'
+        AND EXISTS (
+          SELECT 1
+          FROM failed_runs
+          WHERE failed_runs.task_id = t.id
+        )
+      RETURNING t.id
+    )
+    SELECT
+      (SELECT COUNT(*)::int FROM terminal_jobs) AS inspected,
+      (SELECT COUNT(*)::int FROM failed_runs) AS recovered_runs,
+      (SELECT COUNT(*)::int FROM failed_tasks) AS recovered_tasks
+  `);
+
+  const row = result.rows?.[0] as
+    | {
+        inspected?: number | string;
+        recovered_runs?: number | string;
+        recovered_tasks?: number | string;
+      }
+    | undefined;
+
+  return {
+    inspected: Number(row?.inspected ?? 0),
+    recoveredRuns: Number(row?.recovered_runs ?? 0),
+    recoveredTasks: Number(row?.recovered_tasks ?? 0),
+  };
+}
+
 export async function reconcileStaleMultiWorkerRuns(
   options: { taskId?: string; now?: Date } = {},
 ): Promise<MultiWorkerRecoveryResult> {
@@ -124,11 +211,15 @@ export async function reconcileStaleMultiWorkerRuns(
   for (const item of terminal) candidates.set(item.id, item);
   for (const item of expired) candidates.set(item.id, item);
 
+  const orphanRecovery = options.taskId
+    ? { inspected: 0, recoveredRuns: 0, recoveredTasks: 0 }
+    : await reconcileTerminalMultiWorkerJobOrphans(now);
+
   const result: MultiWorkerRecoveryResult = {
-    inspected: candidates.size,
-    recoveredRuns: 0,
+    inspected: candidates.size + orphanRecovery.inspected,
+    recoveredRuns: orphanRecovery.recoveredRuns,
     recoveredWorkstreams: 0,
-    recoveredTasks: 0,
+    recoveredTasks: orphanRecovery.recoveredTasks,
     recoveredJobs: 0,
   };
 
