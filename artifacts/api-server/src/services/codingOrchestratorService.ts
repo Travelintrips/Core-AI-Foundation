@@ -1261,7 +1261,7 @@ export async function resumeDeferredCodingOrchestrations(): Promise<number> {
     SELECT r.id AS run_id, r.task_id
     FROM ai_platform.ai_coding_runs AS r
     JOIN ai_platform.ai_coding_tasks AS t ON t.id = r.task_id
-    WHERE r.agent_name = 'Coding Orchestrator'
+    WHERE r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')
       AND r.status = 'RUNNING'
       AND t.status = 'ANALYZING'
       AND (
