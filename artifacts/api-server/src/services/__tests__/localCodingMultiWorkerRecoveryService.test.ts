@@ -17,7 +17,10 @@ vi.mock("drizzle-orm", () => ({
   lte: vi.fn(),
 }));
 
-import { workstreamChildLifecycleDisposition } from "../localCodingMultiWorkerRecoveryService.js";
+import {
+  expiredLeaseRecoveryDisposition,
+  workstreamChildLifecycleDisposition,
+} from "../localCodingMultiWorkerRecoveryService.js";
 
 describe("multi-worker child lifecycle recovery", () => {
   it("marks a legacy failed constrained-AI review as FAILED instead of READY_REVIEW", () => {
@@ -61,6 +64,16 @@ describe("multi-worker child lifecycle recovery", () => {
       runStatus: "COMPLETED",
       taskStatus: "READY_REVIEW",
       aiFailure: false,
+    });
+  });
+
+  it("treats an expired active lease as a recoverable requeue while closing the stale child lifecycle", () => {
+    expect(expiredLeaseRecoveryDisposition()).toEqual({
+      workstreamStatus: "READY",
+      graphStatus: "RUNNING",
+      staleRunStatus: "FAILED",
+      staleTaskStatus: "FAILED",
+      clearExecutionBindings: true,
     });
   });
 
