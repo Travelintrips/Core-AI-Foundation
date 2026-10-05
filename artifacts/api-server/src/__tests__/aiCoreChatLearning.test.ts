@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { appendLearningsToMessage, redactLearningText } from "../services/aiCoreChatLearningService.js";
 
@@ -22,5 +23,18 @@ describe("AI Core chat learning hardening", () => {
 
   it("does not modify a prompt when no validated memory exists", () => {
     expect(appendLearningsToMessage("hello", [])).toBe("hello");
+  });
+});
+
+
+describe("AI Core local chat timeout contract", () => {
+  it("keeps a bounded grace window above the remote Ollama model timeout", () => {
+    const source = readFileSync(
+      new URL("../routes/ai-core-chat.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("Math.min(50_000, selection.timeoutMs + 5_000)");
+    expect(source).not.toContain("Math.min(40_000, selection.timeoutMs)");
   });
 });

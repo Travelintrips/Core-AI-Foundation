@@ -8,6 +8,10 @@ import {
   renewLease,
 } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
+import {
+  REMOTE_OLLAMA_CAPABILITY,
+  REMOTE_OLLAMA_RUNTIME_KIND,
+} from "./remoteOllamaWorkerService.js";
 
 export const OLLAMA_WORKER_PROVIDER = "ollama";
 export const OLLAMA_WORKER_RUNTIME_KIND = "ollama_worker";
@@ -275,15 +279,27 @@ export async function getAvailableOllamaCodingSlots(): Promise<number> {
     ) AS available_slots
     FROM ai_platform.ai_workers
     WHERE provider_slug = ${OLLAMA_WORKER_PROVIDER}
-      AND runtime_kind = ${OLLAMA_WORKER_RUNTIME_KIND}
-      AND endpoint_url IS NOT NULL
       AND status IN ('online', 'idle', 'busy')
       AND lease_expires_at IS NOT NULL
       AND lease_expires_at > NOW()
-      AND capabilities @> ${JSON.stringify([
-        OLLAMA_INFERENCE_CAPABILITY,
-        OLLAMA_CODING_CAPABILITY,
-      ])}::jsonb
+      AND (
+        (
+          runtime_kind = ${OLLAMA_WORKER_RUNTIME_KIND}
+          AND endpoint_url IS NOT NULL
+          AND capabilities @> ${JSON.stringify([
+            OLLAMA_INFERENCE_CAPABILITY,
+            OLLAMA_CODING_CAPABILITY,
+          ])}::jsonb
+        )
+        OR
+        (
+          runtime_kind = ${REMOTE_OLLAMA_RUNTIME_KIND}
+          AND endpoint_url IS NULL
+          AND capabilities @> ${JSON.stringify([
+            REMOTE_OLLAMA_CAPABILITY,
+          ])}::jsonb
+        )
+      )
   `);
 
   const value =
