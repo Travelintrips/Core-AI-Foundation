@@ -482,3 +482,32 @@ describe("workstream AI stale-job handoff revocation", () => {
     );
   });
 });
+
+describe("workstream AI automatic repair classification", () => {
+  it("treats ambiguous exact-replacement drift and expired handoffs as bounded repairable failures", async () => {
+    const { decideWorkstreamAiAutoRepair } = await import(
+      "../localCodingWorkstreamAiExecutionService.js"
+    );
+
+    expect(
+      decideWorkstreamAiAutoRepair(
+        new Error("Exact replacement expected 1 occurrence(s), found 3"),
+        null,
+      ).shouldRetry,
+    ).toBe(true);
+
+    expect(
+      decideWorkstreamAiAutoRepair(
+        new Error("AI proposal policy rejected: EXPIRED_HANDOFF"),
+        null,
+      ).shouldRetry,
+    ).toBe(true);
+
+    expect(
+      decideWorkstreamAiAutoRepair(
+        new Error("AI proposal policy rejected: FORBIDDEN_GIT_ACTION"),
+        null,
+      ).shouldRetry,
+    ).toBe(false);
+  });
+});

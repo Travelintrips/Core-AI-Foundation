@@ -88,6 +88,9 @@ let timer: NodeJS.Timeout | null = null;
 let tickRunning = false;
 let lastTestTaskRetentionSweepAt = 0;
 const TEST_TASK_RETENTION_SWEEP_INTERVAL_MS = 60 * 60_000;
+const READY_REVIEW_RECOVERY_INTERVAL_MS = 60_000;
+const READY_REVIEW_EXTENDED_MAX_CYCLES = 80;
+let lastReadyReviewRecoveryAt = 0;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -1488,13 +1491,108 @@ async function temporalOrchestratorActive(): Promise<boolean> {
 }
 
 
+export function readyReviewAutonomousRecoveryDecision(input: {
+  status?: string | null;
+  cycleCount: number;
+  maxCycles: number;
+  lastAction?: string | null;
+  lastError?: string | null;
+}): {
+  reactivate: boolean;
+  extendBudget: boolean;
+  reason: string;
+} {
+  const status = String(input.status ?? "");
+  const cycleCount = Math.max(0, Math.floor(input.cycleCount));
+  const maxCycles = Math.max(1, Math.floor(input.maxCycles));
+  const lastAction = String(input.lastAction ?? "");
+  const lastError = String(input.lastError ?? "");
+
+  if (status === "FAILED" && cycleCount < maxCycles) {
+    return {
+      reactivate: true,
+      extendBudget: false,
+      reason: "FAILED_WITH_REMAINING_BUDGET",
+    };
+  }
+
+  if (status !== "BLOCKED") {
+    return { reactivate: false, extendBudget: false, reason: "NOT_BLOCKED" };
+  }
+
+  // Security/policy blockers must never be auto-reopened by lifecycle cleanup.
+  if (
+    /FORBIDDEN_GIT_ACTION|manual review|required manual review|membutuhkan review manual/i.test(
+      lastError,
+    ) ||
+    [
+      "REPEATED_AI_PROPOSAL_FAILURE",
+      "REPEATED_PROVIDER_BAD_REQUEST",
+      "COMPLETION_EVIDENCE_MISSING",
+      "APPROVAL_REQUIRED",
+    ].includes(lastAction)
+  ) {
+    return {
+      reactivate: false,
+      extendBudget: false,
+      reason: "POLICY_OR_MANUAL_REVIEW_BLOCKER",
+    };
+  }
+
+  const recoverableTechnicalBlocker =
+    lastAction === "TASK_GRAPH_BLOCKER" &&
+    /EXPIRED_HANDOFF|Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT|Exact replacement expected|STALE_CONTEXT|stale claim|repository clone failed/i.test(
+      lastError,
+    );
+
+  if (recoverableTechnicalBlocker && cycleCount < maxCycles) {
+    return {
+      reactivate: true,
+      extendBudget: false,
+      reason: "RECOVERABLE_TECHNICAL_BLOCKER",
+    };
+  }
+
+  // Older rows can be BLOCKED without a persisted blocker reason. Preserve the
+  // pre-existing recovery behavior only for this reasonless legacy state and
+  // only while bounded action budget remains. Explicit policy/manual blockers
+  // were fenced above and are never reopened automatically.
+  if (!lastAction && !lastError && cycleCount < maxCycles) {
+    return {
+      reactivate: true,
+      extendBudget: false,
+      reason: "LEGACY_REASONLESS_BLOCKED",
+    };
+  }
+
+  // Legacy tasks often spent their original 40-cycle budget on polling/races
+  // before those accounting bugs were fixed. Give those tasks one bounded
+  // second budget, but never extend beyond 80 cycles automatically.
+  if (
+    lastAction === "MAX_CYCLES_REACHED" &&
+    maxCycles <= DEFAULT_MAX_CYCLES
+  ) {
+    return {
+      reactivate: true,
+      extendBudget: true,
+      reason: "ONE_TIME_LEGACY_BUDGET_EXTENSION",
+    };
+  }
+
+  return {
+    reactivate: false,
+    extendBudget: false,
+    reason: "NO_SAFE_AUTOMATIC_RECOVERY",
+  };
+}
+
 export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
   const candidates = await db
     .select({ id: aiCodingTasksTable.id })
     .from(aiCodingTasksTable)
     .where(eq(aiCodingTasksTable.status, "READY_REVIEW"))
-    .orderBy(desc(aiCodingTasksTable.updatedAt))
-    .limit(20);
+    .orderBy(aiCodingTasksTable.updatedAt)
+    .limit(50);
 
   const recoverable = new Set([
     "APPROVE_PLAN",
@@ -1516,39 +1614,73 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
     if (!state || !state.nextAction || !recoverable.has(state.nextAction)) continue;
 
     const existing = await db.execute(sql`
-      SELECT task_id, enabled, status, cycle_count, max_cycles
+      SELECT task_id, enabled, status, cycle_count, max_cycles, last_action, last_error
       FROM ai_platform.ai_coding_autonomous_tasks
       WHERE task_id = ${candidate.id}::uuid
       LIMIT 1
     `);
     const row = existing.rows?.[0] as
-      | { status?: string; cycle_count?: number; max_cycles?: number }
+      | {
+          status?: string;
+          cycle_count?: number;
+          max_cycles?: number;
+          last_action?: string | null;
+          last_error?: string | null;
+        }
       | undefined;
 
     if (row) {
       const cycleCount = Number(row.cycle_count ?? 0);
       const maxCycles = Number(row.max_cycles ?? DEFAULT_MAX_CYCLES);
-      if (
-        ["FAILED", "BLOCKED"].includes(String(row.status ?? "")) &&
-        cycleCount < maxCycles
-      ) {
-        const reactivated = await db.execute(sql`
-          UPDATE ai_platform.ai_coding_autonomous_tasks
-          SET enabled = TRUE,
-              status = 'ACTIVE',
-              last_error = NULL,
-              last_action = 'RECOVER_READY_REVIEW',
-              updated_at = NOW()
-          WHERE task_id = ${candidate.id}::uuid
-            AND status IN ('FAILED', 'BLOCKED')
-            AND cycle_count < max_cycles
-          RETURNING task_id
-        `);
-        // A concurrent stop or exhausted budget overrides the earlier read.
+      const decision = readyReviewAutonomousRecoveryDecision({
+        status: row.status,
+        cycleCount,
+        maxCycles,
+        lastAction: row.last_action,
+        lastError: row.last_error,
+      });
+
+      if (decision.reactivate) {
+        const reactivated = decision.extendBudget
+          ? await db.execute(sql`
+              UPDATE ai_platform.ai_coding_autonomous_tasks
+              SET enabled = TRUE,
+                  status = 'ACTIVE',
+                  cycle_count = 0,
+                  max_cycles = GREATEST(max_cycles, ${READY_REVIEW_EXTENDED_MAX_CYCLES}),
+                  last_error = NULL,
+                  last_action = 'RECOVER_READY_REVIEW_MAX_CYCLES',
+                  updated_at = NOW()
+              WHERE task_id = ${candidate.id}::uuid
+                AND status = 'BLOCKED'
+                AND last_action = 'MAX_CYCLES_REACHED'
+                AND max_cycles <= ${DEFAULT_MAX_CYCLES}
+              RETURNING task_id
+            `)
+          : await db.execute(sql`
+              UPDATE ai_platform.ai_coding_autonomous_tasks
+              SET enabled = TRUE,
+                  status = 'ACTIVE',
+                  last_error = NULL,
+                  last_action = 'RECOVER_READY_REVIEW',
+                  updated_at = NOW()
+              WHERE task_id = ${candidate.id}::uuid
+                AND status IN ('FAILED', 'BLOCKED')
+                AND cycle_count < max_cycles
+              RETURNING task_id
+            `);
+
+        // A concurrent stop or changed blocker overrides the earlier read.
         if (!reactivated.rows?.length) continue;
 
         logger.info(
-          { taskId: candidate.id, nextAction: state.nextAction, previousStatus: row.status },
+          {
+            taskId: candidate.id,
+            nextAction: state.nextAction,
+            previousStatus: row.status,
+            recoveryReason: decision.reason,
+            extendedBudget: decision.extendBudget,
+          },
           "[coding-autonomous] reactivated recoverable READY_REVIEW task",
         );
       }
@@ -1583,6 +1715,19 @@ async function autonomousTick(): Promise<void> {
     }
 
     const nowMs = Date.now();
+
+    if (
+      nowMs - lastReadyReviewRecoveryAt >= READY_REVIEW_RECOVERY_INTERVAL_MS
+    ) {
+      lastReadyReviewRecoveryAt = nowMs;
+      await recoverOrphanedReadyReviewTasks().catch((error) => {
+        logger.warn(
+          { err: error },
+          "[coding-autonomous] periodic READY_REVIEW recovery failed",
+        );
+      });
+    }
+
     if (nowMs - lastTestTaskRetentionSweepAt >= TEST_TASK_RETENTION_SWEEP_INTERVAL_MS) {
       lastTestTaskRetentionSweepAt = nowMs;
       const retention = await purgeExpiredCodingTestTasks().catch((error) => {

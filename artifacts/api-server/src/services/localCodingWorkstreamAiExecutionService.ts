@@ -153,7 +153,7 @@ export function decideWorkstreamAiAutoRepair(
     handoffCode === "EXPIRED" ||
     handoffCode === "REVOKED" ||
     handoffCode === "CONSUMED" ||
-    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found 0|patch does not apply|does not match the reviewed AI candidate|one-shot privilege is not available|Approved workstream AI handoff was not found/i.test(
+    /Proposal Contract V1 validation|raw JSON only|not valid JSON|provider (?:is )?unavailable|rate limit|timeout|Exact replacement expected .* found \d+|patch does not apply|does not match the reviewed AI candidate|one-shot privilege is not available|Approved workstream AI handoff was not found|EXPIRED_HANDOFF/i.test(
       message,
     );
 
