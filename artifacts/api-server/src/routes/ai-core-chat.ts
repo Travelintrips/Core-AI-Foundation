@@ -95,6 +95,10 @@ import { runRemoteTrustedPowerShellTask } from "../services/remoteTrustedPowerSh
 import { waitForCodingWhatsappDelivery } from "../services/codingWhatsappNotificationService.js";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import {
+  listAiCoreChatInboxMessages,
+  markAiCoreChatInboxRead,
+} from "../services/aiCoreChatInboxService.js";
+import {
   appendLearningsToMessage,
   promoteExplicitChatLearning,
   promoteOpenAiTeacherExample,
@@ -147,6 +151,10 @@ function normalizeVoiceAgentCommand(message: string): { command: string; wakeWor
   command = command.replace(/\s{2,}/g, " ").trim();
   return { command, wakeWordMatched: true };
 }
+
+const InboxReadRequest = z.object({
+  ids: z.array(z.string().uuid()).max(100).optional(),
+}).strict();
 
 const ChatRequest = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -1890,7 +1898,7 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
       metadata: {
         conversationId: input.conversationId,
         passiveEventBinding: true,
-        eventTypes: ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"],
+        eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
       },
     }).catch((error) => {
       logger.warn(
@@ -3059,6 +3067,32 @@ router.get("/ai/core-chat/external-work/:id", async (req, res): Promise<void> =>
   }
 
   res.json(state);
+});
+
+router.get("/ai/core-chat/inbox", async (req, res): Promise<void> => {
+  const limit = Math.max(1, Math.min(100, Number(req.query["limit"] ?? 50) || 50));
+  try {
+    res.json(await listAiCoreChatInboxMessages(limit));
+  } catch (error) {
+    logger.warn({ error }, "[ai-core-chat] inbox read failed");
+    res.status(503).json({ error: "AI Core inbox is temporarily unavailable." });
+  }
+});
+
+router.post("/ai/core-chat/inbox/read", async (req, res): Promise<void> => {
+  const parsed = InboxReadRequest.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  try {
+    const updated = await markAiCoreChatInboxRead(parsed.data.ids);
+    res.json({ updated });
+  } catch (error) {
+    logger.warn({ error }, "[ai-core-chat] inbox mark-read failed");
+    res.status(503).json({ error: "AI Core inbox could not update read state." });
+  }
 });
 
 router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> => {

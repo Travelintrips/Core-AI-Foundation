@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "wouter";
 import {
   Activity,
+  Bell,
   Bot,
   CheckCircle2,
+  CheckCheck,
   Cloud,
   Cpu,
   Download,
@@ -29,6 +31,7 @@ import {
   Zap,
 } from "lucide-react";
 import { apiEventStream, apiFetch } from "@/lib/apiFetch";
+import { useToast } from "@/hooks/use-toast";
 import {
   PWA_APP_INSTALLED_EVENT,
   PWA_INSTALL_PROMPT_READY_EVENT,
@@ -101,6 +104,29 @@ type CoreConfig = {
   };
 };
 
+
+type InboxMessage = {
+  id: string;
+  responseId: string;
+  commandId: string;
+  taskId: string | null;
+  taskNumber: string | null;
+  projectName: string | null;
+  repository: string | null;
+  branch: string | null;
+  eventType: "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED";
+  title: string;
+  message: string;
+  resultSummary: string | null;
+  workspaceUrl: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
+type InboxResponse = {
+  messages: InboxMessage[];
+  unread: number;
+};
 
 type TaskProgress = {
   task: {
@@ -338,6 +364,7 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 export default function AiCoreChat() {
+  const { toast } = useToast();
   const [mode] = useState<ChatMode>("auto");
   const [policy, setPolicy] = useState<ModelPolicy>("smart");
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
@@ -351,6 +378,12 @@ export default function AiCoreChat() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [progress, setProgress] = useState<TaskProgress | null>(null);
   const [progressError, setProgressError] = useState("");
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([]);
+  const [inboxUnread, setInboxUnread] = useState(0);
+  const [inboxError, setInboxError] = useState("");
+  const inboxInitializedRef = useRef(false);
+  const inboxKnownIdsRef = useRef<Set<string>>(new Set());
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [conversationId] = useState(() => getConversationId());
   const [voiceSupported] = useState(() => Boolean(speechRecognitionConstructor()));
@@ -517,6 +550,69 @@ export default function AiCoreChat() {
       window.speechSynthesis?.cancel();
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const readInbox = async () => {
+      try {
+        const value = await apiFetch<InboxResponse>("/api/ai/core-chat/inbox?limit=50");
+        if (cancelled) return;
+
+        const knownIds = inboxKnownIdsRef.current;
+        const fresh = inboxInitializedRef.current
+          ? value.messages.filter((item) => !knownIds.has(item.id))
+          : [];
+
+        setInboxMessages(value.messages);
+        setInboxUnread(value.unread);
+        setInboxError("");
+
+        if (inboxInitializedRef.current) {
+          for (const item of [...fresh].reverse()) {
+            const taskLabel = item.taskNumber ?? "AI Core task";
+            const summary = item.resultSummary?.trim() || item.message.trim();
+            append({
+              id: `inbox-${item.id}`,
+              role: "assistant",
+              text: [
+                `${taskLabel} · ${item.eventType}`,
+                summary,
+              ].filter(Boolean).join("\n\n"),
+              createdAt: item.createdAt,
+              error: item.eventType === "FAILED" || item.eventType === "BLOCKED",
+              meta: {
+                ...(item.taskNumber ? { taskNumber: item.taskNumber } : {}),
+                ...(item.workspaceUrl ? { workspaceUrl: item.workspaceUrl } : {}),
+              },
+            });
+            toast({
+              title: `${taskLabel} · ${item.eventType}`,
+              description: summary.slice(0, 180),
+              variant:
+                item.eventType === "FAILED" || item.eventType === "BLOCKED"
+                  ? "destructive"
+                  : "default",
+            });
+          }
+        }
+
+        inboxInitializedRef.current = true;
+        inboxKnownIdsRef.current = new Set(value.messages.map((item) => item.id));
+      } catch (error) {
+        if (!cancelled) {
+          setInboxError(error instanceof Error ? error.message : String(error));
+        }
+      }
+    };
+
+    void readInbox();
+    const timer = window.setInterval(() => void readInbox(), 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [toast]);
 
   useEffect(() => {
     if (!activeTaskId) return;
@@ -1586,6 +1682,26 @@ export default function AiCoreChat() {
     setInstallPrompt(null);
   }
 
+  async function toggleInbox() {
+    const opening = !inboxOpen;
+    setInboxOpen(opening);
+    if (!opening || inboxUnread <= 0) return;
+
+    const readAt = new Date().toISOString();
+    setInboxUnread(0);
+    setInboxMessages((current) =>
+      current.map((item) => item.readAt ? item : { ...item, readAt }),
+    );
+    try {
+      await apiFetch<{ updated: number }>("/api/ai/core-chat/inbox/read", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+    } catch (error) {
+      setInboxError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function clearChat() {
     setMessages([]);
     setProgress(null);
@@ -1658,11 +1774,117 @@ export default function AiCoreChat() {
               <span>Install App</span>
             </button>
           )}
+          <button
+            onClick={() => void toggleInbox()}
+            className="relative flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5"
+            style={{
+              color: inboxUnread > 0 ? "#C9C2FF" : "#6B82B0",
+              border: "1px solid #1E3057",
+              background: inboxOpen ? "#121A35" : "#0A1327",
+            }}
+            title="Inbox laporan AI Core"
+          >
+            <Bell className="size-4" />
+            <span>Inbox</span>
+            {inboxUnread > 0 && (
+              <span
+                className="min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-[10px] font-semibold"
+                style={{ background: "#7C6EFA", color: "#FFFFFF" }}
+              >
+                {inboxUnread > 99 ? "99+" : inboxUnread}
+              </span>
+            )}
+          </button>
           <button onClick={clearChat} className="p-2 rounded-lg hover:bg-white/5" style={{ color: "#6B82B0", border: "1px solid #1E3057" }} title="Hapus riwayat chat lokal">
             <Trash2 className="size-4" />
           </button>
         </div>
       </header>
+
+      {inboxOpen && (
+        <div className="px-4 sm:px-6 pt-3" style={{ background: "#060B18" }}>
+          <div
+            className="max-w-5xl mx-auto rounded-xl overflow-hidden"
+            style={{ background: "#0A1327", border: "1px solid #263765" }}
+          >
+            <div className="px-4 py-3 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid #1E3057" }}>
+              <div>
+                <div className="font-semibold text-sm">Inbox AI Core</div>
+                <div className="text-xs mt-0.5" style={{ color: "#7085AE" }}>
+                  Laporan terminal dari coding task. Pesan baru juga tampil otomatis di chat dan popup.
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-xs" style={{ color: "#8195BD" }}>
+                <CheckCheck className="size-4" />
+                Dibaca
+              </div>
+            </div>
+
+            {inboxError && (
+              <div className="px-4 py-2 text-xs" style={{ color: "#FCA5A5", borderBottom: "1px solid #1E3057" }}>
+                {inboxError}
+              </div>
+            )}
+
+            <div className="max-h-72 overflow-y-auto">
+              {inboxMessages.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm" style={{ color: "#7085AE" }}>
+                  Belum ada laporan task.
+                </div>
+              ) : (
+                inboxMessages.map((item) => (
+                  <div
+                    key={item.id}
+                    className="px-4 py-3 flex items-start gap-3"
+                    style={{
+                      borderBottom: "1px solid #152444",
+                      background: item.readAt ? "transparent" : "rgba(124,110,250,.08)",
+                    }}
+                  >
+                    <div
+                      className="mt-1 size-2.5 rounded-full flex-shrink-0"
+                      style={{
+                        background:
+                          item.eventType === "FAILED" || item.eventType === "BLOCKED"
+                            ? "#EF4444"
+                            : "#10B981",
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-sm font-medium">{item.taskNumber ?? item.title}</span>
+                        <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "#141F3D", color: "#9D91FB" }}>
+                          {item.eventType}
+                        </span>
+                        <span className="text-[10px]" style={{ color: "#60769F" }}>
+                          {new Date(item.createdAt).toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                      <p className="text-xs mt-1 leading-5" style={{ color: "#8DA1C8" }}>
+                        {item.resultSummary || item.message}
+                      </p>
+                      {item.repository && (
+                        <div className="text-[10px] mt-1 truncate" style={{ color: "#60769F" }}>
+                          {item.repository}{item.branch ? ` · ${item.branch}` : ""}
+                        </div>
+                      )}
+                    </div>
+                    {item.workspaceUrl && (
+                      <Link
+                        href={item.workspaceUrl}
+                        className="text-xs flex items-center gap-1 px-2 py-1 rounded-md"
+                        style={{ color: "#B8AEFF", border: "1px solid #313C78" }}
+                      >
+                        Buka <ExternalLink className="size-3" />
+                      </Link>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 grid min-h-0 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0 flex flex-col">
