@@ -30,6 +30,7 @@ import {
 } from "../services/localCodingAiProductionModelService.js";
 import { createScheduledOllamaProviderAdapter } from "../services/localCodingOllamaWorkerProviderService.js";
 import {
+  disableAutonomousCodingTask,
   enableAutonomousCodingTask,
   getAutonomousCodingTaskStatus,
   getAutonomousRuntimeStatus,
@@ -1883,6 +1884,69 @@ async function maybeRunRemoteWorkerPreset(
   };
 }
 
+const EXISTING_CWS_TASK = /\b(CWS-[0-9A-F]{8})\b/i;
+const EXISTING_CWS_STOP = /\b(?:stop|hentikan|berhentikan|disable|nonaktifkan)\b/i;
+const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete)\b/i;
+
+async function runExistingCodingTaskLifecycleCommand(
+  message: string,
+): Promise<Record<string, unknown> | null> {
+  const match = message.match(EXISTING_CWS_TASK);
+  if (!match) return null;
+
+  const wantsStop = EXISTING_CWS_STOP.test(message);
+  const wantsResume = EXISTING_CWS_RESUME.test(message);
+  if (!wantsStop && !wantsResume) return null;
+
+  const taskNumber = match[1]!.toUpperCase();
+  const [task] = await db
+    .select()
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.taskNumber, taskNumber))
+    .limit(1);
+
+  if (!task) {
+    return {
+      kind: "validation",
+      route: "CONTROL_PLANE",
+      reply: `Task ${taskNumber} tidak ditemukan.`,
+      taskNumber,
+    };
+  }
+
+  if (wantsStop) {
+    await disableAutonomousCodingTask(task.id);
+    return {
+      kind: "execution",
+      route: "CONTROL_PLANE",
+      reply: `Autonomous execution untuk ${task.taskNumber} dihentikan tanpa membuat task baru.`,
+      taskId: task.id,
+      taskNumber: task.taskNumber,
+      status: task.status,
+      workspaceUrl: `/coding-workspace/${task.id}`,
+      autonomous: false,
+    };
+  }
+
+  const current = await getAutonomousCodingTaskStatus(task.id);
+  const currentMax = Number((current as { max_cycles?: unknown } | null)?.max_cycles ?? 40);
+  const boundedMax = Math.min(100, Math.max(40, Number.isFinite(currentMax) ? currentMax + 40 : 80));
+  await enableAutonomousCodingTask(task.id, boundedMax, { forceDisabled: true });
+
+  return {
+    kind: "execution",
+    route: "CONTROL_PLANE",
+    reply:
+      `Task ${task.taskNumber} dilanjutkan pada task yang sama dengan autonomous budget bounded sampai ${boundedMax} cycle. Tidak ada task duplikat yang dibuat.`,
+    taskId: task.id,
+    taskNumber: task.taskNumber,
+    status: task.status,
+    workspaceUrl: `/coding-workspace/${task.id}`,
+    autonomous: true,
+    maxCycles: boundedMax,
+  };
+}
+
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
   if (!input.projectName || !input.repository || !input.branch) {
     return {
@@ -2138,6 +2202,10 @@ async function runAutoMode(
   }
   input = { ...input, message: commandMessage };
   executionInput = { ...executionInput, message: commandMessage };
+
+  const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(input.message);
+  if (existingTaskLifecycle) return existingTaskLifecycle;
+
   const parsedConversation = parseConversationCommand(input.message, input.context ?? []);
   if (parsedConversation.ambiguous) {
     return {
