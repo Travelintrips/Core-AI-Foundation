@@ -17,7 +17,11 @@ import {
   approveCodingTaskGraph,
   getLatestCodingTaskGraph,
 } from "./localCodingTaskGraphService.js";
-import { dispatchReadyCodingWorkstreams } from "./localCodingMultiWorkerExecutionService.js";
+import {
+  dispatchReadyCodingWorkstreams,
+  requestCodingWorkstreamCapacity,
+} from "./localCodingMultiWorkerExecutionService.js";
+import { getAvailableOllamaCodingSlots } from "./ollamaWorkerRegistryService.js";
 import {
   approveWorkstreamAiCandidatePatch,
   approveWorkstreamAiExecutionHandoff,
@@ -686,6 +690,19 @@ async function processTaskGraph(
       return {
         handled: true,
         blocker: "Task graph tidak memiliki base SHA yang valid untuk dispatch.",
+      };
+    }
+
+    const availableOllamaSlots = await getAvailableOllamaCodingSlots();
+    if (availableOllamaSlots <= 0) {
+      const gcpAutoStartRequested =
+        await requestCodingWorkstreamCapacity(availableOllamaSlots);
+      return {
+        handled: true,
+        action: gcpAutoStartRequested
+          ? "WAIT_OLLAMA_CAPACITY:START_REQUESTED"
+          : "WAIT_OLLAMA_CAPACITY",
+        waiting: true,
       };
     }
 
