@@ -353,10 +353,10 @@ const tools = [
         conversationId: { type: "string", minLength: 1, maxLength: 200 },
         eventTypes: {
           type: "array",
-          items: { type: "string", enum: ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"] },
+          items: { type: "string", enum: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"] },
           minItems: 1,
-          maxItems: 4,
-          default: ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"],
+          maxItems: 5,
+          default: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
         },
         leaseSeconds: { type: "integer", minimum: 30, maximum: 300, default: 300 },
       },
