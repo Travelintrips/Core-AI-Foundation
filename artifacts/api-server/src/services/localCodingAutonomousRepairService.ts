@@ -527,7 +527,7 @@ export function hasDependencyReadyNonReviewWorkstream(
   workstreams: Array<{
     status: string;
     key: string;
-    dependencies: string[];
+    dependencies?: string[] | null;
   }>,
 ): boolean {
   const completedKeys = new Set(
@@ -535,11 +535,13 @@ export function hasDependencyReadyNonReviewWorkstream(
       .filter((item) => item.status === "COMPLETED")
       .map((item) => item.key),
   );
-  return workstreams.some(
-    (item) =>
+  return workstreams.some((item) => {
+    const dependencies = Array.isArray(item.dependencies) ? item.dependencies : [];
+    return (
       ["PENDING", "READY", "CLAIMED", "RUNNING"].includes(item.status) &&
-      item.dependencies.every((dependency) => completedKeys.has(dependency)),
-  );
+      dependencies.every((dependency) => completedKeys.has(dependency))
+    );
+  });
 }
 
 async function processTaskGraph(
