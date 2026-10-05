@@ -196,14 +196,31 @@ describe("autonomous coding explicit stop", () => {
     expect(source).toContain("Autonomous enable skipped because the task was explicitly disabled");
   });
 
-  it("never reactivates DISABLED tasks during READY_REVIEW recovery", () => {
+  it("never reactivates DISABLED tasks during READY_REVIEW recovery", async () => {
+    const { readyReviewAutonomousRecoveryDecision } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "DISABLED",
+        cycleCount: 0,
+        maxCycles: 40,
+        lastAction: null,
+        lastError: null,
+      }),
+    ).toEqual({
+      reactivate: false,
+      extendBudget: false,
+      reason: "NOT_BLOCKED",
+    });
+
     const source = readFileSync(
       new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
       "utf8",
     );
-
-    expect(source).toContain('["FAILED", "BLOCKED"].includes(String(row.status ?? ""))');
-    expect(source).not.toContain('["FAILED", "BLOCKED", "DISABLED"]');
+    expect(source).toContain("AND status IN ('FAILED', 'BLOCKED')");
+    expect(source).not.toContain("AND status IN ('FAILED', 'BLOCKED', 'DISABLED')");
   });
 
   it("preserves DISABLED across internal enable calls unless explicitly forced", () => {
