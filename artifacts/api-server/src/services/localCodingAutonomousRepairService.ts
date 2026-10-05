@@ -517,7 +517,7 @@ export function repeatedNonRetryableAiProviderFailure(
     : null;
 }
 
-export export function isTransientWorkstreamDatabaseFailure(message: string): boolean {
+export function isTransientWorkstreamDatabaseFailure(message: string): boolean {
   return /Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT/i.test(
     message,
   );
