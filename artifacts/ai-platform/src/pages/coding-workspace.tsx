@@ -149,13 +149,15 @@ type CodingOperationalState =
   | "ANALYZING_RUNNING"
   | "WAITING_FOR_WORKER"
   | "QUEUED"
-  | "WAITING_FOR_CAPACITY";
+  | "WAITING_FOR_CAPACITY"
+  | "BLOCKED";
 
 const OPERATIONAL_STATE_LABELS: Record<CodingOperationalState, string> = {
   ANALYZING_RUNNING: "ANALYZING RUNNING",
   WAITING_FOR_WORKER: "WAITING FOR WORKER",
   QUEUED: "QUEUED",
   WAITING_FOR_CAPACITY: "WAITING FOR CAPACITY",
+  BLOCKED: "BLOCKED",
 };
 
 function OperationalStatusBadge({ state }: { state: CodingOperationalState }) {
@@ -164,7 +166,9 @@ function OperationalStatusBadge({ state }: { state: CodingOperationalState }) {
       ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-300"
       : state === "QUEUED"
         ? "border-slate-400/20 bg-slate-400/10 text-slate-300"
-        : "border-amber-400/20 bg-amber-400/10 text-amber-300";
+        : state === "BLOCKED"
+          ? "border-rose-400/20 bg-rose-400/10 text-rose-300"
+          : "border-amber-400/20 bg-amber-400/10 text-amber-300";
   return (
     <span
       className={cn(
@@ -180,7 +184,9 @@ function OperationalStatusBadge({ state }: { state: CodingOperationalState }) {
             ? "bg-cyan-300 animate-pulse"
             : state === "QUEUED"
               ? "bg-slate-300"
-              : "bg-amber-300 animate-pulse",
+              : state === "BLOCKED"
+                ? "bg-rose-300"
+                : "bg-amber-300 animate-pulse",
         )}
       />
       {OPERATIONAL_STATE_LABELS[state]}
@@ -3917,6 +3923,9 @@ export default function CodingWorkspace() {
         if (!cancelled) {
           setMonitor(payload);
           setMonitorError(false);
+          void queryClient.invalidateQueries({
+            queryKey: getListCodingTasksQueryKey(),
+          });
         }
       } catch {
         if (!cancelled) setMonitorError(true);
@@ -3929,7 +3938,7 @@ export default function CodingWorkspace() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     let cancelled = false;

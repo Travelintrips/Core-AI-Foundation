@@ -939,3 +939,37 @@ describe("READY_REVIEW autonomous recovery policy", () => {
     expect(source).toContain("periodic READY_REVIEW recovery failed");
   });
 });
+
+describe("autonomous failed-workstream recovery classification", () => {
+  it("retries transient database failures but not policy failures", async () => {
+    const { isTransientWorkstreamDatabaseFailure } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      isTransientWorkstreamDatabaseFailure(
+        'Workstream AI phase "assert_authorization" failed: Failed query: select * from ai_platform.ai_coding_task_graphs',
+      ),
+    ).toBe(true);
+    expect(
+      isTransientWorkstreamDatabaseFailure(
+        "timeout exceeded when trying to connect",
+      ),
+    ).toBe(true);
+    expect(
+      isTransientWorkstreamDatabaseFailure(
+        "AI proposal policy rejected: FORBIDDEN_GIT_ACTION",
+      ),
+    ).toBe(false);
+  });
+
+  it("bounds transient workstream database retries before hard blocking", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("AUTO_RECOVER_TRANSIENT_WORKSTREAM_DB");
+    expect(source).toContain("failed.attemptCount < 4");
+    expect(source).toContain("retryFailedCodingWorkstream(failed.id)");
+  });
+});

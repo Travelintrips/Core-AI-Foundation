@@ -2,7 +2,8 @@ export type CodingWorkspaceOperationalState =
   | "ANALYZING_RUNNING"
   | "WAITING_FOR_WORKER"
   | "QUEUED"
-  | "WAITING_FOR_CAPACITY";
+  | "WAITING_FOR_CAPACITY"
+  | "BLOCKED";
 
 const CODING_MONITOR_CAPABILITIES = new Set([
   "coding_repository_analyzer",
@@ -65,6 +66,10 @@ export function deriveCodingWorkspaceOperationalState(input: {
 
   if (input.hasActiveRun) {
     return "ANALYZING_RUNNING";
+  }
+
+  if (input.autonomousStatus === "BLOCKED") {
+    return "BLOCKED";
   }
 
   if (

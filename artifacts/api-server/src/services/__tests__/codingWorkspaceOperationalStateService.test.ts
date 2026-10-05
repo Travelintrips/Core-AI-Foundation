@@ -77,6 +77,34 @@ describe("Coding Workspace operational states", () => {
     ).toBe("QUEUED");
   });
 
+  it("shows an autonomous blocker as BLOCKED once no live job or run remains", () => {
+    expect(
+      deriveCodingWorkspaceOperationalState({
+        presentationStatus: "READY_REVIEW",
+        autonomousStatus: "BLOCKED",
+        hasActiveRun: false,
+        jobStatus: null,
+        requiredCapability: null,
+        healthyCapableWorkers: 1,
+        availableCapableWorkers: 1,
+      }),
+    ).toBe("BLOCKED");
+  });
+
+  it("shows an autonomous blocker as BLOCKED once no live job or run remains", () => {
+    expect(
+      deriveCodingWorkspaceOperationalState({
+        presentationStatus: "READY_REVIEW",
+        autonomousStatus: "BLOCKED",
+        hasActiveRun: false,
+        jobStatus: null,
+        requiredCapability: null,
+        healthyCapableWorkers: 1,
+        availableCapableWorkers: 1,
+      }),
+    ).toBe("BLOCKED");
+  });
+
   it("requires a valid lease and fresh heartbeat before a worker is active", () => {
     expect(
       isHealthyCodingWorker({
