@@ -517,6 +517,12 @@ export function repeatedNonRetryableAiProviderFailure(
     : null;
 }
 
+export function isTransientWorkstreamDatabaseFailure(message: string): boolean {
+  return /Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT/i.test(
+    message,
+  );
+}
+
 async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
@@ -555,6 +561,19 @@ async function processTaskGraph(
       return {
         handled: true,
         action: `AUTO_RECOVER_MISSING_SYNTHETIC_BRANCH:${failed.key}`,
+      };
+    }
+
+    if (
+      isTransientWorkstreamDatabaseFailure(failure) &&
+      failed.attemptCount < 4
+    ) {
+      await reserveCycle();
+      await retryFailedCodingWorkstream(failed.id);
+      return {
+        handled: true,
+        action: `AUTO_RECOVER_TRANSIENT_WORKSTREAM_DB:${failed.key}`,
+        waiting: true,
       };
     }
 
