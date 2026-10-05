@@ -31,6 +31,15 @@ describe("AI Core Hostinger infrastructure control", () => {
   });
 
   it.each([
+    ["GCP cek status konfigurasi GCP Billing Export", null],
+    ["GCP check BigQuery billing export status", null],
+    ["Google Cloud cek biaya dan usage cost Workspace", null],
+    ["GCP cek tagihan bulanan", null],
+  ])("does not route billing intent into Compute VM operations for %s", (message, expected) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it.each([
     ["GCP start VM because status terakhir TERMINATED", "GCP_VM_START"],
     ["Google Cloud nyalakan ollama vm, status sekarang TERMINATED", "GCP_VM_START"],
     ["GCP restart VM setelah cek status", "GCP_VM_RESTART"],
