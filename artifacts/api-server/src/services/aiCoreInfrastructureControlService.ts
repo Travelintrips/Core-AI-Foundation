@@ -438,6 +438,43 @@ async function callHostinger(
     throw new Error("Specify domain=<domain> for multi-domain Hostinger operations.");
   };
 
+  const parentDnsZoneCandidates = (domain: string): string[] => {
+    const labels = domain.toLowerCase().replace(/\.$/, "").split(".").filter(Boolean);
+    const candidates: string[] = [];
+    for (let index = 1; index <= labels.length - 2; index += 1) {
+      candidates.push(labels.slice(index).join("."));
+    }
+    return candidates;
+  };
+
+  const resolveParentDnsZone = async (requestedDomain: string): Promise<string | null> => {
+    for (const candidate of parentDnsZoneCandidates(requestedDomain)) {
+      const result = await firstSuccessful(`/dns/v1/zones/${encodeURIComponent(candidate)}`, "GET");
+      if (result.status >= 200 && result.status < 300) return candidate;
+    }
+    return null;
+  };
+
+  const zoneRelativeRecordName = (
+    requestedDomain: string,
+    zoneDomain: string,
+    recordName: string,
+  ): string => {
+    const requested = requestedDomain.toLowerCase().replace(/\.$/, "");
+    const zone = zoneDomain.toLowerCase().replace(/\.$/, "");
+    if (requested === zone) return recordName;
+    const suffix = "." + zone;
+    if (!requested.endsWith(suffix)) return recordName;
+    const delegatedPrefix = requested.slice(0, -suffix.length);
+    if (!delegatedPrefix) return recordName;
+    if (recordName === "@") return delegatedPrefix;
+    const normalizedRecord = recordName.toLowerCase().replace(/\.$/, "");
+    if (normalizedRecord === delegatedPrefix || normalizedRecord.endsWith("." + delegatedPrefix)) {
+      return recordName;
+    }
+    return `${recordName}.${delegatedPrefix}`;
+  };
+
   let data: unknown = null;
 
   if ([
@@ -447,31 +484,61 @@ async function callHostinger(
     "HOSTINGER_DNS_RECORD_UPDATE",
     "HOSTINGER_DNS_RECORD_DELETE",
   ].includes(operation)) {
-    const dnsDomain = valueOf("domain") || hostingDomain;
-    if (!dnsDomain) throw new Error("DNS operations require domain=<domain>.");
-    const zonePath = `/dns/v1/zones/${encodeURIComponent(dnsDomain)}`;
+    const requestedDnsDomain = valueOf("domain") || hostingDomain;
+    if (!requestedDnsDomain) throw new Error("DNS operations require domain=<domain>.");
+
+    let dnsDomain = requestedDnsDomain;
+    let zonePath = `/dns/v1/zones/${encodeURIComponent(dnsDomain)}`;
+
+    const fallbackToParentZone = async (): Promise<boolean> => {
+      const resolved = await resolveParentDnsZone(requestedDnsDomain);
+      if (!resolved || resolved === dnsDomain) return false;
+      dnsDomain = resolved;
+      zonePath = `/dns/v1/zones/${encodeURIComponent(dnsDomain)}`;
+      return true;
+    };
 
     if (operation === "HOSTINGER_DNS_LIST") {
-      const result = await firstSuccessful(zonePath, "GET");
+      let result = await firstSuccessful(zonePath, "GET");
+      if (result.status === 404 && await fallbackToParentZone()) {
+        result = await firstSuccessful(zonePath, "GET");
+      }
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Hostinger DNS list failed with HTTP ${result.status}.`);
       }
-      data = result.data;
+      data = dnsDomain === requestedDnsDomain
+        ? result.data
+        : { requestedDomain: requestedDnsDomain, zoneDomain: dnsDomain, records: result.data };
     } else if (operation === "HOSTINGER_DNS_RECORD_DELETE") {
-      const name = valueOf("name") || valueOf("subdomain");
+      const rawName = valueOf("name") || valueOf("subdomain");
       const type = valueOf("type").toUpperCase();
-      if (!name) throw new Error("DNS record delete requires name=<record-name>.");
+      if (!rawName) throw new Error("DNS record delete requires name=<record-name>.");
       if (!type) throw new Error("DNS record delete requires type=<record-type>.");
-      const result = await firstSuccessful(zonePath, "DELETE", {
+
+      let name = rawName;
+      let result = await firstSuccessful(zonePath, "DELETE", {
         filters: [{ name, type }],
       });
+      if (result.status === 404 && await fallbackToParentZone()) {
+        name = zoneRelativeRecordName(requestedDnsDomain, dnsDomain, rawName);
+        result = await firstSuccessful(zonePath, "DELETE", {
+          filters: [{ name, type }],
+        });
+      }
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Hostinger DNS delete failed with HTTP ${result.status}.`);
       }
-      data = { domain: dnsDomain, name, type, deleted: true, result: result.data };
+      data = {
+        domain: dnsDomain,
+        ...(dnsDomain !== requestedDnsDomain ? { requestedDomain: requestedDnsDomain } : {}),
+        name,
+        type,
+        deleted: true,
+        result: result.data,
+      };
     } else {
       const legacySubdomain = operation === "HOSTINGER_DNS_SUBDOMAIN_CREATE";
-      const name = valueOf("name") || valueOf("subdomain") || "@";
+      const rawName = valueOf("name") || valueOf("subdomain") || "@";
       const content = valueOf("content") || valueOf("target");
       const requestedType = valueOf("type").toUpperCase();
       if (!content) throw new Error("DNS record mutation requires content=<record-value> or target=<record-value>.");
@@ -483,7 +550,7 @@ async function callHostinger(
       if (!allowedTypes.has(type)) {
         throw new Error("DNS record type must be one of A, AAAA, CNAME, TXT, MX, SRV, CAA, or NS.");
       }
-      if (legacySubdomain && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(name)) {
+      if (legacySubdomain && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(rawName)) {
         throw new Error("DNS subdomain create requires a valid subdomain=<prefix>.");
       }
 
@@ -494,7 +561,8 @@ async function callHostinger(
       }
 
       const overwrite = operation === "HOSTINGER_DNS_RECORD_UPDATE" || boolOf("overwrite") === true;
-      const body = {
+      let name = rawName;
+      const buildBody = () => ({
         overwrite,
         zone: [{
           name,
@@ -502,17 +570,35 @@ async function callHostinger(
           ttl,
           records: [{ content }],
         }],
-      };
-      const validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
+      });
+
+      let body = buildBody();
+      let validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
+      if (validation.status === 404 && await fallbackToParentZone()) {
+        name = zoneRelativeRecordName(requestedDnsDomain, dnsDomain, rawName);
+        body = buildBody();
+        validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
+      }
       if (validation.status < 200 || validation.status >= 300) {
         throw new Error(`Hostinger DNS validation failed with HTTP ${validation.status}.`);
       }
-      const result = await firstSuccessful(zonePath, "PUT", body);
+
+      let result = await firstSuccessful(zonePath, "PUT", body);
+      if (result.status === 404 && dnsDomain === requestedDnsDomain && await fallbackToParentZone()) {
+        name = zoneRelativeRecordName(requestedDnsDomain, dnsDomain, rawName);
+        body = buildBody();
+        validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
+        if (validation.status < 200 || validation.status >= 300) {
+          throw new Error(`Hostinger DNS validation failed with HTTP ${validation.status}.`);
+        }
+        result = await firstSuccessful(zonePath, "PUT", body);
+      }
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Hostinger DNS update failed with HTTP ${result.status}.`);
       }
       data = {
         domain: dnsDomain,
+        ...(dnsDomain !== requestedDnsDomain ? { requestedDomain: requestedDnsDomain } : {}),
         name,
         type,
         content,
