@@ -519,6 +519,21 @@ describe("Coding Orchestrator", () => {
     expect(sqlText).toContain("RETRY_REPOSITORY_ANALYSIS");
   });
 
+  it("recovers deferred Incident Auto-Repair runs in addition to Coding Orchestrator runs", async () => {
+    mockDbExecute.mockResolvedValueOnce({ rows: [] });
+
+    expect(await resumeDeferredCodingOrchestrations()).toBe(0);
+
+    const query = mockDbExecute.mock.calls[0]?.[0] as
+      | { strings?: readonly string[] }
+      | undefined;
+    const sqlText = query?.strings?.join("") ?? "";
+    expect(sqlText).toContain(
+      "r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')",
+    );
+    expect(sqlText).toContain("WAIT_REPOSITORY_ANALYZER_SLOT");
+  });
+
   it("resumes the same deferred run after the analyzer slot becomes available", async () => {
     mockSelectLimit.mockResolvedValueOnce([{ id: 1509 }]);
     await startCodingOrchestration({ task: task as never, run: run as never });
