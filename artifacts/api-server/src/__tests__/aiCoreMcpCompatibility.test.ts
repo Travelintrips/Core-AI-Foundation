@@ -27,10 +27,10 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.4.0");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.5.0");
     expect(response.body.result.serverInfo).toEqual({
       name: "ai-core-direct-command",
-      version: "1.4.0",
+      version: "1.5.0",
     });
     expect(response.body.result.protocolVersion).toBe("2025-06-18");
     expect(response.body.result.capabilities).toEqual({
@@ -70,7 +70,7 @@ describe("AI Core MCP discovery compatibility", () => {
       capabilities: { tools: {}, events: {} },
       serverInfo: {
         name: "ai-core-direct-command",
-        version: "1.4.0",
+        version: "1.5.0",
       },
     });
   });
@@ -115,10 +115,11 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.4.0");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.5.0");
     const toolNames = response.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(
       expect.arrayContaining([
+        "query_ai_core",
         "send_ai_core_command",
         "get_ai_core_task_progress",
         "subscribe_ai_core_events",
@@ -137,6 +138,14 @@ describe("AI Core MCP discovery compatibility", () => {
       const tool = response.body.result.tools.find((item: { name: string }) => item.name === name);
       expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.events"] }]);
     }
+    const queryTool = response.body.result.tools.find((item: { name: string }) => item.name === "query_ai_core");
+    expect(queryTool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.progress"] }]);
+    expect(queryTool.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
     const subscribeTool = response.body.result.tools.find((item: { name: string }) => item.name === "subscribe_ai_core_events");
     expect(subscribeTool.inputSchema.properties.eventTypes.items.enum).toContain("BLOCKED");
   });
@@ -150,9 +159,10 @@ it("exposes the same live tool registry on the fresh v2 endpoint", async () => {
 
   expect(response.status).toBe(200);
   expect(response.headers["cache-control"]).toContain("no-store");
-  expect(response.headers["x-mcp-server-version"]).toBe("1.4.0");
+  expect(response.headers["x-mcp-server-version"]).toBe("1.5.0");
   expect(response.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
     expect.arrayContaining([
+      "query_ai_core",
       "send_ai_core_command",
       "get_ai_core_task_progress",
       "subscribe_ai_core_events",

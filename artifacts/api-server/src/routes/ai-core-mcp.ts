@@ -28,7 +28,16 @@ const router = Router();
 const MCP_PROTOCOL_VERSION = "2026-07-28";
 const COMPAT_MCP_PROTOCOL_VERSION = "2025-06-18";
 const LEGACY_MCP_PROTOCOL_VERSION = "2025-03-26";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.4.0" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.5.0" };
+
+const ReadOnlyQueryArgs = z.object({
+  message: z.string().trim().min(1).max(50_000),
+  modelPolicy: z.enum(["economy", "smart", "auto", "cloud"]).default("smart"),
+  projectName: z.string().trim().min(1).max(200).default("Core AI Foundation"),
+  repository: z.string().trim().min(1).max(500).default("Travelintrips/Core-AI-Foundation"),
+  branch: z.string().trim().min(1).max(200).default("main"),
+  conversationId: z.string().trim().min(1).max(200).optional(),
+}).strict();
 
 const SendCommandArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -39,6 +48,14 @@ const SendCommandArgs = z.object({
   priority: z.number().int().min(0).max(100).default(50),
   conversationId: z.string().trim().min(1).max(200).optional(),
 }).strict();
+
+function readOnlyQueryMessage(message: string): string | null {
+  const trimmed = message.trim();
+  const withoutExecutionPrefix = trimmed.startsWith("@")
+    ? trimmed.slice(1).trim()
+    : trimmed;
+  return withoutExecutionPrefix.length > 0 ? withoutExecutionPrefix : null;
+}
 
 function executionGatedMessage(message: string): string | null {
   const trimmed = message.trim();
@@ -293,6 +310,32 @@ function authRequiredResult(id: unknown, scope: string) {
 }
 
 const tools = [
+  {
+    name: "query_ai_core",
+    description:
+      "Ask AI Core a read-only question or inspect status. Use this for checks such as @cek, readiness, worker/task status, and explanations. This tool never creates coding tasks and never changes code, configuration, deployments, databases, or infrastructure; a leading @ is treated only as query syntax.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["message"],
+      properties: {
+        message: { type: "string", minLength: 1, maxLength: 50000 },
+        modelPolicy: { type: "string", enum: ["economy", "smart", "auto", "cloud"], default: "smart" },
+        projectName: { type: "string", default: "Core AI Foundation" },
+        repository: { type: "string", default: "Travelintrips/Core-AI-Foundation" },
+        branch: { type: "string", default: "main" },
+        conversationId: { type: "string" },
+      },
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    annotations: {
+      title: "Query AI Core",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
   {
     name: "send_ai_core_command",
     description:
@@ -688,10 +731,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
   }
 
   const requiredScope =
-    params.name === "send_ai_core_command"
-      ? "ai_core.command"
-      : params.name === "get_ai_core_task_progress"
-        ? "ai_core.progress"
+    params.name === "query_ai_core"
+      ? "ai_core.progress"
+      : params.name === "send_ai_core_command"
+        ? "ai_core.command"
+        : params.name === "get_ai_core_task_progress"
+          ? "ai_core.progress"
         : ["subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event", "unsubscribe_ai_core_events"].includes(params.name)
           ? "ai_core.progress"
           : params.name === "get_profile"
@@ -712,7 +757,33 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
 
   try {
     let payload: unknown;
-    if (params.name === "send_ai_core_command") {
+    if (params.name === "query_ai_core") {
+      const parsed = ReadOnlyQueryArgs.parse(params.arguments ?? {});
+      const message = readOnlyQueryMessage(parsed.message);
+      if (!message) {
+        res.status(200).json(
+          rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "Read-only query cannot be empty." }],
+            structuredContent: { blocked: true, reason: "empty_readonly_query" },
+            isError: true,
+          }),
+        );
+        return;
+      }
+      payload = await callAiCore(
+        "/ai/core-chat/messages",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...parsed,
+            message,
+            mode: "ask",
+            source: "text",
+          }),
+        },
+        identity.connectorKey,
+      );
+    } else if (params.name === "send_ai_core_command") {
       const parsed = SendCommandArgs.parse(params.arguments ?? {});
       const command = executionGatedMessage(parsed.message);
       if (!command) {

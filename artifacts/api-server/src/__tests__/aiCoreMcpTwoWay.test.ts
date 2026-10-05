@@ -22,11 +22,31 @@ describe("MCP command two-way routing", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ kind: "answer", reply: "OK" }), { status: 200 })));
   });
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
-  function send(message: string) {
+  function callTool(name: string, args: Record<string, unknown>) {
     const app = express(); app.use(express.json()); app.use("/api", router);
     return request(app).post("/api/ai/core-chat/mcp").set("Authorization", "Bearer test-connector-key")
-      .send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "send_ai_core_command", arguments: { message, conversationId: "conversation-a" } } });
+      .send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
   }
+  function send(message: string) {
+    return callTool("send_ai_core_command", { message, conversationId: "conversation-a" });
+  }
+  it("routes read-only queries through ask mode and strips an execution-looking prefix", async () => {
+    const response = await callTool("query_ai_core", {
+      message: "@cek status worker",
+      conversationId: "conversation-a",
+      repository: "Travelintrips/Core-AI-Foundation",
+    });
+    expect(response.body.result.isError).toBeFalsy();
+    const init = vi.mocked(fetch).mock.calls[0][1];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      mode: "ask",
+      source: "text",
+      message: "cek status worker",
+      conversationId: "conversation-a",
+    });
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
   it("uses automatic dispatch and persists the reply in its conversation", async () => {
     const response = await send("@ Uji koneksi MCP");
     expect(response.body.result.isError).toBeFalsy();
