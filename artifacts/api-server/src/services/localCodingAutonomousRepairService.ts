@@ -29,6 +29,7 @@ import {
   manualAiPatchReviewReason,
   materializeApprovedWorkstreamAiCandidate,
   prepareWorkstreamAiExecutionHandoff,
+  resetApprovedWorkstreamAiCandidateForAutoRepair,
 } from "./localCodingWorkstreamAiExecutionService.js";
 import {
   completeReviewedCodingWorkstream,
@@ -553,7 +554,22 @@ async function processTaskGraph(
 
         await reserveCycle();
         await approveWorkstreamAiCandidatePatch(review.id);
-        await materializeApprovedWorkstreamAiCandidate(review.id);
+        try {
+          await materializeApprovedWorkstreamAiCandidate(review.id);
+        } catch (error) {
+          const repair = await resetApprovedWorkstreamAiCandidateForAutoRepair(
+            review.id,
+            error,
+          );
+          if (repair.shouldRetry) {
+            return {
+              handled: true,
+              action: `AUTO_REPAIR_MATERIALIZATION:${review.key}:${repair.nextRepairAttempt}`,
+              waiting: true,
+            };
+          }
+          throw error;
+        }
         await completeReviewedCodingWorkstream(review.id, {
           completeChildTask: true,
           childTaskResultSummary:
@@ -570,7 +586,22 @@ async function processTaskGraph(
         execution.reviewStatus === "APPROVED"
       ) {
         await reserveCycle();
-        await materializeApprovedWorkstreamAiCandidate(review.id);
+        try {
+          await materializeApprovedWorkstreamAiCandidate(review.id);
+        } catch (error) {
+          const repair = await resetApprovedWorkstreamAiCandidateForAutoRepair(
+            review.id,
+            error,
+          );
+          if (repair.shouldRetry) {
+            return {
+              handled: true,
+              action: `AUTO_REPAIR_MATERIALIZATION:${review.key}:${repair.nextRepairAttempt}`,
+              waiting: true,
+            };
+          }
+          throw error;
+        }
         await completeReviewedCodingWorkstream(review.id, {
           completeChildTask: true,
           childTaskResultSummary:

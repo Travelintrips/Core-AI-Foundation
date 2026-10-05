@@ -175,6 +175,100 @@ export function decideWorkstreamAiAutoRepair(
   };
 }
 
+export async function resetApprovedWorkstreamAiCandidateForAutoRepair(
+  workstreamId: string,
+  error: unknown,
+): Promise<WorkstreamAiAutoRepairDecision> {
+  const [current] = await db
+    .select()
+    .from(aiCodingWorkstreamsTable)
+    .where(eq(aiCodingWorkstreamsTable.id, workstreamId));
+
+  if (!current) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Coding workstream not found.",
+      "NOT_FOUND",
+    );
+  }
+  if (current.status !== "REVIEW_REQUIRED" || !isRecord(current.resultJson)) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Workstream is not in a recoverable AI review state.",
+      "NOT_READY",
+      { status: current.status },
+    );
+  }
+
+  const decision = decideWorkstreamAiAutoRepair(error, current.resultJson);
+  if (!decision.shouldRetry) return decision;
+
+  const now = new Date();
+  const message = error instanceof Error ? error.message : String(error);
+  const nextResult: Record<string, unknown> = {
+    ...current.resultJson,
+    workstreamAiExecution: {
+      version: 1,
+      status: "FAILED",
+      nextAction: "AI_REQUIRED",
+      error: message.slice(0, 1_200),
+      modelInvoked: true,
+      privilegeEnded: true,
+      autoRepairAttempt: decision.nextRepairAttempt,
+      autoRepairMaxAttempts: decision.maxRepairAttempts,
+      autoRepairStatus: "RETRY_PENDING",
+      failedAt: now.toISOString(),
+    },
+  };
+
+  const [updated] = await db
+    .update(aiCodingWorkstreamsTable)
+    .set({
+      resultJson: nextResult,
+      errorMessage: null,
+      heartbeatAt: now,
+    })
+    .where(
+      and(
+        eq(aiCodingWorkstreamsTable.id, workstreamId),
+        eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"),
+      ),
+    )
+    .returning({ id: aiCodingWorkstreamsTable.id });
+
+  if (!updated) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Workstream changed before materialization auto-repair could be persisted.",
+      "LEASE_LOST",
+    );
+  }
+
+  if (current.childTaskId) {
+    await db
+      .update(aiCodingTasksTable)
+      .set({
+        status: "ANALYZING",
+        resultSummary:
+          `AI Core is regenerating a bounded workstream candidate after recoverable materialization drift (attempt ${decision.nextRepairAttempt}/${decision.maxRepairAttempts}).`,
+      })
+      .where(eq(aiCodingTasksTable.id, current.childTaskId))
+      .catch(() => undefined);
+  }
+
+  await logAudit(
+    "coding-multi-worker",
+    "workstream_ai_materialization_auto_repair_reset",
+    workstreamId,
+    "coding_workstream",
+    "success",
+    {
+      repairAttempt: decision.nextRepairAttempt,
+      maxRepairAttempts: decision.maxRepairAttempts,
+      error: message.slice(0, 700),
+    },
+  ).catch(() => undefined);
+
+  return decision;
+}
+
 interface WorkstreamAiJobPayload {
   graphId: string;
   workstreamId: string;
