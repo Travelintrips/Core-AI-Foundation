@@ -57,7 +57,7 @@ describe("AI Core Hostinger infrastructure control", () => {
 
   it.each([
     [
-      "cek konfigurasi runtime aktual AI Core tanpa melakukan perubahan. apakah worker GCloud auto-start saat ada job dan auto-stop setelah idle?",
+      "cek konfigurasi runtime aktual AI Core tanpa melakukan perubahan. service utama berjalan di Hostinger atau GCloud, dan apakah worker GCloud auto-start saat ada job lalu auto-stop setelah idle?",
       "HOSTINGER_VPS_STATUS",
     ],
     [
