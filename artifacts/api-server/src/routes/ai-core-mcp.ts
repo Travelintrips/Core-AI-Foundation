@@ -52,10 +52,10 @@ const TaskProgressArgs = z.object({
   taskId: z.string().uuid(),
 }).strict();
 
-const EventTypes = z.enum(["COMPLETED", "FAILED", "MERGED", "DEPLOYED"]);
+const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]);
 const SubscribeEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
-  eventTypes: z.array(EventTypes).min(1).max(4).default(["COMPLETED", "FAILED", "MERGED", "DEPLOYED"]),
+  eventTypes: z.array(EventTypes).min(1).max(5).default(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]),
   leaseSeconds: z.number().int().min(30).max(300).default(300),
 }).strict();
 const ReadEventsArgs = z.object({
@@ -539,13 +539,13 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       "protocolVersion" in body.params &&
       typeof (body.params as { protocolVersion?: unknown }).protocolVersion === "string"
         ? (body.params as { protocolVersion: string }).protocolVersion
-        : MCP_PROTOCOL_VERSION;
+        : COMPAT_MCP_PROTOCOL_VERSION;
     const negotiatedProtocolVersion =
       requestedProtocolVersion === MCP_PROTOCOL_VERSION ||
       requestedProtocolVersion === COMPAT_MCP_PROTOCOL_VERSION ||
       requestedProtocolVersion === LEGACY_MCP_PROTOCOL_VERSION
         ? requestedProtocolVersion
-        : MCP_PROTOCOL_VERSION;
+        : COMPAT_MCP_PROTOCOL_VERSION;
     res.status(200).json(
       rpcResult(body.id ?? null, {
         protocolVersion: negotiatedProtocolVersion,
