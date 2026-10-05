@@ -26,6 +26,10 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_SUBDOMAIN_CREATE"
   | "HOSTINGER_DNS_LIST"
   | "HOSTINGER_DNS_SUBDOMAIN_CREATE"
+  | "HOSTINGER_DNS_RECORD_CREATE"
+  | "HOSTINGER_DNS_RECORD_UPDATE"
+  | "HOSTINGER_DNS_RECORD_DELETE"
+  | "HOSTINGER_DOCKER_ENV_SET"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
   | "EXTERNAL_AGENT_STATUS";
@@ -97,6 +101,21 @@ export function detectAiCoreInfrastructureOperation(
       /\b(cari|find|discover|discovery|list|daftar|cek|check|lihat)\b/i.test(text) &&
       /\b(hosting username|hosting domain|hosting account|website|websites|akun hosting|domain hosting)\b/i.test(text)) {
     return "HOSTINGER_HOSTING_DISCOVERY";
+  }
+
+  if (/\b(hostinger|hpanel)\b/i.test(text) &&
+      /\b(secret|secrets|env|environment|environment variable|variabel environment)\b/i.test(text) &&
+      /\b(set|add|tambah|masukkan|masukan|simpan|update|ubah|ganti|apply|pasang)\b/i.test(text) &&
+      !/(?:^|\s)content\s*=/i.test(text)) {
+    return "HOSTINGER_DOCKER_ENV_SET";
+  }
+
+  if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(dns|zone|record)\b/i.test(text)) {
+    if (/\b(delete|hapus|remove)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_DELETE";
+    if (/\b(update|ubah|ganti|replace|overwrite)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_UPDATE";
+    if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomain\b/i.test(text)) {
+      return "HOSTINGER_DNS_RECORD_CREATE";
+    }
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomain\b/i.test(text)) {
@@ -295,6 +314,21 @@ async function callHostinger(
     if (["0", "false", "no", "tidak"].includes(value)) return false;
     throw new Error(`${key} must be true or false.`);
   };
+  const parseEnvironment = (value: string): Map<string, string> => {
+    const vars = new Map<string, string>();
+    for (const line of value.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const separator = trimmed.indexOf("=");
+      if (separator <= 0) continue;
+      const key = trimmed.slice(0, separator).trim();
+      const val = trimmed.slice(separator + 1);
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) vars.set(key, val);
+    }
+    return vars;
+  };
+  const serializeEnvironment = (vars: Map<string, string>): string =>
+    [...vars.entries()].map(([key, value]) => `${key}=${value}`).join("\n");
   const project = valueOf("project") || config.dockerProject;
   const hostingUsername = valueOf("username") || config.hostingUsername;
   const explicitHostingDomain = valueOf("domain");
@@ -406,7 +440,13 @@ async function callHostinger(
 
   let data: unknown = null;
 
-  if (operation === "HOSTINGER_DNS_LIST" || operation === "HOSTINGER_DNS_SUBDOMAIN_CREATE") {
+  if ([
+    "HOSTINGER_DNS_LIST",
+    "HOSTINGER_DNS_SUBDOMAIN_CREATE",
+    "HOSTINGER_DNS_RECORD_CREATE",
+    "HOSTINGER_DNS_RECORD_UPDATE",
+    "HOSTINGER_DNS_RECORD_DELETE",
+  ].includes(operation)) {
     const dnsDomain = valueOf("domain") || hostingDomain;
     if (!dnsDomain) throw new Error("DNS operations require domain=<domain>.");
     const zonePath = `/dns/v1/zones/${encodeURIComponent(dnsDomain)}`;
@@ -417,34 +457,50 @@ async function callHostinger(
         throw new Error(`Hostinger DNS list failed with HTTP ${result.status}.`);
       }
       data = result.data;
+    } else if (operation === "HOSTINGER_DNS_RECORD_DELETE") {
+      const name = valueOf("name") || valueOf("subdomain");
+      const type = valueOf("type").toUpperCase();
+      if (!name) throw new Error("DNS record delete requires name=<record-name>.");
+      if (!type) throw new Error("DNS record delete requires type=<record-type>.");
+      const result = await firstSuccessful(zonePath, "DELETE", {
+        filters: [{ name, type }],
+      });
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger DNS delete failed with HTTP ${result.status}.`);
+      }
+      data = { domain: dnsDomain, name, type, deleted: true, result: result.data };
     } else {
-      const subdomain = valueOf("subdomain");
-      const target = valueOf("target") || valueOf("content");
+      const legacySubdomain = operation === "HOSTINGER_DNS_SUBDOMAIN_CREATE";
+      const name = valueOf("name") || valueOf("subdomain") || "@";
+      const content = valueOf("content") || valueOf("target");
       const requestedType = valueOf("type").toUpperCase();
-      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(subdomain)) {
+      if (!content) throw new Error("DNS record mutation requires content=<record-value> or target=<record-value>.");
+
+      const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(content);
+      const ipv6 = /^[0-9a-f:]+$/i.test(content) && content.includes(":");
+      const type = requestedType || (ipv4 ? "A" : ipv6 ? "AAAA" : "CNAME");
+      const allowedTypes = new Set(["A", "AAAA", "CNAME", "TXT", "MX", "SRV", "CAA", "NS"]);
+      if (!allowedTypes.has(type)) {
+        throw new Error("DNS record type must be one of A, AAAA, CNAME, TXT, MX, SRV, CAA, or NS.");
+      }
+      if (legacySubdomain && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(name)) {
         throw new Error("DNS subdomain create requires a valid subdomain=<prefix>.");
       }
-      if (!target) throw new Error("DNS subdomain create requires target=<IPv4, IPv6, or hostname>.");
 
-      const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(target);
-      const ipv6 = /^[0-9a-f:]+$/i.test(target) && target.includes(":");
-      const type = requestedType || (ipv4 ? "A" : ipv6 ? "AAAA" : "CNAME");
-      if (!["A", "AAAA", "CNAME"].includes(type)) {
-        throw new Error("DNS subdomain create supports only A, AAAA, or CNAME.");
-      }
       const ttlRaw = valueOf("ttl");
       const ttl = ttlRaw ? Number.parseInt(ttlRaw, 10) : 300;
       if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400) {
         throw new Error("DNS ttl must be an integer between 60 and 86400.");
       }
 
+      const overwrite = operation === "HOSTINGER_DNS_RECORD_UPDATE" || boolOf("overwrite") === true;
       const body = {
-        overwrite: false,
+        overwrite,
         zone: [{
-          name: subdomain,
+          name,
           type,
           ttl,
-          records: [{ content: target }],
+          records: [{ content }],
         }],
       };
       const validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
@@ -457,11 +513,11 @@ async function callHostinger(
       }
       data = {
         domain: dnsDomain,
-        subdomain,
+        name,
         type,
-        target,
+        content,
         ttl,
-        overwrite: false,
+        overwrite,
         validation: validation.data,
         result: result.data,
       };
@@ -550,7 +606,53 @@ async function callHostinger(
         throw new Error("Docker project name may contain only letters, numbers, dashes, and underscores.");
       }
 
-      if (operation === "HOSTINGER_DOCKER_DEPLOY") {
+      if (operation === "HOSTINGER_DOCKER_ENV_SET") {
+        if (!project) throw new Error("Hostinger env/secret update requires project=<docker-project>.");
+        const inline = valueOf("env") || valueOf("secret");
+        let key = valueOf("key") || valueOf("name");
+        let secretValue = valueOf("value");
+        if ((!key || !secretValue) && inline.includes("=")) {
+          const separator = inline.indexOf("=");
+          key = key || inline.slice(0, separator).trim();
+          secretValue = secretValue || inline.slice(separator + 1);
+        }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+          throw new Error("Hostinger env/secret update requires key=<ENV_NAME>.");
+        }
+        if (!secretValue) {
+          throw new Error("Hostinger env/secret update requires value=<secret-value> or env=KEY=value.");
+        }
+        const encodedProject = encodeURIComponent(project);
+        const current = await firstSuccessful(`${vmBase}/docker/${encodedProject}`, "GET");
+        if (current.status < 200 || current.status >= 300) {
+          throw new Error(`Hostinger Docker project read failed with HTTP ${current.status}.`);
+        }
+        const currentProject = current.data && typeof current.data === "object"
+          ? current.data as Record<string, unknown>
+          : {};
+        const content = typeof currentProject["content"] === "string" ? currentProject["content"] : "";
+        if (!content) throw new Error("Hostinger Docker project response did not include compose content.");
+        const variables = parseEnvironment(
+          typeof currentProject["environment"] === "string" ? currentProject["environment"] : "",
+        );
+        variables.set(key, secretValue);
+        const environment = serializeEnvironment(variables);
+        const result = await firstSuccessful(`${vmBase}/docker`, "POST", {
+          project_name: project,
+          content,
+          environment,
+        });
+        if (result.status < 200 || result.status >= 300) {
+          throw new Error(`Hostinger Docker environment update failed with HTTP ${result.status}.`);
+        }
+        data = {
+          project,
+          key,
+          value: "[REDACTED]",
+          environmentVariableCount: variables.size,
+          result: result.data,
+        };
+      } else if (operation === "HOSTINGER_DOCKER_DEPLOY") {
         const deployProject = project || valueOf("project");
         const content = valueOf("content");
         const environment = valueOf("env");

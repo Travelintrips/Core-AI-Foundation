@@ -59,14 +59,13 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
       (env["GCP_SECRET_MANAGER_BOOTSTRAP_JSON"] ?? "").trim()
     ),
   );
+  const hostingerTokenConfigured = Boolean((env["HOSTINGER_API_TOKEN"] ?? "").trim());
   const hostingerConfigured = Boolean(
-    (env["HOSTINGER_API_TOKEN"] ?? "").trim() &&
+    hostingerTokenConfigured &&
     (env["HOSTINGER_VPS_ID"] ?? "").trim(),
   );
-  const hostingerDockerConfigured = Boolean(
-    hostingerConfigured &&
-    (env["HOSTINGER_DOCKER_PROJECT"] ?? "").trim(),
-  );
+  const hostingerDockerConfigured = hostingerConfigured;
+  const hostingerDnsConfigured = hostingerTokenConfigured;
 
   return [
     {
@@ -155,10 +154,28 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
       provider: "hostinger",
       label: "Hostinger Docker project",
       state: configuredState(hostingerDockerConfigured),
-      actions: ["status", "restart"],
-      mutatingActions: ["restart"],
+      actions: ["list", "status", "containers", "logs", "deploy", "start", "stop", "restart", "update", "env-set"],
+      mutatingActions: ["deploy", "start", "stop", "restart", "update", "env-set"],
       approvalRequiredActions: [],
-      details: { credentialsExposed: false },
+      details: {
+        credentialsExposed: false,
+        secretValuesRedacted: true,
+        environmentMutationSupported: true,
+      },
+    },
+    {
+      id: "infrastructure.hostinger-dns",
+      kind: "infrastructure",
+      provider: "hostinger",
+      label: "Hostinger DNS",
+      state: configuredState(hostingerDnsConfigured),
+      actions: ["list", "record-create", "record-update", "record-delete", "subdomain-create"],
+      mutatingActions: ["record-create", "record-update", "record-delete", "subdomain-create"],
+      approvalRequiredActions: [],
+      details: {
+        credentialsExposed: false,
+        supportedRecordTypes: ["A", "AAAA", "CNAME", "TXT", "MX", "SRV", "CAA", "NS"],
+      },
     },
   ];
 }

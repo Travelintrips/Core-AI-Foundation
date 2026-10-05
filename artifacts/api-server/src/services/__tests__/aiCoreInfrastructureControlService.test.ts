@@ -19,6 +19,11 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger cek logs docker project=myapp", "HOSTINGER_DOCKER_LOGS"],
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
+    ["Hostinger masukkan secret project=myapp key=OPENAI_API_KEY value=secret-value", "HOSTINGER_DOCKER_ENV_SET"],
+    ["Hostinger set env project=myapp env=API_KEY=secret-value", "HOSTINGER_DOCKER_ENV_SET"],
+    ["Hostinger buat DNS record domain=example.com name=@ type=TXT content=\"hello world\"", "HOSTINGER_DNS_RECORD_CREATE"],
+    ["Hostinger update DNS record domain=example.com name=www type=CNAME content=app.example.com", "HOSTINGER_DNS_RECORD_UPDATE"],
+    ["Hostinger hapus DNS record domain=example.com name=old type=A", "HOSTINGER_DNS_RECORD_DELETE"],
     ["Hostinger stop docker project=myapp", "HOSTINGER_DOCKER_STOP"],
     ["Hostinger buat subdomain domain=example.com subdomain=api target=203.0.113.10", "HOSTINGER_DNS_SUBDOMAIN_CREATE"],
     ["Hostinger buat hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_CREATE"],
@@ -83,6 +88,110 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["GCP stop VM sekarang", "GCP_VM_STOP"],
   ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it("updates one Docker environment secret without returning its value", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        content: "services:\n  app:\n    image: example/app",
+        environment: "EXISTING=1\nAPI_KEY=old",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ accepted: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_ENV_SET",
+      message: "Hostinger masukkan secret project=myapp key=API_KEY value=new-secret",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    });
+
+    expect(result.mutating).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [readUrl, readInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(readUrl).toBe("https://developers.hostinger.com/api/vps/v1/virtual-machines/1792369/docker/myapp");
+    expect(readInit.method).toBe("GET");
+
+    const [applyUrl, applyInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(applyUrl).toBe("https://developers.hostinger.com/api/vps/v1/virtual-machines/1792369/docker");
+    expect(applyInit.method).toBe("POST");
+    expect(JSON.parse(String(applyInit.body))).toEqual({
+      project_name: "myapp",
+      content: "services:\n  app:\n    image: example/app",
+      environment: "EXISTING=1\nAPI_KEY=new-secret",
+    });
+    expect(JSON.stringify(result)).not.toContain("new-secret");
+    expect(result.data).toMatchObject({
+      project: "myapp",
+      key: "API_KEY",
+      value: "[REDACTED]",
+      environmentVariableCount: 2,
+    });
+  });
+
+  it("creates a generic TXT DNS record after validation", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ valid: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DNS_RECORD_CREATE",
+      message: 'Hostinger buat DNS record domain=example.com name=@ type=TXT content="hello world" ttl=600',
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(result.mutating).toBe(true);
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({
+      overwrite: false,
+      zone: [{
+        name: "@",
+        type: "TXT",
+        ttl: 600,
+        records: [{ content: "hello world" }],
+      }],
+    });
+  });
+
+  it("updates a DNS record with overwrite enabled", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ valid: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DNS_RECORD_UPDATE",
+      message: "Hostinger update DNS record domain=example.com name=www type=CNAME content=app.example.com",
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toMatchObject({
+      overwrite: true,
+      zone: [{ name: "www", type: "CNAME" }],
+    });
+  });
+
+  it("deletes a generic DNS record by name and type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DNS_RECORD_DELETE",
+      message: "Hostinger hapus DNS record domain=example.com name=old type=A",
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(result.mutating).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://developers.hostinger.com/api/dns/v1/zones/example.com");
+    expect(init.method).toBe("DELETE");
+    expect(JSON.parse(String(init.body))).toEqual({
+      filters: [{ name: "old", type: "A" }],
+    });
   });
 
   it("deploys a Docker Compose project with optional environment", async () => {
