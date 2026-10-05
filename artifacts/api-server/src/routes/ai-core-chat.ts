@@ -2720,16 +2720,13 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
     .split(",")
     .map((value) => value.replace(/\D/g, ""))
     .find(Boolean) ?? "";
-  const ttsApiKey = getProviderApiKey("openai");
-
-  if (!secret || !sender || !ttsApiKey) {
+  if (!secret || !sender) {
     res.status(503).json({
       ok: false,
       error: "AI_CORE_WA_E2E_NOT_CONFIGURED",
       configured: {
         incomingSecret: Boolean(secret),
         allowedSender: Boolean(sender),
-        voiceFixtureProvider: Boolean(ttsApiKey),
       },
     });
     return;
@@ -2738,43 +2735,11 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
   const incomingMessageId = `e2e-voice-${randomUUID()}`;
 
   try {
-    const ttsModel =
-      process.env["AI_CORE_WA_E2E_TTS_MODEL"]?.trim() || "gpt-4o-mini-tts";
-    let ttsResponse: Awaited<ReturnType<typeof fetch>> | null = null;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${ttsApiKey}`,
-          "content-type": "application/json",
-          accept: "audio/ogg",
-        },
-        body: JSON.stringify({
-          model: ttsModel,
-          voice: "alloy",
-          // Keep the synthetic voice fixture deterministic so this E2E validates
-          // voice transcription + WhatsApp delivery without depending on model-registry DB health.
-          input: "status",
-          response_format: "opus",
-        }),
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (ttsResponse.ok) break;
-      if (ttsResponse.status !== 429 || attempt === 3) {
-        throw new Error(
-          `WhatsApp voice E2E fixture generation failed (HTTP ${ttsResponse.status}).`,
-        );
-      }
-      const retryAfter = Number(ttsResponse.headers.get("retry-after") ?? "");
-      const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
-        ? Math.min(retryAfter * 1_000, 30_000)
-        : attempt * 5_000;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-    if (!ttsResponse?.ok) {
-      throw new Error("WhatsApp voice E2E fixture generation failed after retries.");
-    }
-    const audio = Buffer.from(await ttsResponse.arrayBuffer());
+    // Use a checked-in deterministic speech fixture instead of calling a TTS
+    // provider. Production verification must validate our WhatsApp voice path,
+    // not fail because an unrelated fixture provider is rate-limited.
+    const fixture = await import("../fixtures/aiCoreWhatsappVoiceE2eFixture.js");
+    const audio = Buffer.from(fixture.AI_CORE_WA_E2E_VOICE_WAV_BASE64, "base64");
     if (!audio.length || audio.length > 2 * 1024 * 1024) {
       throw new Error("WhatsApp voice E2E fixture has an invalid size.");
     }
@@ -2786,7 +2751,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
         : {}),
       senderPhone: sender,
       voiceNote: {
-        mimeType: "audio/ogg; codecs=opus",
+        mimeType: "audio/wav",
         base64: audio.toString("base64"),
         ptt: true,
         seconds: 1,
@@ -2800,7 +2765,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
         },
         message: {
           audioMessage: {
-            mimetype: "audio/ogg; codecs=opus",
+            mimetype: "audio/wav",
             ptt: true,
             seconds: 1,
           },
@@ -2871,7 +2836,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
       ok: true,
       mode: "voice_note",
       inputSource: "whatsapp_voice",
-      fixtureModel: ttsModel,
+      fixtureModel: "checked-in-wav",
       webhookStatus: webhookResponse.status,
       route: webhookBody?.["route"] ?? null,
       provider: webhookBody?.["provider"] ?? null,
