@@ -29,7 +29,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-const MAX_ALLOWED_FILES = 80;
+const MAX_ALLOWED_FILES = 12;
 const MAX_SNIPPETS = 10;
 const MAX_SNIPPET_CHARS = 4_000;
 const MAX_PATCH_EXCERPT_CHARS = 24_000;
