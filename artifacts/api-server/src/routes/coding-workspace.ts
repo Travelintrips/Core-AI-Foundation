@@ -66,6 +66,7 @@ import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceRe
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
 import { getWorkerCapacity } from "../services/workerClusterService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
+import { getAiProviderBillingSnapshot } from "../services/aiProviderBillingService.js";
 import {
   deriveCodingWorkspaceOperationalState,
   isCodingRelevantWorker,
@@ -224,6 +225,17 @@ router.get("/ai/coding/gcp-usage", async (req, res): Promise<void> => {
   } catch (error) {
     logger.warn({ err: error }, "[coding-workspace] GCP billing usage query failed");
     res.status(502).json({ error: error instanceof Error ? error.message : "GCP billing usage unavailable" });
+  }
+});
+
+router.get("/ai/coding/provider-billing", async (_req, res): Promise<void> => {
+  try {
+    res.json(await getAiProviderBillingSnapshot());
+  } catch (error) {
+    logger.warn({ err: error }, "[coding-workspace] AI provider billing query failed");
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "AI provider billing unavailable",
+    });
   }
 });
 

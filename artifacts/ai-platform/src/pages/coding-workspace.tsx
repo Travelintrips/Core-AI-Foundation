@@ -199,6 +199,35 @@ type GcpUsageSnapshot = {
   series: Array<{ period: string; cost: number; usageHours: number }>;
 };
 
+type AiProviderBillingStatus =
+  | "OK"
+  | "WARNING"
+  | "TOP_UP_REQUIRED"
+  | "UNCONFIGURED"
+  | "ERROR";
+
+type AiProviderBillingSnapshot = {
+  checkedAt: string;
+  alertThresholdPercent: number;
+  providers: Array<{
+    provider: "openai" | "anthropic" | "gemini";
+    label: string;
+    configured: boolean;
+    status: AiProviderBillingStatus;
+    source: "provider_api" | "gcp_billing_export" | "unavailable";
+    currency: string;
+    monthCost: number | null;
+    todayCost: number | null;
+    monthlyBudget: number | null;
+    remainingBudget: number | null;
+    usagePercent: number | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    requests: number | null;
+    message: string;
+  }>;
+};
+
 const STATUSES = Object.values(CodingTaskStatus) as CodingTaskStatus[];
 
 const canDeleteCodingTask = (task: CodingTask) =>
@@ -3806,6 +3835,8 @@ export default function CodingWorkspace() {
   const [gcpRange, setGcpRange] = useState<"daily" | "monthly">("daily");
   const [gcpUsage, setGcpUsage] = useState<GcpUsageSnapshot | null>(null);
   const [gcpUsageError, setGcpUsageError] = useState(false);
+  const [providerBilling, setProviderBilling] = useState<AiProviderBillingSnapshot | null>(null);
+  const [providerBillingError, setProviderBillingError] = useState(false);
   const { data: tasks, isLoading, isError, refetch } = useListCodingTasks();
   const activeFromRoute = params.id;
   const visibleTasks = useMemo(() => {
@@ -3891,6 +3922,32 @@ export default function CodingWorkspace() {
     const timer = window.setInterval(() => void loadUsage(), 60_000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [gcpRange]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadProviderBilling = async () => {
+      try {
+        const response = await fetch("/api/ai/coding/provider-billing", {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json() as AiProviderBillingSnapshot;
+        if (!cancelled) {
+          setProviderBilling(payload);
+          setProviderBillingError(false);
+        }
+      } catch {
+        if (!cancelled) setProviderBillingError(true);
+      }
+    };
+    void loadProviderBilling();
+    const timer = window.setInterval(() => void loadProviderBilling(), 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const activeCount = (tasks ?? []).filter((task) => ACTIVE_STATUSES.has(task.status)).length;
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
@@ -4253,6 +4310,133 @@ export default function CodingWorkspace() {
             <div className="rounded-lg border border-white/[0.07] bg-[#08111f] p-3"><div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Project</div><div className="mt-1 truncate font-mono text-sm font-semibold text-cyan-100">{gcpUsage?.projectId || "—"}</div></div>
           </div>
           {gcpUsage?.configured && gcpUsage.series.length > 0 ? <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-[10px]"><thead className="text-slate-300"><tr><th className="py-2">Period</th><th className="py-2">Hours</th><th className="py-2">Cost</th></tr></thead><tbody>{gcpUsage.series.map((row) => <tr key={row.period} className="border-t border-white/[0.06] text-slate-200"><td className="py-2 font-mono">{row.period}</td><td className="py-2 font-mono">{Number(row.usageHours).toFixed(2)}</td><td className="py-2 font-mono">{new Intl.NumberFormat(lang === "id" ? "id-ID" : "en-US", { style: "currency", currency: gcpUsage.currency || "USD", maximumFractionDigits: 2 }).format(Number(row.cost))}</td></tr>)}</tbody></table></div> : <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2 text-[10px] text-amber-100">{gcpUsageError ? "GCP billing data unavailable." : gcpUsage?.message ?? "Loading billing data…"}</div>}
+        </section>
+
+        <section className="mb-5 rounded-xl border border-white/[0.09] bg-[#0b1425]/90 p-4" data-testid="ai-provider-billing-panel">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200"><WalletCards className="size-4" />AI Provider Billing</div>
+              <div className="mt-1 text-[11px] text-slate-300">
+                Usage dan biaya OpenAI, Anthropic, dan Gemini. Alert top-up memakai budget provider yang dikonfigurasi dan sinyal payment-required.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg border border-white/[0.08] bg-[#08111f] px-3 py-2 text-[10px] text-slate-300">
+                Alert threshold <span className="font-mono text-violet-200">{providerBilling?.alertThresholdPercent ?? 80}%</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocation("/ai-core-chat")}
+                className="flex items-center gap-1.5 rounded-lg border border-violet-300/20 bg-violet-300/[0.05] px-3 py-2 text-[10px] font-semibold text-violet-200 hover:bg-violet-300/[0.1]"
+                data-testid="button-open-provider-billing-inbox"
+              >
+                Buka Inbox <ArrowUpRight className="size-3" />
+              </button>
+            </div>
+          </div>
+
+          {providerBillingError ? (
+            <div className="mt-3 rounded-lg border border-rose-300/15 bg-rose-300/[0.04] px-3 py-2 text-[10px] text-rose-100">
+              AI provider billing data unavailable.
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-3 lg:grid-cols-3">
+              {(providerBilling?.providers ?? []).map((provider) => {
+                const statusClass =
+                  provider.status === "TOP_UP_REQUIRED"
+                    ? "border-rose-300/25 bg-rose-300/[0.06] text-rose-200"
+                    : provider.status === "WARNING"
+                      ? "border-amber-300/25 bg-amber-300/[0.06] text-amber-200"
+                      : provider.status === "OK"
+                        ? "border-emerald-300/20 bg-emerald-300/[0.04] text-emerald-200"
+                        : provider.status === "ERROR"
+                          ? "border-rose-300/15 bg-rose-300/[0.03] text-rose-200"
+                          : "border-white/10 bg-white/[0.025] text-slate-300";
+                const money = (value: number | null) =>
+                  value == null
+                    ? "—"
+                    : new Intl.NumberFormat(lang === "id" ? "id-ID" : "en-US", {
+                        style: "currency",
+                        currency: provider.currency || "USD",
+                        maximumFractionDigits: 2,
+                      }).format(value);
+                const tokenTotal =
+                  provider.inputTokens == null && provider.outputTokens == null
+                    ? null
+                    : Number(provider.inputTokens ?? 0) + Number(provider.outputTokens ?? 0);
+
+                return (
+                  <div key={provider.provider} className="rounded-xl border border-white/[0.07] bg-[#08111f] p-3" data-testid={`provider-billing-${provider.provider}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-semibold text-slate-100">{provider.label}</div>
+                      <span className={cn("rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wider", statusClass)}>
+                        {provider.status === "TOP_UP_REQUIRED" ? "Top up" : provider.status.replaceAll("_", " ")}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Month spend</div>
+                        <div className="mt-1 font-mono text-sm font-semibold text-slate-50">{money(provider.monthCost)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Today</div>
+                        <div className="mt-1 font-mono text-sm font-semibold text-slate-50">{money(provider.todayCost)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Budget / cap</div>
+                        <div className="mt-1 font-mono text-xs text-slate-200">{money(provider.monthlyBudget)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400">Remaining</div>
+                        <div className="mt-1 font-mono text-xs text-slate-200">{money(provider.remainingBudget)}</div>
+                      </div>
+                    </div>
+                    {provider.usagePercent != null && (
+                      <div className="mt-3">
+                        <div className="mb-1 flex items-center justify-between text-[9px] text-slate-400">
+                          <span>Budget used</span>
+                          <span className="font-mono">{provider.usagePercent.toFixed(1)}%</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              provider.status === "TOP_UP_REQUIRED"
+                                ? "bg-rose-300"
+                                : provider.status === "WARNING"
+                                  ? "bg-amber-300"
+                                  : "bg-emerald-300",
+                            )}
+                            style={{ width: `${Math.min(100, Math.max(0, provider.usagePercent))}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[9px] text-slate-400">
+                      {tokenTotal != null && <span>tokens {tokenTotal.toLocaleString()}</span>}
+                      {provider.requests != null && <span>usage rows {provider.requests.toLocaleString()}</span>}
+                      <span>{provider.source === "provider_api" ? "provider API" : provider.source === "gcp_billing_export" ? "GCP billing" : "not connected"}</span>
+                    </div>
+                    <div className={cn(
+                      "mt-3 rounded-lg border px-2.5 py-2 text-[10px] leading-4",
+                      provider.status === "TOP_UP_REQUIRED"
+                        ? "border-rose-300/20 bg-rose-300/[0.05] text-rose-100"
+                        : provider.status === "WARNING"
+                          ? "border-amber-300/20 bg-amber-300/[0.04] text-amber-100"
+                          : "border-white/[0.06] bg-white/[0.02] text-slate-300",
+                    )}>
+                      {provider.message}
+                    </div>
+                  </div>
+                );
+              })}
+              {!providerBilling && (
+                <div className="rounded-lg border border-white/[0.07] bg-[#08111f] px-3 py-5 text-[10px] text-slate-400 lg:col-span-3">
+                  Loading AI provider billing…
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
