@@ -129,31 +129,7 @@ jobs:
               "$API_BASE_URL/ai/coding/bridge/responses?limit=100")
             test "$code" = "200"
 
-            if node - <<'NODE'
-          const fs=require("fs");
-          const taskId=process.env.TASK_ID;
-          const v=JSON.parse(fs.readFileSync("/tmp/responses.json","utf8"));
-          const rows=Array.isArray(v.responses)?v.responses:[];
-          const hit=rows.find(r =>
-            (r.taskId===taskId || r.task_id===taskId) &&
-            r.kind==="COMPLETED"
-          );
-          if(!hit) process.exit(2);
-          const metadata=hit.metadataJson || hit.metadata_json || {};
-          const wa=metadata.whatsappNotification || {};
-          if(wa.delivery?.status!=="sent") {
-            console.error("COMPLETED response found but WhatsApp not sent yet", JSON.stringify({id:hit.id,wa}));
-            process.exit(3);
-          }
-          fs.writeFileSync("/tmp/completed-response.json", JSON.stringify(hit));
-          console.log(
-            "automatic_completed_whatsapp=PASS"+
-            " response_id="+hit.id+
-            " message_id="+(wa.delivery.messageId||wa.dispatch?.messageId||"")+
-            " wa_message_id="+(wa.delivery.waMessageId||"")
-          );
-NODE
-            then
+            if node -e 'const fs=require("fs");const taskId=process.env.TASK_ID;const v=JSON.parse(fs.readFileSync("/tmp/responses.json","utf8"));const rows=Array.isArray(v.responses)?v.responses:[];const hit=rows.find(r=>(r.taskId===taskId||r.task_id===taskId)&&r.kind==="COMPLETED");if(!hit)process.exit(2);const metadata=hit.metadataJson||hit.metadata_json||{};const wa=metadata.whatsappNotification||{};if(wa.delivery?.status!=="sent"){console.error("COMPLETED response found but WhatsApp not sent yet",JSON.stringify({id:hit.id,wa}));process.exit(3);}fs.writeFileSync("/tmp/completed-response.json",JSON.stringify(hit));console.log("automatic_completed_whatsapp=PASS response_id="+hit.id+" message_id="+(wa.delivery.messageId||wa.dispatch?.messageId||"")+" wa_message_id="+(wa.delivery.waMessageId||""));'; then
               break
             fi
 
