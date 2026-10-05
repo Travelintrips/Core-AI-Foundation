@@ -155,6 +155,75 @@ describe("AI Core Hostinger infrastructure control", () => {
     });
   });
 
+  it("falls back from a configured subdomain to the parent Hostinger DNS zone", async () => {
+    const fetchMock = vi.fn()
+      // Hostinger can validate a subdomain-shaped zone name but reject the PUT
+      // because only the parent DNS zone is actually managed.
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Not found" }), { status: 404 }))
+      // Probe the parent zone, then validate and apply there.
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ name: "@", type: "A", ttl: 300, records: [] }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DNS_RECORD_CREATE",
+      message: "Hostinger buat DNS record name=_smoke type=TXT content=test ttl=300",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_HOSTING_DOMAIN: "aicore.cstlogistic.co.id",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/dns/v1/zones/aicore.cstlogistic.co.id/validate",
+    );
+    expect((fetchMock.mock.calls[2] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id",
+    );
+    expect((fetchMock.mock.calls[3] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id/validate",
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[3] as [string, RequestInit])[1].body))).toMatchObject({
+      zone: [{ name: "_smoke.aicore", type: "TXT", ttl: 300 }],
+    });
+    expect((fetchMock.mock.calls[4] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id",
+    );
+    expect(result.data).toMatchObject({
+      domain: "cstlogistic.co.id",
+      requestedDomain: "aicore.cstlogistic.co.id",
+      name: "_smoke.aicore",
+      type: "TXT",
+    });
+  });
+
+  it("maps subdomain apex records to the delegated prefix on the parent DNS zone", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Not found" }), { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DNS_RECORD_CREATE",
+      message: "Hostinger buat DNS record domain=aicore.cstlogistic.co.id name=@ type=TXT content=test",
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(JSON.parse(String((fetchMock.mock.calls[2] as [string, RequestInit])[1].body))).toMatchObject({
+      zone: [{ name: "aicore", type: "TXT" }],
+    });
+    expect(result.data).toMatchObject({
+      domain: "cstlogistic.co.id",
+      requestedDomain: "aicore.cstlogistic.co.id",
+      name: "aicore",
+    });
+  });
+
   it("updates a DNS record with overwrite enabled", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ valid: true }), { status: 200 }))
