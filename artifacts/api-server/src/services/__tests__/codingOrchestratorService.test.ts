@@ -103,6 +103,7 @@ vi.mock("../localCodingAutomatedMultiTaskPlannerService.js", () => ({
 const {
   startCodingOrchestration,
   resumeDeferredCodingOrchestrations,
+  reconcileTerminalRepositoryAnalyzerOrchestrations,
   startCodingOrchestrationRecoveryRuntime,
   stopCodingOrchestrationRecoveryRuntime,
   shouldPreserveAdvancedAiGate,
@@ -501,6 +502,23 @@ describe("Coding Orchestrator", () => {
     }
   });
 
+  it("recovers a RUNNING orchestrator as soon as its linked analyzer job is terminal", async () => {
+    mockDbExecute.mockResolvedValueOnce({ rows: [{ id: task.id }] });
+
+    expect(await reconcileTerminalRepositoryAnalyzerOrchestrations()).toBe(1);
+
+    const query = mockDbExecute.mock.calls[0]?.[0] as
+      | { strings?: readonly string[] }
+      | undefined;
+    const sqlText = query?.strings?.join("") ?? "";
+    expect(sqlText).toContain("j.status IN ('failed', 'cancelled')");
+    expect(sqlText).toContain(
+      "r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')",
+    );
+    expect(sqlText).toContain("t.status = 'ANALYZING'");
+    expect(sqlText).toContain("RETRY_REPOSITORY_ANALYSIS");
+  });
+
   it("resumes the same deferred run after the analyzer slot becomes available", async () => {
     mockSelectLimit.mockResolvedValueOnce([{ id: 1509 }]);
     await startCodingOrchestration({ task: task as never, run: run as never });
@@ -555,10 +573,10 @@ describe("Coding Orchestrator", () => {
       startCodingOrchestrationRecoveryRuntime();
       startCodingOrchestrationRecoveryRuntime();
       await vi.advanceTimersByTimeAsync(8_000);
-      expect(mockDbExecute).toHaveBeenCalledTimes(2);
+      expect(mockDbExecute).toHaveBeenCalledTimes(4);
       stopCodingOrchestrationRecoveryRuntime();
       await vi.advanceTimersByTimeAsync(16_000);
-      expect(mockDbExecute).toHaveBeenCalledTimes(2);
+      expect(mockDbExecute).toHaveBeenCalledTimes(4);
     } finally {
       stopCodingOrchestrationRecoveryRuntime();
       vi.useRealTimers();
