@@ -86,6 +86,32 @@ describe("AI Core workload router", () => {
     });
   });
 
+  it.each([
+    "kalau sudah selesai tidak perlu lagi review manual dari human, lakukan tindakan selanjutnya: commit, merge PR lalu deploy ke staging",
+    "setelah selesai merge PR, deploy ke staging, commit langsung ke repository",
+    "merge PR setelah CI terverifikasi",
+  ])("routes verified delivery workflow through autonomous coding without generic critical approval: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "CODING",
+      requiresAgent: true,
+      requiresApproval: false,
+    });
+  });
+
+  it.each([
+    "deploy ke production sekarang",
+    "setelah selesai deploy ke production",
+    "rotate secret production",
+    "hapus database production",
+    "ubah IAM role service account",
+  ])("keeps genuinely high-risk actions behind explicit approval: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "CRITICAL_ACTION",
+      requiresAgent: true,
+      requiresApproval: true,
+    });
+  });
+
   it("routes repository-changing instructions to the Coding Orchestrator", () => {
     expect(classifyAiCoreWorkload("perbaiki error build di repository ini")).toMatchObject({
       workload: "CODING",
