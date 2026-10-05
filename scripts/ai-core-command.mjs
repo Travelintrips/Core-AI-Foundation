@@ -316,6 +316,66 @@ export async function execute(command, api, options = {}) {
         cycle: cycle.value,
       };
     }
+    if (command.instruction === 'INSPECT_TASK_GRAPH') {
+      const graphResponse = await api(
+        `/ai/coding/tasks/${command.taskId}/task-graph`,
+        { allowed: [404] },
+      );
+      if (graphResponse.status === 404) {
+        return {
+          action: 'status',
+          taskId: command.taskId,
+          result: 'TASK_GRAPH_NOT_FOUND',
+        };
+      }
+      const snapshot = graphResponse.value ?? {};
+      const workstreams = Array.isArray(snapshot.workstreams)
+        ? snapshot.workstreams.map((item) => {
+            const ai =
+              item?.resultJson && typeof item.resultJson === 'object'
+                ? item.resultJson.workstreamAiExecution
+                : null;
+            return {
+              id: item?.id ?? null,
+              key: item?.key ?? null,
+              status: item?.status ?? null,
+              attemptCount: item?.attemptCount ?? null,
+              errorMessage:
+                typeof item?.errorMessage === 'string'
+                  ? item.errorMessage.slice(0, 1000)
+                  : null,
+              baseSha: item?.baseSha ?? null,
+              dependencies: Array.isArray(item?.dependencies)
+                ? item.dependencies
+                : [],
+              aiExecution:
+                ai && typeof ai === 'object'
+                  ? {
+                      status: ai.status ?? null,
+                      reviewStatus: ai.reviewStatus ?? null,
+                      nextAction: ai.nextAction ?? null,
+                      jobId: ai.jobId ?? null,
+                      errorMessage:
+                        typeof ai.errorMessage === 'string'
+                          ? ai.errorMessage.slice(0, 1000)
+                          : null,
+                    }
+                  : null,
+            };
+          })
+        : [];
+      return {
+        action: 'status',
+        taskId: command.taskId,
+        result: 'TASK_GRAPH_INSPECTED',
+        graph: {
+          id: snapshot.graph?.id ?? null,
+          status: snapshot.graph?.status ?? null,
+          taskId: snapshot.graph?.taskId ?? null,
+        },
+        workstreams,
+      };
+    }
     return waitForTaskOutcome(command, api, { waitMs: 0, ...options });
   }
   const readiness = await audit(api);

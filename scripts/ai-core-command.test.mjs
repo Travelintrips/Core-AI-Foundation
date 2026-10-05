@@ -11,7 +11,7 @@ const resolve = inputs => resolveCommand({ inputs }, env);
 const issue = { action: 'labeled', sender: { login: 'Travelintrips' }, label: { name: 'ai-audit' },
   issue: { number: 321, title: 'Audit trigger', body: 'Read-only test', user: { login: 'Travelintrips' } } };
 
-function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initialStatus = 'WAITING', detailRepository = REPOSITORY } = {}) {
+function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initialStatus = 'WAITING', detailRepository = REPOSITORY, graphSnapshot = null } = {}) {
   const calls = [];
   const api = async (path, options = {}) => {
     calls.push({ path, ...options });
@@ -30,6 +30,9 @@ function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initial
     if (path.endsWith('/run')) return { status: 201, value: { id } };
     if (path.endsWith('/start')) return { status: 202, value: { cycle: { status: initialStatus } } };
     if (path.endsWith('/run-once')) return { status: 200, value: { status: 'ACTIVE', action: 'AUTO_APPROVE_TASK_GRAPH' } };
+    if (path.endsWith('/task-graph')) return graphSnapshot
+      ? { status: 200, value: graphSnapshot }
+      : { status: 404, value: { error: 'Coding task graph not found' } };
     if (path.endsWith('/autonomous')) return { status: state404 ? 404 : 200, value: { status: 'COMPLETED', enabled: false } };
     return { status: 202, value: {} };
   };
@@ -323,6 +326,47 @@ test('owner can advance one autonomous cycle through the existing status action'
   const call = f.calls.find(item => item.path.endsWith('/autonomous/run-once'));
   assert.equal(call.method, 'POST');
   assert.deepEqual(call.body, {});
+});
+
+test('owner can inspect a task graph without mutating it', async () => {
+  const graphSnapshot = {
+    graph: { id: approvalId, taskId: id, status: 'RUNNING' },
+    workstreams: [{
+      id: 'c1234567-1234-1234-1234-123456789abc',
+      key: 'deploy-dev',
+      status: 'FAILED',
+      attemptCount: 2,
+      errorMessage: 'missing host credential',
+      baseSha: 'a'.repeat(40),
+      dependencies: [],
+      resultJson: {
+        workstreamAiExecution: {
+          status: 'CANDIDATE_READY',
+          reviewStatus: 'PENDING',
+          nextAction: 'REVIEW_WORKSTREAM',
+          jobId: 123,
+        },
+      },
+    }],
+  };
+  const f = fakeApi({
+    tasks: [{ id, repository: REPOSITORY }],
+    graphSnapshot,
+  });
+  const result = await execute(resolve({
+    action: 'status',
+    task_id: id,
+    instruction: 'INSPECT_TASK_GRAPH',
+  }), f.api);
+
+  assert.equal(result.result, 'TASK_GRAPH_INSPECTED');
+  assert.equal(result.graph.status, 'RUNNING');
+  assert.equal(result.workstreams[0].key, 'deploy-dev');
+  assert.equal(result.workstreams[0].status, 'FAILED');
+  assert.equal(result.workstreams[0].aiExecution.status, 'CANDIDATE_READY');
+  const call = f.calls.find(item => item.path.endsWith('/task-graph'));
+  assert.equal(call.method, undefined);
+  assert.deepEqual(call.allowed, [404]);
 });
 test('public health probes omit the admin header used on protected coding routes', async () => {
   const calls = [];
