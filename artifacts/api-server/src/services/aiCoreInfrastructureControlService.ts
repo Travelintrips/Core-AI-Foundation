@@ -80,6 +80,14 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // Hostinger capacity/resource inspection must outrank incidental external-agent
+  // names (for example when evaluating whether OpenClaw can be moved there).
+  if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
+      /\b(kapasitas|capacity|resource|resources|cpu|vcpu|ram|memory|memori|swap|disk|storage|load|utilization|utilisation|penggunaan|headroom)\b/i.test(text) &&
+      /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|kapasitas|capacity|resource|resources)\b/i.test(text)) {
+    return "HOSTINGER_VPS_STATUS";
+  }
+
   if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
       /\b(cek|status|health|registry|terdaftar|registered|aktif)\b/i.test(text)) {
     return "EXTERNAL_AGENT_STATUS";

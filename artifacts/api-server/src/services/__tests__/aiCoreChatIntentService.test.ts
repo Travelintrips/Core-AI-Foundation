@@ -76,6 +76,14 @@ describe("AI Core Chat automatic dispatch", () => {
       kind: "INFRA_OPERATION",
       infrastructureOperation: "GCP_VM_RESTART",
     });
+    expect(classifyAiCoreChatDispatch("cek kapasitas Hostinger jika OpenClaw dan n8n dipindahkan")).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "HOSTINGER_VPS_STATUS",
+    });
+    expect(classifyAiCoreChatDispatch("cek CPU RAM disk Hostinger untuk migrasi OpenClaw")).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "HOSTINGER_VPS_STATUS",
+    });
     expect(classifyAiCoreChatDispatch("cek status OpenClaw dan OpenHands")).toMatchObject({
       kind: "INFRA_OPERATION",
       infrastructureOperation: "EXTERNAL_AGENT_STATUS",
