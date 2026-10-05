@@ -695,6 +695,19 @@ describe("autonomous action budget behavior", () => {
 });
 
 
+describe("autonomous concurrent materialization advance", () => {
+  it("refunds the reserved cycle and continues when another actor already advanced materialization", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("if (repair.concurrentAdvance)");
+    expect(source).toContain("await refundReservedActionCycle(taskId).catch(() => undefined)");
+    expect(source).toContain("CONTINUE_AFTER_MATERIALIZATION_RACE:");
+  });
+});
+
 describe("autonomous materialization auto-repair wiring", () => {
   it("routes recoverable stale materialization into bounded candidate regeneration", () => {
     const source = readFileSync(
