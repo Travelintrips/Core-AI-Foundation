@@ -64,10 +64,7 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
     hostingerTokenConfigured &&
     (env["HOSTINGER_VPS_ID"] ?? "").trim(),
   );
-  const hostingerDockerConfigured = Boolean(
-    hostingerConfigured &&
-    (env["HOSTINGER_DOCKER_PROJECT"] ?? "").trim(),
-  );
+  const hostingerDockerConfigured = hostingerConfigured;
   const hostingerDnsConfigured = hostingerTokenConfigured;
 
   return [
