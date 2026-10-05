@@ -466,9 +466,11 @@ async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
   reserveCycle: () => Promise<void>,
+  recoverMissingGraph: boolean,
 ): Promise<{ handled: boolean; action?: string; waiting?: boolean; blocker?: string }> {
   const snapshot = await getLatestCodingTaskGraph(taskId);
   if (!snapshot) {
+    if (!recoverMissingGraph) return { handled: false };
     const queued = await enqueueCodingMultiTaskPlanner(taskId);
     return {
       handled: true,
@@ -874,7 +876,12 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     }
 
     const reserveCycle = () => reserveActionCycle(taskId);
-    const graphAction = await processTaskGraph(taskId, state.payload, reserveCycle);
+    const graphAction = await processTaskGraph(
+      taskId,
+      state.payload,
+      reserveCycle,
+      state.task.status === "READY_REVIEW" && state.nextAction === "WAIT_TASK_GRAPH",
+    );
     if (graphAction.handled) {
       if (graphAction.blocker) {
         await setState(taskId, "BLOCKED", "TASK_GRAPH_BLOCKER", graphAction.blocker);
