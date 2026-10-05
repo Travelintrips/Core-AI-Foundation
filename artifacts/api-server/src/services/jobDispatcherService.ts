@@ -137,9 +137,23 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
   {
     // Coding workstream jobs are executed by the Core AI process itself.
     // The Ollama runtime registers a coding_worker for model inference/heartbeat,
-    // but it does not poll ai_jobs, so a dispatcher-owned coding worker is
+    // but it does not poll ai_jobs, so dispatcher-owned coding workers are
     // required to claim coding_workstream / coding_ai_execution queue items.
     suffix:            "4",
+    workerType:        "coding_worker",
+    capabilities:      WORKER_TYPE_CAPABILITIES["coding_worker"]!,
+    maxConcurrentJobs: 5,
+    providerSlug:       "dynamic",
+    modelId:            "per-job",
+    runtimeKind:        "dispatcher",
+  },
+  {
+    // A second dispatcher-owned coding worker prevents the entire coding queue
+    // from bottlenecking on dispatcher-4. tick() already builds a round-robin
+    // slot plan across all managed workers with remaining capacity, so the two
+    // coding dispatchers naturally share eligible coding jobs while the remote
+    // Ollama worker remains dedicated to model-invocation polling.
+    suffix:            "6",
     workerType:        "coding_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["coding_worker"]!,
     maxConcurrentJobs: 5,
