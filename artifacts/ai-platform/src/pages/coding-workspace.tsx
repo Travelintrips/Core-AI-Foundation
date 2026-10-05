@@ -228,6 +228,24 @@ type AiProviderBillingSnapshot = {
   }>;
 };
 
+type ProviderSecretAdminStatus = {
+  secretName: string;
+  projectId: string;
+  configuredKeys: string[];
+  missingKeys: string[];
+  secretValuesExposed: false;
+};
+
+const PROVIDER_SECRET_FIELDS = [
+  { key: "OPENAI_ADMIN_KEY", label: "OpenAI Admin API Key", sensitive: true, placeholder: "Paste new key" },
+  { key: "OPENAI_MONTHLY_BUDGET_USD", label: "OpenAI monthly budget (USD)", sensitive: false, placeholder: "e.g. 200" },
+  { key: "ANTHROPIC_ADMIN_KEY", label: "Anthropic Admin API Key", sensitive: true, placeholder: "Paste new key" },
+  { key: "ANTHROPIC_MONTHLY_BUDGET_USD", label: "Anthropic monthly budget (USD)", sensitive: false, placeholder: "e.g. 200" },
+  { key: "GEMINI_BILLING_PROJECT_ID", label: "Gemini billing project ID", sensitive: false, placeholder: "GCP project id" },
+  { key: "GEMINI_MONTHLY_BUDGET", label: "Gemini monthly budget", sensitive: false, placeholder: "e.g. 200" },
+  { key: "AI_PROVIDER_BILLING_ALERT_PERCENT", label: "Billing alert threshold (%)", sensitive: false, placeholder: "80" },
+] as const;
+
 const STATUSES = Object.values(CodingTaskStatus) as CodingTaskStatus[];
 
 const canDeleteCodingTask = (task: CodingTask) =>
@@ -3837,6 +3855,11 @@ export default function CodingWorkspace() {
   const [gcpUsageError, setGcpUsageError] = useState(false);
   const [providerBilling, setProviderBilling] = useState<AiProviderBillingSnapshot | null>(null);
   const [providerBillingError, setProviderBillingError] = useState(false);
+  const [secretAdminOpen, setSecretAdminOpen] = useState(false);
+  const [secretAdminStatus, setSecretAdminStatus] = useState<ProviderSecretAdminStatus | null>(null);
+  const [secretAdminError, setSecretAdminError] = useState<string | null>(null);
+  const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({});
+  const [savingSecretKey, setSavingSecretKey] = useState<string | null>(null);
   const { data: tasks, isLoading, isError, refetch } = useListCodingTasks();
   const activeFromRoute = params.id;
   const visibleTasks = useMemo(() => {
@@ -3948,6 +3971,65 @@ export default function CodingWorkspace() {
       window.clearInterval(timer);
     };
   }, []);
+
+  const loadSecretAdminStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/ai/coding/provider-secrets", {
+        credentials: "include",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      const payload = await response.json() as ProviderSecretAdminStatus & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+      setSecretAdminStatus(payload);
+      setSecretAdminError(null);
+    } catch (error) {
+      setSecretAdminError(error instanceof Error ? error.message : "Secure Secret Admin unavailable.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!secretAdminOpen) return;
+    void loadSecretAdminStatus();
+  }, [secretAdminOpen, loadSecretAdminStatus]);
+
+  const saveProviderSecret = useCallback(async (key: string) => {
+    const value = (secretDrafts[key] ?? "").trim();
+    if (!value) {
+      toast({ title: "Value required", description: "Masukkan nilai baru sebelum menyimpan.", variant: "destructive" });
+      return;
+    }
+
+    setSavingSecretKey(key);
+    try {
+      const response = await fetch("/api/ai/coding/provider-secrets", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ key, value }),
+      });
+      const payload = await response.json() as {
+        error?: string;
+        restartRequired?: boolean;
+      };
+      if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+
+      setSecretDrafts((current) => ({ ...current, [key]: "" }));
+      await loadSecretAdminStatus();
+      toast({
+        title: "Tersimpan di GCP Secret Manager",
+        description: "Nilai secret tidak ditampilkan kembali. Restart/redeploy diperlukan agar runtime memakai versi baru.",
+      });
+    } catch (error) {
+      toast({
+        title: "Gagal menyimpan secret",
+        description: error instanceof Error ? error.message : "Secure Secret Admin update failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingSecretKey(null);
+    }
+  }, [loadSecretAdminStatus, secretDrafts, toast]);
 
   const activeCount = (tasks ?? []).filter((task) => ACTIVE_STATUSES.has(task.status)).length;
   const readyCount = (tasks ?? []).filter((task) => task.status === CodingTaskStatus.READY_REVIEW || task.status === CodingTaskStatus.PR_CREATED).length;
@@ -4332,6 +4414,14 @@ export default function CodingWorkspace() {
               >
                 Buka Inbox <ArrowUpRight className="size-3" />
               </button>
+              <button
+                type="button"
+                onClick={() => setSecretAdminOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-300/20 bg-emerald-300/[0.05] px-3 py-2 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-300/[0.1]"
+                data-testid="button-manage-provider-secrets"
+              >
+                <LockKeyhole className="size-3" /> Manage Secrets
+              </button>
             </div>
           </div>
 
@@ -4438,6 +4528,85 @@ export default function CodingWorkspace() {
             </div>
           )}
         </section>
+
+        <Dialog open={secretAdminOpen} onOpenChange={(open) => {
+          setSecretAdminOpen(open);
+          if (!open) {
+            setSecretDrafts({});
+            setSavingSecretKey(null);
+          }
+        }}>
+          <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto border-white/10 bg-[#08111f] text-slate-100" data-testid="secure-provider-secret-admin-dialog">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><LockKeyhole className="size-4 text-emerald-300" />Secure Provider Secret Admin</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Nilai baru dikirim langsung ke backend admin-only dan disimpan sebagai versi baru <span className="font-mono">aicore-app-secrets</span>. Nilai yang sudah tersimpan tidak pernah dibaca kembali ke browser.
+              </DialogDescription>
+            </DialogHeader>
+
+            {secretAdminError ? (
+              <div className="rounded-lg border border-rose-300/20 bg-rose-300/[0.05] px-3 py-2 text-xs text-rose-100">
+                {secretAdminError}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-[10px] text-slate-400">
+                <span className="font-mono">{secretAdminStatus?.projectId ?? "checking…"}</span>
+                <span className="mx-2">·</span>
+                nilai secret tidak diekspos
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {PROVIDER_SECRET_FIELDS.map((field) => {
+                const configured = secretAdminStatus?.configuredKeys.includes(field.key) ?? false;
+                const pending = savingSecretKey === field.key;
+                return (
+                  <div key={field.key} className="rounded-xl border border-white/[0.08] bg-[#0b1425] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-100">{field.label}</div>
+                        <div className="mt-0.5 font-mono text-[9px] text-slate-500">{field.key}</div>
+                      </div>
+                      <span className={cn(
+                        "rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wider",
+                        configured
+                          ? "border-emerald-300/20 bg-emerald-300/[0.05] text-emerald-200"
+                          : "border-amber-300/20 bg-amber-300/[0.05] text-amber-200",
+                      )}>
+                        {configured ? "configured" : "missing"}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        type={field.sensitive ? "password" : "text"}
+                        autoComplete={field.sensitive ? "new-password" : "off"}
+                        value={secretDrafts[field.key] ?? ""}
+                        onChange={(event) => setSecretDrafts((current) => ({ ...current, [field.key]: event.target.value }))}
+                        placeholder={configured ? "Masukkan nilai baru untuk rotasi" : field.placeholder}
+                        className="border-white/10 bg-[#07101d] font-mono text-xs text-slate-100 placeholder:text-slate-600"
+                        data-testid={`input-provider-secret-${field.key.toLowerCase()}`}
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => void saveProviderSecret(field.key)}
+                        disabled={pending || !(secretDrafts[field.key] ?? "").trim()}
+                        className="min-w-24 bg-emerald-300 text-[#062018] hover:bg-emerald-200"
+                        data-testid={`button-save-provider-secret-${field.key.toLowerCase()}`}
+                      >
+                        {pending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-lg border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2 text-[10px] leading-4 text-amber-100">
+              Setelah perubahan secret, lakukan restart/redeploy service agar runtime memuat versi terbaru. AI Core dapat membantu verifikasi koneksi dan billing setelah restart tanpa melihat nilai secret.
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
           <Card className="min-w-0 overflow-hidden border-white/[0.08] bg-[#0b1425]/85">
