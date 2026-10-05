@@ -108,6 +108,23 @@ describe("AI Core MCP discovery compatibility", () => {
     }
   });
 
+  it("requires ai_core.events for fallback lifecycle tool calls", async () => {
+    const response = await request(app())
+      .post("/api/ai/core-chat/mcp")
+      .send({
+        jsonrpc: "2.0",
+        id: 33,
+        method: "tools/call",
+        params: {
+          name: "subscribe_ai_core_events",
+          arguments: { conversationId: "conversation-a" },
+        },
+      });
+
+    expect(response.status).toBe(401);
+    expect(response.headers["www-authenticate"]).toContain("ai_core.events");
+  });
+
   it("continues to expose AI Core tools", async () => {
     const response = await request(app())
       .post("/api/ai/core-chat/mcp")
