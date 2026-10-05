@@ -73,6 +73,7 @@ import {
   executeAdminMutationSql,
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
+  executeAiCoreAuditHistoryQuery,
   executeAdminSemanticQuery,
   executeAdminWorkerStatusQuery,
   extractAdminDbSemanticIntent,
@@ -81,6 +82,7 @@ import {
   formatAdminDbSchemaCatalog,
   inspectAdminDbSchemaCatalog,
   isAdminWorkerStatusQuery,
+  isAiCoreAuditHistoryQuery,
   sanitizeAdminDbError,
   renderAdminDbMutationResult,
   renderAdminDbQueryResult,
@@ -1244,6 +1246,33 @@ async function answerAskMode(
     };
   }
 
+  if (isAiCoreAuditHistoryQuery(routingMessage)) {
+    const result = await executeAiCoreAuditHistoryQuery().catch((error: unknown) => null);
+    if (result) {
+      return {
+        kind: "answer",
+        route: "AI_CORE_AUDIT_HISTORY",
+        provider: null,
+        model: null,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        estimatedCostUsd: 0,
+        workload: "DATA_LOOKUP",
+        costClass: "ZERO",
+        reply: renderAdminDbQueryResult(result),
+        databaseQuery: {
+          sql: result.sql,
+          rowCount: result.rowCount,
+          truncated: result.truncated,
+          elapsedMs: result.elapsedMs,
+          sourceDatabaseId: result.sourceDatabaseId,
+          reason: "Deterministic AI Core audit history lookup using canonical created_at column.",
+          access: "ADMIN_READ_ONLY",
+        },
+        data: result.rows,
+      };
+    }
+  }
+
   const adminDbQuery = await tryRunAdminDbQuery(routingMessage, policy, context).catch(
     (error: unknown) => ({
       kind: "answer",
@@ -1583,6 +1612,34 @@ async function streamAskMode(
       ...(dataTool.warning ? { warning: dataTool.warning } : {}),
     });
     return;
+  }
+
+  if (isAiCoreAuditHistoryQuery(routingMessage)) {
+    const result = await executeAiCoreAuditHistoryQuery().catch((error: unknown) => null);
+    if (result) {
+      writeBufferedChatStream(res, {
+        kind: "answer",
+        route: "AI_CORE_AUDIT_HISTORY",
+        provider: null,
+        model: null,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        estimatedCostUsd: 0,
+        workload: "DATA_LOOKUP",
+        costClass: "ZERO",
+        reply: renderAdminDbQueryResult(result),
+        databaseQuery: {
+          sql: result.sql,
+          rowCount: result.rowCount,
+          truncated: result.truncated,
+          elapsedMs: result.elapsedMs,
+          sourceDatabaseId: result.sourceDatabaseId,
+          reason: "Deterministic AI Core audit history lookup using canonical created_at column.",
+          access: "ADMIN_READ_ONLY",
+        },
+        data: result.rows,
+      });
+      return;
+    }
   }
 
   const adminDbQuery = await tryRunAdminDbQuery(routingMessage, policy, context).catch(
