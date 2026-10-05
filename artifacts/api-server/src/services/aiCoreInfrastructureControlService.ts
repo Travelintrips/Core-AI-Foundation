@@ -121,6 +121,12 @@ export function detectAiCoreInfrastructureOperation(
     }
   }
 
+  // Billing/BigQuery requests are not Compute Engine VM operations. A generic
+  // "GCP" mention plus "cek/status" must not hijack them into GCP_VM_STATUS.
+  if (/\b(billing|billing export|bigquery|biaya|cost|usage cost|tagihan)\b/i.test(text)) {
+    return null;
+  }
+
   const action = actionOf(text);
   if (!action) return null;
 
