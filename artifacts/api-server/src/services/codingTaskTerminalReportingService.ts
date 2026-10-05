@@ -8,15 +8,19 @@ import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js
 
 export type CodingTaskTerminalStatus = "COMPLETED" | "FAILED";
 
-export async function reportCodingTaskTerminalTransition(input: {
+const TERMINAL_REPORT_MAX_ATTEMPTS = 3;
+const TERMINAL_REPORT_RETRY_DELAY_MS = 100;
+
+type TerminalReportResult =
+  | { reported: true; responseId: string }
+  | { reported: false; reason: "NO_BINDING" | "ALREADY_REPORTED"; responseId?: string };
+
+async function reportCodingTaskTerminalTransitionOnce(input: {
   taskId: string;
   status: CodingTaskTerminalStatus;
   message: string;
   source?: string;
-}): Promise<
-  | { reported: true; responseId: string }
-  | { reported: false; reason: "NO_BINDING" | "ALREADY_REPORTED"; responseId?: string }
-> {
+}): Promise<TerminalReportResult> {
   const [command] = await db
     .select({ id: aiCodingBridgeCommandsTable.id })
     .from(aiCodingBridgeCommandsTable)
@@ -62,4 +66,29 @@ export async function reportCodingTaskTerminalTransition(input: {
   });
 
   return { reported: true, responseId: response.id };
+}
+
+export async function reportCodingTaskTerminalTransition(input: {
+  taskId: string;
+  status: CodingTaskTerminalStatus;
+  message: string;
+  source?: string;
+}): Promise<TerminalReportResult> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= TERMINAL_REPORT_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await reportCodingTaskTerminalTransitionOnce(input);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= TERMINAL_REPORT_MAX_ATTEMPTS) break;
+      await new Promise((resolve) =>
+        setTimeout(resolve, TERMINAL_REPORT_RETRY_DELAY_MS * attempt),
+      );
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Coding task terminal lifecycle reporting failed");
 }
