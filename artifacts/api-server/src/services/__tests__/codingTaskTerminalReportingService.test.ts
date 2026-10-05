@@ -91,6 +91,49 @@ describe("coding task terminal reporting", () => {
     expect(mocks.appendCodingBridgeResponse).not.toHaveBeenCalled();
   });
 
+  it("retries a transient database failure before persisting the terminal response", async () => {
+    mocks.limit
+      .mockRejectedValueOnce(new Error("temporary database error"))
+      .mockResolvedValueOnce([{ id: "command-1" }])
+      .mockResolvedValueOnce([]);
+    mocks.appendCodingBridgeResponse.mockResolvedValue({
+      id: "response-1",
+    });
+
+    const result = await reportCodingTaskTerminalTransition({
+      taskId: "11111111-1111-4111-8111-111111111111",
+      status: "COMPLETED",
+      message: "Task selesai.",
+    });
+
+    expect(result).toEqual({ reported: true, responseId: "response-1" });
+    expect(mocks.appendCodingBridgeResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs an ambiguous append without creating a duplicate response", async () => {
+    mocks.limit
+      .mockResolvedValueOnce([{ id: "command-1" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "command-1" }])
+      .mockResolvedValueOnce([{ id: "response-existing" }]);
+    mocks.appendCodingBridgeResponse.mockRejectedValueOnce(
+      new Error("connection dropped after persistence"),
+    );
+
+    const result = await reportCodingTaskTerminalTransition({
+      taskId: "11111111-1111-4111-8111-111111111111",
+      status: "COMPLETED",
+      message: "Task selesai.",
+    });
+
+    expect(result).toEqual({
+      reported: false,
+      reason: "ALREADY_REPORTED",
+      responseId: "response-existing",
+    });
+    expect(mocks.appendCodingBridgeResponse).toHaveBeenCalledTimes(1);
+  });
+
   it("does not duplicate a terminal response already persisted", async () => {
     mocks.limit
       .mockResolvedValueOnce([{ id: "command-1" }])
