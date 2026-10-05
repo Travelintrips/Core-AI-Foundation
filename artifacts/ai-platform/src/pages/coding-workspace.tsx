@@ -561,6 +561,9 @@ type RepositoryAnalyzerUiResult = {
       sourceFilesParsed?: number;
       sensitiveFilesExcluded?: number;
       cacheHit?: boolean;
+      filesIndexedThisRun?: number;
+      sourceFilesParsedThisRun?: number;
+      cacheStrategy?: string;
       searchBackend?: string;
     };
   };
@@ -1460,6 +1463,9 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
                   sourceFilesParsed: typeof contextIndexValue.sourceFilesParsed === "number" ? contextIndexValue.sourceFilesParsed : undefined,
                   sensitiveFilesExcluded: typeof contextIndexValue.sensitiveFilesExcluded === "number" ? contextIndexValue.sensitiveFilesExcluded : undefined,
                   cacheHit: contextIndexValue.cacheHit === true,
+                  filesIndexedThisRun: typeof contextIndexValue.filesIndexedThisRun === "number" ? contextIndexValue.filesIndexedThisRun : undefined,
+                  sourceFilesParsedThisRun: typeof contextIndexValue.sourceFilesParsedThisRun === "number" ? contextIndexValue.sourceFilesParsedThisRun : undefined,
+                  cacheStrategy: typeof contextIndexValue.cacheStrategy === "string" ? contextIndexValue.cacheStrategy : undefined,
                   searchBackend: typeof contextIndexValue.searchBackend === "string" ? contextIndexValue.searchBackend : undefined,
                 }
               : undefined,
@@ -2624,11 +2630,13 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                       {analyzerResult.contextPackage.index?.cacheHit && <span>cache hit</span>}
                     </div>
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-4">
+                  <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
                     {[
-                      ["Indexed", analyzerResult.contextPackage.index?.filesIndexed ?? 0],
+                      ["Repo indexed", analyzerResult.contextPackage.index?.filesIndexed ?? 0],
+                      ["Indexed this run", analyzerResult.contextPackage.index?.filesIndexedThisRun ?? (analyzerResult.contextPackage.index?.cacheHit ? 0 : analyzerResult.contextPackage.index?.filesIndexed ?? 0)],
+                      ["Parsed this run", analyzerResult.contextPackage.index?.sourceFilesParsedThisRun ?? (analyzerResult.contextPackage.index?.cacheHit ? 0 : analyzerResult.contextPackage.index?.sourceFilesParsed ?? 0)],
                       ["Relevant", analyzerResult.contextPackage.relevantFiles.length],
-                      ["Symbols", analyzerResult.contextPackage.symbols.length],
+                      ["Affected", analyzerResult.contextPackage.affectedFiles.length],
                       ["Tests", analyzerResult.contextPackage.relatedTests.length],
                     ].map(([label, count]) => (
                       <div key={String(label)} className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2">
@@ -2636,6 +2644,11 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                         <div className="mt-1 font-mono text-sm text-cyan-300">{String(count)}</div>
                       </div>
                     ))}
+                  </div>
+                  <div className="rounded-md border border-white/[0.05] bg-white/[0.015] px-2.5 py-2 text-[9px] text-slate-400">
+                    {analyzerResult.contextPackage.index?.cacheHit
+                      ? "Index repository dipakai ulang dari cache untuk snapshot yang sama; angka Repo indexed bukan jumlah file yang dibaca ulang pada task ini."
+                      : "Index repository dibangun pada run ini; task berikutnya pada snapshot repo yang sama dapat memakai ulang cache."}
                   </div>
                   {analyzerResult.contextPackage.keywords.length > 0 && (
                     <div>

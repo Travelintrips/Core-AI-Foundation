@@ -220,6 +220,9 @@ export interface LocalCodingContextPackage {
     bytesParsed: number;
     sensitiveFilesExcluded: number;
     cacheHit: boolean;
+    filesIndexedThisRun: number;
+    sourceFilesParsedThisRun: number;
+    cacheStrategy: "REUSED" | "REBUILT";
     searchBackend: "ripgrep" | "local-fallback";
   };
 }
@@ -571,8 +574,28 @@ async function buildRepositoryIndex(root: string): Promise<RepositoryIndex> {
   };
 }
 
+export function normalizeRepositoryCacheIdentity(repository: string): string {
+  const trimmed = repository.trim().replace(/\/+$/, "").replace(/\.git$/i, "");
+  if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "github.com" || host === "gitlab.com") {
+      const path = parsed.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
+      return `${host}/${path}`.toLowerCase();
+    }
+  } catch {
+    // Local paths and non-URL repository identifiers keep their original casing.
+  }
+
+  return trimmed;
+}
+
 function cacheKey(repository: string, metadata: GitMetadata): string {
-  return `${repository}|${metadata.headSha}|${metadata.cacheFingerprint}`;
+  return `${normalizeRepositoryCacheIdentity(repository)}|${metadata.headSha}|${metadata.cacheFingerprint}`;
 }
 
 function rememberIndex(key: string, index: RepositoryIndex): void {
@@ -1167,6 +1190,9 @@ export async function buildLocalCodingContextPackage(
       bytesParsed: index.bytesParsed,
       sensitiveFilesExcluded: index.sensitiveFilesExcluded,
       cacheHit,
+      filesIndexedThisRun: cacheHit ? 0 : index.files.length,
+      sourceFilesParsedThisRun: cacheHit ? 0 : index.sourceFilesParsed,
+      cacheStrategy: cacheHit ? "REUSED" : "REBUILT",
       searchBackend: search.backend,
     },
   };

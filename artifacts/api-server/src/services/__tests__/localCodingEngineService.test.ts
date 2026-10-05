@@ -187,7 +187,14 @@ describe("Local Coding Engine", () => {
     expect(JSON.stringify(first)).not.toContain("super-secret-value");
     expect(first.gitDiff).toContain("[REDACTED_SENSITIVE_DIFF_LINE]");
     expect(first.index.sensitiveFilesExcluded).toBeGreaterThan(0);
+    expect(first.index.cacheHit).toBe(false);
+    expect(first.index.cacheStrategy).toBe("REBUILT");
+    expect(first.index.filesIndexedThisRun).toBe(first.index.filesIndexed);
+    expect(first.index.sourceFilesParsedThisRun).toBe(first.index.sourceFilesParsed);
     expect(second.index.cacheHit).toBe(true);
+    expect(second.index.cacheStrategy).toBe("REUSED");
+    expect(second.index.filesIndexedThisRun).toBe(0);
+    expect(second.index.sourceFilesParsedThisRun).toBe(0);
   });
 
   it("allows only deterministic pnpm verification scripts", () => {
