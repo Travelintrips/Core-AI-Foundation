@@ -29,6 +29,7 @@ function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initial
     }
     if (path.endsWith('/run')) return { status: 201, value: { id } };
     if (path.endsWith('/start')) return { status: 202, value: { cycle: { status: initialStatus } } };
+    if (path.endsWith('/run-once')) return { status: 200, value: { status: 'ACTIVE', action: 'AUTO_APPROVE_TASK_GRAPH' } };
     if (path.endsWith('/autonomous')) return { status: state404 ? 404 : 200, value: { status: 'COMPLETED', enabled: false } };
     return { status: 202, value: {} };
   };
@@ -283,6 +284,23 @@ test('status and stop require a task from the allowlisted repository', async () 
   assert.ok(f.calls.every(call => !call.method));
   const valid = fakeApi({ tasks: [{ id, repository: REPOSITORY }] });
   assert.equal((await execute(resolve({ action: 'stop', task_id: id }), valid.api)).result, 'STOP_REQUESTED');
+});
+
+test('owner can advance one autonomous cycle through the existing status action', async () => {
+  const f = fakeApi({ tasks: [{ id, repository: REPOSITORY }] });
+  const command = resolve({
+    action: 'status',
+    task_id: id,
+    instruction: 'RUN_AUTONOMOUS_CYCLE',
+  });
+  const result = await execute(command, f.api);
+
+  assert.equal(result.result, 'CYCLE_EXECUTED');
+  assert.equal(result.taskId, id);
+  assert.equal(result.cycle.action, 'AUTO_APPROVE_TASK_GRAPH');
+  const call = f.calls.find(item => item.path.endsWith('/autonomous/run-once'));
+  assert.equal(call.method, 'POST');
+  assert.deepEqual(call.body, {});
 });
 test('public health probes omit the admin header used on protected coding routes', async () => {
   const calls = [];

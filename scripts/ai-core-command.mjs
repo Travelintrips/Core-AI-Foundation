@@ -285,6 +285,18 @@ export async function execute(command, api, options = {}) {
       await api(`/ai/coding/tasks/${command.taskId}/autonomous/stop`, { method: 'POST', body: {} });
       return { action: 'stop', taskId: command.taskId, result: 'STOP_REQUESTED' };
     }
+    if (command.instruction === 'RUN_AUTONOMOUS_CYCLE') {
+      const cycle = await api(`/ai/coding/tasks/${command.taskId}/autonomous/run-once`, {
+        method: 'POST',
+        body: {},
+      });
+      return {
+        action: 'status',
+        taskId: command.taskId,
+        result: 'CYCLE_EXECUTED',
+        cycle: cycle.value,
+      };
+    }
     return waitForTaskOutcome(command, api, { waitMs: 0, ...options });
   }
   const readiness = await audit(api);
