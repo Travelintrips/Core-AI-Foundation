@@ -36,7 +36,7 @@ vi.mock("../localCodingAiHandoffService.js", () => ({
   startAiHandoffPreparation: vi.fn(),
 }));
 vi.mock("../localCodingAiQueueRuntimeService.js", () => ({ enqueueCodingAiExecution: vi.fn() }));
-vi.mock("../localCodingPlannerQueueRuntimeService.js", () => ({ enqueueCodingMultiTaskPlanner: vi.fn() }));
+vi.mock("../localCodingPlannerQueueRuntimeService.js", () => ({ enqueueCodingMultiTaskPlanner: vi.fn(async () => ({ job: { jobCode: "PLAN-TEST" }, created: false })) }));
 vi.mock("../localCodingAiPatchApprovalService.js", () => ({ approveAndValidateAiPatch: vi.fn() }));
 vi.mock("../localCodingCommitApprovalService.js", () => ({ approveCommitAndCreatePullRequest: vi.fn() }));
 vi.mock("../localCodingPullRequestGateService.js", () => ({
