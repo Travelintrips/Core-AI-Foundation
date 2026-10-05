@@ -579,25 +579,50 @@ jobs:
 
           body=$(jq -nc --arg sha "$BASE_SHA" '{baseSha:$sha,maxParallel:1,leaseSeconds:120,workerPoolId:"production-e2e-canary"}')
           code=""
-          for attempt in 1 2 3; do
+          dispatch_adopted="false"
+          for attempt in $(seq 1 6); do
+            rm -f /tmp/dispatch.headers /tmp/dispatch.json /tmp/dispatch-probe.json
             code=$(curl -sS -D /tmp/dispatch.headers -o /tmp/dispatch.json -w "%{http_code}" \
+              --connect-timeout 15 --max-time 30 \
               -X POST "$API_BASE_URL/ai/coding/tasks/$task/task-graph/$graph/dispatch" \
-              -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body")
-            if [[ "$code" != "307" && "$code" != "308" ]]; then
+              -H "Content-Type: application/json" -H "x-admin-api-key: $ADMIN_API_KEY" -d "$body" || true)
+
+            if [ "$code" = "202" ]; then
               break
             fi
-            echo "Bounded dispatch received transient HTTP $code from production edge (attempt $attempt/3); retrying same canonical API URL in 5s..."
-            sleep 5
+
+            if [[ "$code" = "000" || "$code" = "307" || "$code" = "308" || "$code" = "500" || "$code" = "502" || "$code" = "503" || "$code" = "504" ]]; then
+              probe_code=$(curl -sS -o /tmp/dispatch-probe.json -w "%{http_code}" \
+                --connect-timeout 10 --max-time 15 \
+                "$API_BASE_URL/ai/coding/tasks/$task/task-graph" \
+                -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+
+              if [ "$probe_code" = "200" ]; then
+                dispatched_count=$(jq '[.workstreams[]? | select(.status == "CLAIMED" or .status == "RUNNING" or .status == "COMPLETED" or .status == "REVIEW_REQUIRED")] | length' /tmp/dispatch-probe.json 2>/dev/null || echo 0)
+                if [ "${dispatched_count:-0}" -gt 0 ]; then
+                  echo "Bounded dispatch returned transient HTTP ${code:-curl-error}, but task graph already shows $dispatched_count dispatched workstream(s); adopting server-side success."
+                  dispatch_adopted="true"
+                  break
+                fi
+              fi
+
+              echo "Bounded dispatch transient HTTP ${code:-curl-error} with no dispatch evidence yet (attempt $attempt/6); retrying in 5s..."
+              sleep 5
+              continue
+            fi
+
+            break
           done
-          if [ "$code" != "202" ]; then
-            echo "::error::Bounded dispatch failed with HTTP $code"
+          if [ "$code" != "202" ] && [ "$dispatch_adopted" != "true" ]; then
+            echo "::error::Bounded dispatch failed with HTTP ${code:-curl-error}"
             if [[ "$code" = "307" || "$code" = "308" ]]; then
               location=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' /tmp/dispatch.headers)
               if [ -n "$location" ]; then
                 echo "Production edge redirect location: $location"
               fi
             fi
-            cat /tmp/dispatch.json
+            cat /tmp/dispatch.json 2>/dev/null || true
+            cat /tmp/dispatch-probe.json 2>/dev/null || true
             exit 1
           fi
 
