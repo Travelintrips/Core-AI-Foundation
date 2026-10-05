@@ -1177,6 +1177,81 @@ export async function startCodingOrchestration(
   return { sessionId };
 }
 
+export async function reconcileTerminalRepositoryAnalyzerOrchestrations(): Promise<number> {
+  const result = await db.execute(sql`
+    WITH terminal_jobs AS (
+      SELECT DISTINCT ON (r.id)
+        r.id AS run_id,
+        r.task_id,
+        j.id AS job_id,
+        j.status AS job_status,
+        COALESCE(
+          NULLIF(j.error_message, ''),
+          'Repository Analyzer job ended without an error message'
+        ) AS job_error
+      FROM ai_platform.ai_coding_runs AS r
+      JOIN ai_platform.ai_coding_tasks AS t
+        ON t.id = r.task_id
+      JOIN ai_platform.ai_jobs AS j
+        ON j.job_type = 'coding_repository_analyzer'
+       AND j.payload_json->>'codingRunId' = r.id::text
+      WHERE r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')
+        AND r.status = 'RUNNING'
+        AND t.status = 'ANALYZING'
+        AND j.status IN ('failed', 'cancelled')
+      ORDER BY r.id, j.id DESC
+    ),
+    failed_runs AS (
+      UPDATE ai_platform.ai_coding_runs AS r
+      SET status = 'FAILED',
+          finished_at = NOW(),
+          error_message = LEFT(
+            'Repository Analyzer job ' || terminal_jobs.job_id::text ||
+            ' ended as ' || terminal_jobs.job_status || ': ' ||
+            terminal_jobs.job_error,
+            2000
+          ),
+          logs = json_build_object(
+            'codingTaskId', terminal_jobs.task_id,
+            'codingRunId', terminal_jobs.run_id,
+            'executionStatus', 'FAILED',
+            'error',
+              'Repository Analyzer job ' || terminal_jobs.job_id::text ||
+              ' ended as ' || terminal_jobs.job_status || ': ' ||
+              terminal_jobs.job_error,
+            'orchestration', json_build_object(
+              'status', 'FAILED',
+              'nextAction', 'RETRY_REPOSITORY_ANALYSIS',
+              'recoveredTerminalAnalyzerJobId', terminal_jobs.job_id
+            )
+          )::text
+      FROM terminal_jobs
+      WHERE r.id = terminal_jobs.run_id
+        AND r.status = 'RUNNING'
+      RETURNING r.task_id
+    )
+    UPDATE ai_platform.ai_coding_tasks AS t
+    SET status = 'FAILED',
+        result_summary = LEFT(
+          'Repository Analyzer failed: ' || terminal_jobs.job_error,
+          500
+        ),
+        updated_at = NOW()
+    FROM terminal_jobs
+    WHERE t.id = terminal_jobs.task_id
+      AND EXISTS (
+        SELECT 1
+        FROM failed_runs
+        WHERE failed_runs.task_id = t.id
+      )
+    RETURNING t.id
+  `);
+
+  const rows =
+    (result as unknown as { rows?: Array<{ id: string }> }).rows ?? [];
+  return rows.length;
+}
+
 export async function resumeDeferredCodingOrchestrations(): Promise<number> {
   // Also recover legacy deferrals, which returned without logs or an analyzer
   // job. A grace period avoids competing with a fresh start still bootstrapping
@@ -1218,9 +1293,29 @@ async function recoverDeferredOrchestrations(): Promise<void> {
   if (orchestrationRecoveryRunning) return;
   orchestrationRecoveryRunning = true;
   try {
-    await resumeDeferredCodingOrchestrations();
-  } catch (error) {
-    logger.warn({ err: error }, "[coding-orchestrator] Deferred analysis recovery will retry");
+    try {
+      const recovered = await reconcileTerminalRepositoryAnalyzerOrchestrations();
+      if (recovered > 0) {
+        logger.warn(
+          { recovered },
+          "[coding-orchestrator] Recovered RUNNING orchestrators whose analyzer job was already terminal",
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "[coding-orchestrator] Terminal analyzer reconciliation will retry",
+      );
+    }
+
+    try {
+      await resumeDeferredCodingOrchestrations();
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "[coding-orchestrator] Deferred analysis recovery will retry",
+      );
+    }
   } finally {
     orchestrationRecoveryRunning = false;
   }
