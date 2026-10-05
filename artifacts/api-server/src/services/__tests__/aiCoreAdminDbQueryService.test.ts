@@ -39,6 +39,7 @@ import {
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
   executeAdminSemanticQuery,
+  executeAiCoreAuditHistoryQuery,
   extractAdminDbNaturalLookup,
   extractAdminDbSemanticIntent,
   extractExplicitAdminMutationSql,
@@ -46,6 +47,7 @@ import {
   inspectAdminDbSchemaCatalog,
   isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
+  isAiCoreAuditHistoryQuery,
   executeAdminWorkerStatusQuery,
   sanitizeAdminDbError,
   renderAdminSemanticQueryResult,
@@ -134,6 +136,34 @@ describe("AI Core admin database query service", () => {
     expect(result.sql).toContain("ai_core_mcp_event_deliveries");
     expect(result.sql).not.toContain("FROM ai_platform.ai_events");
     expect(result.sql).not.toContain("e.subscription_id");
+  });
+
+  it("uses a deterministic created_at query for AI Core control-plane audit history", async () => {
+    expect(isAiCoreAuditHistoryQuery(
+      "audit riwayat eksekusi terakhir yang gagal untuk perubahan DNS Hostinger",
+    )).toBe(true);
+    expect(isAiCoreAuditHistoryQuery("cek DNS Hostinger domain=example.com")).toBe(false);
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          module: "ai-core-chat",
+          action: "infrastructure_operation_executed",
+          status: "failure",
+          created_at: "2026-10-06T00:00:00Z",
+        }],
+      });
+
+    const result = await executeAiCoreAuditHistoryQuery();
+    expect(result.rowCount).toBe(1);
+    expect(result.sql).toContain("created_at");
+    expect(result.sql).not.toMatch(/\btimestamp\b/i);
+    expect(result.sql).toContain("ai_platform.ai_audit_logs");
+    expect(result.sql).toContain("ORDER BY created_at DESC");
   });
 
   it("never inherits financial semantics into AI runtime inventory questions", () => {
