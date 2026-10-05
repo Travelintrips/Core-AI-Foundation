@@ -63,7 +63,8 @@ jobs:
         run: |
           set -euo pipefail
           external_id="completed-wa-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          payload=$(jq -nc --arg external "$external_id" --arg task "$TASK_ID" --arg run "$GITHUB_RUN_ID" '{
+          conversation_id="completed-wa-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          payload=$(jq -nc --arg external "$external_id" --arg conversation "$conversation_id" --arg task "$TASK_ID" --arg run "$GITHUB_RUN_ID" '{
             externalCommandId:$external,
             instruction:"Passive lifecycle reporting binding for Coding COMPLETED WhatsApp E2E canary.",
             taskId:$task,
@@ -71,6 +72,7 @@ jobs:
             commandType:"EVENT_BINDING",
             metadata:{
               passiveEventBinding:true,
+              conversationId:$conversation,
               eventTypes:["COMPLETED","FAILED","BLOCKED","MERGED","DEPLOYED"],
               workflow:"Coding COMPLETED WhatsApp E2E",
               runId:$run
@@ -89,7 +91,8 @@ jobs:
           command_id=$(jq -r '.command.id // empty' /tmp/binding.json)
           [[ "$command_id" =~ ^[0-9a-fA-F-]{36}$ ]]
           echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
-          echo "lifecycle_binding=PASS command_id=$command_id"
+          echo "conversation_id=$conversation_id" >> "$GITHUB_OUTPUT"
+          echo "lifecycle_binding=PASS command_id=$command_id conversation_id=$conversation_id"
 
       - name: Transition coding task to COMPLETED
         shell: bash
@@ -119,6 +122,7 @@ jobs:
         shell: bash
         env:
           TASK_ID: ${{ steps.task.outputs.task_id }}
+          CONVERSATION_ID: ${{ steps.binding.outputs.conversation_id }}
         run: |
           set -euo pipefail
           for attempt in $(seq 1 35); do
@@ -126,10 +130,10 @@ jobs:
               --retry 2 --retry-delay 1 --retry-all-errors \
               --connect-timeout 15 --max-time 60 \
               -H "x-admin-api-key: $ADMIN_API_KEY" \
-              "$API_BASE_URL/ai/coding/bridge/responses?limit=100")
+              "$API_BASE_URL/ai/coding/bridge/subscriptions/$CONVERSATION_ID/events?limit=20")
             test "$code" = "200"
 
-            if node -e 'const fs=require("fs");const taskId=process.env.TASK_ID;const v=JSON.parse(fs.readFileSync("/tmp/responses.json","utf8"));const rows=Array.isArray(v.responses)?v.responses:[];const hit=rows.find(r=>(r.taskId===taskId||r.task_id===taskId)&&r.kind==="COMPLETED");if(!hit)process.exit(2);const metadata=hit.metadataJson||hit.metadata_json||{};const wa=metadata.whatsappNotification||{};if(wa.delivery?.status!=="sent"){console.error("COMPLETED response found but WhatsApp not sent yet",JSON.stringify({id:hit.id,wa}));process.exit(3);}fs.writeFileSync("/tmp/completed-response.json",JSON.stringify(hit));console.log("automatic_completed_whatsapp=PASS response_id="+hit.id+" message_id="+(wa.delivery.messageId||wa.dispatch?.messageId||"")+" wa_message_id="+(wa.delivery.waMessageId||""));'; then
+            if node -e 'const fs=require("fs");const taskId=process.env.TASK_ID;const v=JSON.parse(fs.readFileSync("/tmp/responses.json","utf8"));const rows=Array.isArray(v.events)?v.events:[];const hit=rows.find(r=>(r.taskId===taskId||r.task_id===taskId)&&r.kind==="COMPLETED");if(!hit)process.exit(2);const metadata=hit.metadata||hit.metadataJson||hit.metadata_json||{};const wa=metadata.whatsappNotification||{};if(wa.delivery?.status!=="sent"){console.error("COMPLETED response found but WhatsApp not sent yet",JSON.stringify({id:hit.id,wa}));process.exit(3);}fs.writeFileSync("/tmp/completed-response.json",JSON.stringify(hit));console.log("automatic_completed_whatsapp=PASS response_id="+hit.id+" message_id="+(wa.delivery.messageId||wa.dispatch?.messageId||"")+" wa_message_id="+(wa.delivery.waMessageId||""));'; then
               break
             fi
 
@@ -143,8 +147,8 @@ jobs:
           done
 
           response_id=$(jq -r '.id' /tmp/completed-response.json)
-          message_id=$(jq -r '(.metadataJson // .metadata_json).whatsappNotification.delivery.messageId // (.metadataJson // .metadata_json).whatsappNotification.dispatch.messageId // empty' /tmp/completed-response.json)
-          wa_message_id=$(jq -r '(.metadataJson // .metadata_json).whatsappNotification.delivery.waMessageId // empty' /tmp/completed-response.json)
+          message_id=$(jq -r '(.metadata // .metadataJson // .metadata_json).whatsappNotification.delivery.messageId // (.metadata // .metadataJson // .metadata_json).whatsappNotification.dispatch.messageId // empty' /tmp/completed-response.json)
+          wa_message_id=$(jq -r '(.metadata // .metadataJson // .metadata_json).whatsappNotification.delivery.waMessageId // empty' /tmp/completed-response.json)
           echo "response_id=$response_id" >> "$GITHUB_OUTPUT"
           echo "message_id=$message_id" >> "$GITHUB_OUTPUT"
           echo "wa_message_id=$wa_message_id" >> "$GITHUB_OUTPUT"
