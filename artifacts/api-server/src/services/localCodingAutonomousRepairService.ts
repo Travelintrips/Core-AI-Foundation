@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   aiCodingBridgeCommandsTable,
   aiCodingRunsTable,
+  aiCodingTaskGraphsTable,
   aiCodingTasksTable,
   aiJobsTable,
   db,
@@ -625,6 +626,37 @@ async function processTaskGraph(
   }
 
   if (["APPROVED", "RUNNING"].includes(snapshot.graph.status)) {
+    if (
+      snapshot.workstreams.length > 0 &&
+      snapshot.workstreams.every((item) => item.status === "COMPLETED")
+    ) {
+      await reserveCycle();
+      await db
+        .update(aiCodingTaskGraphsTable)
+        .set({ status: "COMPLETED", completedAt: new Date() })
+        .where(
+          and(
+            eq(aiCodingTaskGraphsTable.id, snapshot.graph.id),
+            inArray(aiCodingTaskGraphsTable.status, ["APPROVED", "RUNNING"]),
+          ),
+        );
+      return {
+        handled: true,
+        action: "AUTO_RECONCILE_TASK_GRAPH_COMPLETED",
+      };
+    }
+
+    const terminalBlocker = snapshot.workstreams.find((item) =>
+      ["BLOCKED", "CANCELLED"].includes(item.status),
+    );
+    if (terminalBlocker) {
+      return {
+        handled: true,
+        blocker:
+          `Workstream ${terminalBlocker.key} tidak dapat dilanjutkan otomatis (status=${terminalBlocker.status}).`,
+      };
+    }
+
     if (hasLiveCodingWorkstreamClaim(snapshot.workstreams)) {
       return {
         handled: true,
@@ -880,7 +912,8 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       taskId,
       state.payload,
       reserveCycle,
-      state.task.status === "READY_REVIEW" && state.nextAction === "WAIT_TASK_GRAPH",
+      state.task.status === "READY_REVIEW" &&
+        ["WAIT_TASK_GRAPH", "APPROVE_TASK_GRAPH"].includes(state.nextAction ?? ""),
     );
     if (graphAction.handled) {
       if (graphAction.blocker) {
