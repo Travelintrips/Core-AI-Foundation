@@ -71,6 +71,7 @@ import {
 import {
   buildAdminDbUnresolvedAnswer,
   executeAdminMutationSql,
+  executeAdminMcpEventStatusQuery,
   executeAdminNaturalTextLookup,
   executeAdminReadOnlySql,
   executeAdminSemanticQuery,
@@ -80,6 +81,7 @@ import {
   extractExplicitReadOnlySql,
   formatAdminDbSchemaCatalog,
   inspectAdminDbSchemaCatalog,
+  isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
   sanitizeAdminDbError,
   renderAdminDbMutationResult,
@@ -798,6 +800,33 @@ async function tryRunAdminDbQuery(
         access: "ADMIN_READ_ONLY",
       },
       data: workerStatus.rows,
+    };
+  }
+
+  if (isAdminMcpEventStatusQuery(message)) {
+    const eventStatus = await executeAdminMcpEventStatusQuery();
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply:
+        "Native AI Core event ai_core.task.terminal tersedia. Status subscription/delivery saat ini:\n\n" +
+        renderAdminDbQueryResult(eventStatus),
+      databaseQuery: {
+        sql: eventStatus.sql,
+        rowCount: eventStatus.rowCount,
+        truncated: eventStatus.truncated,
+        elapsedMs: eventStatus.elapsedMs,
+        sourceDatabaseId: eventStatus.sourceDatabaseId,
+        reason: "Deterministic MCP lifecycle event subscription/delivery status query.",
+        access: "ADMIN_READ_ONLY",
+      },
+      data: eventStatus.rows,
     };
   }
 
