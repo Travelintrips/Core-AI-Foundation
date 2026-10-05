@@ -124,7 +124,7 @@ describe("Local Coding AI Handoff Package", () => {
     });
 
     expect(pkg.version).toBe(1);
-    expect(pkg.allowedFiles).toHaveLength(13);
+    expect(pkg.allowedFiles).toHaveLength(12);
     expect(pkg.allowedFiles).not.toContain(".env");
     expect(pkg.allowedFiles).not.toContain("C:/Windows/System32/drivers/etc/hosts");
     expect(pkg.allowedFiles).not.toContain("../outside.ts");
@@ -253,7 +253,7 @@ describe("Local Coding AI Handoff Package", () => {
       currentPatch: "diff --git a/src/payment.ts b/src/payment.ts\n" + "x".repeat(30_000),
     });
 
-    expect(pkg.allowedFiles.length).toBeLessThanOrEqual(80);
+    expect(pkg.allowedFiles.length).toBeLessThanOrEqual(12);
     expect(pkg.snippets.length).toBeLessThanOrEqual(10);
     expect(pkg.snippets.every((item) => item.content.length <= 4_000)).toBe(true);
     expect(pkg.currentPatch.excerpt.length).toBeLessThanOrEqual(24_000);
