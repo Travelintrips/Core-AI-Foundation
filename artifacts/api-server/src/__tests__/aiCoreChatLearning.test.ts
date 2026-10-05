@@ -28,13 +28,13 @@ describe("AI Core chat learning hardening", () => {
 
 
 describe("AI Core local chat timeout contract", () => {
-  it("keeps a bounded grace window above the remote Ollama model timeout", () => {
+  it("stays below the public proxy timeout while leaving bounded local model time", () => {
     const source = readFileSync(
       new URL("../routes/ai-core-chat.ts", import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain("Math.min(60_000, selection.timeoutMs + 15_000)");
-    expect(source).not.toContain("Math.min(65_000, selection.timeoutMs + 20_000)");
+    expect(source).toContain("Math.min(45_000, selection.timeoutMs + 10_000)");
+    expect(source).not.toContain("Math.min(60_000, selection.timeoutMs + 15_000)");
   });
 });
