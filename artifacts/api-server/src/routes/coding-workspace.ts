@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { and, desc, eq, notLike, sql } from "drizzle-orm";
 import {
   db,
@@ -68,6 +69,10 @@ import { getWorkerCapacity } from "../services/workerClusterService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
 import { getAiProviderBillingSnapshot } from "../services/aiProviderBillingService.js";
 import {
+  getProviderSecretAdminStatus,
+  upsertProviderSecretAdminValue,
+} from "../services/providerSecretAdminService.js";
+import {
   deriveCodingWorkspaceOperationalState,
   isCodingRelevantWorker,
   isHealthyCodingWorker,
@@ -75,9 +80,58 @@ import {
 
 const router = Router();
 
+const ProviderSecretAdminRequest = z.object({
+  key: z.string().trim().min(1).max(128),
+  value: z.string().min(1).max(16_384),
+}).strict();
+
 function createTaskNumber(): string {
   return `CWS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
+
+router.get("/ai/coding/provider-secrets", async (_req, res): Promise<void> => {
+  try {
+    const status = await getProviderSecretAdminStatus();
+    res.setHeader("Cache-Control", "no-store");
+    res.json(status);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Secure Secret Admin unavailable.";
+    logger.warn({ message }, "[coding-workspace] provider secret status failed");
+    res.status(503).json({ error: message });
+  }
+});
+
+router.post("/ai/coding/provider-secrets", async (req, res): Promise<void> => {
+  const parsed = ProviderSecretAdminRequest.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid Secure Secret Admin request." });
+    return;
+  }
+
+  try {
+    const result = await upsertProviderSecretAdminValue(parsed.data);
+    logger.info(
+      { key: result.key, created: result.created },
+      "[coding-workspace] provider secret/config updated",
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      ok: true,
+      key: result.key,
+      created: result.created,
+      versionName: result.versionName,
+      secretValuesExposed: false,
+      restartRequired: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Secure Secret Admin update failed.";
+    logger.warn(
+      { key: parsed.data.key, message },
+      "[coding-workspace] provider secret/config update failed",
+    );
+    res.status(502).json({ error: message });
+  }
+});
 
 router.get("/ai/coding/github/repositories", async (req, res): Promise<void> => {
   const query = typeof req.query["q"] === "string" ? req.query["q"] : undefined;
