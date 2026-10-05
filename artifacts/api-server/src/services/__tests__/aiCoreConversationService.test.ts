@@ -43,11 +43,22 @@ describe("AI Core conversational gateway", () => {
     expect(parsed.confidence).toBeLessThan(0.5);
   });
 
-  it("keeps critical actions approval gated", () => {
+  it("treats normal pull-request merge as autonomous repository mutation", () => {
     const parsed = parseConversationCommand(
       "merge pull request ini ke main",
       [],
     );
+    expect(parsed.riskLevel).toBe("MUTATING");
+    expect(parsed.requiresApproval).toBe(false);
+  });
+
+  it.each([
+    "deploy ke production sekarang",
+    "rotate secret production",
+    "hapus database production",
+    "ubah IAM role service account",
+  ])("keeps genuinely critical actions approval gated: %s", (message) => {
+    const parsed = parseConversationCommand(message, []);
     expect(parsed.riskLevel).toBe("CRITICAL");
     expect(parsed.requiresApproval).toBe(true);
   });
