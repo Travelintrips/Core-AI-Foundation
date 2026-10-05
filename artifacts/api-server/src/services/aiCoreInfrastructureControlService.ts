@@ -82,9 +82,9 @@ export function detectAiCoreInfrastructureOperation(
 
   // Hostinger capacity/resource inspection must outrank incidental external-agent
   // names (for example when evaluating whether OpenClaw can be moved there).
-  if (/\\b(hostinger|hpanel|vps)\\b/i.test(text) &&
-      /\\b(kapasitas|capacity|resource|resources|cpu|vcpu|ram|memory|memori|swap|disk|storage|load|utilization|utilisation|penggunaan|headroom)\\b/i.test(text) &&
-      /\\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|kapasitas|capacity|resource|resources)\\b/i.test(text)) {
+  if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
+      /\b(kapasitas|capacity|resource|resources|cpu|vcpu|ram|memory|memori|swap|disk|storage|load|utilization|utilisation|penggunaan|headroom)\b/i.test(text) &&
+      /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|kapasitas|capacity|resource|resources)\b/i.test(text)) {
     return "HOSTINGER_VPS_STATUS";
   }
 
