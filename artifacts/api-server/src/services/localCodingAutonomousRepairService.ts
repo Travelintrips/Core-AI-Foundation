@@ -33,6 +33,7 @@ import {
 } from "./localCodingWorkstreamAiExecutionService.js";
 import {
   completeReviewedCodingWorkstream,
+  MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS,
   retryFailedCodingWorkstream,
 } from "./localCodingMultiWorkerOrchestratorService.js";
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
@@ -398,12 +399,27 @@ export function shouldDeferWorkstreamAiCandidateAutoAdvance(
 }
 
 export function hasLiveCodingWorkstreamClaim(
-  workstreams: Array<{ status: string; leaseExpiresAt: Date | string | null }>,
+  workstreams: Array<{
+    status: string;
+    leaseExpiresAt: Date | string | null;
+    claimedAt?: Date | string | null;
+  }>,
   now = new Date(),
 ): boolean {
   const nowMs = now.getTime();
   return workstreams.some((item) => {
     if (!["CLAIMED", "RUNNING"].includes(item.status)) return false;
+
+    if (item.claimedAt) {
+      const claimedAt = new Date(item.claimedAt).getTime();
+      if (
+        Number.isFinite(claimedAt) &&
+        claimedAt <= nowMs - MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS
+      ) {
+        return false;
+      }
+    }
+
     if (!item.leaseExpiresAt) return true;
     const expiresAt = new Date(item.leaseExpiresAt).getTime();
     return !Number.isFinite(expiresAt) || expiresAt > nowMs;
