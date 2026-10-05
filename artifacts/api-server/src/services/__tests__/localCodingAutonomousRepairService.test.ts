@@ -40,7 +40,11 @@ vi.mock("../localCodingWorkstreamAiExecutionService.js", () => ({
     reason: "SAFE_AUTOMATIC_REPAIR",
   })),
 }));
-vi.mock("../localCodingMultiWorkerOrchestratorService.js", () => ({ completeReviewedCodingWorkstream: vi.fn() }));
+vi.mock("../localCodingMultiWorkerOrchestratorService.js", () => ({
+  completeReviewedCodingWorkstream: vi.fn(),
+  MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS: 15 * 60 * 1000,
+  retryFailedCodingWorkstream: vi.fn(),
+}));
 vi.mock("../localCodingPatchApprovalService.js", () => ({ approveAndValidateLocalPatch: vi.fn() }));
 vi.mock("../localCodingSandboxGateService.js", () => ({ startSandboxVerification: vi.fn() }));
 vi.mock("../localCodingDeterministicRecoveryService.js", () => ({ startDeterministicLocalRecovery: vi.fn() }));
@@ -88,6 +92,22 @@ describe("autonomous coding workstream lease handling", () => {
         now,
       ),
     ).toBe(true);
+  });
+
+  it("does not treat a hard-expired claim as live even when heartbeat kept the lease fresh", async () => {
+    const { hasLiveCodingWorkstreamClaim } = await import("../localCodingAutonomousRepairService.js");
+    const now = new Date("2026-10-05T09:30:00.000Z");
+
+    expect(
+      hasLiveCodingWorkstreamClaim(
+        [{
+          status: "RUNNING",
+          claimedAt: "2026-10-05T09:00:00.000Z",
+          leaseExpiresAt: "2026-10-05T09:35:00.000Z",
+        }],
+        now,
+      ),
+    ).toBe(false);
   });
 
   it("fails closed and waits when an active claim has no lease expiry", async () => {
