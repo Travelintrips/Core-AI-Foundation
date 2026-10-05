@@ -198,7 +198,12 @@ export async function getLatestCodingTaskGraph(
 export async function persistCodingTaskGraph(
   taskId: string,
   planInput: unknown,
+  options: { baseSha?: string | null } = {},
 ): Promise<{ graph: AiCodingTaskGraph; created: boolean }> {
+  const baseSha =
+    typeof options.baseSha === "string" && /^[0-9a-f]{40}$/i.test(options.baseSha.trim())
+      ? options.baseSha.trim().toLowerCase()
+      : null;
   const plan = canonicalPlan(validateCodingMultiTaskPlanV1(planInput));
   if (plan.taskId !== taskId) {
     throw new LocalCodingTaskGraphError(
@@ -278,6 +283,7 @@ export async function persistCodingTaskGraph(
           ownershipPaths: item.ownershipPaths,
           acceptanceCriteria: item.acceptanceCriteria,
           verificationProfiles: item.verificationProfiles,
+          baseSha,
         })),
       )
       .returning();
