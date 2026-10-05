@@ -413,7 +413,7 @@ async function completeLocalAnalysis(
     nextAction === "REVIEW_LOCAL_PATCH"
       ? `${analysisSummary} A deterministic local patch is ready for review; repository scripts were not executed. No AI/LLM was invoked.`
       : nextAction === "APPROVE_TASK_GRAPH"
-        ? `${analysisSummary} The deterministic executor declined to guess, so the bounded AI planner generated a PREPARED task graph. Explicit task-graph approval is required before any worker or coding-model execution; no patch, commit, push, or merge was performed.`
+        ? `${analysisSummary} The deterministic executor declined to guess, so the bounded AI planner generated a PREPARED task graph. The autonomous controller will approve and dispatch the graph automatically when policy checks pass; no patch, commit, push, or merge was performed yet.`
         : nextAction === "AI_REQUIRED"
           ? `${analysisSummary} The deterministic executor declined to guess; AI reasoning is required for the remaining semantic work. No AI/LLM was invoked.`
           : `${analysisSummary} Local context is ready for review. No AI/LLM was invoked.`;
@@ -891,9 +891,10 @@ function scheduleRepositoryAnalyzerClaimFailover(
  * executes work created by this explicit Run Agent request. The local analyzer
  * may also produce a deterministic review-only patch inside its isolated clone.
  * Semantic tasks are marked AI_REQUIRED rather than guessed. AI_REQUIRED is
- * escalated through the bounded multi-task planner into a PREPARED task graph;
- * explicit task-graph approval remains mandatory before worker/model coding
- * execution. Repository scripts and direct repository writes remain fail-closed.
+ * escalated through the bounded multi-task planner into a PREPARED task graph.
+ * The autonomous controller approves safe prepared graphs and advances worker/model
+ * execution automatically; policy/security failures remain fail-closed. Repository
+ * scripts and direct repository writes remain fail-closed.
  */
 export async function startCodingOrchestration(
   input: CodingOrchestrationInput,
