@@ -111,6 +111,7 @@ export interface WorkstreamAiAutoRepairDecision {
   nextRepairAttempt: number;
   maxRepairAttempts: number;
   reason: string;
+  concurrentAdvance?: boolean;
 }
 
 export function decideWorkstreamAiAutoRepair(
@@ -190,9 +191,27 @@ export async function resetApprovedWorkstreamAiCandidateForAutoRepair(
       "NOT_FOUND",
     );
   }
-  if (current.status !== "REVIEW_REQUIRED" || !isRecord(current.resultJson)) {
+  if (current.status !== "REVIEW_REQUIRED") {
+    if (["CLAIMED", "RUNNING", "COMPLETED"].includes(current.status)) {
+      return {
+        recoverable: true,
+        shouldRetry: false,
+        previousRepairAttempts: 0,
+        nextRepairAttempt: 0,
+        maxRepairAttempts: MAX_AUTOMATIC_WORKSTREAM_AI_REPAIRS,
+        reason: "CONCURRENT_ADVANCE",
+        concurrentAdvance: true,
+      };
+    }
     throw new LocalCodingWorkstreamAiExecutionError(
       "Workstream is not in a recoverable AI review state.",
+      "NOT_READY",
+      { status: current.status },
+    );
+  }
+  if (!isRecord(current.resultJson)) {
+    throw new LocalCodingWorkstreamAiExecutionError(
+      "Workstream review state does not contain recoverable AI execution metadata.",
       "NOT_READY",
       { status: current.status },
     );
@@ -235,6 +254,20 @@ export async function resetApprovedWorkstreamAiCandidateForAutoRepair(
     .returning({ id: aiCodingWorkstreamsTable.id });
 
   if (!updated) {
+    const [advanced] = await db
+      .select({ status: aiCodingWorkstreamsTable.status })
+      .from(aiCodingWorkstreamsTable)
+      .where(eq(aiCodingWorkstreamsTable.id, workstreamId))
+      .limit(1)
+      .catch(() => []);
+    if (advanced && ["CLAIMED", "RUNNING", "COMPLETED"].includes(advanced.status)) {
+      return {
+        ...decision,
+        shouldRetry: false,
+        reason: "CONCURRENT_ADVANCE",
+        concurrentAdvance: true,
+      };
+    }
     throw new LocalCodingWorkstreamAiExecutionError(
       "Workstream changed before materialization auto-repair could be persisted.",
       "LEASE_LOST",
