@@ -2059,6 +2059,49 @@ async function runInfrastructureOperation(
   };
 }
 
+function isGcpBillingStatusRequest(message: string): boolean {
+  const text = message.trim().replace(/^@\s*/, "");
+  return /\b(?:gcp|google cloud)\b/i.test(text) &&
+    /\b(?:billing|billing export|bigquery|biaya|cost|usage cost|tagihan)\b/i.test(text) &&
+    /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat)\b/i.test(text);
+}
+
+async function runGcpBillingStatusOperation(
+  message: string,
+): Promise<Record<string, unknown> | null> {
+  if (!isGcpBillingStatusRequest(message)) return null;
+  const billing = await getGcpWorkspaceCostUsage("daily").catch((error: unknown) => ({
+    configured: false as const,
+    range: "daily" as const,
+    currency: process.env["GCP_BILLING_CURRENCY"] ?? "IDR",
+    projectId: process.env["GCP_OLLAMA_VM_PROJECT"] ?? "",
+    totalCost: 0,
+    totalUsageHours: 0,
+    series: [],
+    message: error instanceof Error ? error.message : "GCP Billing status check failed.",
+  }));
+  return {
+    kind: "answer",
+    route: "GCP_BILLING_STATUS",
+    provider: null,
+    model: null,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    estimatedCostUsd: 0,
+    workload: "DETERMINISTIC",
+    costClass: "ZERO",
+    mutating: false,
+    reply: billing.configured
+      ? "GCP Billing Export Workspace sudah configured dan dapat dibaca."
+      : "GCP Billing Export Workspace belum configured atau belum dapat dibaca.",
+    billing: {
+      configured: billing.configured,
+      projectId: billing.projectId,
+      currency: billing.currency,
+      ...(billing.configured ? {} : { message: billing.message }),
+    },
+  };
+}
+
 async function runAutoMode(
   input: z.infer<typeof ChatRequest>,
   executionInput: z.infer<typeof ChatRequest> = input,
@@ -3036,7 +3079,8 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     const rawDispatch = classifyAiCoreChatDispatch(rawInput.message);
     const result =
       effectiveInput.mode === "agent"
-        ? (await runAdminDbMutationOperation(rawInput.message)) ??
+        ? (await runGcpBillingStatusOperation(rawInput.message)) ??
+          (await runAdminDbMutationOperation(rawInput.message)) ??
           (await runInfrastructureOperation(rawInput.message)) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
