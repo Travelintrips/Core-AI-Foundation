@@ -9,6 +9,7 @@ import {
 import { publishSafe } from "./aiEventBusService.js";
 import { enqueueAiCoreMcpBridgeLifecycleEvent } from "./aiCoreMcpEventWebhookService.js";
 import { notifyCodingBridgeResponse } from "./codingWhatsappNotificationService.js";
+import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 
@@ -232,7 +233,19 @@ export async function appendCodingBridgeResponse(input: {
     taskId: input.taskId ?? null,
     kind: input.kind,
     message: input.message,
+    checkpoint: input.checkpoint ?? {},
+    metadata: input.metadata ?? {},
   });
+
+  void enqueueAiCoreChatInboxMessage({
+    responseId: response.id,
+    commandId: input.commandId,
+    taskId: input.taskId ?? null,
+    kind: input.kind,
+    message: input.message,
+    checkpoint: input.checkpoint ?? {},
+    metadata: input.metadata ?? {},
+  }).catch(() => undefined);
 
   if (
     input.kind === "COMPLETED" ||
