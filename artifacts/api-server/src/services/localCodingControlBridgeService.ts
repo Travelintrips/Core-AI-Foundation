@@ -218,7 +218,7 @@ async function deliverCodingBridgeWhatsappNotification(input: {
     .update(aiCodingBridgeResponsesTable)
     .set({
       metadataJson: {
-        ...record(current?.metadataJson),
+        ...(isRecord(current?.metadataJson) ? current.metadataJson : {}),
         whatsappNotification: {
           dispatch,
           delivery,
