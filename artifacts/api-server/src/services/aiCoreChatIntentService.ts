@@ -71,17 +71,9 @@ export function classifyAiCoreChatDispatch(
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
 
-  if (infrastructureOperation) {
-    return {
-      kind: "INFRA_OPERATION",
-      workload,
-      preset: null,
-      infrastructureOperation,
-      externalAgentClientId: null,
-      reason: "Infrastructure request is handled directly by the AI Core capability executor.",
-    };
-  }
-
+  // Repository-changing and critical-action intent always outranks incidental
+  // infrastructure keywords that may appear in examples, acceptance criteria,
+  // logs, or explanatory text.
   if (workload.requiresAgent) {
     return {
       kind: "CONTROL_PLANE",
@@ -93,6 +85,17 @@ export function classifyAiCoreChatDispatch(
         workload.workload === "CRITICAL_ACTION"
           ? "Critical actions must enter the control plane and stop at the explicit approval gate."
           : "Repository-changing coding work must enter the Coding Orchestrator; an explicitly named coding agent may be used only inside that controlled path.",
+    };
+  }
+
+  if (infrastructureOperation) {
+    return {
+      kind: "INFRA_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation,
+      externalAgentClientId: null,
+      reason: "Infrastructure request is handled directly by the AI Core capability executor.",
     };
   }
 

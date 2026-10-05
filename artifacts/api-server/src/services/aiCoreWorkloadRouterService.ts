@@ -122,14 +122,41 @@ const REVIEW_CONTEXT =
 const DETERMINISTIC =
   /^(?:\/)?(?:status|health|healthz|model|routing|cost|help|biaya|bantuan|cek\s+status|cek\s+health|cek\s+model|routing\s+biaya)$/i;
 
+const READ_ONLY_RUNTIME_INTENT =
+  /\b(read[ -]?only|hanya baca|tanpa (?:mengubah|ubah|modifikasi|modify|change)|jangan (?:mengubah|ubah|modifikasi|modify|change)|cek|check|status|health|audit|inspect|periksa|lihat|show|list|verify|verifikasi|validasi)\b/i;
+
+const RUNTIME_CONTEXT =
+  /\b(runtime|production|prod|worker|ollama|gpu|gcp|google cloud|vm|service|deployment status|config(?:uration)? state|konfigurasi runtime|infrastructure|infra)\b/i;
+
+function stripNegatedMutations(text: string): string {
+  return text
+    .replace(/\b(?:jangan|do not|don't|without|tanpa)\s+(?:\w+\s+){0,3}(?:deploy(?:ment)?|merge|commit|push|restart|start|stop|delete|hapus|ubah|edit|modify|change|implement(?:asikan)?|patch|fix|perbaiki)\b/gi, " ")
+    .replace(/\b(?:must not|tidak boleh)\s+(?:\w+\s+){0,3}(?:deploy(?:ment)?|merge|commit|push|restart|start|stop|delete|hapus|ubah|edit|modify|change|implement(?:asikan)?|patch|fix|perbaiki)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
   const text = normalize(message);
+  const actionableText = stripNegatedMutations(text);
 
   if (!text) return route("CHAT");
   if (/^(hello|hi|halo|hai|hey)$/.test(text)) return route("DETERMINISTIC");
   if (DETERMINISTIC.test(text)) return route("DETERMINISTIC");
-  if (CRITICAL_ACTION.test(text)) return route("CRITICAL_ACTION");
-  if (CODING_ACTION.test(text) && CODE_CONTEXT.test(text)) return route("CODING");
+
+  // Explicit read-only runtime inspection takes precedence when no affirmative
+  // mutation remains after removing negated/exclusion clauses.
+  if (
+    READ_ONLY_RUNTIME_INTENT.test(text) &&
+    RUNTIME_CONTEXT.test(text) &&
+    !CRITICAL_ACTION.test(actionableText) &&
+    !(CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText))
+  ) {
+    return route("DETERMINISTIC");
+  }
+
+  if (CRITICAL_ACTION.test(actionableText)) return route("CRITICAL_ACTION");
+  if (CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText)) return route("CODING");
   if (REASONING.test(text)) return route("REASONING");
   if (REVIEW.test(text) && REVIEW_CONTEXT.test(text)) return route("REVIEW");
   return route("CHAT");
