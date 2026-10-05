@@ -65,6 +65,7 @@ import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorke
 import { reconcileStaleCodingRuns } from "../services/localCodingRunRecoveryService.js";
 import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
+import { getAutonomousCodingTaskStatus } from "../services/localCodingAutonomousRepairService.js";
 import { reportCodingTaskTerminalTransition } from "../services/codingTaskTerminalReportingService.js";
 import { getWorkerCapacity } from "../services/workerClusterService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
