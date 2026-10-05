@@ -15,6 +15,7 @@ import {
 import { logAudit } from "./aiAuditService.js";
 import { computePriorityScore } from "./priorityEngine.js";
 import { getAvailableOllamaCodingSlots } from "./ollamaWorkerRegistryService.js";
+import { ensureGcpOllamaVmStarted } from "./gcpOllamaVmLifecycleService.js";
 import {
   completeRepositoryAnalyzerRun,
   executeRepositoryAnalyzerJob,
@@ -100,6 +101,13 @@ export function resolveCodingDispatchConcurrency(
 
   const requested = Math.max(1, Math.min(8, Math.floor(requestedMaxParallel!)));
   return Math.min(requested, available);
+}
+
+export async function requestCodingWorkstreamCapacity(
+  availableOllamaSlots: number,
+): Promise<boolean> {
+  if (availableOllamaSlots > 0) return false;
+  return ensureGcpOllamaVmStarted().catch(() => false);
 }
 
 function validateBaseSha(value: string): string {
@@ -558,6 +566,12 @@ export async function dispatchReadyCodingWorkstreams(
   );
 
   if (effectiveMaxParallel === 0) {
+    // Workstream jobs cannot be created until a healthy Ollama worker is
+    // registered because dispatch concurrency is capacity-bounded. Request the
+    // configured GCP worker here to break the cold-start deadlock; the next
+    // autonomous cycle will observe the worker lease and dispatch normally.
+    const gcpAutoStartRequested = await requestCodingWorkstreamCapacity(availableOllamaSlots);
+
     const [graph] = await db
       .select()
       .from(aiCodingTaskGraphsTable)
@@ -572,6 +586,7 @@ export async function dispatchReadyCodingWorkstreams(
       {
         requestedMaxParallel: options.maxParallel ?? null,
         availableOllamaSlots,
+        gcpAutoStartRequested,
       },
     ).catch(() => undefined);
 

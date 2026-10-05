@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   logAudit: vi.fn(),
   isTransientDatabaseConnectionError: vi.fn(),
   getAvailableOllamaCodingSlots: vi.fn(),
+  ensureGcpOllamaVmStarted: vi.fn(),
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -45,6 +46,10 @@ vi.mock("../ollamaWorkerRegistryService.js", () => ({
   getAvailableOllamaCodingSlots: mocks.getAvailableOllamaCodingSlots,
 }));
 
+vi.mock("../gcpOllamaVmLifecycleService.js", () => ({
+  ensureGcpOllamaVmStarted: mocks.ensureGcpOllamaVmStarted,
+}));
+
 vi.mock("../repositoryAnalyzerService.js", () => ({
   executeRepositoryAnalyzerJob: mocks.executeAnalyzer,
   completeRepositoryAnalyzerRun: mocks.completeAnalyzer,
@@ -74,6 +79,7 @@ import {
   codingWorkstreamOwnsFile,
   executeCodingWorkstreamJob,
   resolveCodingDispatchConcurrency,
+  requestCodingWorkstreamCapacity,
 } from "../localCodingMultiWorkerExecutionService.js";
 
 const GRAPH_ID = "11111111-1111-4111-8111-111111111111";
@@ -99,6 +105,28 @@ function job() {
     },
   } as any;
 }
+
+describe("multi-worker GCP Ollama cold start", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.ensureGcpOllamaVmStarted.mockResolvedValue(true);
+  });
+
+  it("requests the configured GCP Ollama VM when no slot is available", async () => {
+    await expect(requestCodingWorkstreamCapacity(0)).resolves.toBe(true);
+    expect(mocks.ensureGcpOllamaVmStarted).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start GCP when Ollama capacity already exists", async () => {
+    await expect(requestCodingWorkstreamCapacity(2)).resolves.toBe(false);
+    expect(mocks.ensureGcpOllamaVmStarted).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the GCP start request is unavailable", async () => {
+    mocks.ensureGcpOllamaVmStarted.mockRejectedValueOnce(new Error("not configured"));
+    await expect(requestCodingWorkstreamCapacity(0)).resolves.toBe(false);
+  });
+});
 
 describe("multi-worker Ollama capacity", () => {
   it("uses all available Ollama slots when no explicit limit is requested", () => {
