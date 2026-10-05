@@ -979,7 +979,7 @@ async function executePrepareHandoff(
         .set({
           status: "READY_REVIEW",
           resultSummary:
-            `Bounded AI handoff package prepared for ${pkg.allowedFiles.length} allowed file(s). No model was invoked. Explicit handoff approval is required.`,
+            `Bounded AI handoff package prepared for ${pkg.allowedFiles.length} allowed file(s). No model was invoked. The autonomous controller will approve and continue automatically when policy checks pass; manual approval is only required when explicitly flagged by policy.`,
         })
         .where(eq(aiCodingTasksTable.id, context.task.id));
     });
