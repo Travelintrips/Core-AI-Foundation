@@ -2740,27 +2740,39 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
   try {
     const ttsModel =
       process.env["AI_CORE_WA_E2E_TTS_MODEL"]?.trim() || "gpt-4o-mini-tts";
-    const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${ttsApiKey}`,
-        "content-type": "application/json",
-        accept: "audio/ogg",
-      },
-      body: JSON.stringify({
-        model: ttsModel,
-        voice: "alloy",
-        // Keep the synthetic voice fixture deterministic so this E2E validates
-        // voice transcription + WhatsApp delivery without depending on model-registry DB health.
-        input: "status",
-        response_format: "opus",
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!ttsResponse.ok) {
-      throw new Error(
-        `WhatsApp voice E2E fixture generation failed (HTTP ${ttsResponse.status}).`,
-      );
+    let ttsResponse: Response | null = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ttsApiKey}`,
+          "content-type": "application/json",
+          accept: "audio/ogg",
+        },
+        body: JSON.stringify({
+          model: ttsModel,
+          voice: "alloy",
+          // Keep the synthetic voice fixture deterministic so this E2E validates
+          // voice transcription + WhatsApp delivery without depending on model-registry DB health.
+          input: "status",
+          response_format: "opus",
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (ttsResponse.ok) break;
+      if (ttsResponse.status !== 429 || attempt === 3) {
+        throw new Error(
+          `WhatsApp voice E2E fixture generation failed (HTTP ${ttsResponse.status}).`,
+        );
+      }
+      const retryAfter = Number(ttsResponse.headers.get("retry-after") ?? "");
+      const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1_000, 30_000)
+        : attempt * 5_000;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    if (!ttsResponse?.ok) {
+      throw new Error("WhatsApp voice E2E fixture generation failed after retries.");
     }
     const audio = Buffer.from(await ttsResponse.arrayBuffer());
     if (!audio.length || audio.length > 2 * 1024 * 1024) {
