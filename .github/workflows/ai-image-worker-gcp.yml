@@ -1,0 +1,109 @@
+name: AI Image Worker GCP
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: start-deploy, status, or stop
+        required: true
+        default: start-deploy
+        type: choice
+        options:
+          - start-deploy
+          - status
+          - stop
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ai-image-worker-gcp
+  cancel-in-progress: false
+
+jobs:
+  manage:
+    runs-on: ubuntu-latest
+    environment: ai-image-worker-gcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Validate configuration
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          ZONE: ${{ vars.GCP_GPU_ZONE }}
+          INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
+        run: |
+          set -euo pipefail
+          test -n "$PROJECT"
+          test -n "$ZONE"
+          test -n "$INSTANCE"
+          gcloud config set project "$PROJECT"
+
+      - name: Start GPU VM
+        if: inputs.action == 'start-deploy'
+        env:
+          ZONE: ${{ vars.GCP_GPU_ZONE }}
+          INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
+        run: |
+          set -euo pipefail
+          gcloud compute instances start "$INSTANCE" --zone "$ZONE" || true
+          for i in $(seq 1 30); do
+            status="$(gcloud compute instances describe "$INSTANCE" --zone "$ZONE" --format='value(status)')"
+            [[ "$status" == "RUNNING" ]] && exit 0
+            sleep 5
+          done
+          exit 1
+
+      - name: Copy image-worker deployment
+        if: inputs.action == 'start-deploy'
+        env:
+          ZONE: ${{ vars.GCP_GPU_ZONE }}
+          INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
+        run: |
+          set -euo pipefail
+          tar -czf /tmp/ai-image-worker.tgz deploy/ai-image-worker scripts/install-ai-image-worker.sh scripts/ai-image-worker-idle-shutdown.sh
+          gcloud compute scp /tmp/ai-image-worker.tgz "$INSTANCE:/tmp/ai-image-worker.tgz" --zone "$ZONE"
+
+      - name: Install and verify ComfyUI
+        if: inputs.action == 'start-deploy'
+        env:
+          ZONE: ${{ vars.GCP_GPU_ZONE }}
+          INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
+        run: |
+          set -euo pipefail
+          gcloud compute ssh "$INSTANCE" --zone "$ZONE" --command '
+            set -euo pipefail
+            rm -rf /tmp/core-ai-image-worker
+            mkdir -p /tmp/core-ai-image-worker
+            tar -xzf /tmp/ai-image-worker.tgz -C /tmp/core-ai-image-worker
+            cd /tmp/core-ai-image-worker
+            sudo AI_IMAGE_WORKER_ENV_FILE=/etc/ai-core/ai-image-worker.env bash scripts/install-ai-image-worker.sh
+            curl -fsS http://127.0.0.1:8188/system_stats >/dev/null
+            nvidia-smi
+          '
+
+      - name: Status
+        if: inputs.action == 'status'
+        env:
+          ZONE: ${{ vars.GCP_GPU_ZONE }}
+          INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
+        run: |
+          gcloud compute instances describe "$INSTANCE" --zone "$ZONE"             --format='table(name,status,machineType.basename(),zone.basename())'
+
+      - name: Stop GPU VM
+        if: inputs.action == 'stop'
+        env:
+          ZONE: ${{ vars.GCP_GPU_ZONE }}
+          INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
+        run: |
+          set -euo pipefail
+          gcloud compute instances stop "$INSTANCE" --zone "$ZONE"

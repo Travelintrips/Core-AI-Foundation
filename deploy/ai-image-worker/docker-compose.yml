@@ -1,0 +1,36 @@
+name: ${COMPOSE_PROJECT_NAME:-ai-core-image-worker}
+
+services:
+  comfyui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        COMFYUI_VERSION: ${COMFYUI_VERSION:-v0.38.0}
+        PYTORCH_INDEX_URL: ${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}
+    image: ai-core-comfyui:${COMFYUI_VERSION:-v0.38.0}
+    restart: unless-stopped
+    init: true
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      HF_HOME: /models/.cache/huggingface
+      HF_TOKEN: ${HF_TOKEN:-}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - "${COMFYUI_MODELS_PATH:-/opt/ai-image-worker/models}:/opt/ComfyUI/models"
+      - "${COMFYUI_INPUT_PATH:-/opt/ai-image-worker/input}:/opt/ComfyUI/input"
+      - "${COMFYUI_OUTPUT_PATH:-/opt/ai-image-worker/output}:/opt/ComfyUI/output"
+      - "${COMFYUI_USER_PATH:-/opt/ai-image-worker/user}:/opt/ComfyUI/user"
+      - "${COMFYUI_CUSTOM_NODES_PATH:-/opt/ai-image-worker/custom_nodes}:/opt/ComfyUI/custom_nodes"
+    ports:
+      - "127.0.0.1:${COMFYUI_PORT:-8188}:8188"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8188/system_stats >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    security_opt:
+      - no-new-privileges:true
