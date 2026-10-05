@@ -1,4 +1,5 @@
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   normalizeOllamaWorkerEndpoint,
@@ -56,5 +57,20 @@ describe("Ollama worker endpoint policy", () => {
         "http://10.0.0.2:11434/api",
       ),
     ).toThrow(/\/v1/);
+  });
+});
+
+
+describe("Ollama coding capacity registry", () => {
+  it("counts healthy remote-pull workers as bounded model capacity", () => {
+    const source = readFileSync(
+      new URL("../ollamaWorkerRegistryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("REMOTE_OLLAMA_RUNTIME_KIND");
+    expect(source).toContain("REMOTE_OLLAMA_CAPABILITY");
+    expect(source).toContain("endpoint_url IS NULL");
+    expect(source).toContain("SUM(GREATEST(max_concurrent_jobs - running_jobs, 0))");
   });
 });
