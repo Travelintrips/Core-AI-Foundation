@@ -558,7 +558,7 @@ describe("autonomous action budget behavior", () => {
     expect(autonomous.cycle_count).toBe(39);
   });
 
-  it("does not spend cycles when graph dependencies leave nothing ready to dispatch", async () => {
+  it("blocks instead of waiting forever when a dependency workstream is terminally blocked", async () => {
     const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
     const { getLatestCodingTaskGraph } = await import("../localCodingTaskGraphService.js");
     const { dispatchReadyCodingWorkstreams } = await import("../localCodingMultiWorkerExecutionService.js");
@@ -570,7 +570,10 @@ describe("autonomous action budget behavior", () => {
         { key: "dependent", status: "PENDING", dependencies: ["source"] },
       ],
     } as never);
-    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ action: "WAIT_TASK_GRAPH" });
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({
+      status: "BLOCKED",
+      action: "TASK_GRAPH_BLOCKER",
+    });
     expect(dispatchReadyCodingWorkstreams).not.toHaveBeenCalled();
     expect(autonomous.cycle_count).toBe(40);
   });
