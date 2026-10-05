@@ -105,12 +105,17 @@ type CodingGitHubBranch = {
 
 type CodingMonitorSnapshot = {
   refreshedAt: string;
+  taskStates: Record<string, CodingOperationalState>;
   jobs: {
     active: number;
     waitingQueued: number;
     codingModelRunning: number;
     failedBlocked: number;
     trueReadyReview: number;
+    analyzingRunning: number;
+    waitingForWorker: number;
+    queued: number;
+    waitingForCapacity: number;
   };
   workers: {
     active: number;
@@ -139,6 +144,49 @@ type CodingMonitorSnapshot = {
     }>;
   };
 };
+
+type CodingOperationalState =
+  | "ANALYZING_RUNNING"
+  | "WAITING_FOR_WORKER"
+  | "QUEUED"
+  | "WAITING_FOR_CAPACITY";
+
+const OPERATIONAL_STATE_LABELS: Record<CodingOperationalState, string> = {
+  ANALYZING_RUNNING: "ANALYZING RUNNING",
+  WAITING_FOR_WORKER: "WAITING FOR WORKER",
+  QUEUED: "QUEUED",
+  WAITING_FOR_CAPACITY: "WAITING FOR CAPACITY",
+};
+
+function OperationalStatusBadge({ state }: { state: CodingOperationalState }) {
+  const toneClass =
+    state === "ANALYZING_RUNNING"
+      ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-300"
+      : state === "QUEUED"
+        ? "border-slate-400/20 bg-slate-400/10 text-slate-300"
+        : "border-amber-400/20 bg-amber-400/10 text-amber-300";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]",
+        toneClass,
+      )}
+      data-testid={`status-operational-${state.toLowerCase()}`}
+    >
+      <span
+        className={cn(
+          "size-1.5 rounded-full",
+          state === "ANALYZING_RUNNING"
+            ? "bg-cyan-300 animate-pulse"
+            : state === "QUEUED"
+              ? "bg-slate-300"
+              : "bg-amber-300 animate-pulse",
+        )}
+      />
+      {OPERATIONAL_STATE_LABELS[state]}
+    </span>
+  );
+}
 
 type GcpUsageSnapshot = {
   configured: boolean;
@@ -1847,7 +1895,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   );
 }
 
-function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExecutionQueued, presentationStatus }: { detail?: CodingTaskDetail; isLoading: boolean; isError: boolean; onRetry: () => void; onClose: () => void; onAiExecutionQueued: () => void; presentationStatus?: CodingTaskStatus }) {
+function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExecutionQueued, presentationStatus, operationalState }: { detail?: CodingTaskDetail; isLoading: boolean; isError: boolean; onRetry: () => void; onClose: () => void; onAiExecutionQueued: () => void; presentationStatus?: CodingTaskStatus; operationalState?: CodingOperationalState }) {
   const { t, lang } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -2477,7 +2525,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
           <div className="min-w-0"><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-cyan-300"><span className="size-1.5 rounded-full bg-cyan-300" />{task.taskNumber}</div><h2 className="truncate font-display text-xl text-slate-100">{task.projectName}</h2><div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-slate-500"><GitBranch className="size-3.5 shrink-0 text-slate-400" /><span className="truncate">{task.repository}</span><span className="text-slate-400">/</span><span className="truncate text-slate-400">{task.branch}</span></div></div>
           <button type="button" onClick={onClose} className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200" aria-label={t("pages.codingWorkspace.close")} data-testid="button-close-coding-detail"><XCircle className="size-4" /></button>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2"><StatusBadge status={displayedTaskStatus} label={t(`pages.codingWorkspace.statuses.${displayedTaskStatus.toLowerCase()}`)} /><span className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-slate-500">P{task.priority}</span><span className="text-xs text-slate-400">{formatDate(task.createdAt, lang, true)}</span></div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">{operationalState ? <OperationalStatusBadge state={operationalState} /> : <StatusBadge status={displayedTaskStatus} label={t(`pages.codingWorkspace.statuses.${displayedTaskStatus.toLowerCase()}`)} />}<span className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-slate-500">P{task.priority}</span><span className="text-xs text-slate-400">{formatDate(task.createdAt, lang, true)}</span></div>
       </CardHeader>
       <CardContent className="space-y-6 p-5">
         <section><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><TerminalSquare className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.instruction")}</div><p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-[#091222] p-3 text-sm leading-6 text-slate-300">{task.instruction}</p></section>
@@ -4117,12 +4165,12 @@ export default function CodingWorkspace() {
 
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
             {[
-              { label: "Jobs Active", value: monitor?.jobs.active ?? 0, icon: CircleDot, tone: "text-amber-300" },
-              { label: "Waiting / Queued", value: monitor?.jobs.waitingQueued ?? 0, icon: Clock3, tone: "text-slate-300" },
-              { label: "Coding / Model", value: monitor?.jobs.codingModelRunning ?? 0, icon: Bot, tone: "text-cyan-300" },
+              { label: "Analyzing Running", value: monitor?.jobs.analyzingRunning ?? 0, icon: CircleDot, tone: "text-cyan-300" },
+              { label: "Waiting Worker", value: monitor?.jobs.waitingForWorker ?? 0, icon: TerminalSquare, tone: "text-amber-300" },
+              { label: "Queued", value: monitor?.jobs.queued ?? 0, icon: Clock3, tone: "text-slate-300" },
+              { label: "Waiting Capacity", value: monitor?.jobs.waitingForCapacity ?? 0, icon: ShieldAlert, tone: "text-amber-300" },
               { label: "Worker Active", value: monitor?.workers.active ?? 0, icon: TerminalSquare, tone: "text-emerald-300" },
               { label: "Worker Available", value: monitor?.workers.available ?? 0, icon: CheckCircle2, tone: "text-emerald-300" },
-              { label: "Busy / Unavailable", value: monitor?.workers.busyUnavailable ?? 0, icon: ShieldAlert, tone: "text-amber-300" },
               { label: "Failed / Blocked", value: monitor?.jobs.failedBlocked ?? 0, icon: XCircle, tone: "text-rose-300" },
               { label: "True Ready Review", value: monitor?.jobs.trueReadyReview ?? 0, icon: ArrowUpRight, tone: "text-violet-300" },
             ].map((stat) => (
@@ -4299,7 +4347,7 @@ export default function CodingWorkspace() {
                           <ChevronRight className="size-4 text-slate-400 transition-transform group-hover:translate-x-0.5 sm:hidden" />
                         </div>
                         <div className="min-w-0"><div className="truncate text-sm font-medium text-slate-200">{task.projectName}</div><div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-400"><span className="truncate">{task.repository}</span><span className="text-slate-400">·</span><span className="truncate text-slate-500">{task.branch}</span></div></div>
-                        <div><StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} /></div>
+                        <div>{monitor?.taskStates?.[task.id] ? <OperationalStatusBadge state={monitor.taskStates[task.id]!} /> : <StatusBadge status={task.status} label={t(`pages.codingWorkspace.statuses.${task.status.toLowerCase()}`)} />}</div>
                         <div className="flex items-center justify-between gap-2 text-xs text-slate-400 sm:justify-end">
                           <span className="sm:hidden">{formatDate(task.createdAt, lang)}</span>
                           <span className="font-mono text-[10px] text-slate-500">P{task.priority}</span>
@@ -4322,6 +4370,7 @@ export default function CodingWorkspace() {
             onClose={() => setLocation("/coding-workspace")}
             onAiExecutionQueued={() => setQueuedAiBaselineRunCount(aiExecutionRunCount)}
             presentationStatus={selectedPresentationStatus}
+            operationalState={selectedId ? monitor?.taskStates?.[selectedId] : undefined}
           /> : <Card className="min-h-[420px] border-white/[0.08] bg-[#0c1628]"><CardContent className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-300"><Code2 className="size-5" /></div><p className="font-display text-lg text-slate-100">{isLoading ? t("pages.codingWorkspace.loading") : t("pages.codingWorkspace.selectTask")}</p></CardContent></Card>}</div>
         </div>
         <div className="mt-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-slate-400"><div className="h-px flex-1 bg-white/[0.05]" /><span>Travelintrips engineering / coding intake</span><div className="h-px flex-1 bg-white/[0.05]" /></div>
