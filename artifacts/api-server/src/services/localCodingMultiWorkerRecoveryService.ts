@@ -174,6 +174,130 @@ async function reconcileTerminalMultiWorkerJobOrphans(
   };
 }
 
+const DETACHED_READY_REVIEW_GRACE_MS = 10 * 60_000;
+
+async function reconcileReadyReviewMultiWorkerChildren(
+  now: Date,
+): Promise<{ inspected: number; recoveredTasks: number }> {
+  const cutoff = new Date(now.getTime() - DETACHED_READY_REVIEW_GRACE_MS);
+
+  const result = await db.execute(sql`
+    WITH linked_terminal AS (
+      SELECT
+        t.id AS task_id,
+        w.status AS workstream_status,
+        w.error_message
+      FROM ai_platform.ai_coding_tasks AS t
+      JOIN ai_platform.ai_coding_workstreams AS w
+        ON w.child_task_id = t.id
+      WHERE t.status = 'READY_REVIEW'
+        AND t.task_number LIKE 'MW-%'
+        AND w.status IN ('COMPLETED', 'FAILED', 'CANCELLED')
+    ),
+    linked_updated AS (
+      UPDATE ai_platform.ai_coding_tasks AS t
+      SET status = CASE
+            WHEN linked_terminal.workstream_status = 'COMPLETED'
+              THEN 'COMPLETED'
+            ELSE 'FAILED'
+          END,
+          result_summary = CASE
+            WHEN linked_terminal.workstream_status = 'COMPLETED'
+              THEN COALESCE(
+                NULLIF(t.result_summary, ''),
+                'Reviewed coding workstream completed successfully.'
+              )
+            ELSE LEFT(
+              'Coding workstream ended as ' ||
+              linked_terminal.workstream_status || ': ' ||
+              COALESCE(
+                NULLIF(linked_terminal.error_message, ''),
+                'terminal workstream state'
+              ),
+              500
+            )
+          END,
+          updated_at = ${now}
+      FROM linked_terminal
+      WHERE t.id = linked_terminal.task_id
+        AND t.status = 'READY_REVIEW'
+      RETURNING t.id
+    ),
+    detached AS (
+      SELECT t.id
+      FROM ai_platform.ai_coding_tasks AS t
+      WHERE t.status = 'READY_REVIEW'
+        AND t.task_number LIKE 'MW-%'
+        AND t.updated_at <= ${cutoff}
+        AND NULLIF(t.commit_sha, '') IS NULL
+        AND NULLIF(t.pull_request_url, '') IS NULL
+        AND EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_runs AS completed_run
+          WHERE completed_run.task_id = t.id
+            AND completed_run.status = 'COMPLETED'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_runs AS active_run
+          WHERE active_run.task_id = t.id
+            AND active_run.status = 'RUNNING'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_workstreams AS active_binding
+          WHERE active_binding.child_task_id = t.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_jobs AS active_job
+          WHERE active_job.status IN ('queued', 'waiting', 'running', 'retrying')
+            AND (
+              active_job.payload_json->>'codingTaskId' = t.id::text
+              OR active_job.payload_json->>'codingRunId' IN (
+                SELECT run_for_task.id::text
+                FROM ai_platform.ai_coding_runs AS run_for_task
+                WHERE run_for_task.task_id = t.id
+              )
+            )
+        )
+    ),
+    detached_updated AS (
+      UPDATE ai_platform.ai_coding_tasks AS t
+      SET status = 'FAILED',
+          result_summary = LEFT(
+            'Legacy detached Multi-Worker child lifecycle closed safely: no active workstream, run, or job remains. ' ||
+            'The parent/workstream lifecycle is authoritative; no implementation completion is inferred. ' ||
+            COALESCE(t.result_summary, ''),
+            500
+          ),
+          updated_at = ${now}
+      FROM detached
+      WHERE t.id = detached.id
+        AND t.status = 'READY_REVIEW'
+      RETURNING t.id
+    )
+    SELECT
+      (
+        (SELECT COUNT(*) FROM linked_terminal) +
+        (SELECT COUNT(*) FROM detached)
+      )::int AS inspected,
+      (
+        (SELECT COUNT(*) FROM linked_updated) +
+        (SELECT COUNT(*) FROM detached_updated)
+      )::int AS recovered_tasks
+  `);
+
+  const row = result.rows?.[0] as
+    | { inspected?: number | string; recovered_tasks?: number | string }
+    | undefined;
+
+  return {
+    inspected: Number(row?.inspected ?? 0),
+    recoveredTasks: Number(row?.recovered_tasks ?? 0),
+  };
+}
+
 export async function reconcileStaleMultiWorkerRuns(
   options: { taskId?: string; now?: Date } = {},
 ): Promise<MultiWorkerRecoveryResult> {
@@ -364,6 +488,12 @@ export async function reconcileStaleMultiWorkerRuns(
 
       if (updatedTask) result.recoveredTasks += 1;
     });
+  }
+
+  if (!options.taskId) {
+    const readyReviewRecovery = await reconcileReadyReviewMultiWorkerChildren(now);
+    result.inspected += readyReviewRecovery.inspected;
+    result.recoveredTasks += readyReviewRecovery.recoveredTasks;
   }
 
   return result;
