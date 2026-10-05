@@ -55,6 +55,28 @@ describe("AI Core workload router", () => {
     });
   });
 
+  it.each([
+    "cek apakah Ollama GPU aktif di production",
+    "cek worker yang aktif",
+    "audit production runtime read-only",
+    "check GCP VM status",
+    "verify runtime config state without changing anything",
+  ])("keeps read-only runtime inspection deterministic: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "DETERMINISTIC",
+      costClass: "ZERO",
+      requiresAgent: false,
+    });
+  });
+
+  it.each([
+    "perbaiki routing AI Core",
+    "restart VM",
+    "deploy production",
+  ])("does not downgrade mutating intent to read-only: %s", (message) => {
+    expect(classifyAiCoreWorkload(message).workload).not.toBe("DETERMINISTIC");
+  });
+
   it("routes production deploy to the explicit approval gate", () => {
     expect(classifyAiCoreWorkload("deploy ke production sekarang")).toMatchObject({
       workload: "CRITICAL_ACTION",
