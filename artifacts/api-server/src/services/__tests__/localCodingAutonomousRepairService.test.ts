@@ -31,6 +31,14 @@ vi.mock("../localCodingWorkstreamAiExecutionService.js", () => ({
   manualAiPatchReviewReason: vi.fn(() => null),
   materializeApprovedWorkstreamAiCandidate: vi.fn(),
   prepareWorkstreamAiExecutionHandoff: vi.fn(),
+  resetApprovedWorkstreamAiCandidateForAutoRepair: vi.fn(async () => ({
+    recoverable: true,
+    shouldRetry: true,
+    previousRepairAttempts: 0,
+    nextRepairAttempt: 1,
+    maxRepairAttempts: 3,
+    reason: "SAFE_AUTOMATIC_REPAIR",
+  })),
 }));
 vi.mock("../localCodingMultiWorkerOrchestratorService.js", () => ({ completeReviewedCodingWorkstream: vi.fn() }));
 vi.mock("../localCodingPatchApprovalService.js", () => ({ approveAndValidateLocalPatch: vi.fn() }));
@@ -617,6 +625,19 @@ describe("autonomous action budget behavior", () => {
   });
 });
 
+
+describe("autonomous materialization auto-repair wiring", () => {
+  it("routes recoverable stale materialization into bounded candidate regeneration", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("resetApprovedWorkstreamAiCandidateForAutoRepair");
+    expect(source).toContain("AUTO_REPAIR_MATERIALIZATION:");
+    expect(source).toContain("if (repair.shouldRetry)");
+  });
+});
 
 describe("autonomous terminal task status", () => {
   it("requires explicit terminal evidence before persisting COMPLETED", async () => {
