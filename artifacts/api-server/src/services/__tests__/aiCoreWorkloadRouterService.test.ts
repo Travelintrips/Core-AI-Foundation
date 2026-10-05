@@ -112,6 +112,20 @@ describe("AI Core workload router", () => {
     });
   });
 
+  it.each([
+    "audit workspace lalu selesaikan task READY_REVIEW yang menggantung",
+    "lanjutkan task siap ditinjau sampai completed",
+    "rekonsiliasi workstream blocked dan perbaiki blockernya",
+    "resume workspace task yang masih menganalisis",
+  ])("routes workspace task mutations to the Coding Orchestrator: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "CODING",
+      costClass: "HIGH",
+      requiresAgent: true,
+      requiresApproval: false,
+    });
+  });
+
   it("routes repository-changing instructions to the Coding Orchestrator", () => {
     expect(classifyAiCoreWorkload("perbaiki error build di repository ini")).toMatchObject({
       workload: "CODING",

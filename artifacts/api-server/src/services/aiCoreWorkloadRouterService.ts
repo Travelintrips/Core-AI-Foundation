@@ -114,7 +114,10 @@ const CODING_ACTION =
   /\b(perbaiki|fix|implement(?:asikan)?|buat(?:kan)?\s+(?:kode|fitur|endpoint|api|service|komponen|component|test|unit\s+test)|tambah(?:kan)?\s+(?:kode|fitur|endpoint|api|service|komponen|component|test|unit\s+test)|refactor|ubah\s+(?:kode|source|file)|edit\s+(?:kode|source|file)|patch|commit|push)\b/i;
 
 const CODE_CONTEXT =
-  /\b(code|kode|source|repository|repo|typescript|javascript|python|function|fungsi|class|endpoint|api|build|test|ci|bug|error)\b/i;
+  /\b(code|kode|source|repository|repo|typescript|javascript|python|function|fungsi|class|endpoint|api|build|test|ci|bug|error|workspace|task|workstream|ready[_ -]?review|siap\s+ditinjau|analyzing|menganalisis|blocked|gantung)\b/i;
+
+const WORKSPACE_TASK_MUTATION =
+  /\b(?:lanjutkan|continue|resume|selesaikan|complete|rekonsiliasi|reconcile|tutup|close|reactivate|aktifkan\s+kembali|perbaiki|fix)\b.{0,120}\b(?:workspace|task|workstream|ready[_ -]?review|siap\s+ditinjau|analyzing|menganalisis|blocked|gantung)\b|\b(?:workspace|task|workstream|ready[_ -]?review|siap\s+ditinjau|analyzing|menganalisis|blocked|gantung)\b.{0,120}\b(?:lanjutkan|continue|resume|selesaikan|complete|rekonsiliasi|reconcile|tutup|close|reactivate|perbaiki|fix)\b/i;
 
 const REASONING =
   /\b(kenapa|mengapa|why|root\s*cause|penyebab|analisis(?:is)?|analyze|analyse|jelaskan\s+kenapa|explain\s+why|bandingkan|compare|pola|pattern|anomali|anomaly)\b/i;
@@ -174,6 +177,7 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
   }
 
   if (CRITICAL_ACTION.test(actionableText)) return route("CRITICAL_ACTION");
+  if (WORKSPACE_TASK_MUTATION.test(actionableText)) return route("CODING");
   if (VERIFIED_DELIVERY_WORKFLOW.test(actionableText)) return route("CODING");
   if (CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText)) return route("CODING");
   if (REASONING.test(text)) return route("REASONING");
