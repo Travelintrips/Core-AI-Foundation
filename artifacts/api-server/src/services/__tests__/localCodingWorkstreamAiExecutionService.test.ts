@@ -358,6 +358,26 @@ describe("workstream AI failure context preservation", () => {
     });
   });
 
+  it("treats QC revision requests as bounded recoverable work", () => {
+    const decision = decideWorkstreamAiAutoRepair(
+      new Error("QC review requested revision: AI candidate contains verification/policy warnings."),
+      {
+        localExecutionPlan: { status: "AI_REQUIRED" },
+        workstreamAiExecution: {
+          status: "CANDIDATE_READY",
+          autoRepairAttempt: 0,
+        },
+      },
+    );
+
+    expect(decision).toMatchObject({
+      recoverable: true,
+      shouldRetry: true,
+      nextRepairAttempt: 1,
+      reason: "SAFE_AUTOMATIC_REPAIR",
+    });
+  });
+
   it("does not auto-retry policy violations", () => {
     const decision = decideWorkstreamAiAutoRepair(
       new Error("AI candidate patch escaped its workstream ownership boundary."),

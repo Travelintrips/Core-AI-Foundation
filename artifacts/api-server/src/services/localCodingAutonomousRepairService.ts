@@ -523,6 +523,27 @@ export function isTransientWorkstreamDatabaseFailure(message: string): boolean {
   );
 }
 
+export function hasDependencyReadyNonReviewWorkstream(
+  workstreams: Array<{
+    status: string;
+    key: string;
+    dependencies?: string[] | null;
+  }>,
+): boolean {
+  const completedKeys = new Set(
+    workstreams
+      .filter((item) => item.status === "COMPLETED")
+      .map((item) => item.key),
+  );
+  return workstreams.some((item) => {
+    const dependencies = Array.isArray(item.dependencies) ? item.dependencies : [];
+    return (
+      ["PENDING", "READY", "CLAIMED", "RUNNING"].includes(item.status) &&
+      dependencies.every((dependency) => completedKeys.has(dependency))
+    );
+  });
+}
+
 async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
@@ -584,7 +605,11 @@ async function processTaskGraph(
     };
   }
 
-  const review = snapshot.workstreams.find((item) => item.status === "REVIEW_REQUIRED");
+  // A review/QC workstream must not stall independent safe work. Let dependency-ready
+  // siblings dispatch first; return to the review workstream once no safe sibling can advance.
+  const review = hasDependencyReadyNonReviewWorkstream(snapshot.workstreams)
+    ? undefined
+    : snapshot.workstreams.find((item) => item.status === "REVIEW_REQUIRED");
   if (review) {
     const result = review.resultJson;
     const execution =
@@ -613,10 +638,28 @@ async function processTaskGraph(
         );
 
         if (manualReviewReason) {
+          const revision = await resetApprovedWorkstreamAiCandidateForAutoRepair(
+            review.id,
+            new Error(`QC review requested revision: ${manualReviewReason}`),
+          );
+          if (revision.concurrentAdvance) {
+            return {
+              handled: true,
+              action: `CONTINUE_AFTER_QC_RACE:${review.key}`,
+              waiting: true,
+            };
+          }
+          if (revision.shouldRetry) {
+            return {
+              handled: true,
+              action: `AUTO_QC_REVISION:${review.key}:${revision.nextRepairAttempt}`,
+              waiting: true,
+            };
+          }
           return {
             handled: true,
             blocker:
-              `Workstream ${review.key} membutuhkan review manual: ${manualReviewReason}`,
+              `Workstream ${review.key} requires human review after bounded QC revisions were exhausted: ${manualReviewReason}`,
           };
         }
 
@@ -807,10 +850,7 @@ async function processTaskGraph(
     const completedKeys = new Set(snapshot.workstreams
       .filter((item) => item.status === "COMPLETED")
       .map((item) => item.key));
-    if (!snapshot.workstreams.some((item) =>
-      ["PENDING", "READY", "CLAIMED", "RUNNING"].includes(item.status) &&
-      item.dependencies.every((dependency) => completedKeys.has(dependency))
-    )) {
+    if (!hasDependencyReadyNonReviewWorkstream(snapshot.workstreams)) {
       return { handled: true, action: "WAIT_TASK_GRAPH", waiting: true };
     }
 

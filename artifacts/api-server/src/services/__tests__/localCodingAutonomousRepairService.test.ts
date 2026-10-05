@@ -14,7 +14,7 @@ vi.mock("@workspace/db", () => ({
   aiCodingTasksTable: { table: "tasks" },
   aiJobsTable: { table: "jobs" },
 }));
-vi.mock("../aiAuditService.js", () => ({ logAudit: vi.fn() }));
+vi.mock("../aiAuditService.js", () => ({ logAudit: vi.fn(async () => undefined) }));
 vi.mock("../localCodingControlBridgeService.js", () => ({ appendCodingBridgeResponse: vi.fn() }));
 vi.mock("../localCodingTaskGraphService.js", () => ({ approveCodingTaskGraph: vi.fn(), getLatestCodingTaskGraph: vi.fn() }));
 vi.mock("../localCodingMultiWorkerExecutionService.js", () => ({
@@ -67,6 +67,39 @@ vi.mock("../localCodingRunRecoveryService.js", () => ({
   reconcileStaleCodingRuns: vi.fn(async () => ({ inspected: 0, recoveredRuns: 0, recoveredTasks: 0 })),
   purgeExpiredCodingTestTasks: vi.fn(async () => ({ inspected: 0, purgedTasks: 0 })),
 }));
+
+describe("autonomous QC scheduling policy", () => {
+  it("lets dependency-ready safe siblings advance before a REVIEW_REQUIRED workstream", async () => {
+    const { hasDependencyReadyNonReviewWorkstream } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      hasDependencyReadyNonReviewWorkstream([
+        { status: "REVIEW_REQUIRED", key: "WS-001", dependencies: [] },
+        { status: "READY", key: "WS-002", dependencies: [] },
+      ]),
+    ).toBe(true);
+
+    expect(
+      hasDependencyReadyNonReviewWorkstream([
+        { status: "REVIEW_REQUIRED", key: "WS-001", dependencies: [] },
+        { status: "PENDING", key: "WS-002", dependencies: ["WS-001"] },
+      ]),
+    ).toBe(false);
+  });
+
+  it("routes candidate warnings into bounded QC revision before human review", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("QC review requested revision:");
+    expect(source).toContain("AUTO_QC_REVISION:");
+    expect(source).toContain("bounded QC revisions were exhausted");
+  });
+});
 
 describe("autonomous coding workstream lease handling", () => {
   it("waits only for live claims and lets expired claims be reclaimed", async () => {
