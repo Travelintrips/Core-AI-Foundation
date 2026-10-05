@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readGcpOllamaVmConfig } from "../gcpOllamaVmLifecycleService.js";
+import { isGcpOllamaVmWithinStartupGrace, readGcpOllamaVmConfig } from "../gcpOllamaVmLifecycleService.js";
 
 describe("GCP Ollama VM lifecycle config", () => {
   it("is disabled by default", () => {
@@ -25,5 +25,10 @@ describe("GCP Ollama VM lifecycle config", () => {
   it("supports an explicit idle shutdown timeout with a one minute floor", () => {
     expect(readGcpOllamaVmConfig({ GCP_OLLAMA_IDLE_SHUTDOWN_MS: "300000" }).idleShutdownMs).toBe(300000);
     expect(readGcpOllamaVmConfig({ GCP_OLLAMA_IDLE_SHUTDOWN_MS: "1000" }).idleShutdownMs).toBe(60000);
+  });
+  it("protects a newly started VM for the full idle window even when prior activity is stale", () => {
+    const startedAt = Date.parse("2026-10-05T03:14:36.000Z");
+    expect(isGcpOllamaVmWithinStartupGrace(startedAt, startedAt + 4 * 60_000 + 59_000, 5 * 60_000)).toBe(true);
+    expect(isGcpOllamaVmWithinStartupGrace(startedAt, startedAt + 5 * 60_000, 5 * 60_000)).toBe(false);
   });
 });

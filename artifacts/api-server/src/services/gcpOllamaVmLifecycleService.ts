@@ -44,26 +44,45 @@ function isConfigured(config: GcpOllamaVmConfig): boolean {
   );
 }
 
-async function authenticatedVmRequest(
-  config: GcpOllamaVmConfig,
-  action: "start" | "stop",
-): Promise<boolean> {
+async function authenticatedClient(config: GcpOllamaVmConfig) {
   let credentials: NonNullable<GoogleAuthOptions["credentials"]>;
   try {
     credentials = JSON.parse(config.credentialJson) as NonNullable<GoogleAuthOptions["credentials"]>;
   } catch {
     throw new Error("GCP Ollama compute credential JSON is invalid");
   }
-
   const auth = new GoogleAuth({ credentials, scopes: [COMPUTE_SCOPE] });
   const client = await auth.getClient();
   const tokenResult = await client.getAccessToken();
   const token = typeof tokenResult === "string" ? tokenResult : tokenResult?.token;
   if (!token) throw new Error("GCP Ollama compute authentication returned no access token");
+  return token;
+}
 
-  const url =
-    `${COMPUTE_API}/projects/${encodeURIComponent(config.projectId)}` +
-    `/zones/${encodeURIComponent(config.zone)}/instances/${encodeURIComponent(config.instanceName)}/${action}`;
+function vmBaseUrl(config: GcpOllamaVmConfig): string {
+  return `${COMPUTE_API}/projects/${encodeURIComponent(config.projectId)}` +
+    `/zones/${encodeURIComponent(config.zone)}/instances/${encodeURIComponent(config.instanceName)}`;
+}
+
+async function readVmLastStartAt(config: GcpOllamaVmConfig): Promise<number> {
+  const token = await authenticatedClient(config);
+  const response = await fetch(vmBaseUrl(config), { method: "GET", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) throw new Error(`GCP Ollama VM status failed with HTTP ${response.status}`);
+  const data = await response.json() as { lastStartTimestamp?: unknown };
+  const parsed = data.lastStartTimestamp ? new Date(String(data.lastStartTimestamp)).getTime() : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function isGcpOllamaVmWithinStartupGrace(lastStartAt: number, now: number, idleShutdownMs: number): boolean {
+  return lastStartAt > 0 && now >= lastStartAt && now - lastStartAt < idleShutdownMs;
+}
+
+async function authenticatedVmRequest(
+  config: GcpOllamaVmConfig,
+  action: "start" | "stop",
+): Promise<boolean> {
+  const token = await authenticatedClient(config);
+  const url = `${vmBaseUrl(config)}/${action}`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -137,6 +156,11 @@ export async function stopGcpOllamaVmIfIdle(
   `);
   const runningJobs = Number((busyRaw as unknown as { rows?: Array<{ running_jobs?: unknown }> }).rows?.[0]?.running_jobs ?? 0);
   if (runningJobs > 0) return false;
+
+  // Protect starts performed by the separate infrastructure control plane too.
+  // Compute Engine persists this timestamp, so process restarts cannot erase the grace period.
+  const vmLastStartAt = await readVmLastStartAt(config);
+  if (isGcpOllamaVmWithinStartupGrace(vmLastStartAt, now, config.idleShutdownMs)) return false;
   if (lastActivity > 0 && now - lastActivity < config.idleShutdownMs) return false;
   if (active <= 0 && lastStartRequestAt > 0 && now - lastStartRequestAt < config.idleShutdownMs) return false;
 
