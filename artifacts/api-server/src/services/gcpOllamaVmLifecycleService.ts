@@ -64,6 +64,35 @@ function vmBaseUrl(config: GcpOllamaVmConfig): string {
     `/zones/${encodeURIComponent(config.zone)}/instances/${encodeURIComponent(config.instanceName)}`;
 }
 
+async function readVmStatus(config: GcpOllamaVmConfig): Promise<string | null> {
+  const token = await authenticatedClient(config);
+  const response = await fetch(vmBaseUrl(config), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    throw new Error(`GCP Ollama VM status failed with HTTP ${response.status}`);
+  }
+  const data = await response.json() as { status?: unknown };
+  return typeof data.status === "string" ? data.status.trim().toUpperCase() : null;
+}
+
+export function shouldIssueGcpOllamaVmStart(
+  vmStatus: string | null,
+  now: number,
+  previousStartRequestAt: number,
+  cooldownMs = START_COOLDOWN_MS,
+): boolean {
+  const status = (vmStatus ?? "").trim().toUpperCase();
+  if (["RUNNING", "PROVISIONING", "STAGING"].includes(status)) return false;
+  // A terminated VM must never be hidden behind an in-process cooldown. The
+  // previous start may have been accepted by Compute Engine but failed or the
+  // instance may have been stopped by another control plane afterwards.
+  if (status === "TERMINATED") return true;
+  return now - previousStartRequestAt >= cooldownMs;
+}
+
 async function readVmLastStartAt(config: GcpOllamaVmConfig): Promise<number> {
   const token = await authenticatedClient(config);
   const response = await fetch(vmBaseUrl(config), { method: "GET", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) });
@@ -109,11 +138,13 @@ export async function ensureGcpOllamaVmStarted(
   const config = readGcpOllamaVmConfig(env);
   if (!isConfigured(config)) return false;
 
-  if (Date.now() - lastStartRequestAt < START_COOLDOWN_MS) {
+  if (startInFlight) return startInFlight;
+
+  const now = Date.now();
+  const vmStatus = await readVmStatus(config).catch(() => null);
+  if (!shouldIssueGcpOllamaVmStart(vmStatus, now, lastStartRequestAt)) {
     return true;
   }
-
-  if (startInFlight) return startInFlight;
 
   startInFlight = authenticatedVmRequest(config, "start")
     .then((started) => {
