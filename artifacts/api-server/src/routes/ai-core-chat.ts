@@ -114,6 +114,7 @@ import {
   sanitizeConversationContext,
   type ConversationSource,
 } from "../services/aiCoreConversationService.js";
+import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 import {
   createAiCoreRealtimeSession,
@@ -1175,6 +1176,43 @@ async function answerAskMode(
       costClass: "ZERO",
       reply: `Koneksi AI Core sehat; MCP aktif dan runtime autonomous ${runtime.running ? "RUNNING" : "STOPPED"}. Pemeriksaan ini memakai 0 token LLM.`,
       status: { mcp: "READY", autonomous: runtime },
+    };
+  }
+
+  // Workspace GCP Billing status is a deterministic read-only capability. Keep
+  // configuration checks away from Ollama/PowerShell planners and return only
+  // non-secret readiness metadata.
+  if (/\b(?:gcp|google cloud)\b/i.test(normalizedRoutingMessage) &&
+      /\b(?:billing|billing export|bigquery|biaya|cost|usage cost|tagihan)\b/i.test(normalizedRoutingMessage) &&
+      /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat)\b/i.test(normalizedRoutingMessage)) {
+    const billing = await getGcpWorkspaceCostUsage("daily").catch((error: unknown) => ({
+      configured: false as const,
+      range: "daily" as const,
+      currency: process.env["GCP_BILLING_CURRENCY"] ?? "IDR",
+      projectId: process.env["GCP_OLLAMA_VM_PROJECT"] ?? "",
+      totalCost: 0,
+      totalUsageHours: 0,
+      series: [],
+      message: error instanceof Error ? error.message : "GCP Billing status check failed.",
+    }));
+    return {
+      kind: "answer",
+      route: "GCP_BILLING_STATUS",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DETERMINISTIC",
+      costClass: "ZERO",
+      reply: billing.configured
+        ? "GCP Billing Export Workspace sudah configured dan dapat dibaca."
+        : "GCP Billing Export Workspace belum configured atau belum dapat dibaca.",
+      billing: {
+        configured: billing.configured,
+        projectId: billing.projectId,
+        currency: billing.currency,
+        ...(billing.configured ? {} : { message: billing.message }),
+      },
     };
   }
 
