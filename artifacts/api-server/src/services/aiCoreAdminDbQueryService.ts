@@ -1025,6 +1025,31 @@ export async function executeAdminNaturalTextLookup(
   };
 }
 
+export function isAiCoreAuditHistoryQuery(message: string): boolean {
+  const value = normalizeSemanticText(message);
+  const asksHistory = /\b(audit|riwayat|history|event|run|task|command|perintah|eksekusi)\b/.test(value);
+  const asksFailure = /\b(gagal|failure|failed|error|terakhir|last|sebelumnya|previous)\b/.test(value);
+  const controlPlane = /\b(hostinger|dns|domain|secret|env|environment|infrastructure|control plane|provider hosting)\b/.test(value);
+  return asksHistory && asksFailure && controlPlane;
+}
+
+export async function executeAiCoreAuditHistoryQuery(): Promise<AdminDbQueryExecution> {
+  // Deterministic query over the canonical append-only audit table. Do not let
+  // the NL planner invent generic names such as "timestamp"; the actual column
+  // is created_at.
+  return executeAdminReadOnlySql(
+    "SELECT id, module, action, resource_id, resource_type, status, details, created_at " +
+    "FROM ai_platform.ai_audit_logs " +
+    "WHERE (" +
+      "module ILIKE '%ai-core%' OR module ILIKE '%hostinger%' OR " +
+      "action ILIKE '%infrastructure%' OR action ILIKE '%hostinger%' OR action ILIKE '%dns%' OR " +
+      "resource_type ILIKE '%control_plane%' OR CAST(details AS text) ILIKE '%hostinger%' OR CAST(details AS text) ILIKE '%dns%'" +
+    ") " +
+    "AND status IN ('failure','warning','success') " +
+    "ORDER BY created_at DESC LIMIT 50"
+  );
+}
+
 export function isAdminWorkerStatusQuery(message: string): boolean {
   const value = normalizeSemanticText(message);
   if (!/\bworker\b/.test(value)) return false;
