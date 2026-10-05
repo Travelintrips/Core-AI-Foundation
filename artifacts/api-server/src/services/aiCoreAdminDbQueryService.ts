@@ -1040,6 +1040,30 @@ export async function executeAdminWorkerStatusQuery(): Promise<AdminDbQueryExecu
   );
 }
 
+export function isAdminMcpEventStatusQuery(message: string): boolean {
+  const value = normalizeSemanticText(message);
+  if (!/\bevents?\b/.test(value)) return false;
+  if (/\b(calendar|kalender|meeting|rapat)\b/.test(value)) return false;
+  return /\b(ada|status|masuk|pending|delivering|delivered|terkirim|failed|gagal|blocked|merged|deployed|subscription|subscribe|aktif|active|queue|antrian|terakhir|latest)\b/.test(value);
+}
+
+export async function executeAdminMcpEventStatusQuery(): Promise<AdminDbQueryExecution> {
+  // MCP lifecycle events are persisted in the dedicated subscription/delivery
+  // tables. Do not join ai_platform.ai_events: it has no subscription_id.
+  return executeAdminReadOnlySql(
+    "SELECT " +
+    "(SELECT COUNT(*)::bigint FROM ai_platform.ai_core_mcp_event_subscriptions WHERE active = TRUE AND expires_at > NOW()) AS active_subscriptions, " +
+    "(SELECT COUNT(*)::bigint FROM ai_platform.ai_core_mcp_event_deliveries) AS total_deliveries, " +
+    "(SELECT COUNT(*)::bigint FROM ai_platform.ai_core_mcp_event_deliveries WHERE status IN ('PENDING','DELIVERING')) AS pending_deliveries, " +
+    "(SELECT COUNT(*)::bigint FROM ai_platform.ai_core_mcp_event_deliveries WHERE status = 'DELIVERED') AS delivered_events, " +
+    "(SELECT COUNT(*)::bigint FROM ai_platform.ai_core_mcp_event_deliveries WHERE status IN ('FAILED','TERMINATED')) AS failed_or_terminated, " +
+    "(SELECT payload_json -> 'data' ->> 'event_type' FROM ai_platform.ai_core_mcp_event_deliveries ORDER BY created_at DESC LIMIT 1) AS latest_lifecycle_event, " +
+    "(SELECT task_id FROM ai_platform.ai_core_mcp_event_deliveries ORDER BY created_at DESC LIMIT 1) AS latest_task_id, " +
+    "(SELECT status FROM ai_platform.ai_core_mcp_event_deliveries ORDER BY created_at DESC LIMIT 1) AS latest_delivery_status, " +
+    "(SELECT MAX(created_at) FROM ai_platform.ai_core_mcp_event_deliveries) AS latest_event_at"
+  );
+}
+
 export function shouldAttemptAdminDbQuery(message: string): boolean {
   const value = message.trim();
   if (!value || MUTATION.test(value)) return false;
