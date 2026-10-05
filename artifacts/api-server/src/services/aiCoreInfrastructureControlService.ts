@@ -42,11 +42,27 @@ function normalizedMessage(message: string): string {
   return message.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function isExplicitReadOnlyRequest(text: string): boolean {
+  const normalized = text.replace(/^@+\s*/, "");
+
+  // Fail closed for explicit no-change language. Read-only inspection prompts
+  // often mention words such as auto-start/auto-stop while describing what to
+  // inspect; those mentions must never be interpreted as infrastructure actions.
+  if (/\b(read[ -]?only|hanya baca|tanpa (?:melakukan )?perubahan|without (?:making )?changes?|do not (?:make|apply) changes?|jangan (?:melakukan )?perubahan|jangan ubah apa ?pun)\b/i.test(normalized)) {
+    return true;
+  }
+
+  // A leading inspection verb is authoritative unless the request begins with
+  // an explicit mutation command such as "GCP stop VM ..." or
+  // "Hostinger nyalakan VPS ...".
+  return /^(?:cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify)\b/i.test(normalized);
+}
+
 function actionOf(text: string): "status" | "start" | "stop" | "restart" | null {
   // Resolve negation per action instead of treating any "jangan <action>" as
   // globally read-only. This preserves commands such as "start VM, jangan
   // restart" while still preventing the specifically negated mutation.
-  if (/\b(read[ -]?only|hanya baca)\b/i.test(text)) return "status";
+  if (isExplicitReadOnlyRequest(text)) return "status";
 
   const isNegated = (pattern: string) =>
     new RegExp(`\\b(?:jangan|do not|don't)\\s+(?:\\w+\\s+){0,2}(?:${pattern})\\b`, "i").test(text);
@@ -54,7 +70,7 @@ function actionOf(text: string): "status" | "start" | "stop" | "restart" | null 
   if (/\b(restart|reboot|mulai ulang)\b/i.test(text) && !isNegated("restart|reboot|mulai ulang")) return "restart";
   if (/\b(stop|matikan|shutdown|hentikan)\b/i.test(text) && !isNegated("stop|matikan|shutdown|hentikan")) return "stop";
   if (/\b(start|nyalakan|hidupkan|jalankan)\b/i.test(text) && !isNegated("start|nyalakan|hidupkan|jalankan")) return "start";
-  if (/\b(cek|check|status|health|inspect|periksa|lihat)\b/i.test(text)) return "status";
+  if (/\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify)\b/i.test(text)) return "status";
   return null;
 }
 
@@ -101,6 +117,7 @@ export function detectAiCoreInfrastructureOperation(
   }
 
   if (/\b(hostinger|hpanel|vps)\b/i.test(text) && /\b(docker|compose|container|project)\b/i.test(text)) {
+    if (isExplicitReadOnlyRequest(text)) return "HOSTINGER_DOCKER_STATUS";
     if (/\b(log|logs)\b/i.test(text)) return "HOSTINGER_DOCKER_LOGS";
     if (/\b(container|containers)\b/i.test(text) && /\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) {
       return "HOSTINGER_DOCKER_CONTAINERS";
