@@ -66,6 +66,11 @@ import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceRe
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
 import { getWorkerCapacity } from "../services/workerClusterService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
+import {
+  deriveCodingWorkspaceOperationalState,
+  isCodingRelevantWorker,
+  isHealthyCodingWorker,
+} from "../services/codingWorkspaceOperationalStateService.js";
 
 const router = Router();
 
@@ -223,7 +228,7 @@ router.get("/ai/coding/gcp-usage", async (req, res): Promise<void> => {
 });
 
 router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
-  const [jobSnapshot, taskSnapshot, workers] = await Promise.all([
+  const [jobSnapshot, taskSnapshot, operationalRows, workers] = await Promise.all([
     db.execute(sql`
       SELECT
         COUNT(*) FILTER (
@@ -296,6 +301,78 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
         )::int AS true_ready_review
       FROM task_state
     `),
+    db.execute(sql`
+      WITH parent_tasks AS (
+        SELECT
+          t.id AS task_id,
+          t.status AS task_status,
+          a.status AS autonomous_status,
+          EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_runs r
+            WHERE r.task_id = t.id
+              AND r.status = 'RUNNING'
+          ) AS has_active_run
+        FROM ai_platform.ai_coding_tasks t
+        LEFT JOIN ai_platform.ai_coding_autonomous_tasks a
+          ON a.task_id = t.id
+         AND a.enabled = TRUE
+        WHERE t.task_number NOT LIKE 'MW-%'
+      ),
+      direct_jobs AS (
+        SELECT
+          j.id,
+          NULLIF(j.payload_json->>'codingTaskId', '')::uuid AS task_id,
+          j.status AS job_status,
+          j.required_capability
+        FROM ai_platform.ai_jobs j
+        WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+          AND j.job_type IN (
+            'coding_repository_analyzer',
+            'coding_ai_execution',
+            'coding_workstream_execution',
+            'coding_workstream_ai_execution',
+            'coding_multi_task_planner'
+          )
+          AND NULLIF(j.payload_json->>'codingTaskId', '') IS NOT NULL
+      ),
+      workstream_jobs AS (
+        SELECT
+          j.id,
+          g.task_id,
+          j.status AS job_status,
+          j.required_capability
+        FROM ai_platform.ai_jobs j
+        JOIN ai_platform.ai_coding_workstreams w
+          ON w.id::text = j.payload_json->>'workstreamId'
+        JOIN ai_platform.ai_coding_task_graphs g
+          ON g.id = w.graph_id
+        WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+          AND j.job_type IN ('coding_workstream_execution', 'coding_workstream_ai_execution')
+      ),
+      latest_jobs AS (
+        SELECT DISTINCT ON (task_id)
+          task_id,
+          job_status,
+          required_capability
+        FROM (
+          SELECT * FROM direct_jobs
+          UNION ALL
+          SELECT * FROM workstream_jobs
+        ) jobs
+        WHERE task_id IS NOT NULL
+        ORDER BY task_id, id DESC
+      )
+      SELECT
+        p.task_id,
+        p.task_status,
+        p.autonomous_status,
+        p.has_active_run,
+        l.job_status,
+        l.required_capability
+      FROM parent_tasks p
+      LEFT JOIN latest_jobs l ON l.task_id = p.task_id
+    `),
     getWorkerCapacity(),
   ]);
 
@@ -310,12 +387,14 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
     );
     const heartbeatFresh =
       Number.isFinite(heartbeatAgeMs) && heartbeatAgeMs <= heartbeatFreshMs;
-    const active =
-      worker.leaseValid &&
-      heartbeatFresh &&
-      !["offline", "stale"].includes(worker.status);
+    const active = isHealthyCodingWorker({
+      leaseValid: worker.leaseValid,
+      heartbeatFresh,
+      status: worker.status,
+    });
     const available = active && worker.availableSlots > 0;
     const legacyPlaceholder = /^worker-(alpha|beta|gamma)$/i.test(worker.workerName);
+    const codingRelevant = isCodingRelevantWorker(worker.capabilities);
     return {
       ...worker,
       heartbeatFresh,
@@ -323,24 +402,88 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
       active,
       available,
       legacyPlaceholder,
+      codingRelevant,
       busyOrUnavailable: !available,
     };
   });
   const operationalWorkerDetails = workerDetails.filter(
-    (worker) => !worker.legacyPlaceholder,
+    (worker) => !worker.legacyPlaceholder && worker.codingRelevant,
   );
   const retiredLegacyWorkers = workerDetails.filter(
     (worker) => worker.legacyPlaceholder,
   ).length;
 
+  const taskStates: Record<string, string> = {};
+  for (const raw of operationalRows.rows ?? []) {
+    const row = raw as Record<string, unknown>;
+    const taskId = typeof row["task_id"] === "string" ? row["task_id"] : "";
+    if (!taskId) continue;
+    const autonomousStatus =
+      typeof row["autonomous_status"] === "string"
+        ? row["autonomous_status"]
+        : null;
+    const hasActiveRun = row["has_active_run"] === true;
+    const presentationStatus = codingTaskPresentationStatus({
+      taskStatus: String(row["task_status"] ?? ""),
+      autonomousStatus,
+      hasActiveRun,
+    });
+    const requiredCapability =
+      typeof row["required_capability"] === "string"
+        ? row["required_capability"]
+        : null;
+
+    const capableWorkers = requiredCapability
+      ? operationalWorkerDetails.filter((worker) =>
+          worker.capabilities.includes(requiredCapability),
+        )
+      : operationalWorkerDetails;
+    const healthyCapableWorkers = capableWorkers.filter(
+      (worker) => worker.active,
+    ).length;
+    const availableCapableWorkers = capableWorkers.filter(
+      (worker) => worker.available,
+    ).length;
+
+    const operationalState = deriveCodingWorkspaceOperationalState({
+      presentationStatus,
+      autonomousStatus,
+      hasActiveRun,
+      jobStatus:
+        typeof row["job_status"] === "string" ? row["job_status"] : null,
+      requiredCapability,
+      healthyCapableWorkers,
+      availableCapableWorkers,
+    });
+    if (operationalState) taskStates[taskId] = operationalState;
+  }
+
+  const operationalCounts = Object.values(taskStates).reduce(
+    (counts, state) => {
+      if (state === "ANALYZING_RUNNING") counts.analyzingRunning += 1;
+      if (state === "WAITING_FOR_WORKER") counts.waitingForWorker += 1;
+      if (state === "QUEUED") counts.queued += 1;
+      if (state === "WAITING_FOR_CAPACITY") counts.waitingForCapacity += 1;
+      return counts;
+    },
+    {
+      analyzingRunning: 0,
+      waitingForWorker: 0,
+      queued: 0,
+      waitingForCapacity: 0,
+    },
+  );
+
   res.json({
     refreshedAt: new Date().toISOString(),
+    taskStates,
     jobs: {
       active: Number(taskRow["jobs_active"] ?? 0),
       waitingQueued: Number(jobRow["waiting_queued"] ?? 0),
       codingModelRunning: Number(jobRow["coding_model_running"] ?? 0),
       failedBlocked: Number(taskRow["failed_blocked"] ?? 0),
       trueReadyReview: Number(taskRow["true_ready_review"] ?? 0),
+      ...operationalCounts,
     },
     workers: {
       active: operationalWorkerDetails.filter((worker) => worker.active).length,
