@@ -599,6 +599,14 @@ async function processTaskGraph(
             review.id,
             error,
           );
+          if (repair.concurrentAdvance) {
+            await refundReservedActionCycle(taskId).catch(() => undefined);
+            return {
+              handled: true,
+              action: `CONTINUE_AFTER_MATERIALIZATION_RACE:${review.key}`,
+              waiting: true,
+            };
+          }
           if (repair.shouldRetry) {
             return {
               handled: true,
@@ -639,6 +647,14 @@ async function processTaskGraph(
             review.id,
             error,
           );
+          if (repair.concurrentAdvance) {
+            await refundReservedActionCycle(taskId).catch(() => undefined);
+            return {
+              handled: true,
+              action: `CONTINUE_AFTER_MATERIALIZATION_RACE:${review.key}`,
+              waiting: true,
+            };
+          }
           if (repair.shouldRetry) {
             return {
               handled: true,
