@@ -38,6 +38,7 @@ import {
   startAiHandoffPreparation,
 } from "./localCodingAiHandoffService.js";
 import { enqueueCodingAiExecution } from "./localCodingAiQueueRuntimeService.js";
+import { enqueueCodingMultiTaskPlanner } from "./localCodingPlannerQueueRuntimeService.js";
 import { approveAndValidateAiPatch } from "./localCodingAiPatchApprovalService.js";
 import { approveCommitAndCreatePullRequest } from "./localCodingCommitApprovalService.js";
 import {
@@ -465,9 +466,20 @@ async function processTaskGraph(
   taskId: string,
   payload: Record<string, unknown>,
   reserveCycle: () => Promise<void>,
+  recoverMissingGraph: boolean,
 ): Promise<{ handled: boolean; action?: string; waiting?: boolean; blocker?: string }> {
   const snapshot = await getLatestCodingTaskGraph(taskId);
-  if (!snapshot) return { handled: false };
+  if (!snapshot) {
+    if (!recoverMissingGraph) return { handled: false };
+    const queued = await enqueueCodingMultiTaskPlanner(taskId);
+    return {
+      handled: true,
+      action: queued.created
+        ? `AUTO_ENQUEUE_TASK_GRAPH_PLANNER:${queued.job.jobCode}`
+        : "WAIT_TASK_GRAPH_PLANNER",
+      waiting: true,
+    };
+  }
 
   if (snapshot.graph.status === "PREPARED") {
     await reserveCycle();
@@ -864,7 +876,12 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     }
 
     const reserveCycle = () => reserveActionCycle(taskId);
-    const graphAction = await processTaskGraph(taskId, state.payload, reserveCycle);
+    const graphAction = await processTaskGraph(
+      taskId,
+      state.payload,
+      reserveCycle,
+      state.task.status === "READY_REVIEW" && state.nextAction === "WAIT_TASK_GRAPH",
+    );
     if (graphAction.handled) {
       if (graphAction.blocker) {
         await setState(taskId, "BLOCKED", "TASK_GRAPH_BLOCKER", graphAction.blocker);
