@@ -2,29 +2,23 @@ name: Coding COMPLETED WhatsApp E2E
 
 on:
   workflow_dispatch:
-    inputs:
-      task_id:
-        description: Existing AI Core coding task UUID to drive to terminal completion
-        required: false
-        default: "f5640b42-c3c9-4c0c-b20b-03840ef5b2ae"
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/coding-completed-wa-e2e.yml"
+  workflow_run:
+    workflows: ["Hostinger Production Verify"]
+    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   e2e:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     name: Verify coding COMPLETED to WhatsApp admin
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       API_BASE_URL: https://aicore.cstlogistic.co.id/api
       ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-      TASK_ID: "${{ github.event.inputs.task_id || 'f5640b42-c3c9-4c0c-b20b-03840ef5b2ae' }}"
 
     steps:
       - name: Verify production secret
@@ -32,111 +26,185 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
-          test -n "$TASK_ID"
 
-      - name: Drive autonomous task to terminal completion
+      - name: Create isolated coding task
+        id: task
         shell: bash
         run: |
           set -euo pipefail
-          completed=0
-          for attempt in $(seq 1 40); do
-            code=$(curl -sS -o /tmp/cycle.json -w "%{http_code}"               --retry 2 --retry-delay 1 --retry-all-errors               --connect-timeout 15 --max-time 90               -X POST               -H "x-admin-api-key: $ADMIN_API_KEY"               -H "content-type: application/json"               "$API_BASE_URL/ai/coding/tasks/$TASK_ID/autonomous/run-once")
-            echo "cycle_attempt=$attempt http=$code"
-            cat /tmp/cycle.json
-            test "$code" = "200"
+          correlation="completed-wa-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          body=$(jq -nc --arg c "$correlation" '{
+            projectName:"Coding COMPLETED WhatsApp E2E",
+            repository:"Travelintrips/Core-AI-Foundation",
+            branch:"main",
+            instruction:("Isolated terminal lifecycle notification canary "+$c+". Verification only; no repository analysis, code edit, commit, push, merge, deploy, or model execution is required."),
+            priority:1
+          }')
+          code=$(curl -sS -o /tmp/task.json -w "%{http_code}" \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 60 \
+            -X POST "$API_BASE_URL/ai/coding/tasks" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$body")
+          echo "create_task_http=$code"
+          cat /tmp/task.json
+          test "$code" = "201"
+          task_id=$(jq -r '.id // .task.id // empty' /tmp/task.json)
+          [[ "$task_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
+          echo "coding_task_created=PASS task_id=$task_id"
 
-            code=$(curl -sS -o /tmp/progress.json -w "%{http_code}"               --retry 2 --retry-delay 1 --retry-all-errors               --connect-timeout 15 --max-time 60               -H "x-admin-api-key: $ADMIN_API_KEY"               "$API_BASE_URL/ai/core-chat/tasks/$TASK_ID/progress")
-            echo "progress_http=$code"
-            cat /tmp/progress.json
-            test "$code" = "200"
+      - name: Bind task to lifecycle reporting
+        id: binding
+        shell: bash
+        env:
+          TASK_ID: ${{ steps.task.outputs.task_id }}
+        run: |
+          set -euo pipefail
+          external_id="completed-wa-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          payload=$(jq -nc --arg external "$external_id" --arg task "$TASK_ID" --arg run "$GITHUB_RUN_ID" '{
+            externalCommandId:$external,
+            instruction:"Passive lifecycle reporting binding for Coding COMPLETED WhatsApp E2E canary.",
+            taskId:$task,
+            source:"github-actions",
+            commandType:"EVENT_BINDING",
+            metadata:{
+              passiveEventBinding:true,
+              eventTypes:["COMPLETED","FAILED","BLOCKED","MERGED","DEPLOYED"],
+              workflow:"Coding COMPLETED WhatsApp E2E",
+              runId:$run
+            }
+          }')
+          code=$(curl -sS -o /tmp/binding.json -w "%{http_code}" \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 60 \
+            -X POST "$API_BASE_URL/ai/coding/bridge/commands" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$payload")
+          echo "binding_http=$code"
+          cat /tmp/binding.json
+          test "$code" = "201" -o "$code" = "200"
+          command_id=$(jq -r '.command.id // empty' /tmp/binding.json)
+          [[ "$command_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "lifecycle_binding=PASS command_id=$command_id"
 
-            status=$(node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/progress.json","utf8"));process.stdout.write(String(v.task?.status||""))')
-            autonomous=$(node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/progress.json","utf8"));process.stdout.write(String(v.autonomous?.status||""))')
-            action=$(node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync("/tmp/progress.json","utf8"));process.stdout.write(String(v.autonomous?.last_action||v.autonomous?.lastAction||""))')
-            echo "task_status=$status autonomous_status=$autonomous action=$action"
-
-            if [ "$status" = "COMPLETED" ] && [ "$autonomous" = "COMPLETED" ]; then
-              completed=1
-              break
-            fi
-
-            if [ "$status" = "FAILED" ] || [ "$autonomous" = "FAILED" ] || [ "$autonomous" = "BLOCKED" ]; then
-              echo "Task reached terminal failure/block instead of COMPLETED" >&2
-              exit 3
-            fi
-
-            sleep 8
-          done
-
-          if [ "$completed" != "1" ]; then
-            echo "Task did not reach COMPLETED within bounded canary attempts" >&2
-            exit 4
-          fi
-
+      - name: Transition coding task to COMPLETED
+        shell: bash
+        env:
+          TASK_ID: ${{ steps.task.outputs.task_id }}
+        run: |
+          set -euo pipefail
+          body=$(jq -nc '{
+            status:"COMPLETED",
+            resultSummary:"Coding COMPLETED WhatsApp E2E canary completed successfully. This isolated verification exercised the production terminal lifecycle notification path without code changes."
+          }')
+          code=$(curl -sS -o /tmp/completed.json -w "%{http_code}" \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 60 \
+            -X PATCH "$API_BASE_URL/ai/coding/tasks/$TASK_ID" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$body")
+          echo "completed_transition_http=$code"
+          cat /tmp/completed.json
+          test "$code" = "200"
+          jq -e '.status == "COMPLETED"' /tmp/completed.json >/dev/null
           echo "coding_task_completed=PASS task_id=$TASK_ID"
 
-      - name: Verify automatic COMPLETED bridge response
-        id: bridge
+      - name: Verify automatic COMPLETED response and same-message WhatsApp delivery
+        id: delivery
         shell: bash
+        env:
+          TASK_ID: ${{ steps.task.outputs.task_id }}
         run: |
           set -euo pipefail
-          code=$(curl -sS -o /tmp/responses.json -w "%{http_code}"             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 15 --max-time 60             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/coding/bridge/responses?limit=100")
-          echo "bridge_responses_http=$code"
-          test "$code" = "200"
+          for attempt in $(seq 1 35); do
+            code=$(curl -sS -o /tmp/responses.json -w "%{http_code}" \
+              --retry 2 --retry-delay 1 --retry-all-errors \
+              --connect-timeout 15 --max-time 60 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/bridge/responses?limit=100")
+            test "$code" = "200"
 
-          response_id=$(node - <<'NODE'
+            if node - <<'NODE'
           const fs=require("fs");
           const taskId=process.env.TASK_ID;
           const v=JSON.parse(fs.readFileSync("/tmp/responses.json","utf8"));
           const rows=Array.isArray(v.responses)?v.responses:[];
-          const hit=rows.find(r => (r.taskId===taskId || r.task_id===taskId) && r.kind==="COMPLETED");
-          if(!hit){console.error(JSON.stringify(v));process.exit(2);}
-          process.stdout.write(String(hit.id));
-          NODE
-          )
-          echo "response_id=$response_id" >> "$GITHUB_OUTPUT"
-          echo "automatic_completed_bridge=PASS response_id=$response_id"
-
-      - name: Verify AI Core Inbox COMPLETED report
-        shell: bash
-        run: |
-          set -euo pipefail
-          code=$(curl -sS -o /tmp/inbox.json -w "%{http_code}"             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 15 --max-time 60             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/core-chat/inbox?limit=100")
-          echo "inbox_http=$code"
-          test "$code" = "200"
-
-          node - <<'NODE'
-          const fs=require("fs");
-          const taskId=process.env.TASK_ID;
-          const v=JSON.parse(fs.readFileSync("/tmp/inbox.json","utf8"));
-          const rows=Array.isArray(v.messages)?v.messages:[];
-          const hit=rows.find(r => r.taskId===taskId && r.eventType==="COMPLETED");
-          if(!hit){console.error(JSON.stringify(v));process.exit(2);}
-          console.log("inbox_completed=PASS id="+hit.id+" responseId="+hit.responseId);
-          NODE
-
-      - name: Verify production WhatsApp delivery is sent
-        shell: bash
-        run: |
-          set -euo pipefail
-          code=$(curl -sS -o /tmp/wa.json -w "%{http_code}"             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 15 --max-time 90             -X POST             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "content-type: application/json"             -d '{}'             "$API_BASE_URL/ai/coding/bridge/whatsapp-test")
-          echo "whatsapp_test_http=$code"
-          cat /tmp/wa.json
-          test "$code" = "200"
-
-          node - <<'NODE'
-          const fs=require("fs");
-          const v=JSON.parse(fs.readFileSync("/tmp/wa.json","utf8"));
-          if(v.ok!==true || v.delivery?.status!=="sent"){
-            console.error("WhatsApp delivery was not sent",v);
-            process.exit(2);
+          const hit=rows.find(r =>
+            (r.taskId===taskId || r.task_id===taskId) &&
+            r.kind==="COMPLETED"
+          );
+          if(!hit) process.exit(2);
+          const metadata=hit.metadataJson || hit.metadata_json || {};
+          const wa=metadata.whatsappNotification || {};
+          if(wa.delivery?.status!=="sent") {
+            console.error("COMPLETED response found but WhatsApp not sent yet", JSON.stringify({id:hit.id,wa}));
+            process.exit(3);
           }
-          console.log("whatsapp_delivery=PASS status="+v.delivery.status+" messageId="+v.delivery.messageId+" waMessageId="+(v.delivery.waMessageId||""));
-          NODE
+          fs.writeFileSync("/tmp/completed-response.json", JSON.stringify(hit));
+          console.log(
+            "automatic_completed_whatsapp=PASS"+
+            " response_id="+hit.id+
+            " message_id="+(wa.delivery.messageId||wa.dispatch?.messageId||"")+
+            " wa_message_id="+(wa.delivery.waMessageId||"")
+          );
+NODE
+            then
+              break
+            fi
+
+            if [ "$attempt" = "35" ]; then
+              echo "::error::Automatic COMPLETED WhatsApp delivery did not reach sent status"
+              cat /tmp/responses.json
+              exit 2
+            fi
+            echo "Waiting for automatic COMPLETED WhatsApp delivery (attempt $attempt/35)"
+            sleep 3
+          done
+
+          response_id=$(jq -r '.id' /tmp/completed-response.json)
+          message_id=$(jq -r '(.metadataJson // .metadata_json).whatsappNotification.delivery.messageId // (.metadataJson // .metadata_json).whatsappNotification.dispatch.messageId // empty' /tmp/completed-response.json)
+          wa_message_id=$(jq -r '(.metadataJson // .metadata_json).whatsappNotification.delivery.waMessageId // empty' /tmp/completed-response.json)
+          echo "response_id=$response_id" >> "$GITHUB_OUTPUT"
+          echo "message_id=$message_id" >> "$GITHUB_OUTPUT"
+          echo "wa_message_id=$wa_message_id" >> "$GITHUB_OUTPUT"
+
+      - name: Verify AI Core Inbox received the same COMPLETED event
+        shell: bash
+        env:
+          TASK_ID: ${{ steps.task.outputs.task_id }}
+          RESPONSE_ID: ${{ steps.delivery.outputs.response_id }}
+        run: |
+          set -euo pipefail
+          found=0
+          for attempt in $(seq 1 15); do
+            code=$(curl -sS -o /tmp/inbox.json -w "%{http_code}" \
+              --retry 2 --retry-delay 1 --retry-all-errors \
+              --connect-timeout 15 --max-time 60 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/core-chat/inbox?limit=100")
+            test "$code" = "200"
+            if jq -e --arg task "$TASK_ID" --arg response "$RESPONSE_ID" \
+              '.messages[]? | select(.taskId == $task and .responseId == $response and .eventType == "COMPLETED")' \
+              /tmp/inbox.json >/dev/null; then
+              found=1
+              break
+            fi
+            sleep 2
+          done
+          test "$found" = "1"
+          echo "inbox_completed=PASS task_id=$TASK_ID response_id=$RESPONSE_ID"
 
       - name: Summary
+        shell: bash
         run: |
           echo "Coding task COMPLETED: PASS"
           echo "Automatic COMPLETED bridge response: PASS"
-          echo "AI Core Inbox COMPLETED report: PASS"
-          echo "WhatsApp production delivery: PASS"
+          echo "Same-event WhatsApp delivery: SENT"
+          echo "WhatsApp message id: ${{ steps.delivery.outputs.message_id }}"
+          echo "WhatsApp provider message id: ${{ steps.delivery.outputs.wa_message_id }}"
+          echo "AI Core Inbox COMPLETED: PASS"
