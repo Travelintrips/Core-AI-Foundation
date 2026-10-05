@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { aiCodingTasksTable, db } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
 type CodingBridgeKind =
@@ -14,6 +16,64 @@ const NOTIFIABLE_KINDS = new Set<CodingBridgeKind>([
   "COMPLETED",
   "FAILED",
 ]);
+
+type CodingLifecycleStatus =
+  | "CHECKPOINT"
+  | "COMPLETED"
+  | "FAILED"
+  | "BLOCKED"
+  | "MERGED"
+  | "DEPLOYED";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function lifecycleStatus(input: {
+  kind: CodingBridgeKind;
+  message: string;
+  checkpoint?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}): CodingLifecycleStatus {
+  const checkpoint = isRecord(input.checkpoint) ? input.checkpoint : {};
+  const metadata = isRecord(input.metadata) ? input.metadata : {};
+  for (const value of [checkpoint["eventType"], metadata["eventType"]]) {
+    if (
+      typeof value === "string" &&
+      ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"].includes(value)
+    ) {
+      return value as CodingLifecycleStatus;
+    }
+  }
+
+  if (input.kind === "BLOCKER") return "BLOCKED";
+  if (input.kind === "FAILED") return "FAILED";
+  if (input.kind === "CHECKPOINT") return "CHECKPOINT";
+
+  const haystack = `${input.message} ${JSON.stringify(checkpoint)} ${JSON.stringify(metadata)}`.toLowerCase();
+  if (/\bdeploy(?:ed|ment)?\b/.test(haystack) && /(success|succeed|completed|selesai|deployed)/.test(haystack)) {
+    return "DEPLOYED";
+  }
+  if (/\bmerge(?:d)?\b/.test(haystack)) return "MERGED";
+  return "COMPLETED";
+}
+
+async function taskNotificationDetails(taskId: string | null | undefined) {
+  if (!taskId) return null;
+  const [task] = await db
+    .select({
+      taskNumber: aiCodingTasksTable.taskNumber,
+      projectName: aiCodingTasksTable.projectName,
+      repository: aiCodingTasksTable.repository,
+      branch: aiCodingTasksTable.branch,
+      resultSummary: aiCodingTasksTable.resultSummary,
+    })
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, taskId))
+    .limit(1)
+    .catch(() => []);
+  return task ?? null;
+}
 
 function config() {
   const baseUrl = (process.env.CST_WA_GATEWAY_URL ?? "").trim().replace(/\/$/, "");
@@ -202,18 +262,38 @@ export async function notifyCodingBridgeResponse(input: {
   taskId?: string | null;
   kind: CodingBridgeKind;
   message: string;
+  checkpoint?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }): Promise<CodingWhatsappNotifyResult> {
   const configured = getCodingWhatsappConfigStatus();
   if (!NOTIFIABLE_KINDS.has(input.kind)) {
     return { status: "skipped", reason: "kind_not_notifiable", configured };
   }
 
-  const taskLine = input.taskId ? `Task: ${input.taskId}\n` : "";
+  const status = lifecycleStatus(input);
+  const task = await taskNotificationDetails(input.taskId);
+  const { publicBaseUrl } = approvalWebConfig();
+  const workspaceUrl =
+    input.taskId && publicBaseUrl
+      ? `${publicBaseUrl}/coding-workspace/${encodeURIComponent(input.taskId)}`
+      : null;
   const text = [
-    "AI Core Coding Update",
-    `Status: ${input.kind}`,
-    taskLine.trimEnd(),
-    input.message.trim(),
+    status === "CHECKPOINT" ? "AI Core Coding Update" : "AI Core Task Report",
+    `Status: ${status}`,
+    task?.taskNumber
+      ? `Task: ${task.taskNumber}`
+      : input.taskId
+        ? `Task: ${input.taskId}`
+        : "",
+    task?.projectName ? `Project: ${task.projectName}` : "",
+    task?.repository ? `Repository: ${task.repository}` : "",
+    task?.branch ? `Branch: ${task.branch}` : "",
+    "",
+    input.message.trim() || task?.resultSummary?.trim() || "",
+    task?.resultSummary && task.resultSummary.trim() !== input.message.trim()
+      ? `Ringkasan: ${task.resultSummary.trim()}`
+      : "",
+    workspaceUrl ? `Workspace: ${workspaceUrl}` : "",
   ]
     .filter(Boolean)
     .join("\n");
