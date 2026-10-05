@@ -1366,7 +1366,9 @@ export async function generateAndPersistCodingMultiTaskPlan(
     throw error;
   }
 
-  const persisted = await persistCodingTaskGraph(taskId, generated.plan);
+  const persisted = await persistCodingTaskGraph(taskId, generated.plan, {
+    baseSha: context.headSha,
+  });
 
   await logAudit(
     "automated-multi-task-planner",
