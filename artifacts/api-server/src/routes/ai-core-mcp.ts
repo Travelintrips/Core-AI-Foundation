@@ -738,6 +738,29 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         },
         identity.connectorKey,
       );
+      if (
+        payload &&
+        typeof payload === "object" &&
+        (payload as Record<string, unknown>).kind === "agent"
+      ) {
+        const commandResult = payload as Record<string, unknown>;
+        const taskId = commandResult.taskId;
+        const taskNumber = commandResult.taskNumber;
+        if (typeof taskId !== "string" || typeof taskNumber !== "string") {
+          throw new Error(
+            "AI Core coding command did not return taskId/taskNumber; progress tracking would be impossible.",
+          );
+        }
+        payload = {
+          ...commandResult,
+          task: {
+            id: taskId,
+            taskNumber,
+            status: commandResult.status ?? null,
+            workspaceUrl: commandResult.workspaceUrl ?? null,
+          },
+        };
+      }
       await recordAiCoreMcpTerminalResult({
         conversationId: parsed.conversationId,
         instruction: command,
