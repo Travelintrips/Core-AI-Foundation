@@ -34,7 +34,7 @@ describe("AI Core local chat timeout contract", () => {
       "utf8",
     );
 
-    expect(source).toContain("Math.min(50_000, selection.timeoutMs + 5_000)");
-    expect(source).not.toContain("Math.min(40_000, selection.timeoutMs)");
+    expect(source).toContain("Math.min(65_000, selection.timeoutMs + 20_000)");
+    expect(source).not.toContain("Math.min(50_000, selection.timeoutMs + 5_000)");
   });
 });
