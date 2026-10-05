@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@workspace/db", () => ({
@@ -23,6 +24,35 @@ import {
 } from "../localCodingMultiWorkerRecoveryService.js";
 
 describe("multi-worker child lifecycle recovery", () => {
+  it("reconciles only stale detached READY_REVIEW Multi-Worker children without active work", () => {
+    const source = readFileSync(
+      new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("DETACHED_READY_REVIEW_GRACE_MS = 10 * 60_000");
+    expect(source).toContain("t.status = 'READY_REVIEW'");
+    expect(source).toContain("t.task_number LIKE 'MW-%'");
+    expect(source).toContain("NULLIF(t.commit_sha, '') IS NULL");
+    expect(source).toContain("NULLIF(t.pull_request_url, '') IS NULL");
+    expect(source).toContain("active_run.status = 'RUNNING'");
+    expect(source).toContain("active_binding.child_task_id = t.id");
+    expect(source).toContain("active_job.status IN ('queued', 'waiting', 'running', 'retrying')");
+    expect(source).toContain("no implementation completion is inferred");
+  });
+
+  it("synchronizes READY_REVIEW children from terminal workstream truth", () => {
+    const source = readFileSync(
+      new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("w.status IN ('COMPLETED', 'FAILED', 'CANCELLED')");
+    expect(source).toContain("WHEN linked_terminal.workstream_status = 'COMPLETED'");
+    expect(source).toContain("THEN 'COMPLETED'");
+    expect(source).toContain("ELSE 'FAILED'");
+  });
+
   it("marks a legacy failed constrained-AI review as FAILED instead of READY_REVIEW", () => {
     expect(
       workstreamChildLifecycleDisposition("REVIEW_REQUIRED", {
