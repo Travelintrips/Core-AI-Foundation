@@ -292,7 +292,7 @@ export function buildAutomatedMultiTaskPlannerPrompt(
     "When the task explicitly names a new file path, use that exact file path as ownership; do not widen it to a parent-directory glob.",
     "Parallel workstreams must never overlap ownership. If two workstreams need the same path, order them with a dependency instead.",
     "Do not include commands, credentials, environment variables, URLs, or secret values.",
-    "Do not claim that code was changed or verified. This output is planning-only and still requires explicit human approval before dispatch.",
+    "Do not claim that code was changed or verified. This output is planning-only; the autonomous controller applies policy gates and automatically dispatches safe approved workstreams. Do not request human approval for routine execution.",
   ].join(" ");
 
   const groundedPaths = groundedPlannerPaths(context);
