@@ -26,15 +26,19 @@ describe("remote Ollama worker service", () => {
     expect(source).toContain("{ attempts: 4, baseDelayMs: 250 }");
   });
 
-  it("keeps the remote Ollama model warm for interactive Economy traffic", () => {
+  it("prewarms the remote Ollama model before advertising Economy capacity", () => {
     const source = readFileSync(
       new URL("../../scripts/remoteOllamaWorker.ts", import.meta.url),
       "utf8",
     );
 
     expect(source).toContain('OLLAMA_REMOTE_KEEP_ALIVE');
-    expect(source).toContain('"10m"');
-    expect(source).toContain("keep_alive:");
+    expect(source).toContain('"15m"');
+    expect(source).toContain('ollamaNativeBase + "/api/generate"');
+    expect(source).toContain('prompt: ""');
+    expect(source).toContain("AbortSignal.timeout(180_000)");
+    expect(source).toContain("await warmLocalOllama();");
+    expect(source).toContain("keep_alive: ollamaKeepAlive");
   });
 
   it("reconciles worker capacity after complete and retry bookkeeping", () => {
