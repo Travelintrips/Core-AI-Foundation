@@ -504,11 +504,16 @@ async function invokeChatModel(
   // bookkeeping reaches the API. Keep a bounded queue/transport grace window
   // above that worker ceiling while staying below the 75s production smoke
   // request deadline. Coding/planner calls use their own invocation paths.
+  // Economy chat must stay comfortably inside the production HTTP deadline.
+  // A 512-token local cap let short deterministic prompts spend ~50s decoding
+  // before the remote worker ceiling fired. Keep interactive local replies
+  // intentionally small; coding/planner invocations use separate paths and
+  // retain their larger output budgets.
   const chatMaxOutputTokens = localProvider
-    ? Math.min(512, selection.maxOutputTokens || 512)
+    ? Math.min(160, selection.maxOutputTokens || 160)
     : Math.min(4_096, selection.maxOutputTokens || 1_600);
   const chatTimeoutMs = localProvider
-    ? Math.min(65_000, selection.timeoutMs + 20_000)
+    ? Math.min(60_000, selection.timeoutMs + 15_000)
     : selection.timeoutMs;
 
   const response = await adapter.invoke({

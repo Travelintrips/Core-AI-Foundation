@@ -13,7 +13,7 @@ const maxConcurrentJobs = Math.max(
 );
 const invocationTimeoutMs = Math.max(
   10_000,
-  Math.min(50_000, Number(process.env["OLLAMA_REMOTE_INVOCATION_TIMEOUT_MS"] ?? 45_000)),
+  Math.min(55_000, Number(process.env["OLLAMA_REMOTE_INVOCATION_TIMEOUT_MS"] ?? 50_000)),
 );
 const gcpAutoStopEnabled =
   (process.env["GCP_GPU_AUTO_STOP_ENABLED"] ?? "false").trim().toLowerCase() === "true";
@@ -216,6 +216,10 @@ async function invoke(payload: Record<string, any>): Promise<Record<string, unkn
       stream: false,
       temperature: 0,
       max_tokens: payload["maxOutputTokens"],
+      // Keep the model resident between Economy requests. Reloading a 7B model
+      // on every sparse CI/user request can consume most of the bounded latency
+      // budget before generation starts.
+      keep_alive: process.env["OLLAMA_REMOTE_KEEP_ALIVE"]?.trim() || "10m",
       ...(structured ? { response_format: { type: "json_object" } } : {}),
     }),
     signal: AbortSignal.timeout(invocationTimeoutMs),
