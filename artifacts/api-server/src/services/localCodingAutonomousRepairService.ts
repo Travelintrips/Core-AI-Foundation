@@ -710,7 +710,11 @@ async function processTaskGraph(
     }
 
     await reserveCycle();
-    await completeReviewedCodingWorkstream(review.id);
+    await completeReviewedCodingWorkstream(review.id, {
+      completeChildTask: true,
+      childTaskResultSummary:
+        "Deterministic reviewed workstream completed automatically by the autonomous repair loop.",
+    });
     return {
       handled: true,
       action: `AUTO_COMPLETE_DETERMINISTIC_WORKSTREAM:${review.key}`,

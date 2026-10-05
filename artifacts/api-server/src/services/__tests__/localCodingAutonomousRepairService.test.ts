@@ -827,3 +827,20 @@ describe("autonomous repository analyzer resource-pressure recovery", () => {
     expect(source).toContain('status: "ANALYZING"');
   });
 });
+
+describe("autonomous deterministic workstream child completion", () => {
+  it("closes the child task when deterministic review is completed", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const marker = "AUTO_COMPLETE_DETERMINISTIC_WORKSTREAM";
+    const markerIndex = source.indexOf(marker);
+    expect(markerIndex).toBeGreaterThan(0);
+    const window = source.slice(Math.max(0, markerIndex - 700), markerIndex + 250);
+    expect(window).toContain("completeReviewedCodingWorkstream(review.id, {");
+    expect(window).toContain("completeChildTask: true");
+    expect(window).toContain("Deterministic reviewed workstream completed automatically");
+  });
+});
