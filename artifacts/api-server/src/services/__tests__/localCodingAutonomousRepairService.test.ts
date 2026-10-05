@@ -17,7 +17,13 @@ vi.mock("@workspace/db", () => ({
 vi.mock("../aiAuditService.js", () => ({ logAudit: vi.fn() }));
 vi.mock("../localCodingControlBridgeService.js", () => ({ appendCodingBridgeResponse: vi.fn() }));
 vi.mock("../localCodingTaskGraphService.js", () => ({ approveCodingTaskGraph: vi.fn(), getLatestCodingTaskGraph: vi.fn() }));
-vi.mock("../localCodingMultiWorkerExecutionService.js", () => ({ dispatchReadyCodingWorkstreams: vi.fn() }));
+vi.mock("../localCodingMultiWorkerExecutionService.js", () => ({
+  dispatchReadyCodingWorkstreams: vi.fn(),
+  requestCodingWorkstreamCapacity: vi.fn(async () => false),
+}));
+vi.mock("../ollamaWorkerRegistryService.js", () => ({
+  getAvailableOllamaCodingSlots: vi.fn(async () => 1),
+}));
 vi.mock("../localCodingWorkstreamAiExecutionService.js", () => ({
   approveWorkstreamAiCandidatePatch: vi.fn(),
   approveWorkstreamAiExecutionHandoff: vi.fn(),
@@ -539,6 +545,38 @@ describe("autonomous action budget behavior", () => {
       workstreams: [{ status: "RUNNING", leaseExpiresAt: new Date(Date.now() + 60_000) }],
     } as never);
     expect(await runAutonomousCodingCycle(taskId)).toMatchObject({ action: "WAIT_WORKSTREAM_EXECUTION" });
+    expect(autonomous.cycle_count).toBe(40);
+  });
+
+  it("waits for Ollama capacity without spending the autonomous cycle budget", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { getLatestCodingTaskGraph } = await import("../localCodingTaskGraphService.js");
+    const {
+      dispatchReadyCodingWorkstreams,
+      requestCodingWorkstreamCapacity,
+    } = await import("../localCodingMultiWorkerExecutionService.js");
+    const { getAvailableOllamaCodingSlots } = await import("../ollamaWorkerRegistryService.js");
+
+    autonomous.cycle_count = 40;
+    runs[0]!.logs = JSON.stringify({ orchestration: { nextAction: "WAIT_TASK_GRAPH" } });
+    vi.mocked(getLatestCodingTaskGraph).mockResolvedValue({
+      graph: { id: "graph-1", status: "RUNNING" },
+      workstreams: [{
+        key: "WS-001",
+        status: "READY",
+        dependencies: [],
+        baseSha: "a".repeat(40),
+      }],
+    } as never);
+    vi.mocked(getAvailableOllamaCodingSlots).mockResolvedValue(0);
+    vi.mocked(requestCodingWorkstreamCapacity).mockResolvedValue(true);
+
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({
+      status: "WAITING",
+      action: "WAIT_OLLAMA_CAPACITY:START_REQUESTED",
+    });
+    expect(requestCodingWorkstreamCapacity).toHaveBeenCalledWith(0);
+    expect(dispatchReadyCodingWorkstreams).not.toHaveBeenCalled();
     expect(autonomous.cycle_count).toBe(40);
   });
 
