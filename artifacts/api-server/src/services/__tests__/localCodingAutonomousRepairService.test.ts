@@ -36,6 +36,7 @@ vi.mock("../localCodingAiHandoffService.js", () => ({
   startAiHandoffPreparation: vi.fn(),
 }));
 vi.mock("../localCodingAiQueueRuntimeService.js", () => ({ enqueueCodingAiExecution: vi.fn() }));
+vi.mock("../localCodingPlannerQueueRuntimeService.js", () => ({ enqueueCodingMultiTaskPlanner: vi.fn() }));
 vi.mock("../localCodingAiPatchApprovalService.js", () => ({ approveAndValidateAiPatch: vi.fn() }));
 vi.mock("../localCodingCommitApprovalService.js", () => ({ approveCommitAndCreatePullRequest: vi.fn() }));
 vi.mock("../localCodingPullRequestGateService.js", () => ({
@@ -147,6 +148,19 @@ describe("autonomous coding explicit stop", () => {
     );
 
     expect(route).toContain("forceDisabled:true");
+  });
+});
+
+describe("autonomous missing task graph recovery", () => {
+  it("enqueues the bounded planner when no persisted task graph exists", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("enqueueCodingMultiTaskPlanner(taskId)");
+    expect(source).toContain("AUTO_ENQUEUE_TASK_GRAPH_PLANNER");
+    expect(source).toContain("WAIT_TASK_GRAPH_PLANNER");
   });
 });
 
