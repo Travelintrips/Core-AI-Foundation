@@ -55,6 +55,36 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
 
+  it.each([
+    [
+      "cek konfigurasi runtime aktual AI Core tanpa melakukan perubahan. apakah worker GCloud auto-start saat ada job dan auto-stop setelah idle?",
+      "HOSTINGER_VPS_STATUS",
+    ],
+    [
+      "Hostinger read-only audit VPS: cek apakah service auto-start/auto-stop; do not make changes",
+      "HOSTINGER_VPS_STATUS",
+    ],
+    [
+      "GCP audit worker read-only, verifikasi auto-start dan auto-stop tanpa melakukan perubahan",
+      "GCP_VM_STATUS",
+    ],
+    [
+      "Hostinger cek docker project=myapp read-only; lihat apakah container restart otomatis, jangan ubah apa pun",
+      "HOSTINGER_DOCKER_STATUS",
+    ],
+  ])("fails closed for explicit read-only infrastructure inspection: %s", (message, expected) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it.each([
+    ["Hostinger nyalakan VPS sekarang", "HOSTINGER_VPS_START"],
+    ["Hostinger matikan VPS sekarang", "HOSTINGER_VPS_STOP"],
+    ["GCP start VM sekarang", "GCP_VM_START"],
+    ["GCP stop VM sekarang", "GCP_VM_STOP"],
+  ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
   it("deploys a Docker Compose project with optional environment", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ accepted: true }), {
