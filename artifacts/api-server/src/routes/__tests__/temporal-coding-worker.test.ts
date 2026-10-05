@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
@@ -37,6 +38,27 @@ async function buildApp() {
   app.use(router);
   return app;
 }
+
+describe("Temporal coding worker lifecycle contract", () => {
+  it("continues long-lived autonomous workflows instead of orphaning them after a fixed loop count", () => {
+    const source = readFileSync(
+      new URL("../../../../../deploy/ai-workers/temporal/coding-worker.py", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("workflow.continue_as_new(task_id)");
+    expect(source).not.toContain('"action": "TEMPORAL_MAX_ITERATIONS"');
+  });
+
+  it("allows discovery to restart a closed workflow for a task that is still active", () => {
+    const source = readFileSync(
+      new URL("../../../../../deploy/ai-workers/temporal/coding-worker.py", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("WorkflowIDReusePolicy.ALLOW_DUPLICATE");
+  });
+});
 
 describe("Temporal coding takeover", () => {
   beforeEach(() => {
