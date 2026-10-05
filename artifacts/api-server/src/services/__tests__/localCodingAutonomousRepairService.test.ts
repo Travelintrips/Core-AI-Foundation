@@ -164,6 +164,37 @@ describe("autonomous missing task graph recovery", () => {
   });
 });
 
+describe("autonomous task graph stall recovery", () => {
+  it("recovers a missing graph from both WAIT_TASK_GRAPH and APPROVE_TASK_GRAPH", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('["WAIT_TASK_GRAPH", "APPROVE_TASK_GRAPH"].includes(state.nextAction ?? "")');
+  });
+
+  it("reconciles a graph left RUNNING after every workstream completed", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('snapshot.workstreams.every((item) => item.status === "COMPLETED")');
+    expect(source).toContain('status: "COMPLETED", completedAt: new Date()');
+    expect(source).toContain('"AUTO_RECONCILE_TASK_GRAPH_COMPLETED"');
+  });
+
+  it("does not wait forever behind terminal blocked or cancelled workstreams", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('["BLOCKED", "CANCELLED"].includes(item.status)');
+  });
+});
+
 describe("autonomous coding cycle budget", () => {
   it("keeps internal re-enable bounded but lets explicit owner restart renew an exhausted budget", () => {
     const source = readFileSync(
