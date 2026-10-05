@@ -103,6 +103,13 @@ export function resolveCodingDispatchConcurrency(
   return Math.min(requested, available);
 }
 
+export async function requestCodingWorkstreamCapacity(
+  availableOllamaSlots: number,
+): Promise<boolean> {
+  if (availableOllamaSlots > 0) return false;
+  return ensureGcpOllamaVmStarted().catch(() => false);
+}
+
 function validateBaseSha(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!SHA_RE.test(normalized)) {
@@ -563,7 +570,7 @@ export async function dispatchReadyCodingWorkstreams(
     // registered because dispatch concurrency is capacity-bounded. Request the
     // configured GCP worker here to break the cold-start deadlock; the next
     // autonomous cycle will observe the worker lease and dispatch normally.
-    const gcpAutoStartRequested = await ensureGcpOllamaVmStarted().catch(() => false);
+    const gcpAutoStartRequested = await requestCodingWorkstreamCapacity(availableOllamaSlots);
 
     const [graph] = await db
       .select()
