@@ -1898,7 +1898,7 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
       metadata: {
         conversationId: input.conversationId,
         passiveEventBinding: true,
-        eventTypes: ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"],
+        eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
       },
     }).catch((error) => {
       logger.warn(
