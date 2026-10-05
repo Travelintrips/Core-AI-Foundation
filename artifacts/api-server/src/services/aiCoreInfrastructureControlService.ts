@@ -105,7 +105,8 @@ export function detectAiCoreInfrastructureOperation(
 
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
       /\b(secret|secrets|env|environment|environment variable|variabel environment)\b/i.test(text) &&
-      /\b(set|add|tambah|masukkan|masukan|simpan|update|ubah|ganti|apply|pasang)\b/i.test(text)) {
+      /\b(set|add|tambah|masukkan|masukan|simpan|update|ubah|ganti|apply|pasang)\b/i.test(text) &&
+      !/(?:^|\s)content\s*=/i.test(text)) {
     return "HOSTINGER_DOCKER_ENV_SET";
   }
 
