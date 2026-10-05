@@ -1184,7 +1184,8 @@ async function answerAskMode(
   // non-secret readiness metadata.
   if (/\b(?:gcp|google cloud)\b/i.test(normalizedRoutingMessage) &&
       /\b(?:billing|billing export|bigquery|biaya|cost|usage cost|tagihan)\b/i.test(normalizedRoutingMessage) &&
-      /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat)\b/i.test(normalizedRoutingMessage)) {
+      /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat|akses|access|permission|permissions|izin|capability|capabilities|readiness|ready|tersedia|available)\b/i.test(normalizedRoutingMessage) &&
+      !/\b(?:aktifkan|enable|setup|set up|configure|konfigurasikan|buat|create|set|ubah|update|grant|beri|pasang|install|deploy|redeploy|restart)\b/i.test(normalizedRoutingMessage)) {
     const billing = await getGcpWorkspaceCostUsage("daily").catch((error: unknown) => ({
       configured: false as const,
       range: "daily" as const,
@@ -2071,7 +2072,7 @@ function isGcpBillingStatusRequest(message: string): boolean {
     return false;
   }
 
-  return /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat)\b/i.test(text);
+  return /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat|akses|access|permission|permissions|izin|capability|capabilities|readiness|ready|tersedia|available)\b/i.test(text);
 }
 
 async function runGcpBillingStatusOperation(
