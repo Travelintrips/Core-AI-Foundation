@@ -2740,7 +2740,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
   try {
     const ttsModel =
       process.env["AI_CORE_WA_E2E_TTS_MODEL"]?.trim() || "gpt-4o-mini-tts";
-    let ttsResponse: Response | null = null;
+    let ttsResponse: Awaited<ReturnType<typeof fetch>> | null = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
