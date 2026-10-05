@@ -65,6 +65,7 @@ import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorke
 import { reconcileStaleCodingRuns } from "../services/localCodingRunRecoveryService.js";
 import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
+import { reportCodingTaskTerminalTransition } from "../services/codingTaskTerminalReportingService.js";
 import { getWorkerCapacity } from "../services/workerClusterService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
 import { getAiProviderBillingSnapshot } from "../services/aiProviderBillingService.js";
@@ -1265,15 +1266,49 @@ router.patch("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   if (parsed.data.resultSummary !== undefined) updateData.resultSummary = parsed.data.resultSummary;
   if (parsed.data.commitSha !== undefined) updateData.commitSha = parsed.data.commitSha;
 
-  const [task] = await db
-    .update(aiCodingTasksTable)
-    .set(updateData)
-    .where(eq(aiCodingTasksTable.id, params.data.id))
-    .returning();
+  const transition = await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ status: aiCodingTasksTable.status })
+      .from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.id, params.data.id))
+      .for("update");
 
-  if (!task) {
+    if (!current) return null;
+
+    const [task] = await tx
+      .update(aiCodingTasksTable)
+      .set(updateData)
+      .where(eq(aiCodingTasksTable.id, params.data.id))
+      .returning();
+
+    return task ? { task, previousStatus: current.status } : null;
+  });
+
+  if (!transition) {
     res.status(404).json({ error: "Coding task not found" });
     return;
+  }
+
+  const { task, previousStatus } = transition;
+  if (
+    previousStatus !== task.status &&
+    (task.status === "COMPLETED" || task.status === "FAILED")
+  ) {
+    await reportCodingTaskTerminalTransition({
+      taskId: task.id,
+      status: task.status,
+      message:
+        task.resultSummary?.trim() ||
+        (task.status === "COMPLETED"
+          ? "Coding task selesai."
+          : "Coding task gagal."),
+      source: "coding-workspace-task-transition",
+    }).catch((error) => {
+      logger.warn(
+        { err: error, taskId: task.id, status: task.status },
+        "[coding-workspace] terminal lifecycle report failed",
+      );
+    });
   }
 
   res.json(UpdateCodingTaskResponse.parse(task));
