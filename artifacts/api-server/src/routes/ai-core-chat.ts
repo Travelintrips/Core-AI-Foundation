@@ -500,10 +500,11 @@ async function invokeChatModel(
   );
 
   const localProvider = isLocalProvider(provider);
-  // Remote-pull Ollama can spend up to 50s inside the worker before completion
-  // bookkeeping reaches the API. Keep a bounded queue/transport grace window
-  // above that worker ceiling while staying below the 75s production smoke
-  // request deadline. Coding/planner calls use their own invocation paths.
+  // Interactive local chat must fail closed before the production reverse proxy
+  // reaches its ~55s upstream timeout. The remote worker is pre-warmed before
+  // it registers capacity, so a healthy Economy request should complete well
+  // inside this 45s application deadline. Coding/planner calls use their own
+  // invocation paths.
   // Economy chat must stay comfortably inside the production HTTP deadline.
   // A 512-token local cap let short deterministic prompts spend ~50s decoding
   // before the remote worker ceiling fired. Keep interactive local replies
@@ -513,7 +514,7 @@ async function invokeChatModel(
     ? Math.min(160, selection.maxOutputTokens || 160)
     : Math.min(4_096, selection.maxOutputTokens || 1_600);
   const chatTimeoutMs = localProvider
-    ? Math.min(60_000, selection.timeoutMs + 15_000)
+    ? Math.min(45_000, selection.timeoutMs + 10_000)
     : selection.timeoutMs;
 
   const response = await adapter.invoke({
