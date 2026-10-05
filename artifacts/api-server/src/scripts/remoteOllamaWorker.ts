@@ -3,6 +3,8 @@ import { promisify } from "node:util";
 const apiBase = (process.env["AICORE_REMOTE_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
 const enrollmentSecret = (process.env["OLLAMA_REMOTE_ENROLLMENT_SECRET"] ?? "").trim();
 const ollamaBase = (process.env["OLLAMA_BASE_URL"] ?? "http://127.0.0.1:11434/v1").replace(/\/$/, "");
+const ollamaNativeBase = ollamaBase.replace(/\/v1$/i, "");
+const ollamaKeepAlive = process.env["OLLAMA_REMOTE_KEEP_ALIVE"]?.trim() || "15m";
 const modelId = (process.env["OLLAMA_WORKER_MODEL"] ?? "qwen2.5-coder:7b").trim();
 const workerName = (process.env["OLLAMA_WORKER_NAME"] ?? "ollama-windows-worker").trim();
 const nodeId = (process.env["OLLAMA_WORKER_NODE_ID"] ?? workerName).trim();
@@ -41,6 +43,24 @@ async function verifyLocalOllama(): Promise<void> {
   if (!models.some((item: any) => item?.id === modelId)) {
     throw new Error(`Ollama model '${modelId}' is not installed locally`);
   }
+}
+
+async function warmLocalOllama(): Promise<void> {
+  // Do not advertise remote capacity until the model is actually resident.
+  // A cold 7B load can consume nearly the entire reverse-proxy request budget;
+  // warming before registration keeps Economy requests inside the interactive
+  // HTTP deadline while preserving demand-driven VM start/stop semantics.
+  await json(await fetch(ollamaNativeBase + "/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({
+      model: modelId,
+      prompt: "",
+      stream: false,
+      keep_alive: ollamaKeepAlive,
+    }),
+    signal: AbortSignal.timeout(180_000),
+  }));
 }
 
 async function register(): Promise<{ workerId: number; token: string }> {
@@ -219,7 +239,7 @@ async function invoke(payload: Record<string, any>): Promise<Record<string, unkn
       // Keep the model resident between Economy requests. Reloading a 7B model
       // on every sparse CI/user request can consume most of the bounded latency
       // budget before generation starts.
-      keep_alive: process.env["OLLAMA_REMOTE_KEEP_ALIVE"]?.trim() || "10m",
+      keep_alive: ollamaKeepAlive,
       ...(structured ? { response_format: { type: "json_object" } } : {}),
     }),
     signal: AbortSignal.timeout(invocationTimeoutMs),
@@ -341,6 +361,7 @@ async function executeClaimedJob(
 
 async function main(): Promise<void> {
   await verifyLocalOllama();
+  await warmLocalOllama();
   let registration = await registerWithRetry();
 
   if (runSelfTest) {
