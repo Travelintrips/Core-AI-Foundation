@@ -500,15 +500,15 @@ async function invokeChatModel(
   );
 
   const localProvider = isLocalProvider(provider);
-  // Remote-pull Ollama bounds the model call at 45s by default. The API caller
-  // needs a small queue/transport grace window after that model budget, while
-  // still remaining below the Hostinger verification request ceiling.
-  // Coding/planner calls use their own model invocation paths.
+  // Remote-pull Ollama can spend up to 50s inside the worker before completion
+  // bookkeeping reaches the API. Keep a bounded queue/transport grace window
+  // above that worker ceiling while staying below the 75s production smoke
+  // request deadline. Coding/planner calls use their own invocation paths.
   const chatMaxOutputTokens = localProvider
     ? Math.min(512, selection.maxOutputTokens || 512)
     : Math.min(4_096, selection.maxOutputTokens || 1_600);
   const chatTimeoutMs = localProvider
-    ? Math.min(50_000, selection.timeoutMs + 5_000)
+    ? Math.min(65_000, selection.timeoutMs + 20_000)
     : selection.timeoutMs;
 
   const response = await adapter.invoke({
