@@ -306,6 +306,41 @@ async function reconcileReadyReviewMultiWorkerChildren(
   };
 }
 
+async function reconcileTerminalGraphStates(now: Date): Promise<number> {
+  const result = await db.execute(sql`
+    WITH graph_truth AS (
+      SELECT
+        g.id AS graph_id,
+        CASE
+          WHEN BOOL_OR(w.status IN ('FAILED', 'CANCELLED')) THEN 'FAILED'
+          WHEN COUNT(w.id) > 0 AND BOOL_AND(w.status = 'COMPLETED') THEN 'COMPLETED'
+          ELSE NULL
+        END AS desired_status
+      FROM ai_platform.ai_coding_task_graphs AS g
+      JOIN ai_platform.ai_coding_workstreams AS w
+        ON w.graph_id = g.id
+      WHERE g.status IN ('APPROVED', 'RUNNING')
+      GROUP BY g.id
+    ),
+    reconciled AS (
+      UPDATE ai_platform.ai_coding_task_graphs AS g
+      SET status = graph_truth.desired_status,
+          completed_at = COALESCE(g.completed_at, ${now}),
+          updated_at = ${now}
+      FROM graph_truth
+      WHERE g.id = graph_truth.graph_id
+        AND graph_truth.desired_status IS NOT NULL
+        AND g.status <> graph_truth.desired_status
+      RETURNING g.id
+    )
+    SELECT COUNT(*)::int AS recovered_graphs
+    FROM reconciled
+  `);
+
+  const row = result.rows?.[0] as { recovered_graphs?: number | string } | undefined;
+  return Number(row?.recovered_graphs ?? 0);
+}
+
 export async function reconcileStaleMultiWorkerRuns(
   options: { taskId?: string; now?: Date } = {},
 ): Promise<MultiWorkerRecoveryResult> {
@@ -502,6 +537,12 @@ export async function reconcileStaleMultiWorkerRuns(
     const readyReviewRecovery = await reconcileReadyReviewMultiWorkerChildren(now);
     result.inspected += readyReviewRecovery.inspected;
     result.recoveredTasks += readyReviewRecovery.recoveredTasks;
+
+    // Recovery can observe terminal workstreams that were closed by a job/lease
+    // reconciliation path rather than failCodingWorkstreamClaim(). Keep the
+    // graph lifecycle consistent with its workstream truth so autonomous
+    // recovery never waits forever on a RUNNING graph whose work has ended.
+    await reconcileTerminalGraphStates(now);
   }
 
   return result;
