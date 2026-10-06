@@ -81,6 +81,48 @@ async function cleanupExpiredAndTerminal(): Promise<void> {
           WHERE t.id::text = r.task_id
             AND t.status IN ('COMPLETED', 'FAILED')
        )
+       OR (
+          EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_autonomous_tasks a
+            WHERE a.task_id::text = r.task_id
+              AND a.enabled = FALSE
+              AND a.status = 'DISABLED'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_runs cr
+            WHERE cr.task_id::text = r.task_id
+              AND cr.status = 'RUNNING'
+          )
+       )
+       OR (
+          EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_task_graphs g
+            WHERE g.task_id::text = r.task_id
+              AND g.version = (
+                SELECT MAX(g2.version)
+                FROM ai_platform.ai_coding_task_graphs g2
+                WHERE g2.task_id = g.task_id
+              )
+              AND g.status = 'FAILED'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_runs cr
+            WHERE cr.task_id::text = r.task_id
+              AND cr.status = 'RUNNING'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_task_graphs g
+            JOIN ai_platform.ai_coding_workstreams w
+              ON w.graph_id = g.id
+            WHERE g.task_id::text = r.task_id
+              AND w.status IN ('RUNNING', 'CLAIMED')
+          )
+       )
   `);
 }
 
