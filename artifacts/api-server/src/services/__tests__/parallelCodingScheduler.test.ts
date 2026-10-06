@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("single-slot coding scheduler contracts", () => {
-  it("routes planner jobs only to coding-capable workers", () => {
+  it("routes planner jobs to a dedicated planner-capable worker", () => {
     const planner = readFileSync(
       new URL("../localCodingPlannerQueueRuntimeService.ts", import.meta.url),
       "utf8",
@@ -15,7 +15,20 @@ describe("single-slot coding scheduler contracts", () => {
     expect(planner).toContain(
       "requiredCapability: CODING_MULTI_TASK_PLANNER_JOB_TYPE",
     );
-    expect(cluster).toContain('"coding_multi_task_planner"');
+    expect(cluster).toContain('planner_worker: ["coding_multi_task_planner"]');
+    expect(cluster).not.toContain(
+      'coding_worker: ["coding_ai_execution", "coding_workstream", "coding_multi_task_planner"]',
+    );
+
+    const dispatcher = readFileSync(
+      new URL("../jobDispatcherService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(dispatcher).toContain('suffix:            "7"');
+    expect(dispatcher).toContain('workerType:        "planner_worker"');
+    expect(dispatcher).toContain(
+      'capabilities:      WORKER_TYPE_CAPABILITIES["planner_worker"]!',
+    );
   });
 
   it("gives every dispatcher coding worker exactly one active slot", () => {
