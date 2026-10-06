@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { aiCodingRunsTable, aiCodingTasksTable, db } from "@workspace/db";
+import { reportCodingTaskTerminalTransition } from "./codingTaskTerminalReportingService.js";
 
 const TERMINAL_TASK_STATUSES = new Set(["PR_CREATED", "READY_REVIEW", "COMPLETED", "FAILED"]);
 const ACTIVE_TASK_STATUSES = new Set(["PENDING", "ANALYZING", "CODING", "TESTING", "COMMITTING"]);
@@ -90,27 +91,27 @@ export async function reconcileStaleCodingRuns(
   };
 
   for (const candidate of candidates) {
-    await db.transaction(async (tx) => {
+    const recoveredTaskEvent = await db.transaction(async (tx) => {
       const [run] = await tx
         .select()
         .from(aiCodingRunsTable)
         .where(eq(aiCodingRunsTable.id, candidate.runId))
         .for("update");
-      if (!run || run.status !== "RUNNING" || !run.startedAt) return;
+      if (!run || run.status !== "RUNNING" || !run.startedAt) return null;
 
       const [task] = await tx
         .select()
         .from(aiCodingTasksTable)
         .where(eq(aiCodingTasksTable.id, candidate.taskId))
         .for("update");
-      if (!task) return;
+      if (!task) return null;
 
       if (!isRecoverableStaleCodingRun({
         taskStatus: task.status,
         runStatus: run.status,
         startedAt: run.startedAt,
         now,
-      })) return;
+      })) return null;
 
       const ageMinutes = Math.max(1, Math.floor((now.getTime() - run.startedAt.getTime()) / 60_000));
       const recoveryMessage =
@@ -131,7 +132,10 @@ export async function reconcileStaleCodingRuns(
         const [updatedTask] = await tx
           .update(aiCodingTasksTable)
           .set({
-            status: "FAILED",
+            // Stale child execution is recoverable. READY_REVIEW is the
+            // persisted technical-intervention state; presentation maps it to
+            // BLOCKED when no critical approval exists.
+            status: "READY_REVIEW",
             resultSummary: task.resultSummary ?? recoveryMessage,
           })
           .where(eq(aiCodingTasksTable.id, task.id))
@@ -140,18 +144,29 @@ export async function reconcileStaleCodingRuns(
           result.recoveredTasks += 1;
           await tx.execute(sql`
             UPDATE ai_platform.ai_coding_autonomous_tasks
-            SET enabled = FALSE,
-                status = 'FAILED',
-                last_action = 'STALE_RUN_RECOVERED',
+            SET status = 'BLOCKED',
+                last_action = 'RECOVERABLE_OPERATIONAL_FAILURE',
                 last_error = ${recoveryMessage},
-                completed_at = ${now},
+                completed_at = NULL,
                 updated_at = ${now}
             WHERE task_id = ${task.id}::uuid
               AND enabled = TRUE
           `);
+          return { taskId: task.id, message: recoveryMessage };
         }
       }
+
+      return null;
     });
+
+    if (recoveredTaskEvent) {
+      await reportCodingTaskTerminalTransition({
+        taskId: recoveredTaskEvent.taskId,
+        status: "BLOCKED",
+        message: recoveredTaskEvent.message,
+        source: "coding-run-stale-recovery",
+      }).catch(() => undefined);
+    }
   }
 
   return result;
