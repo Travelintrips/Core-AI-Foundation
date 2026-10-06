@@ -41,6 +41,7 @@ function stageProgress(status: string): number {
     COMPLETED: 100,
     FAILED: 100,
     BLOCKED: 100,
+    CANCELLED: 100,
     QUEUED: 5,
     WAITING_FOR_WORKER: 5,
     WAITING_FOR_CAPACITY: 5,
@@ -192,6 +193,8 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
       SELECT
         t.id AS task_id,
         a.status AS autonomous_status,
+        a.enabled AS autonomous_enabled,
+        a.last_action AS autonomous_last_action,
         EXISTS (
           SELECT 1
           FROM ai_platform.ai_coding_runs AS active_run
@@ -208,7 +211,6 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
       JOIN ai_platform.ai_coding_tasks t ON t.id = rt.id
       LEFT JOIN ai_platform.ai_coding_autonomous_tasks a
         ON a.task_id = t.id
-       AND a.enabled = TRUE
     `).catch(() => ({ rows: [] })),
   ]);
 
@@ -220,6 +222,8 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
       const item = row as {
         task_id?: string;
         autonomous_status?: string | null;
+        autonomous_enabled?: boolean | null;
+        autonomous_last_action?: string | null;
         has_active_run?: boolean;
         has_pending_critical_approval?: boolean;
       };
@@ -227,6 +231,11 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
         item.task_id ?? "",
         {
           autonomousStatus: item.autonomous_status ?? null,
+          autonomousEnabled:
+            typeof item.autonomous_enabled === "boolean"
+              ? item.autonomous_enabled
+              : null,
+          autonomousLastAction: item.autonomous_last_action ?? null,
           hasActiveRun: item.has_active_run === true,
           hasPendingCriticalApproval: item.has_pending_critical_approval === true,
         },
@@ -242,6 +251,8 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
       taskStatus: task.status,
       latestRunStatus: run?.status ?? null,
       autonomousStatus: presentation?.autonomousStatus,
+      autonomousEnabled: presentation?.autonomousEnabled ?? null,
+      autonomousLastAction: presentation?.autonomousLastAction ?? null,
       hasActiveRun: presentation?.hasActiveRun ?? run?.status === "RUNNING",
       hasPendingCriticalApproval:
         presentation?.hasPendingCriticalApproval ?? false,
