@@ -57,10 +57,17 @@ export function resolveCommand(event, env) {
       autonomousE2E =
         event.label.name === 'ai-task' &&
         /^autonomous_e2e:\s*true\s*$/im.test(body);
+      const issueRunId = String(env.GITHUB_RUN_ID ?? '').trim();
+      if (!/^[0-9]+$/.test(issueRunId)) {
+        throw new Error('GITHUB_RUN_ID is required for owner issue triggers.');
+      }
       inputs = {
         action: event.label.name === 'ai-audit' ? 'audit' : 'submit',
         instruction: `${event.issue.title ?? ''}\n\n${event.issue.body ?? ''}`.trim(),
-        request_id: `issue-${issueNumber}`,
+        request_id:
+          event.label.name === 'ai-task'
+            ? `issue-${issueNumber}-run-${issueRunId}`
+            : `issue-${issueNumber}`,
         max_cycles: '60',
       };
     }
