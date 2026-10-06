@@ -242,7 +242,18 @@ async function commandIdForTask(taskId: string): Promise<string | null> {
     .select({ id: aiCodingBridgeCommandsTable.id })
     .from(aiCodingBridgeCommandsTable)
     .where(eq(aiCodingBridgeCommandsTable.taskId, taskId))
-    .orderBy(desc(aiCodingBridgeCommandsTable.createdAt))
+    .orderBy(
+      // The lifecycle binding carries the ChatGPT conversationId. Prefer it
+      // over newer worker/control commands so BLOCKER/COMPLETED/FAILED events
+      // return to the conversation that originally delegated the task.
+      sql`CASE
+        WHEN ${aiCodingBridgeCommandsTable.source} = 'ai-core-task-lifecycle'
+         AND ${aiCodingBridgeCommandsTable.commandType} = 'EVENT_BINDING'
+        THEN 0
+        ELSE 1
+      END`,
+      desc(aiCodingBridgeCommandsTable.createdAt),
+    )
     .limit(1);
   return row?.id ?? null;
 }
