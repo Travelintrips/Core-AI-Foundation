@@ -173,6 +173,18 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     modelId:            "per-job",
     runtimeKind:        "dispatcher",
   },
+  {
+    // Planner jobs are control-plane work. Keep one single-slot dispatcher
+    // dedicated to planning so coding workstreams cannot starve task-graph
+    // generation and leave canaries or autonomous recovery stuck in QUEUED.
+    suffix:            "7",
+    workerType:        "planner_worker",
+    capabilities:      WORKER_TYPE_CAPABILITIES["planner_worker"]!,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
+    providerSlug:       "dynamic",
+    modelId:            "per-job",
+    runtimeKind:        "dispatcher",
+  },
 ];
 
 if (process.env["BLENDER_WORKER_RUNTIME_ENABLED"] === "true") {
