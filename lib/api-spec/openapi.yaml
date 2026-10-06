@@ -16473,7 +16473,7 @@ components:
 
     CodingTaskStatus:
       type: string
-      enum: [PENDING, ANALYZING, CODING, TESTING, COMMITTING, PR_CREATED, READY_REVIEW, COMPLETED, FAILED]
+      enum: [PENDING, ANALYZING, CODING, TESTING, COMMITTING, PR_CREATED, READY_REVIEW, COMPLETED, FAILED, BLOCKED]
 
     CodingRunStatus:
       type: string
