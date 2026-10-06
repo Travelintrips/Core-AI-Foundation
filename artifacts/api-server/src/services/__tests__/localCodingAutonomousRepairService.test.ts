@@ -947,6 +947,48 @@ describe("READY_REVIEW autonomous recovery policy", () => {
     });
   });
 
+  it("recovers disabled wait races but never explicit manual stops", async () => {
+    const { readyReviewAutonomousRecoveryDecision } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "DISABLED",
+        cycleCount: 0,
+        maxCycles: 60,
+        lastAction: "WAIT_ACTIVE_RUN:Coding Orchestrator",
+        lastError: null,
+      }),
+    ).toEqual({
+      reactivate: true,
+      extendBudget: false,
+      reason: "DISABLED_WAIT_RACE",
+    });
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "DISABLED",
+        cycleCount: 0,
+        maxCycles: 60,
+        lastAction: "MANUAL_STOP",
+        lastError: null,
+      }),
+    ).toEqual({
+      reactivate: false,
+      extendBudget: false,
+      reason: "MANUAL_STOP",
+    });
+
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("last_action = 'MANUAL_STOP'");
+    expect(source).toContain("last_action LIKE 'WAIT_ACTIVE_RUN:%'");
+    expect(source).toContain("RECOVER_READY_REVIEW_DISABLED_WAIT");
+  });
+
   it("gives legacy max-cycle tasks only one bounded second budget", async () => {
     const { readyReviewAutonomousRecoveryDecision } = await import(
       "../localCodingAutonomousRepairService.js"
