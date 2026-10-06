@@ -198,8 +198,12 @@ async function deliverCodingBridgeWhatsappNotification(input: {
   message: string;
   checkpoint?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  eventTimestamp?: string | Date | null;
 }): Promise<void> {
-  const dispatch = await notifyCodingBridgeResponse(input);
+  const dispatch = await notifyCodingBridgeResponse({
+    ...input,
+    eventTimestamp: input.eventTimestamp ?? null,
+  });
   const delivery =
     dispatch.status === "queued"
       ? await waitForCodingWhatsappDelivery(dispatch.messageId, {
@@ -277,6 +281,7 @@ export async function appendCodingBridgeResponse(input: {
     message: input.message,
     checkpoint: input.checkpoint ?? {},
     metadata: input.metadata ?? {},
+    eventTimestamp: response.createdAt,
   }).catch(() => undefined);
 
   void enqueueAiCoreChatInboxMessage({

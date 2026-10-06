@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { aiCodingTasksTable, db } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
@@ -82,6 +82,62 @@ function config() {
   return { baseUrl, apiKey, to };
 }
 
+function formatJakartaTimestamp(value: string | Date | null | undefined): string {
+  const date = value instanceof Date ? value : value ? new Date(value) : new Date();
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(safe);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")} ${part("hour")}:${part("minute")}:${part("second")} WIB`;
+}
+
+async function findDeliveredLifecycleDuplicate(input: {
+  responseId: string;
+  taskId?: string | null;
+  status: CodingLifecycleStatus;
+}): Promise<{ responseId: string; messageId: string | null } | null> {
+  if (!input.taskId || input.status === "CHECKPOINT") return null;
+
+  const result = await db.execute(sql`
+    SELECT
+      id,
+      metadata_json #>> '{whatsappNotification,delivery,messageId}' AS message_id
+    FROM ai_platform.ai_coding_bridge_responses
+    WHERE task_id = ${input.taskId}::uuid
+      AND id <> ${input.responseId}::uuid
+      AND metadata_json #>> '{whatsappNotification,delivery,status}' = 'sent'
+      AND COALESCE(
+        NULLIF(checkpoint_json ->> 'eventType', ''),
+        NULLIF(metadata_json ->> 'eventType', ''),
+        CASE kind
+          WHEN 'BLOCKER' THEN 'BLOCKED'
+          WHEN 'FAILED' THEN 'FAILED'
+          WHEN 'COMPLETED' THEN 'COMPLETED'
+          ELSE kind::text
+        END
+      ) = ${input.status}::text
+    ORDER BY created_at ASC
+    LIMIT 1
+  `);
+
+  const row = result.rows?.[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    responseId: String(row["id"]),
+    messageId:
+      typeof row["message_id"] === "string" ? row["message_id"] : null,
+  };
+}
+
 function approvalWebConfig() {
   const publicBaseUrl = (
     process.env.AI_CORE_PUBLIC_API_URL ??
@@ -98,7 +154,16 @@ function buildApprovalWebLink(token: string): string | null {
 }
 
 export type CodingWhatsappNotifyResult =
-  | { status: "skipped"; reason: "kind_not_notifiable" | "missing_config"; configured: { baseUrl: boolean; apiKey: boolean; to: boolean } }
+  | {
+      status: "skipped";
+      reason:
+        | "kind_not_notifiable"
+        | "missing_config"
+        | "duplicate_lifecycle_notification";
+      configured: { baseUrl: boolean; apiKey: boolean; to: boolean };
+      duplicateOfResponseId?: string;
+      duplicateMessageId?: string | null;
+    }
   | { status: "queued"; gatewayStatus: number; messageId: string | null }
   | { status: "rejected"; gatewayStatus: number; body: string }
   | { status: "failed"; error: string };
@@ -275,6 +340,7 @@ export async function notifyCodingBridgeResponse(input: {
   message: string;
   checkpoint?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  eventTimestamp?: string | Date | null;
 }): Promise<CodingWhatsappNotifyResult> {
   const configured = getCodingWhatsappConfigStatus();
   if (!NOTIFIABLE_KINDS.has(input.kind)) {
@@ -282,6 +348,21 @@ export async function notifyCodingBridgeResponse(input: {
   }
 
   const status = lifecycleStatus(input);
+  const duplicate = await findDeliveredLifecycleDuplicate({
+    responseId: input.responseId,
+    taskId: input.taskId,
+    status,
+  });
+  if (duplicate) {
+    return {
+      status: "skipped",
+      reason: "duplicate_lifecycle_notification",
+      configured,
+      duplicateOfResponseId: duplicate.responseId,
+      duplicateMessageId: duplicate.messageId,
+    };
+  }
+
   const task = await taskNotificationDetails(input.taskId);
   const { publicBaseUrl } = approvalWebConfig();
   const workspaceUrl =
@@ -299,6 +380,7 @@ export async function notifyCodingBridgeResponse(input: {
     task?.projectName ? `Project: ${task.projectName}` : "",
     task?.repository ? `Repository: ${task.repository}` : "",
     task?.branch ? `Branch: ${task.branch}` : "",
+    `Timestamp: ${formatJakartaTimestamp(input.eventTimestamp)}`,
     "",
     input.message.trim() || task?.resultSummary?.trim() || "",
     task?.resultSummary && task.resultSummary.trim() !== input.message.trim()
@@ -309,9 +391,14 @@ export async function notifyCodingBridgeResponse(input: {
     .filter(Boolean)
     .join("\n");
 
+  const stableLifecycleKey =
+    input.taskId && status !== "CHECKPOINT"
+      ? `ai-core-coding-${input.taskId}-${status.toLowerCase()}`
+      : `ai-core-coding-${input.responseId}`;
+
   const result = await sendGatewayMessage({
-    idempotencyKey: `ai-core-coding-${input.responseId}`,
-    clientMessageId: input.responseId,
+    idempotencyKey: stableLifecycleKey,
+    clientMessageId: stableLifecycleKey,
     text,
   });
 
