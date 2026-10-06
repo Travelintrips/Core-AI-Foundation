@@ -29,7 +29,7 @@ const router = Router();
 const MCP_PROTOCOL_VERSION = "2026-07-28";
 const COMPAT_MCP_PROTOCOL_VERSION = "2025-06-18";
 const LEGACY_MCP_PROTOCOL_VERSION = "2025-03-26";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.6.0" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.6.1" };
 const DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS = 24 * 60 * 60;
 const MAX_CONVERSATION_EVENT_LEASE_SECONDS = 7 * 24 * 60 * 60;
 const DEFAULT_TERMINAL_EVENT_TYPES = [
@@ -680,8 +680,19 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     return;
   }
 
+  // Like tools/list, this is a static catalog, not account or task data.
+  // Plugin scanning can precede OAuth and must be able to discover the event.
+  // Creating/removing subscriptions still requires ai_core.events below.
+  if (body.method === "events/list") {
+    setDiscoveryHeaders(res);
+    res.status(200).json(rpcResult(body.id ?? null, {
+      events: nativeEvents,
+      nextCursor: null,
+    }));
+    return;
+  }
+
   if (
-    body.method === "events/list" ||
     body.method === "events/subscribe" ||
     body.method === "events/unsubscribe"
   ) {
@@ -706,17 +717,6 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     }
 
     try {
-      if (body.method === "events/list") {
-        setDiscoveryHeaders(res);
-        res.status(200).json(
-          rpcResult(body.id ?? null, {
-            events: nativeEvents,
-            nextCursor: null,
-          }),
-        );
-        return;
-      }
-
       if (body.method === "events/subscribe") {
         const parsed = NativeEventSubscribeParams.parse(body.params ?? {});
         await logAudit({
