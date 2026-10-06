@@ -350,6 +350,26 @@ function workstreamAiRequired(result: Record<string, unknown> | null): boolean {
   return plan?.status === "AI_REQUIRED";
 }
 
+export function isStaleAiHandoffPreparationError(
+  value: string | null | undefined,
+): boolean {
+  return /Repository HEAD changed from [0-9a-f]{40} to [0-9a-f]{40}; rerun Local Coding Engine before AI handoff/i.test(
+    normalizeRunError(value),
+  );
+}
+
+function staleAiHandoffPreparationFailure(
+  state: Awaited<ReturnType<typeof loadTaskState>>,
+): string | null {
+  if (state.task.status !== "READY_REVIEW" || state.nextAction !== "AI_REQUIRED") return null;
+  const latestHandoff = state.runs.find(
+    (run) => run.agentName === "AI Handoff Gate" && run.status === "FAILED",
+  );
+  const error = normalizeRunError(latestHandoff?.errorMessage);
+  if (!error || !isStaleAiHandoffPreparationError(error)) return null;
+  return error;
+}
+
 function retryableAiHandoffCloneFailure(
   state: Awaited<ReturnType<typeof loadTaskState>>,
 ): string | null {
@@ -1100,6 +1120,38 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         taskId,
         status: "WAITING",
         action: "RETRY_REPOSITORY_ANALYZER_RESOURCE_PRESSURE",
+      };
+    }
+
+    const staleHandoffPreparation = staleAiHandoffPreparationFailure(state);
+    if (staleHandoffPreparation) {
+      await reserveActionCycle(taskId);
+      await restartRepositoryAnalysisAfterTransientFailure(
+        taskId,
+        "Repository HEAD changed during AI handoff preparation. Re-running Repository Analyzer from the latest HEAD.",
+      );
+      await setState(taskId, "WAITING", "RETRY_STALE_AI_HANDOFF_PREPARATION", null);
+      await report(
+        taskId,
+        "CHECKPOINT",
+        "Repository HEAD berubah saat menyiapkan AI handoff. AI Core otomatis menjalankan ulang Repository Analyzer dari HEAD terbaru.",
+        {
+          source: "autonomous-repair-loop",
+          nextAction: "AI_REQUIRED",
+        },
+      ).catch(() => undefined);
+      await logAudit(
+        "coding-autonomous",
+        "stale_ai_handoff_preparation_reanalysis_started",
+        taskId,
+        "coding_task",
+        "success",
+        { error: staleHandoffPreparation.slice(0, 1000) },
+      ).catch(() => undefined);
+      return {
+        taskId,
+        status: "WAITING",
+        action: "RETRY_STALE_AI_HANDOFF_PREPARATION",
       };
     }
 
