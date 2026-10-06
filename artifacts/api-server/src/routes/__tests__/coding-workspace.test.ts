@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ListCodingTasksResponse } from "@workspace/api-zod";
 
 const mockTransaction = vi.hoisted(() => vi.fn());
 const mockDbSelect = vi.hoisted(() => vi.fn());
@@ -385,6 +386,11 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
 });
 
 describe("AI coding workspace task list", () => {
+  it("keeps BLOCKED presentation status valid in the public API contract", () => {
+    const parsed = ListCodingTasksResponse.parse([{ ...task, status: "BLOCKED" }]);
+    expect(parsed[0]?.status).toBe("BLOCKED");
+  });
+
   it("keeps multi-worker child executions out of the top-level task queue", () => {
     const source = readFileSync(
       new URL("../coding-workspace.ts", import.meta.url),
