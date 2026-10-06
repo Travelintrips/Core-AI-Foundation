@@ -13,6 +13,7 @@ import { BlockList, isIP } from "node:net";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { logAudit } from "./aiAuditService.js";
 
 export const AI_CORE_TERMINAL_EVENT_NAME = "ai_core.task.terminal";
 const DEFAULT_SUBSCRIPTION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -215,6 +216,25 @@ function publicIpAddress(address: string): boolean {
   return false;
 }
 
+export function choosePreferredCallbackAddress(
+  addresses: Array<{ address: string; family: number }>,
+): { address: string; family: number } | null {
+  if (addresses.length === 0) return null;
+  return [...addresses].sort((left, right) => {
+    const leftRank = left.family === 4 ? 0 : left.family === 6 ? 1 : 2;
+    const rightRank = right.family === 4 ? 0 : right.family === 6 ? 1 : 2;
+    return leftRank - rightRank;
+  })[0] ?? null;
+}
+
+function callbackAuditHost(rawUrl: string): string {
+  try {
+    return new URL(rawUrl).hostname.slice(0, 255);
+  } catch {
+    return "invalid-url";
+  }
+}
+
 async function validatedCallbackTarget(rawUrl: string): Promise<{
   url: URL;
   address: string;
@@ -262,7 +282,14 @@ async function validatedCallbackTarget(rawUrl: string): Promise<{
       "Callback hostname resolves to a private, local, reserved, or non-public address.",
     );
   }
-  return { url, address: addresses[0]!.address };
+  const preferred = choosePreferredCallbackAddress(addresses);
+  if (!preferred) {
+    throw new McpCallbackEndpointError(
+      "dns_failed",
+      "Callback hostname did not resolve to a usable address.",
+    );
+  }
+  return { url, address: preferred.address };
 }
 
 async function postPinnedHttps(
@@ -476,13 +503,39 @@ export async function subscribeAiCoreMcpEvent(input: {
   if (input.eventName !== AI_CORE_TERMINAL_EVENT_NAME) {
     throw new Error(`Unsupported MCP event: ${input.eventName}`);
   }
-  decodeStandardWebhookSecret(input.secret);
   const subscriptionId = deterministicSubscriptionId(input);
-  await verifyCallback({
-    subscriptionId,
-    callbackUrl: input.callbackUrl,
-    secret: input.secret,
-  });
+  const callbackHost = callbackAuditHost(input.callbackUrl);
+
+  try {
+    decodeStandardWebhookSecret(input.secret);
+    await verifyCallback({
+      subscriptionId,
+      callbackUrl: input.callbackUrl,
+      secret: input.secret,
+    });
+  } catch (error) {
+    const reason =
+      error instanceof McpCallbackEndpointError
+        ? error.reason
+        : "internal_error";
+    await logAudit({
+      module: "mcp-events",
+      action: "native_subscription_verification_failed",
+      resourceId: subscriptionId,
+      resourceType: "mcp_event_subscription",
+      status: "failure",
+      details: {
+        eventName: input.eventName,
+        callbackHost,
+        reason,
+        message:
+          error instanceof Error
+            ? error.message.slice(0, 500)
+            : "Native subscription verification failed.",
+      },
+    });
+    throw error;
+  }
 
   const canonicalArguments = canonicalJson(input.arguments);
   const argumentsDigest = createHash("sha256")
@@ -529,6 +582,19 @@ export async function subscribeAiCoreMcpEvent(input: {
       active = TRUE,
       updated_at = NOW()
   `);
+
+  await logAudit({
+    module: "mcp-events",
+    action: "native_subscription_created",
+    resourceId: subscriptionId,
+    resourceType: "mcp_event_subscription",
+    status: "success",
+    details: {
+      eventName: input.eventName,
+      callbackHost,
+      refreshBefore: expiresAt.toISOString(),
+    },
+  });
 
   return { id: subscriptionId, refreshBefore: expiresAt.toISOString() };
 }
