@@ -123,9 +123,16 @@ jobs:
                 case "$file" in
                   docs/*|*.md|*.mdx|*.txt|*/__tests__/*|*.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx)
                     ;;
-                  .github/workflows/hostinger-deploy.yml|.github/workflows/hostinger-nodejs-deploy.yml|scripts/hostinger-*|package.json|pnpm-lock.yaml)
+                  .github/workflows/hostinger-deploy.yml|.github/workflows/hostinger-nodejs-deploy.yml|scripts/hostinger-*)
+                    # Deployment/verifier plumbing changes still run the always-on
+                    # exact-commit/readiness baseline, but must not wake every
+                    # expensive subsystem smoke. WhatsApp and Ollama have their
+                    # own dedicated diff detectors below.
+                    reason="deploy_verifier_change_baseline_only:$file"
+                    ;;
+                  package.json|pnpm-lock.yaml)
                     set_all_scopes
-                    reason="shared_deploy_or_runtime_change:$file"
+                    reason="shared_runtime_dependency_change:$file"
                     break
                     ;;
                   lib/api-spec/*|lib/api-zod/*|lib/api-client-react/*)
