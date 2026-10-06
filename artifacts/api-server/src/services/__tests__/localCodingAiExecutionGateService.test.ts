@@ -165,11 +165,19 @@ afterEach(async () => {
 });
 
 describe("git HEAD normalization", () => {
-  it("accepts string and buffer stdout from child_process", () => {
+  it("accepts direct and wrapped stdout shapes from child_process", () => {
     const sha = "A".repeat(40);
-    expect(normalizeGitHeadOutput(sha + "\n")).toBe("a".repeat(40));
-    expect(normalizeGitHeadOutput(Buffer.from(sha + "\n", "utf8"))).toBe("a".repeat(40));
-    expect(normalizeGitHeadOutput(new Uint8Array(Buffer.from(sha, "utf8")))).toBe("a".repeat(40));
+    const text = sha + "\n";
+    const buffer = Buffer.from(text, "utf8");
+    const bytes = new Uint8Array(buffer);
+    const expected = "a".repeat(40);
+
+    expect(normalizeGitHeadOutput(text)).toBe(expected);
+    expect(normalizeGitHeadOutput(buffer)).toBe(expected);
+    expect(normalizeGitHeadOutput(bytes)).toBe(expected);
+    expect(normalizeGitHeadOutput({ stdout: text })).toBe(expected);
+    expect(normalizeGitHeadOutput({ stdout: buffer })).toBe(expected);
+    expect(normalizeGitHeadOutput({ stdout: bytes })).toBe(expected);
   });
 });
 
