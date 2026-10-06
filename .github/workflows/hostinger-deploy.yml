@@ -123,9 +123,44 @@ jobs:
                 case "$file" in
                   docs/*|*.md|*.mdx|*.txt|*/__tests__/*|*.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx)
                     ;;
-                  .github/workflows/hostinger-deploy.yml|.github/workflows/hostinger-nodejs-deploy.yml|scripts/hostinger-*|package.json|pnpm-lock.yaml)
+                  .github/workflows/hostinger-deploy.yml)
+                    # Workflow-only edits should verify the smoke domain whose
+                    # actual step changed. Trigger/concurrency/scope plumbing
+                    # stays on the always-on exact-SHA/readiness/auth/SMTP baseline.
+                    workflow_diff=$(git diff -U2 "$base_sha" "$EXPECTED_SHA" -- "$file")
+
+                    if grep -Eiq 'Verify live MCP discovery|server/discover|tools/list|mcp_native_event_discovery' <<< "$workflow_diff"; then
+                      verify_mcp=true
+                    fi
+                    if grep -Eiq 'Verify authenticated Coding Workspace|Verify Coding Workspace GitHub repository discovery|coding_tasks_authenticated|github_repository_discovery' <<< "$workflow_diff"; then
+                      verify_coding=true
+                    fi
+                    if grep -Eiq 'Verify deterministic AI Core Chat smoke|ai_core_chat_smoke|ai_core_chat_stream_smoke' <<< "$workflow_diff"; then
+                      verify_chat=true
+                    fi
+                    if grep -Eiq 'Verify schema-aware AI Core Chat database queries|Verify AI Core Data Tool|ai-core-admin-db-smoke|data_tools_readiness|data_tool_execution' <<< "$workflow_diff"; then
+                      verify_data=true
+                    fi
+                    if grep -Eiq 'Verify AI Core cloud routing|ai_core_cloud_smoke|gemini_primary_registered' <<< "$workflow_diff"; then
+                      verify_cloud=true
+                    fi
+                    if grep -Eiq 'Inspect ZeroLLM host readiness|zerollm/readiness' <<< "$workflow_diff"; then
+                      verify_zerollm=true
+                    fi
+                    if grep -Eiq 'Verify public sitemap for Googlebot|PUBLIC_SITEMAP_URL|legacy_sitemap_http' <<< "$workflow_diff"; then
+                      verify_sitemap=true
+                    fi
+
+                    reason="hostinger_workflow_diff_selective:$file"
+                    ;;
+                  .github/workflows/hostinger-nodejs-deploy.yml|scripts/hostinger-*)
+                    # Deployment mechanics are covered by exact-SHA convergence
+                    # and readiness; they do not require unrelated product smoke.
+                    reason="deploy_orchestration_baseline:$file"
+                    ;;
+                  package.json|pnpm-lock.yaml)
                     set_all_scopes
-                    reason="shared_deploy_or_runtime_change:$file"
+                    reason="shared_runtime_dependency_change:$file"
                     break
                     ;;
                   lib/api-spec/*|lib/api-zod/*|lib/api-client-react/*)
@@ -201,6 +236,7 @@ jobs:
           echo "verify_sitemap=$verify_sitemap" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
           echo "verification_scope reason=$reason mcp=$verify_mcp coding=$verify_coding chat=$verify_chat data=$verify_data cloud=$verify_cloud zerollm=$verify_zerollm sitemap=$verify_sitemap"
+
       - name: Detect whether Ollama verification is required
         id: ollama_scope
         if: steps.target.outputs.stale != 'true'
