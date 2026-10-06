@@ -191,6 +191,9 @@ describe("Coding Orchestrator active-change conflict guard", () => {
     );
     expect(source).toContain('changeReservation?.status === "CONFLICT"');
     expect(source).toContain('"active_change_conflict_waiting_for_qc"');
+    expect(source).toContain('status: "BLOCKED"');
+    expect(source).toContain('"coding-orchestrator-active-change-conflict"');
+    expect(source).toContain("reportCodingTaskTerminalTransition");
     expect(source).toContain("workerDispatched: false");
     const guard = source.indexOf('changeReservation?.status === "CONFLICT"');
     const planner = source.indexOf("generateAndPersistCodingMultiTaskPlan(input.task.id, analysis)");
