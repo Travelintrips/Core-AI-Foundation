@@ -48,6 +48,23 @@ describe("single-slot coding scheduler contracts", () => {
     );
   });
 
+
+  it("preserves live job occupancy when a rolling deploy reacquires a worker lease", () => {
+    const dispatcher = readFileSync(
+      new URL("../jobDispatcherService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(dispatcher).toContain(
+      "payload_json->>'_claimedByWorkerId'",
+    );
+    expect(dispatcher).toContain("COUNT(*)::int AS running_count");
+    expect(dispatcher).toContain("status: runningCount > 0 ? \"busy\" : \"idle\"");
+    expect(dispatcher).not.toContain(
+      'status: "idle",\n        currentJob: null,\n        runningJobs: 0',
+    );
+  });
+
   it("serializes claim admission and rechecks the one-job cap under lock", () => {
     const worker = readFileSync(
       new URL("../jobWorkerService.ts", import.meta.url),
