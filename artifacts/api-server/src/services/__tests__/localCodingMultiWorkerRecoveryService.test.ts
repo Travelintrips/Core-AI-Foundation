@@ -38,7 +38,11 @@ describe("multi-worker child lifecycle recovery", () => {
     expect(source).toContain("active_run.status = 'RUNNING'");
     expect(source).toContain("active_binding.child_task_id = t.id");
     expect(source).toContain("active_job.status IN ('queued', 'waiting', 'running', 'retrying')");
-    expect(source).toContain("no implementation completion is inferred");
+    expect(source).toContain("ai_coding_critical_approvals");
+    expect(source).toContain("approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')");
+    expect(source).toContain("SET status = 'COMPLETED'");
+    expect(source).toContain("coding_status = 'COMPLETED'");
+    expect(source).toContain("Auto-reconciled completed Multi-Worker child");
   });
 
   it("synchronizes READY_REVIEW children from terminal workstream truth", () => {

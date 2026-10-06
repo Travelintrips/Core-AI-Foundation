@@ -261,14 +261,22 @@ async function reconcileReadyReviewMultiWorkerChildren(
               )
             )
         )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_critical_approvals AS approval
+          WHERE approval.task_id = t.id
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        )
     ),
     detached_updated AS (
       UPDATE ai_platform.ai_coding_tasks AS t
-      SET status = 'FAILED',
+      SET status = 'COMPLETED',
+          coding_status = 'COMPLETED',
           result_summary = LEFT(
-            'Legacy detached Multi-Worker child lifecycle closed safely: no active workstream, run, or job remains. ' ||
-            'The parent/workstream lifecycle is authoritative; no implementation completion is inferred. ' ||
-            COALESCE(t.result_summary, ''),
+            COALESCE(
+              NULLIF(t.result_summary, ''),
+              'Auto-reconciled completed Multi-Worker child: completed run exists and no active work, binding, job, or critical approval remains.'
+            ),
             500
           ),
           updated_at = ${now}

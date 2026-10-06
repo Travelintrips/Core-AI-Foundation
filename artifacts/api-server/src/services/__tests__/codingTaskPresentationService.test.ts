@@ -1,8 +1,46 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { codingTaskPresentationStatus } from "../codingTaskPresentationService.js";
+import {
+  codingDashboardTaskPresentationStatus,
+  codingTaskPresentationStatus,
+} from "../codingTaskPresentationService.js";
 
 describe("coding task presentation status", () => {
+  it("shows completed Multi-Worker child shards as COMPLETED when no critical gate remains", () => {
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "MW-CWS-12345678-V1-WS-001-A1",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("COMPLETED");
+
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "MW-CWS-12345678-V1-WS-001-A1",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: true,
+      }),
+    ).toBe("READY_REVIEW");
+
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "MW-CWS-12345678-V1-WS-001-A1",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: "BLOCKED",
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("BLOCKED");
+  });
+
   it("shows terminal autonomous failure instead of READY_REVIEW", () => {
     expect(
       codingTaskPresentationStatus({
@@ -139,6 +177,11 @@ describe("coding task presentation status", () => {
     expect(chatRoute).toContain("const presentedStatus = codingTaskPresentationStatus({");
     expect(chatRoute).toContain("status: presentedStatus");
     expect(chatRoute).toContain("persistedStatus: task.status");
+    const dashboardRoute = readFileSync(
+      new URL("../../routes/aicoding-dashboard.ts", import.meta.url),
+      "utf8",
+    );
+    expect(dashboardRoute).toContain("codingDashboardTaskPresentationStatus");
   });
 
   it("workspace list query includes active autonomous states for presentation mapping", () => {
