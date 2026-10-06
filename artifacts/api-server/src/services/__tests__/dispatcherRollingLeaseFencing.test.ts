@@ -11,6 +11,12 @@ describe("dispatcher stuck-job retry fencing", () => {
       .toEqual({ nextRetryCount: 1, exhausted: false });
   });
 
+  it("uses an extended timeout for repository analyzer jobs", async () => {
+    const { jobTimeoutMsForType } = await import("../jobDispatcherService.js");
+    expect(jobTimeoutMsForType("coding_repository_analyzer", 300000)).toBe(900000);
+    expect(jobTimeoutMsForType("image_generation", 300000)).toBe(300000);
+  });
+
   it("clears stale claimed-worker ownership in no-holder recovery", () => {
     const source = readFileSync(
       new URL("../jobDispatcherService.ts", import.meta.url),
