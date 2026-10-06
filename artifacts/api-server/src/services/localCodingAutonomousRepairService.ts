@@ -535,6 +535,12 @@ export function isTransientWorkstreamDatabaseFailure(message: string): boolean {
   );
 }
 
+export function isRecoverableWorkstreamLeaseFailure(message: string): boolean {
+  return /Workstream claim lease is no longer valid|claim lease (?:expired|is no longer valid)|stale workstream claim/i.test(
+    message,
+  );
+}
+
 export function hasDependencyReadyNonReviewWorkstream(
   workstreams: Array<{
     status: string;
@@ -606,6 +612,19 @@ async function processTaskGraph(
       return {
         handled: true,
         action: `AUTO_RECOVER_TRANSIENT_WORKSTREAM_DB:${failed.key}`,
+        waiting: true,
+      };
+    }
+
+    if (
+      isRecoverableWorkstreamLeaseFailure(failure) &&
+      failed.attemptCount < 4
+    ) {
+      await reserveCycle();
+      await retryFailedCodingWorkstream(failed.id);
+      return {
+        handled: true,
+        action: `AUTO_RECOVER_EXPIRED_WORKSTREAM_LEASE:${failed.key}`,
         waiting: true,
       };
     }
