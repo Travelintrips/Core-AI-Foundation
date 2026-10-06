@@ -276,7 +276,7 @@ export async function waitForCodingWhatsappDelivery(
     return { status: "unavailable", reason: "WhatsApp gateway configuration is incomplete." };
   }
 
-  const timeoutMs = Math.max(1_000, Math.min(options?.timeoutMs ?? 30_000, 60_000));
+  const timeoutMs = Math.max(1_000, Math.min(options?.timeoutMs ?? 30_000, 120_000));
   const pollIntervalMs = Math.max(250, Math.min(options?.pollIntervalMs ?? 1_000, 5_000));
   const deadline = Date.now() + timeoutMs;
   let lastStatus: string | null = null;
