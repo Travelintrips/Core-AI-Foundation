@@ -19,6 +19,10 @@ import { executeAI, type ExecutionInput } from "./aiExecutionService.js";
 import { parseJsonResponse } from "./creativeAiService.js";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
+import {
+  isImageRouterConfigured,
+  tryGenerateImageViaRouter,
+} from "./imageRouterService.js";
 
 export const MAX_PREVIEWS_PER_SESSION = 2;
 
@@ -81,8 +85,29 @@ The two concepts must feel meaningfully different from each other (e.g. one bold
   return { systemPrompt, userPrompt };
 }
 
-async function generatePreviewImage(prompt: string, apiKey: string): Promise<string | null> {
+async function generatePreviewImage(
+  prompt: string,
+  apiKey: string | null,
+): Promise<string | null> {
   try {
+    const local = await tryGenerateImageViaRouter({
+      prompt,
+      aspectRatio: "1:1",
+      width: 768,
+      height: 768,
+      steps: 12,
+      filenamePrefix: "live-preview",
+      timeoutMs: 180_000,
+    });
+    if (local) {
+      const image = await fetch(local.imageUrl);
+      if (!image.ok) return null;
+      const buffer = Buffer.from(await image.arrayBuffer());
+      const contentType = image.headers.get("content-type") ?? "image/png";
+      return `data:${contentType};base64,${buffer.toString("base64")}`;
+    }
+    if (!apiKey) return null;
+
     const createRes = await fetch(`https://api.replicate.com/v1/models/${FLUX_SCHNELL}/predictions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Prefer: "wait" },
@@ -150,7 +175,9 @@ export async function generateLivePreview(previewId: number, input: LivePreviewI
     if (!parsed.concept_a || !parsed.concept_b) throw new Error("AI response did not include both concepts");
 
     const replicateKey = getProviderApiKey("replicate");
-    const [imageA, imageB] = replicateKey
+    const imageProviderAvailable =
+      isImageRouterConfigured() || Boolean(replicateKey);
+    const [imageA, imageB] = imageProviderAvailable
       ? await Promise.all([
           generatePreviewImage(String(parsed.concept_a["image_prompt"] ?? ""), replicateKey),
           generatePreviewImage(String(parsed.concept_b["image_prompt"] ?? ""), replicateKey),
