@@ -261,6 +261,7 @@ export async function resolveSupersededIncidents(input: SupersededIncidentResolu
 
     let repairTasksCompleted = 0;
     let activeRepairTasksSkipped = 0;
+    let resolvedIncidents = 0;
 
     for (const incident of incidents) {
       if (incident.repairTaskId) {
@@ -274,6 +275,10 @@ export async function resolveSupersededIncidents(input: SupersededIncidentResolu
 
         if (activeRun) {
           activeRepairTasksSkipped += 1;
+          // Do not resolve the incident while its linked repair task is still
+          // running. Leaving it open makes the next successful production
+          // verification retry resolution after the repair run becomes idle.
+          continue;
         } else {
           const [task] = await tx.select({
             id: aiCodingTasksTable.id,
@@ -326,10 +331,11 @@ export async function resolveSupersededIncidents(input: SupersededIncidentResolu
           successfulVerifyHeadSha: input.successfulHeadSha ?? null,
         },
       }).where(eq(aiIncidentsTable.id, incident.id));
+      resolvedIncidents += 1;
     }
 
     return {
-      resolved: incidents.length,
+      resolved: resolvedIncidents,
       repairTasksCompleted,
       activeRepairTasksSkipped,
     };
