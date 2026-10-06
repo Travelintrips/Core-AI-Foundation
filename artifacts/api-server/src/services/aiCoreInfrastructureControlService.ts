@@ -149,6 +149,14 @@ export function detectAiCoreInfrastructureOperation(
     return "HOSTINGER_SSH_PUBLIC_KEY_ATTACH";
   }
 
+  // Read-only Docker inspection must outrank incidental mutation words in
+  // negative constraints such as "jangan deploy/restart/ubah env".
+  if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
+      /\b(docker|compose|container|project)\b/i.test(text) &&
+      isExplicitReadOnlyRequest(text)) {
+    return "HOSTINGER_DOCKER_STATUS";
+  }
+
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
       /\b(secret|secrets|env|environment|environment variable|variabel environment)\b/i.test(text) &&
       /\b(set|add|tambah|masukkan|masukan|simpan|update|ubah|ganti|apply|pasang)\b/i.test(text) &&
