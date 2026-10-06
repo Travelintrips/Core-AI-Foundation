@@ -33,7 +33,7 @@ jobs:
     name: Verify Hostinger native deployment
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -67,6 +67,128 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Detect production verification scope
+        id: verify_scope
+        if: steps.target.outputs.stale != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verify_mcp=false
+          verify_coding=false
+          verify_chat=false
+          verify_wa=false
+          verify_data=false
+          verify_cloud=false
+          verify_zerollm=false
+          verify_sitemap=false
+          reason="selective"
+
+          set_all_scopes() {
+            verify_mcp=true
+            verify_coding=true
+            verify_chat=true
+            verify_wa=true
+            verify_data=true
+            verify_cloud=true
+            verify_zerollm=true
+            verify_sitemap=true
+          }
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            set_all_scopes
+            reason="manual_dispatch_full_verify"
+          else
+            base_sha=""
+            if git rev-parse "${EXPECTED_SHA}^1" >/dev/null 2>&1; then
+              base_sha=$(git rev-parse "${EXPECTED_SHA}^1")
+            fi
+
+            if [ -z "$base_sha" ]; then
+              set_all_scopes
+              reason="parent_unavailable_full_verify"
+            else
+              changed_files=$(git diff --name-only "$base_sha" "$EXPECTED_SHA")
+              printf 'verification_scope_changed_files=\n%s\n' "$changed_files"
+
+              while IFS= read -r file; do
+                [ -z "$file" ] && continue
+
+                case "$file" in
+                  docs/*|*.md|*.mdx|*.txt|*/__tests__/*|*.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx)
+                    ;;
+                  .github/workflows/hostinger-deploy.yml|.github/workflows/hostinger-nodejs-deploy.yml|scripts/hostinger-*|package.json|pnpm-lock.yaml)
+                    set_all_scopes
+                    reason="shared_deploy_or_runtime_change:$file"
+                    break
+                    ;;
+                  lib/api-spec/*|lib/api-zod/*|lib/api-client-react/*)
+                    set_all_scopes
+                    reason="shared_api_contract_change:$file"
+                    break
+                    ;;
+                  artifacts/api-server/src/migrations/*|artifacts/api-server/src/repositories/*|artifacts/api-server/src/db*|artifacts/api-server/src/database*)
+                    set_all_scopes
+                    reason="shared_data_layer_change:$file"
+                    break
+                    ;;
+                  artifacts/api-server/src/routes/ai-core-chat.ts)
+                    verify_mcp=true
+                    verify_chat=true
+                    verify_wa=true
+                    verify_data=true
+                    verify_cloud=true
+                    ;;
+                  artifacts/api-server/src/*mcp*|artifacts/api-server/src/*Mcp*|artifacts/api-server/src/**/*mcp*|artifacts/api-server/src/**/*Mcp*)
+                    verify_mcp=true
+                    ;;
+                  artifacts/api-server/src/routes/coding-*|artifacts/api-server/src/routes/aicoding-*|artifacts/api-server/src/services/*coding*|artifacts/api-server/src/services/*Coding*)
+                    verify_coding=true
+                    ;;
+                  artifacts/api-server/src/*whatsapp*|artifacts/api-server/src/*WhatsApp*|artifacts/api-server/src/**/*whatsapp*|artifacts/api-server/src/**/*WhatsApp*|artifacts/api-server/src/**/*waGateway*|artifacts/api-server/src/**/*WaGateway*)
+                    verify_wa=true
+                    ;;
+                  artifacts/api-server/src/**/*dataTool*|artifacts/api-server/src/**/*DataTool*|artifacts/api-server/src/**/*serviceNormalization*|artifacts/api-server/src/**/*goalRepository*)
+                    verify_data=true
+                    ;;
+                  artifacts/api-server/src/**/*zerollm*|artifacts/api-server/src/**/*ZeroLlm*|artifacts/api-server/src/**/*ZeroLLM*)
+                    verify_zerollm=true
+                    ;;
+                  artifacts/api-server/src/**/*provider*|artifacts/api-server/src/**/*Provider*|artifacts/api-server/src/**/*model*|artifacts/api-server/src/**/*Model*|artifacts/api-server/src/**/*aiExecution*)
+                    verify_cloud=true
+                    ;;
+                  artifacts/customer-portal/*|artifacts/customer-portal/**/*|**/sitemap*|**/robots.txt)
+                    verify_sitemap=true
+                    ;;
+                  artifacts/ai-platform/*|artifacts/ai-platform/**/*)
+                    # UI-only AI Platform changes still get exact-SHA, readiness, auth and SMTP baseline checks.
+                    ;;
+                  artifacts/api-server/src/*|artifacts/api-server/src/**/*|scripts/*|lib/*)
+                    set_all_scopes
+                    reason="unclassified_runtime_change:$file"
+                    break
+                    ;;
+                  *)
+                    # Unknown production-affecting paths fail safe to the full suite.
+                    set_all_scopes
+                    reason="unclassified_path:$file"
+                    break
+                    ;;
+                esac
+              done <<< "$changed_files"
+            fi
+          fi
+
+          echo "verify_mcp=$verify_mcp" >> "$GITHUB_OUTPUT"
+          echo "verify_coding=$verify_coding" >> "$GITHUB_OUTPUT"
+          echo "verify_chat=$verify_chat" >> "$GITHUB_OUTPUT"
+          echo "verify_wa=$verify_wa" >> "$GITHUB_OUTPUT"
+          echo "verify_data=$verify_data" >> "$GITHUB_OUTPUT"
+          echo "verify_cloud=$verify_cloud" >> "$GITHUB_OUTPUT"
+          echo "verify_zerollm=$verify_zerollm" >> "$GITHUB_OUTPUT"
+          echo "verify_sitemap=$verify_sitemap" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "verification_scope reason=$reason mcp=$verify_mcp coding=$verify_coding chat=$verify_chat wa=$verify_wa data=$verify_data cloud=$verify_cloud zerollm=$verify_zerollm sitemap=$verify_sitemap"
       - name: Detect whether Ollama verification is required
         id: ollama_scope
         if: steps.target.outputs.stale != 'true'
@@ -194,7 +316,7 @@ jobs:
           done
 
       - name: Verify live MCP discovery and native events
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_mcp == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -307,7 +429,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/email-diagnostic","utf8")); if(v.ok!==true || v.category!=="OK") throw new Error("SMTP transport is not healthy"); console.log("smtp_transport=PASS");'
 
       - name: Verify authenticated Coding Workspace
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_coding == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -323,7 +445,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/tasks-auth","utf8")); if(!Array.isArray(v)) throw new Error("Expected coding tasks array"); console.log("coding_tasks_authenticated_payload=array");'
 
       - name: Verify deterministic AI Core Chat smoke
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_chat == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -397,7 +519,7 @@ jobs:
           NODE
 
       - name: Verify AI Core WhatsApp general chat E2E
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_wa == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -433,7 +555,7 @@ jobs:
           NODE
 
       - name: Verify schema-aware AI Core Chat database queries
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_data == 'true'
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
         run: node scripts/ai-core-admin-db-smoke.mjs
@@ -577,7 +699,7 @@ jobs:
           echo "ollama_economy=SKIPPED reason=${{ steps.ollama_scope.outputs.reason }}"
 
       - name: Verify AI Core cloud routing
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_cloud == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -656,7 +778,7 @@ jobs:
           NODE
 
       - name: Verify AI Core Data Tool schema readiness
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_data == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -686,7 +808,7 @@ jobs:
           NODE
 
       - name: Verify AI Core Data Tool execution
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_data == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -749,7 +871,7 @@ jobs:
           NODE
 
       - name: Inspect ZeroLLM host readiness
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_zerollm == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -763,7 +885,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/zerollm-readiness","utf8")); if(v.provider!=="zerollm"||v.loopbackOnly!==true) throw new Error("Invalid ZeroLLM readiness payload");'
 
       - name: Verify Coding Workspace GitHub repository discovery
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_coding == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -779,7 +901,7 @@ jobs:
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/github-repositories","utf8")); if(!Array.isArray(v.repositories)) throw new Error("Expected repositories array"); if(!v.repositories.some(r=>r.fullName==="Travelintrips/Core-AI-Foundation")) throw new Error("Core-AI-Foundation not returned by GitHub discovery"); console.log("github_repository_discovery=PASS count="+v.repositories.length);'
 
       - name: Verify public sitemap for Googlebot
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_sitemap == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -846,18 +968,32 @@ jobs:
         env:
           VERIFY_OLLAMA: ${{ steps.ollama_scope.outputs.verify_ollama }}
           OLLAMA_REASON: ${{ steps.ollama_scope.outputs.reason }}
+          SCOPE_REASON: ${{ steps.verify_scope.outputs.reason }}
+          VERIFY_MCP: ${{ steps.verify_scope.outputs.verify_mcp }}
+          VERIFY_CODING: ${{ steps.verify_scope.outputs.verify_coding }}
+          VERIFY_CHAT: ${{ steps.verify_scope.outputs.verify_chat }}
+          VERIFY_WA: ${{ steps.verify_scope.outputs.verify_wa }}
+          VERIFY_DATA: ${{ steps.verify_scope.outputs.verify_data }}
+          VERIFY_CLOUD: ${{ steps.verify_scope.outputs.verify_cloud }}
+          VERIFY_ZEROLLM: ${{ steps.verify_scope.outputs.verify_zerollm }}
+          VERIFY_SITEMAP: ${{ steps.verify_scope.outputs.verify_sitemap }}
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
-          echo "Health/readiness: PASS"
-          echo "Admin auth guard: PASS"
-          echo "Authenticated Coding Workspace smoke: PASS"
-          echo "Admin DB metadata, revenue, streaming and follow-up: PASS"
+          echo "Baseline exact-SHA/readiness/auth/SMTP: PASS"
+          echo "Verification scope reason: $SCOPE_REASON"
+          echo "MCP: $([ "$VERIFY_MCP" = "true" ] && echo PASS || echo SKIPPED)"
+          echo "Coding Workspace + GitHub discovery: $([ "$VERIFY_CODING" = "true" ] && echo PASS || echo SKIPPED)"
+          echo "Deterministic AI Core Chat: $([ "$VERIFY_CHAT" = "true" ] && echo PASS || echo SKIPPED)"
+          echo "WhatsApp E2E: $([ "$VERIFY_WA" = "true" ] && echo PASS || echo SKIPPED)"
+          echo "Data Tool + schema-aware DB queries: $([ "$VERIFY_DATA" = "true" ] && echo PASS || echo SKIPPED)"
+          echo "Cloud routing: $([ "$VERIFY_CLOUD" = "true" ] && echo PASS || echo SKIPPED)"
+          echo "ZeroLLM readiness: $([ "$VERIFY_ZEROLLM" = "true" ] && echo PASS || echo SKIPPED)"
+          echo "Sitemap: $([ "$VERIFY_SITEMAP" = "true" ] && echo PASS || echo SKIPPED)"
           if [ "$VERIFY_OLLAMA" = "true" ]; then
             echo "GCP Ollama worker + Economy routing: PASS"
           else
             echo "GCP Ollama worker + Economy routing: SKIPPED ($OLLAMA_REASON)"
           fi
-          echo "Public sitemap Googlebot fetch: PASS"
 
       - name: Stale trigger summary
         if: steps.target.outputs.stale == 'true'
