@@ -106,7 +106,7 @@ describe("coding task terminal reporting", () => {
     expect(mocks.appendCodingBridgeResponse).toHaveBeenCalledWith({
       commandId: "command-1",
       taskId: "11111111-1111-4111-8111-111111111111",
-      kind: "BLOCKED",
+      kind: "BLOCKER",
       message: "Task menunggu konflik file selesai.",
       checkpoint: {
         eventType: "BLOCKED",
