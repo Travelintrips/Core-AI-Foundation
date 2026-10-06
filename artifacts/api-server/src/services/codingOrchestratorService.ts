@@ -361,6 +361,14 @@ async function executePlanner(
   );
 }
 
+async function isManualStopRequested(taskId: string): Promise<boolean> {
+  const state = await getAutonomousCodingTaskStatus(taskId).catch(() => null);
+  return (
+    String(state?.["status"] ?? "").toUpperCase() === "DISABLED" &&
+    String(state?.["last_action"] ?? "").toUpperCase() === "MANUAL_STOP"
+  );
+}
+
 async function persistSnapshot(
   runId: string,
   taskId: string,
@@ -604,6 +612,13 @@ export async function continueCodingOrchestration(
 ): Promise<void> {
   let stages = initialStages;
   try {
+    if (await isManualStopRequested(input.task.id)) {
+      logger.info(
+        { taskId: input.task.id, codingRunId: input.run.id },
+        "[coding-orchestrator] Manual stop detected before continuation; skipping analyzer execution",
+      );
+      return;
+    }
     stages = updateStage(stages, "repository_analyzer", "RUNNING");
     await persistSnapshot(
       input.run.id,
@@ -622,6 +637,15 @@ export async function continueCodingOrchestration(
       queuedJob,
       { finalizeCodingRun: false },
     );
+
+    if (await isManualStopRequested(input.task.id)) {
+      logger.info(
+        { taskId: input.task.id, codingRunId: input.run.id, jobId: queuedJob.id },
+        "[coding-orchestrator] Manual stop detected after analyzer execution; discarding late result",
+      );
+      return;
+    }
+
     if (!analysis) {
       // Another executor may have won the claim between a watchdog status check
       // and the on-demand compare-and-set. Do not fail the coding task while
@@ -864,6 +888,14 @@ export async function continueCodingOrchestration(
         : "[coding-orchestrator] Local Coding Engine ready for review without AI/LLM",
     );
   } catch (error) {
+    if (await isManualStopRequested(input.task.id)) {
+      logger.info(
+        { taskId: input.task.id, codingRunId: input.run.id },
+        "[coding-orchestrator] Ignoring late orchestration error after manual stop",
+      );
+      return;
+    }
+
     const runningStage = stages.find((stage) => stage.status === "RUNNING");
     if (runningStage) {
       stages = updateStage(
