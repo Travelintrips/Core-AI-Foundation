@@ -425,7 +425,12 @@ const tools = [
           maxItems: 5,
           default: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
         },
-        leaseSeconds: { type: "integer", minimum: 30, maximum: 300, default: 300 },
+        leaseSeconds: {
+          type: "integer",
+          minimum: 30,
+          maximum: MAX_CONVERSATION_EVENT_LEASE_SECONDS,
+          default: DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS,
+        },
       },
     },
     securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],

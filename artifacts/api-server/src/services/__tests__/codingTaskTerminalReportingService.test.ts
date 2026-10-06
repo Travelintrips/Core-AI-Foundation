@@ -17,6 +17,7 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...conditions: unknown[]) => conditions),
   desc: vi.fn((value: unknown) => value),
   eq: vi.fn((...conditions: unknown[]) => conditions),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -26,6 +27,8 @@ vi.mock("@workspace/db", () => ({
   aiCodingBridgeCommandsTable: {
     id: "commands.id",
     taskId: "commands.taskId",
+    source: "commands.source",
+    commandType: "commands.commandType",
     createdAt: "commands.createdAt",
   },
   aiCodingBridgeResponsesTable: {
@@ -76,6 +79,12 @@ describe("coding task terminal reporting", () => {
         source: "test",
       },
     });
+    expect(builder.orderBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        values: ["commands.source", "commands.commandType"],
+      }),
+      "commands.createdAt",
+    );
   });
 
   it("does nothing when the task has no lifecycle binding", async () => {

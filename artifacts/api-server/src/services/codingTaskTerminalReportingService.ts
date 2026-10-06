@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   aiCodingBridgeCommandsTable,
   aiCodingBridgeResponsesTable,
@@ -25,7 +25,18 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
     .select({ id: aiCodingBridgeCommandsTable.id })
     .from(aiCodingBridgeCommandsTable)
     .where(eq(aiCodingBridgeCommandsTable.taskId, input.taskId))
-    .orderBy(desc(aiCodingBridgeCommandsTable.createdAt))
+    .orderBy(
+      // Prefer the canonical lifecycle binding created by AI Core Chat. Later
+      // worker/control commands can belong to a different client and would
+      // otherwise steal the terminal event from the originating conversation.
+      sql`CASE
+        WHEN ${aiCodingBridgeCommandsTable.source} = 'ai-core-task-lifecycle'
+         AND ${aiCodingBridgeCommandsTable.commandType} = 'EVENT_BINDING'
+        THEN 0
+        ELSE 1
+      END`,
+      desc(aiCodingBridgeCommandsTable.createdAt),
+    )
     .limit(1);
 
   if (!command) {
