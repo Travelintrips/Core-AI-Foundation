@@ -66,6 +66,7 @@ export const id = {
       userManagement:       "User Management",
       settings:             "Pengaturan",
       aiCoreChat:          "Chat AI Core",
+      aiCoreActivity:      "Aktivitas ChatGPT ↔ AI Core",
       codingWorkspace:     "Workspace Coding AI",
     },
   },

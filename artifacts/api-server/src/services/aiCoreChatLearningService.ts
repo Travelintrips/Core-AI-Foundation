@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { aiMemoryTable, db } from "@workspace/db";
 
 export type ChatLearningScope = {
@@ -54,6 +54,163 @@ export async function recordChatLearningEvent(input: {
       ...(input.metadata ?? {}),
     },
   });
+}
+
+export type AiCoreChatActivityItem = {
+  id: string;
+  conversationId: string | null;
+  role: "user" | "assistant" | "system";
+  direction: "chatgpt_to_ai_core" | "ai_core_to_chatgpt" | "system";
+  content: string;
+  route: string | null;
+  kind: string | null;
+  status: string | null;
+  taskId: string | null;
+  projectName: string | null;
+  repository: string | null;
+  branch: string | null;
+  createdAt: string | null;
+};
+
+export async function listAiCoreChatActivity(input?: {
+  conversationId?: string | null;
+  limit?: number;
+}): Promise<AiCoreChatActivityItem[]> {
+  const conversationId = input?.conversationId?.trim() || null;
+  const limit = Math.max(1, Math.min(input?.limit ?? 100, 500));
+  const whereClause = conversationId
+    ? and(
+        eq(aiMemoryTable.agentId, "ai-core-chat"),
+        eq(aiMemoryTable.memoryType, "chat_event"),
+        eq(aiMemoryTable.sessionId, conversationId),
+      )
+    : and(
+        eq(aiMemoryTable.agentId, "ai-core-chat"),
+        eq(aiMemoryTable.memoryType, "chat_event"),
+      );
+
+  const rows = await db
+    .select({
+      id: aiMemoryTable.id,
+      sessionId: aiMemoryTable.sessionId,
+      content: aiMemoryTable.content,
+      metadata: aiMemoryTable.metadata,
+      createdAt: aiMemoryTable.createdAt,
+    })
+    .from(aiMemoryTable)
+    .where(whereClause)
+    .orderBy(desc(aiMemoryTable.createdAt))
+    .limit(limit);
+
+  const chatItems = rows.flatMap((row) => {
+    const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+    const rawRole = metadata["role"];
+    if (rawRole !== "user" && rawRole !== "assistant" && rawRole !== "system") return [];
+
+    const stringMeta = (key: string): string | null =>
+      typeof metadata[key] === "string" && String(metadata[key]).trim()
+        ? String(metadata[key])
+        : null;
+    const rawStatus = stringMeta("status");
+
+    return [{
+      id: String(row.id),
+      conversationId: row.sessionId ?? null,
+      role: rawRole,
+      direction:
+        rawRole === "user"
+          ? "chatgpt_to_ai_core"
+          : rawRole === "assistant"
+            ? "ai_core_to_chatgpt"
+            : "system",
+      content: row.content,
+      route: stringMeta("route"),
+      kind: stringMeta("kind"),
+      status: rawStatus === "event" ? null : rawStatus,
+      taskId: stringMeta("taskId"),
+      projectName: stringMeta("projectName"),
+      repository: stringMeta("repository"),
+      branch: stringMeta("branch"),
+      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
+    } satisfies AiCoreChatActivityItem];
+  });
+
+  // Native MCP lifecycle callbacks are part of the AI Core → ChatGPT exchange,
+  // but they do not pass through /ai/core-chat/messages. Fold their safe,
+  // already-bounded payload into the same activity timeline when the native
+  // event tables exist. A fresh/dev database may not have created them yet.
+  let nativeItems: AiCoreChatActivityItem[] = [];
+  if (!conversationId) {
+    try {
+      const deliveries = await db.execute(sql`
+        SELECT
+          event_id,
+          payload_json,
+          status,
+          last_http_status,
+          last_error,
+          delivered_at,
+          created_at
+        FROM ai_platform.ai_core_mcp_event_deliveries
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `);
+
+      nativeItems = (deliveries.rows ?? []).flatMap((row) => {
+        const payload =
+          row["payload_json"] && typeof row["payload_json"] === "object"
+            ? (row["payload_json"] as Record<string, unknown>)
+            : null;
+        const data =
+          payload?.["data"] && typeof payload["data"] === "object"
+            ? (payload["data"] as Record<string, unknown>)
+            : null;
+        if (!payload || !data) return [];
+
+        const text = (key: string): string | null =>
+          typeof data[key] === "string" && String(data[key]).trim()
+            ? String(data[key])
+            : null;
+        const eventType = text("event_type");
+        const deliveryStatus =
+          typeof row["status"] === "string" ? String(row["status"]) : null;
+        const terminalStatus = text("status") ?? eventType ?? deliveryStatus;
+        const message =
+          text("message") ??
+          text("result_summary") ??
+          (eventType ? `Native lifecycle event ${eventType}` : "Native AI Core event");
+
+        return [{
+          id: `native:${String(row["event_id"] ?? row["created_at"] ?? "unknown")}`,
+          conversationId: null,
+          role: "assistant",
+          direction: "ai_core_to_chatgpt",
+          content: message,
+          route: "NATIVE_EVENT",
+          kind: eventType ? `ai_core.task.terminal:${eventType}` : "ai_core.task.terminal",
+          status: terminalStatus,
+          taskId: text("task_id"),
+          projectName: text("project_name"),
+          repository: text("repository"),
+          branch: text("branch"),
+          createdAt:
+            row["delivered_at"] || row["created_at"]
+              ? new Date(String(row["delivered_at"] ?? row["created_at"])).toISOString()
+              : null,
+        } satisfies AiCoreChatActivityItem];
+      });
+    } catch {
+      nativeItems = [];
+    }
+  }
+
+  return [...chatItems, ...nativeItems]
+    .sort((left, right) => {
+      const a = left.createdAt ? Date.parse(left.createdAt) : 0;
+      const b = right.createdAt ? Date.parse(right.createdAt) : 0;
+      return b - a;
+    })
+    .slice(0, limit);
 }
 
 function explicitDurableLearning(message: string): { key: string; content: string; importance: string } | null {
