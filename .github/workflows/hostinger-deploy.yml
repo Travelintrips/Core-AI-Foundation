@@ -138,6 +138,12 @@ jobs:
                     reason="shared_data_layer_change:$file"
                     break
                     ;;
+                  artifacts/api-server/src/services/aiCoreWorkloadRouterService.ts)
+                    # Workload classification and cloud-model selection affect
+                    # deterministic chat behavior and cloud routing, not WA/Data/Sitemap.
+                    verify_chat=true
+                    verify_cloud=true
+                    ;;
                   artifacts/api-server/src/routes/ai-core-chat.ts)
                     # Central chat route owns MCP/events, coding control, Data Tool,
                     # provider routing and ZeroLLM entry points. WhatsApp remains
