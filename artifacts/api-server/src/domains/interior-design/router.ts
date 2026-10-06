@@ -25,6 +25,7 @@ import {
   getProject,
   getProjectByToken,
   updateProject,
+  updateProjectStatus,
   submitBrief,
   getBriefByProject,
   generateOutputs,
@@ -54,6 +55,10 @@ import {
   moodboardProjectUuidSchema,
 } from "./moodboardSchemas.js";
 import { generateMoodboard, getMoodboard } from "./moodboardService.js";
+import {
+  generatePublicInteriorRenders,
+  getPublicInteriorRenderAssets,
+} from "./publicInteriorRenderService.js";
 import {
   EXPORT_FORMATS,
   EXPORT_SECTIONS,
@@ -136,12 +141,31 @@ router.post("/public/interior-design/projects", async (req, res): Promise<void> 
           additionalNotes: typeof b["additionalNotes"] === "string" ? b["additionalNotes"] : undefined,
         });
 
-        // Auto-trigger AI generation in background — client polls for status changes.
-        // generateOutputs() immediately sets status → "analyzing", then → "outputs_ready".
+        // Auto-trigger structured generation, then create two backend render variants.
+        // Keep the project in "analyzing" until the render attempt is finished so the
+        // customer polling loop cannot miss the transition between text output and images.
         const clientId = typeof body["clientEmail"] === "string" ? body["clientEmail"] : undefined;
-        void generateOutputs(project.id, { clientId }).catch((genErr) => {
-          console.error("[interior-design] Auto-generation failed:", genErr instanceof Error ? genErr.message : genErr);
-        });
+        void generateOutputs(project.id, { clientId, deferReadyStatus: true })
+          .then(async (result) => {
+            try {
+              await generatePublicInteriorRenders({
+                project,
+                brief,
+                output: result.output,
+                variantCount: 2,
+              });
+            } catch (renderErr) {
+              // Image-provider failure must not hide the structured design result.
+              console.error(
+                "[interior-design] Public render generation failed:",
+                renderErr instanceof Error ? renderErr.message : renderErr,
+              );
+            }
+            await updateProjectStatus(project.id, "outputs_ready");
+          })
+          .catch((genErr) => {
+            console.error("[interior-design] Auto-generation failed:", genErr instanceof Error ? genErr.message : genErr);
+          });
 
         // accessToken returned once at creation — customer must store it
         res.status(201).json({ project: publicProject(project as never), brief, accessToken: project.accessToken });
@@ -209,12 +233,13 @@ router.get("/public/interior-design/projects/:token/outputs", async (req, res): 
     const project = await getProjectByToken(token);
     if (!project) { res.status(404).json({ error: "not found" }); return; }
 
-    const [brief, output] = await Promise.all([
+    const [brief, output, renderAssets] = await Promise.all([
       getBriefByProject(project.id),
       getLatestOutput(project.id),
+      getPublicInteriorRenderAssets(project.id),
     ]);
 
-    res.json({ project: publicProject(project as never), brief, output });
+    res.json({ project: publicProject(project as never), brief, output, renderAssets });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }

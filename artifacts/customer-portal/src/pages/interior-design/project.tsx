@@ -8,7 +8,7 @@ import { useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import {
   ArrowLeft, Loader2, AlertTriangle, CheckCircle, Home, Palette,
-  Layers, Lightbulb, ShoppingBag, Shield, RefreshCw, Sofa,
+  Layers, Lightbulb, ShoppingBag, Shield, RefreshCw, Sofa, Image as ImageIcon,
 } from "lucide-react";
 
 interface ProjectData {
@@ -26,6 +26,15 @@ interface BriefData {
   style: string;
   furnitureNeeds: string[];
   budgetNotes?: string | null;
+}
+
+interface RenderAssetData {
+  id: number;
+  variantIndex: number | null;
+  status: string;
+  imageUrl: string | null;
+  thumbnailUrl: string | null;
+  aspectRatio: string | null;
 }
 
 interface OutputData {
@@ -120,6 +129,7 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
   const [project, setProject] = useState<ProjectData | null>(null);
   const [brief, setBrief] = useState<BriefData | null>(null);
   const [output, setOutput] = useState<OutputData | null>(null);
+  const [renderAssets, setRenderAssets] = useState<RenderAssetData[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // params.id is the accessToken (UUID) — used directly in the token-based URL
@@ -135,10 +145,16 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
         const d = (await res.json()) as { error?: string };
         throw new Error(d.error ?? `HTTP ${res.status}`);
       }
-      const d = (await res.json()) as { project: ProjectData; brief: BriefData | null; output: OutputData | null };
+      const d = (await res.json()) as {
+        project: ProjectData;
+        brief: BriefData | null;
+        output: OutputData | null;
+        renderAssets?: RenderAssetData[];
+      };
       setProject(d.project);
       setBrief(d.brief);
       setOutput(d.output);
+      setRenderAssets(d.renderAssets ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan");
     } finally {
@@ -151,9 +167,12 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
     void load();
   }, [accessToken]);
 
-  // Poll while analyzing
+  // Poll while the structured design or any backend render is still running.
   useEffect(() => {
-    if (project?.status === "analyzing") {
+    const rendersInProgress = renderAssets.some(
+      (asset) => asset.status === "pending" || asset.status === "generating",
+    );
+    if (project?.status === "analyzing" || rendersInProgress) {
       const id = setInterval(() => {
         setPolling(true);
         void load(true);
@@ -161,7 +180,7 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
       return () => clearInterval(id);
     }
     return undefined;
-  }, [project?.status]);
+  }, [project?.status, renderAssets]);
 
   if (loading) {
     return (
@@ -263,6 +282,46 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
 
           {output && (
             <div className="space-y-6">
+              {renderAssets.length > 0 && (
+                <Section icon={<ImageIcon className="w-4 h-4" style={{ color: "#7C6EFA" }} />} title="Render Interior">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {renderAssets.map((asset) => (
+                      <div
+                        key={asset.id}
+                        className="relative overflow-hidden rounded-xl min-h-52"
+                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      >
+                        {asset.status === "completed" && asset.imageUrl ? (
+                          <a href={asset.imageUrl} target="_blank" rel="noreferrer" className="block h-full">
+                            <img
+                              src={asset.thumbnailUrl ?? asset.imageUrl}
+                              alt={`Render interior variasi ${(asset.variantIndex ?? 0) + 1}`}
+                              loading="lazy"
+                              className="w-full h-full min-h-52 object-cover transition-transform duration-300 hover:scale-[1.02]"
+                            />
+                          </a>
+                        ) : asset.status === "pending" || asset.status === "generating" ? (
+                          <div className="min-h-52 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                            <Loader2 className="w-7 h-7 animate-spin" style={{ color: "#7C6EFA" }} />
+                            <p className="text-sm" style={{ color: "#8B9BC4" }}>Render sedang dibuat di backend...</p>
+                          </div>
+                        ) : (
+                          <div className="min-h-52 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                            <AlertTriangle className="w-7 h-7" style={{ color: "#F59E0B" }} />
+                            <p className="text-sm" style={{ color: "#9A7B2A" }}>
+                              Render belum berhasil dibuat. Konsep desain tetap tersedia di bawah.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs mt-3" style={{ color: "#5A6B8C" }}>
+                    Gambar dibuat oleh backend AI Platform dan dapat dibuka dalam ukuran penuh.
+                  </p>
+                </Section>
+              )}
+
               {/* Validation warnings */}
               {allWarnings.length > 0 && (
                 <div className="p-5 rounded-2xl" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)" }}>
