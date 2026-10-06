@@ -505,7 +505,6 @@ export async function reconcileStaleMultiWorkerRuns(
               "CODING",
               "TESTING",
               "COMMITTING",
-              "TESTING",
               "READY_REVIEW",
             ]),
           ),
