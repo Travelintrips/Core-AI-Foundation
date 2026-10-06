@@ -6,7 +6,7 @@ import {
 } from "@workspace/db";
 import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js";
 
-export type CodingTaskTerminalStatus = "COMPLETED" | "FAILED";
+export type CodingTaskTerminalStatus = "COMPLETED" | "FAILED" | "BLOCKED";
 
 const TERMINAL_REPORT_MAX_ATTEMPTS = 3;
 const TERMINAL_REPORT_RETRY_DELAY_MS = 100;
@@ -43,6 +43,8 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
     return { reported: false, reason: "NO_BINDING" };
   }
 
+  const bridgeKind = input.status === "BLOCKED" ? "BLOCKER" : input.status;
+
   const [existing] = await db
     .select({ id: aiCodingBridgeResponsesTable.id })
     .from(aiCodingBridgeResponsesTable)
@@ -50,7 +52,7 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
       and(
         eq(aiCodingBridgeResponsesTable.commandId, command.id),
         eq(aiCodingBridgeResponsesTable.taskId, input.taskId),
-        eq(aiCodingBridgeResponsesTable.kind, input.status),
+        eq(aiCodingBridgeResponsesTable.kind, bridgeKind),
       ),
     )
     .orderBy(desc(aiCodingBridgeResponsesTable.createdAt))
@@ -67,7 +69,7 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
   const response = await appendCodingBridgeResponse({
     commandId: command.id,
     taskId: input.taskId,
-    kind: input.status,
+    kind: bridgeKind,
     message: input.message.trim(),
     checkpoint: {
       eventType: input.status,
@@ -101,5 +103,5 @@ export async function reportCodingTaskTerminalTransition(input: {
 
   throw lastError instanceof Error
     ? lastError
-    : new Error("Coding task terminal lifecycle reporting failed");
+    : new Error("Coding task lifecycle reporting failed");
 }
