@@ -410,6 +410,10 @@ router.patch(
       res.status(403).json({ error: "Akun owner tidak dapat diubah dari User Management." });
       return;
     }
+    if (target.role === "admin" && actor.role !== "owner") {
+      res.status(403).json({ error: "Hanya owner yang dapat mengubah akun admin." });
+      return;
+    }
 
     const nextRole = req.body?.role;
     const nextStatus = req.body?.status;
