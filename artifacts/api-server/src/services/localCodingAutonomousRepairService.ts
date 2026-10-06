@@ -548,6 +548,12 @@ export function isTransientWorkstreamDatabaseFailure(message: string): boolean {
   );
 }
 
+export function isRecoverableAutonomousOperationalFailure(message: string): boolean {
+  return /PROVIDER_UNAVAILABLE|MODEL_UNAVAILABLE|provider unavailable|model unavailable|ollama.{0,40}(?:unavailable|busy|offline)|worker.{0,60}(?:unavailable|busy|offline|capacity)|WAITING_FOR_CAPACITY|no healthy worker|connector.{0,50}(?:timeout|unavailable)|tool.{0,50}(?:timeout|unavailable)|ssh.{0,80}(?:timeout|unavailable|connection)|banner exchange|connection timed out|timeout|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENETUNREACH|connection terminated|socket hang up|temporarily unavailable|resource temporarily unavailable|service unavailable|gateway time-?out|HTTP\s+(?:408|425|429|5\d\d)|rate limit|quota|insufficient[_\s-]?quota|repository clone failed|No remote source branch is available to seed isolated workspace|stale claim|EXPIRED_HANDOFF|STALE_CONTEXT|Exact replacement expected/i.test(
+    message,
+  );
+}
+
 export function isRecoverableWorkstreamLeaseFailure(message: string): boolean {
   return /Workstream claim lease is no longer valid|claim lease (?:expired|is no longer valid)|stale workstream claim/i.test(
     message,
@@ -1565,6 +1571,36 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       return { taskId, status: "ACTIVE", action: "RECOVER_FRESH_AI_HANDOFF" };
     }
 
+    if (isRecoverableAutonomousOperationalFailure(message)) {
+      const action = "RECOVERABLE_OPERATIONAL_FAILURE";
+      await setState(taskId, "BLOCKED", action, message.slice(0, 2000)).catch(
+        () => undefined,
+      );
+      await report(
+        taskId,
+        "BLOCKER",
+        `AI Core mengalami gangguan operasional yang masih bisa dipulihkan: ${message.slice(0, 1200)}`,
+        {
+          source: "autonomous-repair-loop",
+          recoverable: true,
+          fallbackRequired: true,
+          action,
+        },
+      ).catch(() => undefined);
+      await logAudit(
+        "coding-autonomous",
+        "recoverable_operational_failure_blocked",
+        taskId,
+        "coding_task",
+        "failure",
+        {
+          error: message.slice(0, 1000),
+          fallbackRequired: true,
+        },
+      ).catch(() => undefined);
+      return { taskId, status: "BLOCKED", action };
+    }
+
     await setState(taskId, "FAILED", "AUTONOMOUS_CYCLE_FAILED", message.slice(0, 2000));
     await report(
       taskId,
@@ -1773,10 +1809,12 @@ export function readyReviewAutonomousRecoveryDecision(input: {
   }
 
   const recoverableTechnicalBlocker =
-    lastAction === "TASK_GRAPH_BLOCKER" &&
-    /EXPIRED_HANDOFF|Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT|Exact replacement expected|STALE_CONTEXT|stale claim|repository clone failed/i.test(
-      lastError,
-    );
+    (lastAction === "TASK_GRAPH_BLOCKER" &&
+      /EXPIRED_HANDOFF|Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT|Exact replacement expected|STALE_CONTEXT|stale claim|repository clone failed/i.test(
+        lastError,
+      )) ||
+    (lastAction === "RECOVERABLE_OPERATIONAL_FAILURE" &&
+      isRecoverableAutonomousOperationalFailure(lastError));
 
   if (recoverableTechnicalBlocker && cycleCount < maxCycles) {
     return {
