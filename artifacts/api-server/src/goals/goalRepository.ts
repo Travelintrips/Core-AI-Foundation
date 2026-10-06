@@ -196,9 +196,10 @@ export async function listServicesForGoal(goalId: number): Promise<GoalServiceSt
        m.relevance_score,
        m.is_primary,
        m.display_order
-     FROM ai_goal_service_mappings m
-     JOIN ai_services s           ON s.id  = m.service_id
-     JOIN ai_service_categories c ON c.id  = s.category_id
+     FROM ai_platform.ai_goal_service_mappings m
+     JOIN ai_platform.ai_services s ON s.id = m.service_id
+     JOIN ai_platform.ai_service_categories c
+       ON c.id = COALESCE(s.parent_category_id, s.category_id)
      WHERE m.goal_id = $1
        AND m.status             = 'active'
        AND s.status             = 'active'

@@ -17,7 +17,7 @@
  *     visibility='public', commercial_status='commercial_ready').
  */
 
-import { eq, and, asc, inArray } from "drizzle-orm";
+import { eq, and, asc, inArray, sql } from "drizzle-orm";
 import {
   db,
   aiServicesTable,
@@ -348,7 +348,10 @@ export async function listEligibleServicesForCollection(collectionId: number) {
       categoryName: aiServiceCategoriesTable.name,
     })
     .from(aiServicesTable)
-    .innerJoin(aiServiceCategoriesTable, eq(aiServicesTable.categoryId, aiServiceCategoriesTable.id))
+    .innerJoin(
+      aiServiceCategoriesTable,
+      sql`${aiServiceCategoriesTable.id} = COALESCE(${aiServicesTable.parentCategoryId}, ${aiServicesTable.categoryId})`,
+    )
     .where(
       and(
         inArray(aiServicesTable.id, serviceIds),
