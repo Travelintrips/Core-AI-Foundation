@@ -369,6 +369,34 @@ export async function requestAiCoreWhatsappChat(input: {
   };
 }
 
+const WHATSAPP_GATEWAY_TRANSIENT_STATUSES = new Set([
+  408,
+  425,
+  429,
+  500,
+  502,
+  503,
+  504,
+]);
+
+export function shouldRetryAiCoreWhatsappGatewayStatus(status: number): boolean {
+  return WHATSAPP_GATEWAY_TRANSIENT_STATUSES.has(status);
+}
+
+async function waitWhatsappGatewayRetry(attempt: number): Promise<void> {
+  const configured = Number.parseInt(
+    process.env["AI_CORE_WA_GATEWAY_RETRY_DELAY_MS"] ?? "500",
+    10,
+  );
+  const baseMs = Number.isFinite(configured)
+    ? Math.max(25, Math.min(2_000, configured))
+    : 500;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, baseMs * attempt);
+    timer.unref?.();
+  });
+}
+
 export async function sendAiCoreWhatsappReply(input: {
   to: string;
   deviceId?: string | null;
@@ -383,49 +411,69 @@ export async function sendAiCoreWhatsappReply(input: {
   const clientMessageId = `aicore-chat-${input.incomingMessageId}`.slice(0, 160);
   const idempotencyKey = `ai-core-chat-${input.incomingMessageId}`.slice(0, 200);
   const replyDeviceId = resolveReplyDeviceId(input.deviceId);
+  const body = JSON.stringify({
+    type: "text",
+    ...(replyDeviceId ? { deviceId: replyDeviceId } : {}),
+    to: input.to,
+    text: input.text.slice(0, 10_000),
+    clientMessageId,
+    ...(replyDeviceId
+      ? { replyToProviderMessageId: input.incomingMessageId.slice(0, 200) }
+      : {}),
+  });
 
-  try {
-    const response = await fetch(`${baseUrl}/v1/messages`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey,
-      },
-      body: JSON.stringify({
-        type: "text",
-        ...(replyDeviceId ? { deviceId: replyDeviceId } : {}),
-        to: input.to,
-        text: input.text.slice(0, 10_000),
-        clientMessageId,
-        ...(replyDeviceId
-          ? { replyToProviderMessageId: input.incomingMessageId.slice(0, 200) }
-          : {}),
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
+  let lastNetworkError = "";
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/v1/messages`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+        body,
+        signal: AbortSignal.timeout(10_000),
+      });
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
+      if (response.ok) {
+        const payload = await response.json().catch(() => null) as
+          | { messageId?: unknown }
+          | null;
+        return {
+          status: "queued",
+          gatewayStatus: response.status,
+          messageId:
+            typeof payload?.messageId === "string" ? payload.messageId : null,
+        };
+      }
+
+      const responseBody = await response.text().catch(() => "");
+      if (
+        attempt < 3 &&
+        shouldRetryAiCoreWhatsappGatewayStatus(response.status)
+      ) {
+        await waitWhatsappGatewayRetry(attempt);
+        continue;
+      }
+
       return {
         status: "rejected",
         gatewayStatus: response.status,
-        body: body.slice(0, 500),
+        body: responseBody.slice(0, 500),
       };
+    } catch (error) {
+      lastNetworkError =
+        error instanceof Error ? error.message : String(error);
+      if (attempt < 3) {
+        await waitWhatsappGatewayRetry(attempt);
+        continue;
+      }
     }
-
-    const body = await response.json().catch(() => null) as
-      | { messageId?: unknown }
-      | null;
-    return {
-      status: "queued",
-      gatewayStatus: response.status,
-      messageId: typeof body?.messageId === "string" ? body.messageId : null,
-    };
-  } catch (error) {
-    return {
-      status: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    };
   }
+
+  return {
+    status: "failed",
+    error: lastNetworkError || "WhatsApp gateway request failed after retries.",
+  };
 }

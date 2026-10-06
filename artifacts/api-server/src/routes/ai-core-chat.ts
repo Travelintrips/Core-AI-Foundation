@@ -3170,6 +3170,12 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
       webhookBody?.["inputSource"] !== "whatsapp_voice" ||
       !outboundMessageId
     ) {
+      const webhookDelivery =
+        webhookBody?.["delivery"] &&
+        typeof webhookBody["delivery"] === "object" &&
+        !Array.isArray(webhookBody["delivery"])
+          ? webhookBody["delivery"] as Record<string, unknown>
+          : null;
       res.status(502).json({
         ok: false,
         error: "AI_CORE_WA_E2E_WEBHOOK_FAILED",
@@ -3179,6 +3185,14 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
         replied: webhookBody?.["replied"] ?? false,
         inputSource: webhookBody?.["inputSource"] ?? null,
         route: webhookBody?.["route"] ?? null,
+        deliveryStatus:
+          typeof webhookDelivery?.["status"] === "string"
+            ? webhookDelivery["status"]
+            : null,
+        deliveryGatewayStatus:
+          typeof webhookDelivery?.["gatewayStatus"] === "number"
+            ? webhookDelivery["gatewayStatus"]
+            : null,
       });
       return;
     }
