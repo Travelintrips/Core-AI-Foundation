@@ -14,7 +14,62 @@ function canExecute(command, env) {
   return !result.error && (result.status ?? 1) === 0;
 }
 
+function readCommand(command, args) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.error || (result.status ?? 1) !== 0) return "";
+  return String(result.stdout ?? "").trim();
+}
+
+function isCommitSha(value) {
+  return /^[0-9a-f]{40}$/i.test(String(value ?? "").trim());
+}
+
+function resolveBuildCommitSha(env) {
+  // Native Hostinger Git deployments may retain CST_BUILD_COMMIT_SHA from an
+  // older release. The checked-out Git HEAD is the source of truth whenever
+  // the repository metadata is available.
+  const gitSha = readCommand("git", ["rev-parse", "HEAD"]);
+  if (isCommitSha(gitSha)) return gitSha.toLowerCase();
+
+  // Archive/CI builds may not include .git; accept well-known immutable CI
+  // commit variables before falling back to the legacy Hostinger variable.
+  for (const candidate of [
+    env.GITHUB_SHA,
+    env.CI_COMMIT_SHA,
+    env.CST_BUILD_COMMIT_SHA,
+  ]) {
+    if (isCommitSha(candidate)) return String(candidate).trim().toLowerCase();
+  }
+
+  return "unknown";
+}
+
+function writeBuildMetadata(env) {
+  const commitSha = resolveBuildCommitSha(env);
+  const builtAt = new Date().toISOString();
+  const root = process.cwd();
+  const markerPath = path.join(root, ".cst-build-sha");
+  const publicDir = path.join(root, "artifacts", "ai-platform", "public");
+  const publicMetaPath = path.join(publicDir, "build-meta.json");
+
+  fs.writeFileSync(markerPath, commitSha + "\n", { encoding: "utf8" });
+  fs.mkdirSync(publicDir, { recursive: true });
+  fs.writeFileSync(
+    publicMetaPath,
+    JSON.stringify({ commitSha, builtAt }, null, 2) + "\n",
+    { encoding: "utf8" },
+  );
+
+  env.CST_BUILD_COMMIT_SHA = commitSha;
+  console.log(`[hostinger-build] Build commit: ${commitSha}`);
+  console.log(`[hostinger-build] Frontend build metadata: ${publicMetaPath}`);
+}
+
 const env = { ...process.env };
+writeBuildMetadata(env);
 const pnpmStore = path.join(process.cwd(), "node_modules", ".pnpm");
 
 if (process.platform === "linux" && fs.existsSync(pnpmStore)) {
