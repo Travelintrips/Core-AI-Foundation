@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "AI Coding Operations",
+  "short_name": "AI Coding",
+  "description": "Live operations dashboard for coding tasks, workers, infrastructure, deployment, and WhatsApp devices.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#06101D",
+  "theme_color": "#08101F",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
