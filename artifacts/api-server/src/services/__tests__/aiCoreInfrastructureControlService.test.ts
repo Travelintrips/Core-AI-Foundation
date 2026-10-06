@@ -90,6 +90,58 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
 
+  it("auto-discovers the only accessible Docker project when no project is configured", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { project_name: "aicore" },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        project_name: "aicore",
+        state: "running",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_STATUS",
+      message: "Hostinger cek docker status",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    });
+
+    expect(result.mutating).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/virtual-machines/1792369/docker",
+    );
+    expect((fetchMock.mock.calls[1] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/virtual-machines/1792369/docker/aicore",
+    );
+  });
+
+  it("fails closed when Docker project discovery is ambiguous", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify([
+        { project_name: "aicore" },
+        { project_name: "n8n" },
+      ]), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_STATUS",
+      message: "Hostinger cek docker status",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    })).rejects.toThrow(
+      "Multiple Hostinger Docker projects are accessible (aicore, n8n). Specify project=<name> or configure HOSTINGER_DOCKER_PROJECT.",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("updates one Docker environment secret without returning its value", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({

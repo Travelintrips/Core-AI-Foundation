@@ -329,7 +329,7 @@ async function callHostinger(
   };
   const serializeEnvironment = (vars: Map<string, string>): string =>
     [...vars.entries()].map(([key, value]) => `${key}=${value}`).join("\n");
-  const project = valueOf("project") || config.dockerProject;
+  let project = valueOf("project") || config.dockerProject;
   const hostingUsername = valueOf("username") || config.hostingUsername;
   const explicitHostingDomain = valueOf("domain");
   const hostingDomain = explicitHostingDomain || config.hostingDomain;
@@ -694,6 +694,52 @@ async function callHostinger(
       throw new Error("Hostinger VPS/Docker operations require HOSTINGER_VPS_ID.");
     }
     const vmBase = `/vps/v1/virtual-machines/${encodeURIComponent(config.vmId)}`;
+
+    const resolveDockerProject = async (): Promise<string> => {
+      const result = await firstSuccessful(`${vmBase}/docker`, "GET");
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger Docker project discovery failed with HTTP ${result.status}.`);
+      }
+      const payload = result.data as { data?: unknown[] } | unknown[] | null;
+      const items = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+          ? (payload as { data: unknown[] }).data
+          : [];
+      const names = Array.from(new Set(
+        items
+          .filter((item) => item && typeof item === "object")
+          .map((item) => {
+            const value = item as Record<string, unknown>;
+            return String(
+              value["project_name"] ??
+              value["projectName"] ??
+              value["name"] ??
+              "",
+            ).trim();
+          })
+          .filter(Boolean),
+      ));
+
+      if (names.length === 1) return names[0]!;
+      if (names.length === 0) {
+        throw new Error(
+          "No Hostinger Docker project is accessible. Specify project=<name> for deploy or configure HOSTINGER_DOCKER_PROJECT.",
+        );
+      }
+      throw new Error(
+        `Multiple Hostinger Docker projects are accessible (${names.join(", ")}). Specify project=<name> or configure HOSTINGER_DOCKER_PROJECT.`,
+      );
+    };
+
+    if (
+      operation.startsWith("HOSTINGER_DOCKER_") &&
+      operation !== "HOSTINGER_DOCKER_LIST" &&
+      operation !== "HOSTINGER_DOCKER_DEPLOY" &&
+      !project
+    ) {
+      project = await resolveDockerProject();
+    }
 
     if (operation === "HOSTINGER_DOCKER_LIST") {
       const result = await firstSuccessful(`${vmBase}/docker`, "GET");
