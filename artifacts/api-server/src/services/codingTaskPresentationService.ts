@@ -77,6 +77,8 @@ export function codingDashboardTaskPresentationStatus(input: {
   taskStatus: string;
   latestRunStatus?: string | null;
   autonomousStatus?: string | null;
+  autonomousEnabled?: boolean | null;
+  autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
   hasPendingCriticalApproval?: boolean;
 }): string {
