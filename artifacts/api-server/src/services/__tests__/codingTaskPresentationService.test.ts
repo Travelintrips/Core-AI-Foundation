@@ -28,6 +28,17 @@ describe("coding task presentation status", () => {
         hasPendingCriticalApproval: true,
       }),
     ).toBe("READY_REVIEW");
+
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "MW-CWS-12345678-V1-WS-001-A1",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: "BLOCKED",
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("BLOCKED");
   });
 
   it("shows terminal autonomous failure instead of READY_REVIEW", () => {
