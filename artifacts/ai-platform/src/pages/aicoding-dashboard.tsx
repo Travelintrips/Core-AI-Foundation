@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useInternalAuth, type InternalRole } from "@/hooks/use-internal-auth";
 import {
   Activity,
   AlertTriangle,
@@ -19,12 +20,26 @@ import {
   RefreshCw,
   Server,
   ShieldAlert,
+  Mail,
+  UserPlus,
+  Users,
   Wifi,
   WifiOff,
   Workflow,
   XCircle,
   Zap,
 } from "lucide-react";
+
+type ManagedInternalUser = {
+  id: number;
+  email: string;
+  role: InternalRole;
+  accountType: string;
+  status: string;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+};
 
 type DashboardOverview = {
   generatedAt: string;
@@ -124,6 +139,7 @@ const navItems = [
   { id: "workers", label: "Worker", icon: Boxes },
   { id: "whatsapp", label: "WA Gateway", icon: MessageCircle },
   { id: "incidents", label: "Insiden & Aktivitas", icon: ShieldAlert },
+  { id: "users", label: "User Management", icon: Users, adminOnly: true },
 ];
 
 function statusTone(status: string): string {
@@ -249,10 +265,104 @@ function MetricRow({ label, value, tone = "sky" }: { label: string; value: numbe
 }
 
 export default function AicodingDashboard() {
+  const { user } = useInternalAuth();
+  const canManageUsers = user?.role === "owner" || user?.role === "admin";
   const [data, setData] = useState<DashboardOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [managedUsers, setManagedUsers] = useState<ManagedInternalUser[]>([]);
+  const [userEmail, setUserEmail] = useState("");
+  const [userRole, setUserRole] = useState<InternalRole>("internal_staff");
+  const [userSaving, setUserSaving] = useState(false);
+  const [userActionId, setUserActionId] = useState<number | null>(null);
+  const [userMessage, setUserMessage] = useState<string | null>(null);
+  const [userError, setUserError] = useState<string | null>(null);
+
+  const loadUsers = useCallback(async () => {
+    if (!canManageUsers) return;
+    try {
+      const response = await fetch("/api/internal/auth/users", { credentials: "include", cache: "no-store" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error ?? `User API HTTP ${response.status}`);
+      setManagedUsers(Array.isArray(body?.users) ? body.users : []);
+      setUserError(null);
+    } catch (err) {
+      setUserError(err instanceof Error ? err.message : "Gagal memuat user.");
+    }
+  }, [canManageUsers]);
+
+  const createUser = useCallback(async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canManageUsers || !userEmail.trim()) return;
+    setUserSaving(true);
+    setUserMessage(null);
+    setUserError(null);
+    try {
+      const response = await fetch("/api/internal/auth/users", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail.trim().toLowerCase(), role: userRole }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error ?? `Create user HTTP ${response.status}`);
+      setUserEmail("");
+      setUserRole("internal_staff");
+      setUserMessage(body?.inviteSent
+        ? `Akun ${body.user?.email ?? ""} dibuat dan link login dikirim.`
+        : `Akun ${body.user?.email ?? ""} dibuat, tetapi email login belum terkirim.`);
+      await loadUsers();
+    } catch (err) {
+      setUserError(err instanceof Error ? err.message : "Gagal membuat user.");
+    } finally {
+      setUserSaving(false);
+    }
+  }, [canManageUsers, loadUsers, userEmail, userRole]);
+
+  const updateUser = useCallback(async (
+    target: ManagedInternalUser,
+    patch: { status?: "active" | "suspended"; role?: InternalRole },
+  ) => {
+    setUserActionId(target.id);
+    setUserMessage(null);
+    setUserError(null);
+    try {
+      const response = await fetch(`/api/internal/auth/users/${target.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error ?? `Update user HTTP ${response.status}`);
+      setUserMessage(`Akun ${target.email} berhasil diperbarui.`);
+      await loadUsers();
+    } catch (err) {
+      setUserError(err instanceof Error ? err.message : "Gagal memperbarui user.");
+    } finally {
+      setUserActionId(null);
+    }
+  }, [loadUsers]);
+
+  const sendUserMagicLink = useCallback(async (target: ManagedInternalUser) => {
+    setUserActionId(target.id);
+    setUserMessage(null);
+    setUserError(null);
+    try {
+      const response = await fetch(`/api/internal/auth/users/${target.id}/send-magic-link`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error ?? `Magic link HTTP ${response.status}`);
+      setUserMessage(`Link login dikirim ke ${target.email}.`);
+    } catch (err) {
+      setUserError(err instanceof Error ? err.message : "Gagal mengirim link login.");
+    } finally {
+      setUserActionId(null);
+    }
+  }, []);
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -275,6 +385,10 @@ export default function AicodingDashboard() {
     const timer = window.setInterval(() => void load(), data?.refreshMs ?? 5_000);
     return () => window.clearInterval(timer);
   }, [load, data?.refreshMs]);
+
+  useEffect(() => {
+    if (canManageUsers) void loadUsers();
+  }, [canManageUsers, loadUsers]);
 
   const codingTasks = useMemo(() => data?.coding.tasks.slice(0, 9) ?? [], [data]);
   const incidents = useMemo(() => data?.incidents.filter((item) => item.status !== "RESOLVED").slice(0, 8) ?? [], [data]);
@@ -305,7 +419,7 @@ export default function AicodingDashboard() {
             </div>
           </div>
           <nav className="space-y-1 p-3">
-            {navItems.map(({ id, label, icon: Icon }, index) => (
+            {navItems.filter((item) => !item.adminOnly || canManageUsers).map(({ id, label, icon: Icon }, index) => (
               <button
                 key={id}
                 type="button"
@@ -581,6 +695,137 @@ export default function AicodingDashboard() {
                 </div>
               </Panel>
             </div>
+
+            {canManageUsers && (
+              <Panel id="users" title="User Management" subtitle="Owner/admin dapat menambah akun login, mengatur role, menonaktifkan akun, dan mengirim ulang magic link." icon={Users}>
+                <div className="grid gap-4 p-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+                  <form onSubmit={createUser} className="rounded-xl border border-slate-800 bg-slate-900/35 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                      <UserPlus className="h-4 w-4 text-sky-400" />
+                      Tambah akun login
+                    </div>
+                    <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                      Akun baru langsung aktif dan menggunakan login magic-link tanpa password.
+                    </p>
+                    <label className="mt-4 block text-[11px] font-medium text-slate-400">Email</label>
+                    <input
+                      type="email"
+                      required
+                      value={userEmail}
+                      onChange={(event) => setUserEmail(event.target.value)}
+                      placeholder="nama@perusahaan.com"
+                      className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-sky-500"
+                    />
+                    <label className="mt-3 block text-[11px] font-medium text-slate-400">Role</label>
+                    <select
+                      value={userRole}
+                      onChange={(event) => setUserRole(event.target.value as InternalRole)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 outline-none focus:border-sky-500"
+                    >
+                      <option value="internal_staff">Internal Staff</option>
+                      <option value="manager">Manager</option>
+                      {user?.role === "owner" && <option value="admin">Admin</option>}
+                    </select>
+                    <button
+                      type="submit"
+                      disabled={userSaving}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {userSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                      {userSaving ? "Membuat akun…" : "Tambah & kirim link login"}
+                    </button>
+                    {userMessage && <p className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">{userMessage}</p>}
+                    {userError && <p className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300">{userError}</p>}
+                  </form>
+
+                  <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/20">
+                    <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-300">Akun Internal</p>
+                        <p className="text-[10px] text-slate-600">{managedUsers.length} akun terdaftar</p>
+                      </div>
+                      <button type="button" onClick={() => void loadUsers()} className="rounded-lg border border-slate-800 p-2 text-slate-500 hover:text-white" title="Refresh user">
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] text-left text-xs">
+                        <thead className="bg-slate-950/40 text-[10px] uppercase tracking-[0.1em] text-slate-600">
+                          <tr>
+                            <th className="px-4 py-2.5">Email</th>
+                            <th className="px-3 py-2.5">Role</th>
+                            <th className="px-3 py-2.5">Status</th>
+                            <th className="px-3 py-2.5">Last Login</th>
+                            <th className="px-3 py-2.5 text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {managedUsers.map((target) => {
+                            const immutable = target.role === "owner";
+                            const busy = userActionId === target.id;
+                            return (
+                              <tr key={target.id} className="border-t border-slate-900">
+                                <td className="px-4 py-3">
+                                  <p className="font-medium text-slate-300">{target.email}</p>
+                                  <p className="mt-0.5 text-[10px] text-slate-600">ID {target.id}</p>
+                                </td>
+                                <td className="px-3 py-3">
+                                  {immutable ? (
+                                    <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300">OWNER</span>
+                                  ) : (
+                                    <select
+                                      value={target.role}
+                                      disabled={busy || (target.role === "admin" && user?.role !== "owner")}
+                                      onChange={(event) => void updateUser(target, { role: event.target.value as InternalRole })}
+                                      className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-300"
+                                    >
+                                      <option value="internal_staff">Internal Staff</option>
+                                      <option value="manager">Manager</option>
+                                      {user?.role === "owner" && <option value="admin">Admin</option>}
+                                    </select>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${statusTone(target.status === "active" ? "ACTIVE" : "OFFLINE")}`}>
+                                    {target.status.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3 text-slate-500">{target.lastLoginAt ? new Date(target.lastLoginAt).toLocaleString("id-ID") : "Belum pernah"}</td>
+                                <td className="px-3 py-3">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={busy || target.status !== "active"}
+                                      onClick={() => void sendUserMagicLink(target)}
+                                      className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400 hover:border-sky-500/50 hover:text-sky-300 disabled:opacity-40"
+                                    >
+                                      Kirim login
+                                    </button>
+                                    {!immutable && (
+                                      <button
+                                        type="button"
+                                        disabled={busy || target.id === user?.id}
+                                        onClick={() => void updateUser(target, { status: target.status === "active" ? "suspended" : "active" })}
+                                        className={`rounded-md border px-2 py-1 text-[10px] disabled:opacity-40 ${target.status === "active" ? "border-rose-500/30 text-rose-300 hover:bg-rose-500/10" : "border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"}`}
+                                      >
+                                        {busy ? "Proses…" : target.status === "active" ? "Nonaktifkan" : "Aktifkan"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {managedUsers.length === 0 && (
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-slate-600">Belum ada data user.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </Panel>
+            )}
 
             <footer className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2 text-[10px] text-slate-700">
               <span>AI Coding Operations · data live tanpa angka dummy</span>
