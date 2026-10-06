@@ -37,6 +37,27 @@ describe("coding task presentation status", () => {
     }
   });
 
+
+  it("does not show orphan READY_REVIEW without a real critical approval", () => {
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        autonomousStatus: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("FAILED");
+
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        autonomousStatus: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: true,
+      }),
+    ).toBe("READY_REVIEW");
+  });
+
   it("shows active autonomous work as ANALYZING instead of READY_REVIEW", () => {
     expect(
       codingTaskPresentationStatus({

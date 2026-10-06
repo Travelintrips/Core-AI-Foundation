@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   aiCodingRunsTable,
@@ -77,6 +77,7 @@ import {
   executeAiCoreAuditHistoryQuery,
   executeAdminSemanticQuery,
   executeAdminWorkerStatusQuery,
+  executeAdminCodingTaskStatusQuery,
   extractAdminDbSemanticIntent,
   extractExplicitAdminMutationSql,
   extractExplicitReadOnlySql,
@@ -84,6 +85,7 @@ import {
   inspectAdminDbSchemaCatalog,
   isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
+  isAdminCodingTaskStatusQuery,
   isAiCoreAuditHistoryQuery,
   sanitizeAdminDbError,
   renderAdminDbMutationResult,
@@ -783,6 +785,31 @@ async function tryRunAdminDbQuery(
   policy: ChatPolicy,
   context: AdminDbConversationMessage[] = [],
 ): Promise<Record<string, unknown> | null> {
+  if (isAdminCodingTaskStatusQuery(message)) {
+    const taskStatus = await executeAdminCodingTaskStatusQuery();
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: renderAdminDbQueryResult(taskStatus),
+      databaseQuery: {
+        sql: taskStatus.sql,
+        rowCount: taskStatus.rowCount,
+        truncated: taskStatus.truncated,
+        elapsedMs: taskStatus.elapsedMs,
+        sourceDatabaseId: taskStatus.sourceDatabaseId,
+        reason: "Deterministic coding task lifecycle audit query.",
+        access: "ADMIN_READ_ONLY",
+      },
+      data: taskStatus.rows,
+    };
+  }
+
   if (isAdminWorkerStatusQuery(message)) {
     const workerStatus = await executeAdminWorkerStatusQuery();
     return {
@@ -3385,7 +3412,17 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
     .limit(1),
   { attempts: 3, baseDelayMs: 150 });
 
-  const autonomous = await getAutonomousCodingTaskStatus(task.id).catch(() => null);
+  const [autonomous, approvalSnapshot] = await Promise.all([
+    getAutonomousCodingTaskStatus(task.id).catch(() => null),
+    db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM ai_platform.ai_coding_critical_approvals approval
+        WHERE approval.task_id = ${task.id}::uuid
+          AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+      ) AS has_pending_critical_approval
+    `),
+  ]);
   const presentedStatus = codingTaskPresentationStatus({
     taskStatus: task.status,
     autonomousStatus:
@@ -3393,6 +3430,9 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
         ? String((autonomous as { status?: unknown }).status)
         : null,
     hasActiveRun: latestRun?.status === "RUNNING",
+    hasPendingCriticalApproval:
+      (approvalSnapshot.rows?.[0] as { has_pending_critical_approval?: boolean } | undefined)
+        ?.has_pending_critical_approval === true,
   });
 
   res.json({
