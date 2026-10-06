@@ -38,6 +38,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DNS_RECORD_DELETE"
   | "HOSTINGER_DOCKER_ENV_SET"
   | "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"
+  | "HOSTINGER_SSH_PUBLIC_KEY_LIST"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
   | "EXTERNAL_AGENT_STATUS";
@@ -109,6 +110,12 @@ export function detectAiCoreInfrastructureOperation(
       /\b(cari|find|discover|discovery|list|daftar|cek|check|lihat)\b/i.test(text) &&
       /\b(hosting username|hosting domain|hosting account|website|websites|akun hosting|domain hosting)\b/i.test(text)) {
     return "HOSTINGER_HOSTING_DISCOVERY";
+  }
+
+  if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
+      /\b(ssh|public key|public-key|ssh key|kunci ssh)\b/i.test(text) &&
+      /\b(list|daftar|cek|check|status|lihat|verify|verifikasi)\b/i.test(text)) {
+    return "HOSTINGER_SSH_PUBLIC_KEY_LIST";
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
@@ -603,7 +610,29 @@ async function callHostinger(
 
   let data: unknown = null;
 
-  if (operation === "HOSTINGER_SSH_PUBLIC_KEY_ATTACH") {
+  if (operation === "HOSTINGER_SSH_PUBLIC_KEY_LIST") {
+    if (!config.vmId) throw new Error("Hostinger SSH key list requires HOSTINGER_VPS_ID.");
+    const listed = await firstSuccessful(
+      `/vps/v1/virtual-machines/${encodeURIComponent(config.vmId)}/public-keys`,
+      "GET",
+    );
+    if (listed.status < 200 || listed.status >= 300) {
+      throw new Error(`Hostinger VPS SSH key list failed with HTTP ${listed.status}.`);
+    }
+    const payload = listed.data as { data?: unknown[] } | unknown[] | null;
+    const items = Array.isArray(payload)
+      ? payload
+      : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+        ? (payload as { data: unknown[] }).data
+        : [];
+    data = items.map((item) => {
+      const value = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        id: value["id"] ?? null,
+        name: value["name"] ?? null,
+      };
+    });
+  } else if (operation === "HOSTINGER_SSH_PUBLIC_KEY_ATTACH") {
     if (!config.vmId) throw new Error("Hostinger SSH key attach requires HOSTINGER_VPS_ID.");
     const key = valueOf("key");
     const name = valueOf("name") || "ai-core-hostinger";
@@ -1057,6 +1086,7 @@ async function callHostinger(
 
   const readOnly = new Set<AiCoreInfrastructureOperation>([
     "HOSTINGER_VPS_STATUS",
+    "HOSTINGER_SSH_PUBLIC_KEY_LIST",
     "HOSTINGER_DOCKER_LIST",
     "HOSTINGER_DOCKER_STATUS",
     "HOSTINGER_DOCKER_CONTAINERS",

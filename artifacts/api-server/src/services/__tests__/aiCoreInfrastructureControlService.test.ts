@@ -16,6 +16,7 @@ describe("AI Core Hostinger infrastructure control", () => {
 
   it.each([
     ["Hostinger list docker projects", "HOSTINGER_DOCKER_LIST"],
+    ["Hostinger cek SSH public key VPS", "HOSTINGER_SSH_PUBLIC_KEY_LIST"],
     ["Hostinger cek logs docker project=myapp", "HOSTINGER_DOCKER_LOGS"],
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
@@ -89,6 +90,29 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["GCP stop VM sekarang", "GCP_VM_STOP"],
   ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it("lists attached Hostinger SSH keys without returning key material", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      data: [{ id: 594837, name: "chatgpt-ai-task-20261006", key: "ssh-ed25519 SECRET" }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_SSH_PUBLIC_KEY_LIST",
+      message: "Hostinger cek SSH public key VPS",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    });
+
+    expect(result.mutating).toBe(false);
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/virtual-machines/1792369/public-keys",
+    );
+    expect(result.data).toEqual([{ id: 594837, name: "chatgpt-ai-task-20261006" }]);
+    expect(JSON.stringify(result)).not.toContain("SECRET");
   });
 
   it("creates and attaches an SSH public key through the Hostinger API", async () => {
