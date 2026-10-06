@@ -248,17 +248,6 @@ export async function getCriticalApproval(id: string): Promise<CriticalApprovalR
   return normalizeRow(result.rows[0] as Record<string, unknown>);
 }
 
-function requiredMetadataString(
-  approval: CriticalApprovalRow,
-  key: string,
-): string {
-  const value = approval.metadata[key];
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`Critical approval metadata is missing ${key}`);
-  }
-  return value.trim();
-}
-
 async function executeApprovedAction(approval: CriticalApprovalRow): Promise<void> {
   // Only truly critical database/security actions may enter this path.
   // Their concrete execution remains fail-closed until a dedicated, scoped
