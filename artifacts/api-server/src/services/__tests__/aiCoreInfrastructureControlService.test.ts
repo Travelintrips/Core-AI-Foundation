@@ -31,6 +31,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
     ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
+    ["Hostinger pasang SSH public key key=ssh-ed25519-AAAA", "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"],
   ])("detects %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
@@ -88,6 +89,51 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["GCP stop VM sekarang", "GCP_VM_STOP"],
   ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it("creates and attaches an SSH public key through the Hostinger API", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 325,
+        name: "ai-core-hostinger",
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest aicore-hostinger",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 999, state: "success" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_SSH_PUBLIC_KEY_ATTACH",
+      message: 'Hostinger pasang SSH public key name=ai-core-hostinger key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest aicore-hostinger"',
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    });
+
+    expect(result.mutating).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/public-keys",
+    );
+    expect((fetchMock.mock.calls[1] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/public-keys",
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[1] as [string, RequestInit])[1].body))).toEqual({
+      name: "ai-core-hostinger",
+      key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest aicore-hostinger",
+    });
+    expect((fetchMock.mock.calls[2] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/public-keys/attach/1792369",
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[2] as [string, RequestInit])[1].body))).toEqual({
+      ids: [325],
+    });
+    expect(result.data).toMatchObject({
+      virtualMachineId: "1792369",
+      publicKeyId: 325,
+      attached: true,
+    });
   });
 
   it("requires explicit SSH configuration when Docker Manager is unsupported", async () => {
