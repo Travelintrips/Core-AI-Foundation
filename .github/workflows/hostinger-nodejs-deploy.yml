@@ -146,7 +146,7 @@ jobs:
           fi
 
       - name: Validate Hostinger deployment credentials
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -157,7 +157,7 @@ jobs:
           test -n "$HOSTINGER_DOMAIN"
 
       - name: Resolve Hostinger website
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true'
         id: website
         shell: bash
         run: |
@@ -176,7 +176,7 @@ jobs:
           echo "website=$HOSTINGER_DOMAIN username=$username"
 
       - name: Create source archive
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true'
         id: archive
         shell: bash
         run: |
@@ -191,7 +191,7 @@ jobs:
           echo "bytes=$(stat -c%s "$archive_path")" >> "$GITHUB_OUTPUT"
 
       - name: Upload source archive to Hostinger
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true'
         id: upload
         shell: bash
         env:
@@ -240,7 +240,7 @@ jobs:
           echo "archive_uploaded=$ARCHIVE_NAME bytes=$size"
 
       - name: Resolve Node.js build settings
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true'
         id: settings
         shell: bash
         env:
@@ -276,7 +276,7 @@ jobs:
           cat /tmp/build-settings.normalized.json
 
       - name: Reconfirm latest main before fallback build
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true'
         id: fallback_freshness
         shell: bash
         run: |
