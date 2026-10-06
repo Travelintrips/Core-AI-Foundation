@@ -1636,6 +1636,8 @@ export async function disableAutonomousCodingTask(taskId: string): Promise<void>
     ON CONFLICT (task_id) DO UPDATE
     SET enabled = FALSE,
         status = 'DISABLED',
+        last_action = 'MANUAL_STOP',
+        last_error = NULL,
         updated_at = NOW()
   `);
 }
@@ -1695,6 +1697,32 @@ export function readyReviewAutonomousRecoveryDecision(input: {
       reactivate: true,
       extendBudget: false,
       reason: "FAILED_WITH_REMAINING_BUDGET",
+    };
+  }
+
+  if (status === "DISABLED") {
+    if (lastAction === "MANUAL_STOP") {
+      return {
+        reactivate: false,
+        extendBudget: false,
+        reason: "MANUAL_STOP",
+      };
+    }
+    if (
+      /^WAIT_ACTIVE_RUN:/.test(lastAction) &&
+      !lastError &&
+      cycleCount < maxCycles
+    ) {
+      return {
+        reactivate: true,
+        extendBudget: false,
+        reason: "DISABLED_WAIT_RACE",
+      };
+    }
+    return {
+      reactivate: false,
+      extendBudget: false,
+      reason: "DISABLED_NOT_SAFE_TO_RECOVER",
     };
   }
 
@@ -1823,34 +1851,51 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
       });
 
       if (decision.reactivate) {
-        const reactivated = decision.extendBudget
-          ? await db.execute(sql`
-              UPDATE ai_platform.ai_coding_autonomous_tasks
-              SET enabled = TRUE,
-                  status = 'ACTIVE',
-                  cycle_count = 0,
-                  max_cycles = GREATEST(max_cycles, ${READY_REVIEW_EXTENDED_MAX_CYCLES}),
-                  last_error = NULL,
-                  last_action = 'RECOVER_READY_REVIEW_MAX_CYCLES',
-                  updated_at = NOW()
-              WHERE task_id = ${candidate.id}::uuid
-                AND status = 'BLOCKED'
-                AND last_action = 'MAX_CYCLES_REACHED'
-                AND max_cycles <= ${DEFAULT_MAX_CYCLES}
-              RETURNING task_id
-            `)
-          : await db.execute(sql`
-              UPDATE ai_platform.ai_coding_autonomous_tasks
-              SET enabled = TRUE,
-                  status = 'ACTIVE',
-                  last_error = NULL,
-                  last_action = 'RECOVER_READY_REVIEW',
-                  updated_at = NOW()
-              WHERE task_id = ${candidate.id}::uuid
-                AND status IN ('FAILED', 'BLOCKED')
-                AND cycle_count < max_cycles
-              RETURNING task_id
-            `);
+        const reactivated =
+          decision.reason === "DISABLED_WAIT_RACE"
+            ? await db.execute(sql`
+                UPDATE ai_platform.ai_coding_autonomous_tasks
+                SET enabled = TRUE,
+                    status = 'ACTIVE',
+                    last_error = NULL,
+                    last_action = 'RECOVER_READY_REVIEW_DISABLED_WAIT',
+                    updated_at = NOW()
+                WHERE task_id = ${candidate.id}::uuid
+                  AND enabled = FALSE
+                  AND status = 'DISABLED'
+                  AND last_action LIKE 'WAIT_ACTIVE_RUN:%'
+                  AND COALESCE(last_error, '') = ''
+                  AND cycle_count < max_cycles
+                RETURNING task_id
+              `)
+            : decision.extendBudget
+              ? await db.execute(sql`
+                  UPDATE ai_platform.ai_coding_autonomous_tasks
+                  SET enabled = TRUE,
+                      status = 'ACTIVE',
+                      cycle_count = 0,
+                      max_cycles = GREATEST(max_cycles, ${READY_REVIEW_EXTENDED_MAX_CYCLES}),
+                      last_error = NULL,
+                      last_action = 'RECOVER_READY_REVIEW_MAX_CYCLES',
+                      updated_at = NOW()
+                  WHERE task_id = ${candidate.id}::uuid
+                    AND status = 'BLOCKED'
+                    AND last_action = 'MAX_CYCLES_REACHED'
+                    AND max_cycles <= ${DEFAULT_MAX_CYCLES}
+                  RETURNING task_id
+                `)
+              : await db.execute(sql`
+                  UPDATE ai_platform.ai_coding_autonomous_tasks
+                  SET enabled = TRUE,
+                      status = 'ACTIVE',
+                      last_error = NULL,
+                      last_action = 'RECOVER_READY_REVIEW',
+                      updated_at = NOW()
+                  WHERE task_id = ${candidate.id}::uuid
+                    AND status IN ('FAILED', 'BLOCKED')
+                    AND cycle_count < max_cycles
+                  RETURNING task_id
+                `);
 
         // A concurrent stop or changed blocker overrides the earlier read.
         if (!reactivated.rows?.length) continue;
