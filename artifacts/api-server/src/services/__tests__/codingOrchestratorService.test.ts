@@ -143,7 +143,7 @@ describe("Coding Orchestrator manual stop fence", () => {
     );
 
     expect(source).toContain("async function isManualStopRequested");
-    expect(source).toContain('"MANUAL_STOP"');
+    expect(source).toContain("'MANUAL_STOP'");
     expect(source).toContain("Manual stop detected before continuation");
     expect(source).toContain("Manual stop detected after analyzer execution");
     expect(source).toContain("Ignoring late orchestration error after manual stop");
