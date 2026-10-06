@@ -63,7 +63,8 @@ jobs:
           echo "ready=false" >> "$GITHUB_OUTPUT"
           for attempt in $(seq 1 12); do
             rm -f /tmp/native.headers /tmp/native.body
-            curl --http1.1 --silent --show-error -D /tmp/native.headers -o /tmp/native.body \
+            curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
+              -D /tmp/native.headers -o /tmp/native.body \
               -H "Accept: application/json" \
               -H "User-Agent: CST-AI-Core-Native-Deploy-Grace/1.0" \
               "$health" || true
@@ -280,7 +281,11 @@ jobs:
           set -euo pipefail
           health="https://$HOSTINGER_DOMAIN/api/healthz"
           for attempt in $(seq 1 30); do
-            curl --http1.1 --silent --show-error -D /tmp/live.headers -o /tmp/live.body               -H "Accept: application/json"               -H "User-Agent: CST-AI-Core-Direct-Deploy/1.0"               "$health" || true
+            curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
+              -D /tmp/live.headers -o /tmp/live.body \
+              -H "Accept: application/json" \
+              -H "User-Agent: CST-AI-Core-Direct-Deploy/1.0" \
+              "$health" || true
             live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/live.headers | tail -n1)
             echo "verify_attempt=$attempt live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA"
             if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/live.body; then
