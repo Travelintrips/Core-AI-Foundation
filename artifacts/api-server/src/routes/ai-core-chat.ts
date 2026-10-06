@@ -3451,15 +3451,21 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       effectiveInput.mode === "agent"
         ? (await runGcpBillingStatusOperation(rawInput.message)) ??
           (await runAdminDbMutationOperation(rawInput.message)) ??
-          (await runInfrastructureOperation(rawInput.message)) ??
-          (await runGitHubOperation(rawInput.message, rawInput.repository)) ??
+          (rawDispatch.kind === "INFRA_OPERATION"
+            ? await runInfrastructureOperation(rawInput.message)
+            : null) ??
+          (rawDispatch.kind === "GITHUB_OPERATION"
+            ? await runGitHubOperation(rawInput.message, rawInput.repository)
+            : null) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
                 effectiveInput,
                 rawDispatch.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
               )
             : null) ??
-          (await maybeRunRemoteWorkerPreset(rawInput)) ??
+          (rawDispatch.kind === "REMOTE_READONLY"
+            ? await maybeRunRemoteWorkerPreset(rawInput)
+            : null) ??
           await startAgentTask(effectiveInput)
         : effectiveInput.mode === "ask"
           ? await answerAskMode(
