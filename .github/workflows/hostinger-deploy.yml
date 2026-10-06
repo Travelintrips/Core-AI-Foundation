@@ -64,6 +64,8 @@ jobs:
       ollama_reason: ${{ steps.ollama_scope.outputs.reason }}
       verify_whatsapp: ${{ steps.whatsapp_scope.outputs.verify_whatsapp }}
       whatsapp_reason: ${{ steps.whatsapp_scope.outputs.reason }}
+      runtime_deploy_required: ${{ steps.deploy_scope.outputs.deploy_required }}
+      runtime_deploy_reason: ${{ steps.deploy_scope.outputs.reason }}
 
     steps:
       - uses: actions/checkout@v7
@@ -86,6 +88,53 @@ jobs:
           else
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Detect whether runtime deployment is required
+        id: deploy_scope
+        if: steps.target.outputs.stale != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy_required=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_dispatch" >> "$GITHUB_OUTPUT"
+            echo "runtime_deploy=RUN reason=manual_dispatch"
+            exit 0
+          fi
+
+          base_sha=""
+          if git rev-parse "${EXPECTED_SHA}^1" >/dev/null 2>&1; then
+            base_sha=$(git rev-parse "${EXPECTED_SHA}^1")
+          fi
+
+          if [ -z "$base_sha" ]; then
+            echo "deploy_required=true" >> "$GITHUB_OUTPUT"
+            echo "reason=parent_unavailable_fail_safe" >> "$GITHUB_OUTPUT"
+            echo "runtime_deploy=RUN reason=parent_unavailable_fail_safe"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$base_sha" "$EXPECTED_SHA")
+          deploy_required=false
+          reason="deploy_neutral_only"
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              .github/workflows/*|docs/*|*.md|*.mdx|*.txt|*/__tests__/*|*.test.ts|*.test.tsx|*.test.mjs|*.spec.ts|*.spec.tsx)
+                ;;
+              *)
+                deploy_required=true
+                reason="runtime_path:$file"
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "deploy_required=$deploy_required" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "runtime_deploy=$([ "$deploy_required" = "true" ] && echo RUN || echo SKIP) reason=$reason"
 
       - name: Detect production verification scope
         id: verify_scope
@@ -437,8 +486,24 @@ jobs:
           fetch-depth: 2
 
       - name: Wait for stable exact production commit
+        if: needs.plan.outputs.runtime_deploy_required == 'true'
         shell: bash
         run: bash scripts/hostinger-production-probe.sh
+
+      - name: Verify live production for deploy-neutral change
+        if: needs.plan.outputs.runtime_deploy_required != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 30 -L --silent --show-error \
+            -D /tmp/deploy-neutral.headers -o /tmp/deploy-neutral.body -w "%{http_code}" \
+            "$API_BASE_URL/healthz")
+          live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/deploy-neutral.headers | tail -n1)
+          echo "deploy_neutral_health_http=$code live_sha=${live_sha:-missing} source_sha=$EXPECTED_SHA"
+          test "$code" = "200"
+          grep -q '"status":"ok"' /tmp/deploy-neutral.body
+          echo "runtime_deploy=SKIPPED reason=${{ needs.plan.outputs.runtime_deploy_reason }}"
 
       - name: Verify readiness
         shell: bash
@@ -1490,9 +1555,17 @@ jobs:
           VERIFY_ZEROLLM: ${{ needs.plan.outputs.verify_zerollm }}
           VERIFY_SITEMAP: ${{ needs.plan.outputs.verify_sitemap }}
           SCOPE_REASON: ${{ needs.plan.outputs.scope_reason }}
+          RUNTIME_DEPLOY_REQUIRED: ${{ needs.plan.outputs.runtime_deploy_required }}
+          RUNTIME_DEPLOY_REASON: ${{ needs.plan.outputs.runtime_deploy_reason }}
         run: |
-          echo "Production commit verified: $EXPECTED_SHA"
-          echo "Baseline exact-SHA/readiness/auth/SMTP: PASS"
+          echo "Production verification source commit: $EXPECTED_SHA"
+          if [ "$RUNTIME_DEPLOY_REQUIRED" = "true" ]; then
+            echo "Runtime deployment: PASS exact-SHA"
+            echo "Baseline exact-SHA/readiness/auth/SMTP: PASS"
+          else
+            echo "Runtime deployment: SKIPPED ($RUNTIME_DEPLOY_REASON)"
+            echo "Baseline live-readiness/auth/SMTP: PASS"
+          fi
           echo "Verification scope reason: $SCOPE_REASON"
           echo "MCP: $([ "$VERIFY_MCP" = "true" ] && echo PASS || echo SKIPPED)"
           echo "Coding Workspace + GitHub discovery: $([ "$VERIFY_CODING" = "true" ] && echo PASS || echo SKIPPED)"

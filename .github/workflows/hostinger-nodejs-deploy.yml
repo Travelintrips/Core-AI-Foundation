@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 1
+          fetch-depth: 2
 
       - name: Reject stale release trigger
         id: freshness
@@ -54,8 +54,57 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Give native Hostinger deploy a short grace period
+      - name: Detect whether runtime deployment is required
+        id: deploy_scope
         if: steps.freshness.outputs.stale != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy_required=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_dispatch" >> "$GITHUB_OUTPUT"
+            echo "runtime_deploy=RUN reason=manual_dispatch"
+            exit 0
+          fi
+
+          base_sha=""
+          if git rev-parse "${EXPECTED_SHA}^1" >/dev/null 2>&1; then
+            base_sha=$(git rev-parse "${EXPECTED_SHA}^1")
+          fi
+
+          if [ -z "$base_sha" ]; then
+            echo "deploy_required=true" >> "$GITHUB_OUTPUT"
+            echo "reason=parent_unavailable_fail_safe" >> "$GITHUB_OUTPUT"
+            echo "runtime_deploy=RUN reason=parent_unavailable_fail_safe"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$base_sha" "$EXPECTED_SHA")
+          printf 'runtime_deploy_changed_files=\n%s\n' "$changed_files"
+
+          deploy_required=false
+          reason="deploy_neutral_only"
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              .github/workflows/*|docs/*|*.md|*.mdx|*.txt|*/__tests__/*|*.test.ts|*.test.tsx|*.test.mjs|*.spec.ts|*.spec.tsx)
+                ;;
+              *)
+                deploy_required=true
+                reason="runtime_path:$file"
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "deploy_required=$deploy_required" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "runtime_deploy=$([ "$deploy_required" = "true" ] && echo RUN || echo SKIP) reason=$reason"
+
+      - name: Give native Hostinger deploy a short grace period
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true'
         id: native
         shell: bash
         run: |
@@ -329,3 +378,11 @@ jobs:
           done
           echo "::error::Production did not expose the exact deployed SHA."
           exit 1
+
+
+      - name: Skip runtime deployment for deploy-neutral change
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Skipping Hostinger application redeploy because this commit changes deploy-neutral files only."
+          echo "runtime_deploy=SKIPPED reason=${{ steps.deploy_scope.outputs.reason }}"
