@@ -77,6 +77,7 @@ import {
   executeAiCoreAuditHistoryQuery,
   executeAdminSemanticQuery,
   executeAdminWorkerStatusQuery,
+  executeAdminCodingTaskStatusQuery,
   extractAdminDbSemanticIntent,
   extractExplicitAdminMutationSql,
   extractExplicitReadOnlySql,
@@ -84,6 +85,7 @@ import {
   inspectAdminDbSchemaCatalog,
   isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
+  isAdminCodingTaskStatusQuery,
   isAiCoreAuditHistoryQuery,
   sanitizeAdminDbError,
   renderAdminDbMutationResult,
@@ -783,6 +785,31 @@ async function tryRunAdminDbQuery(
   policy: ChatPolicy,
   context: AdminDbConversationMessage[] = [],
 ): Promise<Record<string, unknown> | null> {
+  if (isAdminCodingTaskStatusQuery(message)) {
+    const taskStatus = await executeAdminCodingTaskStatusQuery();
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: renderAdminDbQueryResult(taskStatus),
+      databaseQuery: {
+        sql: taskStatus.sql,
+        rowCount: taskStatus.rowCount,
+        truncated: taskStatus.truncated,
+        elapsedMs: taskStatus.elapsedMs,
+        sourceDatabaseId: taskStatus.sourceDatabaseId,
+        reason: "Deterministic coding task lifecycle audit query.",
+        access: "ADMIN_READ_ONLY",
+      },
+      data: taskStatus.rows,
+    };
+  }
+
   if (isAdminWorkerStatusQuery(message)) {
     const workerStatus = await executeAdminWorkerStatusQuery();
     return {
