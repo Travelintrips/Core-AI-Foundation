@@ -9,6 +9,7 @@ export type AiCoreGitHubOperation =
   | "GITHUB_WORKFLOW_RERUN"
   | "GITHUB_WORKFLOW_RERUN_FAILED"
   | "GITHUB_WORKFLOW_CANCEL"
+  | "GITHUB_HOSTINGER_NODEJS_DEPLOY"
   | "GITHUB_PR_STATUS"
   | "GITHUB_PR_MERGE";
 
@@ -27,6 +28,13 @@ function normalize(message: string): string {
 export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
   const text = normalize(message);
   if (!text) return null;
+
+  const hostingerNodeDeploy =
+    /\bhostinger\b/i.test(text) &&
+    /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
+    !/\b(?:docker|compose|container)\b/i.test(text) &&
+    /\b(?:node(?:\.?js|\s+js)|aicore|ai\s+core|commit|sha|production|produksi)\b/i.test(text);
+  if (hostingerNodeDeploy) return "GITHUB_HOSTINGER_NODEJS_DEPLOY";
 
   const workflowContext = /\b(?:github\s+actions?|workflow|action\s+run|ci\s+run)\b/i.test(text);
   if (workflowContext) {
@@ -66,6 +74,12 @@ function runId(message: string): number | null {
     message.match(/\bactions\/runs\/(\d+)\b/i)?.[1];
   const parsed = raw ? Number.parseInt(raw, 10) : NaN;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function requestedCommitSha(message: string): string | null {
+  return message.match(
+    /\b(?:exact\s+)?(?:commit|sha)\s*[:=#]?\s*([0-9a-f]{7,40})\b/i,
+  )?.[1]?.toLowerCase() ?? null;
 }
 
 function prNumber(message: string): number | null {
@@ -182,7 +196,34 @@ export async function executeAiCoreGitHubOperation(input: {
   let data: unknown;
   let mutating = false;
 
-  if (input.operation.startsWith("GITHUB_WORKFLOW_")) {
+  if (input.operation === "GITHUB_HOSTINGER_NODEJS_DEPLOY") {
+    mutating = true;
+    const requestedSha = requestedCommitSha(input.message);
+    const current = record(await client.request("GET", `${base}/commits/main`));
+    const headSha = stringValue(current["sha"]).toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(headSha)) {
+      throw new Error("Current main SHA is unavailable; Hostinger deploy remains fail-closed.");
+    }
+    if (requestedSha && !headSha.startsWith(requestedSha)) {
+      throw new Error(
+        `Requested Hostinger deploy SHA ${requestedSha} is not current main ${headSha}; refusing stale deploy.`,
+      );
+    }
+
+    await client.request(
+      "POST",
+      `${base}/actions/workflows/hostinger-nodejs-deploy.yml/dispatches`,
+      { ref: "main" },
+    );
+    data = {
+      accepted: true,
+      workflow: "hostinger-nodejs-deploy.yml",
+      ref: "main",
+      expectedSha: headSha,
+      requestedSha,
+      noWorker: true,
+    };
+  } else if (input.operation.startsWith("GITHUB_WORKFLOW_")) {
     const id = runId(input.message);
     if (!id) throw new Error("GitHub workflow operation requires run=<workflow-run-id>.");
 
