@@ -1776,6 +1776,13 @@ export async function getAutonomousCodingTaskStatus(taskId: string) {
 
 export async function listActiveAutonomousCodingTasks(limit = MAX_TASKS_PER_TICK) {
   await ensureCodingControlBridgeTables();
+
+  // Temporal owns cycle execution while its lease is active, so the local tick
+  // intentionally stops dispatching. Keep READY_REVIEW recovery independent
+  // from that local timer: every Temporal polling path performs the same
+  // bounded/throttled recovery sweep before listing ACTIVE/WAITING work.
+  await maybeRecoverOrphanedReadyReviewTasks();
+
   const bounded = Math.max(1, Math.min(50, Math.floor(limit)));
   const result = await withTransientDatabaseRetry(() => db.execute(sql`
     SELECT task_id, enabled, status, cycle_count, max_cycles, last_action, last_error, updated_at
@@ -1920,6 +1927,26 @@ export function readyReviewAutonomousRecoveryDecision(input: {
     extendBudget: false,
     reason: "NO_SAFE_AUTOMATIC_RECOVERY",
   };
+}
+
+async function maybeRecoverOrphanedReadyReviewTasks(): Promise<void> {
+  const nowMs = Date.now();
+  if (
+    nowMs - lastReadyReviewRecoveryAt <
+    READY_REVIEW_RECOVERY_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  // Reserve the interval before the DB sweep so concurrent local/Temporal polls
+  // cannot stampede the same recovery scan.
+  lastReadyReviewRecoveryAt = nowMs;
+  await recoverOrphanedReadyReviewTasks().catch((error) => {
+    logger.warn(
+      { err: error },
+      "[coding-autonomous] periodic READY_REVIEW recovery failed",
+    );
+  });
 }
 
 export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
@@ -2070,17 +2097,7 @@ async function autonomousTick(): Promise<void> {
 
     const nowMs = Date.now();
 
-    if (
-      nowMs - lastReadyReviewRecoveryAt >= READY_REVIEW_RECOVERY_INTERVAL_MS
-    ) {
-      lastReadyReviewRecoveryAt = nowMs;
-      await recoverOrphanedReadyReviewTasks().catch((error) => {
-        logger.warn(
-          { err: error },
-          "[coding-autonomous] periodic READY_REVIEW recovery failed",
-        );
-      });
-    }
+    await maybeRecoverOrphanedReadyReviewTasks();
 
     if (nowMs - lastTestTaskRetentionSweepAt >= TEST_TASK_RETENTION_SWEEP_INTERVAL_MS) {
       lastTestTaskRetentionSweepAt = nowMs;
