@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import { aiCodingRunsTable, aiCodingTasksTable, aiIncidentsTable, db } from "@workspace/db";
 import { startCodingOrchestration } from "./codingOrchestratorService.js";
 import { publishSafe } from "./aiEventBusService.js";
@@ -225,6 +225,132 @@ export async function syncIncidentRepairStatuses(limit = 50) {
   }
 
   return { scanned: incidents.length, updated };
+}
+
+export interface SupersededIncidentResolutionInput {
+  source: IncidentSource;
+  kind: string;
+  environment?: string;
+  successfulHeadSha?: string | null;
+  successfulRunId?: string | number | null;
+  resolvedBefore?: Date;
+}
+
+export async function resolveSupersededIncidents(input: SupersededIncidentResolutionInput) {
+  const environment = input.environment ?? "production";
+  const resolvedAt = new Date();
+  const resolvedBefore = input.resolvedBefore ?? resolvedAt;
+  const completionSummary = [
+    "Superseded by a later successful production verification.",
+    input.successfulRunId ? "Successful verify run: " + String(input.successfulRunId) + "." : null,
+    input.successfulHeadSha ? "Verified commit: " + input.successfulHeadSha + "." : null,
+    "No further repair or human review is required.",
+  ].filter(Boolean).join(" ");
+
+  const result = await db.transaction(async tx => {
+    const incidents = await tx.select().from(aiIncidentsTable)
+      .where(and(
+        eq(aiIncidentsTable.source, input.source),
+        eq(aiIncidentsTable.kind, input.kind),
+        eq(aiIncidentsTable.environment, environment),
+        ne(aiIncidentsTable.status, "RESOLVED"),
+        lte(aiIncidentsTable.lastSeenAt, resolvedBefore),
+      ))
+      .orderBy(asc(aiIncidentsTable.firstSeenAt))
+      .for("update");
+
+    let repairTasksCompleted = 0;
+    let activeRepairTasksSkipped = 0;
+
+    for (const incident of incidents) {
+      if (incident.repairTaskId) {
+        const [activeRun] = await tx.select({ id: aiCodingRunsTable.id })
+          .from(aiCodingRunsTable)
+          .where(and(
+            eq(aiCodingRunsTable.taskId, incident.repairTaskId),
+            eq(aiCodingRunsTable.status, "RUNNING"),
+          ))
+          .limit(1);
+
+        if (activeRun) {
+          activeRepairTasksSkipped += 1;
+        } else {
+          const [task] = await tx.select({
+            id: aiCodingTasksTable.id,
+            taskNumber: aiCodingTasksTable.taskNumber,
+            status: aiCodingTasksTable.status,
+          }).from(aiCodingTasksTable)
+            .where(eq(aiCodingTasksTable.id, incident.repairTaskId))
+            .limit(1);
+
+          if (task?.taskNumber.startsWith("INC-")) {
+            await tx.execute(sql`
+              UPDATE ai_platform.ai_coding_tasks
+              SET status = 'COMPLETED',
+                  coding_status = 'COMPLETED',
+                  result_summary = ${completionSummary},
+                  updated_at = NOW()
+              WHERE id = ${task.id}::uuid
+                AND task_number LIKE 'INC-%'
+                AND status <> 'COMPLETED'
+            `);
+            await tx.execute(sql`
+              UPDATE ai_platform.ai_coding_autonomous_tasks
+              SET enabled = FALSE,
+                  status = 'COMPLETED',
+                  last_action = 'SUPERSEDED_BY_SUCCESSFUL_PRODUCTION_VERIFY',
+                  last_error = NULL,
+                  completed_at = COALESCE(completed_at, NOW()),
+                  updated_at = NOW()
+              WHERE task_id = ${task.id}::uuid
+                AND status <> 'DISABLED'
+            `);
+            await tx.execute(sql`
+              DELETE FROM ai_platform.ai_coding_active_file_reservations
+              WHERE task_id = ${task.id}::text
+            `);
+            if (task.status !== "COMPLETED") repairTasksCompleted += 1;
+          }
+        }
+      }
+
+      const metadata = incident.metadataJson as Record<string, unknown> | null;
+      await tx.update(aiIncidentsTable).set({
+        status: "RESOLVED",
+        resolvedAt,
+        lastError: null,
+        metadataJson: {
+          ...(metadata ?? {}),
+          resolvedBy: "successful_production_verify",
+          successfulVerifyRunId: input.successfulRunId ?? null,
+          successfulVerifyHeadSha: input.successfulHeadSha ?? null,
+        },
+      }).where(eq(aiIncidentsTable.id, incident.id));
+    }
+
+    return {
+      resolved: incidents.length,
+      repairTasksCompleted,
+      activeRepairTasksSkipped,
+    };
+  });
+
+  if (result.resolved > 0) {
+    publishSafe({
+      eventType: "incident.superseded",
+      sourceModule: "incident-auto-repair",
+      payload: {
+        source: input.source,
+        kind: input.kind,
+        environment,
+        successfulVerifyRunId: input.successfulRunId ?? null,
+        successfulVerifyHeadSha: input.successfulHeadSha ?? null,
+        ...result,
+      },
+    });
+  }
+
+  return result;
 }
 
 export async function listIncidents(limit = 100) {
