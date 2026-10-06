@@ -9,6 +9,7 @@ import {
   db,
 } from "@workspace/db";
 import { executeAdminWhatsappDeviceStatusQuery } from "../services/aiCoreAdminDbQueryService.js";
+import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
 import { getExternalAgentRegistrySnapshot } from "../services/externalAgentRegistryService.js";
 import { executeAiCoreInfrastructureOperation } from "../services/aiCoreInfrastructureControlService.js";
 
@@ -162,7 +163,7 @@ function findPercent(data: unknown, matcher: RegExp): number | null {
 
 router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
   const generatedAt = new Date();
-  const [taskRows, runRows, workerRows, incidentRows, wa, agents, probes, databaseProbe] = await Promise.all([
+  const [taskRows, runRows, workerRows, incidentRows, wa, agents, probes, databaseProbe, presentationRows] = await Promise.all([
     db.select().from(aiCodingTasksTable).orderBy(desc(aiCodingTasksTable.updatedAt)).limit(50),
     db.select().from(aiCodingRunsTable).orderBy(desc(aiCodingRunsTable.startedAt)).limit(150),
     db.select().from(aiWorkersTable).orderBy(aiWorkersTable.workerName),
@@ -171,13 +172,73 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
     getExternalAgentRegistrySnapshot().catch(() => []),
     externalProbes(),
     db.execute(sql`SELECT now() AS checked_at`).then(() => true).catch(() => false),
+    db.execute(sql`
+      SELECT
+        t.id AS task_id,
+        a.status AS autonomous_status,
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_runs AS active_run
+          WHERE active_run.task_id = t.id
+            AND active_run.status = 'RUNNING'
+        ) AS has_active_run,
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_critical_approvals AS approval
+          WHERE approval.task_id = t.id
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        ) AS has_pending_critical_approval,
+        (
+          SELECT w.status
+          FROM ai_platform.ai_coding_workstreams AS w
+          WHERE w.child_task_id = t.id
+          ORDER BY w.updated_at DESC
+          LIMIT 1
+        ) AS workstream_status
+      FROM ai_platform.ai_coding_tasks AS t
+      LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a
+        ON a.task_id = t.id
+       AND a.enabled = TRUE
+       AND a.status IN ('ACTIVE', 'WAITING', 'APPROVAL_REQUIRED', 'COMPLETED', 'FAILED', 'BLOCKED')
+      ORDER BY t.updated_at DESC
+      LIMIT 50
+    `),
   ]);
+
+  const presentationByTask = new Map(
+    (presentationRows.rows ?? []).map((row) => {
+      const item = row as {
+        task_id?: string;
+        autonomous_status?: string | null;
+        has_active_run?: boolean;
+        has_pending_critical_approval?: boolean;
+        workstream_status?: string | null;
+      };
+      return [
+        item.task_id ?? "",
+        {
+          autonomousStatus: item.autonomous_status ?? null,
+          hasActiveRun: item.has_active_run === true,
+          hasPendingCriticalApproval: item.has_pending_critical_approval === true,
+          workstreamStatus: item.workstream_status ?? null,
+        },
+      ] as const;
+    }),
+  );
 
   const latestRunByTask = new Map<string, typeof runRows[number]>();
   for (const run of runRows) if (!latestRunByTask.has(run.taskId)) latestRunByTask.set(run.taskId, run);
 
   const tasks = taskRows.map((task) => {
     const run = latestRunByTask.get(task.id);
+    const presentation = presentationByTask.get(task.id);
+    const status = codingTaskPresentationStatus({
+      taskStatus: task.status,
+      autonomousStatus: presentation?.autonomousStatus,
+      hasActiveRun: presentation?.hasActiveRun ?? false,
+      hasPendingCriticalApproval: presentation?.hasPendingCriticalApproval ?? false,
+      workstreamStatus: presentation?.workstreamStatus,
+    });
     return {
       id: task.id,
       taskNumber: task.taskNumber,
@@ -185,9 +246,10 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
       repository: task.repository,
       branch: task.branch,
       instruction: task.instruction,
-      status: task.status,
+      status,
+      persistedStatus: task.status,
       priority: task.priority,
-      progress: stageProgress(task.status),
+      progress: stageProgress(status),
       progressBasis: "lifecycle_stage",
       worker: run?.agentName ?? null,
       runStatus: run?.status ?? null,
