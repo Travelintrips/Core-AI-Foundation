@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import {
   compressImageForStorage,
+  compressInteriorRenderForStorage,
   isProductionStorageEnvironment,
+  uploadPublicInteriorRenderViaEdge,
   uploadToSupabase,
 } from "../supabaseStorage.js";
 
@@ -151,6 +153,70 @@ describe("Supabase Storage compression gate", () => {
 
     const metadata = await sharp(result.buffer).metadata();
     expect(metadata.format).toBe("webp");
+  });
+
+  it("normalizes public Interior renders to compressed WebP", async () => {
+    const input = await highQualityWebp();
+    const result = await compressInteriorRenderForStorage(input);
+
+    expect(result.contentType).toBe("image/webp");
+    expect(result.compressed).toBe(true);
+    expect(result.storedBytes).toBeLessThanOrEqual(result.originalBytes);
+
+    const metadata = await sharp(result.buffer).metadata();
+    expect(metadata.format).toBe("webp");
+  });
+
+  it("sends compressed WebP through the Edge bridge without a Supabase admin key", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv(
+      "SUPABASE_PROD_DATABASE_URL",
+      "postgresql://postgres.nzdweipzckfszczzqtuw:secret@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres",
+    );
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.stubEnv("SUPABASE_PROD_SERVICE_ROLE_KEY", "");
+    vi.stubEnv("SUPABASE_SECRET_KEY", "");
+    vi.stubEnv("SUPABASE_PROD_SECRET_KEY", "");
+
+    const input = await highQualityWebp();
+    const expected = await compressInteriorRenderForStorage(input);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          path: "interior-renders/public-interior-42/variant-1.webp",
+          publicUrl:
+            "https://nzdweipzckfszczzqtuw.supabase.co/storage/v1/object/public/ai-assets/interior-renders/public-interior-42/variant-1.webp",
+          storedBytes: expected.storedBytes,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const result = await uploadPublicInteriorRenderViaEdge({
+      projectId: 42,
+      accessToken: "123e4567-e89b-42d3-a456-426614174000",
+      variantIndex: 1,
+      buffer: input,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [requestUrl, requestInit] = fetchMock.mock.calls[0]!;
+    expect(String(requestUrl)).toBe(
+      "https://nzdweipzckfszczzqtuw.supabase.co/functions/v1/interior-render-storage",
+    );
+    expect(requestInit?.headers).toMatchObject({
+      "Content-Type": "image/webp",
+      "x-interior-project-id": "42",
+      "x-interior-variant-index": "1",
+    });
+    const body = requestInit?.body;
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect((body as Uint8Array).byteLength).toBeLessThanOrEqual(input.byteLength);
+    expect(result.storagePath).toBe(
+      "interior-renders/public-interior-42/variant-1.webp",
+    );
+    expect(result.storedBytes).toBe(expected.storedBytes);
   });
 
   it("uploads the compressed buffer to the production Supabase project", async () => {
