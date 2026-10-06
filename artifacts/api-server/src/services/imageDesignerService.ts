@@ -33,6 +33,10 @@ import { recordCost, getProjectCosts } from "./costService.js";
 import { readGuardrails } from "./guardrailService.js";
 import { applyTextOverlay, type OverlaySpec, type OverlayContext } from "../lib/textOverlay.js";
 import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
+import {
+  isImageRouterConfigured,
+  tryGenerateImageViaRouter,
+} from "./imageRouterService.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -764,10 +768,34 @@ async function generateReplicateImage(
     negativePrompt?: string;
     aspectRatio?: string;
   },
-  apiKey: string,
+  apiKey: string | null,
   timeoutMs: number,
-): Promise<{ imageUrl: string; latencyMs: number }> {
+): Promise<{
+  imageUrl: string;
+  latencyMs: number;
+  provider: "gcp-comfyui" | "replicate";
+  model: string;
+}> {
   const startTime = Date.now();
+
+  const local = await tryGenerateImageViaRouter({
+    prompt: input.prompt,
+    negativePrompt: input.negativePrompt,
+    aspectRatio: input.aspectRatio,
+    timeoutMs,
+    filenamePrefix: "creative-ai",
+  });
+  if (local) {
+    return {
+      imageUrl: local.imageUrl,
+      latencyMs: local.latencyMs,
+      provider: "gcp-comfyui",
+      model: local.model,
+    };
+  }
+  if (!apiKey) {
+    throw new Error("Replicate fallback is not configured.");
+  }
 
   const createRes = await fetch(
     `https://api.replicate.com/v1/models/${modelId}/predictions`,
@@ -809,7 +837,14 @@ async function generateReplicateImage(
   // If prediction already succeeded (Prefer: wait)
   if (prediction.status === "succeeded" && Array.isArray(prediction.output)) {
     const url = prediction.output[0];
-    if (url) return { imageUrl: url, latencyMs: Date.now() - startTime };
+    if (url) {
+      return {
+        imageUrl: url,
+        latencyMs: Date.now() - startTime,
+        provider: "replicate",
+        model: modelId,
+      };
+    }
   }
 
   if (prediction.status === "failed") {
@@ -837,7 +872,12 @@ async function generateReplicateImage(
     if (result.status === "succeeded") {
       const url = Array.isArray(result.output) ? result.output[0] : undefined;
       if (!url) throw new Error("Replicate returned no image URLs");
-      return { imageUrl: url, latencyMs: Date.now() - startTime };
+      return {
+        imageUrl: url,
+        latencyMs: Date.now() - startTime,
+        provider: "replicate",
+        model: modelId,
+      };
     }
 
     if (result.status === "failed") {
@@ -1066,6 +1106,7 @@ export async function generateNamedAssetSet(
   const maxRetry = Math.max(0, opts?.maxRetryPerAsset ?? Math.min(guardrails.maxRetryPerProvider, 2));
   const maxQualityRetry = Math.max(0, opts?.maxQualityRetryPerAsset ?? 1);
   const replicateKey = getProviderApiKey("replicate");
+  const imageRouterConfigured = isImageRouterConfigured();
 
   const results: GeneratedNamedAsset[] = [];
   let lastRequestAt = 0;
@@ -1104,10 +1145,10 @@ export async function generateNamedAssetSet(
     const brandSlug = String(brief["brandName"] ?? "brand")
       .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "brand";
 
-    if (!replicateKey) {
+    if (!replicateKey && !imageRouterConfigured) {
       results.push({
         role: role.role, label: role.label, prompt, imageUrl: null, status: "failed",
-        qcScore: 0, qcNotes: "REPLICATE_API_TOKEN not configured", cost: 0, retries: 0,
+        qcScore: 0, qcNotes: "No image generation provider is configured", cost: 0, retries: 0,
       });
       continue;
     }
@@ -1381,6 +1422,8 @@ export async function runImageDesignerPipeline(
   });
 
   const replicateKey = getProviderApiKey("replicate");
+  const imageRouterConfigured = isImageRouterConfigured();
+  const imageProviderAvailable = imageRouterConfigured || Boolean(replicateKey);
   const imageDesignerAgent = await getAgentBySlug("image-designer");
 
   // Reserve visible asset rows before the first external AI call. Previously
@@ -1411,8 +1454,10 @@ export async function runImageDesignerPipeline(
     const [row] = await db.insert(creativeAiAssetsTable).values({
       projectId: projectUuid,
       agentId: imageDesignerAgent?.id ?? null,
-      provider: "replicate",
-      model: FLUX_SCHNELL,
+      provider: imageRouterConfigured ? "gcp-comfyui" : "replicate",
+      model: imageRouterConfigured
+        ? "sd_xl_base_1.0.safetensors"
+        : FLUX_SCHNELL,
       assetType: "image",
       prompt: placeholderPrompt,
       negativePrompt: null,
@@ -1483,13 +1528,13 @@ export async function runImageDesignerPipeline(
               {
                 style: p.style,
                 variationIndex: i + 1,
-                pipelineStage: replicateKey ? "image_generation" : "prompt_complete",
+                pipelineStage: imageProviderAvailable ? "image_generation" : "prompt_complete",
               },
             )
             : {
               style: p.style,
               variationIndex: i + 1,
-              pipelineStage: replicateKey ? "image_generation" : "prompt_complete",
+              pipelineStage: imageProviderAvailable ? "image_generation" : "prompt_complete",
             },
         })
         .where(eq(creativeAiAssetsTable.id, assetIds[i]));
@@ -1561,8 +1606,8 @@ export async function runImageDesignerPipeline(
   }
 
   // ── Step 2+3: Generate images and QC each one ─────────────────────────────
-  if (!replicateKey) {
-    const errorMessage = "Image generation requires REPLICATE_API_TOKEN. Set this environment variable in Replit Secrets to enable actual image generation.";
+  if (!imageProviderAvailable) {
+    const errorMessage = "No image generation provider is configured.";
     for (let i = 0; i < imagePrompts.length; i++) {
       const p = imagePrompts[i];
       const visualRole = isInteriorProject ? (p.visualRole ?? interiorVisualRoleForIndex(i)) : null;
@@ -1576,23 +1621,23 @@ export async function runImageDesignerPipeline(
               visualRole!,
               conceptVersion!,
               "visual_failed",
-              "replicate",
-              FLUX_SCHNELL,
+              null,
+              null,
               p.prompt,
-              "REPLICATE_API_TOKEN not configured",
+              errorMessage,
               { style: p.style, variationIndex: i + 1, pipelineStage: "provider_missing" },
             )
             : {
               style: p.style,
               variationIndex: i + 1,
               pipelineStage: "provider_missing",
-              generationError: "REPLICATE_API_TOKEN not configured",
+              generationError: errorMessage,
             },
         })
         .where(eq(creativeAiAssetsTable.id, assetIds[i]));
     }
     await logAudit("creative-ai", "image_generation_skipped", projectUuid, "creative_project", "failure", {
-      reason: "REPLICATE_API_TOKEN not set",
+      reason: "No image provider configured",
     });
     if (isInteriorProject && conceptVersion) {
       await finalizeInteriorConceptMetadata(projectUuid, conceptVersion);
@@ -1632,7 +1677,11 @@ export async function runImageDesignerPipeline(
     let qcScore: number | null = null;
     let qcNotes: string | null = null;
     let generationError: string | null = null;
-    let usedModel = FLUX_SCHNELL;
+    let usedModel = imageRouterConfigured
+      ? "sd_xl_base_1.0.safetensors"
+      : FLUX_SCHNELL;
+    let usedProvider: "gcp-comfyui" | "replicate" =
+      imageRouterConfigured ? "gcp-comfyui" : "replicate";
     const visualRole = isInteriorProject ? (p.visualRole ?? interiorVisualRoleForIndex(i)) : null;
 
     // Try primary model (FLUX.1 Schnell), then fallback to FLUX.1 Dev if enabled
@@ -1652,14 +1701,15 @@ export async function runImageDesignerPipeline(
           imageUrl = result.imageUrl;
           imageLatency = result.latencyMs;
           imageStatus = "completed";
-          usedModel = modelId;
+          usedModel = result.model;
+          usedProvider = result.provider;
           generationError = null;
 
           await recordCost({
             projectId: projectUuid,
             agentSlug: "image-designer",
-            provider: "replicate",
-            model: modelId,
+            provider: result.provider,
+            model: result.model,
             inputTokens: 0,
             outputTokens: 0,
             latencyMs: imageLatency,
@@ -1680,8 +1730,8 @@ export async function runImageDesignerPipeline(
       await recordCost({
         projectId: projectUuid,
         agentSlug: "image-designer",
-        provider: "replicate",
-        model: FLUX_SCHNELL,
+        provider: usedProvider,
+        model: usedModel,
         inputTokens: 0,
         outputTokens: 0,
         latencyMs: 0,
@@ -1760,13 +1810,18 @@ export async function runImageDesignerPipeline(
     await db
       .update(creativeAiAssetsTable)
       .set({
+        provider: usedProvider,
         model: usedModel,
         imageUrl: finalImageUrl,
         storagePath: storagePath ?? undefined,
         status: imageStatus,
         qcScore,
         qcNotes: qcNotes ?? (generationError ? `Generation failed: ${generationError}` : null),
-        cost: String(imageStatus === "completed" ? IMAGE_COST_SCHNELL.toFixed(6) : "0"),
+        cost: String(
+          imageStatus === "completed" && usedProvider === "replicate"
+            ? IMAGE_COST_SCHNELL.toFixed(6)
+            : "0",
+        ),
         latencyMs: imageLatency,
         metadata: isInteriorProject
           ? interiorAssetMetadata(
@@ -1775,7 +1830,7 @@ export async function runImageDesignerPipeline(
             imageStatus === "completed" && isPermanentSupabaseImageUrl(finalImageUrl)
               ? "visual_ready"
               : "visual_failed",
-            "replicate",
+            usedProvider,
             usedModel,
             p.prompt,
             imageStatus === "completed" ? null : generationError ?? qcNotes,
@@ -1911,6 +1966,8 @@ export async function regenerateSingleAsset(
   };
 
   const replicateKey = getProviderApiKey("replicate");
+  const imageRouterConfigured = isImageRouterConfigured();
+  const imageProviderAvailable = imageRouterConfigured || Boolean(replicateKey);
   const maxRetries = Math.min(guardrails.maxRetryPerProvider, 2);
   const timeoutMs = Math.min(guardrails.providerTimeoutMs, 120000);
 
@@ -1940,16 +1997,18 @@ export async function regenerateSingleAsset(
     .values({
       projectId: projectUuid,
       agentId: imageDesignerAgent?.id ?? null,
-      provider: "replicate",
-      model: original.model ?? FLUX_SCHNELL,
+      provider: imageRouterConfigured ? "gcp-comfyui" : "replicate",
+      model: imageRouterConfigured
+        ? "sd_xl_base_1.0.safetensors"
+        : (original.model ?? FLUX_SCHNELL),
       assetType: "image",
       prompt,
       negativePrompt: negativePrompt ?? null,
       aspectRatio,
       imageUrl: null,
-      status: replicateKey ? "generating" : "failed",
+      status: imageProviderAvailable ? "generating" : "failed",
       qcScore: null,
-      qcNotes: replicateKey ? null : "Image generation requires REPLICATE_API_TOKEN.",
+      qcNotes: imageProviderAvailable ? null : "No image generation provider is configured.",
       cost: "0",
       latencyMs: 0,
       metadata: {
@@ -1961,16 +2020,26 @@ export async function regenerateSingleAsset(
     })
     .returning({ id: creativeAiAssetsTable.id });
 
-  if (!replicateKey) return;
+  if (!imageProviderAvailable) return;
   let imageUrl: string | null = null;
   let imageLatency = 0;
   let imageStatus = "failed";
   let qcScore: number | null = null;
   let qcNotes: string | null = null;
   let generationError: string | null = null;
-  let usedModel = original.model ?? FLUX_SCHNELL;
+  let usedModel = imageRouterConfigured
+    ? "sd_xl_base_1.0.safetensors"
+    : (original.model ?? FLUX_SCHNELL);
+  let usedProvider: "gcp-comfyui" | "replicate" =
+    imageRouterConfigured ? "gcp-comfyui" : "replicate";
 
-  const modelCandidates = guardrails.fallbackEnabled ? [usedModel, FLUX_DEV] : [usedModel];
+  const replicatePrimaryModel =
+    original.model?.startsWith("black-forest-labs/")
+      ? original.model
+      : FLUX_SCHNELL;
+  const modelCandidates = guardrails.fallbackEnabled
+    ? [replicatePrimaryModel, FLUX_DEV]
+    : [replicatePrimaryModel];
 
   outerLoop: for (const modelId of modelCandidates) {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -1984,13 +2053,14 @@ export async function regenerateSingleAsset(
         imageUrl = result.imageUrl;
         imageLatency = result.latencyMs;
         imageStatus = "completed";
-        usedModel = modelId;
+        usedModel = result.model;
+        usedProvider = result.provider;
         generationError = null;
         await recordCost({
           projectId: projectUuid,
           agentSlug: "image-designer",
-          provider: "replicate",
-          model: modelId,
+          provider: result.provider,
+          model: result.model,
           inputTokens: 0,
           outputTokens: 0,
           latencyMs: imageLatency,
@@ -2055,13 +2125,18 @@ export async function regenerateSingleAsset(
   await db
     .update(creativeAiAssetsTable)
     .set({
+      provider: usedProvider,
       model: usedModel,
       imageUrl: finalImageUrl,
       storagePath: storagePath ?? undefined,
       status: imageStatus,
       qcScore,
       qcNotes: qcNotes ?? (generationError ? `Generation failed: ${generationError}` : null),
-      cost: String(imageStatus === "completed" ? IMAGE_COST_SCHNELL.toFixed(6) : "0"),
+      cost: String(
+        imageStatus === "completed" && usedProvider === "replicate"
+          ? IMAGE_COST_SCHNELL.toFixed(6)
+          : "0",
+      ),
       latencyMs: imageLatency,
     })
     .where(eq(creativeAiAssetsTable.id, newAsset.id));

@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { promisify } from "node:util";
 const apiBase = (process.env["AICORE_REMOTE_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
 const enrollmentSecret = (process.env["OLLAMA_REMOTE_ENROLLMENT_SECRET"] ?? "").trim();
@@ -28,6 +30,28 @@ const execFileAsync = promisify(execFile);
 const powershellRoot = (process.env["LOCAL_CODING_POWERSHELL_ROOT"] ?? process.cwd()).trim();
 const allowedScripts = new Set(["test", "typecheck", "lint", "build"]);
 const forbiddenShellMeta = /[;&|><\x60\r\n\0]/;
+const imageRequestFile =
+  (process.env["AI_GPU_IMAGE_REQUEST_FILE"] ?? "/var/lib/ai-gpu-runtime/image-requested").trim();
+const gpuLastBusyFile =
+  (process.env["AI_GPU_LAST_BUSY_FILE"] ?? "/var/lib/ai-gpu-runtime/last-busy").trim();
+
+async function imageGpuRequested(): Promise<boolean> {
+  try {
+    await access(imageRequestFile);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function markGpuActivity(): Promise<void> {
+  try {
+    await mkdir(dirname(gpuLastBusyFile), { recursive: true });
+    await writeFile(gpuLastBusyFile, String(Math.floor(Date.now() / 1000)) + "\n", "utf8");
+  } catch {
+    // Idle accounting is best-effort and must never fail a coding job.
+  }
+}
 
 if (!enrollmentSecret) throw new Error("OLLAMA_REMOTE_ENROLLMENT_SECRET is required");
 
@@ -339,6 +363,7 @@ async function executeClaimedJob(
   job: Record<string, any>,
 ): Promise<void> {
   const jobId = Number(job["jobId"]);
+  await markGpuActivity();
   const heartbeatTimer = setInterval(() => {
     void heartbeat(registration.workerId, registration.token).catch(() => undefined);
   }, 20_000);
@@ -356,6 +381,7 @@ async function executeClaimedJob(
     console.error(`Remote Ollama job ${jobId} failed:`, error);
   } finally {
     clearInterval(heartbeatTimer);
+    await markGpuActivity();
   }
 }
 
@@ -382,6 +408,17 @@ async function main(): Promise<void> {
       if (activeJobs.size >= maxConcurrentJobs) {
         idleSince = null;
         await Promise.race(activeJobs);
+        continue;
+      }
+
+      // The shared L4 is also used by ComfyUI. Once an image request announces
+      // itself, stop claiming new Ollama work. Existing jobs are allowed to
+      // finish normally; the image gateway waits for Ollama to unload before
+      // submitting the ComfyUI workflow.
+      if (await imageGpuRequested()) {
+        idleSince = null;
+        await markGpuActivity();
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
         continue;
       }
 

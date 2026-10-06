@@ -19,15 +19,30 @@ interface GcpOllamaVmConfig {
 }
 
 export function readGcpOllamaVmConfig(env: NodeJS.ProcessEnv = process.env): GcpOllamaVmConfig {
+  const explicitEnabled = env["GCP_OLLAMA_AUTOSTART_ENABLED"];
+  const production = env["NODE_ENV"] === "production";
+  const credentialJson = (
+    env["GCP_AI_CORE_COMPUTE_SA_JSON"] ??
+    env["GCP_CODING_WORKER_COMPUTE_SA_JSON"] ??
+    env["GCP_OLLAMA_COMPUTE_SA_JSON"] ??
+    // The AI Core bootstrap service account already has the scoped
+    // aiCoreGpuController role in the Ollama project. Reusing it avoids a
+    // second long-lived compute credential in Hostinger.
+    env["GCP_SECRET_MANAGER_BOOTSTRAP_JSON"] ??
+    ""
+  ).trim();
+
   return {
-    enabled: (env["GCP_OLLAMA_AUTOSTART_ENABLED"] ?? "false").trim().toLowerCase() === "true",
-    projectId: (env["GCP_OLLAMA_VM_PROJECT"] ?? "").trim(),
-    zone: (env["GCP_OLLAMA_VM_ZONE"] ?? "").trim(),
-    instanceName: (env["GCP_OLLAMA_VM_INSTANCE"] ?? "").trim(),
-    credentialJson:
-      (env["GCP_AI_CORE_COMPUTE_SA_JSON"] ??
-        env["GCP_CODING_WORKER_COMPUTE_SA_JSON"] ??
-        env["GCP_OLLAMA_COMPUTE_SA_JSON"] ?? "").trim(),
+    enabled:
+      explicitEnabled != null
+        ? explicitEnabled.trim().toLowerCase() === "true"
+        : production && Boolean(credentialJson),
+    projectId: (env["GCP_OLLAMA_VM_PROJECT"] ?? "ollama-510011").trim(),
+    zone: (env["GCP_OLLAMA_VM_ZONE"] ?? "asia-northeast1-c").trim(),
+    instanceName: (
+      env["GCP_OLLAMA_VM_INSTANCE"] ?? "instance-20260928-124118"
+    ).trim(),
+    credentialJson,
     idleShutdownMs: Math.max(
       60_000,
       Number.parseInt(env["GCP_OLLAMA_IDLE_SHUTDOWN_MS"] ?? "", 10) || DEFAULT_IDLE_SHUTDOWN_MS,

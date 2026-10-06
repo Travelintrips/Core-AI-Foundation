@@ -51,6 +51,7 @@ type ChatMessage = {
   createdAt: string;
   error?: boolean;
   image?: { name: string; dataUrl: string };
+  generatedImageUrl?: string;
   meta?: {
     route?: string | null;
     provider?: string | null;
@@ -79,6 +80,7 @@ type ChatResponse = {
   status?: string;
   workspaceUrl?: string;
   warning?: string;
+  imageUrl?: string | null;
 };
 
 type CoreConfig = {
@@ -1549,6 +1551,9 @@ export default function AiCoreChat() {
                       "Catatan: " +
                       warning
                     : message.text,
+                ...(typeof value.imageUrl === "string" && value.imageUrl
+                  ? { generatedImageUrl: value.imageUrl }
+                  : {}),
                 meta: {
                   ...message.meta,
                   usage,
@@ -1631,6 +1636,7 @@ export default function AiCoreChat() {
         role: "assistant",
         text: spokenReply + (response.warning ? "\n\nCatatan: " + response.warning : ""),
         createdAt: new Date().toISOString(),
+        ...(response.imageUrl ? { generatedImageUrl: response.imageUrl } : {}),
         meta: {
           route: response.route,
           provider: response.provider,
@@ -1935,6 +1941,20 @@ export default function AiCoreChat() {
                           alt={message.image.name}
                           className="mb-2 max-h-64 max-w-full rounded-xl object-contain"
                         />
+                      )}
+                      {message.generatedImageUrl && (
+                        <a
+                          href={message.generatedImageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block mb-3"
+                        >
+                          <img
+                            src={message.generatedImageUrl}
+                            alt="Gambar hasil AI Core"
+                            className="max-h-[520px] max-w-full rounded-xl object-contain"
+                          />
+                        </a>
                       )}
                       {message.text || (streamingMessageId === message.id ? "AI Core mulai menjawab…" : "")}
                       {streamingMessageId === message.id && message.text && (

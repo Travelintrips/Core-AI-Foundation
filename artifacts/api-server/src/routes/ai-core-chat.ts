@@ -134,6 +134,10 @@ import {
   DEFAULT_AI_CORE_REALTIME_VOICE,
   isAiCoreRealtimeVoiceConfigured,
 } from "../services/aiCoreRealtimeVoiceService.js";
+import {
+  generateAndPersistImageViaRouter,
+  isImageRouterConfigured,
+} from "../services/imageRouterService.js";
 
 const router = Router();
 const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] !== "false";
@@ -210,6 +214,40 @@ const VoiceLibrarySpeakRequest = z.object({
 const TaskId = z.string().uuid();
 
 type ChatPolicy = z.infer<typeof ChatRequest>["modelPolicy"];
+
+function isDirectImageGenerationRequest(message: string): boolean {
+  const text = message.trim();
+  if (!text) return false;
+  return [
+    /\b(?:buat(?:kan)?|bikin(?:kan)?|generate|render|ciptakan|create|draw|design)\b[\s\S]{0,100}\b(?:gambar|image|foto|photo|poster|ilustrasi|illustration|visual|artwork)\b/i,
+    /\b(?:gambar|image|foto|photo|poster|ilustrasi|illustration|visual|artwork)\b[\s\S]{0,80}\b(?:buat(?:kan)?|bikin(?:kan)?|generate|render|create|draw)\b/i,
+  ].some((pattern) => pattern.test(text));
+}
+
+async function runDirectImageGeneration(message: string): Promise<Record<string, unknown>> {
+  const generated = await generateAndPersistImageViaRouter({
+    prompt: message,
+    width: 1024,
+    height: 1024,
+    steps: 20,
+    cfg: 7,
+    filenamePrefix: "ai-core-chat",
+  });
+  return {
+    kind: "answer",
+    reply: "Gambar selesai dibuat.",
+    route: "GCP_IMAGE_ROUTER",
+    provider: generated.provider,
+    model: generated.model,
+    workload: "IMAGE_GENERATION",
+    costClass: "LOCAL_GPU",
+    usage: null,
+    estimatedCostUsd: 0,
+    imageUrl: generated.imageUrl,
+    promptId: generated.promptId,
+    latencyMs: generated.latencyMs,
+  };
+}
 
 const ASK_SYSTEM_PROMPT = [
   "You are AI Core Chat, the internal assistant for the AI Core control plane.",
@@ -1624,6 +1662,9 @@ function writeBufferedChatStream(
     workspaceUrl: result["workspaceUrl"] ?? null,
     databaseQuery: result["databaseQuery"] ?? null,
     data: result["data"] ?? null,
+    imageUrl: result["imageUrl"] ?? null,
+    promptId: result["promptId"] ?? null,
+    latencyMs: result["latencyMs"] ?? null,
     incomplete: false,
   });
 }
@@ -3187,6 +3228,16 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       effectiveMessage = withImageContext(effectiveMessage, vision.description);
     }
 
+    if (
+      !parsed.data.image &&
+      isImageRouterConfigured() &&
+      isDirectImageGenerationRequest(safeMessage)
+    ) {
+      const result = await runDirectImageGeneration(safeMessage);
+      writeBufferedChatStream(res, result);
+      return;
+    }
+
     if (parsed.data.mode === "auto") {
       const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
       const effectiveInput = {
@@ -3315,7 +3366,12 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
     const rawDispatch = classifyAiCoreChatDispatch(rawInput.message);
     const result =
-      effectiveInput.mode === "agent"
+      effectiveInput.mode !== "agent" &&
+      !parsed.data.image &&
+      isImageRouterConfigured() &&
+      isDirectImageGenerationRequest(rawInput.message)
+        ? await runDirectImageGeneration(rawInput.message)
+        : effectiveInput.mode === "agent"
         ? (await runGcpBillingStatusOperation(rawInput.message)) ??
           (await runAdminDbMutationOperation(rawInput.message)) ??
           (await runInfrastructureOperation(rawInput.message)) ??
