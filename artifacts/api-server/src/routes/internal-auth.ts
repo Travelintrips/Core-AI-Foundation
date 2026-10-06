@@ -37,6 +37,23 @@ function clientIp(req: import("express").Request): string | undefined {
   return (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? undefined;
 }
 
+const TRUSTED_PORTAL_HOSTS = new Set([
+  "aicore.cstlogistic.co.id",
+  "aicoding.travelintrips.co.id",
+]);
+
+function publicPortalBaseUrl(req: import("express").Request): string {
+  const forwardedHost = typeof req.headers["x-forwarded-host"] === "string"
+    ? req.headers["x-forwarded-host"].split(",")[0]?.trim()
+    : "";
+  const rawHost = forwardedHost || req.get("host") || "";
+  const hostname = rawHost.replace(/:\d+$/, "").toLowerCase();
+  if (process.env["NODE_ENV"] === "production" && TRUSTED_PORTAL_HOSTS.has(hostname)) {
+    return `https://${hostname}`;
+  }
+  return (process.env["PUBLIC_APP_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
+}
+
 function setSessionCookie(res: import("express").Response, token: string): void {
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
@@ -150,7 +167,7 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   if (!user || user.status !== "active") { res.json(generic); return; }
 
   const token = issueMagicLoginToken(user.id);
-  const baseUrl = (process.env["PUBLIC_APP_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
+  const baseUrl = publicPortalBaseUrl(req);
   const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
   const sent = await sendEmail({
     to: user.email,
@@ -214,7 +231,7 @@ router.post("/internal/auth/request-password-reset", loginLimiter, async (req, r
   }
 
   const token = issuePasswordResetToken(user);
-  const baseUrl = (process.env["PUBLIC_APP_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
+  const baseUrl = publicPortalBaseUrl(req);
   const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
   const sent = await sendEmail({
     to: user.email,

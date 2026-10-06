@@ -180,6 +180,7 @@ import codingPowerShellRouter from "./coding-powershell.js";
 import aiCoreChatRouter from "./ai-core-chat.js";
 import aiCoreMcpRouter from "./ai-core-mcp.js";
 import incidentsRouter from "./incidents.js";
+import aicodingDashboardRouter from "./aicoding-dashboard.js";
 import localMediaRouter from "./local-media.js";
 import local3dRouter from "./local-3d.js";
 
@@ -199,6 +200,7 @@ router.use(codingPowerShellRouter);
 router.use(aiCoreMcpRouter);
 router.use(aiCoreChatRouter);
 router.use(incidentsRouter);
+router.use(aicodingDashboardRouter);
 router.use(localMediaRouter);
 router.use(local3dRouter);
 router.use(internalAuthRouter);
