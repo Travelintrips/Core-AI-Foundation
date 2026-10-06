@@ -30,6 +30,57 @@ const SECRET_PATTERNS: RegExp[] = [
 const AMBIGUOUS_REFERENCE =
   /\b(yang\s+tadi|yang\s+lama|yang\s+itu|itu\s+saja|lanjutkan\s+yang\s+tadi|continue\s+that|the\s+previous\s+one)\b/i;
 
+const CONTEXTUAL_FOLLOW_UP =
+  /^(?:cek(?:\s+lagi)?|check(?:\s+again)?|lanjut(?:kan)?|continue|resume|perbaiki|fix|benahi|merge|rerun|ulang(?:i)?|uji(?:\s+lagi)?|test|audit(?:\s+lagi)?|selesaikan|bereskan|next|nextnya\s+apa)$/i;
+
+const EXPLICIT_TARGET =
+  /\b(?:CWS-[A-Z0-9-]+|PR\s*#?\s*\d+|pull\s*request\s*#?\s*\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+|worker\s+(?:satu|dua|tiga|empat|lima|enam|1|2|3|4|5|6))\b/i;
+
+function contextualFollowUp(message: string): boolean {
+  const normalized = message.trim().replace(/[.!?…]+$/g, "").trim();
+  return CONTEXTUAL_FOLLOW_UP.test(normalized) && !EXPLICIT_TARGET.test(normalized);
+}
+
+function distinctStrongTargets(
+  context: ConversationContextMessage[],
+): { prs: Set<string>; tasks: Set<string> } {
+  const prs = new Set<string>();
+  const tasks = new Set<string>();
+  for (const item of context.slice(-6)) {
+    for (const match of item.text.matchAll(/\b(?:PR|pull\s*request)\s*#?\s*(\d+)\b/gi)) {
+      const value = match[1];
+      if (value) prs.add(value);
+    }
+    for (const match of item.text.matchAll(/\bCWS-[A-Z0-9-]+\b/gi)) {
+      tasks.add(match[0].toUpperCase());
+    }
+  }
+  return { prs, tasks };
+}
+
+export function contextualizeConversationCommand(
+  message: string,
+  context: ConversationContextMessage[] | undefined,
+): string {
+  const safeMessage = redactConversationText(message).trim();
+  const safeContext = sanitizeConversationContext(context);
+  if (!contextualFollowUp(safeMessage) || safeContext.length === 0) return safeMessage;
+
+  const recent = safeContext.slice(-4);
+  const transcript = recent
+    .map((item) => `${item.role === "user" ? "User" : "AI Core"}: ${item.text}`)
+    .join("\n");
+
+  return [
+    safeMessage,
+    "",
+    "Recent conversation context for resolving this short follow-up command:",
+    transcript,
+    "",
+    "Apply the command only to the single active target implied by this context. If multiple targets remain plausible, ask for clarification instead of guessing.",
+  ].join("\n");
+}
+
 const WORKER_MARKER =
   /\bworker\s+(?:satu|dua|tiga|empat|lima|enam|1|2|3|4|5|6)\b/gi;
 
@@ -100,9 +151,21 @@ export function parseConversationCommand(
   context: ConversationContextMessage[] | undefined = [],
 ): ParsedConversationCommand {
   const safeMessage = redactConversationText(message).trim();
-  const dispatch = classifyAiCoreChatDispatch(safeMessage);
+  const safeContext = sanitizeConversationContext(context);
+  const routingMessage = contextualizeConversationCommand(safeMessage, safeContext);
+  const dispatch = classifyAiCoreChatDispatch(routingMessage);
   const commands = splitParallelWorkerCommands(safeMessage);
-  const ambiguous = AMBIGUOUS_REFERENCE.test(safeMessage) && context.length === 0;
+  const targets = distinctStrongTargets(safeContext);
+  const contextualAmbiguity =
+    contextualFollowUp(safeMessage) &&
+    (
+      safeContext.length === 0 ||
+      targets.prs.size > 1 ||
+      targets.tasks.size > 1
+    );
+  const ambiguous =
+    (AMBIGUOUS_REFERENCE.test(safeMessage) && safeContext.length === 0) ||
+    contextualAmbiguity;
 
   const riskLevel: ConversationRiskLevel =
     dispatch.workload.requiresApproval
