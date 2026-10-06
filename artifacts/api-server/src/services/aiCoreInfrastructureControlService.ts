@@ -37,6 +37,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DNS_RECORD_UPDATE"
   | "HOSTINGER_DNS_RECORD_DELETE"
   | "HOSTINGER_DOCKER_ENV_SET"
+  | "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
   | "EXTERNAL_AGENT_STATUS";
@@ -108,6 +109,12 @@ export function detectAiCoreInfrastructureOperation(
       /\b(cari|find|discover|discovery|list|daftar|cek|check|lihat)\b/i.test(text) &&
       /\b(hosting username|hosting domain|hosting account|website|websites|akun hosting|domain hosting)\b/i.test(text)) {
     return "HOSTINGER_HOSTING_DISCOVERY";
+  }
+
+  if (/\b(hostinger|hpanel)\b/i.test(text) &&
+      /\b(ssh|public key|public-key|ssh key|kunci ssh)\b/i.test(text) &&
+      /\b(attach|pasang|daftarkan|register|add|tambah)\b/i.test(text)) {
+    return "HOSTINGER_SSH_PUBLIC_KEY_ATTACH";
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
@@ -596,7 +603,64 @@ async function callHostinger(
 
   let data: unknown = null;
 
-  if ([
+  if (operation === "HOSTINGER_SSH_PUBLIC_KEY_ATTACH") {
+    if (!config.vmId) throw new Error("Hostinger SSH key attach requires HOSTINGER_VPS_ID.");
+    const key = valueOf("key");
+    const name = valueOf("name") || "ai-core-hostinger";
+    if (!key || !/^ssh-(?:ed25519|rsa)\s+[A-Za-z0-9+/=]+(?:\s+.*)?$/.test(key)) {
+      throw new Error("Hostinger SSH key attach requires key=<OpenSSH-public-key>.");
+    }
+
+    const existing = await firstSuccessful("/vps/v1/public-keys", "GET");
+    if (existing.status < 200 || existing.status >= 300) {
+      throw new Error(`Hostinger SSH public key list failed with HTTP ${existing.status}.`);
+    }
+    const payload = existing.data as { data?: unknown[] } | unknown[] | null;
+    const items = Array.isArray(payload)
+      ? payload
+      : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+        ? (payload as { data: unknown[] }).data
+        : [];
+    const normalizedKey = key.trim();
+    const match = items
+      .filter((item) => item && typeof item === "object")
+      .map((item) => item as Record<string, unknown>)
+      .find((item) => String(item["key"] ?? "").trim() === normalizedKey);
+
+    let publicKeyId = match ? Number(match["id"]) : NaN;
+    if (!Number.isInteger(publicKeyId) || publicKeyId <= 0) {
+      const created = await firstSuccessful("/vps/v1/public-keys", "POST", {
+        name,
+        key: normalizedKey,
+      });
+      if (created.status < 200 || created.status >= 300) {
+        throw new Error(`Hostinger SSH public key create failed with HTTP ${created.status}.`);
+      }
+      const createdValue = created.data && typeof created.data === "object"
+        ? created.data as Record<string, unknown>
+        : {};
+      publicKeyId = Number(createdValue["id"]);
+      if (!Number.isInteger(publicKeyId) || publicKeyId <= 0) {
+        throw new Error("Hostinger SSH public key create returned no usable id.");
+      }
+    }
+
+    const attached = await firstSuccessful(
+      `/vps/v1/public-keys/attach/${encodeURIComponent(config.vmId)}`,
+      "POST",
+      { ids: [publicKeyId] },
+    );
+    if (attached.status < 200 || attached.status >= 300) {
+      throw new Error(`Hostinger SSH public key attach failed with HTTP ${attached.status}.`);
+    }
+    data = {
+      virtualMachineId: config.vmId,
+      publicKeyId,
+      name,
+      attached: true,
+      result: attached.data,
+    };
+  } else if ([[
     "HOSTINGER_DNS_LIST",
     "HOSTINGER_DNS_SUBDOMAIN_CREATE",
     "HOSTINGER_DNS_RECORD_CREATE",
