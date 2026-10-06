@@ -56,6 +56,85 @@ export async function recordChatLearningEvent(input: {
   });
 }
 
+export type AiCoreChatActivityItem = {
+  id: string;
+  conversationId: string | null;
+  role: "user" | "assistant" | "system";
+  direction: "chatgpt_to_ai_core" | "ai_core_to_chatgpt" | "system";
+  content: string;
+  route: string | null;
+  kind: string | null;
+  status: string | null;
+  taskId: string | null;
+  projectName: string | null;
+  repository: string | null;
+  branch: string | null;
+  createdAt: string | null;
+};
+
+export async function listAiCoreChatActivity(input?: {
+  conversationId?: string | null;
+  limit?: number;
+}): Promise<AiCoreChatActivityItem[]> {
+  const conversationId = input?.conversationId?.trim() || null;
+  const limit = Math.max(1, Math.min(input?.limit ?? 100, 500));
+  const whereClause = conversationId
+    ? and(
+        eq(aiMemoryTable.agentId, "ai-core-chat"),
+        eq(aiMemoryTable.memoryType, "chat_event"),
+        eq(aiMemoryTable.sessionId, conversationId),
+      )
+    : and(
+        eq(aiMemoryTable.agentId, "ai-core-chat"),
+        eq(aiMemoryTable.memoryType, "chat_event"),
+      );
+
+  const rows = await db
+    .select({
+      id: aiMemoryTable.id,
+      sessionId: aiMemoryTable.sessionId,
+      content: aiMemoryTable.content,
+      metadata: aiMemoryTable.metadata,
+      createdAt: aiMemoryTable.createdAt,
+    })
+    .from(aiMemoryTable)
+    .where(whereClause)
+    .orderBy(desc(aiMemoryTable.createdAt))
+    .limit(limit);
+
+  return rows.flatMap((row) => {
+    const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+    const rawRole = metadata["role"];
+    if (rawRole !== "user" && rawRole !== "assistant" && rawRole !== "system") return [];
+
+    const stringMeta = (key: string): string | null =>
+      typeof metadata[key] === "string" && String(metadata[key]).trim()
+        ? String(metadata[key])
+        : null;
+
+    return [{
+      id: String(row.id),
+      conversationId: row.sessionId ?? null,
+      role: rawRole,
+      direction:
+        rawRole === "user"
+          ? "chatgpt_to_ai_core"
+          : rawRole === "assistant"
+            ? "ai_core_to_chatgpt"
+            : "system",
+      content: row.content,
+      route: stringMeta("route"),
+      kind: stringMeta("kind"),
+      status: stringMeta("status"),
+      taskId: stringMeta("taskId"),
+      projectName: stringMeta("projectName"),
+      repository: stringMeta("repository"),
+      branch: stringMeta("branch"),
+      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
+    }];
+  });
+}
+
 function explicitDurableLearning(message: string): { key: string; content: string; importance: string } | null {
   const text = message.trim();
   const rule = /^(?:ingat|remember|mulai sekarang|from now on|selalu|always|jangan pernah|never)\b/i;
