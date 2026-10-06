@@ -150,6 +150,30 @@ describe("Coding Orchestrator autonomous fail-closed policy", () => {
   });
 });
 
+describe("Coding Orchestrator watchdog recovery policy", () => {
+  it("reports terminal analyzer process failures as recoverable BLOCKED task events", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf(
+      "export async function reconcileTerminalRepositoryAnalyzerOrchestrations",
+    );
+    const end = source.indexOf(
+      "export async function resumeDeferredCodingOrchestrations",
+      start,
+    );
+    const recovery = source.slice(start, end);
+
+    expect(recovery).toContain("status = 'READY_REVIEW'");
+    expect(recovery).toContain("last_action = 'RECOVERABLE_OPERATIONAL_FAILURE'");
+    expect(recovery).toContain('status: "BLOCKED"');
+    expect(recovery).toContain(
+      'source: "coding-orchestrator-analyzer-recovery"',
+    );
+  });
+});
+
 describe("Coding Orchestrator AI gate monotonicity", () => {
   it("preserves handoff gates that already advanced beyond AI_REQUIRED", () => {
     expect(
@@ -537,6 +561,14 @@ describe("Coding Orchestrator", () => {
     );
     expect(sqlText).toContain("t.status = 'ANALYZING'");
     expect(sqlText).toContain("RETRY_REPOSITORY_ANALYSIS");
+    expect(sqlText).toContain("SET status = 'READY_REVIEW'");
+    expect(sqlText).toContain("last_action = 'RECOVERABLE_OPERATIONAL_FAILURE'");
+    expect(sqlText).toContain("'status', 'BLOCKED'");
+    expect(sqlText).toContain("recoverable");
+    expect(sqlText).toContain("blocked_autonomous");
+    expect(sqlText).not.toContain(
+      "UPDATE ai_platform.ai_coding_tasks AS t\n    SET status = 'FAILED'",
+    );
   });
 
   it("recovers deferred Incident Auto-Repair runs in addition to Coding Orchestrator runs", async () => {

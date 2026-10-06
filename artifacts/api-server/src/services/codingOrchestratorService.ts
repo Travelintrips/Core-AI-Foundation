@@ -1285,8 +1285,9 @@ export async function reconcileTerminalRepositoryAnalyzerOrchestrations(): Promi
               ' ended as ' || terminal_jobs.job_status || ': ' ||
               terminal_jobs.job_error,
             'orchestration', json_build_object(
-              'status', 'FAILED',
+              'status', 'BLOCKED',
               'nextAction', 'RETRY_REPOSITORY_ANALYSIS',
+              'recoverable', true,
               'recoveredTerminalAnalyzerJobId', terminal_jobs.job_id
             )
           )::text
@@ -1294,11 +1295,28 @@ export async function reconcileTerminalRepositoryAnalyzerOrchestrations(): Promi
       WHERE r.id = terminal_jobs.run_id
         AND r.status = 'RUNNING'
       RETURNING r.task_id
+    ),
+    blocked_autonomous AS (
+      UPDATE ai_platform.ai_coding_autonomous_tasks AS a
+      SET status = 'BLOCKED',
+          last_action = 'RECOVERABLE_OPERATIONAL_FAILURE',
+          last_error = LEFT(
+            'Repository Analyzer job ' || terminal_jobs.job_id::text ||
+            ' ended as ' || terminal_jobs.job_status || ': ' ||
+            terminal_jobs.job_error,
+            2000
+          ),
+          completed_at = NULL,
+          updated_at = NOW()
+      FROM terminal_jobs
+      WHERE a.task_id = terminal_jobs.task_id
+        AND a.enabled = TRUE
+      RETURNING a.task_id
     )
     UPDATE ai_platform.ai_coding_tasks AS t
-    SET status = 'FAILED',
+    SET status = 'READY_REVIEW',
         result_summary = LEFT(
-          'Repository Analyzer failed: ' || terminal_jobs.job_error,
+          'Repository Analyzer needs recoverable retry: ' || terminal_jobs.job_error,
           500
         ),
         updated_at = NOW()
@@ -1309,11 +1327,28 @@ export async function reconcileTerminalRepositoryAnalyzerOrchestrations(): Promi
         FROM failed_runs
         WHERE failed_runs.task_id = t.id
       )
-    RETURNING t.id
+    RETURNING t.id, terminal_jobs.job_error
   `);
 
   const rows =
-    (result as unknown as { rows?: Array<{ id: string }> }).rows ?? [];
+    (result as unknown as { rows?: Array<{ id: string; job_error?: string }> }).rows ?? [];
+
+  for (const row of rows) {
+    const message =
+      `Repository Analyzer recovery is recoverable: ${row.job_error ?? "terminal analyzer job requires retry"}`;
+    await reportCodingTaskTerminalTransition({
+      taskId: row.id,
+      status: "BLOCKED",
+      message,
+      source: "coding-orchestrator-analyzer-recovery",
+    }).catch((error) => {
+      logger.warn(
+        { taskId: row.id, error },
+        "[coding-orchestrator] Failed to report recoverable analyzer blocker",
+      );
+    });
+  }
+
   return rows.length;
 }
 
