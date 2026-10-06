@@ -24,39 +24,106 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect AI Platform verification scope
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run_ai_platform=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_dispatch" >> "$GITHUB_OUTPUT"
+            echo "pr_fast_scope=RUN reason=manual_dispatch"
+            exit 0
+          fi
+
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "run_ai_platform=true" >> "$GITHUB_OUTPUT"
+            echo "reason=missing_pr_sha_fail_safe" >> "$GITHUB_OUTPUT"
+            echo "pr_fast_scope=RUN reason=missing_pr_sha_fail_safe"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          printf 'pr_fast_changed_files=\n%s\n' "$changed_files"
+
+          run_ai_platform=false
+          reason="no_ai_platform_sensitive_change"
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              artifacts/ai-platform/*|artifacts/ai-platform/**/*|\
+              lib/*|lib/**/*|\
+              package.json|pnpm-lock.yaml|pnpm-workspace.yaml|\
+              tsconfig.json|tsconfig.*.json|turbo.json|\
+              .github/workflows/pr-fast-verify.yml)
+                run_ai_platform=true
+                reason="sensitive_path:$file"
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "run_ai_platform=$run_ai_platform" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "pr_fast_scope=$([ "$run_ai_platform" = "true" ] && echo RUN || echo SKIP) reason=$reason"
 
       - name: Setup pnpm
+        if: steps.scope.outputs.run_ai_platform == 'true'
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Setup Node
+        if: steps.scope.outputs.run_ai_platform == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.scope.outputs.run_ai_platform == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build workspace type references
+        if: steps.scope.outputs.run_ai_platform == 'true'
         run: pnpm run typecheck:libs
 
       - name: AI Platform typecheck
+        if: steps.scope.outputs.run_ai_platform == 'true'
         run: pnpm --filter @workspace/ai-platform typecheck
 
       - name: AI Platform tests
+        if: steps.scope.outputs.run_ai_platform == 'true'
         run: pnpm --filter @workspace/ai-platform test
 
       - name: AI Platform build
+        if: steps.scope.outputs.run_ai_platform == 'true'
         env:
           PORT: 4173
           BASE_PATH: /
         run: pnpm --filter @workspace/ai-platform build
 
+      - name: Skip AI Platform checks for unrelated PR
+        if: steps.scope.outputs.run_ai_platform != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Skipping AI Platform typecheck/tests/build because this PR does not touch AI Platform-sensitive paths."
+          echo "pr_fast_verify=SKIPPED reason=${{ steps.scope.outputs.reason }}"
+
       - name: Self diagnostic summary
         if: always()
         shell: bash
+        env:
+          RUN_AI_PLATFORM: ${{ steps.scope.outputs.run_ai_platform }}
+          SCOPE_REASON: ${{ steps.scope.outputs.reason }}
         run: |
           {
             echo "## AI Core PR Self Diagnostic"
@@ -65,11 +132,13 @@ jobs:
             echo "- Workflow: \`${GITHUB_WORKFLOW}\`"
             echo "- Run: #${GITHUB_RUN_NUMBER}"
             echo "- Repository: \`${GITHUB_REPOSITORY}\`"
+            echo "- AI Platform checks: \`${RUN_AI_PLATFORM:-unknown}\`"
+            echo "- Scope reason: \`${SCOPE_REASON:-unknown}\`"
             echo
             echo "### Verification contract"
-            echo "- Workspace references must build before leaf typecheck."
-            echo "- AI Platform must pass typecheck, tests, and build."
-            echo "- Build requires PORT=4173 and BASE_PATH=/."
+            echo "- AI Platform-sensitive changes build workspace references before leaf typecheck."
+            echo "- AI Platform-sensitive changes must pass typecheck, tests, and build."
+            echo "- Unrelated backend/workflow changes keep this check green without duplicating AI Platform work."
             echo
             echo "### Failure triage"
             echo "Open the first failed step above. Treat its first compiler/test/build error as the primary blocker; later errors may be cascading."
@@ -78,7 +147,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture diagnostic context
-        if: failure()
+        if: failure() && steps.scope.outputs.run_ai_platform == 'true'
         shell: bash
         run: |
           mkdir -p .ci-diagnostics
@@ -95,7 +164,7 @@ jobs:
           pnpm list --depth 0 > .ci-diagnostics/workspace-packages.txt 2>&1 || true
 
       - name: Upload failure diagnostics
-        if: failure()
+        if: failure() && steps.scope.outputs.run_ai_platform == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ai-core-pr-diagnostics-${{ github.run_id }}
