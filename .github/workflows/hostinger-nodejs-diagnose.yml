@@ -1,0 +1,94 @@
+name: Hostinger NodeJS Diagnose
+
+on:
+  push:
+    branches:
+      - ops/hostinger-nodejs-diagnose-20261006
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+      HOSTINGER_ALT_TOKEN: ${{ secrets.HOSTINGER_TOKEN }}
+      HOSTINGER_USERNAME: u684045296
+      HOSTINGER_DOMAIN: aicore.cstlogistic.co.id
+      HOSTINGER_API_BASE: https://developers.hostinger.com/api
+    steps:
+      - name: Resolve Hostinger credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${HOSTINGER_API_TOKEN:-}" ]; then
+            echo "HOSTINGER_TOKEN_SOURCE=HOSTINGER_API_TOKEN" >> "$GITHUB_ENV"
+          elif [ -n "${HOSTINGER_ALT_TOKEN:-}" ]; then
+            echo "HOSTINGER_TOKEN_SOURCE=HOSTINGER_TOKEN" >> "$GITHUB_ENV"
+            echo "HOSTINGER_API_TOKEN=$HOSTINGER_ALT_TOKEN" >> "$GITHUB_ENV"
+          else
+            echo "::error::No Hostinger API token is configured in the production environment/repository secrets."
+            exit 2
+          fi
+
+      - name: Read NodeJS build settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds/settings"
+          code=$(curl -sS -o /tmp/settings.json -w "%{http_code}"             -H "Accept: application/json"             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$url")
+          echo "settings_http=$code"
+          cat /tmp/settings.json
+          echo
+          test "$code" = "200"
+
+      - name: Read recent NodeJS builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds?per_page=10"
+          code=$(curl -sS -o /tmp/builds.json -w "%{http_code}"             -H "Accept: application/json"             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$url")
+          echo "builds_http=$code"
+          test "$code" = "200"
+          node - <<'NODE'
+          const fs = require("fs");
+          const body = JSON.parse(fs.readFileSync("/tmp/builds.json", "utf8"));
+          const rows = Array.isArray(body?.data) ? body.data : [];
+          console.log(JSON.stringify({
+            total: body?.meta?.total ?? rows.length,
+            recent: rows.slice(0,10).map((b) => ({
+              uuid: b.uuid,
+              state: b.state,
+              created_at: b.created_at,
+              updated_at: b.updated_at,
+              options: b.options ? {
+                node_version: b.options.node_version,
+                app_type: b.options.app_type,
+                root_directory: b.options.root_directory,
+                output_directory: b.options.output_directory,
+                build_script: b.options.build_script,
+                entry_file: b.options.entry_file,
+                package_manager: b.options.package_manager,
+                source_type: b.options.source_type,
+              } : null,
+            })),
+          }, null, 2));
+          NODE
+
+      - name: Read NodeJS environment keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds/settings/env"
+          code=$(curl -sS -o /tmp/env.json -w "%{http_code}"             -H "Accept: application/json"             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$url")
+          echo "env_http=$code"
+          test "$code" = "200"
+          node - <<'NODE'
+          const fs = require("fs");
+          const body = JSON.parse(fs.readFileSync("/tmp/env.json", "utf8"));
+          const rows = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
+          console.log(JSON.stringify({keys: rows.map((row) => row.key).filter(Boolean).sort()}, null, 2));
+          NODE
