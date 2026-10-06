@@ -13,14 +13,91 @@ permissions:
 
 concurrency:
   group: ai-core-chat-routing-canary
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  routing-canary:
-    name: Production chat routing canary
+  scope:
+    name: Scope chat routing canary
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      should_run: ${{ steps.scope.outputs.should_run }}
+      reason: ${{ steps.scope.outputs.reason }}
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 2
+
+      - name: Detect routing-sensitive change
+        id: scope
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_dispatch" >> "$GITHUB_OUTPUT"
+            echo "Manual routing canary requested."
+            exit 0
+          fi
+
+          latest_main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          if [ "$EXPECTED_SHA" != "$latest_main_sha" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=stale_verified_sha" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping routing canary for stale verified SHA $EXPECTED_SHA; current main is $latest_main_sha."
+            exit 0
+          fi
+
+          if ! git rev-parse "${EXPECTED_SHA}^1" >/dev/null 2>&1; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=parent_unavailable_fail_safe" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base_sha=$(git rev-parse "${EXPECTED_SHA}^1")
+          changed_files=$(git diff --name-only "$base_sha" "$EXPECTED_SHA")
+          printf 'routing_canary_changed_files=\n%s\n' "$changed_files"
+
+          should_run=false
+          reason="no_routing_sensitive_change"
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              .github/workflows/ai-core-chat-routing-canary.yml|\
+              artifacts/api-server/src/routes/ai-core-chat.ts|\
+              artifacts/api-server/src/services/aiCoreWorkloadRouterService.ts|\
+              artifacts/api-server/src/services/aiCoreChat*.ts|\
+              artifacts/api-server/src/services/aiCoreConversation*.ts|\
+              artifacts/api-server/src/services/aiCoreCapabilityRegistryService.ts|\
+              artifacts/api-server/src/services/externalAgentRegistryService.ts|\
+              artifacts/api-server/src/services/workerMonitor*.ts|\
+              artifacts/api-server/src/services/aiExecution*.ts|\
+              lib/api-spec/*|\
+              lib/api-zod/*)
+                should_run=true
+                reason="routing_sensitive_path:$file"
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "routing_canary_scope=$should_run reason=$reason"
+
+  routing-canary:
+    name: Production chat routing canary
+    needs: scope
+    if: needs.scope.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 5
@@ -71,7 +148,7 @@ jobs:
           ask() {
             local message="$1" context="${2:-[]}" out="$3"
             jq -nc --arg m "$message" --argjson c "$context" \
-              '{message:$m,mode:"ask",modelPolicy:"auto",conversationId:"production-chat-routing-canary",context:$c}' > /tmp/chat-request.json
+              '{message:$m,mode:"ask",modelPolicy:"cloud",conversationId:"production-chat-routing-canary",context:$c}' > /tmp/chat-request.json
             local code=""
             for attempt in $(seq 1 4); do
               code=$(curl --http1.1 -sS -L --max-redirs 3 --proto-redir '=https' \
