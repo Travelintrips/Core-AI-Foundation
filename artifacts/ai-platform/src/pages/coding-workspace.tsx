@@ -588,7 +588,6 @@ type RepositoryAnalyzerUiResult = {
     implementationSteps: string[];
     verificationSteps: string[];
     risks: string[];
-    approvalRequired?: boolean;
   };
   planner?: {
     modelUsed?: string;
@@ -1493,7 +1492,6 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             implementationSteps: stringList(implementationPlanValue.implementationSteps),
             verificationSteps: stringList(implementationPlanValue.verificationSteps),
             risks: stringList(implementationPlanValue.risks),
-            approvalRequired: implementationPlanValue.approvalRequired === true,
           }
         : undefined,
       planner: plannerValue
@@ -2038,7 +2036,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const canApprovePlan =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
-    analyzerResult?.implementationPlan?.approvalRequired === true &&
     !hasActiveRun;
   const canApproveLocalPatch =
     task.status === CodingTaskStatus.READY_REVIEW &&
@@ -3570,11 +3567,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-300">Implementation plan</div>
                     <div className="flex flex-wrap items-center gap-2">
-                      {analyzerResult.implementationPlan.approvalRequired && (
-                        <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-amber-300">
-                          Approval required
-                        </span>
-                      )}
                       {canApprovePlan && (
                         <Button
                           type="button"
@@ -3584,7 +3576,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                           className="h-7 bg-violet-300 px-2.5 text-[10px] font-semibold text-[#1b1230] hover:bg-violet-200"
                           data-testid="button-approve-coding-plan"
                         >
-                          {approvePending ? <><Loader2 className="size-3 animate-spin" />Starting Coding Agent</> : <><CheckCircle2 className="size-3" />Approve Plan & Start Coding</>}
+                          {approvePending ? <><Loader2 className="size-3 animate-spin" />Starting Coding Agent</> : <><CheckCircle2 className="size-3" />Run Plan & Start Coding</>}
                         </Button>
                       )}
                     </div>
