@@ -68,3 +68,35 @@ export function codingTaskPresentationStatus(input: {
 
   return input.taskStatus;
 }
+
+
+export function codingDashboardTaskPresentationStatus(input: {
+  taskNumber?: string | null;
+  taskStatus: string;
+  latestRunStatus?: string | null;
+  autonomousStatus?: string | null;
+  hasActiveRun?: boolean;
+  hasPendingCriticalApproval?: boolean;
+}): string {
+  const taskNumber = input.taskNumber?.trim() ?? "";
+  const latestRunStatus = input.latestRunStatus?.toUpperCase() ?? null;
+
+  // Multi-worker child rows are execution shards, not independent human-review
+  // gates. Once their latest execution is completed and no critical approval or
+  // active recovery remains, show them as completed even if legacy persistence
+  // still says READY_REVIEW.
+  if (
+    taskNumber.startsWith("MW-") &&
+    input.taskStatus === "READY_REVIEW" &&
+    latestRunStatus === "COMPLETED" &&
+    !input.hasActiveRun &&
+    !input.hasPendingCriticalApproval &&
+    input.autonomousStatus !== "APPROVAL_REQUIRED" &&
+    input.autonomousStatus !== "ACTIVE" &&
+    input.autonomousStatus !== "WAITING"
+  ) {
+    return "COMPLETED";
+  }
+
+  return codingTaskPresentationStatus(input);
+}
