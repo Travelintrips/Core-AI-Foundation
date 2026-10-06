@@ -47,8 +47,10 @@ import {
   inspectAdminDbSchemaCatalog,
   isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
+  isAdminCodingTaskStatusQuery,
   isAiCoreAuditHistoryQuery,
   executeAdminWorkerStatusQuery,
+  executeAdminCodingTaskStatusQuery,
   sanitizeAdminDbError,
   renderAdminSemanticQueryResult,
   shouldAttemptAdminDbQuery,
@@ -110,6 +112,28 @@ describe("AI Core admin database query service", () => {
     expect(result.rows).toEqual([{ worker_id: 7, worker_name: "coding-1", status: "busy" }]);
     expect(result.sql).toContain("id AS worker_id");
     expect(result.sql).not.toContain("w.worker_id");
+  });
+
+
+  it("routes coding task lifecycle audits to deterministic task schema", async () => {
+    expect(
+      isAdminCodingTaskStatusQuery(
+        "audit Workspace task READY_REVIEW ANALYZING BLOCKED FAILED",
+      ),
+    ).toBe(true);
+    expect(isAdminCodingTaskStatusQuery("worker mana yang available")).toBe(false);
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ task_number: "CWS-TEST", persisted_status: "READY_REVIEW" }] });
+
+    const result = await executeAdminCodingTaskStatusQuery();
+    expect(result.rowCount).toBe(1);
+    expect(result.sql).toContain("ai_coding_task_graphs.task_id");
+    expect(result.sql).not.toContain("parent_task_id");
+    expect(result.sql).toContain("ai_coding_critical_approvals");
   });
 
   it("routes AI Core MCP event status checks to the dedicated event tables", async () => {
