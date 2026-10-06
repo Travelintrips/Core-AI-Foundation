@@ -254,7 +254,6 @@ function availabilityFromRow(
   const modelId = typeof row["model_id"] === "string" ? row["model_id"] : "";
   const endpointUrl =
     typeof row["endpoint_url"] === "string" ? row["endpoint_url"] : "";
-  const maxConcurrentJobs = Number(row["max_concurrent_jobs"] ?? 0);
   const runningJobs = Number(row["running_jobs"] ?? 0);
 
   if (!Number.isInteger(id) || id <= 0 || !workerName || !modelId || !endpointUrl) {
