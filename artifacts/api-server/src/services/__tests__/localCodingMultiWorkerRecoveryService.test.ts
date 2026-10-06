@@ -41,12 +41,14 @@ describe("multi-worker child lifecycle recovery", () => {
     expect(source).toContain("no implementation completion is inferred");
   });
 
-  it("synchronizes READY_REVIEW children from terminal workstream truth", () => {
+  it("synchronizes READY_REVIEW children from workstream truth, including automated QC", () => {
     const source = readFileSync(
       new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
       "utf8",
     );
 
+    expect(source).toContain("w.status = 'REVIEW_REQUIRED'");
+    expect(source).toContain("SET status = 'TESTING'");
     expect(source).toContain("w.status IN ('COMPLETED', 'FAILED', 'CANCELLED')");
     expect(source).toContain("WHEN linked_terminal.workstream_status = 'COMPLETED'");
     expect(source).toContain("THEN 'COMPLETED'");
@@ -80,12 +82,12 @@ describe("multi-worker child lifecycle recovery", () => {
       }),
     ).toEqual({
       runStatus: "COMPLETED",
-      taskStatus: "READY_REVIEW",
+      taskStatus: "TESTING",
       aiFailure: false,
     });
   });
 
-  it("keeps ordinary review handoffs reviewable", () => {
+  it("keeps ordinary review handoffs in automated QC instead of human review", () => {
     expect(
       workstreamChildLifecycleDisposition("REVIEW_REQUIRED", {
         localExecutionPlan: { status: "EXECUTABLE" },
