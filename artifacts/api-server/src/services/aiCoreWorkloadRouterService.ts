@@ -135,7 +135,13 @@ const READ_ONLY_RUNTIME_INTENT =
   /\b(read[ -]?only|hanya baca|tanpa (?:mengubah|ubah|modifikasi|modify|change)|jangan (?:mengubah|ubah|modifikasi|modify|change)|cek|check|status|health|audit|inspect|periksa|lihat|show|list|verify|verifikasi|validasi)\b/i;
 
 const RUNTIME_CONTEXT =
-  /\b(runtime|production|prod|worker|ollama|gpu|gcp|google cloud|vm|service|deployment status|config(?:uration)? state|konfigurasi runtime|infrastructure|infra)\b/i;
+  /\b(runtime|production|prod|worker|ollama|gpu|gcp|google cloud|vm|vps|hostinger|ssh|docker|container|service|gateway|whatsapp|wa gateway|session|device|redis|queue|webhook|dns|deployment status|config(?:uration)? state|konfigurasi runtime|infrastructure|infra)\b/i;
+
+const RUNTIME_MUTATION =
+  /\b(fix|perbaiki|benahi|pulihkan|recover|restart|reconnect|start|stop|reload|redeploy|repair|bersihkan|clear|flush|ubah|edit|modify|change)\b/i;
+
+const EXPLICIT_RUNTIME_ONLY =
+  /\b(runtime[ -]?only|runtime saja|langsung (?:di|ke) runtime|jangan (?:route|arahkan|masuk)(?:kan)? ke (?:coding|coding orchestrator)|tanpa (?:repo|repository) (?:index|indexing|analysis|analisis)|jangan (?:analisis|analyze|index) (?:repo|repository))\b/i;
 
 function stripNegatedMutations(text: string): string {
   return text
@@ -162,6 +168,22 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
     !(CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText))
   ) {
     return route("DETERMINISTIC");
+  }
+
+  // Runtime/infrastructure mutations must stay on the control plane. Words such
+  // as "fix" or "perbaiki" must not turn Docker/Hostinger/VM/session operations
+  // into repository-changing coding work merely because the message also
+  // mentions a task, error, gateway, or repository as context.
+  if (
+    RUNTIME_CONTEXT.test(text) &&
+    (RUNTIME_MUTATION.test(actionableText) || EXPLICIT_RUNTIME_ONLY.test(text)) &&
+    !(
+      CODING_ACTION.test(actionableText) &&
+      CODE_CONTEXT.test(actionableText) &&
+      !EXPLICIT_RUNTIME_ONLY.test(text)
+    )
+  ) {
+    return route("CRITICAL_ACTION");
   }
 
   // A verified software-delivery workflow is coding orchestration, not itself a
