@@ -38,25 +38,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Verify Hostinger native deployment
+  plan:
+    name: Plan production verification
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_sha == github.sha)
     runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 10
+    timeout-minutes: 3
     env:
       EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
-      PUBLIC_SITEMAP_URL: https://aifront.cstlogistic.co.id/sitemap.xml
-      LEGACY_SITEMAP_URL: https://aicore.cstlogistic.co.id/sitemap.xml
+    outputs:
+      stale: ${{ steps.target.outputs.stale }}
+      latest_main_sha: ${{ steps.target.outputs.latest_main_sha }}
+      verify_mcp: ${{ steps.verify_scope.outputs.verify_mcp }}
+      verify_coding: ${{ steps.verify_scope.outputs.verify_coding }}
+      verify_chat: ${{ steps.verify_scope.outputs.verify_chat }}
+      verify_data: ${{ steps.verify_scope.outputs.verify_data }}
+      verify_cloud: ${{ steps.verify_scope.outputs.verify_cloud }}
+      verify_zerollm: ${{ steps.verify_scope.outputs.verify_zerollm }}
+      verify_sitemap: ${{ steps.verify_scope.outputs.verify_sitemap }}
+      scope_reason: ${{ steps.verify_scope.outputs.reason }}
+      verify_ollama: ${{ steps.ollama_scope.outputs.verify_ollama }}
+      ollama_reason: ${{ steps.ollama_scope.outputs.reason }}
+      verify_whatsapp: ${{ steps.whatsapp_scope.outputs.verify_whatsapp }}
+      whatsapp_reason: ${{ steps.whatsapp_scope.outputs.reason }}
 
     steps:
       - uses: actions/checkout@v7
         with:
-          # The Ollama scope detector compares the deployed commit with its first
-          # parent. Two commits are enough for normal main pushes/merge commits.
           fetch-depth: 2
 
       - name: Resolve production verification target
@@ -399,13 +409,37 @@ jobs:
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
           echo "whatsapp_scope=$([ "$verify_whatsapp" = "true" ] && echo RUN || echo SKIP) reason=$reason"
 
+      - name: Stale trigger summary
+        if: steps.target.outputs.stale == 'true'
+        run: |
+          echo "Skipped stale production verification trigger."
+          echo "Triggered SHA: $EXPECTED_SHA"
+          echo "Current main SHA: ${{ steps.target.outputs.latest_main_sha }}"
+
+
+  baseline:
+    name: Verify exact production baseline
+    needs: plan
+    if: >-
+      needs.plan.result == 'success' &&
+      needs.plan.outputs.stale != 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
       - name: Wait for stable exact production commit
-        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: bash scripts/hostinger-production-probe.sh
 
       - name: Verify readiness
-        if: steps.target.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -436,8 +470,44 @@ jobs:
             sleep 10
           done
 
+      - name: Verify admin auth guard
+        shell: bash
+        run: |
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/tasks -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 "$API_BASE_URL/ai/coding/tasks")
+          echo "coding_tasks_unauthenticated_http=$code"
+          test "$code" = "401"
+
+      - name: Verify SMTP transport for login email
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/email-diagnostic -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/internal/auth/email-diagnostics")
+          echo "email_diagnostics_http=$code"
+          cat /tmp/email-diagnostic
+          test "$code" = "200"
+          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/email-diagnostic","utf8")); if(v.ok!==true || v.category!=="OK") throw new Error("SMTP transport is not healthy"); console.log("smtp_transport=PASS");'
+
+
+
+  verify_mcp:
+    name: Smoke MCP discovery/events
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_mcp == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
       - name: Verify live MCP discovery and native events
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_mcp == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -555,31 +625,23 @@ jobs:
           test "$tools_header_version" = "$server_version"
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-tools.headers
 
-      - name: Verify admin auth guard
-        if: steps.target.outputs.stale != 'true'
-        shell: bash
-        run: |
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/tasks -w "%{http_code}" \
-            --connect-timeout 15 --max-time 30 "$API_BASE_URL/ai/coding/tasks")
-          echo "coding_tasks_unauthenticated_http=$code"
-          test "$code" = "401"
 
-      - name: Verify SMTP transport for login email
-        if: steps.target.outputs.stale != 'true'
-        shell: bash
-        env:
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "$ADMIN_API_KEY"
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/email-diagnostic -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/internal/auth/email-diagnostics")
-          echo "email_diagnostics_http=$code"
-          cat /tmp/email-diagnostic
-          test "$code" = "200"
-          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/email-diagnostic","utf8")); if(v.ok!==true || v.category!=="OK") throw new Error("SMTP transport is not healthy"); console.log("smtp_transport=PASS");'
 
+  verify_coding:
+    name: Smoke Coding Workspace
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_coding == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
       - name: Verify authenticated Coding Workspace
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_coding == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -594,8 +656,38 @@ jobs:
           test "$code" = "200"
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/tasks-auth","utf8")); if(!Array.isArray(v)) throw new Error("Expected coding tasks array"); console.log("coding_tasks_authenticated_payload=array");'
 
+      - name: Verify Coding Workspace GitHub repository discovery
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/github-repositories -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/coding/github/repositories?q=Core-AI-Foundation")
+          echo "github_repository_discovery_http=$code"
+          test "$code" = "200"
+          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/github-repositories","utf8")); if(!Array.isArray(v.repositories)) throw new Error("Expected repositories array"); if(!v.repositories.some(r=>r.fullName==="Travelintrips/Core-AI-Foundation")) throw new Error("Core-AI-Foundation not returned by GitHub discovery"); console.log("github_repository_discovery=PASS count="+v.repositories.length);'
+
+
+
+  verify_chat:
+    name: Smoke deterministic AI Core Chat
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_chat == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
       - name: Verify deterministic AI Core Chat smoke
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_chat == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -668,8 +760,23 @@ jobs:
           console.log("ai_core_chat_stream_smoke=PASS");
           NODE
 
+
+
+  verify_whatsapp:
+    name: Smoke WhatsApp E2E
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_whatsapp == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 8
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
       - name: Verify AI Core WhatsApp general chat E2E
-        if: steps.target.outputs.stale != 'true' && steps.whatsapp_scope.outputs.verify_whatsapp == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -704,14 +811,139 @@ jobs:
           );
           NODE
 
+
+
+  verify_data:
+    name: Smoke Admin DB and Data Tools
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_data == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 8
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
       - name: Verify schema-aware AI Core Chat database queries
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_data == 'true'
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
         run: node scripts/ai-core-admin-db-smoke.mjs
 
+      - name: Verify AI Core Data Tool schema readiness
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS \
+            -o /tmp/ai-core-data-tools-readiness -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            "$API_BASE_URL/ai/core-chat/data-tools/readiness")
+          echo "ai_core_data_tools_readiness_http=$code"
+          test "$code" = "200"
+          node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tools-readiness", "utf8"));
+          if (value.status !== "ok") {
+            throw new Error("AI Core Data Tool schema readiness is degraded: " + JSON.stringify(value));
+          }
+          if (value.tools?.sportCenterBookingLookup?.ready !== true) {
+            throw new Error("Sport Center booking Data Tool is not ready");
+          }
+          if (value.tools?.tenantOutstandingSummary?.ready !== true) {
+            throw new Error("Tenant outstanding Data Tool is not ready");
+          }
+          console.log("ai_core_data_tools_readiness=PASS");
+          NODE
+
+      - name: Verify AI Core Data Tool execution
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          payload='{"message":"cek booking SC-0992","mode":"ask","modelPolicy":"smart"}'
+          data_tool_ok=false
+          for attempt in $(seq 1 4); do
+            code=$(curl --http1.1 -L -sS \
+              -o /tmp/ai-core-data-tool-execution -w "%{http_code}" \
+              --connect-timeout 15 --max-time 45 \
+              -H "Content-Type: application/json" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              -d "$payload" \
+              "$API_BASE_URL/ai/core-chat/messages" || true)
+            echo "ai_core_data_tool_execution_attempt=$attempt/4 http=${code:-curl-error}"
+
+            if [ "$code" = "200" ] && node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
+          process.exit(value.data?.failed === true ? 1 : 0);
+          NODE
+            then
+              data_tool_ok=true
+              break
+            fi
+
+            # Print only the bounded server diagnostic, never booking/customer payload.
+            if [ "$code" = "200" ]; then
+              node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
+          const warning = typeof value.warning === "string"
+            ? value.warning.replace(/[\\r\\n\\t]+/g, " ").slice(0, 500)
+            : "no diagnostic returned";
+          console.error("::warning::Sport Center Data Tool attempt failed: " + warning);
+          NODE
+            fi
+
+            if [ "$attempt" -lt 4 ]; then sleep $((attempt * 5)); fi
+          done
+
+          if [ "$data_tool_ok" != "true" ]; then
+            echo "::error::Sport Center Data Tool query failed after bounded retries"
+            exit 1
+          fi
+
+          # Do not print the response: it may contain customer/business data.
+          node - <<'NODE'
+          const fs = require("fs");
+          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
+          if (value.route !== "DATA_TOOL") throw new Error("Expected DATA_TOOL route");
+          if (value.dataTool !== "SPORT_CENTER_BOOKING_LOOKUP") throw new Error("Expected Sport Center booking tool");
+          if (value.usage?.totalTokens !== 0) throw new Error("Data Tool execution must use 0 tokens");
+          if (value.estimatedCostUsd !== 0) throw new Error("Data Tool execution must cost 0 USD");
+          if (value.data?.found !== true) throw new Error("Expected production smoke booking SC-0992 to exist");
+          console.log("ai_core_data_tool_execution=PASS");
+          NODE
+
+
+
+  verify_ollama:
+    name: Smoke GCP Ollama Economy
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_ollama == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
       - name: Verify GCP Ollama worker and Economy routing
-        if: steps.target.outputs.stale != 'true' && steps.ollama_scope.outputs.verify_ollama == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -841,15 +1073,23 @@ jobs:
           NODE
           fi
 
-      - name: Skip GCP Ollama cold-start for unrelated deploys
-        if: steps.target.outputs.stale != 'true' && steps.ollama_scope.outputs.verify_ollama != 'true'
-        shell: bash
-        run: |
-          echo "::notice::Skipping GCP Ollama/Economy smoke because this deploy does not touch Ollama-sensitive paths."
-          echo "ollama_economy=SKIPPED reason=${{ steps.ollama_scope.outputs.reason }}"
 
+
+  verify_cloud:
+    name: Smoke cloud routing
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_cloud == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 8
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
       - name: Verify AI Core cloud routing
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_cloud == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -927,101 +1167,23 @@ jobs:
           );
           NODE
 
-      - name: Verify AI Core Data Tool schema readiness
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_data == 'true'
-        shell: bash
-        env:
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "$ADMIN_API_KEY"
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS \
-            -o /tmp/ai-core-data-tools-readiness -w "%{http_code}" \
-            --connect-timeout 15 --max-time 30 \
-            -H "x-admin-api-key: $ADMIN_API_KEY" \
-            "$API_BASE_URL/ai/core-chat/data-tools/readiness")
-          echo "ai_core_data_tools_readiness_http=$code"
-          test "$code" = "200"
-          node - <<'NODE'
-          const fs = require("fs");
-          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tools-readiness", "utf8"));
-          if (value.status !== "ok") {
-            throw new Error("AI Core Data Tool schema readiness is degraded: " + JSON.stringify(value));
-          }
-          if (value.tools?.sportCenterBookingLookup?.ready !== true) {
-            throw new Error("Sport Center booking Data Tool is not ready");
-          }
-          if (value.tools?.tenantOutstandingSummary?.ready !== true) {
-            throw new Error("Tenant outstanding Data Tool is not ready");
-          }
-          console.log("ai_core_data_tools_readiness=PASS");
-          NODE
 
-      - name: Verify AI Core Data Tool execution
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_data == 'true'
-        shell: bash
-        env:
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "$ADMIN_API_KEY"
 
-          payload='{"message":"cek booking SC-0992","mode":"ask","modelPolicy":"smart"}'
-          data_tool_ok=false
-          for attempt in $(seq 1 4); do
-            code=$(curl --http1.1 -L -sS \
-              -o /tmp/ai-core-data-tool-execution -w "%{http_code}" \
-              --connect-timeout 15 --max-time 45 \
-              -H "Content-Type: application/json" \
-              -H "x-admin-api-key: $ADMIN_API_KEY" \
-              -d "$payload" \
-              "$API_BASE_URL/ai/core-chat/messages" || true)
-            echo "ai_core_data_tool_execution_attempt=$attempt/4 http=${code:-curl-error}"
+  verify_zerollm:
+    name: Smoke ZeroLLM readiness
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_zerollm == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 4
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
 
-            if [ "$code" = "200" ] && node - <<'NODE'
-          const fs = require("fs");
-          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
-          process.exit(value.data?.failed === true ? 1 : 0);
-          NODE
-            then
-              data_tool_ok=true
-              break
-            fi
-
-            # Print only the bounded server diagnostic, never booking/customer payload.
-            if [ "$code" = "200" ]; then
-              node - <<'NODE'
-          const fs = require("fs");
-          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
-          const warning = typeof value.warning === "string"
-            ? value.warning.replace(/[\\r\\n\\t]+/g, " ").slice(0, 500)
-            : "no diagnostic returned";
-          console.error("::warning::Sport Center Data Tool attempt failed: " + warning);
-          NODE
-            fi
-
-            if [ "$attempt" -lt 4 ]; then sleep $((attempt * 5)); fi
-          done
-
-          if [ "$data_tool_ok" != "true" ]; then
-            echo "::error::Sport Center Data Tool query failed after bounded retries"
-            exit 1
-          fi
-
-          # Do not print the response: it may contain customer/business data.
-          node - <<'NODE'
-          const fs = require("fs");
-          const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
-          if (value.route !== "DATA_TOOL") throw new Error("Expected DATA_TOOL route");
-          if (value.dataTool !== "SPORT_CENTER_BOOKING_LOOKUP") throw new Error("Expected Sport Center booking tool");
-          if (value.usage?.totalTokens !== 0) throw new Error("Data Tool execution must use 0 tokens");
-          if (value.estimatedCostUsd !== 0) throw new Error("Data Tool execution must cost 0 USD");
-          if (value.data?.found !== true) throw new Error("Expected production smoke booking SC-0992 to exist");
-          console.log("ai_core_data_tool_execution=PASS");
-          NODE
-
+    steps:
       - name: Inspect ZeroLLM host readiness
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_zerollm == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -1034,24 +1196,25 @@ jobs:
           cat /tmp/zerollm-readiness
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/zerollm-readiness","utf8")); if(v.provider!=="zerollm"||v.loopbackOnly!==true) throw new Error("Invalid ZeroLLM readiness payload");'
 
-      - name: Verify Coding Workspace GitHub repository discovery
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_coding == 'true'
-        shell: bash
-        env:
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "$ADMIN_API_KEY"
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -L -sS -o /tmp/github-repositories -w "%{http_code}" \
-            --connect-timeout 15 --max-time 30 \
-            -H "x-admin-api-key: $ADMIN_API_KEY" \
-            "$API_BASE_URL/ai/coding/github/repositories?q=Core-AI-Foundation")
-          echo "github_repository_discovery_http=$code"
-          test "$code" = "200"
-          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/github-repositories","utf8")); if(!Array.isArray(v.repositories)) throw new Error("Expected repositories array"); if(!v.repositories.some(r=>r.fullName==="Travelintrips/Core-AI-Foundation")) throw new Error("Core-AI-Foundation not returned by GitHub discovery"); console.log("github_repository_discovery=PASS count="+v.repositories.length);'
 
+
+  verify_sitemap:
+    name: Smoke public sitemap
+    needs: [plan, baseline]
+    if: >-
+      needs.baseline.result == 'success' &&
+      needs.plan.outputs.verify_sitemap == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 4
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+      PUBLIC_SITEMAP_URL: https://aifront.cstlogistic.co.id/sitemap.xml
+      LEGACY_SITEMAP_URL: https://aicore.cstlogistic.co.id/sitemap.xml
+
+    steps:
       - name: Verify public sitemap for Googlebot
-        if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_sitemap == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1086,8 +1249,99 @@ jobs:
           test "$legacy_code" = "301"
           test "$legacy_location" = "$PUBLIC_SITEMAP_URL"
 
+
+
+  finalize:
+    name: Finalize production verification
+    needs:
+      - plan
+      - baseline
+      - verify_mcp
+      - verify_coding
+      - verify_chat
+      - verify_whatsapp
+      - verify_data
+      - verify_ollama
+      - verify_cloud
+      - verify_zerollm
+      - verify_sitemap
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      needs.plan.outputs.stale != 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 4
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      API_BASE_URL: ${{ vars.AI_CORE_VERIFY_BASE_URL || vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+
+    steps:
+      - name: Aggregate parallel smoke results
+        id: aggregate
+        shell: bash
+        env:
+          BASELINE_RESULT: ${{ needs.baseline.result }}
+          MCP_RESULT: ${{ needs.verify_mcp.result }}
+          CODING_RESULT: ${{ needs.verify_coding.result }}
+          CHAT_RESULT: ${{ needs.verify_chat.result }}
+          WHATSAPP_RESULT: ${{ needs.verify_whatsapp.result }}
+          DATA_RESULT: ${{ needs.verify_data.result }}
+          OLLAMA_RESULT: ${{ needs.verify_ollama.result }}
+          CLOUD_RESULT: ${{ needs.verify_cloud.result }}
+          ZEROLLM_RESULT: ${{ needs.verify_zerollm.result }}
+          SITEMAP_RESULT: ${{ needs.verify_sitemap.result }}
+        run: |
+          set -euo pipefail
+          ok=true
+          for pair in             "baseline=$BASELINE_RESULT"             "mcp=$MCP_RESULT"             "coding=$CODING_RESULT"             "chat=$CHAT_RESULT"             "whatsapp=$WHATSAPP_RESULT"             "data=$DATA_RESULT"             "ollama=$OLLAMA_RESULT"             "cloud=$CLOUD_RESULT"             "zerollm=$ZEROLLM_RESULT"             "sitemap=$SITEMAP_RESULT"
+          do
+            name=${pair%%=*}
+            result=${pair#*=}
+            echo "parallel_result $name=$result"
+            case "$result" in
+              success|skipped) ;;
+              *) ok=false ;;
+            esac
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+
+      - name: Skip GCP Ollama cold-start for unrelated deploys
+        if: needs.plan.outputs.verify_ollama != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Skipping GCP Ollama/Economy smoke because this deploy does not touch Ollama-sensitive paths."
+          echo "ollama_economy=SKIPPED reason=${{ needs.plan.outputs.ollama_reason }}"
+
+      - name: Report Hostinger verification failure
+        if: steps.aggregate.outputs.ok != 'true'
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set +e
+          payload=$(node -e 'console.log(JSON.stringify({
+            source:"hostinger",
+            kind:"production_verification_failed",
+            title:"Hostinger production verification failed",
+            summary:"GitHub Actions Hostinger Production Verify failed for expected commit "+process.env.EXPECTED_SHA,
+            severity:"critical",
+            riskClass:"GUARDED",
+            repository:"Travelintrips/Core-AI-Foundation",
+            branch:"main",
+            headSha:process.env.EXPECTED_SHA,
+            environment:"production",
+            fingerprint:"hostinger:production:"+process.env.EXPECTED_SHA,
+            metadata:{workflow:"Hostinger Production Verify",runId:process.env.GITHUB_RUN_ID}
+          }))')
+          curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors --silent --show-error --max-time 20 \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/incidents" || true
+
       - name: Resolve superseded Hostinger verification incidents
-        if: success() && steps.target.outputs.stale != 'true'
+        if: steps.aggregate.outputs.ok == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -1123,48 +1377,22 @@ jobs:
           );
           NODE
 
-      - name: Report Hostinger verification failure
-        if: failure() && steps.target.outputs.stale != 'true'
+      - name: Verification summary
+        if: steps.aggregate.outputs.ok == 'true'
         shell: bash
         env:
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-        run: |
-          set +e
-          payload=$(node -e 'console.log(JSON.stringify({
-            source:"hostinger",
-            kind:"production_verification_failed",
-            title:"Hostinger production verification failed",
-            summary:"GitHub Actions Hostinger Production Verify failed for expected commit "+process.env.EXPECTED_SHA,
-            severity:"critical",
-            riskClass:"GUARDED",
-            repository:"Travelintrips/Core-AI-Foundation",
-            branch:"main",
-            headSha:process.env.EXPECTED_SHA,
-            environment:"production",
-            fingerprint:"hostinger:production:"+process.env.EXPECTED_SHA,
-            metadata:{workflow:"Hostinger Production Verify",runId:process.env.GITHUB_RUN_ID}
-          }))')
-          curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors --silent --show-error --max-time 20 \
-            -H "Content-Type: application/json" \
-            -H "x-admin-api-key: $ADMIN_API_KEY" \
-            -d "$payload" \
-            "$API_BASE_URL/ai/incidents" || true
-
-      - name: Verification summary
-        if: steps.target.outputs.stale != 'true'
-        env:
-          VERIFY_OLLAMA: ${{ steps.ollama_scope.outputs.verify_ollama }}
-          OLLAMA_REASON: ${{ steps.ollama_scope.outputs.reason }}
-          VERIFY_WHATSAPP: ${{ steps.whatsapp_scope.outputs.verify_whatsapp }}
-          WHATSAPP_REASON: ${{ steps.whatsapp_scope.outputs.reason }}
-          SCOPE_REASON: ${{ steps.verify_scope.outputs.reason }}
-          VERIFY_MCP: ${{ steps.verify_scope.outputs.verify_mcp }}
-          VERIFY_CODING: ${{ steps.verify_scope.outputs.verify_coding }}
-          VERIFY_CHAT: ${{ steps.verify_scope.outputs.verify_chat }}
-          VERIFY_DATA: ${{ steps.verify_scope.outputs.verify_data }}
-          VERIFY_CLOUD: ${{ steps.verify_scope.outputs.verify_cloud }}
-          VERIFY_ZEROLLM: ${{ steps.verify_scope.outputs.verify_zerollm }}
-          VERIFY_SITEMAP: ${{ steps.verify_scope.outputs.verify_sitemap }}
+          VERIFY_MCP: ${{ needs.plan.outputs.verify_mcp }}
+          VERIFY_CODING: ${{ needs.plan.outputs.verify_coding }}
+          VERIFY_CHAT: ${{ needs.plan.outputs.verify_chat }}
+          VERIFY_WHATSAPP: ${{ needs.plan.outputs.verify_whatsapp }}
+          WHATSAPP_REASON: ${{ needs.plan.outputs.whatsapp_reason }}
+          VERIFY_DATA: ${{ needs.plan.outputs.verify_data }}
+          VERIFY_OLLAMA: ${{ needs.plan.outputs.verify_ollama }}
+          OLLAMA_REASON: ${{ needs.plan.outputs.ollama_reason }}
+          VERIFY_CLOUD: ${{ needs.plan.outputs.verify_cloud }}
+          VERIFY_ZEROLLM: ${{ needs.plan.outputs.verify_zerollm }}
+          VERIFY_SITEMAP: ${{ needs.plan.outputs.verify_sitemap }}
+          SCOPE_REASON: ${{ needs.plan.outputs.scope_reason }}
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
           echo "Baseline exact-SHA/readiness/auth/SMTP: PASS"
@@ -1182,10 +1410,11 @@ jobs:
           else
             echo "GCP Ollama worker + Economy routing: SKIPPED ($OLLAMA_REASON)"
           fi
+          echo "Parallel production verification: PASS"
 
-      - name: Stale trigger summary
-        if: steps.target.outputs.stale == 'true'
+      - name: Fail final gate when any parallel smoke failed
+        if: steps.aggregate.outputs.ok != 'true'
+        shell: bash
         run: |
-          echo "Skipped stale production verification trigger."
-          echo "Triggered SHA: $EXPECTED_SHA"
-          echo "Current main SHA: ${{ steps.target.outputs.latest_main_sha }}"
+          echo "::error::One or more parallel production smoke jobs failed or were cancelled."
+          exit 1
