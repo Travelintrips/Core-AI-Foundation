@@ -12,11 +12,13 @@ export const PWA_APP_INSTALLED_EVENT = "ai-core-pwa-app-installed";
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 let captureInitialized = false;
 
-export function initializePwaInstallCapture(): void {
+export function initializePwaInstallCapture(options: { customPrompt?: boolean } = {}): void {
   if (captureInitialized || typeof window === "undefined") return;
   captureInitialized = true;
+  const customPrompt = options.customPrompt ?? true;
 
   window.addEventListener("beforeinstallprompt", (event) => {
+    if (!customPrompt) return;
     event.preventDefault();
     deferredInstallPrompt = event as BeforeInstallPromptEvent;
     window.dispatchEvent(new Event(PWA_INSTALL_PROMPT_READY_EVENT));

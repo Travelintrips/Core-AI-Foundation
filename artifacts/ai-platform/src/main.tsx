@@ -12,7 +12,18 @@ if (adminKey && adminKey.trim()) {
   setAuthTokenGetter(() => adminKey.trim());
 }
 
-initializePwaInstallCapture();
+const pathname = window.location.pathname.toLowerCase();
+const hostname = window.location.hostname.toLowerCase();
+const isAiCoreChatSurface = pathname.startsWith("/ai-core-chat");
+const isAiCodingSurface =
+  hostname === "aicoding.travelintrips.co.id" || pathname === "/aicoding";
+
+const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+if (manifestLink && isAiCodingSurface) {
+  manifestLink.href = "/aicoding.webmanifest";
+}
+
+initializePwaInstallCapture({ customPrompt: isAiCoreChatSurface });
 
 createRoot(document.getElementById("root")!).render(<App />);
 
