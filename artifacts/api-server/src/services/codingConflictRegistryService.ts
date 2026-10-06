@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { db, sql } from "@workspace/db";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 
 const MAX_RESERVED_FILES = 40;
 const RESERVATION_TTL_HOURS = 12;
