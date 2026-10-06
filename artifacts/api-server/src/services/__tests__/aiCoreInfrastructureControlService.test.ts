@@ -224,6 +224,47 @@ describe("AI Core Hostinger infrastructure control", () => {
     });
   });
 
+  it("falls back to the parent DNS zone when Hostinger returns DNS:4005 invalid-domain 422", async () => {
+    const invalidZone = JSON.stringify({
+      message: "[DNS:4005] Domain name is not valid!",
+      correlation_id: "test-correlation",
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(invalidZone, { status: 422 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DNS_RECORD_CREATE",
+      message: "Hostinger buat DNS record name=_smoke type=TXT content=test ttl=300",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_HOSTING_DOMAIN: "aicore.cstlogistic.co.id",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/dns/v1/zones/aicore.cstlogistic.co.id/validate",
+    );
+    expect((fetchMock.mock.calls[1] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id",
+    );
+    expect((fetchMock.mock.calls[2] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id/validate",
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[2] as [string, RequestInit])[1].body))).toMatchObject({
+      zone: [{ name: "_smoke.aicore", type: "TXT", ttl: 300 }],
+    });
+    expect(result.data).toMatchObject({
+      domain: "cstlogistic.co.id",
+      requestedDomain: "aicore.cstlogistic.co.id",
+      name: "_smoke.aicore",
+    });
+  });
+
   it("updates a DNS record with overwrite enabled", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ valid: true }), { status: 200 }))
