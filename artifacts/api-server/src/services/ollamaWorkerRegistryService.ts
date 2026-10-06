@@ -6,6 +6,7 @@ import {
   registerWorker,
   releaseLease,
   renewLease,
+  MAX_ACTIVE_JOBS_PER_WORKER,
 } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
 import {
@@ -20,7 +21,6 @@ export const OLLAMA_CODING_CAPABILITY = "coding_ai_execution";
 export const OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 
 const DEFAULT_MODEL = "qwen2.5-coder:7b";
-const DEFAULT_MAX_CONCURRENCY = 2;
 const OLLAMA_RESERVATION_STALE_MS = 360_000;
 const RELEASE_RETRY_DELAYS_MS = [0, 150, 500] as const;
 
@@ -139,9 +139,8 @@ export function normalizeOllamaWorkerEndpoint(
   return parsed.toString().replace(/\/$/, "");
 }
 
-function clampConcurrency(value: number | undefined): number {
-  if (!Number.isFinite(value)) return DEFAULT_MAX_CONCURRENCY;
-  return Math.max(1, Math.min(32, Math.floor(value ?? DEFAULT_MAX_CONCURRENCY)));
+function clampConcurrency(_value: number | undefined): number {
+  return MAX_ACTIVE_JOBS_PER_WORKER;
 }
 
 export async function registerOllamaWorker(
@@ -255,7 +254,6 @@ function availabilityFromRow(
   const modelId = typeof row["model_id"] === "string" ? row["model_id"] : "";
   const endpointUrl =
     typeof row["endpoint_url"] === "string" ? row["endpoint_url"] : "";
-  const maxConcurrentJobs = Number(row["max_concurrent_jobs"] ?? 0);
   const runningJobs = Number(row["running_jobs"] ?? 0);
 
   if (!Number.isInteger(id) || id <= 0 || !workerName || !modelId || !endpointUrl) {
@@ -267,14 +265,14 @@ function availabilityFromRow(
     workerName,
     modelId,
     endpointUrl,
-    availableSlots: Math.max(0, maxConcurrentJobs - runningJobs),
+    availableSlots: Math.max(0, MAX_ACTIVE_JOBS_PER_WORKER - runningJobs),
   };
 }
 
 export async function getAvailableOllamaCodingSlots(): Promise<number> {
   const raw = await db.execute(sql`
     SELECT COALESCE(
-      SUM(GREATEST(max_concurrent_jobs - running_jobs, 0)),
+      SUM(GREATEST(${MAX_ACTIVE_JOBS_PER_WORKER} - running_jobs, 0)),
       0
     ) AS available_slots
     FROM ai_platform.ai_workers
@@ -331,7 +329,7 @@ export async function getOllamaWorkerAvailability(
       AND status IN ('online', 'idle', 'busy')
       AND lease_expires_at IS NOT NULL
       AND lease_expires_at > NOW()
-      AND running_jobs < max_concurrent_jobs
+      AND running_jobs < ${MAX_ACTIVE_JOBS_PER_WORKER}
       AND capabilities @> ${JSON.stringify([OLLAMA_INFERENCE_CAPABILITY])}::jsonb
     ORDER BY
       (running_jobs::numeric / GREATEST(max_concurrent_jobs, 1)) ASC,
@@ -366,7 +364,7 @@ async function attemptReserveOllamaWorker(
         AND status IN ('online', 'idle', 'busy')
         AND lease_expires_at IS NOT NULL
         AND lease_expires_at > NOW()
-        AND running_jobs < max_concurrent_jobs
+        AND running_jobs < ${MAX_ACTIVE_JOBS_PER_WORKER}
         AND capabilities @> ${JSON.stringify([OLLAMA_INFERENCE_CAPABILITY])}::jsonb
       ORDER BY
         (running_jobs::numeric / GREATEST(max_concurrent_jobs, 1)) ASC,

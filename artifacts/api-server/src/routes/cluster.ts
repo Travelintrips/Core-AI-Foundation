@@ -74,7 +74,7 @@ router.post("/ai/cluster/workers/register", async (req, res): Promise<void> => {
     region = "local",
     version = "1.0.0",
     capabilities,
-    maxConcurrentJobs = 2,
+    maxConcurrentJobs = 1,
     leaseOwner = "api",
     leaseTtlMs,
   } = body.data;

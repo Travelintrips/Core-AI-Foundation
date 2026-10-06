@@ -35,7 +35,7 @@ describe("Ollama worker runtime configuration", () => {
       advertiseBaseUrl:
         "http://10.10.0.21:11434/v1",
       apiKey: "worker-secret",
-      maxConcurrentJobs: 4,
+      maxConcurrentJobs: 1,
       powershellEnabled: true,
       heartbeatMs: 10000,
       reconnectMinMs: 1500,
@@ -53,9 +53,9 @@ describe("Ollama worker runtime configuration", () => {
       OLLAMA_WORKER_MAX_CONCURRENCY: "1",
     } as NodeJS.ProcessEnv);
 
-    expect(high.maxConcurrentJobs).toBe(32);
+    expect(high.maxConcurrentJobs).toBe(1);
     expect(high.heartbeatMs).toBe(2000);
-    expect(low.maxConcurrentJobs).toBe(2);
+    expect(low.maxConcurrentJobs).toBe(1);
   });
 
   it("keeps reconnect bounds valid and uses exponential backoff", () => {

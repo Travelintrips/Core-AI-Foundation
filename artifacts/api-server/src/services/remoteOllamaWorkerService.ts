@@ -8,7 +8,7 @@ import {
   type AiJob,
   type AiWorker,
 } from "@workspace/db";
-import { registerWorker, renewLease, DEFAULT_LEASE_TTL_MS } from "./workerClusterService.js";
+import { registerWorker, renewLease, DEFAULT_LEASE_TTL_MS, MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { completeJob, retryJob, JobOwnershipLostError } from "./jobWorkerService.js";
 
 export const REMOTE_OLLAMA_RUNTIME_KIND = "ollama_remote_pull";
@@ -82,7 +82,7 @@ export async function registerRemoteOllamaWorker(input: {
           region: input.region ?? "remote",
           version: input.version ?? "1.0.0",
           capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
-          maxConcurrentJobs: Math.max(2, Math.min(8, input.maxConcurrentJobs ?? 2)),
+          maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
           leaseOwner: "ollama-remote:" + input.nodeId,
           updatedAt: new Date(),
         }).where(eq(aiWorkersTable.id, existing.id)).returning();
@@ -99,7 +99,7 @@ export async function registerRemoteOllamaWorker(input: {
     region: input.region ?? "remote",
     version: input.version ?? "1.0.0",
     capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
-    maxConcurrentJobs: Math.max(2, Math.min(8, input.maxConcurrentJobs ?? 2)),
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     leaseOwner: "ollama-remote:" + input.nodeId,
     leaseTtlMs: DEFAULT_LEASE_TTL_MS,
     providerSlug: PROVIDER,
@@ -303,7 +303,7 @@ export async function claimRemoteOllamaInvocation(
           eq(aiWorkersTable.runtimeKind, REMOTE_OLLAMA_RUNTIME_KIND),
           inArray(aiWorkersTable.status, ["online", "idle", "busy"]),
           sql`${aiWorkersTable.leaseExpiresAt} IS NOT NULL AND ${aiWorkersTable.leaseExpiresAt} > NOW()`,
-          sql`${aiWorkersTable.runningJobs} < ${aiWorkersTable.maxConcurrentJobs}`,
+          sql`${aiWorkersTable.runningJobs} < ${MAX_ACTIVE_JOBS_PER_WORKER}`,
         ),
       )
       .returning({ id: aiWorkersTable.id });

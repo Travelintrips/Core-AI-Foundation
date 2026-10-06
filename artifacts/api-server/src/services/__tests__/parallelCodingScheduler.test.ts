@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-describe("parallel coding scheduler contracts", () => {
+describe("single-slot coding scheduler contracts", () => {
   it("routes planner jobs only to coding-capable workers", () => {
     const planner = readFileSync(
       new URL("../localCodingPlannerQueueRuntimeService.ts", import.meta.url),
@@ -18,19 +18,20 @@ describe("parallel coding scheduler contracts", () => {
     expect(cluster).toContain('"coding_multi_task_planner"');
   });
 
-  it("provides five coding-worker slots for different coding tasks", () => {
+  it("gives every dispatcher coding worker exactly one active slot", () => {
     const dispatcher = readFileSync(
       new URL("../jobDispatcherService.ts", import.meta.url),
       "utf8",
     );
 
     expect(dispatcher).toContain('workerType:        "coding_worker"');
-    expect(dispatcher).toMatch(
-      /workerType:\s*"coding_worker"[\s\S]*?maxConcurrentJobs:\s*5/,
+    expect(dispatcher).toContain(
+      "maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER",
     );
+    expect(dispatcher).not.toMatch(/maxConcurrentJobs:\s*[2-9]/);
   });
 
-  it("fills free slots even when a worker is already busy", () => {
+  it("keeps a busy worker from receiving a second active job", () => {
     const dispatcher = readFileSync(
       new URL("../jobDispatcherService.ts", import.meta.url),
       "utf8",
@@ -40,14 +41,14 @@ describe("parallel coding scheduler contracts", () => {
       'inArray(aiWorkersTable.status, ["idle", "busy"])',
     );
     expect(dispatcher).toContain(
-      "worker.maxConcurrentJobs - worker.runningJobs",
+      "MAX_ACTIVE_JOBS_PER_WORKER - worker.runningJobs",
     );
     expect(dispatcher).toContain(
       "dispatchWorkerIds.map((workerId) => dispatch(workerId))",
     );
   });
 
-  it("serializes only claim admission for the same worker", () => {
+  it("serializes claim admission and rechecks the one-job cap under lock", () => {
     const worker = readFileSync(
       new URL("../jobWorkerService.ts", import.meta.url),
       "utf8",
@@ -57,7 +58,7 @@ describe("parallel coding scheduler contracts", () => {
       "SELECT pg_advisory_xact_lock(${workerId})",
     );
     expect(worker).toContain(
-      "lockedWorker.runningJobs >= lockedWorker.maxConcurrentJobs",
+      "lockedWorker.runningJobs >= MAX_ACTIVE_JOBS_PER_WORKER",
     );
   });
 });
