@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const execFileMock = vi.hoisted(() => vi.fn());
+vi.mock("node:child_process", () => ({
+  execFile: (...args: unknown[]) => execFileMock(...args),
+}));
+
 vi.mock("../aiAuditService.js", () => ({
   logAudit: vi.fn().mockResolvedValue(undefined),
 }));
@@ -12,6 +17,7 @@ import {
 describe("AI Core Hostinger infrastructure control", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    execFileMock.mockReset();
   });
 
   it.each([
@@ -177,6 +183,143 @@ describe("AI Core Hostinger infrastructure control", () => {
       },
     })).rejects.toThrow(
       "SSH fallback requires HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, and HOSTINGER_SSH_PRIVATE_KEY",
+    );
+  });
+
+  it("falls back to SSH for Docker deploy on generic Ubuntu VPS without exposing env secrets", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        message: "[VPS:2044] Currently installed operating system does not support Docker Manager.",
+      }), { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "deployed", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const secret = "ssh-deploy-secret";
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_DEPLOY",
+      message: `Hostinger deploy docker project=myapp content="services:
+  app:
+    image: example/app" env="API_KEY=${secret}"`,
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+        HOSTINGER_SSH_HOST: "203.0.113.20",
+        HOSTINGER_SSH_USER: "root",
+        HOSTINGER_SSH_PRIVATE_KEY: "PRIVATE-KEY",
+        HOSTINGER_DOCKER_PROJECT_DIR: "/opt/ai-core-services",
+      },
+    });
+
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    const sshArgs = execFileMock.mock.calls[0]?.[1] as string[];
+    const remoteCommand = sshArgs.at(-1) ?? "";
+    expect(remoteCommand).toContain("docker compose -p 'myapp' up -d --remove-orphans");
+    expect(remoteCommand).not.toContain(secret);
+    expect(String(stdinEnd.mock.calls[0]?.[0] ?? "")).not.toContain(secret);
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      project: "myapp",
+      directory: "/opt/ai-core-services",
+      deployed: true,
+      environmentApplied: true,
+    });
+  });
+
+  it("falls back to SSH for Docker env updates and keeps the secret out of command/results", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        message: "[VPS:2044] Currently installed operating system does not support Docker Manager.",
+      }), { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "updated", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const secret = "ssh-env-secret";
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_ENV_SET",
+      message: `Hostinger set env project=myapp key=API_KEY value=${secret}`,
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+        HOSTINGER_SSH_HOST: "203.0.113.20",
+        HOSTINGER_SSH_USER: "root",
+        HOSTINGER_SSH_PRIVATE_KEY: "PRIVATE-KEY",
+        HOSTINGER_DOCKER_PROJECT_DIR: "/opt/ai-core-services",
+      },
+    });
+
+    const sshArgs = execFileMock.mock.calls[0]?.[1] as string[];
+    const remoteCommand = sshArgs.at(-1) ?? "";
+    expect(remoteCommand).toContain("awk -v key='API_KEY'");
+    expect(remoteCommand).not.toContain(secret);
+    expect(String(stdinEnd.mock.calls[0]?.[0] ?? "")).not.toContain(secret);
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      project: "myapp",
+      key: "API_KEY",
+      value: "[REDACTED]",
+      applied: true,
+    });
+  });
+
+  it("rejects unsafe SSH Docker project names", async () => {
+    await expect(executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_DEPLOY",
+      message: 'Hostinger deploy docker project="bad/name" content="services: {}"',
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    })).rejects.toThrow("Docker project name may contain only letters, numbers, dashes, and underscores.");
+  });
+
+  it("rejects invalid env keys before attempting Hostinger or SSH mutation", async () => {
+    await expect(executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_ENV_SET",
+      message: 'Hostinger set env project=myapp key="BAD-KEY" value=secret',
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    })).rejects.toThrow("Hostinger env/secret update requires key=<ENV_NAME>.");
+  });
+
+  it("fails closed when SSH Docker project directory is not absolute", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        message: "[VPS:2044] Currently installed operating system does not support Docker Manager.",
+      }), { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_DEPLOY",
+      message: 'Hostinger deploy docker project=myapp content="services: {}"',
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+        HOSTINGER_SSH_HOST: "203.0.113.20",
+        HOSTINGER_SSH_USER: "root",
+        HOSTINGER_SSH_PRIVATE_KEY: "PRIVATE-KEY",
+        HOSTINGER_DOCKER_PROJECT_DIR: "relative/path",
+      },
+    })).rejects.toThrow(
+      "Hostinger SSH Docker fallback requires HOSTINGER_DOCKER_PROJECT_DIR or directory=<absolute-path>.",
     );
   });
 
