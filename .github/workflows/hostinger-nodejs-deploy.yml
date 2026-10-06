@@ -1,0 +1,268 @@
+name: Hostinger Node.js Deploy
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - CI Verify
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostinger-nodejs-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy AI Core to Hostinger Node.js
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOSTINGER_API_BASE: https://developers.hostinger.com/api
+      HOSTINGER_DOMAIN: ${{ vars.HOSTINGER_HOSTING_DOMAIN || 'aicore.cstlogistic.co.id' }}
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 1
+
+      - name: Reject stale release trigger
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          echo "latest_main_sha=$latest_main_sha"
+          echo "expected_sha=$EXPECTED_SHA"
+          if [ "$latest_main_sha" != "$EXPECTED_SHA" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping stale deploy trigger."
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate Hostinger deployment credentials
+        if: steps.freshness.outputs.stale != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${HOSTINGER_API_TOKEN:-}" ]; then
+            echo "::error::GitHub secret HOSTINGER_API_TOKEN is not configured."
+            exit 1
+          fi
+          test -n "$HOSTINGER_DOMAIN"
+
+      - name: Resolve Hostinger website
+        if: steps.freshness.outputs.stale != 'true'
+        id: website
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100"             -o /tmp/websites.json
+
+          username=$(jq -r --arg domain "$HOSTINGER_DOMAIN"             '.data[] | select(.domain == $domain and .website_type == "nodejs" and .is_enabled == true) | .username'             /tmp/websites.json | head -n1)
+
+          if [ -z "$username" ] || [ "$username" = "null" ]; then
+            echo "::error::Enabled Node.js website not found for $HOSTINGER_DOMAIN."
+            exit 1
+          fi
+
+          echo "username=$username" >> "$GITHUB_OUTPUT"
+          echo "domain=$HOSTINGER_DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "website=$HOSTINGER_DOMAIN username=$username"
+
+      - name: Create source archive
+        if: steps.freshness.outputs.stale != 'true'
+        id: archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_name="aicore-${EXPECTED_SHA}.zip"
+          archive_path="/tmp/$archive_name"
+          git archive --format=zip --output="$archive_path" HEAD
+          printf '%s\n' "$EXPECTED_SHA" > /tmp/.cst-build-sha
+          zip -q -j "$archive_path" /tmp/.cst-build-sha
+          echo "name=$archive_name" >> "$GITHUB_OUTPUT"
+          echo "path=$archive_path" >> "$GITHUB_OUTPUT"
+          echo "bytes=$(stat -c%s "$archive_path")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload source archive to Hostinger
+        if: steps.freshness.outputs.stale != 'true'
+        id: upload
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+          ARCHIVE_PATH: ${{ steps.archive.outputs.path }}
+        run: |
+          set -euo pipefail
+          jq -n             --arg username "$HOSTINGER_USERNAME"             --arg domain "$HOSTINGER_DOMAIN"             '{username:$username,domain:$domain}' > /tmp/upload-url-request.json
+
+          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/upload-url-request.json             "$HOSTINGER_API_BASE/hosting/v1/files/upload-urls"             -o /tmp/upload-url.json
+
+          upload_base=$(jq -r '.url' /tmp/upload-url.json)
+          auth_key=$(jq -r '.auth_key' /tmp/upload-url.json)
+          rest_auth_key=$(jq -r '.rest_auth_key' /tmp/upload-url.json)
+          if [ -z "$upload_base" ] || [ "$upload_base" = "null" ]; then
+            echo "::error::Hostinger did not return an upload URL."
+            exit 1
+          fi
+
+          echo "::add-mask::$auth_key"
+          echo "::add-mask::$rest_auth_key"
+
+          size=$(stat -c%s "$ARCHIVE_PATH")
+          target="${upload_base%/}/$ARCHIVE_NAME?override=true"
+
+          create_code=$(curl --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Upload-Length: $size"             -H "Upload-Offset: 0"             "$target")
+          if [ "$create_code" != "201" ]; then
+            cat /tmp/tus-create.body || true
+            echo "::error::Hostinger TUS create returned HTTP $create_code."
+            exit 1
+          fi
+
+          patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$target")
+          if [ "$patch_code" != "204" ]; then
+            cat /tmp/tus-patch.body || true
+            echo "::error::Hostinger TUS upload returned HTTP $patch_code."
+            exit 1
+          fi
+
+          uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)
+          if [ "$uploaded" != "$size" ]; then
+            echo "::error::Hostinger upload offset mismatch: uploaded=${uploaded:-missing} expected=$size"
+            exit 1
+          fi
+          echo "archive_uploaded=$ARCHIVE_NAME bytes=$size"
+
+      - name: Resolve Node.js build settings
+        if: steps.freshness.outputs.stale != 'true'
+        id: settings
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+        run: |
+          set -euo pipefail
+          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds"
+
+          settings_code=$(curl --silent --show-error -o /tmp/build-settings.json -w "%{http_code}"             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$base/settings")
+
+          if [ "$settings_code" != "200" ]; then
+            echo "Stored settings unavailable (HTTP $settings_code); auto-detecting from archive."
+            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$base/settings/from-archive?archive_path=$ARCHIVE_NAME"               -o /tmp/build-settings.json
+          fi
+
+          jq '{
+            node_version,
+            app_type,
+            root_directory,
+            output_directory,
+            build_script,
+            entry_file,
+            package_manager
+          }' /tmp/build-settings.json > /tmp/build-settings.normalized.json
+
+          if ! jq -e '.node_version != null and .app_type != null and .package_manager != null' /tmp/build-settings.normalized.json >/dev/null; then
+            echo "::error::Hostinger Node.js build settings are incomplete."
+            cat /tmp/build-settings.json
+            exit 1
+          fi
+
+          cat /tmp/build-settings.normalized.json
+
+      - name: Start Node.js deployment build
+        if: steps.freshness.outputs.stale != 'true'
+        id: build
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+        run: |
+          set -euo pipefail
+          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds"
+
+          jq             --arg archive "$ARCHIVE_NAME"             '. + {source_type:"archive",source_options:{archive_path:$archive}}'             /tmp/build-settings.normalized.json > /tmp/build-request.json
+
+          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/build-request.json             "$base"             -o /tmp/build-start.json
+
+          uuid=$(jq -r '.uuid' /tmp/build-start.json)
+          if [ -z "$uuid" ] || [ "$uuid" = "null" ]; then
+            echo "::error::Hostinger did not return a build UUID."
+            cat /tmp/build-start.json
+            exit 1
+          fi
+          echo "uuid=$uuid" >> "$GITHUB_OUTPUT"
+          echo "build_uuid=$uuid"
+
+      - name: Wait for Node.js deployment
+        if: steps.freshness.outputs.stale != 'true'
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          BUILD_UUID: ${{ steps.build.outputs.uuid }}
+        run: |
+          set -euo pipefail
+          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds"
+
+          for attempt in $(seq 1 90); do
+            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$base/$BUILD_UUID"               -o /tmp/build-status.json
+
+            state=$(jq -r '.state' /tmp/build-status.json)
+            echo "build_attempt=$attempt state=$state"
+
+            if [ "$state" = "completed" ]; then
+              exit 0
+            fi
+            if [ "$state" = "failed" ]; then
+              curl --silent --show-error                 -H "Authorization: Bearer $HOSTINGER_API_TOKEN"                 "$base/$BUILD_UUID/logs" || true
+              echo
+              curl --silent --show-error                 -H "Authorization: Bearer $HOSTINGER_API_TOKEN"                 "$base/$BUILD_UUID/analysis" || true
+              echo
+              exit 1
+            fi
+            sleep 10
+          done
+
+          echo "::error::Hostinger Node.js build timed out."
+          exit 1
+
+      - name: Restart Node.js application
+        if: steps.freshness.outputs.stale != 'true'
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/server/restart"
+
+      - name: Verify exact live release
+        if: steps.freshness.outputs.stale != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          health="https://$HOSTINGER_DOMAIN/api/healthz"
+          for attempt in $(seq 1 30); do
+            curl --http1.1 --silent --show-error -D /tmp/live.headers -o /tmp/live.body               -H "Accept: application/json"               -H "User-Agent: CST-AI-Core-Direct-Deploy/1.0"               "$health" || true
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/live.headers | tail -n1)
+            echo "verify_attempt=$attempt live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA"
+            if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/live.body; then
+              echo "exact_release=PASS"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Production did not expose the exact deployed SHA."
+          exit 1
