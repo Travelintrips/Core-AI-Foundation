@@ -23,6 +23,7 @@ vi.mock("../services/aiCoreMcpEventWebhookService.js", () => ({
 }));
 
 import router from "../routes/ai-core-mcp.js";
+import { logAudit } from "../services/aiAuditService.js";
 
 function app() {
   const instance = express();
@@ -136,6 +137,43 @@ describe("AI Core native MCP events", () => {
       arguments: { taskId: "52902096-a053-49fe-868b-1c6a90cf22d0" },
       callbackUrl: "https://receiver.example.test/mcp-events/callback",
     }));
+  });
+
+  it("audits arrival and invalid params without callback or signing secrets", async () => {
+    const response = await post({
+      jsonrpc: "2.0", id: 5, method: "events/subscribe",
+      params: {
+        name: "ai_core.task.terminal",
+        arguments: { eventTypes: ["UNKNOWN"] },
+        delivery: { mode: "webhook", url: "https://receiver.example.test/private-callback", secret: "whsec_PRIVATE" },
+      },
+    });
+    expect(response.body.error.code).toBe(-32602);
+    expect(eventMocks.subscribe).not.toHaveBeenCalled();
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "native_event_request_received",
+    }));
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "native_event_request_failed",
+      details: expect.objectContaining({ reason: "invalid_params", issues: [{ path: ["arguments", "eventTypes", 0], code: "invalid_enum_value" }] }),
+    }));
+    const audit = JSON.stringify(vi.mocked(logAudit).mock.calls);
+    expect(audit).not.toContain("whsec_PRIVATE");
+    expect(audit).not.toContain("private-callback");
+    expect(audit).not.toContain("test-connector-key");
+  });
+
+  it("audits internal failures without storing raw error details", async () => {
+    eventMocks.subscribe.mockRejectedValueOnce(new Error("private-callback whsec_PRIVATE"));
+    const response = await post({
+      jsonrpc: "2.0", id: 6, method: "events/subscribe",
+      params: { name: "ai_core.task.terminal", delivery: { mode: "webhook", url: "https://receiver.example.test/private-callback", secret: "whsec_PRIVATE" } },
+    });
+    expect(response.body.error.code).toBe(-32603);
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "native_event_request_failed", details: { method: "events/subscribe", reason: "internal_error" },
+    }));
+    expect(JSON.stringify(vi.mocked(logAudit).mock.calls)).not.toContain("whsec_PRIVATE");
   });
 
   it("allows plugin scans to discover the static event catalog before OAuth", async () => {
