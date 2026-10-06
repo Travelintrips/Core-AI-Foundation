@@ -85,7 +85,7 @@ router.post("/ai/coding/bridge/critical-approvals",async(req,res):Promise<void>=
  const p=z.object({
   taskId:Uuid.nullish(),
   commandId:Uuid.nullish(),
-  actionType:z.enum(["WORKSTREAM_AI_HANDOFF","MERGE_PR","PRODUCTION_DEPLOY","PRODUCTION_DB_MIGRATION","DESTRUCTIVE_DB_CHANGE","SECURITY_CHANGE","PRODUCTION_SERVICE_RESTART"]),
+  actionType:z.enum(["PRODUCTION_DB_MIGRATION","DESTRUCTIVE_DB_CHANGE","SECURITY_CHANGE"]),
   summary:z.string().min(1).max(4000),
   metadata:z.record(z.string(),z.unknown()).optional(),
   ttlMinutes:z.number().int().min(2).max(30).optional()
