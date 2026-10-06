@@ -54,6 +54,8 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DOCKER_UPDATE"
   | "HOSTINGER_SUBDOMAIN_LIST"
   | "HOSTINGER_SUBDOMAIN_CREATE"
+  | "HOSTINGER_PARKED_DOMAIN_LIST"
+  | "HOSTINGER_PARKED_DOMAIN_CREATE"
   | "HOSTINGER_DNS_LIST"
   | "HOSTINGER_DNS_SUBDOMAIN_CREATE"
   | "HOSTINGER_DNS_RECORD_CREATE"
@@ -160,6 +162,11 @@ export function detectAiCoreInfrastructureOperation(
     if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomain\b/i.test(text)) {
       return "HOSTINGER_DNS_RECORD_CREATE";
     }
+  }
+
+  if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(parked domain|domain alias|alias domain|parkir domain)\b/i.test(text)) {
+    if (/\b(buat|create|add|tambah|pasang)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_CREATE";
+    if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_LIST";
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomain\b/i.test(text)) {
@@ -959,6 +966,27 @@ async function callHostinger(
       throw new Error(`Hostinger domain availability failed with HTTP ${result.status}.`);
     }
     data = result.data;
+  } else if (operation === "HOSTINGER_PARKED_DOMAIN_LIST" || operation === "HOSTINGER_PARKED_DOMAIN_CREATE") {
+    const target = await resolveHostingTarget();
+    const path =
+      `/hosting/v1/accounts/${encodeURIComponent(target.username)}/websites/${encodeURIComponent(target.domain)}/parked-domains`;
+    if (operation === "HOSTINGER_PARKED_DOMAIN_LIST") {
+      const result = await firstSuccessful(path, "GET");
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger parked-domain list failed with HTTP ${result.status}.`);
+      }
+      data = { target, parkedDomains: result.data };
+    } else {
+      const parkedDomain = valueOf("parked_domain") || valueOf("alias") || valueOf("name");
+      if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(parkedDomain)) {
+        throw new Error("Parked-domain create requires parked_domain=<fully-qualified-domain>.");
+      }
+      const result = await firstSuccessful(path, "POST", { parked_domain: parkedDomain });
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger parked-domain create failed with HTTP ${result.status}.`);
+      }
+      data = { target, parkedDomain, result: result.data };
+    }
   } else if (operation === "HOSTINGER_SUBDOMAIN_LIST" || operation === "HOSTINGER_SUBDOMAIN_CREATE") {
     const target = await resolveHostingTarget();
     const path =
@@ -1214,6 +1242,7 @@ async function callHostinger(
     "HOSTINGER_DOCKER_CONTAINERS",
     "HOSTINGER_DOCKER_LOGS",
     "HOSTINGER_SUBDOMAIN_LIST",
+    "HOSTINGER_PARKED_DOMAIN_LIST",
     "HOSTINGER_DNS_LIST",
     "HOSTINGER_DOMAIN_AVAILABILITY",
     "HOSTINGER_HOSTING_DISCOVERY",
