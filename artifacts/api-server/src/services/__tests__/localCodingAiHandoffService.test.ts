@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  aiHandoffHeadAdvanceTouchesAllowedFiles,
   buildAiHandoffPackage,
   computeAiHandoffExpiresAt,
   isAiHandoffLeaseFresh,
@@ -80,6 +82,65 @@ function failureContexts(): LocalFailureContext[] {
     warnings: [],
   }];
 }
+
+describe("Local Coding AI Handoff HEAD scope stability", () => {
+  it("allows repository advancement when changed files are outside the bounded write scope", () => {
+    expect(
+      aiHandoffHeadAdvanceTouchesAllowedFiles(
+        [
+          ".github/workflows/ci.yml",
+          "artifacts/api-server/src/services/localCodingAutonomousRepairService.ts",
+        ],
+        [
+          "artifacts/api-server/src/services/imageRouterService.ts",
+          "scripts/ai-image-gateway.py",
+        ],
+      ),
+    ).toBe(false);
+  });
+
+  it("fails closed when any allowed target changed", () => {
+    expect(
+      aiHandoffHeadAdvanceTouchesAllowedFiles(
+        [
+          ".github/workflows/ci.yml",
+          "scripts/ai-image-gateway.py",
+        ],
+        [
+          "artifacts/api-server/src/services/imageRouterService.ts",
+          "scripts/ai-image-gateway.py",
+        ],
+      ),
+    ).toBe(true);
+  });
+
+  it("fails closed when the allowed scope is empty or unsafe", () => {
+    expect(
+      aiHandoffHeadAdvanceTouchesAllowedFiles(
+        ["docs/readme.md"],
+        [],
+      ),
+    ).toBe(true);
+    expect(
+      aiHandoffHeadAdvanceTouchesAllowedFiles(
+        [".env"],
+        [".env"],
+      ),
+    ).toBe(true);
+  });
+
+  it("rebases the persisted bounded context only after git diff proves target scope unchanged", () => {
+    const source = readFileSync(
+      new URL("../localCodingAiHandoffService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('"diff",');
+    expect(source).toContain('"--name-only"');
+    expect(source).toContain("head_advanced_outside_allowed_scope");
+    expect(source).toContain("context.contextPackage.headSha = actualHead");
+    expect(source).toContain("payloadContextPackage.headSha = actualHead");
+  });
+});
 
 describe("Local Coding AI Handoff Package", () => {
   it("builds a bounded read-only package without invoking a model", () => {
