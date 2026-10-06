@@ -10,8 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-fast-verify-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Key by immutable head SHA instead of only PR number. This keeps reruns of
+  # the same commit from cancelling each other before a runner starts, while a
+  # new PR head still gets an independent verification run.
+  group: pr-fast-verify-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
   ai-platform:
