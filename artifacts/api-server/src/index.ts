@@ -133,6 +133,14 @@ async function initializeRuntimeServices(): Promise<void> {
     }
   }
 
+  // Start the autonomous timer before slower sequential startup initializers.
+  // The runtime registers its timer before its own schema recovery, so readiness
+  // remains accurate during Hostinger rolling deploys while DB work stays bounded.
+  await runStartupStep(
+    "[coding-autonomous] Runtime start",
+    () => codingAutonomous.startAutonomousCodingRuntime(),
+  );
+
   // Run startup DB work sequentially. Hostinger performs rolling deploys and
   // can overlap processes briefly; firing every initializer concurrently caused
   // Supabase session-pool exhaustion during deploys.
@@ -180,10 +188,6 @@ async function initializeRuntimeServices(): Promise<void> {
     );
   }
 
-  await runStartupStep(
-    "[coding-autonomous] Runtime start",
-    () => codingAutonomous.startAutonomousCodingRuntime(),
-  );
   await runStartupStep(
     "[mcp-events] Delivery runtime start",
     () => mcpEvents.startAiCoreMcpEventDeliveryRuntime(),
