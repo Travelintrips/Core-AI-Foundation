@@ -13,7 +13,7 @@ describe("coding task presentation status", () => {
     ).toBe("FAILED");
   });
 
-  it("shows technical autonomous blockers as failed, not human review", () => {
+  it("shows technical autonomous blockers as BLOCKED, not terminal failure or human review", () => {
     for (const taskStatus of ["READY_REVIEW", "FAILED", "ANALYZING"]) {
       expect(
         codingTaskPresentationStatus({
@@ -21,7 +21,7 @@ describe("coding task presentation status", () => {
           autonomousStatus: "BLOCKED",
           hasActiveRun: false,
         }),
-      ).toBe("FAILED");
+      ).toBe("BLOCKED");
     }
   });
 
@@ -46,7 +46,7 @@ describe("coding task presentation status", () => {
         hasActiveRun: false,
         hasPendingCriticalApproval: false,
       }),
-    ).toBe("FAILED");
+    ).toBe("BLOCKED");
 
     expect(
       codingTaskPresentationStatus({
