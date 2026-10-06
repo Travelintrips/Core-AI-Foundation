@@ -296,12 +296,26 @@ async function loadTaskState(taskId: string) {
   );
 
   const activeRun = runs.find((run) => run.status === "RUNNING") ?? null;
-  const orchestrator = runs.find(
-    (run) =>
-      run.agentName === "Coding Orchestrator" &&
-      run.status === "COMPLETED" &&
-      Boolean(run.logs),
-  ) ?? null;
+  // Incident Auto-Repair and other bounded lifecycle agents can persist the
+  // same orchestration contract as Coding Orchestrator. Prefer the newest
+  // completed run that actually exposes a nextAction, rather than hard-coding
+  // one agent name and leaving incident tasks orphaned in READY_REVIEW.
+  const orchestrator =
+    runs.find((run) => {
+      if (run.status !== "COMPLETED" || !run.logs) return false;
+      const candidate = parseJson(run.logs);
+      const candidateOrchestration = isRecord(candidate.orchestration)
+        ? candidate.orchestration
+        : null;
+      return typeof candidateOrchestration?.nextAction === "string";
+    }) ??
+    runs.find(
+      (run) =>
+        run.agentName === "Coding Orchestrator" &&
+        run.status === "COMPLETED" &&
+        Boolean(run.logs),
+    ) ??
+    null;
   const payload = orchestrator ? parseJson(orchestrator.logs) : {};
   const orchestration = isRecord(payload.orchestration) ? payload.orchestration : {};
   const nextAction =
