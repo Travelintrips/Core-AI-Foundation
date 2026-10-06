@@ -173,6 +173,20 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     modelId:            "per-job",
     runtimeKind:        "dispatcher",
   },
+  {
+    // Reserve one single-slot dispatcher exclusively for multi-task planning.
+    // Planner jobs used to compete with long-running coding execution jobs on
+    // dispatcher-4/6 and could starve indefinitely while execution stayed busy.
+    // A dedicated planner slot keeps planning responsive without increasing the
+    // per-worker concurrency cap or stealing execution capacity.
+    suffix:            "7",
+    workerType:        "coding_worker",
+    capabilities:      ["coding_multi_task_planner"],
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
+    providerSlug:       "dynamic",
+    modelId:            "per-job",
+    runtimeKind:        "dispatcher",
+  },
 ];
 
 if (process.env["BLENDER_WORKER_RUNTIME_ENABLED"] === "true") {
