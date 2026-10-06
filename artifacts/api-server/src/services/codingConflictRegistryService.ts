@@ -37,6 +37,16 @@ function safeFiles(files: string[]): string[] {
     .slice(0, MAX_RESERVED_FILES);
 }
 
+export function codingFileTextArraySql(files: string[]) {
+  if (files.length === 0) {
+    return sql`ARRAY[]::text[]`;
+  }
+  return sql`ARRAY[${sql.join(
+    files.map((file) => sql`${file}`),
+    sql`, `,
+  )}]::text[]`;
+}
+
 async function ensureTable(): Promise<void> {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ai_platform.ai_coding_active_file_reservations (
@@ -103,7 +113,7 @@ export async function reserveCodingFileSet(input: {
       WHERE repository = ${input.repository}
         AND branch = ${input.branch}
         AND task_id = ${input.taskId}
-        AND file_path = ANY(${files}::text[])
+        AND file_path = ANY(${codingFileTextArraySql(files)})
     `);
 
     for (const file of files) {
@@ -129,7 +139,7 @@ export async function reserveCodingFileSet(input: {
       FROM ai_platform.ai_coding_active_file_reservations
       WHERE repository = ${input.repository}
         AND branch = ${input.branch}
-        AND file_path = ANY(${files}::text[])
+        AND file_path = ANY(${codingFileTextArraySql(files)})
         AND task_id <> ${input.taskId}
       ORDER BY file_path
     `);
@@ -143,7 +153,7 @@ export async function reserveCodingFileSet(input: {
         WHERE repository = ${input.repository}
           AND branch = ${input.branch}
           AND task_id = ${input.taskId}
-          AND file_path = ANY(${files}::text[])
+          AND file_path = ANY(${codingFileTextArraySql(files)})
       `);
       return { status: "CONFLICT" as const, files, conflicts };
     }
