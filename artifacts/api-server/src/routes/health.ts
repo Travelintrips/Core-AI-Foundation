@@ -10,6 +10,8 @@
  * { status: "ok" } for the deploy gate to pass.
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
@@ -21,8 +23,35 @@ const router: IRouter = Router();
 
 /** Process start time — used to compute uptime in /healthz/full */
 const startedAt = Date.now();
-const RELEASE_MARKER = "phase7a12-workers-killswitch-20260924";
-const BUILD_COMMIT_SHA = process.env.CST_BUILD_COMMIT_SHA ?? "unknown";
+const RELEASE_MARKER = "hostinger-build-commit-telemetry-20261006";
+
+function isCommitSha(value: string): boolean {
+  return /^[0-9a-f]{40}$/i.test(value.trim());
+}
+
+function resolveBuildCommitSha(): string {
+  // The build writes this marker from the checked-out Git HEAD. Prefer it over
+  // CST_BUILD_COMMIT_SHA because Hostinger may preserve environment variables
+  // from an older deployment across native Git builds.
+  try {
+    const marker = readFileSync(resolve(process.cwd(), ".cst-build-sha"), "utf8").trim();
+    if (isCommitSha(marker)) return marker.toLowerCase();
+  } catch {
+    // Older deployments do not have the marker yet; fall through safely.
+  }
+
+  for (const candidate of [
+    process.env["GITHUB_SHA"],
+    process.env["CI_COMMIT_SHA"],
+    process.env["CST_BUILD_COMMIT_SHA"],
+  ]) {
+    if (candidate && isCommitSha(candidate)) return candidate.trim().toLowerCase();
+  }
+
+  return "unknown";
+}
+
+const BUILD_COMMIT_SHA = resolveBuildCommitSha();
 
 const DEFAULT_READINESS_DB_TIMEOUT_MS = 2_500;
 const MIN_READINESS_DB_TIMEOUT_MS = 250;
