@@ -240,7 +240,7 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
     LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a
       ON a.task_id = t.id
      AND a.enabled = TRUE
-     AND a.status IN ('ACTIVE', 'WAITING', 'COMPLETED', 'FAILED', 'BLOCKED')
+     AND a.status IN ('ACTIVE', 'WAITING', 'APPROVAL_REQUIRED', 'COMPLETED', 'FAILED', 'BLOCKED')
     WHERE t.task_number NOT LIKE 'MW-%'
   `);
 
@@ -326,7 +326,13 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
             FROM ai_platform.ai_coding_runs r
             WHERE r.task_id = t.id
               AND r.status = 'RUNNING'
-          ) AS has_active_run
+          ) AS has_active_run,
+          EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_critical_approvals approval
+            WHERE approval.task_id = t.id
+              AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+          ) AS has_pending_critical_approval
         FROM ai_platform.ai_coding_tasks t
         LEFT JOIN ai_platform.ai_coding_autonomous_tasks a
           ON a.task_id = t.id
@@ -341,31 +347,19 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
         COUNT(*) FILTER (
           WHERE has_active_run = FALSE
             AND (
-              autonomous_status = 'FAILED'
+              autonomous_status IN ('FAILED', 'BLOCKED')
               OR (
                 status = 'FAILED'
                 AND (
                   autonomous_status IS NULL
-                  OR autonomous_status IN ('APPROVAL_REQUIRED', 'DISABLED')
+                  OR autonomous_status = 'DISABLED'
                 )
               )
             )
         )::int AS failed_blocked,
         COUNT(*) FILTER (
           WHERE has_active_run = FALSE
-            AND (
-              (
-                status = 'READY_REVIEW'
-                AND (
-                  autonomous_status IS NULL
-                  OR autonomous_status IN ('APPROVAL_REQUIRED', 'DISABLED', 'BLOCKED')
-                )
-              )
-              OR (
-                status = 'FAILED'
-                AND autonomous_status = 'BLOCKED'
-              )
-            )
+            AND has_pending_critical_approval = TRUE
         )::int AS true_ready_review
       FROM task_state
     `),

@@ -94,6 +94,11 @@ describe("AI Core admin database query service", () => {
     expect(isAdminWorkerStatusQuery("cek apakah worker nya pada sibuk")).toBe(true);
     expect(isAdminWorkerStatusQuery("worker mana yang available sekarang")).toBe(true);
     expect(isAdminWorkerStatusQuery("jelaskan apa itu worker")).toBe(false);
+    expect(
+      isAdminWorkerStatusQuery(
+        "audit Workspace task READY_REVIEW QUEUED ANALYZING WAITING_FOR_WORKER BLOCKED FAILED",
+      ),
+    ).toBe(false);
 
     mocks.txExecute
       .mockResolvedValueOnce({ rows: [] })
