@@ -66,6 +66,7 @@ export const en = {
       userManagement:       "User Management",
       settings:             "Settings",
       aiCoreChat:          "AI Core Chat",
+      aiCoreActivity:      "ChatGPT ↔ AI Core Activity",
       codingWorkspace:     "AI Coding Workspace",
     },
   },
