@@ -77,6 +77,7 @@ import {
   executeAiCoreAuditHistoryQuery,
   executeAdminSemanticQuery,
   executeAdminWorkerStatusQuery,
+  executeAdminWhatsappDeviceStatusQuery,
   executeAdminCodingTaskStatusQuery,
   extractAdminDbSemanticIntent,
   extractExplicitAdminMutationSql,
@@ -85,6 +86,7 @@ import {
   inspectAdminDbSchemaCatalog,
   isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
+  isAdminWhatsappDeviceStatusQuery,
   isAdminCodingTaskStatusQuery,
   isAiCoreAuditHistoryQuery,
   sanitizeAdminDbError,
@@ -807,6 +809,33 @@ async function tryRunAdminDbQuery(
         access: "ADMIN_READ_ONLY",
       },
       data: taskStatus.rows,
+    };
+  }
+
+  if (isAdminWhatsappDeviceStatusQuery(message)) {
+    const waStatus = await executeAdminWhatsappDeviceStatusQuery();
+    return {
+      kind: "answer",
+      route: "ADMIN_DB_QUERY",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: waStatus.rowCount > 0
+        ? renderAdminDbQueryResult(waStatus)
+        : "Schema WhatsApp sudah diperiksa, tetapi tabel/kolom device status yang dapat diverifikasi belum ditemukan.",
+      databaseQuery: {
+        sql: waStatus.sql,
+        rowCount: waStatus.rowCount,
+        truncated: waStatus.truncated,
+        elapsedMs: waStatus.elapsedMs,
+        sourceDatabaseId: waStatus.sourceDatabaseId,
+        reason: "Deterministic WhatsApp device status query with schema discovery.",
+        access: "ADMIN_READ_ONLY",
+      },
+      data: waStatus.rows,
     };
   }
 
