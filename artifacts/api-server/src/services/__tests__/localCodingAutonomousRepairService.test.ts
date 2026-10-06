@@ -1010,6 +1010,30 @@ describe("READY_REVIEW conflict orphan recovery", () => {
   });
 });
 
+describe("Temporal autonomous READY_REVIEW recovery", () => {
+  it("runs the throttled recoverable-task sweep from the Temporal polling path", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const listStart = source.indexOf("export async function listActiveAutonomousCodingTasks");
+    const listEnd = source.indexOf("async function temporalOrchestratorActive", listStart);
+    const listSource = source.slice(listStart, listEnd);
+    expect(listSource).toContain("await maybeRecoverOrphanedReadyReviewTasks();");
+
+    const helperStart = source.indexOf("async function maybeRecoverOrphanedReadyReviewTasks");
+    const helperEnd = source.indexOf(
+      "export async function recoverOrphanedReadyReviewTasks",
+      helperStart,
+    );
+    const helperSource = source.slice(helperStart, helperEnd);
+    expect(helperSource).toContain("READY_REVIEW_RECOVERY_INTERVAL_MS");
+    expect(helperSource).toContain("lastReadyReviewRecoveryAt = nowMs");
+    expect(helperSource).toContain("recoverOrphanedReadyReviewTasks()");
+  });
+});
+
 describe("READY_REVIEW autonomous recovery policy", () => {
   it("reactivates safe technical blockers without bypassing policy blockers", async () => {
     const { readyReviewAutonomousRecoveryDecision } = await import(
