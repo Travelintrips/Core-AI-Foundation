@@ -21,6 +21,16 @@ function productionEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   };
 }
 
+function legacySupabaseJwt(projectRef: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({
+    iss: "supabase",
+    ref: projectRef,
+    role: "service_role",
+  })).toString("base64url");
+  return `${header}.${payload}.test-signature`;
+}
+
 describe("Supabase Storage production credential selection", () => {
   it("treats APP_ENV=production as production even when NODE_ENV is absent", () => {
     expect(
@@ -49,6 +59,67 @@ describe("Supabase Storage production credential selection", () => {
         SUPABASE_SERVICE_ROLE_KEY_DEV: "secret",
       }),
     ).toBe(false);
+  });
+
+
+  it("derives the project URL from a legacy service-role JWT when the pooler URL has no project ref", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv(
+      "SUPABASE_DATABASE_URL",
+      "postgresql://postgres:secret@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres",
+    );
+    vi.stubEnv("SUPABASE_PROD_DATABASE_URL", "");
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_PROD_URL", "");
+    vi.stubEnv("VITE_SUPABASE_URL", "");
+    vi.stubEnv(
+      "SUPABASE_SERVICE_ROLE_KEY",
+      legacySupabaseJwt("nzdweipzckfszczzqtuw"),
+    );
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { status: 200 }),
+    );
+
+    const url = await uploadToSupabase(
+      "diagnostics/runtime.txt",
+      Buffer.from("storage-ok"),
+      "text/plain",
+    );
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "https://nzdweipzckfszczzqtuw.supabase.co/storage/v1/object/ai-assets/diagnostics/runtime.txt",
+    );
+    expect(url).toBe(
+      "https://nzdweipzckfszczzqtuw.supabase.co/storage/v1/object/public/ai-assets/diagnostics/runtime.txt",
+    );
+  });
+
+  it("accepts VITE_SUPABASE_URL as a production URL fallback for modern secret keys", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv(
+      "SUPABASE_DATABASE_URL",
+      "postgresql://postgres:secret@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres",
+    );
+    vi.stubEnv("SUPABASE_PROD_DATABASE_URL", "");
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_PROD_URL", "");
+    vi.stubEnv("VITE_SUPABASE_URL", "https://nzdweipzckfszczzqtuw.supabase.co/");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_server_only_test");
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { status: 200 }),
+    );
+
+    await uploadToSupabase(
+      "diagnostics/modern-key.txt",
+      Buffer.from("storage-ok"),
+      "text/plain",
+    );
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "https://nzdweipzckfszczzqtuw.supabase.co/storage/v1/object/ai-assets/diagnostics/modern-key.txt",
+    );
   });
 });
 
