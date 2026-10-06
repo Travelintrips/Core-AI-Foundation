@@ -260,52 +260,14 @@ function requiredMetadataString(
 }
 
 async function executeApprovedAction(approval: CriticalApprovalRow): Promise<void> {
-  if (!approval.taskId) {
-    throw new Error("Critical approval does not have a coding task id");
-  }
-
-  switch (approval.actionType) {
-    case "WORKSTREAM_AI_HANDOFF": {
-      const workstreamId = requiredMetadataString(approval, "workstreamId");
-      const handoffId = requiredMetadataString(approval, "handoffId");
-      const expectedPackageHash = requiredMetadataString(
-        approval,
-        "packageHash",
-      ).toLowerCase();
-
-      const {
-        approveWorkstreamAiExecutionHandoff,
-        enqueueWorkstreamAiExecution,
-      } = await import("./localCodingWorkstreamAiExecutionService.js");
-
-      const lease = await approveWorkstreamAiExecutionHandoff(
-        workstreamId,
-        handoffId,
-      );
-      if (lease.packageHash.toLowerCase() !== expectedPackageHash) {
-        throw new Error(
-          "Approved workstream AI handoff package hash changed before execution.",
-        );
-      }
-
-      await enqueueWorkstreamAiExecution(workstreamId, {
-        expectedPackageHash: lease.packageHash,
-        requestedBy: `admin-approval:${approval.id}`,
-      });
-      return;
-    }
-    case "MERGE_PR": {
-      const { approveAndMergePullRequest } = await import(
-        "./localCodingPullRequestGateService.js"
-      );
-      await approveAndMergePullRequest(approval.taskId);
-      return;
-    }
-    default:
-      throw new Error(
-        `Critical action ${approval.actionType} is gated but does not yet have an execution adapter.`,
-      );
-  }
+  // Only truly critical database/security actions may enter this path.
+  // Their concrete execution remains fail-closed until a dedicated, scoped
+  // adapter validates the approved payload. Ordinary coding/merge/deploy
+  // actions never create human approvals and auto-advance through their own
+  // deterministic verification gates.
+  throw new Error(
+    `Critical action ${approval.actionType} is approved but has no scoped execution adapter.`,
+  );
 }
 
 async function decideLoadedCriticalApproval(
