@@ -29,6 +29,19 @@ export interface StorageImageCompressionResult {
   compressed: boolean;
 }
 
+export interface PublicInteriorStorageProxyInput {
+  projectId: number;
+  accessToken: string;
+  variantIndex: number;
+  buffer: Buffer;
+}
+
+export interface PublicInteriorStorageProxyResult {
+  publicUrl: string;
+  storagePath: string;
+  storedBytes: number;
+}
+
 function normalizedEnvironmentValue(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -119,6 +132,41 @@ export async function compressImageForStorage(
   };
 }
 
+export async function compressInteriorRenderForStorage(
+  buffer: Buffer,
+): Promise<StorageImageCompressionResult> {
+  const originalBytes = buffer.byteLength;
+  if (originalBytes === 0) {
+    throw new Error("Interior render image is empty");
+  }
+
+  // Interior renders are normalized to WebP before leaving the API host. This
+  // guarantees the object written to Supabase is already compressed at rest,
+  // rather than relying only on CDN-time transformations.
+  const encoded = await sharp(buffer, { failOn: "warning" })
+    .rotate()
+    .webp({ quality: 78, effort: 5, smartSubsample: true })
+    .toBuffer();
+
+  // Replicate normally returns WebP already. If its source is smaller than our
+  // re-encode, keep the smaller compressed WebP rather than increasing storage.
+  const sourceIsWebp =
+    buffer.byteLength >= 12 &&
+    buffer[0] === 0x52 && buffer[1] === 0x49 &&
+    buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 &&
+    buffer[10] === 0x42 && buffer[11] === 0x50;
+  const stored = sourceIsWebp && encoded.byteLength >= originalBytes ? buffer : encoded;
+
+  return {
+    buffer: stored,
+    contentType: "image/webp",
+    originalBytes,
+    storedBytes: stored.byteLength,
+    compressed: true,
+  };
+}
+
 function deriveSupabaseUrlFromDatabaseUrl(databaseUrl: string | undefined): string | undefined {
   if (!databaseUrl) return undefined;
 
@@ -142,21 +190,27 @@ function deriveSupabaseUrlFromDatabaseUrl(databaseUrl: string | undefined): stri
   return undefined;
 }
 
+function getSupabaseProjectUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const isProduction = isProductionStorageEnvironment(env);
+  const databaseUrl = isProduction
+    ? env["SUPABASE_PROD_DATABASE_URL"] || env["SUPABASE_DATABASE_URL"]
+    : env["SUPABASE_DEV_DATABASE_URL"] || env["SUPABASE_DATABASE_URL_DEV"];
+  const explicitUrl = isProduction
+    ? env["SUPABASE_URL"] || env["SUPABASE_PROD_URL"]
+    : env["SUPABASE_URL_DEV"] || env["SUPABASE_DEV_URL"];
+  const derivedUrl = deriveSupabaseUrlFromDatabaseUrl(databaseUrl);
+  const url = (isProduction ? (derivedUrl || explicitUrl) : (explicitUrl || derivedUrl))?.replace(/\/$/, "");
+  if (!url) {
+    throw new Error("Supabase project URL is unavailable");
+  }
+  return url;
+}
+
 function getCredentials(): SupabaseCredentials {
   const isProduction = isProductionStorageEnvironment(process.env);
-
-  const databaseUrl = isProduction
-    ? process.env["SUPABASE_PROD_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL"]
-    : process.env["SUPABASE_DEV_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL_DEV"];
-
-  const explicitUrl = isProduction
-    ? process.env["SUPABASE_URL"] || process.env["SUPABASE_PROD_URL"]
-    : process.env["SUPABASE_URL_DEV"] || process.env["SUPABASE_DEV_URL"];
-
-  const derivedUrl = deriveSupabaseUrlFromDatabaseUrl(databaseUrl);
-  // In production prefer the URL derived from the production DB connection so
-  // Storage can never accidentally point at a different Supabase project.
-  const url = (isProduction ? (derivedUrl || explicitUrl) : (explicitUrl || derivedUrl))?.replace(/\/$/, "");
+  const url = getSupabaseProjectUrl(process.env);
 
   const serviceKey = isProduction
     ? process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
@@ -282,6 +336,74 @@ export async function uploadToSupabase(
   }
 
   return getSupabasePublicUrl(path);
+}
+
+/**
+ * Server-to-server bridge for public Interior Design renders when the Hostinger
+ * runtime intentionally has no Supabase admin key. The Edge Function owns the
+ * admin credential and independently validates the customer project token.
+ *
+ * Only compressed WebP bytes are accepted by the Edge Function and its path is
+ * deterministic per project/variant, so callers cannot choose arbitrary bucket
+ * paths or grow storage unbounded with the same token.
+ */
+export async function uploadPublicInteriorRenderViaEdge(
+  input: PublicInteriorStorageProxyInput,
+): Promise<PublicInteriorStorageProxyResult> {
+  if (!Number.isSafeInteger(input.projectId) || input.projectId <= 0) {
+    throw new Error("Invalid public Interior Design project id");
+  }
+  if (!Number.isInteger(input.variantIndex) || input.variantIndex < 0 || input.variantIndex > 3) {
+    throw new Error("Invalid public Interior Design variant index");
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(input.accessToken)) {
+    throw new Error("Invalid public Interior Design access token");
+  }
+
+  const prepared = await compressInteriorRenderForStorage(input.buffer);
+  const projectUrl = getSupabaseProjectUrl(process.env);
+  const response = await fetch(
+    `${projectUrl}/functions/v1/interior-render-storage`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": prepared.contentType,
+        "x-interior-project-id": String(input.projectId),
+        "x-interior-access-token": input.accessToken,
+        "x-interior-variant-index": String(input.variantIndex),
+      },
+      body: prepared.buffer,
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+
+  const text = await response.text();
+  let result: {
+    publicUrl?: string;
+    path?: string;
+    storedBytes?: number;
+    error?: string;
+  } = {};
+  try {
+    result = text ? JSON.parse(text) as typeof result : {};
+  } catch {
+    // Keep the error generic; never include auth headers or access tokens.
+  }
+
+  if (!response.ok || !result.publicUrl || !result.path) {
+    throw new Error(
+      `Supabase Interior render storage bridge failed (HTTP ${response.status}): ${result.error ?? "unknown"}`,
+    );
+  }
+
+  return {
+    publicUrl: result.publicUrl,
+    storagePath: result.path,
+    storedBytes:
+      typeof result.storedBytes === "number" && result.storedBytes >= 0
+        ? result.storedBytes
+        : prepared.storedBytes,
+  };
 }
 
 /**
