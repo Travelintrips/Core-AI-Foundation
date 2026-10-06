@@ -1050,6 +1050,64 @@ export async function executeAiCoreAuditHistoryQuery(): Promise<AdminDbQueryExec
   );
 }
 
+export function isAdminWhatsappDeviceStatusQuery(message: string): boolean {
+  const value = normalizeSemanticText(message);
+  const whatsappScope = /\b(whatsapp|wa|gateway)\b/.test(value);
+  const deviceScope = /\b(device|nomor|number|phone|sender|session|admin|aktif|online|offline|banned|ban|qr required|qr_required|status)\b/.test(value);
+  return whatsappScope && deviceScope;
+}
+
+export async function executeAdminWhatsappDeviceStatusQuery(): Promise<AdminDbQueryExecution> {
+  const inspected = await inspectAdminDbSchemaCatalog("whatsapp wa device phone sender session status online");
+  const candidates = inspected.tables
+    .filter((table) => /whatsapp|wa_|wa\b|device|session/i.test(table.schema + "." + table.table))
+    .map((table) => {
+      const columns = new Set(table.columns.map((column) => column.toLowerCase()));
+      const pick = (...names: string[]) => names.find((name) => columns.has(name));
+      const id = pick("device_id", "id", "session_id");
+      const phone = pick("phone_number", "phone", "number", "msisdn", "jid", "remote_jid");
+      const status = pick("status", "connection_status", "state");
+      const lastSeen = pick("last_seen", "last_seen_at", "last_heartbeat", "updated_at");
+      const name = pick("device_name", "name", "label");
+      return { table, id, phone, status, lastSeen, name };
+    })
+    .filter((candidate) => candidate.status && (candidate.id || candidate.phone))
+    .sort((left, right) => {
+      const score = (candidate: typeof left) =>
+        (candidate.phone ? 8 : 0) + (candidate.id ? 4 : 0) + (candidate.lastSeen ? 2 : 0) +
+        (/whatsapp/i.test(candidate.table.schema + "." + candidate.table.table) ? 4 : 0);
+      return score(right) - score(left);
+    });
+
+  const best = candidates[0];
+  if (!best) {
+    return {
+      sql: "WHATSAPP_DEVICE_STATUS schema_discovery",
+      rows: [],
+      rowCount: 0,
+      truncated: false,
+      elapsedMs: 0,
+      discovery: inspected.discovery,
+    };
+  }
+
+  const select = [
+    best.id ? quoteIdentifier(best.id) + " AS device_id" : "NULL::text AS device_id",
+    best.name ? quoteIdentifier(best.name) + " AS device_name" : "NULL::text AS device_name",
+    best.phone ? quoteIdentifier(best.phone) + " AS phone_number" : "NULL::text AS phone_number",
+    quoteIdentifier(best.status!) + " AS status",
+    best.lastSeen ? quoteIdentifier(best.lastSeen) + " AS last_seen" : "NULL::timestamptz AS last_seen",
+  ].join(", ");
+  const tableRef = quoteIdentifier(best.table.schema) + "." + quoteIdentifier(best.table.table);
+  const result = await executeAdminReadOnlySql(
+    "SELECT " + select + " FROM " + tableRef +
+    " ORDER BY " + (best.lastSeen ? quoteIdentifier(best.lastSeen) + " DESC NULLS LAST" : quoteIdentifier(best.status!)) +
+    " LIMIT 100",
+    best.table.databaseId,
+  );
+  return { ...result, discovery: inspected.discovery };
+}
+
 export function isAdminWorkerStatusQuery(message: string): boolean {
   const value = normalizeSemanticText(message);
   if (!/\bworker\b/.test(value)) return false;
