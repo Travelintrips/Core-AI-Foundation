@@ -87,6 +87,35 @@ describe("coding task terminal reporting", () => {
     );
   });
 
+  it("emits a BLOCKED bridge response for a recoverable conflict exactly once", async () => {
+    mocks.limit
+      .mockResolvedValueOnce([{ id: "command-1" }])
+      .mockResolvedValueOnce([]);
+    mocks.appendCodingBridgeResponse.mockResolvedValue({
+      id: "response-blocked",
+    });
+
+    const result = await reportCodingTaskTerminalTransition({
+      taskId: "11111111-1111-4111-8111-111111111111",
+      status: "BLOCKED",
+      message: "Task menunggu konflik file selesai.",
+      source: "coding-orchestrator-active-change-conflict",
+    });
+
+    expect(result).toEqual({ reported: true, responseId: "response-blocked" });
+    expect(mocks.appendCodingBridgeResponse).toHaveBeenCalledWith({
+      commandId: "command-1",
+      taskId: "11111111-1111-4111-8111-111111111111",
+      kind: "BLOCKED",
+      message: "Task menunggu konflik file selesai.",
+      checkpoint: {
+        eventType: "BLOCKED",
+        status: "BLOCKED",
+        source: "coding-orchestrator-active-change-conflict",
+      },
+    });
+  });
+
   it("does nothing when the task has no lifecycle binding", async () => {
     mocks.limit.mockResolvedValueOnce([]);
 
