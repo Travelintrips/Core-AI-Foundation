@@ -571,7 +571,14 @@ router.post(
 
     const sender = senderCandidates(payload).find((candidate) => allowlist.has(candidate));
     if (!sender) {
-      res.status(403).json({ error: "SENDER_NOT_ALLOWED" });
+      logger.info(
+        {
+          event: payload.event,
+          deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
+        },
+        "[coding-wa-inbound] sender ignored because it is not allowlisted",
+      );
+      res.status(202).json({ accepted: false, reason: "SENDER_NOT_ALLOWED" });
       return;
     }
 
