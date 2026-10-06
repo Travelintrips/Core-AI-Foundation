@@ -3528,11 +3528,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
               )}
               {analyzerResult?.implementationPlan && (
                 <div className="space-y-3 rounded-lg border border-violet-300/15 bg-violet-300/[0.035] p-3" data-testid="panel-coding-implementation-plan">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-300">Implementation plan</div>
-                    <div className="flex flex-wrap items-center gap-2">
-                    </div>
-                  </div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-300">Historical implementation plan</div>
                   {analyzerResult.implementationPlan.summary && (
                     <p className="text-xs leading-5 text-slate-300">{analyzerResult.implementationPlan.summary}</p>
                   )}
