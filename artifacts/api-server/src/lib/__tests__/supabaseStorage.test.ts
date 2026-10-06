@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import {
   compressImageForStorage,
+  compressImageToWebpForStorage,
   isProductionStorageEnvironment,
   uploadToSupabase,
 } from "../supabaseStorage.js";
@@ -147,6 +148,28 @@ describe("Supabase Storage compression gate", () => {
 
     expect(result.contentType).toBe("image/webp");
     expect(result.compressed).toBe(true);
+    expect(result.storedBytes).toBeLessThan(result.originalBytes);
+
+    const metadata = await sharp(result.buffer).metadata();
+    expect(metadata.format).toBe("webp");
+  });
+
+
+  it("normalizes fallback images to compressed WebP for the Edge Storage path", async () => {
+    const input = await sharp({
+      create: {
+        width: 640,
+        height: 480,
+        channels: 3,
+        background: { r: 180, g: 140, b: 100 },
+      },
+    }).png().toBuffer();
+
+    const result = await compressImageToWebpForStorage(input);
+
+    expect(result.contentType).toBe("image/webp");
+    expect(result.compressed).toBe(true);
+    expect(result.storedBytes).toBeGreaterThan(0);
     expect(result.storedBytes).toBeLessThan(result.originalBytes);
 
     const metadata = await sharp(result.buffer).metadata();

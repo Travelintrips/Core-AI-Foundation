@@ -1,6 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { creativeAiAssetsTable, db } from "@workspace/db";
 import { generatePhotorealisticInteriorImage } from "../../services/imagePreviewService.js";
+import {
+  compressImageToWebpForStorage,
+  getSupabaseProjectUrl,
+} from "../../lib/supabaseStorage.js";
 
 const PUBLIC_PROJECT_PREFIX = "public-interior-";
 const DEFAULT_VARIANTS = 2;
@@ -14,6 +18,7 @@ type PublicRenderProject = {
   id: number;
   title: string;
   roomType: string;
+  accessToken: string;
 };
 
 type PublicRenderAsset = {
@@ -29,6 +34,86 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+type EdgeStorageResult = {
+  publicUrl: string;
+  path: string;
+  originalBytes: number;
+  storedBytes: number;
+};
+
+async function persistPublicInteriorRenderViaEdge(input: {
+  project: PublicRenderProject;
+  variantIndex: number;
+  providerUrl: string;
+}): Promise<EdgeStorageResult> {
+  if (!input.project.accessToken) {
+    throw new Error("Interior project access token is unavailable for storage authorization");
+  }
+
+  const supabaseUrl = getSupabaseProjectUrl();
+  if (!supabaseUrl) {
+    throw new Error("Supabase project URL is unavailable for Edge Storage fallback");
+  }
+
+  const raw = await fetch(input.providerUrl, {
+    redirect: "follow",
+    headers: {
+      Accept: "image/webp,image/avif,image/png,image/jpeg,image/*,*/*;q=0.8",
+    },
+  });
+  if (!raw.ok) {
+    throw new Error(`Provider image download failed with HTTP ${raw.status}`);
+  }
+
+  const source = Buffer.from(await raw.arrayBuffer());
+  const prepared = await compressImageToWebpForStorage(source);
+  if (prepared.storedBytes === 0) {
+    throw new Error("Provider image download returned an empty body");
+  }
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/interior-render-storage`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "image/webp",
+        "x-interior-project-id": String(input.project.id),
+        "x-interior-access-token": input.project.accessToken,
+        "x-interior-variant-index": String(input.variantIndex),
+      },
+      body: prepared.buffer,
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+
+  const payload = await response.json().catch(() => null) as {
+    publicUrl?: unknown;
+    path?: unknown;
+    storedBytes?: unknown;
+    error?: unknown;
+  } | null;
+
+  if (!response.ok) {
+    throw new Error(
+      `Interior Storage Edge upload failed (${response.status}): ${String(payload?.error ?? "unknown")}`,
+    );
+  }
+
+  if (typeof payload?.publicUrl !== "string" || typeof payload?.path !== "string") {
+    throw new Error("Interior Storage Edge response is missing the permanent asset URL");
+  }
+
+  return {
+    publicUrl: payload.publicUrl,
+    path: payload.path,
+    originalBytes: prepared.originalBytes,
+    storedBytes:
+      typeof payload.storedBytes === "number"
+        ? payload.storedBytes
+        : prepared.storedBytes,
+  };
 }
 
 function buildPrompt(input: {
@@ -132,18 +217,50 @@ export async function generatePublicInteriorRenders(input: {
         aspectRatio: "16:9",
       });
 
+      let finalImageUrl = image.imageUrl;
+      let finalStoragePath = image.storagePath;
+      let qcNotes: string | null = null;
+      let completionMetadata: Record<string, unknown> = {
+        source: "public_interior_design",
+        publicInteriorProjectId: input.project.id,
+        compressionGate: "webp-quality-78",
+        storagePersistence: image.storagePath ? "supabase-direct" : "provider-fallback",
+      };
+
+      if (!image.storagePath) {
+        try {
+          const edgeStored = await persistPublicInteriorRenderViaEdge({
+            project: input.project,
+            variantIndex,
+            providerUrl: image.imageUrl,
+          });
+          finalImageUrl = edgeStored.publicUrl;
+          finalStoragePath = edgeStored.path;
+          completionMetadata = {
+            ...completionMetadata,
+            storagePersistence: "supabase-edge",
+            originalBytes: edgeStored.originalBytes,
+            storedBytes: edgeStored.storedBytes,
+            savingsBytes: Math.max(0, edgeStored.originalBytes - edgeStored.storedBytes),
+          };
+        } catch (edgeError) {
+          const directMessage = image.persistenceError ?? "direct storage unavailable";
+          const edgeMessage = edgeError instanceof Error ? edgeError.message : String(edgeError);
+          qcNotes = `Permanent storage fallback: direct=${directMessage}; edge=${edgeMessage}`.slice(0, 1000);
+        }
+      }
+
       await db
         .update(creativeAiAssetsTable)
         .set({
           status: "completed",
-          imageUrl: image.imageUrl,
-          thumbnailUrl: image.imageUrl,
-          storagePath: image.storagePath,
+          imageUrl: finalImageUrl,
+          thumbnailUrl: finalImageUrl,
+          storagePath: finalStoragePath,
           model: image.model,
           latencyMs: image.latencyMs,
-          qcNotes: image.persistenceError
-            ? `Permanent storage fallback: ${image.persistenceError.slice(0, 900)}`
-            : null,
+          qcNotes,
+          metadata: completionMetadata,
         })
         .where(eq(creativeAiAssetsTable.id, assetId));
     } catch (error) {

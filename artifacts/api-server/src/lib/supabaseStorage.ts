@@ -170,49 +170,48 @@ function deriveSupabaseUrlFromLegacyJwt(apiKey: string | undefined): string | un
   }
 }
 
-function getCredentials(): SupabaseCredentials {
-  const isProduction = isProductionStorageEnvironment(process.env);
+export function getSupabaseProjectUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const isProduction = isProductionStorageEnvironment(env);
 
   const databaseUrl = isProduction
-    ? process.env["SUPABASE_PROD_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL"]
-    : process.env["SUPABASE_DEV_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL_DEV"];
+    ? env["SUPABASE_PROD_DATABASE_URL"] || env["SUPABASE_DATABASE_URL"]
+    : env["SUPABASE_DEV_DATABASE_URL"] || env["SUPABASE_DATABASE_URL_DEV"];
 
   const serviceKey = isProduction
-    ? process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
-      process.env["SUPABASE_PROD_SERVICE_ROLE_KEY"] ||
-      process.env["SUPABASE_SECRET_KEY"] ||
-      process.env["SUPABASE_PROD_SECRET_KEY"]
-    : process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] ||
-      process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"] ||
-      process.env["SUPABASE_SECRET_KEY_DEV"] ||
-      process.env["SUPABASE_DEV_SECRET_KEY"];
+    ? env["SUPABASE_SERVICE_ROLE_KEY"] ||
+      env["SUPABASE_PROD_SERVICE_ROLE_KEY"] ||
+      env["SUPABASE_SECRET_KEY"] ||
+      env["SUPABASE_PROD_SECRET_KEY"]
+    : env["SUPABASE_SERVICE_ROLE_KEY_DEV"] ||
+      env["SUPABASE_DEV_SERVICE_ROLE_KEY"] ||
+      env["SUPABASE_SECRET_KEY_DEV"] ||
+      env["SUPABASE_DEV_SECRET_KEY"];
 
   const anonKey = isProduction
-    ? process.env["SUPABASE_ANON_KEY"] || process.env["VITE_SUPABASE_ANON_KEY"]
-    : process.env["SUPABASE_ANON_KEY_DEV"] || process.env["VITE_SUPABASE_ANON_KEY_DEV"];
+    ? env["SUPABASE_ANON_KEY"] || env["VITE_SUPABASE_ANON_KEY"]
+    : env["SUPABASE_ANON_KEY_DEV"] || env["VITE_SUPABASE_ANON_KEY_DEV"];
 
   const explicitUrl = isProduction
-    ? process.env["SUPABASE_URL"] ||
-      process.env["SUPABASE_PROD_URL"] ||
-      process.env["VITE_SUPABASE_URL"] ||
-      process.env["NEXT_PUBLIC_SUPABASE_URL"]
-    : process.env["SUPABASE_URL_DEV"] ||
-      process.env["SUPABASE_DEV_URL"] ||
-      process.env["VITE_SUPABASE_URL_DEV"];
+    ? env["SUPABASE_URL"] ||
+      env["SUPABASE_PROD_URL"] ||
+      env["VITE_SUPABASE_URL"] ||
+      env["NEXT_PUBLIC_SUPABASE_URL"]
+    : env["SUPABASE_URL_DEV"] ||
+      env["SUPABASE_DEV_URL"] ||
+      env["VITE_SUPABASE_URL_DEV"];
 
   const projectRef = isProduction
-    ? process.env["SUPABASE_PROD_PROJECT_REF"] || process.env["SUPABASE_PROJECT_REF"]
-    : process.env["SUPABASE_DEV_PROJECT_REF"] || process.env["SUPABASE_PROJECT_REF"];
+    ? env["SUPABASE_PROD_PROJECT_REF"] || env["SUPABASE_PROJECT_REF"]
+    : env["SUPABASE_DEV_PROJECT_REF"] || env["SUPABASE_PROJECT_REF"];
 
   const databaseDerivedUrl = deriveSupabaseUrlFromDatabaseUrl(databaseUrl);
   const serviceKeyDerivedUrl = deriveSupabaseUrlFromLegacyJwt(serviceKey);
   const anonKeyDerivedUrl = deriveSupabaseUrlFromLegacyJwt(anonKey);
   const projectRefUrl = supabaseUrlFromProjectRef(projectRef);
 
-  // Production prefers server-authenticated sources over frontend metadata.
-  // This also recovers Hostinger deployments that have the DB + service-role
-  // credentials but omit a separate SUPABASE_URL variable.
-  const url = (
+  return (
     isProduction
       ? databaseDerivedUrl ||
         serviceKeyDerivedUrl ||
@@ -225,6 +224,54 @@ function getCredentials(): SupabaseCredentials {
         projectRefUrl ||
         anonKeyDerivedUrl
   )?.replace(/\/$/, "");
+}
+
+export async function compressImageToWebpForStorage(
+  buffer: Buffer,
+): Promise<StorageImageCompressionResult> {
+  const originalBytes = buffer.byteLength;
+  if (originalBytes === 0) {
+    return {
+      buffer,
+      contentType: "image/webp",
+      originalBytes,
+      storedBytes: 0,
+      compressed: false,
+    };
+  }
+
+  const metadata = await sharp(buffer, { failOn: "warning" }).metadata();
+  const encoded = await sharp(buffer, { failOn: "warning" })
+    .rotate()
+    .webp({ quality: 78, effort: 5, smartSubsample: true })
+    .toBuffer();
+
+  const canKeepOriginal = metadata.format === "webp" && encoded.byteLength >= originalBytes;
+  const stored = canKeepOriginal ? buffer : encoded;
+
+  return {
+    buffer: stored,
+    contentType: "image/webp",
+    originalBytes,
+    storedBytes: stored.byteLength,
+    compressed: true,
+  };
+}
+
+function getCredentials(): SupabaseCredentials {
+  const isProduction = isProductionStorageEnvironment(process.env);
+
+  const serviceKey = isProduction
+    ? process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
+      process.env["SUPABASE_PROD_SERVICE_ROLE_KEY"] ||
+      process.env["SUPABASE_SECRET_KEY"] ||
+      process.env["SUPABASE_PROD_SECRET_KEY"]
+    : process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] ||
+      process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"] ||
+      process.env["SUPABASE_SECRET_KEY_DEV"] ||
+      process.env["SUPABASE_DEV_SECRET_KEY"];
+
+  const url = getSupabaseProjectUrl(process.env);
 
   if (!url || !serviceKey) {
     const missing = [
