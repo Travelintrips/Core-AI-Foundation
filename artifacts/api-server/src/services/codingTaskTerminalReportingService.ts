@@ -6,7 +6,7 @@ import {
 } from "@workspace/db";
 import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js";
 
-export type CodingTaskTerminalStatus = "COMPLETED" | "FAILED";
+export type CodingTaskTerminalStatus = "COMPLETED" | "FAILED" | "BLOCKED";
 
 const TERMINAL_REPORT_MAX_ATTEMPTS = 3;
 const TERMINAL_REPORT_RETRY_DELAY_MS = 100;
@@ -101,5 +101,5 @@ export async function reportCodingTaskTerminalTransition(input: {
 
   throw lastError instanceof Error
     ? lastError
-    : new Error("Coding task terminal lifecycle reporting failed");
+    : new Error("Coding task lifecycle reporting failed");
 }
