@@ -92,8 +92,8 @@ jobs:
           archive_name="aicore-${EXPECTED_SHA}.zip"
           archive_path="/tmp/$archive_name"
           git archive --format=zip --output="$archive_path" HEAD
-          printf '%s\n' "$EXPECTED_SHA" > /tmp/.release-sha
-          zip -q -j "$archive_path" /tmp/.release-sha
+          printf '%s\n' "$EXPECTED_SHA" > /tmp/.cst-build-sha
+          zip -q -j "$archive_path" /tmp/.cst-build-sha
           echo "name=$archive_name" >> "$GITHUB_OUTPUT"
           echo "path=$archive_path" >> "$GITHUB_OUTPUT"
           echo "bytes=$(stat -c%s "$archive_path")" >> "$GITHUB_OUTPUT"
