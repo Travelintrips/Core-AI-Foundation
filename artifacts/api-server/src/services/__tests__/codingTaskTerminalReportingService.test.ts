@@ -78,13 +78,13 @@ describe("coding task terminal reporting", () => {
         status: "COMPLETED",
         source: "test",
       },
-      expect(builder.orderBy).toHaveBeenCalledWith(
+    });
+    expect(builder.orderBy).toHaveBeenCalledWith(
       expect.objectContaining({
         values: ["commands.source", "commands.commandType"],
       }),
       "commands.createdAt",
     );
-  });
   });
 
   it("does nothing when the task has no lifecycle binding", async () => {
