@@ -265,18 +265,68 @@ async function generateReplicateImage(
 async function persistImage(
   url: string,
   storagePath: string,
-): Promise<string | null> {
-  try {
-    const { isSupabaseStorageAvailable, uploadToSupabase } = await import("../lib/supabaseStorage.js");
-    if (!isSupabaseStorageAvailable()) return null;
-    const raw = await fetch(url);
-    if (!raw.ok) return null;
-    const buf = Buffer.from(await raw.arrayBuffer());
-    const ct = raw.headers.get("content-type") || "image/webp";
-    return await uploadToSupabase(storagePath, buf, ct);
-  } catch {
-    return null;
+): Promise<string> {
+  const { isSupabaseStorageAvailable, ensureStorageBucket, uploadToSupabase } =
+    await import("../lib/supabaseStorage.js");
+
+  if (!isSupabaseStorageAvailable()) {
+    throw new Error("Supabase Storage credentials are unavailable");
   }
+
+  let buffer: Buffer | null = null;
+  let contentType = "image/webp";
+  let lastDownloadError = "unknown download failure";
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const raw = await fetch(url, {
+        redirect: "follow",
+        headers: { Accept: "image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8" },
+      });
+      if (!raw.ok) {
+        lastDownloadError = `provider image download HTTP ${raw.status}`;
+      } else {
+        const candidate = Buffer.from(await raw.arrayBuffer());
+        if (candidate.byteLength === 0) {
+          lastDownloadError = "provider image download returned an empty body";
+        } else {
+          buffer = candidate;
+          contentType = (raw.headers.get("content-type") || "image/webp").split(";")[0]!.trim();
+          break;
+        }
+      }
+    } catch (error) {
+      lastDownloadError = error instanceof Error ? error.message : String(error);
+    }
+
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+    }
+  }
+
+  if (!buffer) {
+    throw new Error(`Could not download generated provider image: ${lastDownloadError}`);
+  }
+
+  // Startup normally creates the bucket. Calling this again is idempotent and
+  // makes image persistence resilient when a fresh production project is used.
+  await ensureStorageBucket();
+
+  let lastUploadError: unknown = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      return await uploadToSupabase(storagePath, buffer, contentType);
+    } catch (error) {
+      lastUploadError = error;
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
+    }
+  }
+
+  throw lastUploadError instanceof Error
+    ? lastUploadError
+    : new Error("Supabase Storage upload failed");
 }
 
 /**
@@ -294,7 +344,13 @@ export async function generatePhotorealisticInteriorImage(input: {
   aspectRatio?: string;
   model?: string;
   timeoutMs?: number;
-}): Promise<{ imageUrl: string; storagePath: string; model: string; latencyMs: number }> {
+}): Promise<{
+  imageUrl: string;
+  storagePath: string | null;
+  model: string;
+  latencyMs: number;
+  persistenceError?: string;
+}> {
   const apiKey = getProviderApiKey("replicate");
   if (!apiKey) throw new Error("Replicate provider is not configured");
 
@@ -314,17 +370,29 @@ export async function generatePhotorealisticInteriorImage(input: {
   const storagePath =
     `interior-renders/${input.projectUuid}/${input.sessionId}/` +
     `variant-${input.variantIndex}-${Date.now()}.webp`;
-  const storedUrl = await persistImage(result.imageUrl, storagePath);
-  if (!storedUrl) {
-    throw new Error("Generated image could not be persisted to object storage");
+  try {
+    const storedUrl = await persistImage(result.imageUrl, storagePath);
+    return {
+      imageUrl: storedUrl,
+      storagePath,
+      model,
+      latencyMs: result.latencyMs,
+    };
+  } catch (error) {
+    // Do not discard a successfully generated image just because permanent
+    // storage is temporarily unavailable. The caller can still deliver the
+    // provider URL immediately while recording the persistence error for
+    // follow-up. This keeps the end-user E2E path functional.
+    const persistenceError = error instanceof Error ? error.message : String(error);
+    console.warn("[imagePreview] Permanent image persistence failed; using provider URL fallback:", persistenceError);
+    return {
+      imageUrl: result.imageUrl,
+      storagePath: null,
+      model,
+      latencyMs: result.latencyMs,
+      persistenceError,
+    };
   }
-
-  return {
-    imageUrl: storedUrl,
-    storagePath,
-    model,
-    latencyMs: result.latencyMs,
-  };
 }
 
 // ── Step: Generate preview prompts (LLM) ──────────────────────────────────────
