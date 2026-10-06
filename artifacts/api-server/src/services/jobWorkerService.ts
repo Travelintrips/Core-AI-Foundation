@@ -19,6 +19,7 @@ import {
 } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { createHash } from "crypto";
+import { MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { executeAI } from "./aiExecutionService.js";
@@ -469,8 +470,8 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
     return null; // lease expired — worker is stale
   }
 
-  // Capacity check: respect max_concurrent_jobs
-  if (worker.runningJobs >= worker.maxConcurrentJobs) return null;
+  // Hard invariant: one active job per healthy worker.
+  if (worker.runningJobs >= MAX_ACTIVE_JOBS_PER_WORKER) return null;
 
   // Capabilities for this worker (Phase 5.2 capability routing)
   const capabilities = (worker.capabilities as string[] | null) ?? [];
@@ -498,7 +499,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
     ) {
       return null;
     }
-    if (lockedWorker.runningJobs >= lockedWorker.maxConcurrentJobs) {
+    if (lockedWorker.runningJobs >= MAX_ACTIVE_JOBS_PER_WORKER) {
       return null;
     }
 
