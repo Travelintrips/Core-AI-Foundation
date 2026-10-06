@@ -47,6 +47,8 @@ import {
   inspectAdminDbSchemaCatalog,
   isAdminMcpEventStatusQuery,
   isAdminWorkerStatusQuery,
+  isAdminWhatsappDeviceStatusQuery,
+  executeAdminWhatsappDeviceStatusQuery,
   isAdminCodingTaskStatusQuery,
   isAiCoreAuditHistoryQuery,
   executeAdminWorkerStatusQuery,
@@ -90,6 +92,34 @@ describe("AI Core admin database query service", () => {
       },
       inheritedFromContext: false,
     });
+  });
+
+  it("discovers WhatsApp device status columns instead of inventing device_id", async () => {
+    expect(isAdminWhatsappDeviceStatusQuery("cek nomor WA admin yang aktif")).toBe(true);
+    expect(isAdminWhatsappDeviceStatusQuery("status WhatsApp gateway device online")).toBe(true);
+
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          table_schema: "ai_platform",
+          table_name: "whatsapp_devices",
+          columns: ["id", "phone_number", "connection_status", "updated_at"],
+        },
+      ],
+    });
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{ device_id: "wa-2", phone_number: "+62811", status: "ONLINE" }],
+      });
+
+    const result = await executeAdminWhatsappDeviceStatusQuery();
+    expect(result.rowCount).toBe(1);
+    expect(result.sql).toContain('"id" AS device_id');
+    expect(result.sql).toContain('"connection_status" AS status');
+    expect(result.sql).not.toContain('wd.device_id');
   });
 
   it("detects worker runtime status questions for deterministic inventory lookup", async () => {
