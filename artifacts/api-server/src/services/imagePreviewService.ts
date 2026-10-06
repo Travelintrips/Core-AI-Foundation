@@ -926,7 +926,7 @@ export async function runPreviewGeneration(
     if (imageUrl) {
       const storagePath = `creative-assets/${projectUuid}/previews/concept-${i + 1}-${Date.now()}.webp`;
       const persisted = await persistImage(imageUrl, storagePath);
-      if (persisted) finalImageUrl = persisted;
+      if (persisted) finalImageUrl = persisted.imageUrl;
     }
 
     const imageCost = imageStatus === "completed" ? PREVIEW_CONFIG.costPerImage : 0;
@@ -1174,7 +1174,7 @@ export async function runFinalGeneration(
     if (imageUrl) {
       const storagePath = `creative-assets/${projectUuid}/final/${packageTier}-${i + 1}-${Date.now()}.webp`;
       const persisted = await persistImage(imageUrl, storagePath);
-      if (persisted) finalImageUrl = persisted;
+      if (persisted) finalImageUrl = persisted.imageUrl;
     }
 
     const imageCost = imageStatus === "completed" ? tierCfg.costPerImage : 0;
