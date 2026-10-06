@@ -12,13 +12,14 @@ permissions:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   # Only the newest run for a branch/ref is useful. A new main push makes any
-  # older main CI stale, so cancel it instead of consuming the shared runner.
+  # older main CI stale, so cancel it instead of consuming shared runners.
   cancel-in-progress: true
 
 jobs:
-  verify:
+  static:
+    name: Static checks and typecheck
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -38,10 +39,42 @@ jobs:
           python3 -m py_compile services/zerollm/server.py
       - name: Typecheck
         run: pnpm run typecheck
+
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Test
         env:
           SUPABASE_DEV_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ci_test
         run: pnpm run ci:test
+
+  build:
+    name: Build artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Build
         env:
           PORT: 4173
@@ -49,8 +82,48 @@ jobs:
           HOSTINGER_FRONTEND: customer-portal
           ZEROLLM_INSTALL_ENABLED: "false"
         run: pnpm run build
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: core-ai-foundation-build
+          path: |
+            artifacts/ai-platform/dist
+            artifacts/customer-portal/dist
+            artifacts/api-server/dist
+
+  finalize:
+    name: Finalize CI Verify
+    needs:
+      - static
+      - test
+      - build
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: CI result summary
+        shell: bash
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          {
+            echo "## CI Verify"
+            echo
+            echo "| Job | Result |"
+            echo "|---|---:|"
+            echo "| Static checks and typecheck | $STATIC_RESULT |"
+            echo "| Test suite | $TEST_RESULT |"
+            echo "| Build artifacts | $BUILD_RESULT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Report CI failure to incident inbox
-        if: failure() && github.event_name != 'pull_request'
+        if: >-
+          github.event_name != 'pull_request' &&
+          (needs.static.result != 'success' ||
+           needs.test.result != 'success' ||
+           needs.build.result != 'success')
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -69,19 +142,32 @@ jobs:
             headSha:process.env.GITHUB_SHA,
             environment:"production",
             fingerprint:"github:ci:"+process.env.GITHUB_REPOSITORY+":"+process.env.GITHUB_SHA,
-            metadata:{workflow:"CI Verify",runId:process.env.GITHUB_RUN_ID}
+            metadata:{
+              workflow:"CI Verify",
+              runId:process.env.GITHUB_RUN_ID,
+              staticResult:process.env.STATIC_RESULT,
+              testResult:process.env.TEST_RESULT,
+              buildResult:process.env.BUILD_RESULT
+            }
           }))')
           curl --silent --show-error --max-time 20 \
             -H "Content-Type: application/json" \
             -H "x-admin-api-key: $ADMIN_API_KEY" \
             -d "$payload" \
             "$API_BASE_URL/ai/incidents" || true
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: https://aicore.cstlogistic.co.id/api
+          STATIC_RESULT: ${{ needs.static.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: core-ai-foundation-build
-          path: |
-            artifacts/ai-platform/dist
-            artifacts/customer-portal/dist
-            artifacts/api-server/dist
+      - name: Fail final gate when any CI job failed
+        if: >-
+          needs.static.result != 'success' ||
+          needs.test.result != 'success' ||
+          needs.build.result != 'success'
+        shell: bash
+        run: |
+          echo "::error::CI Verify parallel jobs did not all succeed."
+          exit 1
