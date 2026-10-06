@@ -19,7 +19,6 @@ import {
   type PullRequestVerificationInput,
   type PullRequestVerificationResult,
 } from "./localCodingGitHubPullRequestService.js";
-import { finalizeCodingCriticalApproval } from "./codingCriticalApprovalService.js";
 
 export class LocalPullRequestGateError extends Error {
   constructor(
@@ -545,14 +544,6 @@ async function executeMerge(
         autoMerged: automatic,
       },
     );
-
-    await finalizeCodingCriticalApproval({
-      taskId: context.task.id,
-      actionType: "MERGE_PR",
-      status: "COMPLETED",
-      message:
-        `PR #${merged.pullRequestNumber} berhasil di-merge. Merge commit ${merged.mergeCommitSha.slice(0, 12)}.`,
-    }).catch(() => undefined);
   } catch (error) {
     const normalized =
       error instanceof GitHubPublisherError
@@ -628,13 +619,6 @@ async function executeMerge(
         error: normalized.message.slice(0, 700),
       },
     ).catch(() => undefined);
-
-    await finalizeCodingCriticalApproval({
-      taskId: context.task.id,
-      actionType: "MERGE_PR",
-      status: "FAILED",
-      message: `Merge gagal: ${normalized.message.slice(0, 1000)}`,
-    }).catch(() => undefined);
   }
 }
 
@@ -663,7 +647,7 @@ async function startVerifiedPullRequestMerge(
     }
     if (lockedTask.status !== "PR_CREATED") {
       throw new LocalPullRequestGateError(
-        "Coding task is not awaiting explicit merge approval",
+        "Coding task is not ready for verified merge",
         "NOT_READY",
       );
     }
@@ -696,7 +680,7 @@ async function startVerifiedPullRequestMerge(
         resultSummary:
           automatic
             ? "Autonomous merge started after PR integrity and CI verification passed."
-            : "Explicit merge approval accepted. GitHub PR integrity and CI will be re-verified before merge.",
+            : "Verified merge started. GitHub PR integrity and CI will be re-verified before merge.",
       })
       .where(eq(aiCodingTasksTable.id, taskId));
 
