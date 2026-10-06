@@ -14,7 +14,6 @@ const mockInsertReturning = vi.hoisted(() => vi.fn());
 const mockUpdateSet = vi.hoisted(() => vi.fn());
 const mockUpdateWhere = vi.hoisted(() => vi.fn());
 const mockStartCodingOrchestration = vi.hoisted(() => vi.fn());
-const mockApprovePlanAndStartCoding = vi.hoisted(() => vi.fn());
 const mockApproveAndValidateLocalPatch = vi.hoisted(() => vi.fn());
 const mockStartSandboxVerification = vi.hoisted(() => vi.fn());
 const mockStartDeterministicLocalRecovery = vi.hoisted(() => vi.fn());
@@ -208,10 +207,6 @@ vi.mock("../../lib/logger.js", () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
-}));
-
-vi.mock("../../services/codingAgentService.js", () => ({
-  approvePlanAndStartCoding: mockApprovePlanAndStartCoding,
 }));
 
 vi.mock("../../services/localCodingPatchApprovalService.js", () => ({
@@ -437,7 +432,6 @@ describe("AI coding workspace run endpoint", () => {
     mockUpdateSet.mockReturnValue(updateBuilder);
     mockUpdateWhere.mockResolvedValue([]);
     mockStartCodingOrchestration.mockResolvedValue({ sessionId: `coding-${runId}` });
-    mockApprovePlanAndStartCoding.mockResolvedValue({ ...run, agentName: "Coding Agent" });
     mockApproveAndValidateLocalPatch.mockResolvedValue({
       ...run,
       agentName: "Local Patch Gate",
@@ -534,52 +528,6 @@ describe("AI coding workspace run endpoint", () => {
     });
   });
 });
-
-describe("AI coding workspace plan approval endpoint", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockApprovePlanAndStartCoding.mockResolvedValue({
-      ...run,
-      agentName: "Coding Agent",
-    });
-  });
-
-  it("starts the Coding Agent only through explicit plan approval", async () => {
-    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-plan`);
-
-    expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({
-      id: runId,
-      taskId,
-      agentName: "Coding Agent",
-      status: "RUNNING",
-    });
-    expect(mockApprovePlanAndStartCoding).toHaveBeenCalledWith(taskId);
-  });
-
-  it("returns 409 when the task is not awaiting plan approval", async () => {
-    mockApprovePlanAndStartCoding.mockRejectedValueOnce(
-      new Error("Coding task is not awaiting plan approval"),
-    );
-
-    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-plan`);
-
-    expect(response.status).toBe(409);
-    expect(response.body).toEqual({
-      error: "Coding task is not awaiting plan approval",
-    });
-  });
-
-  it("returns 404 when the task does not exist", async () => {
-    mockApprovePlanAndStartCoding.mockRejectedValueOnce(new Error("Coding task not found"));
-
-    const response = await request(app).post(`/ai/coding/tasks/${taskId}/approve-plan`);
-
-    expect(response.status).toBe(404);
-    expect(response.body).toEqual({ error: "Coding task not found" });
-  });
-});
-
 
 describe("AI coding workspace local patch approval endpoint", () => {
   beforeEach(() => {
