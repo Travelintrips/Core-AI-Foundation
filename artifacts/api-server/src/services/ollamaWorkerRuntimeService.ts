@@ -1,6 +1,6 @@
 
 import { hostname } from "node:os";
-import { DEFAULT_LEASE_TTL_MS } from "./workerClusterService.js";
+import { DEFAULT_LEASE_TTL_MS, MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import {
   heartbeatOllamaWorker,
   normalizeOllamaWorkerEndpoint,
@@ -160,15 +160,8 @@ export function readOllamaWorkerRuntimeConfig(
     localBaseUrl,
     advertiseBaseUrl,
     apiKey: (env["OLLAMA_WORKER_API_KEY"] ?? "").trim(),
-    // The hosted GCP Ollama path is a direct HTTP worker. Keep at least two
-    // slots so one slow/stale reservation cannot make Economy routing appear
-    // completely unavailable. Remote pull workers have their own 1..4 bound.
-    maxConcurrentJobs: boundedInt(
-      env["OLLAMA_WORKER_MAX_CONCURRENCY"],
-      2,
-      2,
-      32,
-    ),
+    // Global invariant: one worker owns at most one active model job.
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     powershellEnabled: envTrue(env["OLLAMA_WORKER_POWERSHELL_ENABLED"]),
     heartbeatMs: boundedInt(
       env["OLLAMA_WORKER_HEARTBEAT_MS"],
