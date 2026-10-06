@@ -383,6 +383,22 @@ describe("repository analyzer queue claim timeout", () => {
       REPOSITORY_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS: "invalid",
     })).toBe(60_000);
   });
+
+  it("recovers stale queued Coding Orchestrator analyzer jobs", () => {
+    const source = readFileSync(
+      new URL("../repositoryAnalyzerService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("j.status = 'queued'");
+    expect(source).toContain("AND j.created_at < ${queuedCutoff}");
+    expect(source).toContain(
+      "r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')",
+    );
+    expect(source).not.toContain(
+      "AND r.agent_name <> 'Coding Orchestrator'",
+    );
+  });
 });
 
 describe("repository analyzer execution", () => {

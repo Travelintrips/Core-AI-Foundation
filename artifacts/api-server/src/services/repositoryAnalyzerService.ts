@@ -1206,7 +1206,6 @@ export async function failStaleRepositoryAnalyzerRuns(
         (
           j.status = 'queued'
           AND j.created_at < ${queuedCutoff}
-          AND r.agent_name <> 'Coding Orchestrator'
         )
         OR
         (
