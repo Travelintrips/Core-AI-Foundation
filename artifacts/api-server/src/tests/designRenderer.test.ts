@@ -578,6 +578,10 @@ describe("buildSvg — integration", () => {
 // ── Renderer Integration: PNG / JPG / WebP / PDF ──────────────────────────────
 
 describe("encodeSvg — format integration", () => {
+  // Sharp/librsvg can pay a one-time native cold-start cost on shared CI runners.
+  // Keep this well below the production renderer timeout (60s) while avoiding
+  // false failures from Vitest's 5s default during native codec initialization.
+  const FORMAT_INTEGRATION_TIMEOUT_MS = 15_000;
   const simpleSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#ff0000"/><text x="10" y="50" font-size="16" fill="#fff">Test</text></svg>`;
 
   it("produces a valid PNG (magic bytes + non-zero size)", async () => {
@@ -589,7 +593,7 @@ describe("encodeSvg — format integration", () => {
     expect(result.mimeType).toBe("image/png");
     expect(result.width).toBe(100);
     expect(result.height).toBe(100);
-  });
+  }, FORMAT_INTEGRATION_TIMEOUT_MS);
 
   it("produces a valid JPG (magic bytes + non-zero size)", async () => {
     const result = await encodeSvg(simpleSvg, "jpg", 100, 100);
@@ -598,7 +602,7 @@ describe("encodeSvg — format integration", () => {
     expect(result.buffer[0]).toBe(0xff);
     expect(result.buffer[1]).toBe(0xd8);
     expect(result.mimeType).toBe("image/jpeg");
-  });
+  }, FORMAT_INTEGRATION_TIMEOUT_MS);
 
   it("produces a valid WebP (RIFF header + non-zero size)", async () => {
     const result = await encodeSvg(simpleSvg, "webp", 100, 100);
@@ -607,7 +611,7 @@ describe("encodeSvg — format integration", () => {
     expect(result.buffer[0]).toBe(0x52);
     expect(result.buffer[1]).toBe(0x49);
     expect(result.mimeType).toBe("image/webp");
-  });
+  }, FORMAT_INTEGRATION_TIMEOUT_MS);
 
   it("produces a valid PDF (%%PDF signature + non-zero size)", async () => {
     const result = await encodeSvg(simpleSvg, "pdf", 100, 100);
@@ -616,7 +620,7 @@ describe("encodeSvg — format integration", () => {
     // PDF magic: %PDF
     const head = result.buffer.slice(0, 4).toString("ascii");
     expect(head).toBe("%PDF");
-  });
+  }, FORMAT_INTEGRATION_TIMEOUT_MS);
 
   it("produces deterministic output for same input", async () => {
     // SVG → PNG should be the same size for the same SVG
