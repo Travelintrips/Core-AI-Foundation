@@ -322,6 +322,18 @@ function workstreamAiRequired(result: Record<string, unknown> | null): boolean {
   return plan?.status === "AI_REQUIRED";
 }
 
+function retryableAiHandoffCloneFailure(
+  state: Awaited<ReturnType<typeof loadTaskState>>,
+): string | null {
+  if (state.task.status !== "READY_REVIEW" || state.nextAction !== "AI_REQUIRED") return null;
+  const latestHandoff = state.runs.find(
+    (run) => run.agentName === "AI Handoff Gate" && run.status === "FAILED",
+  );
+  const error = normalizeRunError(latestHandoff?.errorMessage);
+  if (!error) return null;
+  return isRetryableRepositoryCloneResourceError(error) ? error : null;
+}
+
 function retryableRepositoryAnalyzerFailure(
   state: Awaited<ReturnType<typeof loadTaskState>>,
 ): string | null {
@@ -1034,6 +1046,26 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         taskId,
         status: "WAITING",
         action: "RETRY_REPOSITORY_ANALYZER_RESOURCE_PRESSURE",
+      };
+    }
+
+    const aiHandoffCloneFailure = retryableAiHandoffCloneFailure(state);
+    if (aiHandoffCloneFailure) {
+      await reserveActionCycle(taskId);
+      await startAiHandoffPreparation(taskId);
+      await setState(taskId, "WAITING", "RETRY_AI_HANDOFF_RESOURCE_PRESSURE", null);
+      await logAudit(
+        "coding-autonomous",
+        "ai_handoff_transient_clone_failure_retried",
+        taskId,
+        "coding_task",
+        "success",
+        { error: aiHandoffCloneFailure.slice(0, 1000) },
+      ).catch(() => undefined);
+      return {
+        taskId,
+        status: "WAITING",
+        action: "RETRY_AI_HANDOFF_RESOURCE_PRESSURE",
       };
     }
 
