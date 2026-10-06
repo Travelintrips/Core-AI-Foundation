@@ -36,6 +36,19 @@ describe("coding conflict registry SQL arrays", () => {
     expect(query.params).toEqual([]);
   });
 
+  it("allows a workstream child to inherit its own parent task reservation only", () => {
+    const source = readFileSync(
+      new URL("../codingConflictRegistryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("w.child_task_id::text = ${input.taskId}");
+    expect(source).toContain("g.task_id::text = r.task_id");
+    expect(source).toContain("AND r.task_id <> ${input.taskId}");
+    expect(source).toContain("w.status IN (");
+    expect(source).toContain("'REVIEW_REQUIRED'");
+  });
+
   it("cleans reservations for disabled tasks and failed latest graphs without active execution", () => {
     const source = readFileSync(
       new URL("../codingConflictRegistryService.ts", import.meta.url),
