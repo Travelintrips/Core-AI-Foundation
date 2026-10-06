@@ -260,7 +260,7 @@ async function sendGatewayMessage(input: {
 export type CodingWhatsappDeliveryResult =
   | { status: "sent"; messageId: string; gatewayStatus: number; sentAt?: string; waMessageId?: string | null }
   | { status: "failed"; messageId: string; reason: string; attemptsMade?: number }
-  | { status: "timeout"; messageId: string; lastStatus: string | null }
+  | { status: "timeout"; messageId: string; lastStatus: string | null; lastReason?: string | null }
   | { status: "unavailable"; reason: string };
 
 export async function waitForCodingWhatsappDelivery(
@@ -276,10 +276,11 @@ export async function waitForCodingWhatsappDelivery(
     return { status: "unavailable", reason: "WhatsApp gateway configuration is incomplete." };
   }
 
-  const timeoutMs = Math.max(1_000, Math.min(options?.timeoutMs ?? 30_000, 60_000));
+  const timeoutMs = Math.max(1_000, Math.min(options?.timeoutMs ?? 30_000, 120_000));
   const pollIntervalMs = Math.max(250, Math.min(options?.pollIntervalMs ?? 1_000, 5_000));
   const deadline = Date.now() + timeoutMs;
   let lastStatus: string | null = null;
+  let lastReason: string | null = null;
 
   while (Date.now() < deadline) {
     try {
@@ -299,6 +300,12 @@ export async function waitForCodingWhatsappDelivery(
         } | null;
 
         lastStatus = typeof body?.status === "string" ? body.status : null;
+        lastReason =
+          typeof body?.failedReason === "string"
+            ? body.failedReason
+            : typeof body?.error === "string"
+              ? body.error
+              : lastReason;
         if (lastStatus === "sent") {
           return {
             status: "sent",
@@ -337,7 +344,7 @@ export async function waitForCodingWhatsappDelivery(
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
-  return { status: "timeout", messageId, lastStatus };
+  return { status: "timeout", messageId, lastStatus, lastReason };
 }
 
 export function getCodingWhatsappConfigStatus() {
