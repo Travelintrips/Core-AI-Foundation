@@ -91,9 +91,11 @@ export function codingDashboardTaskPresentationStatus(input: {
     latestRunStatus === "COMPLETED" &&
     !input.hasActiveRun &&
     !input.hasPendingCriticalApproval &&
-    input.autonomousStatus !== "APPROVAL_REQUIRED" &&
-    input.autonomousStatus !== "ACTIVE" &&
-    input.autonomousStatus !== "WAITING"
+    (
+      input.autonomousStatus == null ||
+      input.autonomousStatus === "DISABLED" ||
+      input.autonomousStatus === "COMPLETED"
+    )
   ) {
     return "COMPLETED";
   }
