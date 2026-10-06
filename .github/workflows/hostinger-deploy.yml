@@ -123,9 +123,15 @@ jobs:
                 case "$file" in
                   docs/*|*.md|*.mdx|*.txt|*/__tests__/*|*.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx)
                     ;;
-                  .github/workflows/hostinger-deploy.yml|.github/workflows/hostinger-nodejs-deploy.yml|scripts/hostinger-*|package.json|pnpm-lock.yaml)
+                  .github/workflows/hostinger-deploy.yml|.github/workflows/hostinger-nodejs-deploy.yml|scripts/hostinger-*)
+                    # Workflow/probe-only changes alter deployment verification
+                    # orchestration, not application runtime behavior. The always-on
+                    # exact-SHA/readiness/auth/SMTP baseline is sufficient here.
+                    reason="workflow_only_baseline:$file"
+                    ;;
+                  package.json|pnpm-lock.yaml)
                     set_all_scopes
-                    reason="shared_deploy_or_runtime_change:$file"
+                    reason="shared_runtime_dependency_change:$file"
                     break
                     ;;
                   lib/api-spec/*|lib/api-zod/*|lib/api-client-react/*)
