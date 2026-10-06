@@ -2,6 +2,7 @@ export function codingTaskPresentationStatus(input: {
   taskStatus: string;
   autonomousStatus?: string | null;
   hasActiveRun?: boolean;
+  hasPendingCriticalApproval?: boolean;
 }): string {
   // A live run/recovery always wins over stale persisted terminal state.
   if (input.hasActiveRun) {
@@ -27,7 +28,10 @@ export function codingTaskPresentationStatus(input: {
 
   // Human review is reserved for an explicit critical approval gate. A
   // technical runtime blocker must never masquerade as a review request.
-  if (input.autonomousStatus === "APPROVAL_REQUIRED") {
+  if (
+    input.autonomousStatus === "APPROVAL_REQUIRED" ||
+    input.hasPendingCriticalApproval
+  ) {
     return "READY_REVIEW";
   }
 
@@ -39,6 +43,10 @@ export function codingTaskPresentationStatus(input: {
     ) {
       return "FAILED";
     }
+  }
+
+  if (input.taskStatus === "READY_REVIEW") {
+    return "FAILED";
   }
 
   return input.taskStatus;
