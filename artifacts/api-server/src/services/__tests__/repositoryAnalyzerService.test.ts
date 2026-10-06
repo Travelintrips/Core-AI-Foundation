@@ -37,6 +37,14 @@ vi.mock("drizzle-orm", () => ({
   eq: vi.fn((...conditions: unknown[]) => conditions),
 }));
 
+vi.mock("../codingConflictRegistryService.js", () => ({
+  reserveCodingFileSet: vi.fn(async (input: { files: string[] }) => ({
+    status: input.files.length > 0 ? "RESERVED" : "EMPTY",
+    files: input.files,
+    conflicts: [],
+  })),
+}));
+
 vi.mock("@workspace/db", () => ({
   db: {
     select: mockDbSelect,
