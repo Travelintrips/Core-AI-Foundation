@@ -121,6 +121,7 @@ import {
 } from "../services/aiCoreConversationService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
 import { bindAiCoreTaskLifecycleReporting } from "../services/aiCoreTaskLifecycleBindingService.js";
+import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
 import {
   createAiCoreRealtimeSession,
   DEFAULT_AI_CORE_REALTIME_MODEL,
@@ -3376,6 +3377,14 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
   { attempts: 3, baseDelayMs: 150 });
 
   const autonomous = await getAutonomousCodingTaskStatus(task.id).catch(() => null);
+  const presentedStatus = codingTaskPresentationStatus({
+    taskStatus: task.status,
+    autonomousStatus:
+      autonomous && typeof (autonomous as { status?: unknown }).status === "string"
+        ? String((autonomous as { status?: unknown }).status)
+        : null,
+    hasActiveRun: latestRun?.status === "RUNNING",
+  });
 
   res.json({
     task: {
@@ -3384,7 +3393,8 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
       projectName: task.projectName,
       repository: task.repository,
       branch: task.branch,
-      status: task.status,
+      status: presentedStatus,
+      persistedStatus: task.status,
       resultSummary: task.resultSummary,
       updatedAt: task.updatedAt,
     },

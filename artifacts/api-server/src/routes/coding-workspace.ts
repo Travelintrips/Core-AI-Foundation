@@ -65,6 +65,7 @@ import { reconcileStaleMultiWorkerRuns } from "../services/localCodingMultiWorke
 import { reconcileStaleCodingRuns } from "../services/localCodingRunRecoveryService.js";
 import { withCodingWorkspaceReadRetry } from "../services/localCodingWorkspaceReadService.js";
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
+import { getAutonomousCodingTaskStatus } from "../services/localCodingAutonomousRepairService.js";
 import { reportCodingTaskTerminalTransition } from "../services/codingTaskTerminalReportingService.js";
 import { getWorkerCapacity } from "../services/workerClusterService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
@@ -650,7 +651,7 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [runs, changes] = await Promise.all([
+  const [runs, changes, autonomous] = await Promise.all([
     withCodingWorkspaceReadRetry(() =>
       db
         .select()
@@ -665,9 +666,23 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
         .where(eq(aiCodeChangesTable.taskId, task.id))
         .orderBy(desc(aiCodeChangesTable.createdAt)),
     ),
+    getAutonomousCodingTaskStatus(task.id).catch(() => null),
   ]);
 
-  res.json(GetCodingTaskResponse.parse({ task, runs, changes }));
+  const presentedStatus = codingTaskPresentationStatus({
+    taskStatus: task.status,
+    autonomousStatus:
+      autonomous && typeof (autonomous as { status?: unknown }).status === "string"
+        ? String((autonomous as { status?: unknown }).status)
+        : null,
+    hasActiveRun: runs.some((run) => run.status === "RUNNING"),
+  });
+  const presentedTask =
+    presentedStatus === task.status
+      ? task
+      : { ...task, status: presentedStatus };
+
+  res.json(GetCodingTaskResponse.parse({ task: presentedTask, runs, changes }));
 });
 
 class CodingTaskNotFoundError extends Error {}

@@ -91,6 +91,23 @@ describe("coding task presentation status", () => {
       }),
     ).toBe("COMPLETED");
   });
+  it("uses presentation status consistently in task detail and MCP progress endpoints", () => {
+    const workspaceRoute = readFileSync(
+      new URL("../../routes/coding-workspace.ts", import.meta.url),
+      "utf8",
+    );
+    const chatRoute = readFileSync(
+      new URL("../../routes/ai-core-chat.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(workspaceRoute).toContain("const presentedStatus = codingTaskPresentationStatus({");
+    expect(workspaceRoute).toContain("task: presentedTask");
+    expect(chatRoute).toContain("const presentedStatus = codingTaskPresentationStatus({");
+    expect(chatRoute).toContain("status: presentedStatus");
+    expect(chatRoute).toContain("persistedStatus: task.status");
+  });
+
   it("workspace list query includes active autonomous states for presentation mapping", () => {
     const source = readFileSync(
       new URL("../../routes/coding-workspace.ts", import.meta.url),
