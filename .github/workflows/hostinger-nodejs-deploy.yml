@@ -61,7 +61,7 @@ jobs:
           set -euo pipefail
           health="https://$HOSTINGER_DOMAIN/api/healthz"
           echo "ready=false" >> "$GITHUB_OUTPUT"
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 6); do
             rm -f /tmp/native.headers /tmp/native.body
             curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
               -D /tmp/native.headers -o /tmp/native.body \
@@ -75,12 +75,14 @@ jobs:
               echo "native_deploy=PASS"
               exit 0
             fi
-            sleep 10
+            if [ "$attempt" -lt 6 ]; then
+              sleep 10
+            fi
           done
-          echo "::notice::Native Hostinger deploy did not expose the expected SHA; using API fallback."
+          echo "::notice::Native Hostinger deploy did not expose the expected SHA within the short grace period; using API fallback."
 
       - name: Validate Hostinger deployment credentials
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -209,8 +211,24 @@ jobs:
 
           cat /tmp/build-settings.normalized.json
 
-      - name: Start Node.js deployment build
+      - name: Reconfirm latest main before fallback build
         if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        id: fallback_freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          echo "latest_main_sha=$latest_main_sha"
+          echo "expected_sha=$EXPECTED_SHA"
+          if [ "$latest_main_sha" != "$EXPECTED_SHA" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping API fallback because main advanced before the Hostinger build started."
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Start Node.js deployment build
+        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true' && steps.fallback_freshness.outputs.stale != 'true'
         id: build
         shell: bash
         env:
@@ -234,7 +252,7 @@ jobs:
           echo "build_uuid=$uuid"
 
       - name: Wait for Node.js deployment
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true' && steps.fallback_freshness.outputs.stale != 'true'
         shell: bash
         env:
           HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
@@ -266,7 +284,7 @@ jobs:
           exit 1
 
       - name: Restart Node.js application
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true' && steps.fallback_freshness.outputs.stale != 'true'
         shell: bash
         env:
           HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
@@ -275,7 +293,7 @@ jobs:
           curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/server/restart"
 
       - name: Verify exact live release
-        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
+        if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true' && steps.fallback_freshness.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
