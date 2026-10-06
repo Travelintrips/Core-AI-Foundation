@@ -329,7 +329,14 @@ export default function BriefPage() {
   // ── Form state ──────────────────────────────────────────────────────────────
   const [currentStep, setCurrentStep]         = useState(1);
   const [errors, setErrors]                   = useState<FieldErrors>({});
-  const [brief, setBrief]                     = useState<BriefData>(EMPTY_BRIEF);
+  const [brief, setBrief]                     = useState<BriefData>(() => {
+    if (!requestId) return EMPTY_BRIEF;
+    try {
+      const raw = sessionStorage.getItem(`brief_prefill_${requestId}`);
+      if (raw) return { ...EMPTY_BRIEF, ...JSON.parse(raw) } as BriefData;
+    } catch { /* storage unavailable or malformed */ }
+    return EMPTY_BRIEF;
+  });
 
   // CP — resolved industry group for conditional questions (mirrors backend logic)
   // Must be declared AFTER `brief` useState to avoid temporal dead zone error.
@@ -364,6 +371,22 @@ export default function BriefPage() {
   const [showMilestones,  setShowMilestones]  = useState(false);
   const [showSpecialReq,  setShowSpecialReq]  = useState(false);
   const [showAssetNotes,  setShowAssetNotes]  = useState(false);
+
+  // Remove one-time handoff data after the page has consumed it.
+  useEffect(() => {
+    if (!requestId) return;
+    try { sessionStorage.removeItem(`brief_prefill_${requestId}`); } catch { /* ignore */ }
+  }, [requestId]);
+
+  // If the selected service already defines its standard deliverables, use them
+  // as the default answer. Customers can still edit this later.
+  useEffect(() => {
+    const defaults = serviceDetail?.deliverables?.filter(Boolean) ?? [];
+    if (!defaults.length) return;
+    setBrief((prev) => prev.outputFormats.trim()
+      ? prev
+      : { ...prev, outputFormats: defaults.join(", ") });
+  }, [serviceDetail?.id, serviceDetail?.deliverables]);
 
   // ── Draft check ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1714,6 +1737,28 @@ export default function BriefPage() {
             />
           </div>
         )}
+
+        {/* Fast path for normal orders: once the two essential pieces are
+            present, optional questions can be skipped straight to review. */}
+        {!isCompanyProfile &&
+          currentStep >= 2 &&
+          currentStep <= 6 &&
+          hasAnySelection(brief.primaryGoal) &&
+          brief.outputFormats.trim().length > 0 && (
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setErrors({});
+                  setCurrentStep(TOTAL_STEPS);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="px-4 py-2 rounded-xl border border-violet/30 text-sm font-semibold text-violet hover:bg-violet/10 transition-colors"
+              >
+                Sudah cukup — cek & kirim
+              </button>
+            </div>
+          )}
 
         {/* Submit error */}
         {submitError && currentStep === TOTAL_STEPS && (

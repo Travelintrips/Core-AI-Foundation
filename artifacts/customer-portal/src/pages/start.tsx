@@ -879,7 +879,7 @@ function Step2({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
 
       <div className="space-y-4">
         <div>
-          <FieldLabel>{cfg.profileLabel}</FieldLabel>
+          <FieldLabel>{cfg.profileLabel.replace(/\s*\*$/, "")} (opsional)</FieldLabel>
           <Input value={data.businessName} onChange={(v) => onChange("businessName", v)} placeholder={cfg.profilePlaceholder} />
         </div>
         <div>
@@ -920,7 +920,7 @@ function Step3({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
 
       <div className="space-y-4">
         <div>
-          <FieldLabel>{cfg.audienceLabel}</FieldLabel>
+          <FieldLabel>{cfg.audienceLabel.replace(/\s*\*$/, "")} (opsional)</FieldLabel>
           <Textarea
             value={data.targetMarket}
             onChange={(v) => onChange("targetMarket", v)}
@@ -969,7 +969,7 @@ function Step4({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
 
       <div className="space-y-4">
         <div>
-          <FieldLabel>Tujuan utama *</FieldLabel>
+          <FieldLabel>Tujuan utama (opsional)</FieldLabel>
           <SelectChip
             value={data.goals}
             onChange={(v) => {
@@ -1397,11 +1397,11 @@ export default function StartPage() {
   }
 
   function canProceedStep() {
+    // Only the user's core need is required here. Business profile, audience,
+    // goals, timeline, and references are helpful context but can be completed
+    // later in the brief. Avoid forcing users to answer the same questions twice.
     if (step === 1) return (data.projectDesc || data.query).trim().length > 5;
-    if (step === 2) return data.businessName.trim().length > 0;
-    if (step === 3) return data.targetMarket.trim().length > 5;
-    if (step === 4) return data.goals.length > 0;
-    return true; // step 5 is optional
+    return true;
   }
 
   function nextStep() {
@@ -1410,7 +1410,7 @@ export default function StartPage() {
     } else {
       // Transition to analysis
       setPhase("analysis");
-      setTimeout(() => setPhase("workflow"), 3000);
+      setTimeout(() => setPhase("workflow"), 800);
     }
   }
 
@@ -1434,12 +1434,10 @@ export default function StartPage() {
       }
 
       const notes = [
-        `Kategori: ${PROJECT_CATEGORIES.find((c) => c.id === data.categoryId)?.label ?? data.categoryId}`,
-        `Paket: ${PACKAGE_TIERS.find((p) => p.id === data.package)?.name ?? data.package}`,
-        `Deskripsi: ${data.projectDesc || data.query}`,
-        `Bisnis: ${data.businessName}${data.industry ? ` (${data.industry})` : ""}${data.stage ? ` — ${data.stage}` : ""}`,
-        `Target: ${data.targetMarket}${data.geography ? ` [${data.geography}]` : ""}`,
-        `Tujuan: ${data.goals}${data.timeline ? ` — ${data.timeline}` : ""}`,
+        (data.projectDesc || data.query) ? `Kebutuhan: ${data.projectDesc || data.query}` : "",
+        data.businessName ? `Bisnis: ${data.businessName}${data.industry ? ` (${data.industry})` : ""}${data.stage ? ` — ${data.stage}` : ""}` : "",
+        data.targetMarket ? `Target: ${data.targetMarket}${data.geography ? ` [${data.geography}]` : ""}` : "",
+        data.goals ? `Tujuan: ${data.goals}${data.timeline ? ` — ${data.timeline}` : ""}` : "",
         data.references ? `Referensi: ${data.references}` : "",
         data.styleNotes ? `Gaya: ${data.styleNotes}` : "",
       ].filter(Boolean).join("\n");
@@ -1462,9 +1460,26 @@ export default function StartPage() {
       }
 
       const result = await res.json() as { requestId: string };
+
+      // Carry answers forward so the customer never has to type the same
+      // information again on the brief page. sessionStorage is intentionally
+      // short-lived and scoped to this browser tab.
+      const briefPrefill = {
+        companyIndustry: data.industry,
+        primaryGoal: data.goals || data.projectDesc || data.query,
+        audienceDemographics: data.targetMarket,
+        stylePreference: data.styleNotes,
+        outputFormats: service.deliverables?.join(", ") || service.serviceName,
+        deadline: data.timeline,
+        referenceLinks: data.references,
+      };
+      try {
+        sessionStorage.setItem(`brief_prefill_${result.requestId}`, JSON.stringify(briefPrefill));
+      } catch { /* storage unavailable — brief still works normally */ }
+
       setPhase("done");
-      // Redirect to brief page after brief moment
-      setTimeout(() => navigate(`/request-service/${result.requestId}/brief`), 800);
+      // Redirect to brief page after a brief success state.
+      setTimeout(() => navigate(`/request-service/${result.requestId}/brief`), 500);
 
     } catch (err) {
       setSubmitError((err as Error).message ?? "Terjadi kesalahan. Silakan coba lagi.");
