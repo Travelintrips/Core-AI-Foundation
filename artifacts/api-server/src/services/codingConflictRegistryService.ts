@@ -177,13 +177,29 @@ export async function reserveCodingFileSet(input: {
     }
 
     const conflictRows = await tx.execute(sql`
-      SELECT file_path, task_id, run_id, reserved_at, expires_at
-      FROM ai_platform.ai_coding_active_file_reservations
-      WHERE repository = ${input.repository}
-        AND branch = ${input.branch}
-        AND file_path = ANY(${codingFileTextArraySql(files)})
-        AND task_id <> ${input.taskId}
-      ORDER BY file_path
+      SELECT r.file_path, r.task_id, r.run_id, r.reserved_at, r.expires_at
+      FROM ai_platform.ai_coding_active_file_reservations AS r
+      WHERE r.repository = ${input.repository}
+        AND r.branch = ${input.branch}
+        AND r.file_path = ANY(${codingFileTextArraySql(files)})
+        AND r.task_id <> ${input.taskId}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_workstreams AS w
+          JOIN ai_platform.ai_coding_task_graphs AS g
+            ON g.id = w.graph_id
+          WHERE w.child_task_id::text = ${input.taskId}
+            AND g.task_id::text = r.task_id
+            AND w.status IN (
+              'PENDING',
+              'READY',
+              'CLAIMED',
+              'RUNNING',
+              'REVIEW_REQUIRED',
+              'COMPLETED'
+            )
+        )
+      ORDER BY r.file_path
     `);
     const conflicts = Array.isArray(conflictRows.rows)
       ? conflictRows.rows.map((row) => rowConflict(row as Record<string, unknown>))
