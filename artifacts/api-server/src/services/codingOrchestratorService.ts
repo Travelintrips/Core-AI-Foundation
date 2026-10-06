@@ -401,18 +401,27 @@ async function completeLocalAnalysis(
     analysis.localExecution && typeof analysis.localExecution === "object"
       ? (analysis.localExecution as Record<string, unknown>)
       : null;
+  const changeReservation =
+    analysis.changeReservation && typeof analysis.changeReservation === "object"
+      ? (analysis.changeReservation as Record<string, unknown>)
+      : null;
+  const activeConflict = changeReservation?.status === "CONFLICT";
   const nextAction =
-    localExecution?.status === "APPLIED"
-      ? "REVIEW_LOCAL_PATCH"
+    activeConflict
+      ? "REVIEW_CONFLICT"
+      : localExecution?.status === "APPLIED"
+        ? "REVIEW_LOCAL_PATCH"
       : aiEscalation
         ? "APPROVE_TASK_GRAPH"
         : localPlan?.status === "AI_REQUIRED"
           ? "AI_REQUIRED"
           : "REVIEW_LOCAL_CONTEXT";
   const summary =
-    nextAction === "REVIEW_LOCAL_PATCH"
-      ? `${analysisSummary} A deterministic local patch is ready for review; repository scripts were not executed. No AI/LLM was invoked.`
-      : nextAction === "APPROVE_TASK_GRAPH"
+    nextAction === "REVIEW_CONFLICT"
+      ? `${analysisSummary} Coding stopped before worker execution because the predicted change set overlaps an active task. QC can sequence, revise, or rebase the conflicting task; no AI/LLM worker was invoked.`
+      : nextAction === "REVIEW_LOCAL_PATCH"
+        ? `${analysisSummary} A deterministic local patch is ready for review; repository scripts were not executed. No AI/LLM was invoked.`
+        : nextAction === "APPROVE_TASK_GRAPH"
         ? `${analysisSummary} The deterministic executor declined to guess, so the bounded AI planner generated a PREPARED task graph. The autonomous controller will approve and dispatch the graph automatically when policy checks pass; no patch, commit, push, or merge was performed yet.`
         : nextAction === "AI_REQUIRED"
           ? `${analysisSummary} The deterministic executor declined to guess; AI reasoning is required for the remaining semantic work. No AI/LLM was invoked.`
@@ -654,6 +663,48 @@ export async function continueCodingOrchestration(
       analysis.localExecution && typeof analysis.localExecution === "object"
         ? (analysis.localExecution as Record<string, unknown>)
         : null;
+    const changeReservation =
+      analysis.changeReservation && typeof analysis.changeReservation === "object"
+        ? (analysis.changeReservation as Record<string, unknown>)
+        : null;
+
+    if (changeReservation?.status === "CONFLICT") {
+      stages = updateStage(
+        stages,
+        "planner",
+        "BLOCKED",
+        "Active file reservation conflict detected before planning/worker dispatch.",
+      );
+      stages = updateStage(
+        stages,
+        "coding",
+        "BLOCKED",
+        "No coding worker was dispatched because another active task owns part of the predicted change set.",
+      );
+      stages = updateStage(
+        stages,
+        "review",
+        "RUNNING",
+        "QC should sequence, revise, or rebase the conflicting task before retry.",
+      );
+      await completeLocalAnalysis(input, sessionId, stages, analysis);
+      await logAudit(
+        "coding-orchestrator",
+        "active_change_conflict_waiting_for_qc",
+        input.task.id,
+        "coding_task",
+        "success",
+        {
+          sessionId,
+          codingRunId: input.run.id,
+          conflicts: Array.isArray(changeReservation.conflicts)
+            ? changeReservation.conflicts
+            : [],
+          workerDispatched: false,
+        },
+      );
+      return;
+    }
 
     if (localPlan?.status === "EXECUTABLE") {
       stages = updateStage(
