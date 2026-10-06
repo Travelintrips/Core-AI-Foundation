@@ -32,6 +32,10 @@ import { logAudit } from "./aiAuditService.js";
 import { recordCost } from "./costService.js";
 import { readGuardrails } from "./guardrailService.js";
 import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
+import {
+  isImageRouterConfigured,
+  tryGenerateImageViaRouter,
+} from "./imageRouterService.js";
 
 // ── Model constants ───────────────────────────────────────────────────────────
 
@@ -199,10 +203,34 @@ async function getAgentBySlug(slug: string) {
 async function generateReplicateImage(
   modelId: string,
   input: { prompt: string; negativePrompt?: string; aspectRatio?: string; outputQuality?: number },
-  apiKey: string,
+  apiKey: string | null,
   timeoutMs: number,
-): Promise<{ imageUrl: string; latencyMs: number }> {
+): Promise<{
+  imageUrl: string;
+  latencyMs: number;
+  provider: "gcp-comfyui" | "replicate";
+  model: string;
+}> {
   const startTime = Date.now();
+
+  const local = await tryGenerateImageViaRouter({
+    prompt: input.prompt,
+    negativePrompt: input.negativePrompt,
+    aspectRatio: input.aspectRatio,
+    timeoutMs,
+    filenamePrefix: "creative-preview",
+  });
+  if (local) {
+    return {
+      imageUrl: local.imageUrl,
+      latencyMs: local.latencyMs,
+      provider: "gcp-comfyui",
+      model: local.model,
+    };
+  }
+  if (!apiKey) {
+    throw new Error("Replicate fallback is not configured.");
+  }
 
   const createRes = await fetch(
     `https://api.replicate.com/v1/models/${modelId}/predictions`,
@@ -238,7 +266,14 @@ async function generateReplicateImage(
 
   if (prediction.status === "succeeded" && Array.isArray(prediction.output)) {
     const url = prediction.output[0];
-    if (url) return { imageUrl: url, latencyMs: Date.now() - startTime };
+    if (url) {
+      return {
+        imageUrl: url,
+        latencyMs: Date.now() - startTime,
+        provider: "replicate",
+        model: modelId,
+      };
+    }
   }
   if (prediction.status === "failed") {
     throw new Error(`Replicate prediction failed: ${prediction.error ?? "unknown"}`);
@@ -253,7 +288,12 @@ async function generateReplicateImage(
     if (result.status === "succeeded") {
       const url = Array.isArray(result.output) ? result.output[0] : undefined;
       if (!url) throw new Error("Replicate returned no image URLs");
-      return { imageUrl: url, latencyMs: Date.now() - startTime };
+      return {
+        imageUrl: url,
+        latencyMs: Date.now() - startTime,
+        provider: "replicate",
+        model: modelId,
+      };
     }
     if (result.status === "failed") throw new Error(`Replicate prediction failed: ${result.error ?? "unknown"}`);
   }
@@ -348,7 +388,9 @@ export async function generatePhotorealisticInteriorImage(input: {
   persistenceError?: string;
 }> {
   const apiKey = getProviderApiKey("replicate");
-  if (!apiKey) throw new Error("Replicate provider is not configured");
+  if (!apiKey && !isImageRouterConfigured()) {
+    throw new Error("No image generation provider is configured");
+  }
 
   const model = input.model ?? FLUX_DEV;
   const result = await generateReplicateImage(
@@ -371,7 +413,7 @@ export async function generatePhotorealisticInteriorImage(input: {
     return {
       imageUrl: storedUrl,
       storagePath,
-      model,
+      model: result.model,
       latencyMs: result.latencyMs,
     };
   } catch (error) {
@@ -384,7 +426,7 @@ export async function generatePhotorealisticInteriorImage(input: {
     return {
       imageUrl: result.imageUrl,
       storagePath: null,
-      model,
+      model: result.model,
       latencyMs: result.latencyMs,
       persistenceError,
     };
@@ -729,6 +771,8 @@ export async function runPreviewGeneration(
   const packageTier = (session.packageTier ?? "standard") as keyof typeof TIER_CONFIG;
   const guardrails = await readGuardrails();
   const replicateKey = getProviderApiKey("replicate");
+  const imageRouterConfigured = isImageRouterConfigured();
+  const imageProviderAvailable = imageRouterConfigured || Boolean(replicateKey);
 
   // Generate prompts via LLM
   let previewPrompts: PreviewPromptResult[] = [];
@@ -757,13 +801,15 @@ export async function runPreviewGeneration(
       .insert(creativeAiAssetsTable)
       .values({
         projectId: projectUuid,
-        provider: "replicate",
-        model: PREVIEW_CONFIG.model,
+        provider: imageRouterConfigured ? "gcp-comfyui" : "replicate",
+        model: imageRouterConfigured
+          ? "sd_xl_base_1.0.safetensors"
+          : PREVIEW_CONFIG.model,
         assetType: "image",
         prompt: p.prompt,
         negativePrompt: p.negativePrompt,
         aspectRatio: p.aspectRatio,
-        status: replicateKey ? "generating" : "failed",
+        status: imageProviderAvailable ? "generating" : "failed",
         renderStage: "preview",
         renderSessionId: sessionId,
         conceptIndex: i + 1,
@@ -783,7 +829,7 @@ export async function runPreviewGeneration(
     assetIds.push(row.id);
   }
 
-  if (!replicateKey) {
+  if (!imageProviderAvailable) {
     await db
       .update(creativeRenderSessionsTable)
       .set({ sessionStatus: "preview_ready", updatedAt: new Date() })
@@ -800,15 +846,22 @@ export async function runPreviewGeneration(
     const p = previewPrompts[i];
     const assetId = assetIds[i];
 
-    // Rate-limit between Replicate calls
-    const waitMs = MIN_INTER_REQUEST_MS - (Date.now() - lastRequestAt);
-    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
-    lastRequestAt = Date.now();
+    // Only the external Replicate fallback needs account-level pacing.
+    if (!imageRouterConfigured) {
+      const waitMs = MIN_INTER_REQUEST_MS - (Date.now() - lastRequestAt);
+      if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+      lastRequestAt = Date.now();
+    }
 
     let imageUrl: string | null = null;
     let imageLatency = 0;
     let imageStatus = "failed";
     let errorNote: string | null = null;
+    let usedProvider: "gcp-comfyui" | "replicate" =
+      imageRouterConfigured ? "gcp-comfyui" : "replicate";
+    let usedModel = imageRouterConfigured
+      ? "sd_xl_base_1.0.safetensors"
+      : PREVIEW_CONFIG.model;
 
     try {
       const result = await generateReplicateImage(
@@ -820,6 +873,8 @@ export async function runPreviewGeneration(
       imageUrl = result.imageUrl;
       imageLatency = result.latencyMs;
       imageStatus = "completed";
+      usedProvider = result.provider;
+      usedModel = result.model;
     } catch (err) {
       errorNote = `Preview generation failed: ${String(err)}`;
     }
@@ -832,12 +887,17 @@ export async function runPreviewGeneration(
       if (persisted) finalImageUrl = persisted;
     }
 
-    const imageCost = imageStatus === "completed" ? PREVIEW_CONFIG.costPerImage : 0;
+    const imageCost =
+      imageStatus === "completed" && usedProvider === "replicate"
+        ? PREVIEW_CONFIG.costPerImage
+        : 0;
     totalPreviewCost += imageCost;
 
     await db
       .update(creativeAiAssetsTable)
       .set({
+        provider: usedProvider,
+        model: usedModel,
         imageUrl: finalImageUrl,
         status: imageStatus,
         cost: String(imageCost.toFixed(6)),
@@ -849,8 +909,8 @@ export async function runPreviewGeneration(
     await recordCost({
       projectId: projectUuid,
       agentSlug: "image-designer",
-      provider: "replicate",
-      model: PREVIEW_CONFIG.model,
+      provider: usedProvider,
+      model: usedModel,
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: imageLatency,
@@ -998,6 +1058,8 @@ export async function runFinalGeneration(
 
   const guardrails = await readGuardrails();
   const replicateKey = getProviderApiKey("replicate");
+  const imageRouterConfigured = isImageRouterConfigured();
+  const imageProviderAvailable = imageRouterConfigured || Boolean(replicateKey);
   const timeoutMs = Math.min(guardrails.providerTimeoutMs, 120000);
 
   // Insert final asset placeholders
@@ -1007,13 +1069,15 @@ export async function runFinalGeneration(
       .insert(creativeAiAssetsTable)
       .values({
         projectId: projectUuid,
-        provider: "replicate",
-        model: tierCfg.model,
+        provider: imageRouterConfigured ? "gcp-comfyui" : "replicate",
+        model: imageRouterConfigured
+          ? "sd_xl_base_1.0.safetensors"
+          : tierCfg.model,
         assetType: "image",
         prompt,
         negativePrompt,
         aspectRatio,
-        status: replicateKey ? "generating" : "failed",
+        status: imageProviderAvailable ? "generating" : "failed",
         renderStage: "final",
         renderSessionId: sessionId,
         conceptIndex: i + 1,
@@ -1031,7 +1095,7 @@ export async function runFinalGeneration(
     finalAssetIds.push(row.id);
   }
 
-  if (!replicateKey) {
+  if (!imageProviderAvailable) {
     await db
       .update(creativeRenderSessionsTable)
       .set({ sessionStatus: "failed", updatedAt: new Date() })
@@ -1048,15 +1112,22 @@ export async function runFinalGeneration(
   for (let i = 0; i < finalCount; i++) {
     const assetId = finalAssetIds[i];
 
-    // Rate-limit
-    const waitMs = MIN_INTER_REQUEST_MS - (Date.now() - lastRequestAt);
-    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
-    lastRequestAt = Date.now();
+    // Only the external Replicate fallback needs account-level pacing.
+    if (!imageRouterConfigured) {
+      const waitMs = MIN_INTER_REQUEST_MS - (Date.now() - lastRequestAt);
+      if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+      lastRequestAt = Date.now();
+    }
 
     let imageUrl: string | null = null;
     let imageLatency = 0;
     let imageStatus = "failed";
     let errorNote: string | null = null;
+    let usedProvider: "gcp-comfyui" | "replicate" =
+      imageRouterConfigured ? "gcp-comfyui" : "replicate";
+    let usedModel = imageRouterConfigured
+      ? "sd_xl_base_1.0.safetensors"
+      : tierCfg.model;
 
     try {
       const result = await generateReplicateImage(
@@ -1068,6 +1139,8 @@ export async function runFinalGeneration(
       imageUrl = result.imageUrl;
       imageLatency = result.latencyMs;
       imageStatus = "completed";
+      usedProvider = result.provider;
+      usedModel = result.model;
     } catch (err) {
       errorNote = `Final generation failed: ${String(err)}`;
     }
@@ -1080,7 +1153,10 @@ export async function runFinalGeneration(
       if (persisted) finalImageUrl = persisted;
     }
 
-    const imageCost = imageStatus === "completed" ? tierCfg.costPerImage : 0;
+    const imageCost =
+      imageStatus === "completed" && usedProvider === "replicate"
+        ? tierCfg.costPerImage
+        : 0;
     totalFinalCost += imageCost;
 
     // QC — runs ONLY on final images
@@ -1117,6 +1193,8 @@ export async function runFinalGeneration(
     await db
       .update(creativeAiAssetsTable)
       .set({
+        provider: usedProvider,
+        model: usedModel,
         imageUrl: finalImageUrl,
         status: imageStatus === "completed"
           ? (qcScore !== null && qcScore >= FINAL_QC_THRESHOLD ? "completed" : "needs_revision")
@@ -1131,8 +1209,8 @@ export async function runFinalGeneration(
     await recordCost({
       projectId: projectUuid,
       agentSlug: "image-designer",
-      provider: "replicate",
-      model: tierCfg.model,
+      provider: usedProvider,
+      model: usedModel,
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: imageLatency,
