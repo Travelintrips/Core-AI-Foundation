@@ -1052,6 +1052,13 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     const aiHandoffCloneFailure = retryableAiHandoffCloneFailure(state);
     if (aiHandoffCloneFailure) {
       await reserveActionCycle(taskId);
+      await db
+        .update(aiCodingTasksTable)
+        .set({
+          status: "ANALYZING",
+          resultSummary: "Retrying AI handoff preparation after transient host resource pressure.",
+        })
+        .where(eq(aiCodingTasksTable.id, taskId));
       await startAiHandoffPreparation(taskId);
       await setState(taskId, "WAITING", "RETRY_AI_HANDOFF_RESOURCE_PRESSURE", null);
       await logAudit(
