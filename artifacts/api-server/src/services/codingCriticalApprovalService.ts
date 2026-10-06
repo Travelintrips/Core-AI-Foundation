@@ -27,6 +27,18 @@ export type CriticalApprovalStatus =
   | "COMPLETED"
   | "FAILED";
 
+const HUMAN_APPROVAL_ACTIONS = new Set<CriticalApprovalActionType>([
+  "PRODUCTION_DB_MIGRATION",
+  "DESTRUCTIVE_DB_CHANGE",
+  "SECURITY_CHANGE",
+]);
+
+export function requiresHumanCriticalApproval(
+  actionType: CriticalApprovalActionType,
+): boolean {
+  return HUMAN_APPROVAL_ACTIONS.has(actionType);
+}
+
 export interface CriticalApprovalRow {
   id: string;
   taskId: string | null;
@@ -135,6 +147,12 @@ export async function requestCodingCriticalApproval(input: {
   metadata?: Record<string, unknown>;
   ttlMinutes?: number;
 }): Promise<{ approval: CriticalApprovalRow; token?: string; reused: boolean }> {
+  if (!requiresHumanCriticalApproval(input.actionType)) {
+    throw new Error(
+      `NON_CRITICAL_ACTION_MUST_AUTO_ADVANCE:${input.actionType}`,
+    );
+  }
+
   await ensureCodingControlBridgeTables();
   await expireStaleApprovals();
 
