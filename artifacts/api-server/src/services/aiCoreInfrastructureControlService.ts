@@ -369,11 +369,16 @@ async function callHostinger(
       lastStatus = result.response.status;
       lastData = result.data;
       if (result.response.ok) return { status: result.response.status, data: result.data };
+      const detail =
+        typeof result.data === "string"
+          ? result.data.slice(0, 500)
+          : JSON.stringify(result.data ?? {}).slice(0, 500);
+      const dnsInvalidZone =
+        result.response.status === 422 && /\[DNS:4005\]|domain name is not valid/i.test(detail);
+      if (dnsInvalidZone) {
+        return { status: result.response.status, data: result.data };
+      }
       if (result.response.status !== 404) {
-        const detail =
-          typeof result.data === "string"
-            ? result.data.slice(0, 500)
-            : JSON.stringify(result.data ?? {}).slice(0, 500);
         throw new Error(
           `Hostinger operation failed with HTTP ${result.response.status}${detail ? `: ${detail}` : "."}`,
         );
@@ -447,6 +452,16 @@ async function callHostinger(
     return candidates;
   };
 
+  const isDnsZoneMiss = (result: { status: number; data: unknown }): boolean => {
+    if (result.status === 404) return true;
+    if (result.status !== 422) return false;
+    const detail =
+      typeof result.data === "string"
+        ? result.data
+        : JSON.stringify(result.data ?? {});
+    return /\[DNS:4005\]|domain name is not valid/i.test(detail);
+  };
+
   const resolveParentDnsZone = async (requestedDomain: string): Promise<string | null> => {
     for (const candidate of parentDnsZoneCandidates(requestedDomain)) {
       const result = await firstSuccessful(`/dns/v1/zones/${encodeURIComponent(candidate)}`, "GET");
@@ -500,7 +515,7 @@ async function callHostinger(
 
     if (operation === "HOSTINGER_DNS_LIST") {
       let result = await firstSuccessful(zonePath, "GET");
-      if (result.status === 404 && await fallbackToParentZone()) {
+      if (isDnsZoneMiss(result) && await fallbackToParentZone()) {
         result = await firstSuccessful(zonePath, "GET");
       }
       if (result.status < 200 || result.status >= 300) {
@@ -519,7 +534,7 @@ async function callHostinger(
       let result = await firstSuccessful(zonePath, "DELETE", {
         filters: [{ name, type }],
       });
-      if (result.status === 404 && await fallbackToParentZone()) {
+      if (isDnsZoneMiss(result) && await fallbackToParentZone()) {
         name = zoneRelativeRecordName(requestedDnsDomain, dnsDomain, rawName);
         result = await firstSuccessful(zonePath, "DELETE", {
           filters: [{ name, type }],
@@ -574,7 +589,7 @@ async function callHostinger(
 
       let body = buildBody();
       let validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
-      if (validation.status === 404 && await fallbackToParentZone()) {
+      if (isDnsZoneMiss(validation) && await fallbackToParentZone()) {
         name = zoneRelativeRecordName(requestedDnsDomain, dnsDomain, rawName);
         body = buildBody();
         validation = await firstSuccessful(`${zonePath}/validate`, "POST", body);
