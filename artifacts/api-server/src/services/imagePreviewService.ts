@@ -262,12 +262,33 @@ async function generateReplicateImage(
 
 // ── Persist image to Supabase Storage ─────────────────────────────────────────
 
+type PublicInteriorStorageAuth = {
+  projectId: number;
+  accessToken: string;
+  variantIndex: number;
+};
+
+type PersistedImageResult = {
+  imageUrl: string;
+  storagePath: string;
+  originalBytes: number;
+  storedBytes: number;
+  contentType: string;
+  persistenceMode: "direct" | "edge_bridge";
+};
+
 async function persistImage(
   url: string,
   storagePath: string,
-): Promise<string> {
-  const { ensureStorageBucket, uploadToSupabase } =
-    await import("../lib/supabaseStorage.js");
+  publicStorageAuth?: PublicInteriorStorageAuth,
+): Promise<PersistedImageResult> {
+  const {
+    compressInteriorRenderForStorage,
+    isSupabaseStorageAvailable,
+    ensureStorageBucket,
+    uploadPublicInteriorRenderViaEdge,
+    uploadToSupabase,
+  } = await import("../lib/supabaseStorage.js");
 
   let buffer: Buffer | null = null;
   let contentType = "image/webp";
@@ -304,14 +325,71 @@ async function persistImage(
     throw new Error(`Could not download generated provider image: ${lastDownloadError}`);
   }
 
-  // Startup normally creates the bucket. Calling this again is idempotent and
-  // makes image persistence resilient when a fresh production project is used.
+  // Public customer renders are normalized to compressed WebP before either
+  // storage route. The Edge bridge is used when the native Hostinger runtime
+  // has no Supabase admin key, keeping that privileged key off the web host.
+  if (publicStorageAuth) {
+    const prepared = await compressInteriorRenderForStorage(buffer);
+
+    if (isSupabaseStorageAvailable()) {
+      try {
+        await ensureStorageBucket();
+        const directUrl = await uploadToSupabase(
+          storagePath,
+          prepared.buffer,
+          prepared.contentType,
+        );
+        return {
+          imageUrl: directUrl,
+          storagePath,
+          originalBytes: prepared.originalBytes,
+          storedBytes: prepared.storedBytes,
+          contentType: prepared.contentType,
+          persistenceMode: "direct",
+        };
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.warn(
+          "[imagePreview] Direct Supabase persistence failed; trying authenticated Edge bridge:",
+          detail,
+        );
+      }
+    }
+
+    const bridged = await uploadPublicInteriorRenderViaEdge({
+      projectId: publicStorageAuth.projectId,
+      accessToken: publicStorageAuth.accessToken,
+      variantIndex: publicStorageAuth.variantIndex,
+      buffer,
+    });
+    return {
+      imageUrl: bridged.publicUrl,
+      storagePath: bridged.storagePath,
+      originalBytes: prepared.originalBytes,
+      storedBytes: bridged.storedBytes,
+      contentType: "image/webp",
+      persistenceMode: "edge_bridge",
+    };
+  }
+
+  if (!isSupabaseStorageAvailable()) {
+    throw new Error("Supabase Storage credentials are unavailable");
+  }
+
   await ensureStorageBucket();
 
   let lastUploadError: unknown = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      return await uploadToSupabase(storagePath, buffer, contentType);
+      const storedUrl = await uploadToSupabase(storagePath, buffer, contentType);
+      return {
+        imageUrl: storedUrl,
+        storagePath,
+        originalBytes: buffer.byteLength,
+        storedBytes: buffer.byteLength,
+        contentType,
+        persistenceMode: "direct",
+      };
     } catch (error) {
       lastUploadError = error;
       if (attempt < 2) {
@@ -340,12 +418,20 @@ export async function generatePhotorealisticInteriorImage(input: {
   aspectRatio?: string;
   model?: string;
   timeoutMs?: number;
+  publicStorageAuth?: PublicInteriorStorageAuth;
 }): Promise<{
   imageUrl: string;
   storagePath: string | null;
   model: string;
   latencyMs: number;
   persistenceError?: string;
+  compression?: {
+    originalBytes: number;
+    storedBytes: number;
+    savingsBytes: number;
+    contentType: string;
+    persistenceMode: "direct" | "edge_bridge";
+  };
 }> {
   const apiKey = getProviderApiKey("replicate");
   if (!apiKey) throw new Error("Replicate provider is not configured");
@@ -367,12 +453,23 @@ export async function generatePhotorealisticInteriorImage(input: {
     `interior-renders/${input.projectUuid}/${input.sessionId}/` +
     `variant-${input.variantIndex}-${Date.now()}.webp`;
   try {
-    const storedUrl = await persistImage(result.imageUrl, storagePath);
-    return {
-      imageUrl: storedUrl,
+    const stored = await persistImage(
+      result.imageUrl,
       storagePath,
+      input.publicStorageAuth,
+    );
+    return {
+      imageUrl: stored.imageUrl,
+      storagePath: stored.storagePath,
       model,
       latencyMs: result.latencyMs,
+      compression: {
+        originalBytes: stored.originalBytes,
+        storedBytes: stored.storedBytes,
+        savingsBytes: Math.max(0, stored.originalBytes - stored.storedBytes),
+        contentType: stored.contentType,
+        persistenceMode: stored.persistenceMode,
+      },
     };
   } catch (error) {
     // Do not discard a successfully generated image just because permanent
@@ -829,7 +926,7 @@ export async function runPreviewGeneration(
     if (imageUrl) {
       const storagePath = `creative-assets/${projectUuid}/previews/concept-${i + 1}-${Date.now()}.webp`;
       const persisted = await persistImage(imageUrl, storagePath);
-      if (persisted) finalImageUrl = persisted;
+      if (persisted) finalImageUrl = persisted.imageUrl;
     }
 
     const imageCost = imageStatus === "completed" ? PREVIEW_CONFIG.costPerImage : 0;
@@ -1077,7 +1174,7 @@ export async function runFinalGeneration(
     if (imageUrl) {
       const storagePath = `creative-assets/${projectUuid}/final/${packageTier}-${i + 1}-${Date.now()}.webp`;
       const persisted = await persistImage(imageUrl, storagePath);
-      if (persisted) finalImageUrl = persisted;
+      if (persisted) finalImageUrl = persisted.imageUrl;
     }
 
     const imageCost = imageStatus === "completed" ? tierCfg.costPerImage : 0;
