@@ -12,6 +12,7 @@ const mockTxUpdateSet = vi.hoisted(() => vi.fn());
 const mockTxUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTxUpdateReturning = vi.hoisted(() => vi.fn());
 const mockWithTransientDatabaseRetry = vi.hoisted(() => vi.fn());
+const mockReserveCodingFileSet = vi.hoisted(() => vi.fn());
 
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
@@ -54,6 +55,10 @@ vi.mock("@workspace/db", () => ({
     id: "jobs.id",
     status: "jobs.status",
   },
+}));
+
+vi.mock("../codingConflictRegistryService.js", () => ({
+  reserveCodingFileSet: mockReserveCodingFileSet,
 }));
 
 const {
@@ -386,6 +391,11 @@ describe("repository analyzer execution", () => {
     mockWithTransientDatabaseRetry.mockImplementation(
       async (operation: () => Promise<unknown>) => operation(),
     );
+    mockReserveCodingFileSet.mockResolvedValue({
+      status: "RESERVED",
+      files: [],
+      conflicts: [],
+    });
   });
 
   it("guards the task lookup with transient database retry", async () => {

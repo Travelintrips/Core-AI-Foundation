@@ -245,7 +245,7 @@ describe("autonomous coding explicit stop", () => {
     ).toEqual({
       reactivate: false,
       extendBudget: false,
-      reason: "NOT_BLOCKED",
+      reason: "DISABLED_NOT_SAFE_TO_RECOVER",
     });
 
     const source = readFileSync(
