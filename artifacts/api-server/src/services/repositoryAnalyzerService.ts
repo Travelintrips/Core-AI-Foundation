@@ -33,6 +33,9 @@ const CODING_ANALYZER_JOB_TYPE = "coding_repository_analyzer";
 const DEFAULT_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS = 60_000;
 const MIN_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS = 10_000;
 const MAX_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS = 5 * 60_000;
+const DEFAULT_ANALYZER_RUNNING_TIMEOUT_MS = 4 * 60_000;
+const MIN_ANALYZER_RUNNING_TIMEOUT_MS = 150_000;
+const MAX_ANALYZER_RUNNING_TIMEOUT_MS = 15 * 60_000;
 
 export function getRepositoryAnalyzerQueueClaimTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,
@@ -47,6 +50,22 @@ export function getRepositoryAnalyzerQueueClaimTimeoutMs(
   return Math.max(
     MIN_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS,
     Math.min(MAX_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS, parsed),
+  );
+}
+
+export function getRepositoryAnalyzerRunningTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const parsed = Number.parseInt(
+    env["REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS"] ?? "",
+    10,
+  );
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_ANALYZER_RUNNING_TIMEOUT_MS;
+  }
+  return Math.max(
+    MIN_ANALYZER_RUNNING_TIMEOUT_MS,
+    Math.min(MAX_ANALYZER_RUNNING_TIMEOUT_MS, parsed),
   );
 }
 
@@ -1157,7 +1176,7 @@ export async function executeRepositoryAnalyzerJobOnDemand(
  * prevents a crashed process from disabling Run Agent forever.
  */
 export async function failStaleRepositoryAnalyzerRuns(
-  staleAfterMs = 15 * 60 * 1000,
+  staleAfterMs = getRepositoryAnalyzerRunningTimeoutMs(),
   queuedStaleAfterMs = getRepositoryAnalyzerQueueClaimTimeoutMs(),
 ): Promise<number> {
   const cutoff = new Date(Date.now() - staleAfterMs);
