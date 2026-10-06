@@ -135,6 +135,22 @@ const run = {
   errorMessage: null,
 };
 
+describe("Coding Orchestrator no-human-review policy", () => {
+  it("removes the unused legacy LLM plan-approval path and auto-advances safe gates", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toContain("approvalRequired: true");
+    expect(source).not.toContain("requires human review before write access");
+    expect(source).not.toContain("PLANNER_SYSTEM_PROMPT");
+    expect(source).not.toContain("async function executePlanner(");
+    expect(source).toContain('AUTO_ADVANCE_ACTIONS = new Set(["REVIEW_LOCAL_PATCH", "APPROVE_TASK_GRAPH", "AI_REQUIRED"])');
+    expect(source).toContain('label: "Automated QC"');
+  });
+});
+
 describe("Coding Orchestrator autonomous fail-closed policy", () => {
   it("does not treat an unreadable autonomous state as permission to enable", () => {
     const source = readFileSync(
