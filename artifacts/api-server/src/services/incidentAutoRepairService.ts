@@ -148,6 +148,8 @@ export async function processOpenIncidents(limit = 5) {
 
   let queued = 0;
   for (const incident of rows) {
+    let dispatchedRepairTaskId: string | null = null;
+    let dispatchedRepairRunId: string | null = null;
     if (!incident.repository) {
       await db.update(aiIncidentsTable).set({
         status: "BLOCKED",
@@ -191,6 +193,8 @@ export async function processOpenIncidents(limit = 5) {
       });
 
       if (!result) continue;
+      dispatchedRepairTaskId = result.task.id;
+      dispatchedRepairRunId = result.run.id;
       await startCodingOrchestration(result);
       queued += 1;
     } catch (error) {
@@ -202,8 +206,30 @@ export async function processOpenIncidents(limit = 5) {
         { err: error, incidentId: incident.id, failures: disposition.failures, retryable: disposition.retryable },
         "[incident] auto-repair dispatch failed",
       );
+      if (dispatchedRepairRunId) {
+        await db.update(aiCodingRunsTable).set({
+          status: "FAILED",
+          finishedAt: new Date(),
+          errorMessage: ("Incident repair dispatch failed before orchestration started: " + message).slice(0, 2000),
+        }).where(and(
+          eq(aiCodingRunsTable.id, dispatchedRepairRunId),
+          eq(aiCodingRunsTable.status, "RUNNING"),
+        ));
+      }
+      if (dispatchedRepairTaskId) {
+        await db.update(aiCodingTasksTable).set({
+          status: "FAILED",
+          resultSummary: ("Repair attempt could not be dispatched and will be retried automatically: " + message).slice(0, 500),
+          updatedAt: new Date(),
+        }).where(and(
+          eq(aiCodingTasksTable.id, dispatchedRepairTaskId),
+          eq(aiCodingTasksTable.status, "ANALYZING"),
+        ));
+      }
+
       await db.update(aiIncidentsTable).set({
         status: disposition.incidentStatus,
+        repairTaskId: disposition.retryable ? null : dispatchedRepairTaskId ?? incident.repairTaskId,
         lastError: message.slice(0, 2000),
         metadataJson: {
           ...metadata,
