@@ -323,12 +323,38 @@ export async function ensureWorkers(): Promise<void> {
       continue;
     }
 
+    // Preserve occupancy across rolling deploys. A new dispatcher process may
+    // legitimately acquire the lease while jobs claimed by the previous process
+    // are still running. Recompute occupancy from authoritative running-job
+    // ownership markers instead of resetting runningJobs/currentJob to zero.
+    const occupancy = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS running_count,
+        MIN(id)::int AS current_job_id
+      FROM ai_platform.ai_jobs
+      WHERE status = 'running'
+        AND payload_json->>'_claimedByWorkerId' = ${String(worker.id)}
+    `).then((result) =>
+      (result as unknown as {
+        rows: Array<{ running_count?: number; current_job_id?: number | null }>;
+      }).rows[0],
+    );
+
+    const runningCount = Math.max(
+      0,
+      Number(occupancy?.running_count ?? 0),
+    );
+    const currentJobId =
+      occupancy?.current_job_id == null
+        ? null
+        : Number(occupancy.current_job_id);
+
     const [owned] = await db
       .update(aiWorkersTable)
       .set({
-        status: "idle",
-        currentJob: null,
-        runningJobs: 0,
+        status: runningCount > 0 ? "busy" : "idle",
+        currentJob: currentJobId,
+        runningJobs: runningCount,
       })
       .where(
         and(
