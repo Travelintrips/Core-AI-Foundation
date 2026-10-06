@@ -130,7 +130,9 @@ const NativeEventSubscribeParams = z.object({
   }).strict(),
   cursor: z.null().optional().default(null),
   ttlMs: z.union([z.number().int().positive(), z.null()]).optional(),
-}).strict();
+// MCP request envelopes may carry client metadata/extension fields. Ignore
+// those fields; event arguments and webhook delivery remain strictly validated.
+}).strip();
 const NativeEventUnsubscribeParams = z.object({
   name: z.literal(AI_CORE_TERMINAL_EVENT_NAME),
   arguments: NativeTerminalEventArguments.default({}),
@@ -138,7 +140,7 @@ const NativeEventUnsubscribeParams = z.object({
     mode: z.literal("webhook"),
     url: z.string().url(),
   }).strict(),
-}).strict();
+}).strip();
 
 const nativeEvents = [
   {

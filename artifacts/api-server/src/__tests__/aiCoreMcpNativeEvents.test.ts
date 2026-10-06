@@ -139,6 +139,42 @@ describe("AI Core native MCP events", () => {
     }));
   });
 
+  it.each(["events/subscribe", "events/unsubscribe"])("accepts and discards MCP envelope extensions for %s", async (method) => {
+    const response = await post({
+      jsonrpc: "2.0", id: 7, method,
+      params: {
+        name: "ai_core.task.terminal",
+        arguments: { eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"] },
+        delivery: {
+          mode: "webhook", url: "https://receiver.example.test/mcp-events/callback",
+          ...(method === "events/subscribe" ? { secret: "whsec_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } : {}),
+        },
+        _meta: { "client/requestId": "private-client-metadata" },
+        clientExtension: "private-envelope-extension",
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.error).toBeUndefined();
+    const service = method === "events/subscribe" ? eventMocks.subscribe : eventMocks.unsubscribe;
+    expect(service).toHaveBeenCalledOnce();
+    const captured = JSON.stringify([service.mock.calls, vi.mocked(logAudit).mock.calls]);
+    expect(captured).not.toContain("private-client-metadata");
+    expect(captured).not.toContain("private-envelope-extension");
+  });
+
+  it.each(["arguments", "delivery"])("still rejects unexpected fields inside %s", async (field) => {
+    const params = {
+      name: "ai_core.task.terminal",
+      arguments: { eventTypes: ["COMPLETED"] },
+      delivery: { mode: "webhook", url: "https://receiver.example.test/mcp-events/callback", secret: "whsec_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+      _meta: { "client/requestId": "example" },
+    };
+    Object.assign(params[field as "arguments" | "delivery"], { unexpected: true });
+    const response = await post({ jsonrpc: "2.0", id: 8, method: "events/subscribe", params });
+    expect(response.body.error.code).toBe(-32602);
+    expect(eventMocks.subscribe).not.toHaveBeenCalled();
+  });
+
   it("audits arrival and invalid params without callback or signing secrets", async () => {
     const response = await post({
       jsonrpc: "2.0", id: 5, method: "events/subscribe",
