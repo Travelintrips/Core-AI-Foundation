@@ -49,8 +49,16 @@ const EXPLICIT_SOURCE_CHANGE =
 const NEGATED_SOURCE_CHANGE_CLAUSE =
   /\b(?:jangan|tanpa|do\s+not|don't|without)\b[^.!?;\n]{0,180}/gi;
 
+const CONDITIONAL_SOURCE_CHANGE_CLAUSE =
+  /\b(?:hanya|only)\s+(?:jika|kalau|apabila|if)\b[^.!?;\n]{0,220}\b(?:ubah|edit|patch|fix|perbaiki|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b[^.!?;\n]{0,160}\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|routing|intent|logic|alur|behavior|behaviour|bug|fitur|feature|api|endpoint|service|test|tests|regression)\b/gi;
+
 export function hasExplicitSourceChange(message: string): boolean {
-  const affirmativeText = message.replace(NEGATED_SOURCE_CHANGE_CLAUSE, " ");
+  // A conditional fallback such as "inspect runtime; only if logs prove a code
+  // bug, patch the repo" must start in the bounded infrastructure lane. The
+  // source mutation becomes actionable only after runtime evidence exists.
+  const affirmativeText = message
+    .replace(NEGATED_SOURCE_CHANGE_CLAUSE, " ")
+    .replace(CONDITIONAL_SOURCE_CHANGE_CLAUSE, " ");
   return EXPLICIT_SOURCE_CHANGE.test(affirmativeText);
 }
 
