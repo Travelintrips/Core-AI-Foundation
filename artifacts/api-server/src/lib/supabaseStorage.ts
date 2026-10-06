@@ -11,6 +11,7 @@
  * Picks dev vs prod Supabase project based on NODE_ENV.
  */
 
+import sharp from "sharp";
 import { logger } from "./logger.js";
 
 export const SUPABASE_STORAGE_BUCKET = "ai-assets";
@@ -18,6 +19,104 @@ export const SUPABASE_STORAGE_BUCKET = "ai-assets";
 interface SupabaseCredentials {
   url: string;
   serviceKey: string;
+}
+
+export interface StorageImageCompressionResult {
+  buffer: Buffer;
+  contentType: string;
+  originalBytes: number;
+  storedBytes: number;
+  compressed: boolean;
+}
+
+function normalizedEnvironmentValue(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function hasAnyValue(env: NodeJS.ProcessEnv, keys: string[]): boolean {
+  return keys.some((key) => {
+    const value = env[key];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+}
+
+export function isProductionStorageEnvironment(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const nodeEnv = normalizedEnvironmentValue(env["NODE_ENV"]);
+  const appEnv = normalizedEnvironmentValue(env["APP_ENV"]);
+  if (nodeEnv === "production" || appEnv === "production") return true;
+
+  // Hostinger can occasionally start a process without NODE_ENV while still
+  // injecting only production Supabase variables. In that case fail toward the
+  // only complete credential set rather than incorrectly selecting DEV keys.
+  const hasProd = hasAnyValue(env, [
+    "SUPABASE_PROD_DATABASE_URL",
+    "SUPABASE_DATABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_PROD_SERVICE_ROLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_PROD_SECRET_KEY",
+  ]);
+  const hasDev = hasAnyValue(env, [
+    "SUPABASE_DEV_DATABASE_URL",
+    "SUPABASE_DATABASE_URL_DEV",
+    "SUPABASE_SERVICE_ROLE_KEY_DEV",
+    "SUPABASE_DEV_SERVICE_ROLE_KEY",
+    "SUPABASE_SECRET_KEY_DEV",
+    "SUPABASE_DEV_SECRET_KEY",
+  ]);
+
+  return hasProd && !hasDev;
+}
+
+const COMPRESSIBLE_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+export async function compressImageForStorage(
+  buffer: Buffer,
+  contentType: string,
+): Promise<StorageImageCompressionResult> {
+  const normalizedType = contentType.split(";")[0]?.trim().toLowerCase() || contentType;
+  const originalBytes = buffer.byteLength;
+
+  if (!COMPRESSIBLE_IMAGE_MIME_TYPES.has(normalizedType) || originalBytes === 0) {
+    return {
+      buffer,
+      contentType: normalizedType,
+      originalBytes,
+      storedBytes: originalBytes,
+      compressed: false,
+    };
+  }
+
+  let encoded: Buffer;
+  const base = sharp(buffer, { failOn: "warning" }).rotate();
+
+  if (normalizedType === "image/webp") {
+    encoded = await base.webp({ quality: 78, effort: 5, smartSubsample: true }).toBuffer();
+  } else if (normalizedType === "image/jpeg") {
+    encoded = await base.jpeg({ quality: 82, mozjpeg: true, progressive: true }).toBuffer();
+  } else {
+    // Keep PNG lossless to avoid damaging diagrams, logos, or proof imagery.
+    encoded = await base.png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
+  }
+
+  // Already-optimized images are still compressed inputs. Never replace them
+  // with a larger re-encode merely to satisfy the compression pass.
+  const useEncoded = encoded.byteLength > 0 && encoded.byteLength < originalBytes;
+  const stored = useEncoded ? encoded : buffer;
+
+  return {
+    buffer: stored,
+    contentType: normalizedType,
+    originalBytes,
+    storedBytes: stored.byteLength,
+    compressed: useEncoded || normalizedType === "image/png" || normalizedType === "image/webp" || normalizedType === "image/jpeg",
+  };
 }
 
 function deriveSupabaseUrlFromDatabaseUrl(databaseUrl: string | undefined): string | undefined {
@@ -44,30 +143,30 @@ function deriveSupabaseUrlFromDatabaseUrl(databaseUrl: string | undefined): stri
 }
 
 function getCredentials(): SupabaseCredentials {
-  const isDev = process.env["NODE_ENV"] !== "production";
+  const isProduction = isProductionStorageEnvironment(process.env);
 
-  const databaseUrl = isDev
-    ? process.env["SUPABASE_DEV_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL_DEV"]
-    : process.env["SUPABASE_PROD_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL"];
+  const databaseUrl = isProduction
+    ? process.env["SUPABASE_PROD_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL"]
+    : process.env["SUPABASE_DEV_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL_DEV"];
 
-  const explicitUrl = isDev
-    ? process.env["SUPABASE_URL_DEV"] || process.env["SUPABASE_DEV_URL"]
-    : process.env["SUPABASE_URL"] || process.env["SUPABASE_PROD_URL"];
+  const explicitUrl = isProduction
+    ? process.env["SUPABASE_URL"] || process.env["SUPABASE_PROD_URL"]
+    : process.env["SUPABASE_URL_DEV"] || process.env["SUPABASE_DEV_URL"];
 
   const derivedUrl = deriveSupabaseUrlFromDatabaseUrl(databaseUrl);
   // In production prefer the URL derived from the production DB connection so
   // Storage can never accidentally point at a different Supabase project.
-  const url = (isDev ? (explicitUrl || derivedUrl) : (derivedUrl || explicitUrl))?.replace(/\/$/, "");
+  const url = (isProduction ? (derivedUrl || explicitUrl) : (explicitUrl || derivedUrl))?.replace(/\/$/, "");
 
-  const serviceKey = isDev
-    ? process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] ||
-      process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"] ||
-      process.env["SUPABASE_SECRET_KEY_DEV"] ||
-      process.env["SUPABASE_DEV_SECRET_KEY"]
-    : process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
+  const serviceKey = isProduction
+    ? process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
       process.env["SUPABASE_PROD_SERVICE_ROLE_KEY"] ||
       process.env["SUPABASE_SECRET_KEY"] ||
-      process.env["SUPABASE_PROD_SECRET_KEY"];
+      process.env["SUPABASE_PROD_SECRET_KEY"]
+    : process.env["SUPABASE_SERVICE_ROLE_KEY_DEV"] ||
+      process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"] ||
+      process.env["SUPABASE_SECRET_KEY_DEV"] ||
+      process.env["SUPABASE_DEV_SECRET_KEY"];
 
   if (!url || !serviceKey) {
     const missing = [
@@ -144,6 +243,10 @@ export async function uploadToSupabase(
 ): Promise<string> {
   const { url, serviceKey } = getCredentials();
 
+  // Every supported image entering ai-assets passes through the compression
+  // gate before upload. Non-image payloads are left byte-for-byte unchanged.
+  const prepared = await compressImageForStorage(buffer, contentType);
+
   // Remove leading slash if any
   const cleanPath = path.startsWith("/") ? path.slice(1) : path;
 
@@ -153,15 +256,29 @@ export async function uploadToSupabase(
     method: "POST",
     headers: {
       ...authHeaders(serviceKey),
-      "Content-Type": contentType,
+      "Content-Type": prepared.contentType,
       "x-upsert": "true", // overwrite if exists
+      "cache-control": "31536000",
     },
-    body: buffer,
+    body: prepared.buffer,
   });
 
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Supabase Storage upload failed (${res.status}): ${text}`);
+  }
+
+  if (COMPRESSIBLE_IMAGE_MIME_TYPES.has(prepared.contentType)) {
+    logger.info(
+      {
+        path: cleanPath,
+        contentType: prepared.contentType,
+        originalBytes: prepared.originalBytes,
+        storedBytes: prepared.storedBytes,
+        savingsBytes: Math.max(0, prepared.originalBytes - prepared.storedBytes),
+      },
+      "[supabaseStorage] Image compression gate passed before upload",
+    );
   }
 
   return getSupabasePublicUrl(path);
