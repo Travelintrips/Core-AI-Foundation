@@ -40,7 +40,7 @@ vi.mock("../../lib/logger.js", () => ({
   },
 }));
 
-import { notifyCodingBridgeResponse } from "../codingWhatsappNotificationService.js";
+import { notifyCodingBridgeResponse, waitForCodingWhatsappDelivery } from "../codingWhatsappNotificationService.js";
 
 describe("coding WhatsApp lifecycle notification", () => {
   beforeEach(() => {
@@ -99,6 +99,28 @@ describe("coding WhatsApp lifecycle notification", () => {
       "ai-core-coding-33333333-3333-4333-8333-333333333333-completed",
     );
     expect(body.text).toContain("Timestamp: 2026-10-06 14:18:00 WIB");
+  });
+
+  it("surfaces the durable gateway error when delivery fails", async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: "failed",
+        error: "WhatsApp device primary-01 is not online",
+      }),
+    });
+
+    const result = await waitForCodingWhatsappDelivery("msg-failed", {
+      timeoutMs: 1_000,
+      pollIntervalMs: 250,
+    });
+
+    expect(result).toEqual({
+      status: "failed",
+      messageId: "msg-failed",
+      reason: "WhatsApp device primary-01 is not online",
+    });
   });
 
   it("suppresses a lifecycle notification already delivered for the same task/status", async () => {
