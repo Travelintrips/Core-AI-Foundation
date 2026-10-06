@@ -14,6 +14,7 @@ type PublicRenderProject = {
   id: number;
   title: string;
   roomType: string;
+  accessToken: string;
 };
 
 type PublicRenderAsset = {
@@ -130,6 +131,11 @@ export async function generatePublicInteriorRenders(input: {
         prompt,
         negativePrompt: "people, logos, watermark, text, extra rooms, distorted furniture",
         aspectRatio: "16:9",
+        publicStorageAuth: {
+          projectId: input.project.id,
+          accessToken: input.project.accessToken,
+          variantIndex,
+        },
       });
 
       await db
@@ -144,6 +150,20 @@ export async function generatePublicInteriorRenders(input: {
           qcNotes: image.persistenceError
             ? `Permanent storage fallback: ${image.persistenceError.slice(0, 900)}`
             : null,
+          metadata: {
+            source: "public_interior_design",
+            publicInteriorProjectId: input.project.id,
+            storage: image.compression
+              ? {
+                  compressedAtRest: true,
+                  contentType: image.compression.contentType,
+                  originalBytes: image.compression.originalBytes,
+                  storedBytes: image.compression.storedBytes,
+                  savingsBytes: image.compression.savingsBytes,
+                  persistenceMode: image.compression.persistenceMode,
+                }
+              : null,
+          },
         })
         .where(eq(creativeAiAssetsTable.id, assetId));
     } catch (error) {
