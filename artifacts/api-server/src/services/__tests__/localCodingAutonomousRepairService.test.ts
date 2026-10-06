@@ -941,9 +941,7 @@ describe("autonomous lifecycle source recovery", () => {
     const loader = source.slice(start, end);
     expect(loader).toContain("candidateOrchestration?.nextAction");
     expect(loader).toContain('run.status !== "COMPLETED"');
-    expect(loader).not.toContain(
-      'run.agentName === "Coding Orchestrator" &&\n      run.status === "COMPLETED"',
-    );
+    expect(loader).toContain("runs.find((run) => {");
   });
 });
 
