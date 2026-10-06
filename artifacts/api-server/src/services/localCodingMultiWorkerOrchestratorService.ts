@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 
 const MIN_LEASE_SECONDS = 30;
+const DEFAULT_LEASE_SECONDS = 10 * 60;
 const MAX_LEASE_SECONDS = 15 * 60;
 const MAX_PARALLEL_CLAIMS = 8;
 // A heartbeat proves liveness, but it must not let a hung analyzer hold a
@@ -59,8 +60,8 @@ interface DependencyRow {
   dependsOnWorkstreamId: string;
 }
 
-function boundedLeaseSeconds(value: number | undefined): number {
-  if (!Number.isFinite(value)) return 120;
+export function boundedLeaseSeconds(value: number | undefined): number {
+  if (!Number.isFinite(value)) return DEFAULT_LEASE_SECONDS;
   return Math.max(
     MIN_LEASE_SECONDS,
     Math.min(MAX_LEASE_SECONDS, Math.floor(value!)),
