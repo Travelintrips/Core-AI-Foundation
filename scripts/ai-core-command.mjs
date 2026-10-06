@@ -163,7 +163,11 @@ export function createApi(secret, fetchImpl = fetch) {
         throw new Error(`AI Core ${path} returned invalid JSON.`);
       }
     }
-    return { status: response.status, value };
+    return {
+      status: response.status,
+      value,
+      releaseSha: response.headers?.get?.('x-cst-commit-sha')?.trim() || null,
+    };
   };
 }
 
@@ -186,6 +190,12 @@ export async function audit(api) {
     runtime.status === 200 &&
     runtime.value.ready === true;
 
+  const runtimeCommitSha =
+    runtime.releaseSha ||
+    health.releaseSha ||
+    full.releaseSha ||
+    null;
+
   return {
     action: 'audit', ready,
     health: health.status === 403 ? 'edge_blocked' : (health.value.status ?? 'unknown'),
@@ -195,6 +205,7 @@ export async function audit(api) {
     autonomousRunning: runtime.value.autonomous?.running === true,
     githubConfigured: runtime.value.dependencies?.githubConfigured === true,
     criticalApprovalDependenciesReady: runtime.value.ready === true,
+    runtimeCommitSha,
     result: ready ? 'READY_FOR_BOUNDED_TASKS' : 'BLOCKED_RUNTIME_NOT_READY',
   };
 }
@@ -387,6 +398,22 @@ export async function execute(command, api, options = {}) {
   }
   const readiness = await audit(api);
   if (!readiness.ready) throw new Error('AI Core is not ready. No coding task was created or started. Run audit for diagnostics.');
+
+  const expectedCommitSha = String(options.expectedCommitSha ?? '').trim();
+  if (expectedCommitSha) {
+    if (!/^[0-9a-f]{40}$/i.test(expectedCommitSha)) {
+      throw new Error('Expected GitHub commit SHA is invalid; refusing task submission.');
+    }
+    if (!readiness.runtimeCommitSha) {
+      throw new Error('AI Core production runtime did not report x-cst-commit-sha; refusing task submission to avoid version skew.');
+    }
+    if (readiness.runtimeCommitSha !== expectedCommitSha) {
+      throw new Error(
+        `AI Core production runtime is stale (live=${readiness.runtimeCommitSha}, expected=${expectedCommitSha}); refusing task submission until production catches up.`,
+      );
+    }
+  }
+
   const projectName = `GitHub Trigger ${command.requestId}`;
   const instruction = command.instruction + (command.autonomousE2E ? AUTONOMOUS_E2E_POLICY : POLICY);
   const matches = (await listTasks(api, command.targetRepository))
@@ -461,7 +488,11 @@ export async function execute(command, api, options = {}) {
 export async function main(env = process.env, fetchImpl = fetch) {
   const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
   const command = resolveCommand(event, env);
-  const result = await execute(command, createApi(env.ADMIN_API_KEY, fetchImpl));
+  const result = await execute(
+    command,
+    createApi(env.ADMIN_API_KEY, fetchImpl),
+    { expectedCommitSha: env.GITHUB_SHA },
+  );
   const output = JSON.stringify(result, null, 2);
   console.log(output);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY,
