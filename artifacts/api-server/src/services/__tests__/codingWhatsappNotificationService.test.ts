@@ -40,9 +40,14 @@ vi.mock("../../lib/logger.js", () => ({
   },
 }));
 
-import { notifyCodingBridgeResponse, waitForCodingWhatsappDelivery } from "../codingWhatsappNotificationService.js";
+import {
+  notifyCodingBridgeResponse,
+  sendCodingApprovalRequest,
+  sendCodingApprovalResult,
+  waitForCodingWhatsappDelivery,
+} from "../codingWhatsappNotificationService.js";
 
-describe("coding WhatsApp lifecycle notification", () => {
+describe("coding WhatsApp human-review-only policy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.CST_WA_GATEWAY_URL = "https://wa.example.test";
@@ -63,45 +68,94 @@ describe("coding WhatsApp lifecycle notification", () => {
     vi.stubGlobal("fetch", mocks.fetch);
   });
 
-  it("uses a stable task/status idempotency key and persisted WIB timestamp", async () => {
-    mocks.execute.mockResolvedValue({ rows: [] });
+  it.each(["CHECKPOINT", "BLOCKER", "COMPLETED", "FAILED"] as const)(
+    "does not send %s lifecycle notifications to admin WhatsApp",
+    async (kind) => {
+      const result = await notifyCodingBridgeResponse({
+        responseId: "11111111-1111-4111-8111-111111111111",
+        commandId: "22222222-2222-4222-8222-222222222222",
+        taskId: "33333333-3333-4333-8333-333333333333",
+        kind,
+        message: `Lifecycle ${kind}`,
+        checkpoint: { eventType: kind },
+        eventTimestamp: "2026-10-06T07:18:00.000Z",
+      });
+
+      expect(result).toEqual({
+        status: "skipped",
+        reason: "human_review_only_policy",
+        configured: { baseUrl: true, apiKey: true, to: true },
+      });
+      expect(mocks.fetch).not.toHaveBeenCalled();
+      expect(mocks.select).not.toHaveBeenCalled();
+      expect(mocks.execute).not.toHaveBeenCalled();
+    },
+  );
+
+  it("sends only the critical approval request with familiar Indonesian copy", async () => {
     mocks.fetch.mockResolvedValue({
       ok: true,
       status: 202,
-      json: async () => ({ messageId: "msg-1" }),
+      json: async () => ({ messageId: "msg-approval" }),
     });
 
-    const result = await notifyCodingBridgeResponse({
-      responseId: "11111111-1111-4111-8111-111111111111",
-      commandId: "22222222-2222-4222-8222-222222222222",
+    const result = await sendCodingApprovalRequest({
+      approvalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       taskId: "33333333-3333-4333-8333-333333333333",
-      kind: "COMPLETED",
-      message: "Coding task selesai.",
-      checkpoint: { eventType: "COMPLETED" },
-      eventTimestamp: "2026-10-06T07:18:00.000Z",
+      actionType: "SECURITY_CHANGE",
+      summary: "Perubahan ini menyentuh akses admin production.",
+      token: "AbCdEfGhIjKlMnOpQr",
+      expiresAt: "2026-10-06T08:00:00.000Z",
     });
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       status: "queued",
-      messageId: "msg-1",
+      gatewayStatus: 202,
+      messageId: "msg-approval",
     });
-
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
+
     const [url, request] = mocks.fetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://wa.example.test/v1/messages");
     expect(request.headers).toMatchObject({
-      "idempotency-key":
-        "ai-core-coding-33333333-3333-4333-8333-333333333333-completed",
+      "idempotency-key": "ai-core-approval-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
 
     const body = JSON.parse(String(request.body));
-    expect(body.clientMessageId).toBe(
-      "ai-core-coding-33333333-3333-4333-8333-333333333333-completed",
-    );
-    expect(body.text).toContain("Timestamp: 2026-10-06 14:18:00 WIB");
+    expect(body.type).toBe("text");
+    expect(body.text).toContain("Min, butuh keputusan dulu nih");
+    expect(body.text).toContain("kategori kritis");
+    expect(body.text).toContain("Task: CWS-TEST");
+    expect(body.text).toContain("Project: Core AI");
+    expect(body.text).toContain("Yang mau dijalanin: Perubahan keamanan atau hak akses");
+    expect(body.text).toContain("Kenapa perlu dicek: Perubahan ini menyentuh akses admin production.");
+    expect(body.text).toContain("Batas keputusan: 2026-10-06 15:00:00 WIB");
+    expect(body.text).toContain("pilih APPROVE");
+    expect(body.text).toContain("pilih REJECT");
+    expect(body.text).toContain("https://aicore.example.test/api/a/AbCdEfGhIjKlMnOpQr");
   });
 
-  it("surfaces the durable gateway error when delivery fails", async () => {
+  it.each(["REJECTED", "EXECUTING", "COMPLETED", "FAILED"] as const)(
+    "does not send approval result status %s",
+    async (status) => {
+      const result = await sendCodingApprovalResult({
+        approvalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        taskId: "33333333-3333-4333-8333-333333333333",
+        actionType: "SECURITY_CHANGE",
+        status,
+        message: "Update approval.",
+      });
+
+      expect(result).toEqual({
+        status: "skipped",
+        reason: "approval_result_notifications_disabled",
+        configured: { baseUrl: true, apiKey: true, to: true },
+      });
+      expect(mocks.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("surfaces the durable gateway error when a critical approval delivery fails", async () => {
     mocks.fetch.mockResolvedValue({
       ok: true,
       status: 200,
@@ -121,36 +175,5 @@ describe("coding WhatsApp lifecycle notification", () => {
       messageId: "msg-failed",
       reason: "WhatsApp device primary-01 is not online",
     });
-  });
-
-  it("suppresses a lifecycle notification already delivered for the same task/status", async () => {
-    mocks.execute.mockResolvedValue({
-      rows: [
-        {
-          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-          message_id: "msg-existing",
-        },
-      ],
-    });
-
-    const result = await notifyCodingBridgeResponse({
-      responseId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-      commandId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      taskId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-      kind: "BLOCKER",
-      message: "Masih terblokir.",
-      checkpoint: { eventType: "BLOCKED" },
-      eventTimestamp: "2026-10-06T07:18:00.000Z",
-    });
-
-    expect(result).toEqual({
-      status: "skipped",
-      reason: "duplicate_lifecycle_notification",
-      configured: { baseUrl: true, apiKey: true, to: true },
-      duplicateOfResponseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      duplicateMessageId: "msg-existing",
-    });
-    expect(mocks.fetch).not.toHaveBeenCalled();
-    expect(mocks.select).not.toHaveBeenCalled();
   });
 });
