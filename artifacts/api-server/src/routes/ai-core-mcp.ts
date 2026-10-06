@@ -28,7 +28,16 @@ const router = Router();
 const MCP_PROTOCOL_VERSION = "2026-07-28";
 const COMPAT_MCP_PROTOCOL_VERSION = "2025-06-18";
 const LEGACY_MCP_PROTOCOL_VERSION = "2025-03-26";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.5.0" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.6.0" };
+const DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS = 24 * 60 * 60;
+const MAX_CONVERSATION_EVENT_LEASE_SECONDS = 7 * 24 * 60 * 60;
+const DEFAULT_TERMINAL_EVENT_TYPES = [
+  "COMPLETED",
+  "FAILED",
+  "BLOCKED",
+  "MERGED",
+  "DEPLOYED",
+] as const;
 
 const ReadOnlyQueryArgs = z.object({
   message: z.string().trim().min(1).max(50_000),
@@ -82,8 +91,9 @@ const TaskProgressArgs = z.object({
 const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]);
 const SubscribeEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
-  eventTypes: z.array(EventTypes).min(1).max(5).default(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]),
-  leaseSeconds: z.number().int().min(30).max(300).default(300),
+  eventTypes: z.array(EventTypes).min(1).max(5).default([...DEFAULT_TERMINAL_EVENT_TYPES]),
+  leaseSeconds: z.number().int().min(30).max(MAX_CONVERSATION_EVENT_LEASE_SECONDS)
+    .default(DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS),
 }).strict();
 const ReadEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
@@ -845,6 +855,44 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
+      let eventSubscription:
+        | {
+            subscribed: true;
+            conversationId: string;
+            eventTypes: readonly string[];
+            leaseExpiresAt: Date | string;
+            clientId: string;
+          }
+        | {
+            subscribed: false;
+            conversationId: string;
+            error: string;
+          }
+        | null = null;
+
+      if (parsed.conversationId) {
+        try {
+          const subscription = await subscribeCodingBridgeConversation({
+            conversationId: parsed.conversationId,
+            eventTypes: [...DEFAULT_TERMINAL_EVENT_TYPES],
+            leaseSeconds: DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS,
+          });
+          eventSubscription = {
+            subscribed: true,
+            conversationId: parsed.conversationId,
+            eventTypes: DEFAULT_TERMINAL_EVENT_TYPES,
+            leaseExpiresAt: subscription.leaseExpiresAt,
+            clientId: subscription.clientId,
+          };
+        } catch (error) {
+          eventSubscription = {
+            subscribed: false,
+            conversationId: parsed.conversationId,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }
+
       payload = await callAiCore(
         "/ai/core-chat/messages",
         {
@@ -879,6 +927,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
             status: commandResult.status ?? null,
             workspaceUrl: commandResult.workspaceUrl ?? null,
           },
+          ...(eventSubscription ? { eventSubscription } : {}),
+        };
+      } else if (payload && typeof payload === "object" && eventSubscription) {
+        payload = {
+          ...(payload as Record<string, unknown>),
+          eventSubscription,
         };
       }
       await recordAiCoreMcpTerminalResult({
@@ -908,6 +962,13 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       };
     } else if (params.name === "read_ai_core_events") {
       const parsed = ReadEventsArgs.parse(params.arguments ?? {});
+      // Reading events also renews the conversation lease so a long-running
+      // AI Core task cannot silently lose its callback channel.
+      await subscribeCodingBridgeConversation({
+        conversationId: parsed.conversationId,
+        eventTypes: [...DEFAULT_TERMINAL_EVENT_TYPES],
+        leaseSeconds: DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS,
+      });
       const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
       payload = {
         conversationId: parsed.conversationId,

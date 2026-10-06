@@ -19,9 +19,15 @@ import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
 const DEFAULT_COMMAND_LEASE_SECONDS = 300;
+const DEFAULT_CHATGPT_EVENT_LEASE_SECONDS = 24 * 60 * 60;
+const MAX_CHATGPT_EVENT_LEASE_SECONDS = 7 * 24 * 60 * 60;
 
-function boundedLeaseSeconds(value: number | undefined, fallback: number): number {
-  return Math.max(30, Math.min(MAX_LEASE_SECONDS, Math.floor(value ?? fallback)));
+function boundedLeaseSeconds(
+  value: number | undefined,
+  fallback: number,
+  maxSeconds = MAX_LEASE_SECONDS,
+): number {
+  return Math.max(30, Math.min(maxSeconds, Math.floor(value ?? fallback)));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -386,10 +392,13 @@ export async function subscribeCodingBridgeConversation(input: {
   return renewCodingBridgePresence({
     clientId: `chatgpt:${input.conversationId}`,
     source: "chatgpt-mcp",
-    leaseSeconds: input.leaseSeconds,
+    leaseSeconds: input.leaseSeconds ?? DEFAULT_CHATGPT_EVENT_LEASE_SECONDS,
+    maxLeaseSeconds: MAX_CHATGPT_EVENT_LEASE_SECONDS,
     metadata: {
       conversationId: input.conversationId,
-      eventTypes: input.eventTypes ?? ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"],
+      eventTypes: input.eventTypes ?? ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
+      autoRenewUntilTerminal: true,
+      leasePolicy: "chatgpt-terminal-events",
     },
   });
 }
@@ -592,10 +601,15 @@ export async function renewCodingBridgePresence(input: {
   clientId: string;
   source?: string;
   leaseSeconds?: number;
+  maxLeaseSeconds?: number;
   metadata?: Record<string, unknown>;
 }) {
   await ensureCodingControlBridgeTables();
-  const seconds = boundedLeaseSeconds(input.leaseSeconds, DEFAULT_LEASE_SECONDS);
+  const seconds = boundedLeaseSeconds(
+    input.leaseSeconds,
+    DEFAULT_LEASE_SECONDS,
+    input.maxLeaseSeconds ?? MAX_LEASE_SECONDS,
+  );
   const now = new Date();
   const leaseExpiresAt = new Date(now.getTime() + seconds * 1000);
   const leaseToken = randomUUID();
