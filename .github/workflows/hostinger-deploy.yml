@@ -32,6 +32,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: hostinger-production-verify
@@ -1306,6 +1307,101 @@ jobs:
             esac
           done
           echo "ok=$ok" >> "$GITHUB_OUTPUT"
+
+      - name: Report production verification timing budget
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_OLLAMA: ${{ needs.plan.outputs.verify_ollama }}
+        run: |
+          set -euo pipefail
+          api_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api_url" > /tmp/production-verify-jobs.json
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/production-verify-jobs.json", "utf8"));
+          const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+          const now = Date.now();
+          const budgets = new Map([
+            ["Plan production verification", 60],
+            ["Verify exact production baseline", 180],
+            ["Smoke MCP discovery/events", 120],
+            ["Smoke Coding Workspace", 120],
+            ["Smoke deterministic AI Core Chat", 180],
+            ["Smoke WhatsApp E2E", 180],
+            ["Smoke Admin DB and Data Tools", 180],
+            ["Smoke GCP Ollama Economy", 600],
+            ["Smoke cloud routing", 180],
+            ["Smoke ZeroLLM readiness", 60],
+            ["Smoke public sitemap", 60],
+          ]);
+
+          const rows = [];
+          let earliest = Infinity;
+          let latestCompleted = 0;
+          let warnings = 0;
+
+          for (const job of jobs) {
+            if (!job.started_at) continue;
+            const start = Date.parse(job.started_at);
+            const end = job.completed_at ? Date.parse(job.completed_at) : now;
+            if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+            earliest = Math.min(earliest, start);
+            if (job.completed_at) latestCompleted = Math.max(latestCompleted, end);
+
+            const duration = Math.max(0, Math.round((end - start) / 1000));
+            const budget = budgets.get(job.name);
+            const skipped = String(job.conclusion || "") === "skipped";
+            const over = budget != null && !skipped && duration > budget;
+            if (over) warnings += 1;
+            rows.push({
+              name: job.name,
+              result: job.conclusion || job.status || "unknown",
+              duration,
+              budget: budget ?? null,
+              over,
+            });
+          }
+
+          rows.sort((a, b) => b.duration - a.duration);
+          const total = earliest < Infinity && latestCompleted > 0
+            ? Math.max(0, Math.round((latestCompleted - earliest) / 1000))
+            : 0;
+          const ollama = String(process.env.VERIFY_OLLAMA || "").toLowerCase() === "true";
+          const totalBudget = ollama ? 720 : 300;
+          const totalOver = total > totalBudget;
+          if (totalOver) warnings += 1;
+
+          const summary = [];
+          summary.push("## Production Verify timing");
+          summary.push("");
+          summary.push("| Job | Result | Duration | Budget |");
+          summary.push("|---|---:|---:|---:|");
+          for (const row of rows) {
+            const budgetText = row.budget == null ? "—" : row.budget + "s";
+            const durationText = row.duration + "s" + (row.over ? " ⚠️" : "");
+            summary.push("| " + row.name.replace(/\|/g, "\\|") + " | " + row.result + " | " + durationText + " | " + budgetText + " |");
+          }
+          summary.push("");
+          summary.push("Pre-finalize wall clock: **" + total + "s** / budget **" + totalBudget + "s**" + (totalOver ? " ⚠️" : ""));
+          summary.push("");
+          summary.push("Budget warnings: **" + warnings + "**");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join("\n") + "\n");
+
+          console.log("production_verify_wall_clock_s=" + total + " budget_s=" + totalBudget + " warnings=" + warnings);
+          for (const row of rows.filter((r) => r.over)) {
+            console.log("::warning::Production Verify timing budget exceeded: " + row.name + " duration=" + row.duration + "s budget=" + row.budget + "s");
+          }
+          if (totalOver) {
+            console.log("::warning::Production Verify total timing budget exceeded: duration=" + total + "s budget=" + totalBudget + "s");
+          }
+          NODE
 
       - name: Skip GCP Ollama cold-start for unrelated deploys
         if: needs.plan.outputs.verify_ollama != 'true'
