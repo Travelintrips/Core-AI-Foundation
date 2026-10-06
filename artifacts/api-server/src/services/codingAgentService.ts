@@ -235,7 +235,7 @@ export async function buildProposedDiff(workspace: string): Promise<string> {
 async function latestApprovedContext(taskId: string): Promise<ApprovedContext> {
   const [task] = await db.select().from(aiCodingTasksTable).where(eq(aiCodingTasksTable.id, taskId));
   if (!task) throw new Error("Coding task not found");
-  if (task.status !== "READY_REVIEW") throw new Error("Coding task is not awaiting plan approval");
+  if (task.status !== "READY_REVIEW") throw new Error("Coding task is not ready for automated plan progression");
 
   const runs = await db
     .select()
@@ -255,10 +255,9 @@ async function latestApprovedContext(taskId: string): Promise<ApprovedContext> {
       ? payload.orchestration as Record<string, unknown>
       : null;
 
-  if (!implementationPlan || !orchestration) throw new Error("Approved plan payload is incomplete");
+  if (!implementationPlan || !orchestration) throw new Error("Implementation plan payload is incomplete");
   if (orchestration.nextAction !== "APPROVE_PLAN") throw new Error("Coding task is not at APPROVE_PLAN gate");
-  if (implementationPlan.approvalRequired !== true) throw new Error("Implementation plan does not require approval");
-
+  
   return { task, orchestratorRun, implementationPlan, orchestration };
 }
 
@@ -306,7 +305,7 @@ async function executeCodingAgent(context: ApprovedContext, run: AiCodingRun): P
     const sourceContext = await readPlanContext(workspace, filesToInspect);
 
     const prompt = [
-      "Produce the proposed code changes for this approved implementation plan.",
+      "Produce the proposed code changes for this validated implementation plan.",
       `Repository: ${context.task.repository}`,
       `Branch: ${context.task.branch}`,
       `User instruction: ${context.task.instruction}`,
