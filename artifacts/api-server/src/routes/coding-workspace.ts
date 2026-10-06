@@ -235,7 +235,13 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
              FROM ai_platform.ai_coding_runs AS r
              WHERE r.task_id = t.id
                AND r.status = 'RUNNING'
-           ) AS has_active_run
+           ) AS has_active_run,
+           EXISTS (
+             SELECT 1
+             FROM ai_platform.ai_coding_critical_approvals AS approval
+             WHERE approval.task_id = t.id
+               AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+           ) AS has_pending_critical_approval
     FROM ai_platform.ai_coding_tasks AS t
     LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a
       ON a.task_id = t.id
@@ -250,12 +256,14 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
         task_id?: string;
         autonomous_status?: string;
         has_active_run?: boolean;
+        has_pending_critical_approval?: boolean;
       };
       return [
         item.task_id ?? "",
         {
           autonomousStatus: item.autonomous_status ?? null,
           hasActiveRun: item.has_active_run === true,
+          hasPendingCriticalApproval: item.has_pending_critical_approval === true,
         },
       ] as const;
     }),
@@ -267,6 +275,8 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
       taskStatus: task.status,
       autonomousStatus: presentation?.autonomousStatus,
       hasActiveRun: presentation?.hasActiveRun ?? false,
+      hasPendingCriticalApproval:
+        presentation?.hasPendingCriticalApproval ?? false,
     });
     return status === task.status ? task : { ...task, status };
   });
@@ -645,7 +655,7 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [runs, changes, autonomous] = await Promise.all([
+  const [runs, changes, autonomous, approvalSnapshot] = await Promise.all([
     withCodingWorkspaceReadRetry(() =>
       db
         .select()
@@ -661,6 +671,14 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
         .orderBy(desc(aiCodeChangesTable.createdAt)),
     ),
     getAutonomousCodingTaskStatus(task.id).catch(() => null),
+    db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM ai_platform.ai_coding_critical_approvals approval
+        WHERE approval.task_id = ${task.id}::uuid
+          AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+      ) AS has_pending_critical_approval
+    `),
   ]);
 
   const presentedStatus = codingTaskPresentationStatus({
@@ -670,6 +688,9 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
         ? String((autonomous as { status?: unknown }).status)
         : null,
     hasActiveRun: runs.some((run) => run.status === "RUNNING"),
+    hasPendingCriticalApproval:
+      (approvalSnapshot.rows?.[0] as { has_pending_critical_approval?: boolean } | undefined)
+        ?.has_pending_critical_approval === true,
   });
   const presentedTask =
     presentedStatus === task.status
