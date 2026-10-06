@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   canonicalJson,
+  choosePreferredCallbackAddress,
   decodeStandardWebhookSecret,
   matchesTerminalEventArguments,
   signStandardWebhook,
@@ -20,6 +21,19 @@ describe("AI Core MCP event webhook helpers", () => {
     expect(decodeStandardWebhookSecret(secret)).toEqual(rawSecret);
     expect(signStandardWebhook(secret, "evt_1", timestamp, body))
       .toBe(`v1,${expected}`);
+  });
+
+  it("prefers IPv4 for callback verification when both address families are available", () => {
+    expect(choosePreferredCallbackAddress([
+      { address: "2001:4860:4860::8888", family: 6 },
+      { address: "8.8.8.8", family: 4 },
+    ])).toEqual({ address: "8.8.8.8", family: 4 });
+
+    expect(choosePreferredCallbackAddress([
+      { address: "2001:4860:4860::8888", family: 6 },
+    ])).toEqual({ address: "2001:4860:4860::8888", family: 6 });
+
+    expect(choosePreferredCallbackAddress([])).toBeNull();
   });
 
   it("canonicalizes subscription arguments independent of object key order", () => {
