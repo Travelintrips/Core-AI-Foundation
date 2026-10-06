@@ -253,6 +253,32 @@ function extractText(payload: IncomingEnvelope): string {
   return text?.trim() ?? "";
 }
 
+function isWhatsappAdminCodingInstruction(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/^@+\s*/, "")
+    .replace(/\s+/g, " ");
+
+  if (/^coding(?:\s|:)/i.test(normalized)) return true;
+
+  // Authorized WhatsApp senders may issue clear mutating/coding instructions
+  // without a magic prefix. Keep status/check/questions on the read-only chat path.
+  if (/^(?:cek|check|status|lihat|tampilkan|apakah|kenapa|mengapa|berapa|siapa|kapan|dimana|di mana|what|why|how|is|are|can)\b/i.test(normalized)) {
+    return false;
+  }
+
+  return /^(?:perbaiki|benahi|fix|ubah|update|tambahkan|tambah|hapus|remove|buat|implementasikan|implementasi|deploy|redeploy|merge|commit|patch|refactor|migrasi|pindahkan|aktifkan|nonaktifkan|matikan|jalankan|rerun|restart)\b/i.test(normalized);
+}
+
+function stripWhatsappAdminCodingPrefix(text: string): string {
+  return text
+    .trim()
+    .replace(/^@+\s*/, "")
+    .replace(/^coding\s*:?\s*/i, "")
+    .trim();
+}
+
 function resolveReplyDestination(payload: IncomingEnvelope, senderDigits: string): string {
   const remoteJid =
     typeof payload.message?.key?.remoteJid === "string"
@@ -668,7 +694,7 @@ router.post(
       return;
     }
 
-    if (!/^coding(?:\s|:)/i.test(text)) {
+    if (!isWhatsappAdminCodingInstruction(text)) {
       if (process.env.AI_CORE_WA_CHAT_ENABLED === "false") {
         res.status(202).json({ accepted: false, reason: "AI_CORE_WA_CHAT_DISABLED" });
         return;
@@ -735,7 +761,7 @@ router.post(
       return;
     }
 
-    const instruction = text.replace(/^coding\s*:?[\s]*/i, "").trim();
+    const instruction = stripWhatsappAdminCodingPrefix(text);
     if (!instruction) {
       res.status(400).json({ error: "EMPTY_CODING_COMMAND" });
       return;
