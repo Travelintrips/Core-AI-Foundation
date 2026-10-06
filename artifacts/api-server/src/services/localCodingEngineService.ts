@@ -214,6 +214,12 @@ export interface LocalCodingContextPackage {
   verificationCommands: string[];
   testFrameworks: string[];
   warnings: string[];
+  repositoryMap: {
+    used: boolean;
+    path: string | null;
+    moduleIds: string[];
+    matchedFiles: number;
+  };
   index: {
     filesIndexed: number;
     sourceFilesParsed: number;
@@ -222,8 +228,8 @@ export interface LocalCodingContextPackage {
     cacheHit: boolean;
     filesIndexedThisRun: number;
     sourceFilesParsedThisRun: number;
-    cacheStrategy: "REUSED" | "REBUILT";
-    searchBackend: "ripgrep" | "local-fallback";
+    cacheStrategy: "REUSED" | "REBUILT" | "MANIFEST";
+    searchBackend: "ripgrep" | "local-fallback" | "repository-map";
   };
 }
 
@@ -264,7 +270,21 @@ interface BuildLocalContextInput {
 
 interface SearchResult {
   relevantFiles: RelevantFile[];
-  backend: "ripgrep" | "local-fallback";
+  backend: "ripgrep" | "local-fallback" | "repository-map";
+}
+
+interface RepositoryMapModule {
+  id: string;
+  keywords: string[];
+  files: string[];
+  tests: string[];
+}
+
+interface RepositoryMapSelection {
+  path: string;
+  moduleIds: string[];
+  files: string[];
+  tests: string[];
 }
 
 interface CommandExecutorOptions {
@@ -281,6 +301,227 @@ export type VerificationExecutor = (
 ) => Promise<{ stdout?: string; stderr?: string }>;
 
 const indexCache = new Map<string, RepositoryIndex>();
+
+const REPOSITORY_MAP_PATH = ".ai-core/repository-map.json";
+const MAX_REPOSITORY_MAP_BYTES = 512_000;
+const MAX_REPOSITORY_MAP_MODULES = 64;
+const MAX_REPOSITORY_MAP_FILES = 160;
+
+function safeMappedPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = normalizeRepoPath(value.trim());
+  if (
+    !normalized ||
+    normalized.startsWith("/") ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    /[*?\[\]{}]/.test(normalized) ||
+    isSensitiveRepositoryPath(normalized)
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+async function existingMappedFile(root: string, value: string): Promise<string | null> {
+  const safe = safeMappedPath(value);
+  if (!safe) return null;
+  const info = await stat(join(root, safe)).catch(() => null);
+  return info?.isFile() ? safe : null;
+}
+
+async function loadRepositoryMapSelection(
+  root: string,
+  keywords: string[],
+): Promise<RepositoryMapSelection | null> {
+  const mapPath = join(root, REPOSITORY_MAP_PATH);
+  const info = await stat(mapPath).catch(() => null);
+  if (!info?.isFile() || info.size <= 0 || info.size > MAX_REPOSITORY_MAP_BYTES) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(mapPath, "utf8"));
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const rawModules = (parsed as Record<string, unknown>)["modules"];
+  if (!Array.isArray(rawModules)) return null;
+
+  const modules: RepositoryMapModule[] = rawModules
+    .slice(0, MAX_REPOSITORY_MAP_MODULES)
+    .map((raw): RepositoryMapModule | null => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const row = raw as Record<string, unknown>;
+      const id = typeof row["id"] === "string" ? row["id"].trim() : "";
+      if (!id) return null;
+      const moduleKeywords = Array.isArray(row["keywords"])
+        ? row["keywords"].filter((v): v is string => typeof v === "string").map((v) => v.trim().toLowerCase()).filter(Boolean)
+        : [];
+      const files = Array.isArray(row["files"])
+        ? row["files"].map(safeMappedPath).filter((v): v is string => Boolean(v))
+        : [];
+      const tests = Array.isArray(row["tests"])
+        ? row["tests"].map(safeMappedPath).filter((v): v is string => Boolean(v))
+        : [];
+      if (files.length === 0) return null;
+      return { id, keywords: moduleKeywords, files, tests };
+    })
+    .filter((value): value is RepositoryMapModule => Boolean(value));
+
+  const normalizedKeywords = new Set(keywords.map((value) => value.toLowerCase()));
+  const ranked = modules
+    .map((module) => ({
+      module,
+      score: module.keywords.reduce(
+        (score, keyword) =>
+          score +
+          (normalizedKeywords.has(keyword) ? 8 : 0) +
+          ([...normalizedKeywords].some((value) => value.includes(keyword) || keyword.includes(value)) ? 2 : 0),
+        0,
+      ),
+    }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || a.module.id.localeCompare(b.module.id))
+    .slice(0, 6);
+
+  if (ranked.length === 0) return null;
+
+  const fileCandidates = [...new Set(ranked.flatMap((row) => row.module.files))].slice(0, MAX_REPOSITORY_MAP_FILES);
+  const testCandidates = [...new Set(ranked.flatMap((row) => row.module.tests))].slice(0, MAX_RELATED_TESTS);
+  const [files, tests] = await Promise.all([
+    Promise.all(fileCandidates.map((file) => existingMappedFile(root, file))),
+    Promise.all(testCandidates.map((file) => existingMappedFile(root, file))),
+  ]);
+
+  const existingFiles = files.filter((value): value is string => Boolean(value));
+  const existingTests = tests.filter((value): value is string => Boolean(value));
+  if (existingFiles.length === 0) return null;
+
+  return {
+    path: REPOSITORY_MAP_PATH,
+    moduleIds: ranked.map((row) => row.module.id),
+    files: existingFiles,
+    tests: existingTests,
+  };
+}
+
+async function resolveRelativeImportOnDisk(
+  root: string,
+  fromFile: string,
+  specifier: string,
+): Promise<string | undefined> {
+  if (!specifier.startsWith(".")) return undefined;
+  const base = normalizeRepoPath(resolve("/repo", dirname(fromFile), specifier).replace(/^\/repo\/?/, ""));
+  const bases = [base];
+  if (/\.(?:c|m)?js$/i.test(base)) bases.push(base.replace(/\.(?:c|m)?js$/i, ""));
+  const candidates = bases.flatMap((candidateBase) => [
+    candidateBase,
+    ...[".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"].map((ext) => `${candidateBase}${ext}`),
+    ...[".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"].map((ext) => `${candidateBase}/index${ext}`),
+  ]);
+  for (const candidate of candidates) {
+    if (isSensitiveRepositoryPath(candidate)) continue;
+    const info = await stat(join(root, candidate)).catch(() => null);
+    if (info?.isFile()) return candidate;
+  }
+  return undefined;
+}
+
+async function targetedManifestPaths(root: string, files: string[]): Promise<string[]> {
+  const candidates = new Set<string>(["package.json"]);
+  for (const file of files) {
+    let current = dirname(file);
+    while (current && current !== "." && current !== "/") {
+      candidates.add(normalizeRepoPath(join(current, "package.json")));
+      const parent = dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  const existing = await Promise.all(
+    [...candidates].map(async (candidate) => {
+      const info = await stat(join(root, candidate)).catch(() => null);
+      return info?.isFile() ? candidate : null;
+    }),
+  );
+  return existing.filter((value): value is string => Boolean(value));
+}
+
+async function buildTargetedRepositoryIndex(
+  root: string,
+  selection: RepositoryMapSelection,
+): Promise<RepositoryIndex> {
+  const files = new Set<string>([...selection.files, ...selection.tests]);
+  const symbols: LocalSymbol[] = [];
+  const imports: ImportReference[] = [];
+  const warnings: string[] = [
+    `Repository map selected modules: ${selection.moduleIds.join(", ")}.`,
+  ];
+  let sourceFilesParsed = 0;
+  let bytesParsed = 0;
+  let sensitiveFilesExcluded = 0;
+
+  const queue = selection.files
+    .filter((file) => SOURCE_EXTENSIONS.has(extname(file).toLowerCase()))
+    .map((file) => ({ file, depth: 0 }));
+  const parsed = new Set<string>();
+
+  while (queue.length > 0 && parsed.size < MAX_REPOSITORY_MAP_FILES) {
+    const next = queue.shift()!;
+    if (parsed.has(next.file)) continue;
+    parsed.add(next.file);
+    if (isSensitiveRepositoryPath(next.file)) {
+      sensitiveFilesExcluded += 1;
+      continue;
+    }
+    const info = await stat(join(root, next.file)).catch(() => null);
+    if (!info?.isFile() || info.size > MAX_AST_FILE_BYTES || bytesParsed >= MAX_INDEX_BYTES) continue;
+    const content = await readFile(join(root, next.file), "utf8").catch(() => "");
+    bytesParsed += Buffer.byteLength(content, "utf8");
+    sourceFilesParsed += 1;
+    const extracted = extractTypeScriptSymbols(next.file, content);
+    symbols.push(...extracted.symbols);
+    for (const reference of extracted.imports) {
+      reference.resolvedFile = await resolveRelativeImportOnDisk(
+        root,
+        reference.file,
+        reference.specifier,
+      );
+      imports.push(reference);
+      if (reference.resolvedFile) {
+        files.add(reference.resolvedFile);
+        if (
+          next.depth < 1 &&
+          SOURCE_EXTENSIONS.has(extname(reference.resolvedFile).toLowerCase()) &&
+          !parsed.has(reference.resolvedFile)
+        ) {
+          queue.push({ file: reference.resolvedFile, depth: next.depth + 1 });
+        }
+      }
+    }
+  }
+
+  const manifestPaths = await targetedManifestPaths(root, [...files]);
+  const manifests: PackageManifestInfo[] = [];
+  for (const manifestPath of manifestPaths) {
+    files.add(manifestPath);
+    const manifest = await readJsonManifest(root, manifestPath);
+    if (manifest) manifests.push(manifest);
+  }
+
+  return {
+    files: [...files].sort(),
+    symbols,
+    imports,
+    tests: [...new Set(selection.tests)].sort(),
+    manifests,
+    sourceFilesParsed,
+    bytesParsed,
+    sensitiveFilesExcluded,
+    warnings,
+  };
+}
 
 export function normalizeRepoPath(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) return "";
@@ -816,7 +1057,7 @@ async function scoreCandidateFiles(
   candidates: Set<string>,
 ): Promise<RelevantFile[]> {
   const symbolFiles = new Map<string, string[]>();
-  for (const symbol of index.symbols) {
+  for (const symbol of index!.symbols) {
     if (keywords.some((keyword) => symbol.name.toLowerCase().includes(keyword.toLowerCase()))) {
       const list = symbolFiles.get(symbol.file) ?? [];
       list.push(symbol.name);
@@ -953,7 +1194,7 @@ function discoverRelatedTests(index: RepositoryIndex, targets: Set<string>): str
     const lower = test.toLowerCase();
     if (targetStems.some((stem) => stem && lower.includes(stem))) related.add(test);
   }
-  for (const reference of index.imports) {
+  for (const reference of index!.imports) {
     if (reference.resolvedFile && targets.has(reference.resolvedFile) && isTestFile(reference.file)) {
       related.add(reference.file);
     }
@@ -1140,30 +1381,43 @@ export async function buildLocalCodingContextPackage(
   const root = resolve(input.root);
   const keywords = extractTaskKeywords(input.task);
   const gitMetadata = await readGitMetadata(root, input.requestedBranch, keywords);
+  const repositoryMap = await loadRepositoryMapSelection(root, keywords);
   const key = cacheKey(input.repository, gitMetadata);
-  let index = indexCache.get(key);
+  let index = repositoryMap ? null : indexCache.get(key);
   const cacheHit = Boolean(index);
-  if (!index) {
+  if (repositoryMap) {
+    index = await buildTargetedRepositoryIndex(root, repositoryMap);
+  } else if (!index) {
     index = await buildRepositoryIndex(root);
     rememberIndex(key, index);
   }
 
-  const search = await searchRepository(root, index, keywords);
+  const search = repositoryMap
+    ? {
+        relevantFiles: await scoreCandidateFiles(
+          root,
+          index!,
+          keywords,
+          new Set([...repositoryMap.files, ...repositoryMap.tests]),
+        ),
+        backend: "repository-map" as const,
+      }
+    : await searchRepository(root, index!, keywords);
   const seedFiles = search.relevantFiles.slice(0, 10).map((file) => file.path);
-  const affectedFiles = boundedAffectedFiles(index.imports, seedFiles);
+  const affectedFiles = boundedAffectedFiles(index!.imports, seedFiles);
   const affectedSet = new Set(affectedFiles);
-  const relatedTests = discoverRelatedTests(index, affectedSet);
+  const relatedTests = discoverRelatedTests(index!, affectedSet);
   const relevantSet = new Set(seedFiles);
-  const symbols = index.symbols
+  const symbols = index!.symbols
     .filter((symbol) => relevantSet.has(symbol.file) || affectedSet.has(symbol.file))
     .sort((a, b) => Number(b.exported) - Number(a.exported) || a.file.localeCompare(b.file) || a.line - b.line)
     .slice(0, MAX_SYMBOLS_IN_CONTEXT);
-  const dependencies = index.imports
+  const dependencies = index!.imports
     .filter((reference) => affectedSet.has(reference.file) || Boolean(reference.resolvedFile && affectedSet.has(reference.resolvedFile)))
     .slice(0, MAX_DEPENDENCY_EDGES);
-  const verificationCommands = discoverVerificationCommands(index, affectedFiles);
-  const warnings = [...index.warnings];
-  if (index.sensitiveFilesExcluded > 0) warnings.push(`${index.sensitiveFilesExcluded} sensitive file(s) were excluded from indexing and AI context.`);
+  const verificationCommands = discoverVerificationCommands(index!, affectedFiles);
+  const warnings = [...index!.warnings];
+  if (index!.sensitiveFilesExcluded > 0) warnings.push(`${index!.sensitiveFilesExcluded} sensitive file(s) were excluded from indexing and AI context.`);
   if (search.backend === "local-fallback") warnings.push("ripgrep was unavailable; repository search used the bounded local fallback scanner.");
   if (gitMetadata.headSha === "unknown") warnings.push("Git HEAD could not be resolved; cache reuse is limited for this workspace.");
 
@@ -1182,17 +1436,23 @@ export async function buildLocalCodingContextPackage(
     gitDiff: gitMetadata.diff,
     changedFiles: gitMetadata.changedFiles,
     verificationCommands,
-    testFrameworks: discoverTestFrameworks(index),
+    testFrameworks: discoverTestFrameworks(index!),
     warnings,
+    repositoryMap: {
+      used: Boolean(repositoryMap),
+      path: repositoryMap?.path ?? null,
+      moduleIds: repositoryMap?.moduleIds ?? [],
+      matchedFiles: repositoryMap?.files.length ?? 0,
+    },
     index: {
-      filesIndexed: index.files.length,
-      sourceFilesParsed: index.sourceFilesParsed,
-      bytesParsed: index.bytesParsed,
-      sensitiveFilesExcluded: index.sensitiveFilesExcluded,
-      cacheHit,
-      filesIndexedThisRun: cacheHit ? 0 : index.files.length,
-      sourceFilesParsedThisRun: cacheHit ? 0 : index.sourceFilesParsed,
-      cacheStrategy: cacheHit ? "REUSED" : "REBUILT",
+      filesIndexed: index!.files.length,
+      sourceFilesParsed: index!.sourceFilesParsed,
+      bytesParsed: index!.bytesParsed,
+      sensitiveFilesExcluded: index!.sensitiveFilesExcluded,
+      cacheHit: repositoryMap ? false : cacheHit,
+      filesIndexedThisRun: repositoryMap ? index!.files.length : cacheHit ? 0 : index!.files.length,
+      sourceFilesParsedThisRun: repositoryMap ? index!.sourceFilesParsed : cacheHit ? 0 : index!.sourceFilesParsed,
+      cacheStrategy: repositoryMap ? "MANIFEST" : cacheHit ? "REUSED" : "REBUILT",
       searchBackend: search.backend,
     },
   };
