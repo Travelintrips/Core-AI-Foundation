@@ -11,7 +11,7 @@
  * getWorkerCapacity() — per-worker capacity breakdown
  */
 
-import { eq, and, inArray, sql, ne } from "drizzle-orm";
+import { eq, and, inArray, sql, ne, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db, aiWorkersTable, aiJobsTable, withTransientDatabaseRetry } from "@workspace/db";
 import type { AiWorker } from "@workspace/db";
@@ -295,13 +295,18 @@ export async function renewLease(
 }
 
 /**
- * Release a worker's lease and mark it offline.
+ * Release a worker's lease. An idle worker becomes offline, while a worker
+ * that still owns active work becomes stale so the recovery loop can reclaim
+ * that work immediately after a rolling shutdown.
  */
 export async function releaseLease(workerId: number, heartbeatToken: string): Promise<void> {
   await db
     .update(aiWorkersTable)
     .set({
-      status:         "offline",
+      status: sql`CASE
+        WHEN running_jobs > 0 OR current_job IS NOT NULL THEN 'stale'
+        ELSE 'offline'
+      END`,
       leaseOwner:     null,
       leaseExpiresAt: null,
       heartbeatToken: null,
@@ -356,22 +361,32 @@ export async function markStaleWorkers(): Promise<number[]> {
 }
 
 /**
- * Recover running jobs owned by stale workers — requeue them.
+ * Recover running jobs owned by stale workers, plus legacy/offline workers
+ * that still advertise active occupancy. The latter closes the rolling-deploy
+ * gap where shutdown cleared a lease before an in-flight job was recovered.
  * Returns count of recovered jobs.
  */
 export async function rebalanceJobs(): Promise<number> {
   const recovery = await db.transaction(async (tx) => {
-    const staleWorkers = await tx
+    const recoverableWorkers = await tx
       .select({ id: aiWorkersTable.id, currentJob: aiWorkersTable.currentJob })
       .from(aiWorkersTable)
-      .where(eq(aiWorkersTable.status, "stale"));
+      .where(
+        or(
+          eq(aiWorkersTable.status, "stale"),
+          and(
+            eq(aiWorkersTable.status, "offline"),
+            sql`(${aiWorkersTable.runningJobs} > 0 OR ${aiWorkersTable.currentJob} IS NOT NULL)`,
+          ),
+        ),
+      );
 
-    if (staleWorkers.length === 0) {
+    if (recoverableWorkers.length === 0) {
       return { staleIds: [], recovered: [] as Record<string, unknown>[] };
     }
 
-    const staleIds = staleWorkers.map((worker) => worker.id);
-    const currentJobIds = staleWorkers
+    const staleIds = recoverableWorkers.map((worker) => worker.id);
+    const currentJobIds = recoverableWorkers
       .map((worker) => worker.currentJob)
       .filter((jobId): jobId is number => jobId != null);
     const ownershipClauses = [
