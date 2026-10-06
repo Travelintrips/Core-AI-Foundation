@@ -57,12 +57,22 @@ function readOnlyQueryMessage(message: string): string | null {
   return withoutExecutionPrefix.length > 0 ? withoutExecutionPrefix : null;
 }
 
-function executionGatedMessage(message: string): string | null {
+function executionCommandMessage(
+  message: string,
+): { instruction: string; gatedMessage: string } | null {
   const trimmed = message.trim();
-  if (!trimmed.startsWith("@")) return null;
-  // Keep the prefix intact. /ai/core-chat/messages is the canonical universal
-  // execution gate and strips @ exactly once before routing.
-  return trimmed.length > 1 && trimmed.slice(1).trim().length > 0 ? trimmed : null;
+  const instruction = trimmed.startsWith("@")
+    ? trimmed.slice(1).trim()
+    : trimmed;
+  if (!instruction) return null;
+
+  // MCP tool selection is already an explicit execution intent. Keep the
+  // canonical @ execution gate inside /ai/core-chat/messages, but inject it
+  // server-side so ChatGPT/Codex callers do not need a magic prefix.
+  return {
+    instruction,
+    gatedMessage: `@ ${instruction}`,
+  };
 }
 
 const TaskProgressArgs = z.object({
@@ -313,7 +323,7 @@ const tools = [
   {
     name: "query_ai_core",
     description:
-      "Ask AI Core a read-only question or inspect status. Use this for checks such as @cek, readiness, worker/task status, and explanations. This tool never creates coding tasks and never changes code, configuration, deployments, databases, or infrastructure; a leading @ is treated only as query syntax.",
+      "Ask AI Core a read-only question or inspect status. Use this for checks such as cek, readiness, worker/task status, and explanations. This tool never creates coding tasks and never changes code, configuration, deployments, databases, or infrastructure; a leading @ is accepted only for backward compatibility.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -339,7 +349,7 @@ const tools = [
   {
     name: "send_ai_core_command",
     description:
-      "Send a text instruction to AI Core with automatic routing to answers, read-only workers, or the coding control plane. Execution requires the message to begin with @. This can cause code, configuration, deployment, or other operational changes.",
+      "Send an explicit operational instruction to AI Core with automatic routing to read-only workers or the coding control plane. No @ prefix is required; the server applies the internal execution gate. This can cause code, configuration, deployment, or other operational changes.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -785,12 +795,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       );
     } else if (params.name === "send_ai_core_command") {
       const parsed = SendCommandArgs.parse(params.arguments ?? {});
-      const command = executionGatedMessage(parsed.message);
+      const command = executionCommandMessage(parsed.message);
       if (!command) {
         res.status(200).json(
           rpcResult(body.id ?? null, {
-            content: [{ type: "text", text: "Execution blocked: text commands must begin with @." }],
-            structuredContent: { blocked: true, reason: "missing_execution_prefix", requiredPrefix: "@" },
+            content: [{ type: "text", text: "Execution blocked: command cannot be empty." }],
+            structuredContent: { blocked: true, reason: "empty_execution_command" },
             isError: true,
           }),
         );
@@ -802,7 +812,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           method: "POST",
           body: JSON.stringify({
             ...parsed,
-            message: command,
+            message: command.gatedMessage,
             mode: "auto",
             source: "text",
           }),
@@ -834,7 +844,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       }
       await recordAiCoreMcpTerminalResult({
         conversationId: parsed.conversationId,
-        instruction: command,
+        instruction: command.instruction,
         payload,
       }).catch(() => {
         // Preserve the completed command result so clients do not retry execution.

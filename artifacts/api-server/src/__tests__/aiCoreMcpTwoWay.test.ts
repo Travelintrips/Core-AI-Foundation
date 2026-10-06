@@ -47,21 +47,33 @@ describe("MCP command two-way routing", () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
-  it("uses automatic dispatch and persists the reply in its conversation", async () => {
+  it("accepts plain commands, injects the internal execution gate, and persists the user instruction", async () => {
+    const response = await send("Uji koneksi MCP");
+    expect(response.body.result.isError).toBeFalsy();
+    const init = vi.mocked(fetch).mock.calls[0][1];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      mode: "auto",
+      message: "@ Uji koneksi MCP",
+      conversationId: "conversation-a",
+    });
+    expect(mocks.record).toHaveBeenCalledWith({
+      conversationId: "conversation-a",
+      instruction: "Uji koneksi MCP",
+      payload: { kind: "answer", reply: "OK" },
+    });
+  });
+  it("keeps a leading @ backward compatible without duplicating the gate", async () => {
     const response = await send("@ Uji koneksi MCP");
     expect(response.body.result.isError).toBeFalsy();
     const init = vi.mocked(fetch).mock.calls[0][1];
-    expect(JSON.parse(String(init?.body))).toMatchObject({ mode: "auto", message: "@ Uji koneksi MCP", conversationId: "conversation-a" });
-    expect(mocks.record).toHaveBeenCalledWith({ conversationId: "conversation-a", instruction: "@ Uji koneksi MCP", payload: { kind: "answer", reply: "OK" } });
-  });
-  it("preserves the execution prefix gate", async () => {
-    const response = await send("Uji koneksi MCP");
-    expect(response.body.result.isError).toBe(true);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      mode: "auto",
+      message: "@ Uji koneksi MCP",
+    });
   });
   it("preserves a completed reply if event persistence fails", async () => {
     mocks.record.mockRejectedValue(new Error("database unavailable"));
-    const response = await send("@ ping");
+    const response = await send("ping");
     expect(response.body.result.structuredContent).toMatchObject({ reply: "OK", eventDeliveryError: expect.any(String) });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
