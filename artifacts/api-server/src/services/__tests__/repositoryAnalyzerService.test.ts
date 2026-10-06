@@ -8,6 +8,8 @@ import { promisify } from "node:util";
 
 const mockDbSelect = vi.hoisted(() => vi.fn());
 const mockDbTransaction = vi.hoisted(() => vi.fn());
+const mockDbExecute = vi.hoisted(() => vi.fn());
+const mockTxExecute = vi.hoisted(() => vi.fn());
 const mockTxUpdateSet = vi.hoisted(() => vi.fn());
 const mockTxUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTxUpdateReturning = vi.hoisted(() => vi.fn());
@@ -29,16 +31,19 @@ const updateBuilder = {
   returning: mockTxUpdateReturning,
 };
 const tx = {
+  execute: mockTxExecute,
   update: vi.fn(() => updateBuilder),
 };
 
 vi.mock("drizzle-orm", () => ({
   and: vi.fn((...conditions: unknown[]) => conditions),
   eq: vi.fn((...conditions: unknown[]) => conditions),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })),
 }));
 
 vi.mock("@workspace/db", () => ({
   db: {
+    execute: mockDbExecute,
     select: mockDbSelect,
     transaction: mockDbTransaction,
   },
@@ -379,6 +384,8 @@ describe("repository analyzer execution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDbSelect.mockReturnValue(selectBuilder);
+    mockDbExecute.mockResolvedValue({ rows: [] });
+    mockTxExecute.mockResolvedValue({ rows: [] });
     mockDbTransaction.mockImplementation((callback: (executor: typeof tx) => unknown) => callback(tx));
     mockTxUpdateSet.mockReturnValue(updateBuilder);
     mockTxUpdateWhere.mockReturnValue(updateBuilder);
