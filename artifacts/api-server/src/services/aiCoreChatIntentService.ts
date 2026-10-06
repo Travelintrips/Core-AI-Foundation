@@ -9,6 +9,10 @@ import {
 import {
   detectExplicitExternalAgentClientId,
 } from "./externalAgentDispatchService.js";
+import {
+  detectAiCoreGitHubOperation,
+  type AiCoreGitHubOperation,
+} from "./aiCoreGitHubControlService.js";
 
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
 
@@ -17,6 +21,7 @@ export type AiCoreChatDispatchKind =
   | "ANSWER"
   | "REMOTE_READONLY"
   | "INFRA_OPERATION"
+  | "GITHUB_OPERATION"
   | "EXTERNAL_AGENT"
   | "CONTROL_PLANE";
 export type RemoteWorkerPreset = "check" | "build" | "test" | "review";
@@ -26,7 +31,9 @@ export interface AiCoreChatDispatchDecision {
   workload: AiCoreWorkloadRoute;
   preset: RemoteWorkerPreset | null;
   infrastructureOperation: AiCoreInfrastructureOperation | null;
+  githubOperation: AiCoreGitHubOperation | null;
   externalAgentClientId: string | null;
+  executionLane: "NO_WORKER" | "TARGETED" | "CODING" | "HEAVY";
   reason: string;
 }
 
@@ -35,6 +42,9 @@ const MUTATING =
 
 const REPOSITORY_READONLY_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
+
+const EXPLICIT_SOURCE_CHANGE =
+  /\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b.{0,80}\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|typescript|javascript|python)\b|\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul)\b.{0,80}\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b/i;
 
 export function isAiCoreCapabilityQuery(message: string): boolean {
   const value = message.trim().toLowerCase();
@@ -69,33 +79,55 @@ export function classifyAiCoreChatDispatch(
 ): AiCoreChatDispatchDecision {
   const workload = classifyAiCoreWorkload(message);
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
+  const githubOperation = detectAiCoreGitHubOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
+  const sourceChange = EXPLICIT_SOURCE_CHANGE.test(message);
 
-  // Repository-changing and critical-action intent always outranks incidental
-  // infrastructure keywords that may appear in examples, acceptance criteria,
-  // logs, or explanatory text.
+  // Explicit, structured operational actions outrank generic CRITICAL_ACTION
+  // classification. They execute in the deterministic control plane and must
+  // not create repository-analysis/coding jobs. Source-code mutation still
+  // outranks incidental infrastructure/GitHub examples.
+  if (infrastructureOperation && !sourceChange) {
+    return {
+      kind: "INFRA_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation,
+      githubOperation: null,
+      externalAgentClientId: null,
+      executionLane: "NO_WORKER",
+      reason:
+        "Explicit infrastructure action is bounded to its target system and executes directly without Repository Analyzer or coding workers.",
+    };
+  }
+
+  if (githubOperation && !sourceChange) {
+    return {
+      kind: "GITHUB_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation,
+      externalAgentClientId: null,
+      executionLane: "NO_WORKER",
+      reason:
+        "Explicit GitHub status/rerun/cancel/verified-merge action executes directly without Repository Analyzer or coding workers.",
+    };
+  }
+
   if (workload.requiresAgent) {
     return {
       kind: "CONTROL_PLANE",
       workload,
       preset: null,
       infrastructureOperation: null,
+      githubOperation: null,
       externalAgentClientId,
+      executionLane: workload.workload === "CODING" ? "CODING" : "HEAVY",
       reason:
         workload.workload === "CRITICAL_ACTION"
           ? "Critical actions must enter the control plane and stop at the explicit approval gate."
           : "Repository-changing coding work must enter the Coding Orchestrator; an explicitly named coding agent may be used only inside that controlled path.",
-    };
-  }
-
-  if (infrastructureOperation) {
-    return {
-      kind: "INFRA_OPERATION",
-      workload,
-      preset: null,
-      infrastructureOperation,
-      externalAgentClientId: null,
-      reason: "Infrastructure request is handled directly by the AI Core capability executor.",
     };
   }
 
@@ -105,7 +137,9 @@ export function classifyAiCoreChatDispatch(
       workload,
       preset: null,
       infrastructureOperation: null,
+      githubOperation: null,
       externalAgentClientId,
+      executionLane: "TARGETED",
       reason:
         "Explicit external-agent delegation is routed to the role-scoped work queue controlled by AI Core.",
     };
@@ -122,7 +156,9 @@ export function classifyAiCoreChatDispatch(
       workload,
       preset,
       infrastructureOperation: null,
+      githubOperation: null,
       externalAgentClientId: null,
+      executionLane: "TARGETED",
       reason:
         "Read-only repository inspection can run on the trusted remote worker without creating a coding task.",
     };
@@ -133,7 +169,9 @@ export function classifyAiCoreChatDispatch(
     workload,
     preset: null,
     infrastructureOperation: null,
+    githubOperation: null,
     externalAgentClientId: null,
+    executionLane: workload.useLlm ? "TARGETED" : "NO_WORKER",
     reason:
       "This request can be answered without mutating the repository or production system.",
   };
