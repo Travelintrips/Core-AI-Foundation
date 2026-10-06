@@ -13,6 +13,15 @@ on:
           - auto
           - "true"
           - "false"
+      verify_whatsapp:
+        description: "Run the real WhatsApp voice-note delivery E2E"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - "true"
+          - "false"
   workflow_run:
     workflows:
       - CI Verify
@@ -155,6 +164,79 @@ jobs:
           echo "verify_ollama=$verify_ollama" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
           echo "ollama_scope=$([ "$verify_ollama" = "true" ] && echo RUN || echo SKIP) reason=$reason"
+
+      - name: Detect whether WhatsApp verification is required
+        id: whatsapp_scope
+        if: steps.target.outputs.stale != 'true'
+        shell: bash
+        env:
+          MANUAL_WHATSAPP_MODE: ${{ inputs.verify_whatsapp || 'auto' }}
+        run: |
+          set -euo pipefail
+
+          mode="${MANUAL_WHATSAPP_MODE:-auto}"
+          if [ "$mode" = "true" ]; then
+            echo "verify_whatsapp=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_force" >> "$GITHUB_OUTPUT"
+            echo "whatsapp_scope=RUN reason=manual_force"
+            exit 0
+          fi
+          if [ "$mode" = "false" ]; then
+            echo "verify_whatsapp=false" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_skip" >> "$GITHUB_OUTPUT"
+            echo "whatsapp_scope=SKIP reason=manual_skip"
+            exit 0
+          fi
+
+          base_sha=""
+          if git rev-parse "${EXPECTED_SHA}^1" >/dev/null 2>&1; then
+            base_sha=$(git rev-parse "${EXPECTED_SHA}^1")
+          fi
+
+          if [ -z "$base_sha" ]; then
+            echo "verify_whatsapp=true" >> "$GITHUB_OUTPUT"
+            echo "reason=parent_unavailable" >> "$GITHUB_OUTPUT"
+            echo "whatsapp_scope=RUN reason=parent_unavailable"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$base_sha" "$EXPECTED_SHA")
+          verify_whatsapp=false
+          reason="no_whatsapp_sensitive_change"
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              artifacts/api-server/src/routes/coding-whatsapp-webhook.ts|\
+              artifacts/api-server/src/services/aiCoreWhatsappChatService.ts|\
+              artifacts/api-server/src/services/codingWhatsappNotificationService.ts|\
+              artifacts/api-server/src/services/codingWhatsappTaskRuntimeService.ts)
+                verify_whatsapp=true
+                reason="whatsapp_sensitive_path:$file"
+                break
+                ;;
+              artifacts/api-server/src/routes/ai-core-chat.ts)
+                if git diff -U0 "$base_sha" "$EXPECTED_SHA" -- "$file" \
+                  | grep -Eiq '^[+-].*(whatsapp|voice_note|whatsapp_voice|AI_CORE_WA|WA_E2E|delivery)'; then
+                  verify_whatsapp=true
+                  reason="whatsapp_chat_diff:$file"
+                  break
+                fi
+                ;;
+              .github/workflows/hostinger-deploy.yml)
+                if git diff -U0 "$base_sha" "$EXPECTED_SHA" -- "$file" \
+                  | grep -Eiq '^[+-].*(whatsapp|verify_whatsapp|wa_e2e|voice-note|voice_note)'; then
+                  verify_whatsapp=true
+                  reason="whatsapp_verifier_diff:$file"
+                  break
+                fi
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "verify_whatsapp=$verify_whatsapp" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "whatsapp_scope=$([ "$verify_whatsapp" = "true" ] && echo RUN || echo SKIP) reason=$reason"
 
       - name: Wait for stable exact production commit
         if: steps.target.outputs.stale != 'true'
@@ -397,7 +479,7 @@ jobs:
           NODE
 
       - name: Verify AI Core WhatsApp general chat E2E
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.whatsapp_scope.outputs.verify_whatsapp == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -405,7 +487,7 @@ jobs:
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
 
-          code=$(curl --http1.1 --retry 1 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/ai-core-wa-e2e -w "%{http_code}"             --connect-timeout 15 --max-time 120             -X POST             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/core-chat/whatsapp/e2e" || true)
+          code=$(curl --http1.1 --retry 1 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/ai-core-wa-e2e -w "%{http_code}"             --connect-timeout 15 --max-time 180             -X POST             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/core-chat/whatsapp/e2e" || true)
           echo "ai_core_whatsapp_e2e_http=${code:-curl-error}"
           cat /tmp/ai-core-wa-e2e 2>/dev/null || true
           echo
