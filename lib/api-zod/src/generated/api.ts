@@ -3954,7 +3954,7 @@ export const ListCodingTasksResponseItem = zod.object({
   "repository": zod.string(),
   "branch": zod.string(),
   "instruction": zod.string(),
-  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'COMPLETED', 'FAILED']),
+  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'BLOCKED', 'COMPLETED', 'FAILED']),
   "priority": zod.number().int().min(listCodingTasksResponsePriorityMin).max(listCodingTasksResponsePriorityMax),
   "resultSummary": zod.string().nullish(),
   "commitSha": zod.string().nullish(),
@@ -4001,7 +4001,7 @@ export const CreateCodingTaskResponse = zod.object({
   "repository": zod.string(),
   "branch": zod.string(),
   "instruction": zod.string(),
-  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'COMPLETED', 'FAILED']),
+  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'BLOCKED', 'COMPLETED', 'FAILED']),
   "priority": zod.number().int().min(createCodingTaskResponsePriorityMin).max(createCodingTaskResponsePriorityMax),
   "resultSummary": zod.string().nullish(),
   "commitSha": zod.string().nullish(),
@@ -4049,7 +4049,7 @@ export const GetCodingTaskResponse = zod.object({
   "repository": zod.string(),
   "branch": zod.string(),
   "instruction": zod.string(),
-  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'COMPLETED', 'FAILED']),
+  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'BLOCKED', 'COMPLETED', 'FAILED']),
   "priority": zod.number().int().min(getCodingTaskResponseTaskPriorityMin).max(getCodingTaskResponseTaskPriorityMax),
   "resultSummary": zod.string().nullish(),
   "commitSha": zod.string().nullish(),
@@ -4091,7 +4091,7 @@ export const updateCodingTaskBodyCommitShaMax = 200;
 
 
 export const UpdateCodingTaskBody = zod.object({
-  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'COMPLETED', 'FAILED']),
+  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'BLOCKED', 'COMPLETED', 'FAILED']),
   "resultSummary": zod.string().max(updateCodingTaskBodyResultSummaryMax).nullish(),
   "commitSha": zod.string().max(updateCodingTaskBodyCommitShaMax).nullish()
 })
@@ -4108,7 +4108,7 @@ export const UpdateCodingTaskResponse = zod.object({
   "repository": zod.string(),
   "branch": zod.string(),
   "instruction": zod.string(),
-  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'COMPLETED', 'FAILED']),
+  "status": zod.enum(['PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING', 'PR_CREATED', 'READY_REVIEW', 'BLOCKED', 'COMPLETED', 'FAILED']),
   "priority": zod.number().int().min(updateCodingTaskResponsePriorityMin).max(updateCodingTaskResponsePriorityMax),
   "resultSummary": zod.string().nullish(),
   "commitSha": zod.string().nullish(),
