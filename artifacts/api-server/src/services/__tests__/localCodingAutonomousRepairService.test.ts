@@ -880,6 +880,20 @@ describe("autonomous terminal task status", () => {
 });
 
 
+describe("autonomous reservation conflict recovery", () => {
+  it("keeps REVIEW_CONFLICT nonterminal and reports a recoverable blocker", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('case "REVIEW_CONFLICT"');
+    expect(source).toContain('"WAIT_RESERVATION_CONFLICT"');
+    expect(source).toContain('report(taskId, "BLOCKER"');
+    expect(source).toContain("recoverable: true");
+  });
+});
+
 describe("autonomous repository analyzer resource-pressure recovery", () => {
   it("restarts failed analyzer work instead of falling through to unsupported nextAction", () => {
     const source = readFileSync(

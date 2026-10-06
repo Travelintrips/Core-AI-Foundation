@@ -175,6 +175,35 @@ describe("MCP command two-way routing", () => {
     });
   });
 
+  it("returns autonomous blocker responses as BLOCKED lifecycle events", async () => {
+    mocks.list.mockResolvedValueOnce([
+      {
+        id: "response-1",
+        commandId: "command-1",
+        taskId: "task-1",
+        kind: "BLOCKER",
+        message: "Active file reservation conflict detected.",
+        checkpoint: { source: "autonomous-repair-loop" },
+        metadata: {},
+        createdAt: new Date("2026-10-06T16:00:00.000Z"),
+      },
+    ]);
+
+    const response = await callTool("read_ai_core_events", {
+      conversationId: "conversation-a",
+      limit: 25,
+    });
+
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent.events).toEqual([
+      expect.objectContaining({
+        kind: "BLOCKER",
+        eventType: "BLOCKED",
+        message: "Active file reservation conflict detected.",
+      }),
+    ]);
+  });
+
   it("preserves a completed reply if event persistence fails", async () => {
     mocks.record.mockRejectedValue(new Error("database unavailable"));
     const response = await send("ping");

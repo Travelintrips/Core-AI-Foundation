@@ -215,14 +215,18 @@ function classifyLifecycleEvent(input: {
   message: string;
   checkpoint: Record<string, unknown>;
   metadata: Record<string, unknown>;
-}): "COMPLETED" | "FAILED" | "MERGED" | "DEPLOYED" | null {
+}): "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED" | null {
   const explicit = [input.checkpoint["eventType"], input.metadata["eventType"]]
     .find((value) => typeof value === "string");
-  if (typeof explicit === "string" && ["COMPLETED", "FAILED", "MERGED", "DEPLOYED"].includes(explicit)) {
-    return explicit as "COMPLETED" | "FAILED" | "MERGED" | "DEPLOYED";
+  if (
+    typeof explicit === "string" &&
+    ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"].includes(explicit)
+  ) {
+    return explicit as "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED";
   }
   if (input.kind === "COMPLETED") return "COMPLETED";
   if (input.kind === "FAILED") return "FAILED";
+  if (input.kind === "BLOCKER") return "BLOCKED";
   const haystack = `${input.message} ${JSON.stringify(input.checkpoint)} ${JSON.stringify(input.metadata)}`.toLowerCase();
   if (/\bmerge(?:d)?\b/.test(haystack)) return "MERGED";
   if (/\bdeploy(?:ed|ment)?\b/.test(haystack) && /(success|succeed|completed|selesai|deployed)/.test(haystack)) return "DEPLOYED";

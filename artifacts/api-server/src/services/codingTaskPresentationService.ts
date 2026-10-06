@@ -35,7 +35,22 @@ export function codingTaskPresentationStatus(input: {
     return "READY_REVIEW";
   }
 
-  if (input.autonomousStatus === "FAILED" || input.autonomousStatus === "BLOCKED") {
+  // A recoverable technical blocker is not a terminal task failure. Keep it
+  // visible as BLOCKED so the fallback coordinator can retry or choose another
+  // path without falsely closing the overall job.
+  if (input.autonomousStatus === "BLOCKED") {
+    if (
+      input.taskStatus === "READY_REVIEW" ||
+      input.taskStatus === "FAILED" ||
+      input.taskStatus === "ANALYZING"
+    ) {
+      return "BLOCKED";
+    }
+  }
+
+  // FAILED remains terminal only when the autonomous runtime itself has
+  // exhausted its allowed recovery path and no active retry is running.
+  if (input.autonomousStatus === "FAILED") {
     if (
       input.taskStatus === "READY_REVIEW" ||
       input.taskStatus === "FAILED" ||
@@ -45,8 +60,10 @@ export function codingTaskPresentationStatus(input: {
     }
   }
 
+  // READY_REVIEW without an explicit critical approval is a technical
+  // intervention state, not human review and not terminal failure.
   if (input.taskStatus === "READY_REVIEW") {
-    return "FAILED";
+    return "BLOCKED";
   }
 
   return input.taskStatus;

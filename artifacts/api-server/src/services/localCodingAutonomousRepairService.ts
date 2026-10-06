@@ -1185,6 +1185,18 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     }
 
     switch (state.nextAction) {
+      case "REVIEW_CONFLICT": {
+        const message =
+          "Active file reservation conflict is recoverable. The task stays blocked while ChatGPT/fallback coordination resolves the overlap or retries after the reservation clears.";
+        await setState(taskId, "BLOCKED", "WAIT_RESERVATION_CONFLICT", message);
+        await report(taskId, "BLOCKER", message, {
+          source: "autonomous-repair-loop",
+          nextAction: "REVIEW_CONFLICT",
+          recoverable: true,
+        });
+        return { taskId, status: "BLOCKED", action: "WAIT_RESERVATION_CONFLICT" };
+      }
+
       case "APPROVE_PLAN":
         await reserveCycle();
         await approvePlanAndStartCoding(taskId);
