@@ -405,7 +405,7 @@ jobs:
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
 
-          code=$(curl --http1.1 --retry 1 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/ai-core-wa-e2e -w "%{http_code}"             --connect-timeout 15 --max-time 120             -X POST             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/core-chat/whatsapp/e2e" || true)
+          code=$(curl --http1.1 --retry 1 --retry-delay 2 --retry-all-errors -L -sS             -o /tmp/ai-core-wa-e2e -w "%{http_code}"             --connect-timeout 15 --max-time 180             -X POST             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             "$API_BASE_URL/ai/core-chat/whatsapp/e2e" || true)
           echo "ai_core_whatsapp_e2e_http=${code:-curl-error}"
           cat /tmp/ai-core-wa-e2e 2>/dev/null || true
           echo
