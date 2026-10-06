@@ -3,6 +3,28 @@ import { describe, expect, it } from "vitest";
 import { codingTaskPresentationStatus } from "../codingTaskPresentationService.js";
 
 describe("coding task presentation status", () => {
+  it("maps multi-worker review to automated TESTING, never human review", () => {
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        workstreamStatus: "REVIEW_REQUIRED",
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("TESTING");
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        workstreamStatus: "COMPLETED",
+      }),
+    ).toBe("COMPLETED");
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "READY_REVIEW",
+        workstreamStatus: "FAILED",
+      }),
+    ).toBe("FAILED");
+  });
+
   it("shows terminal autonomous failure instead of READY_REVIEW", () => {
     expect(
       codingTaskPresentationStatus({
