@@ -47,6 +47,33 @@ describe("MCP command two-way routing", () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
+  it("answers MCP discovery from the live tool registry without falling through to chat or database routing", async () => {
+    const response = await callTool("query_ai_core", {
+      message: "cek discovery MCP AI Core yang aktif saat ini. Sebutkan jumlah tool dan nama semua tool yang terhubung",
+      conversationId: "conversation-a",
+    });
+
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      kind: "answer",
+      route: "MCP_DISCOVERY",
+      toolCount: 8,
+      source: "LIVE_MCP_TOOL_REGISTRY",
+      tools: [
+        "query_ai_core",
+        "send_ai_core_command",
+        "get_ai_core_task_progress",
+        "subscribe_ai_core_events",
+        "read_ai_core_events",
+        "ack_ai_core_event",
+        "unsubscribe_ai_core_events",
+        "get_profile",
+      ],
+      events: ["ai_core.task.terminal"],
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("accepts plain commands, injects the internal execution gate, and persists the user instruction", async () => {
     const response = await send("Uji koneksi MCP");
     expect(response.body.result.isError).toBeFalsy();
