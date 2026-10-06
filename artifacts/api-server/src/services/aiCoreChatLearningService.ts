@@ -181,7 +181,7 @@ export async function listAiCoreChatActivity(input?: {
           (eventType ? `Native lifecycle event ${eventType}` : "Native AI Core event");
 
         return [{
-          id: `native:${String(row["event_id"] ?? randomUUID())}`,
+          id: `native:${String(row["event_id"] ?? row["created_at"] ?? "unknown")}`,
           conversationId: null,
           role: "assistant",
           direction: "ai_core_to_chatgpt",
