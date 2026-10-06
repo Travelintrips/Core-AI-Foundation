@@ -2,10 +2,33 @@ import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
 
-const execFileAsync = promisify(execFile);
+function execFileWithInput(
+  file: string,
+  args: string[],
+  options: { timeout: number; maxBuffer: number },
+  input?: string,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      file,
+      args,
+      { ...options, encoding: "utf8" },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+        });
+      },
+    );
+    child.stdin?.end(input);
+  });
+}
 
 const GCP_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 const GCP_COMPUTE_API = "https://compute.googleapis.com/compute/v1";
@@ -365,6 +388,12 @@ async function callHostinger(
   const runDockerOverSsh = async (
     sshOperation: AiCoreInfrastructureOperation,
     sshProject: string,
+    options: {
+      content?: string;
+      environment?: string;
+      envKey?: string;
+      envValue?: string;
+    } = {},
   ): Promise<unknown> => {
     const host = config.sshHost;
     const user = config.sshUser;
@@ -380,7 +409,7 @@ async function callHostinger(
     if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
       throw new Error("HOSTINGER_SSH_PORT must be a valid TCP port.");
     }
-    if (!projectDir || !projectDir.startsWith("/")) {
+    if (!projectDir || !projectDir.startsWith("/") || projectDir.includes("\0")) {
       throw new Error(
         "Hostinger SSH Docker fallback requires HOSTINGER_DOCKER_PROJECT_DIR or directory=<absolute-path>.",
       );
@@ -389,21 +418,72 @@ async function callHostinger(
       throw new Error("Docker project name may contain only letters, numbers, dashes, and underscores.");
     }
 
-    const prefix = `cd ${shellQuote(projectDir)} && docker compose -p ${shellQuote(sshProject)}`;
-    const command =
-      sshOperation === "HOSTINGER_DOCKER_STATUS" || sshOperation === "HOSTINGER_DOCKER_CONTAINERS"
-        ? `${prefix} ps --format json`
-        : sshOperation === "HOSTINGER_DOCKER_LOGS"
-          ? `${prefix} logs --tail 200 --no-color`
-          : sshOperation === "HOSTINGER_DOCKER_START"
-            ? `${prefix} up -d`
-            : sshOperation === "HOSTINGER_DOCKER_STOP"
-              ? `${prefix} stop`
-              : sshOperation === "HOSTINGER_DOCKER_RESTART"
-                ? `${prefix} restart`
-                : sshOperation === "HOSTINGER_DOCKER_UPDATE"
-                  ? `${prefix} pull && ${prefix} up -d --remove-orphans`
-                  : "";
+    const projectDirQuoted = shellQuote(projectDir);
+    const projectQuoted = shellQuote(sshProject);
+    const prefix = `cd ${projectDirQuoted} && docker compose -p ${projectQuoted}`;
+    let command = "";
+    let stdinPayload: string | undefined;
+
+    if (sshOperation === "HOSTINGER_DOCKER_STATUS" || sshOperation === "HOSTINGER_DOCKER_CONTAINERS") {
+      command = `${prefix} ps --format json`;
+    } else if (sshOperation === "HOSTINGER_DOCKER_LOGS") {
+      command = `${prefix} logs --tail 200 --no-color`;
+    } else if (sshOperation === "HOSTINGER_DOCKER_START") {
+      command = `${prefix} up -d`;
+    } else if (sshOperation === "HOSTINGER_DOCKER_STOP") {
+      command = `${prefix} stop`;
+    } else if (sshOperation === "HOSTINGER_DOCKER_RESTART") {
+      command = `${prefix} restart`;
+    } else if (sshOperation === "HOSTINGER_DOCKER_UPDATE") {
+      command = `${prefix} pull && ${prefix} up -d --remove-orphans`;
+    } else if (sshOperation === "HOSTINGER_DOCKER_DEPLOY") {
+      const content = options.content ?? "";
+      const environment = options.environment ?? "";
+      if (!content) {
+        throw new Error("Hostinger SSH Docker deploy requires compose content or an HTTPS/HTTP compose URL.");
+      }
+
+      const isComposeUrl = /^https?:\/\/[^\s]+$/i.test(content);
+      const envBase64 = Buffer.from(environment, "utf8").toString("base64");
+      if (isComposeUrl) {
+        stdinPayload = envBase64 + "\n";
+        command =
+          `umask 077; mkdir -p ${projectDirQuoted} && cd ${projectDirQuoted} && ` +
+          `curl -fsSL --max-time 30 ${shellQuote(content)} -o docker-compose.yml.tmp && ` +
+          `mv docker-compose.yml.tmp docker-compose.yml && ` +
+          `IFS= read -r env_b64; ` +
+          `if [ -n "$env_b64" ]; then printf '%s' "$env_b64" | base64 -d > .env.tmp && mv .env.tmp .env; fi; ` +
+          `docker compose -p ${projectQuoted} up -d --remove-orphans`;
+      } else {
+        const composeBase64 = Buffer.from(content, "utf8").toString("base64");
+        stdinPayload = composeBase64 + "\n" + envBase64 + "\n";
+        command =
+          `umask 077; mkdir -p ${projectDirQuoted} && cd ${projectDirQuoted} && ` +
+          `IFS= read -r compose_b64; IFS= read -r env_b64; ` +
+          `printf '%s' "$compose_b64" | base64 -d > docker-compose.yml.tmp && ` +
+          `mv docker-compose.yml.tmp docker-compose.yml && ` +
+          `if [ -n "$env_b64" ]; then printf '%s' "$env_b64" | base64 -d > .env.tmp && mv .env.tmp .env; fi; ` +
+          `docker compose -p ${projectQuoted} up -d --remove-orphans`;
+      }
+    } else if (sshOperation === "HOSTINGER_DOCKER_ENV_SET") {
+      const key = options.envKey ?? "";
+      const secretValue = options.envValue ?? "";
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        throw new Error("Hostinger env/secret update requires key=<ENV_NAME>.");
+      }
+      if (!secretValue || /[\r\n]/.test(secretValue)) {
+        throw new Error("Hostinger SSH env/secret value must be a non-empty single-line value.");
+      }
+
+      stdinPayload = Buffer.from(secretValue, "utf8").toString("base64") + "\n";
+      command =
+        `umask 077; mkdir -p ${projectDirQuoted} && cd ${projectDirQuoted} && touch .env && ` +
+        `awk -v key=${shellQuote(key)} 'index($0, key "=") != 1 { print }' .env > .env.next && ` +
+        `printf '%s=' ${shellQuote(key)} >> .env.next; ` +
+        `IFS= read -r value_b64; printf '%s' "$value_b64" | base64 -d >> .env.next; ` +
+        `printf '\\n' >> .env.next; mv .env.next .env; chmod 600 .env; ` +
+        `docker compose -p ${projectQuoted} up -d --remove-orphans`;
+    }
 
     if (!command) {
       throw new Error(
@@ -417,7 +497,7 @@ async function callHostinger(
       await writeFile(keyPath, privateKey.endsWith("\n") ? privateKey : privateKey + "\n", {
         mode: 0o600,
       });
-      const { stdout, stderr } = await execFileAsync("ssh", [
+      const { stdout, stderr } = await execFileWithInput("ssh", [
         "-i", keyPath,
         "-p", port,
         "-o", "BatchMode=yes",
@@ -428,14 +508,33 @@ async function callHostinger(
       ], {
         timeout: 30_000,
         maxBuffer: 1024 * 1024,
-      });
-      return {
+      }, stdinPayload);
+
+      const baseResult = {
         transport: "ssh",
         host,
         user,
         port: Number(port),
         project: sshProject,
         directory: projectDir,
+      };
+      if (sshOperation === "HOSTINGER_DOCKER_ENV_SET") {
+        return {
+          ...baseResult,
+          key: options.envKey,
+          value: "[REDACTED]",
+          applied: true,
+        };
+      }
+      if (sshOperation === "HOSTINGER_DOCKER_DEPLOY") {
+        return {
+          ...baseResult,
+          deployed: true,
+          environmentApplied: Boolean(options.environment),
+        };
+      }
+      return {
+        ...baseResult,
         stdout: stdout.trim(),
         stderr: stderr.trim(),
       };
@@ -978,36 +1077,45 @@ async function callHostinger(
         if (!secretValue) {
           throw new Error("Hostinger env/secret update requires value=<secret-value> or env=KEY=value.");
         }
-        const encodedProject = encodeURIComponent(project);
-        const current = await firstSuccessful(`${vmBase}/docker/${encodedProject}`, "GET");
-        if (current.status < 200 || current.status >= 300) {
-          throw new Error(`Hostinger Docker project read failed with HTTP ${current.status}.`);
+
+        try {
+          const encodedProject = encodeURIComponent(project);
+          const current = await firstSuccessful(`${vmBase}/docker/${encodedProject}`, "GET");
+          if (current.status < 200 || current.status >= 300) {
+            throw new Error(`Hostinger Docker project read failed with HTTP ${current.status}.`);
+          }
+          const currentProject = current.data && typeof current.data === "object"
+            ? current.data as Record<string, unknown>
+            : {};
+          const content = typeof currentProject["content"] === "string" ? currentProject["content"] : "";
+          if (!content) throw new Error("Hostinger Docker project response did not include compose content.");
+          const variables = parseEnvironment(
+            typeof currentProject["environment"] === "string" ? currentProject["environment"] : "",
+          );
+          variables.set(key, secretValue);
+          const environment = serializeEnvironment(variables);
+          const result = await firstSuccessful(`${vmBase}/docker`, "POST", {
+            project_name: project,
+            content,
+            environment,
+          });
+          if (result.status < 200 || result.status >= 300) {
+            throw new Error(`Hostinger Docker environment update failed with HTTP ${result.status}.`);
+          }
+          data = {
+            project,
+            key,
+            value: "[REDACTED]",
+            environmentVariableCount: variables.size,
+            result: result.data,
+          };
+        } catch (error) {
+          if (!isDockerManagerUnsupported(error)) throw error;
+          data = await runDockerOverSsh(operation, project, {
+            envKey: key,
+            envValue: secretValue,
+          });
         }
-        const currentProject = current.data && typeof current.data === "object"
-          ? current.data as Record<string, unknown>
-          : {};
-        const content = typeof currentProject["content"] === "string" ? currentProject["content"] : "";
-        if (!content) throw new Error("Hostinger Docker project response did not include compose content.");
-        const variables = parseEnvironment(
-          typeof currentProject["environment"] === "string" ? currentProject["environment"] : "",
-        );
-        variables.set(key, secretValue);
-        const environment = serializeEnvironment(variables);
-        const result = await firstSuccessful(`${vmBase}/docker`, "POST", {
-          project_name: project,
-          content,
-          environment,
-        });
-        if (result.status < 200 || result.status >= 300) {
-          throw new Error(`Hostinger Docker environment update failed with HTTP ${result.status}.`);
-        }
-        data = {
-          project,
-          key,
-          value: "[REDACTED]",
-          environmentVariableCount: variables.size,
-          result: result.data,
-        };
       } else if (operation === "HOSTINGER_DOCKER_DEPLOY") {
         const deployProject = project || valueOf("project");
         const content = valueOf("content");
@@ -1015,11 +1123,25 @@ async function callHostinger(
         if (!deployProject || !content) {
           throw new Error("Docker deploy requires project=<name> and content=<compose URL or raw YAML>.");
         }
-        const body: Record<string, unknown> = { project_name: deployProject, content };
-        if (environment) body.environment = environment;
-        const result = await firstSuccessful(`${vmBase}/docker`, "POST", body);
-        if (result.status < 200 || result.status >= 300) throw new Error(`Hostinger Docker deploy failed with HTTP ${result.status}.`);
-        data = result.data;
+        if (!/^[A-Za-z0-9_-]+$/.test(deployProject)) {
+          throw new Error("Docker project name may contain only letters, numbers, dashes, and underscores.");
+        }
+
+        try {
+          const body: Record<string, unknown> = { project_name: deployProject, content };
+          if (environment) body.environment = environment;
+          const result = await firstSuccessful(`${vmBase}/docker`, "POST", body);
+          if (result.status < 200 || result.status >= 300) {
+            throw new Error(`Hostinger Docker deploy failed with HTTP ${result.status}.`);
+          }
+          data = result.data;
+        } catch (error) {
+          if (!isDockerManagerUnsupported(error)) throw error;
+          data = await runDockerOverSsh(operation, deployProject, {
+            content,
+            environment,
+          });
+        }
       } else {
         const encodedProject = encodeURIComponent(project);
         const suffix =
