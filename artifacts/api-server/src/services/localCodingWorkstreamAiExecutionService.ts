@@ -1772,6 +1772,25 @@ async function moveWorkstreamFailureToRepairInbox(input: {
   // never overwrite its child task or create a stale repair incident.
   if (!failedWorkstream) return false;
 
+  // A terminal workstream failure makes the parent task graph terminal too.
+  // Leaving the graph RUNNING after all execution has stopped keeps its file
+  // reservations alive and blocks unrelated follow-up tasks until TTL expiry.
+  // Only transition still-active graph states so a concurrent successful
+  // finalization can never be overwritten.
+  await db
+    .update(aiCodingTaskGraphsTable)
+    .set({
+      status: "FAILED",
+      completedAt: now,
+    })
+    .where(
+      and(
+        eq(aiCodingTaskGraphsTable.id, input.payload.graphId),
+        inArray(aiCodingTaskGraphsTable.status, ["APPROVED", "RUNNING"]),
+      ),
+    )
+    .catch(() => undefined);
+
   if (failedWorkstream.childRunId) {
     await db
       .update(aiCodingRunsTable)
