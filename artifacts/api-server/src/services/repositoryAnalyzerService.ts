@@ -772,15 +772,52 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       `${input.title}\n${input.description}`,
       contextPackage,
     );
+
+    const predictedChangeFiles = [
+      ...new Set(
+        localExecutionPlan.targetFiles.length > 0
+          ? localExecutionPlan.targetFiles
+          : [
+              ...contextPackage.relevantFiles.slice(0, 8).map((item) => item.path),
+              ...contextPackage.affectedFiles.slice(0, 8),
+            ],
+      ),
+    ].slice(0, 40);
+
+    phase = "reserve_change_set";
+    const changeReservation = await reserveCodingFileSet({
+      repository: input.repository,
+      branch: input.branch,
+      taskId: input.codingTaskId,
+      runId: input.codingRunId,
+      files: predictedChangeFiles,
+    });
+
     phase = "execute_local_plan";
-    const localExecution =
-      workspace.cleanup && localExecutionPlan.status === "EXECUTABLE"
-        ? await executeLocalCodingPlan(workspace.path, localExecutionPlan, {
-            trustedWorkspace: true,
-            expectedHeadSha: contextPackage.headSha,
-            runVerification: false,
-          })
-        : null;
+    const localExecution: LocalCodingExecutionResult | null =
+      changeReservation.status === "CONFLICT"
+        ? {
+            status: "BLOCKED",
+            reason:
+              "Predicted file changes overlap another active coding task. " +
+              "Sequence or revise this task before coding continues.",
+            changedFiles: [],
+            patch: "",
+            verification: [],
+            scriptsExecuted: false,
+            rolledBack: false,
+            warnings: changeReservation.conflicts.slice(0, 12).map(
+              (conflict) =>
+                `Conflict: ${conflict.file} reserved by task ${conflict.taskId}`,
+            ),
+          }
+        : workspace.cleanup && localExecutionPlan.status === "EXECUTABLE"
+          ? await executeLocalCodingPlan(workspace.path, localExecutionPlan, {
+              trustedWorkspace: true,
+              expectedHeadSha: contextPackage.headSha,
+              runVerification: false,
+            })
+          : null;
 
     const relevantFiles = contextPackage.relevantFiles.map((item) => item.path);
     const filesInspected = [...new Set([
