@@ -76,6 +76,11 @@ vi.mock("../../middleware/internalAuth.js", () => ({
       res.status(401).json({ error: "Not authenticated" });
     }
   },
+  requireInternalRole: () => (
+    _req: import("express").Request,
+    _res: import("express").Response,
+    next: import("express").NextFunction,
+  ) => next(),
 }));
 
 vi.mock("../../middleware/rateLimiter.js", () => ({
