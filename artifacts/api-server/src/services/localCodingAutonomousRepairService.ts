@@ -42,6 +42,7 @@ import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecov
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
+  revokeAiHandoff,
   startAiHandoffPreparation,
 } from "./localCodingAiHandoffService.js";
 import { enqueueCodingAiExecution } from "./localCodingAiQueueRuntimeService.js";
@@ -1418,6 +1419,31 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         "coding_task",
         "success",
         { nextAction: state.nextAction },
+      ).catch(() => undefined);
+      return { taskId, status: "ACTIVE", action };
+    }
+
+    const stalePreparedHandoff =
+      /Repository HEAD changed from [0-9a-f]{40} to [0-9a-f]{40}; prepare the AI handoff again/i.test(message) &&
+      state?.task.status === "READY_REVIEW" &&
+      ["APPROVE_AI_HANDOFF", "AI_HANDOFF_APPROVED"].includes(state.nextAction ?? "");
+
+    if (stalePreparedHandoff) {
+      const action = "RECOVER_STALE_AI_HANDOFF";
+      await revokeAiHandoff(taskId);
+      await refundReservedActionCycle(taskId).catch(() => undefined);
+      await setState(taskId, "ACTIVE", action, null);
+      await logAudit(
+        "coding-autonomous",
+        "stale_ai_handoff_reprepared",
+        taskId,
+        "coding_task",
+        "success",
+        {
+          previousNextAction: state.nextAction,
+          recoveryNextAction: "AI_REQUIRED",
+          error: message.slice(0, 1000),
+        },
       ).catch(() => undefined);
       return { taskId, status: "ACTIVE", action };
     }

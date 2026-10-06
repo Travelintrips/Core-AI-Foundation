@@ -57,10 +57,14 @@ export function resolveCommand(event, env) {
       autonomousE2E =
         event.label.name === 'ai-task' &&
         /^autonomous_e2e:\s*true\s*$/im.test(body);
+      const issueRequestId =
+        event.label.name === 'ai-task'
+          ? `issue-${issueNumber}-run-${env.GITHUB_RUN_ID}`
+          : `issue-${issueNumber}`;
       inputs = {
         action: event.label.name === 'ai-audit' ? 'audit' : 'submit',
         instruction: `${event.issue.title ?? ''}\n\n${event.issue.body ?? ''}`.trim(),
-        request_id: `issue-${issueNumber}`,
+        request_id: issueRequestId,
         max_cycles: '60',
       };
     }

@@ -112,6 +112,20 @@ test('only owner-authored labeled issues are accepted', () => {
     { ...issue, action: 'edited' },
   ]) assert.throws(() => resolveCommand(bad, issueEnv), /owner-authorized/);
 });
+test('relabeling an ai-task creates a fresh request id while a rerun of the same workflow stays idempotent', () => {
+  const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
+  const event = { ...issue, label: { name: 'ai-task' } };
+
+  const first = resolveCommand(event, { ...issueEnv, GITHUB_RUN_ID: '9001' });
+  const sameRun = resolveCommand(event, { ...issueEnv, GITHUB_RUN_ID: '9001' });
+  const relabeled = resolveCommand(event, { ...issueEnv, GITHUB_RUN_ID: '9002' });
+
+  assert.equal(first.requestId, 'issue-321-run-9001');
+  assert.equal(sameRun.requestId, first.requestId);
+  assert.equal(relabeled.requestId, 'issue-321-run-9002');
+  assert.notEqual(relabeled.requestId, first.requestId);
+});
+
 test('autonomous E2E authority requires an explicit owner ai-task marker', () => {
   const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
   const marked = {
@@ -278,7 +292,7 @@ test('owner issue reruns surface a completed AI Core task as TASK_COMPLETED', as
   const command = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
   const instruction = command.instruction + '\n\nExecution policy: This is an owner-authorized autonomous coding task. Use an isolated working branch. Do not bypass tests, access secrets, force-push, weaken security controls, or directly modify production. Complete the implementation end-to-end: create the patch, run required verification/CI, commit, push, open a pull request, and merge it automatically only after all required checks pass. After merge, allow the normal production deployment workflow to run. Do not stop for ordinary human review; only fail closed for an actual critical security/destructive-operation safeguard.';
   const f = fakeApi({
-    tasks: [{ id, repository: REPOSITORY, projectName: 'GitHub Trigger issue-321', instruction }],
+    tasks: [{ id, repository: REPOSITORY, projectName: 'GitHub Trigger issue-321-run-1234', instruction }],
     state404: false,
   });
   const result = await execute(command, f.api, { waitMs: 0 });
