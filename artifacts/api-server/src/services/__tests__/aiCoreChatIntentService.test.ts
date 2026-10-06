@@ -131,7 +131,8 @@ describe("AI Core Chat automatic dispatch", () => {
     );
 
     expect(decision.kind).toBe("CONTROL_PLANE");
-    expect(decision.workload.workload).toBe("CODING");
+    expect(decision.workload.workload).toBe("CRITICAL_ACTION");
+    expect(decision.githubOperation).toBeNull();
   });
 
   it("does not let incidental infrastructure examples hijack a coding-fix request", () => {
