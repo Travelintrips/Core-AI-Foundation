@@ -4,18 +4,69 @@ const baseUrl = (process.env.API_BASE_URL || "https://aicore.cstlogistic.co.id/a
 const adminKey = process.env.ADMIN_API_KEY;
 assert.ok(adminKey, "ADMIN_API_KEY is required");
 
+const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientRequestError(error) {
+  return (
+    error?.name === "TimeoutError" ||
+    error?.name === "AbortError" ||
+    error instanceof TypeError ||
+    ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN"].includes(error?.cause?.code)
+  );
+}
+
 async function request(path, payload) {
-  const response = await fetch(baseUrl + path, {
-    method: payload ? "POST" : "GET",
-    headers: {
-      "x-admin-api-key": adminKey,
-      ...(payload ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(payload ? { body: JSON.stringify(payload) } : {}),
-    signal: AbortSignal.timeout(30_000),
-  });
-  assert.equal(response.status, 200, `${path}: HTTP ${response.status}`);
-  return response;
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(baseUrl + path, {
+        method: payload ? "POST" : "GET",
+        headers: {
+          "x-admin-api-key": adminKey,
+          ...(payload ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(payload ? { body: JSON.stringify(payload) } : {}),
+        signal: AbortSignal.timeout(25_000),
+      });
+
+      if (response.status === 200) return response;
+
+      if (!transientStatuses.has(response.status) || attempt === maxAttempts) {
+        assert.equal(response.status, 200, `${path}: HTTP ${response.status}`);
+      }
+
+      console.warn(
+        JSON.stringify({
+          phase: "request_retry",
+          path,
+          attempt,
+          maxAttempts,
+          status: response.status,
+        }),
+      );
+    } catch (error) {
+      if (!isTransientRequestError(error) || attempt === maxAttempts) throw error;
+
+      console.warn(
+        JSON.stringify({
+          phase: "request_retry",
+          path,
+          attempt,
+          maxAttempts,
+          error: error?.name || "request_error",
+        }),
+      );
+    }
+
+    await sleep(attempt * 2_000);
+  }
+
+  throw new Error(`${path}: exhausted bounded retries`);
 }
 
 const question = "cek berapa pendapatan sport center kemarin";
