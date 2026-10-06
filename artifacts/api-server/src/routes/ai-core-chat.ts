@@ -2228,16 +2228,21 @@ async function runGcpBillingStatusOperation(
   message: string,
 ): Promise<Record<string, unknown> | null> {
   if (!isGcpBillingStatusRequest(message)) return null;
-  const billing = await getGcpWorkspaceCostUsage("daily").catch((error: unknown) => ({
-    configured: false as const,
-    range: "daily" as const,
-    currency: process.env["GCP_BILLING_CURRENCY"] ?? "IDR",
-    projectId: process.env["GCP_OLLAMA_VM_PROJECT"] ?? "",
-    totalCost: 0,
-    totalUsageHours: 0,
-    series: [],
-    message: error instanceof Error ? error.message : "GCP Billing status check failed.",
-  }));
+  const readBilling = async (range: "daily" | "monthly") =>
+    await getGcpWorkspaceCostUsage(range).catch((error: unknown) => ({
+      configured: false as const,
+      range,
+      currency: process.env["GCP_BILLING_CURRENCY"] ?? "IDR",
+      projectId: process.env["GCP_OLLAMA_VM_PROJECT"] ?? "",
+      totalCost: 0,
+      totalUsageHours: 0,
+      series: [],
+      message: error instanceof Error ? error.message : "GCP Billing status check failed.",
+    }));
+  const [billing, monthlyBilling] = await Promise.all([
+    readBilling("daily"),
+    readBilling("monthly"),
+  ]);
   return {
     kind: "answer",
     route: "GCP_BILLING_STATUS",
@@ -2255,6 +2260,15 @@ async function runGcpBillingStatusOperation(
       configured: billing.configured,
       projectId: billing.projectId,
       currency: billing.currency,
+      daily: {
+        totalCost: billing.totalCost,
+        totalUsageHours: billing.totalUsageHours,
+      },
+      monthly: {
+        configured: monthlyBilling.configured,
+        totalCost: monthlyBilling.totalCost,
+        totalUsageHours: monthlyBilling.totalUsageHours,
+      },
       ...(billing.configured ? {} : { message: billing.message }),
     },
   };
