@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: ai-coding-control-plane-e2e-canary
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy-gate:
@@ -30,6 +30,7 @@ jobs:
     outputs:
       should_run: ${{ steps.gate.outputs.should_run }}
       base_sha: ${{ steps.gate.outputs.base_sha }}
+      reason: ${{ steps.gate.outputs.reason }}
     steps:
       - name: Resolve verified production SHA
         id: gate
@@ -51,8 +52,103 @@ jobs:
             echo "Nightly E2E resolved latest successful Production Verify SHA $base_sha."
           fi
 
-          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          should_run=true
+          reason="manual_dispatch"
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            should_run=true
+            reason="no_previous_success_marker"
+
+            artifact_code=$(curl -sS -L -o /tmp/canary-artifacts.json -w "%{http_code}" \
+              --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?name=control-plane-e2e-success&per_page=20" || true)
+
+            if [ "$artifact_code" = "200" ]; then
+              archive_url=$(jq -r '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].archive_download_url // empty' /tmp/canary-artifacts.json)
+              if [ -n "$archive_url" ]; then
+                download_code=$(curl -sS -L -o /tmp/canary-marker.zip -w "%{http_code}" \
+                  --connect-timeout 10 --max-time 30 \
+                  -H "Authorization: Bearer $GH_TOKEN" \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "$archive_url" || true)
+
+                if [ "$download_code" = "200" ]; then
+                  last_success_sha=$(unzip -p /tmp/canary-marker.zip base_sha.txt 2>/dev/null | tr -d '\r\n' || true)
+                  if [[ "$last_success_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+                    if [ "$last_success_sha" = "$base_sha" ]; then
+                      should_run=false
+                      reason="same_verified_sha_as_last_success"
+                    else
+                      compare_code=$(curl -sS -o /tmp/canary-compare.json -w "%{http_code}" \
+                        --connect-timeout 10 --max-time 30 \
+                        -H "Authorization: Bearer $GH_TOKEN" \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        "https://api.github.com/repos/$GITHUB_REPOSITORY/compare/$last_success_sha...$base_sha" || true)
+
+                      if [ "$compare_code" = "200" ]; then
+                        file_count=$(jq '.files | length' /tmp/canary-compare.json)
+                        if [ "$file_count" -ge 300 ]; then
+                          should_run=true
+                          reason="compare_file_limit_fail_safe"
+                        else
+                          should_run=false
+                          reason="no_control_plane_change_since_last_success"
+                          while IFS= read -r file; do
+                            [ -z "$file" ] && continue
+                            case "$file" in
+                              .github/workflows/coding-control-plane-e2e-canary.yml|\
+                              artifacts/api-server/src/routes/coding-*.ts|\
+                              artifacts/api-server/src/routes/ai-coding-*.ts|\
+                              artifacts/api-server/src/services/localCoding*.ts|\
+                              artifacts/api-server/src/services/coding*.ts|\
+                              artifacts/api-server/src/services/repositoryAnalyzerService.ts|\
+                              artifacts/api-server/src/services/parallelCodingScheduler.ts|\
+                              artifacts/api-server/src/services/jobDispatcherService.ts|\
+                              artifacts/api-server/src/services/jobWorkerService.ts|\
+                              artifacts/api-server/src/services/workerClusterService.ts|\
+                              artifacts/api-server/src/workers/*|\
+                              artifacts/api-server/src/repositories/*coding*|\
+                              artifacts/api-server/src/db/*|\
+                              lib/api-spec/*|\
+                              lib/api-zod/*|\
+                              package.json|\
+                              pnpm-lock.yaml)
+                                should_run=true
+                                reason="control_plane_change:$file"
+                                break
+                                ;;
+                            esac
+                          done < <(jq -r '.files[]?.filename' /tmp/canary-compare.json)
+                        fi
+                      else
+                        should_run=true
+                        reason="compare_lookup_failed_fail_safe"
+                      fi
+                    fi
+                  else
+                    should_run=true
+                    reason="invalid_success_marker_fail_safe"
+                  fi
+                else
+                  should_run=true
+                  reason="success_marker_download_failed_fail_safe"
+                fi
+              fi
+            else
+              should_run=true
+              reason="success_marker_lookup_failed_fail_safe"
+            fi
+          fi
+
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "control_plane_e2e_scope=$should_run reason=$reason base_sha=$base_sha"
 
   planner-capacity:
     name: Check planner capacity
@@ -705,6 +801,25 @@ jobs:
           echo "commit_created=false"
           echo "pushed=false"
           echo "merged=false"
+
+      - name: Write successful scheduled E2E baseline marker
+        if: success() && github.event_name == 'schedule'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/control-plane-e2e-success
+          printf '%s\n' "$BASE_SHA" > /tmp/control-plane-e2e-success/base_sha.txt
+
+      - name: Upload successful scheduled E2E baseline marker
+        if: success() && github.event_name == 'schedule'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-plane-e2e-success
+          path: /tmp/control-plane-e2e-success/base_sha.txt
+          retention-days: 30
+          if-no-files-found: error
 
       - name: Cleanup verification-only canary artifacts
         if: always() && steps.task.outputs.task_id != ''
