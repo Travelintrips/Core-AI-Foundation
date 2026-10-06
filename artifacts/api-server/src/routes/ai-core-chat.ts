@@ -58,6 +58,14 @@ import {
   executeAiCoreInfrastructureOperation,
 } from "../services/aiCoreInfrastructureControlService.js";
 import {
+  detectAiCoreGitHubOperation,
+  executeAiCoreGitHubOperation,
+} from "../services/aiCoreGitHubControlService.js";
+import {
+  parseAiCoreTrustedExecutionHandoff,
+  stripAiCoreTrustedExecutionHandoff,
+} from "../services/aiCoreTrustedHandoffService.js";
+import {
   getAiCoreCapabilityRegistrySnapshot,
   renderAiCoreCapabilityRegistry,
 } from "../services/aiCoreCapabilityRegistryService.js";
@@ -2209,18 +2217,21 @@ async function runAdminDbMutationOperation(
 async function runInfrastructureOperation(
   message: string,
 ): Promise<Record<string, unknown> | null> {
-  const operation = detectAiCoreInfrastructureOperation(message);
+  const handoff = parseAiCoreTrustedExecutionHandoff(message);
+  const command = stripAiCoreTrustedExecutionHandoff(message);
+  const operation = detectAiCoreInfrastructureOperation(command);
   if (!operation) return null;
 
   const result = await executeAiCoreInfrastructureOperation({
     operation,
-    requestedBy: "ai-core-chat",
-    message,
+    requestedBy: handoff?.source ?? "ai-core-chat",
+    message: command,
   });
 
   return {
     kind: "execution",
     route: "INFRA_CONTROL_PLANE",
+    executionLane: "NO_WORKER",
     provider: result.provider,
     model: null,
     usage: null,
@@ -2229,6 +2240,58 @@ async function runInfrastructureOperation(
     mutating: result.mutating,
     reply: result.reply,
     data: result.data,
+    ...(handoff ? {
+      trustedHandoff: {
+        source: handoff.source,
+        action: handoff.action,
+        scope: handoff.scope,
+        verifiedSha: handoff.verifiedSha,
+        analysisComplete: handoff.analysisComplete,
+        sourceVerified: handoff.sourceVerified,
+      },
+    } : {}),
+  };
+}
+
+async function runGitHubOperation(
+  message: string,
+  repository?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const handoff = parseAiCoreTrustedExecutionHandoff(message);
+  const command = stripAiCoreTrustedExecutionHandoff(message);
+  const operation = detectAiCoreGitHubOperation(command);
+  if (!operation) return null;
+
+  const result = await executeAiCoreGitHubOperation({
+    operation,
+    message: command,
+    repository,
+    requestedBy: handoff?.source ?? "ai-core-chat",
+  });
+
+  return {
+    kind: "execution",
+    route: "GITHUB_CONTROL_PLANE",
+    executionLane: "NO_WORKER",
+    provider: "github",
+    model: null,
+    usage: null,
+    estimatedCostUsd: 0,
+    operation: result.operation,
+    mutating: result.mutating,
+    reply: result.reply,
+    data: result.data,
+    repository: result.repository,
+    ...(handoff ? {
+      trustedHandoff: {
+        source: handoff.source,
+        action: handoff.action,
+        scope: handoff.scope,
+        verifiedSha: handoff.verifiedSha,
+        analysisComplete: handoff.analysisComplete,
+        sourceVerified: handoff.sourceVerified,
+      },
+    } : {}),
   };
 }
 
@@ -2396,10 +2459,16 @@ async function runAutoMode(
     autoRouted: true,
     dispatch: decision.kind,
     dispatchReason: decision.reason,
+    executionLane: decision.executionLane,
   };
 
   if (decision.kind === "INFRA_OPERATION") {
     const result = await runInfrastructureOperation(input.message);
+    if (result) return { ...result, ...routingMeta };
+  }
+
+  if (decision.kind === "GITHUB_OPERATION") {
+    const result = await runGitHubOperation(input.message, input.repository);
     if (result) return { ...result, ...routingMeta };
   }
 
@@ -3319,6 +3388,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         ? (await runGcpBillingStatusOperation(rawInput.message)) ??
           (await runAdminDbMutationOperation(rawInput.message)) ??
           (await runInfrastructureOperation(rawInput.message)) ??
+          (await runGitHubOperation(rawInput.message, rawInput.repository)) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
                 effectiveInput,
