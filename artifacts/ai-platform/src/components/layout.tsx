@@ -152,6 +152,7 @@ const NAV_SECTIONS_DEF = [
       { href: "/portfolio",       tKey: "nav.items.portfolio",       icon: Store },
       { href: "/observability",   tKey: "nav.items.observability",   icon: Activity },
       { href: "/audit",           tKey: "nav.items.auditLog",        icon: ShieldAlert },
+      { href: "/user-management", tKey: "nav.items.userManagement",  icon: Users2, roles: ["owner", "admin"] },
       { href: "/settings",        tKey: "nav.items.settings",        icon: Settings },
     ],
   },
@@ -228,7 +229,7 @@ export function Layout({ children }: LayoutProps) {
                 {t(`nav.sections.${section.sectionKey}`)}
               </div>
               <div className="px-2 space-y-0.5">
-                {section.items.map((item) => {
+                {section.items.filter((item) => !("roles" in item) || !item.roles || (user && item.roles.includes(user.role))).map((item) => {
                   const isActive = location === item.href;
                   const label = t(item.tKey);
                   return (

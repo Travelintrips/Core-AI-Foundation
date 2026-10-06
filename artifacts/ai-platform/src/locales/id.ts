@@ -63,6 +63,7 @@ export const id = {
       portfolio:            "Portofolio",
       observability:        "Observabilitas",
       auditLog:             "Log Audit",
+      userManagement:       "User Management",
       settings:             "Pengaturan",
       aiCoreChat:          "Chat AI Core",
       codingWorkspace:     "Workspace Coding AI",
