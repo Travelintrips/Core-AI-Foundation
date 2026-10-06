@@ -9,6 +9,7 @@ export const CODING_TASK_STATUSES = [
   "COMMITTING",
   "PR_CREATED",
   "READY_REVIEW",
+  "BLOCKED",
   "COMPLETED",
   "FAILED",
 ] as const;
