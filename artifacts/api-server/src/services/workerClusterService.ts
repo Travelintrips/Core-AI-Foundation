@@ -479,16 +479,25 @@ export async function getClusterStatus(): Promise<ClusterStatus[]> {
   const now = new Date();
 
   return Object.entries(byCluster).map(([clusterId, wlist]) => {
-    const totalCapacity = wlist.length * MAX_ACTIVE_JOBS_PER_WORKER;
-    const usedCapacity  = wlist.reduce((s, w) => s + w.runningJobs, 0);
+    const healthyWorkers = wlist.filter(
+      (w) =>
+        ["online", "idle", "busy"].includes(w.status) &&
+        w.leaseExpiresAt !== null &&
+        w.leaseExpiresAt > now,
+    );
+    const totalCapacity = healthyWorkers.length * MAX_ACTIVE_JOBS_PER_WORKER;
+    const usedCapacity  = healthyWorkers.reduce(
+      (s, w) => s + Math.min(MAX_ACTIVE_JOBS_PER_WORKER, Math.max(0, w.runningJobs)),
+      0,
+    );
     const nodes = [...new Set(wlist.map((w) => w.nodeId))];
 
     return {
       clusterId,
       totalWorkers:   wlist.length,
-      onlineWorkers:  wlist.filter((w) => w.status === "online" || w.status === "idle").length,
-      idleWorkers:    wlist.filter((w) => w.status === "idle").length,
-      busyWorkers:    wlist.filter((w) => w.status === "busy").length,
+      onlineWorkers:  healthyWorkers.filter((w) => w.status === "online" || w.status === "idle").length,
+      idleWorkers:    healthyWorkers.filter((w) => w.status === "idle").length,
+      busyWorkers:    healthyWorkers.filter((w) => w.status === "busy").length,
       staleWorkers:   wlist.filter((w) => w.status === "stale").length,
       offlineWorkers: wlist.filter((w) => w.status === "offline").length,
       totalCapacity,
@@ -506,24 +515,31 @@ export async function getWorkerCapacity(): Promise<WorkerCapacityItem[]> {
   const workers = await db.select().from(aiWorkersTable);
   const now = new Date();
 
-  return workers.map((w) => ({
-    id:                w.id,
-    workerName:        w.workerName,
-    workerType:        w.workerType,
-    status:            w.status,
-    clusterId:         w.clusterId,
-    nodeId:            w.nodeId,
-    region:            w.region,
-    capabilities:      (w.capabilities as string[]) ?? [],
-    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
-    runningJobs:       w.runningJobs,
-    availableSlots:    Math.max(0, MAX_ACTIVE_JOBS_PER_WORKER - w.runningJobs),
-    providerSlug:      w.providerSlug ?? null,
-    modelId:           w.modelId ?? null,
-    endpointUrl:       w.endpointUrl ?? null,
-    runtimeKind:       w.runtimeKind ?? null,
-    leaseValid:        !!(w.leaseExpiresAt && w.leaseExpiresAt > now),
-    leaseExpiresAt:    w.leaseExpiresAt?.toISOString() ?? null,
-    lastHeartbeat:     w.lastHeartbeat.toISOString(),
-  }));
+  return workers.map((w) => {
+    const leaseValid = !!(w.leaseExpiresAt && w.leaseExpiresAt > now);
+    const schedulable =
+      leaseValid && ["online", "idle", "busy"].includes(w.status);
+    return {
+      id:                w.id,
+      workerName:        w.workerName,
+      workerType:        w.workerType,
+      status:            w.status,
+      clusterId:         w.clusterId,
+      nodeId:            w.nodeId,
+      region:            w.region,
+      capabilities:      (w.capabilities as string[]) ?? [],
+      maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
+      runningJobs:       w.runningJobs,
+      availableSlots:    schedulable
+        ? Math.max(0, MAX_ACTIVE_JOBS_PER_WORKER - w.runningJobs)
+        : 0,
+      providerSlug:      w.providerSlug ?? null,
+      modelId:           w.modelId ?? null,
+      endpointUrl:       w.endpointUrl ?? null,
+      runtimeKind:       w.runtimeKind ?? null,
+      leaseValid,
+      leaseExpiresAt:    w.leaseExpiresAt?.toISOString() ?? null,
+      lastHeartbeat:     w.lastHeartbeat.toISOString(),
+    };
+  });
 }
