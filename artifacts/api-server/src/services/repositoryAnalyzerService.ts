@@ -23,6 +23,10 @@ import {
   type LocalCodingExecutionPlan,
   type LocalCodingExecutionResult,
 } from "./localCodingExecutorService.js";
+import {
+  reserveCodingFileSet,
+  type CodingFileReservationResult,
+} from "./codingConflictRegistryService.js";
 
 const execFileAsync = promisify(execFile);
 const CODING_ANALYZER_JOB_TYPE = "coding_repository_analyzer";
@@ -117,6 +121,7 @@ export interface RepositoryAnalyzerResult {
   contextPackage: LocalCodingContextPackage;
   localExecutionPlan: LocalCodingExecutionPlan;
   localExecution: LocalCodingExecutionResult | null;
+  changeReservation: CodingFileReservationResult;
 }
 
 interface AnalyzerInput {
