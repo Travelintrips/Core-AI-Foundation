@@ -125,6 +125,17 @@ describe("AI Core Chat automatic dispatch", () => {
     });
   });
 
+  it.each([
+    "Audit Docker WA Gateway di Hostinger; hanya jika log membuktikan bug kode, perbaiki repository.",
+    "Inspect Hostinger container logs first; only if runtime evidence proves a code bug, patch the repo.",
+  ])("starts conditional runtime-first repair in the no-worker infrastructure lane: %s", (message) => {
+    const decision = classifyAiCoreChatDispatch(message);
+
+    expect(decision.kind).toBe("INFRA_OPERATION");
+    expect(decision.executionLane).toBe("NO_WORKER");
+    expect(decision.infrastructureOperation).not.toBeNull();
+  });
+
   it("keeps real source changes in the Coding Orchestrator even when Hostinger deploy is mentioned", () => {
     const decision = classifyAiCoreChatDispatch(
       "Perbaiki kode login lalu deploy hasilnya ke Hostinger production.",
