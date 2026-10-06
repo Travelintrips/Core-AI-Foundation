@@ -28,6 +28,7 @@ import { logger } from "../lib/logger.js";
 
 export const DEFAULT_LEASE_TTL_MS  = 60_000;  // 60 s
 export const STALE_HEARTBEAT_MS    = 90_000;  // 90 s without heartbeat → stale
+export const MAX_ACTIVE_JOBS_PER_WORKER = 1;
 const WORKER_CLAIM_PAYLOAD_KEY = "_claimedByWorkerId";
 
 // ── Capability map ────────────────────────────────────────────────────────────
@@ -171,7 +172,7 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
           region: input.region ?? "local",
           version: input.version ?? "1.0.0",
           capabilities: input.capabilities,
-          maxConcurrentJobs: input.maxConcurrentJobs ?? 2,
+          maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
           providerSlug: input.providerSlug ?? null,
           modelId: input.modelId ?? null,
           endpointUrl: input.endpointUrl ?? null,
@@ -272,6 +273,7 @@ export async function renewLease(
       leaseExpiresAt: expires,
       lockVersion:    sql`lock_version + 1`,
       lastHeartbeat:  now,
+      maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
       // Keep updated_at as a state-transition/reservation timestamp. If a
       // heartbeat refreshed it every few seconds, stale hosted-Ollama
       // reservations could never age out in recoverStaleOllamaReservations().
@@ -477,7 +479,7 @@ export async function getClusterStatus(): Promise<ClusterStatus[]> {
   const now = new Date();
 
   return Object.entries(byCluster).map(([clusterId, wlist]) => {
-    const totalCapacity = wlist.reduce((s, w) => s + w.maxConcurrentJobs, 0);
+    const totalCapacity = wlist.length * MAX_ACTIVE_JOBS_PER_WORKER;
     const usedCapacity  = wlist.reduce((s, w) => s + w.runningJobs, 0);
     const nodes = [...new Set(wlist.map((w) => w.nodeId))];
 
@@ -513,9 +515,9 @@ export async function getWorkerCapacity(): Promise<WorkerCapacityItem[]> {
     nodeId:            w.nodeId,
     region:            w.region,
     capabilities:      (w.capabilities as string[]) ?? [],
-    maxConcurrentJobs: w.maxConcurrentJobs,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     runningJobs:       w.runningJobs,
-    availableSlots:    Math.max(0, w.maxConcurrentJobs - w.runningJobs),
+    availableSlots:    Math.max(0, MAX_ACTIVE_JOBS_PER_WORKER - w.runningJobs),
     providerSlug:      w.providerSlug ?? null,
     modelId:           w.modelId ?? null,
     endpointUrl:       w.endpointUrl ?? null,
