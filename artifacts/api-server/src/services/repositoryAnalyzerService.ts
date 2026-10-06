@@ -122,6 +122,15 @@ export interface RepositoryAnalyzerResult {
   localExecutionPlan: LocalCodingExecutionPlan;
   localExecution: LocalCodingExecutionResult | null;
   changeReservation: CodingFileReservationResult;
+  changeManifest: {
+    baseSha: string;
+    readSet: string[];
+    writeSet: string[];
+    affectedFiles: string[];
+    relatedTests: string[];
+    symbols: string[];
+    conflictStatus: CodingFileReservationResult["status"];
+  };
 }
 
 interface AnalyzerInput {
@@ -948,6 +957,18 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       `files and ${contextPackage.affectedFiles.length} affected files on ${contextPackage.branch} at ` +
       `${contextPackage.headSha.slice(0, 12)}.${executionSummary} No AI/LLM was used.`;
 
+    const changeManifest = {
+      baseSha: contextPackage.headSha,
+      readSet: [...new Set(filesInspected)].slice(0, 200),
+      writeSet: [...changeReservation.files],
+      affectedFiles: [...contextPackage.affectedFiles],
+      relatedTests: [...contextPackage.relatedTests],
+      symbols: contextPackage.symbols.slice(0, 80).map(
+        (symbol) => `${symbol.file}#${symbol.name}`,
+      ),
+      conflictStatus: changeReservation.status,
+    };
+
     return {
       codingTaskId: input.codingTaskId,
       codingRunId: input.codingRunId,
@@ -967,6 +988,7 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       localExecutionPlan,
       localExecution,
       changeReservation,
+      changeManifest,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
