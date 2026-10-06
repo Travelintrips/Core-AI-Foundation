@@ -696,6 +696,20 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     body.method === "events/subscribe" ||
     body.method === "events/unsubscribe"
   ) {
+    // Record arrival before auth/parameter validation so a missing subscription
+    // can be distinguished from a request that never reached this endpoint.
+    // Never include params: delivery contains a signing secret and callback URL.
+    await logAudit({
+      module: "mcp-events",
+      action: "native_event_request_received",
+      resourceId: body.method,
+      resourceType: "mcp_event_request",
+      status: "success",
+      details: {
+        method: body.method,
+        userAgent: String(req.headers["user-agent"] ?? "").slice(0, 300),
+      },
+    });
     const identity = await authenticate(req);
     if (!identity || !identity.scopes.has("ai_core.events")) {
       await logAudit({
@@ -766,6 +780,22 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       res.status(200).json(rpcResult(body.id ?? null, {}));
       return;
     } catch (error) {
+      await logAudit({
+        module: "mcp-events",
+        action: "native_event_request_failed",
+        resourceId: body.method,
+        resourceType: "mcp_event_request",
+        status: "failure",
+        details: {
+          method: body.method,
+          reason: error instanceof McpCallbackEndpointError
+            ? error.reason
+            : error instanceof z.ZodError ? "invalid_params" : "internal_error",
+          ...(error instanceof z.ZodError
+            ? { issues: error.issues.map((issue) => ({ path: issue.path, code: issue.code })) }
+            : {}),
+        },
+      });
       if (error instanceof McpCallbackEndpointError) {
         res.status(200).json(
           rpcError(
