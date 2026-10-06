@@ -336,7 +336,7 @@ const ROOM_LABELS: Record<string, string> = {
  */
 export async function generateOutputs(
   projectId: number,
-  opts: { clientId?: string } = {},
+  opts: { clientId?: string; deferReadyStatus?: boolean } = {},
 ): Promise<{
   output: typeof idOutputsTable.$inferSelect;
   validationResult: ReturnType<typeof runFullValidation>;
@@ -518,7 +518,9 @@ Return ONLY a JSON object (no markdown) with exactly this structure:
     })
     .returning();
 
-  await updateProjectStatus(projectId, "outputs_ready");
+  if (!opts.deferReadyStatus) {
+    await updateProjectStatus(projectId, "outputs_ready");
+  }
 
   return { output: output!, validationResult, safetyDisclaimers };
 }
