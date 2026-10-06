@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { aiIncidentsTable, db } from "@workspace/db";
-import { listIncidents, processOpenIncidents, upsertIncident } from "../services/incidentAutoRepairService.js";
+import { listIncidents, processOpenIncidents, resolveSupersededIncidents, upsertIncident } from "../services/incidentAutoRepairService.js";
 
 const router = Router();
 
@@ -35,6 +35,25 @@ router.post("/ai/incidents", async (req, res): Promise<void> => {
 
 router.post("/ai/incidents/process", async (_req, res): Promise<void> => {
   res.json(await processOpenIncidents(10));
+});
+
+router.post("/ai/incidents/resolve-superseded", async (req, res): Promise<void> => {
+  const body = req.body ?? {};
+  if (!["github","supabase","hostinger","system"].includes(body.source) || typeof body.kind !== "string") {
+    res.status(400).json({ error: "source and kind are required" });
+    return;
+  }
+  const result = await resolveSupersededIncidents({
+    source: body.source,
+    kind: body.kind,
+    environment: typeof body.environment === "string" ? body.environment : "production",
+    successfulHeadSha: typeof body.successfulHeadSha === "string" ? body.successfulHeadSha : null,
+    successfulRunId:
+      typeof body.successfulRunId === "string" || typeof body.successfulRunId === "number"
+        ? body.successfulRunId
+        : null,
+  });
+  res.json({ ok: true, ...result });
 });
 
 router.post("/ai/incidents/:id/resolve", async (req, res): Promise<void> => {
