@@ -141,6 +141,9 @@ export async function generatePublicInteriorRenders(input: {
           storagePath: image.storagePath,
           model: image.model,
           latencyMs: image.latencyMs,
+          qcNotes: image.persistenceError
+            ? `Permanent storage fallback: ${image.persistenceError.slice(0, 900)}`
+            : null,
         })
         .where(eq(creativeAiAssetsTable.id, assetId));
     } catch (error) {
