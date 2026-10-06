@@ -194,12 +194,14 @@ function KpiCard({
   detail,
   icon: Icon,
   tone,
+  href,
 }: {
   label: string;
   value: string | number;
   detail: string;
   icon: typeof Activity;
   tone: "sky" | "emerald" | "violet" | "amber" | "rose" | "cyan";
+  href: string;
 }) {
   const styles = {
     sky: "border-sky-500/25 from-sky-500/15 text-sky-300",
@@ -210,16 +212,21 @@ function KpiCard({
     cyan: "border-cyan-500/25 from-cyan-500/15 text-cyan-300",
   }[tone];
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${styles} to-slate-950/30 p-4 shadow-lg shadow-black/10`}>
+    <a
+      href={href}
+      className={`group block rounded-2xl border bg-gradient-to-br ${styles} to-slate-950/30 p-4 shadow-lg shadow-black/10 transition hover:-translate-y-0.5 hover:border-white/20 hover:shadow-xl hover:shadow-black/20 focus:outline-none focus:ring-2 focus:ring-sky-500/40`}
+      aria-label={`Buka halaman ${label}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">{label}</p>
           <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
           <p className="mt-1 text-xs text-slate-400">{detail}</p>
+          <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600 transition group-hover:text-slate-400">Klik untuk detail →</p>
         </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-2.5"><Icon className="h-5 w-5" /></div>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 transition group-hover:scale-105"><Icon className="h-5 w-5" /></div>
       </div>
-    </div>
+    </a>
   );
 }
 
@@ -482,13 +489,13 @@ export default function AicodingDashboard() {
 
           <div className="space-y-4 p-4 lg:p-6">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
-              <KpiCard label="Total Layanan" value={data?.kpis.totalServices ?? 0} detail={`${data?.kpis.activeServices ?? 0} aktif`} icon={Server} tone="sky" />
-              <KpiCard label="Coding Berjalan" value={data?.kpis.codingRunning ?? 0} detail="task live" icon={Code2} tone="violet" />
-              <KpiCard label="Menunggu Antrian" value={data?.kpis.waiting ?? 0} detail="pending / capacity" icon={Clock3} tone="amber" />
-              <KpiCard label="Worker Aktif" value={`${data?.kpis.workerActive ?? 0}/${data?.kpis.workerTotal ?? 0}`} detail="lease sehat" icon={Cpu} tone="cyan" />
-              <KpiCard label="Device WA Live" value={`${data?.kpis.waOnline ?? 0}/${data?.kpis.waTotal ?? 0}`} detail="device online" icon={MessageCircle} tone="emerald" />
-              <KpiCard label="Alert Kritis" value={data?.kpis.criticalAlerts ?? 0} detail="belum resolved" icon={ShieldAlert} tone="rose" />
-              <KpiCard label="Overall Health" value={`${data?.kpis.overallHealth ?? 0}%`} detail="probe live" icon={Activity} tone="emerald" />
+              <KpiCard label="Total Layanan" value={data?.kpis.totalServices ?? 0} detail={`${data?.kpis.activeServices ?? 0} aktif`} icon={Server} tone="sky" href="/aicoding/services" />
+              <KpiCard label="Coding Berjalan" value={data?.kpis.codingRunning ?? 0} detail="task live" icon={Code2} tone="violet" href="/aicoding/coding" />
+              <KpiCard label="Menunggu Antrian" value={data?.kpis.waiting ?? 0} detail="pending / capacity" icon={Clock3} tone="amber" href="/aicoding/queue" />
+              <KpiCard label="Worker Aktif" value={`${data?.kpis.workerActive ?? 0}/${data?.kpis.workerTotal ?? 0}`} detail="lease sehat" icon={Cpu} tone="cyan" href="/aicoding/workers" />
+              <KpiCard label="Device WA Live" value={`${data?.kpis.waOnline ?? 0}/${data?.kpis.waTotal ?? 0}`} detail="device online" icon={MessageCircle} tone="emerald" href="/aicoding/whatsapp" />
+              <KpiCard label="Alert Kritis" value={data?.kpis.criticalAlerts ?? 0} detail="belum resolved" icon={ShieldAlert} tone="rose" href="/aicoding/incidents" />
+              <KpiCard label="Overall Health" value={`${data?.kpis.overallHealth ?? 0}%`} detail="probe live" icon={Activity} tone="emerald" href="/aicoding/health" />
             </div>
 
             <div className="grid gap-4 2xl:grid-cols-12">
