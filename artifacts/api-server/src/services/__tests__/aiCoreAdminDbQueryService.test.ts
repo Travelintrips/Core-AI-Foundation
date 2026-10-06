@@ -131,9 +131,9 @@ describe("AI Core admin database query service", () => {
 
     const result = await executeAdminCodingTaskStatusQuery();
     expect(result.rowCount).toBe(1);
-    expect(result.sql).toContain("ai_coding_task_graphs.task_id");
+    expect(result.sql).toContain("ai_platform.ai_coding_tasks");
     expect(result.sql).not.toContain("parent_task_id");
-    expect(result.sql).toContain("ai_coding_critical_approvals");
+    expect(result.sql).toContain("ai_platform.ai_coding_critical_approvals");
   });
 
   it("routes AI Core MCP event status checks to the dedicated event tables", async () => {
