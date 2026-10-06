@@ -1,6 +1,8 @@
 export function codingTaskPresentationStatus(input: {
   taskStatus: string;
   autonomousStatus?: string | null;
+  autonomousEnabled?: boolean | null;
+  autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
   hasPendingCriticalApproval?: boolean;
 }): string {
@@ -80,6 +82,17 @@ export function codingDashboardTaskPresentationStatus(input: {
 }): string {
   const taskNumber = input.taskNumber?.trim() ?? "";
   const latestRunStatus = input.latestRunStatus?.toUpperCase() ?? null;
+
+  // An explicit manual stop is an operator decision, not a blocker and not a
+  // human-review gate. Keep it visible as a neutral terminal display state.
+  if (
+    !input.hasActiveRun &&
+    input.autonomousEnabled === false &&
+    input.autonomousStatus === "DISABLED" &&
+    input.autonomousLastAction === "MANUAL_STOP"
+  ) {
+    return "CANCELLED";
+  }
 
   // Multi-worker child rows are execution shards, not independent human-review
   // gates. Once their latest execution is completed and no critical approval or
