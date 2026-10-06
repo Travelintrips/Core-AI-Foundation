@@ -1220,43 +1220,10 @@ async function answerAskMode(
     };
   }
 
-  // Workspace GCP Billing status is a deterministic read-only capability. Keep
-  // configuration checks away from Ollama/PowerShell planners and return only
-  // non-secret readiness metadata.
-  if (/\b(?:gcp|google cloud)\b/i.test(normalizedRoutingMessage) &&
-      /\b(?:billing|billing export|bigquery|biaya|cost|usage cost|tagihan)\b/i.test(normalizedRoutingMessage) &&
-      /\b(?:cek|check|status|configured|konfigurasi|periksa|inspect|lihat|akses|access|permission|permissions|izin|capability|capabilities|readiness|ready|tersedia|available)\b/i.test(normalizedRoutingMessage) &&
-      !/\b(?:aktifkan|enable|setup|set up|configure|konfigurasikan|buat|create|set|ubah|update|grant|beri|pasang|install|deploy|redeploy|restart)\b/i.test(normalizedRoutingMessage)) {
-    const billing = await getGcpWorkspaceCostUsage("daily").catch((error: unknown) => ({
-      configured: false as const,
-      range: "daily" as const,
-      currency: process.env["GCP_BILLING_CURRENCY"] ?? "IDR",
-      projectId: process.env["GCP_OLLAMA_VM_PROJECT"] ?? "",
-      totalCost: 0,
-      totalUsageHours: 0,
-      series: [],
-      message: error instanceof Error ? error.message : "GCP Billing status check failed.",
-    }));
-    return {
-      kind: "answer",
-      route: "GCP_BILLING_STATUS",
-      provider: null,
-      model: null,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      estimatedCostUsd: 0,
-      workload: "DETERMINISTIC",
-      costClass: "ZERO",
-      reply: billing.configured
-        ? "GCP Billing Export Workspace sudah configured dan dapat dibaca."
-        : "GCP Billing Export Workspace belum configured atau belum dapat dibaca.",
-      billing: {
-        configured: billing.configured,
-        projectId: billing.projectId,
-        currency: billing.currency,
-        ...(billing.configured ? {} : { message: billing.message }),
-      },
-    };
-  }
+  // Reuse the same deterministic billing handler used by Agent/MCP mode so
+  // Ask/Auto/Agent cannot drift to different response schemas.
+  const billingStatus = await runGcpBillingStatusOperation(routingMessage);
+  if (billingStatus) return billingStatus;
 
   // Read-only data tools run before any LLM. They never accept mutation verbs and
   // only execute parameterized SELECT queries against known business tables.
