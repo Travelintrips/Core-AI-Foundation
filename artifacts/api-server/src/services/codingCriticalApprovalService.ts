@@ -124,7 +124,8 @@ async function expireStaleApprovals(): Promise<void> {
   await db.execute(sql`
     UPDATE ai_platform.ai_coding_critical_approvals
     SET status = 'EXPIRED'
-    WHERE status = 'PENDING' AND expires_at <= NOW()
+    WHERE status IN ('PENDING','APPROVED','EXECUTING','REQUESTED','AWAITING_APPROVAL')
+      AND expires_at <= NOW()
   `);
 }
 
