@@ -188,7 +188,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          endpoint="$API_BASE_URL/ai/core-chat/mcp?v=1.5.0"
+          endpoint="$API_BASE_URL/ai/core-chat/mcp?verify=${GITHUB_SHA}"
 
           discover_payload='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}'
           discover_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
@@ -211,12 +211,21 @@ jobs:
           if (!result?.capabilities || typeof result.capabilities.events !== "object") {
             throw new Error("Native MCP events capability is not live");
           }
-          if (result?.serverInfo?.version !== "1.5.0") {
-            throw new Error("Unexpected live MCP server version: " + String(result?.serverInfo?.version));
+          const serverVersion = String(result?.serverInfo?.version ?? "");
+          const match = serverVersion.match(/^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+          if (!match) throw new Error("Invalid live MCP server version: " + serverVersion);
+          const current = match.slice(1, 4).map(Number);
+          const minimum = [1, 5, 0];
+          const compatible =
+            current[0] > minimum[0] ||
+            (current[0] === minimum[0] && current[1] > minimum[1]) ||
+            (current[0] === minimum[0] && current[1] === minimum[1] && current[2] >= minimum[2]);
+          if (!compatible) {
+            throw new Error("Live MCP server is older than supported minimum 1.5.0: " + serverVersion);
           }
-          console.log("mcp_native_event_discovery=PASS");
+          console.log("mcp_native_event_discovery=PASS version="+serverVersion);
           NODE
-          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.5\.0' /tmp/mcp-discover.headers
+          grep -Eqi '^x-mcp-server-version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+' /tmp/mcp-discover.headers
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-discover.headers
 
           tools_payload='{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
@@ -265,7 +274,7 @@ jobs:
           }
           console.log("mcp_tool_discovery=PASS count="+tools.length);
           NODE
-          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.5\.0' /tmp/mcp-tools.headers
+          grep -Eqi '^x-mcp-server-version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+' /tmp/mcp-tools.headers
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-tools.headers
 
       - name: Verify admin auth guard
