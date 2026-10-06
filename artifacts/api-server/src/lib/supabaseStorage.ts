@@ -119,27 +119,55 @@ export async function compressImageForStorage(
   };
 }
 
+function supabaseUrlFromProjectRef(projectRef: string | undefined): string | undefined {
+  const normalized = projectRef?.trim().toLowerCase();
+  return normalized && /^[a-z0-9-]+$/.test(normalized)
+    ? `https://${normalized}.supabase.co`
+    : undefined;
+}
+
 function deriveSupabaseUrlFromDatabaseUrl(databaseUrl: string | undefined): string | undefined {
   if (!databaseUrl) return undefined;
 
-  // Pooler URLs contain the project ref in the username. Extract it directly
-  // first so passwords containing URL-sensitive characters cannot break the
-  // derivation.
-  const poolerRef = databaseUrl.match(/postgres\.([a-z0-9]+)(?=[:@])/i)?.[1];
-  if (poolerRef) return `https://${poolerRef}.supabase.co`;
+  // Pooler URLs normally contain the project ref in the username. Extract it
+  // from the raw URL first so passwords containing URL-sensitive characters
+  // cannot interfere with parsing.
+  const poolerRef = databaseUrl.match(/postgres\.([a-z0-9-]+)(?=[:@])/i)?.[1];
+  if (poolerRef) return supabaseUrlFromProjectRef(poolerRef);
 
-  const directRef = databaseUrl.match(/db\.([a-z0-9]+)\.supabase\.co/i)?.[1];
-  if (directRef) return `https://${directRef}.supabase.co`;
+  const directRef = databaseUrl.match(/db\.([a-z0-9-]+)\.supabase\.co/i)?.[1];
+  if (directRef) return supabaseUrlFromProjectRef(directRef);
 
   try {
     const parsed = new URL(databaseUrl);
-    const directHost = parsed.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/i);
-    if (directHost?.[1]) return `https://${directHost[1]}.supabase.co`;
+    const decodedUser = decodeURIComponent(parsed.username || "");
+    const usernameRef = decodedUser.match(/^postgres\.([a-z0-9-]+)$/i)?.[1];
+    if (usernameRef) return supabaseUrlFromProjectRef(usernameRef);
+
+    const directHost = parsed.hostname.match(/^db\.([a-z0-9-]+)\.supabase\.co$/i);
+    if (directHost?.[1]) return supabaseUrlFromProjectRef(directHost[1]);
   } catch {
     return undefined;
   }
 
   return undefined;
+}
+
+function deriveSupabaseUrlFromLegacyJwt(apiKey: string | undefined): string | undefined {
+  if (!apiKey || apiKey.split(".").length !== 3) return undefined;
+
+  try {
+    const payload = apiKey.split(".")[1];
+    if (!payload) return undefined;
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      ref?: unknown;
+    };
+    return typeof parsed.ref === "string"
+      ? supabaseUrlFromProjectRef(parsed.ref)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function getCredentials(): SupabaseCredentials {
@@ -148,15 +176,6 @@ function getCredentials(): SupabaseCredentials {
   const databaseUrl = isProduction
     ? process.env["SUPABASE_PROD_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL"]
     : process.env["SUPABASE_DEV_DATABASE_URL"] || process.env["SUPABASE_DATABASE_URL_DEV"];
-
-  const explicitUrl = isProduction
-    ? process.env["SUPABASE_URL"] || process.env["SUPABASE_PROD_URL"]
-    : process.env["SUPABASE_URL_DEV"] || process.env["SUPABASE_DEV_URL"];
-
-  const derivedUrl = deriveSupabaseUrlFromDatabaseUrl(databaseUrl);
-  // In production prefer the URL derived from the production DB connection so
-  // Storage can never accidentally point at a different Supabase project.
-  const url = (isProduction ? (derivedUrl || explicitUrl) : (explicitUrl || derivedUrl))?.replace(/\/$/, "");
 
   const serviceKey = isProduction
     ? process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
@@ -167,6 +186,45 @@ function getCredentials(): SupabaseCredentials {
       process.env["SUPABASE_DEV_SERVICE_ROLE_KEY"] ||
       process.env["SUPABASE_SECRET_KEY_DEV"] ||
       process.env["SUPABASE_DEV_SECRET_KEY"];
+
+  const anonKey = isProduction
+    ? process.env["SUPABASE_ANON_KEY"] || process.env["VITE_SUPABASE_ANON_KEY"]
+    : process.env["SUPABASE_ANON_KEY_DEV"] || process.env["VITE_SUPABASE_ANON_KEY_DEV"];
+
+  const explicitUrl = isProduction
+    ? process.env["SUPABASE_URL"] ||
+      process.env["SUPABASE_PROD_URL"] ||
+      process.env["VITE_SUPABASE_URL"] ||
+      process.env["NEXT_PUBLIC_SUPABASE_URL"]
+    : process.env["SUPABASE_URL_DEV"] ||
+      process.env["SUPABASE_DEV_URL"] ||
+      process.env["VITE_SUPABASE_URL_DEV"];
+
+  const projectRef = isProduction
+    ? process.env["SUPABASE_PROD_PROJECT_REF"] || process.env["SUPABASE_PROJECT_REF"]
+    : process.env["SUPABASE_DEV_PROJECT_REF"] || process.env["SUPABASE_PROJECT_REF"];
+
+  const databaseDerivedUrl = deriveSupabaseUrlFromDatabaseUrl(databaseUrl);
+  const serviceKeyDerivedUrl = deriveSupabaseUrlFromLegacyJwt(serviceKey);
+  const anonKeyDerivedUrl = deriveSupabaseUrlFromLegacyJwt(anonKey);
+  const projectRefUrl = supabaseUrlFromProjectRef(projectRef);
+
+  // Production prefers server-authenticated sources over frontend metadata.
+  // This also recovers Hostinger deployments that have the DB + service-role
+  // credentials but omit a separate SUPABASE_URL variable.
+  const url = (
+    isProduction
+      ? databaseDerivedUrl ||
+        serviceKeyDerivedUrl ||
+        projectRefUrl ||
+        explicitUrl ||
+        anonKeyDerivedUrl
+      : explicitUrl ||
+        databaseDerivedUrl ||
+        serviceKeyDerivedUrl ||
+        projectRefUrl ||
+        anonKeyDerivedUrl
+  )?.replace(/\/$/, "");
 
   if (!url || !serviceKey) {
     const missing = [
