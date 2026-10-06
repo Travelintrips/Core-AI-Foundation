@@ -765,7 +765,7 @@ function scheduleRepositoryAnalyzerClaimFailover(
  *
  * The production global dispatcher remains fail-closed. The orchestrator only
  * executes work created by this explicit Run Agent request. The local analyzer
- * may also produce a deterministic review-only patch inside its isolated clone.
+ * may also produce a deterministic candidate patch inside its isolated clone.
  * Semantic tasks are marked AI_REQUIRED rather than guessed. AI_REQUIRED is
  * escalated through the bounded multi-task planner into a PREPARED task graph.
  * The autonomous controller approves safe prepared graphs and advances worker/model
