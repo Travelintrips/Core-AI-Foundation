@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { classifyIncidentRisk, resolveIncidentRisk } from "../incidentAutoRepairService.js";
+import {
+  classifyIncidentRisk,
+  incidentRepairFailureDisposition,
+  resolveIncidentRisk,
+} from "../incidentAutoRepairService.js";
 
 describe("classifyIncidentRisk", () => {
   it("blocks destructive or structural Supabase incidents behind owner approval", () => {
@@ -29,5 +33,29 @@ describe("resolveIncidentRisk", () => {
 
   it("allows callers to escalate risk", () => {
     expect(resolveIncidentRisk("github", "workflow_failed", "OWNER_APPROVAL")).toBe("OWNER_APPROVAL");
+  });
+});
+
+
+describe("incidentRepairFailureDisposition", () => {
+  it("keeps the first two repair failures recoverable", () => {
+    expect(incidentRepairFailureDisposition(0)).toEqual({
+      failures: 1,
+      retryable: true,
+      incidentStatus: "OPEN",
+    });
+    expect(incidentRepairFailureDisposition(1)).toEqual({
+      failures: 2,
+      retryable: true,
+      incidentStatus: "OPEN",
+    });
+  });
+
+  it("blocks only after bounded automatic recovery is exhausted", () => {
+    expect(incidentRepairFailureDisposition(2)).toEqual({
+      failures: 3,
+      retryable: false,
+      incidentStatus: "BLOCKED",
+    });
   });
 });

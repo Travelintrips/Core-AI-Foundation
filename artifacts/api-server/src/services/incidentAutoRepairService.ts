@@ -8,6 +8,8 @@ import { logger } from "../lib/logger.js";
 export type IncidentSource = "github" | "supabase" | "hostinger" | "system";
 export type IncidentRisk = "SAFE" | "GUARDED" | "OWNER_APPROVAL";
 
+const MAX_AUTOMATIC_INCIDENT_REPAIR_FAILURES = 3;
+
 export interface IncidentInput {
   source: IncidentSource;
   kind: string;
@@ -108,6 +110,15 @@ export async function upsertIncident(input: IncidentInput) {
   return row;
 }
 
+export function incidentRepairFailureDisposition(previousFailures: number) {
+  const failures = Math.max(0, Number.isFinite(previousFailures) ? Math.trunc(previousFailures) : 0) + 1;
+  return {
+    failures,
+    retryable: failures < MAX_AUTOMATIC_INCIDENT_REPAIR_FAILURES,
+    incidentStatus: failures < MAX_AUTOMATIC_INCIDENT_REPAIR_FAILURES ? "OPEN" as const : "BLOCKED" as const,
+  };
+}
+
 function repairInstruction(incident: typeof aiIncidentsTable.$inferSelect): string {
   return [
     "INCIDENT AUTO-REPAIR",
@@ -137,6 +148,8 @@ export async function processOpenIncidents(limit = 5) {
 
   let queued = 0;
   for (const incident of rows) {
+    let dispatchedRepairTaskId: string | null = null;
+    let dispatchedRepairRunId: string | null = null;
     if (!incident.repository) {
       await db.update(aiIncidentsTable).set({
         status: "BLOCKED",
@@ -180,13 +193,62 @@ export async function processOpenIncidents(limit = 5) {
       });
 
       if (!result) continue;
+      dispatchedRepairTaskId = result.task.id;
+      dispatchedRepairRunId = result.run.id;
       await startCodingOrchestration(result);
       queued += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn({ err: error, incidentId: incident.id }, "[incident] auto-repair dispatch failed");
-      await db.update(aiIncidentsTable).set({ status: "FAILED", lastError: message.slice(0, 2000) })
-        .where(eq(aiIncidentsTable.id, incident.id));
+      const metadata = (incident.metadataJson as Record<string, unknown> | null) ?? {};
+      const previousFailures = Number(metadata.autoRepairDispatchFailures ?? 0);
+      const disposition = incidentRepairFailureDisposition(previousFailures);
+      logger.warn(
+        { err: error, incidentId: incident.id, failures: disposition.failures, retryable: disposition.retryable },
+        "[incident] auto-repair dispatch failed",
+      );
+      if (dispatchedRepairRunId) {
+        await db.update(aiCodingRunsTable).set({
+          status: "FAILED",
+          finishedAt: new Date(),
+          errorMessage: ("Incident repair dispatch failed before orchestration started: " + message).slice(0, 2000),
+        }).where(and(
+          eq(aiCodingRunsTable.id, dispatchedRepairRunId),
+          eq(aiCodingRunsTable.status, "RUNNING"),
+        ));
+      }
+      if (dispatchedRepairTaskId) {
+        await db.update(aiCodingTasksTable).set({
+          status: "FAILED",
+          resultSummary: ("Repair attempt could not be dispatched and will be retried automatically: " + message).slice(0, 500),
+          updatedAt: new Date(),
+        }).where(and(
+          eq(aiCodingTasksTable.id, dispatchedRepairTaskId),
+          eq(aiCodingTasksTable.status, "ANALYZING"),
+        ));
+      }
+
+      await db.update(aiIncidentsTable).set({
+        status: disposition.incidentStatus,
+        repairTaskId: disposition.retryable ? null : dispatchedRepairTaskId ?? incident.repairTaskId,
+        lastError: message.slice(0, 2000),
+        metadataJson: {
+          ...metadata,
+          autoRepairDispatchFailures: disposition.failures,
+          lastAutoRepairDispatchFailureAt: new Date().toISOString(),
+        },
+      }).where(eq(aiIncidentsTable.id, incident.id));
+      publishSafe({
+        eventType: disposition.retryable ? "incident.repair_retry_scheduled" : "incident.repair_blocked",
+        sourceModule: "incident-auto-repair",
+        sourceId: incident.id,
+        payload: {
+          source: incident.source,
+          kind: incident.kind,
+          riskClass: incident.riskClass,
+          repairFailures: disposition.failures,
+          retryable: disposition.retryable,
+        },
+      });
     }
   }
   return { scanned: rows.length, queued };
@@ -206,11 +268,38 @@ export async function syncIncidentRepairStatuses(limit = 50) {
       .limit(1);
     if (!task) continue;
 
-    if (task.status === "FAILED" && incident.status !== "FAILED") {
+    if (task.status === "FAILED") {
+      const metadata = (incident.metadataJson as Record<string, unknown> | null) ?? {};
+      const previousFailures = Number(metadata.autoRepairTaskFailures ?? 0);
+      const disposition = incidentRepairFailureDisposition(previousFailures);
+
       await db.update(aiIncidentsTable).set({
-        status: "FAILED",
-        lastError: "Associated repair task failed.",
+        status: disposition.incidentStatus,
+        repairTaskId: disposition.retryable ? null : incident.repairTaskId,
+        lastError: disposition.retryable
+          ? "Associated repair task failed; automatic recovery will create a fresh repair attempt."
+          : "Associated repair task exhausted bounded automatic recovery and requires intervention.",
+        metadataJson: {
+          ...metadata,
+          autoRepairTaskFailures: disposition.failures,
+          lastAutoRepairTaskFailureAt: new Date().toISOString(),
+          lastFailedRepairTaskId: incident.repairTaskId,
+        },
       }).where(eq(aiIncidentsTable.id, incident.id));
+
+      publishSafe({
+        eventType: disposition.retryable ? "incident.repair_retry_scheduled" : "incident.repair_blocked",
+        sourceModule: "incident-auto-repair",
+        sourceId: incident.id,
+        payload: {
+          source: incident.source,
+          kind: incident.kind,
+          riskClass: incident.riskClass,
+          repairFailures: disposition.failures,
+          retryable: disposition.retryable,
+          failedRepairTaskId: incident.repairTaskId,
+        },
+      });
       updated += 1;
       continue;
     }
