@@ -1744,17 +1744,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const [status, setStatus] = useState<CodingTaskStatus>(CodingTaskStatus.PENDING);
   const [summary, setSummary] = useState("");
   const [commitSha, setCommitSha] = useState("");
-  const [localPatchPending, setLocalPatchPending] = useState(false);
-  const [sandboxPending, setSandboxPending] = useState(false);
-  const [recoveryPending, setRecoveryPending] = useState(false);
-  const [handoffPreparePending, setHandoffPreparePending] = useState(false);
-  const [handoffApprovePending, setHandoffApprovePending] = useState(false);
-  const [handoffRevokePending, setHandoffRevokePending] = useState(false);
-  const [aiRunPending, setAiRunPending] = useState(false);
-  const [aiPatchReviewPending, setAiPatchReviewPending] = useState(false);
-  const [commitPending, setCommitPending] = useState(false);
-  const [prVerifyPending, setPrVerifyPending] = useState(false);
-  const [mergePending, setMergePending] = useState(false);
   const [progressNow, setProgressNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -1803,47 +1792,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     liveProgress.startedAt ?? activeRun?.startedAt ?? null,
     progressNow,
   );
-  const canApproveLocalPatch =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "REVIEW_LOCAL_PATCH" &&
-    analyzerResult?.localExecution?.status === "APPLIED" &&
-    analyzerResult.localExecution.rolledBack !== true &&
-    !hasActiveRun;
-  const canRunSandboxVerification =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "RUN_SANDBOX_VERIFICATION" &&
-    analyzerResult?.localPatchApproval?.gateStatus === "PATCH_VALIDATED" &&
-    analyzerResult.localPatchApproval.commitCreated !== true &&
-    analyzerResult.localPatchApproval.pushed !== true &&
-    !hasActiveRun;
-  const canRunLocalRecovery =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "LOCAL_RECOVERY_REQUIRED" &&
-    analyzerResult?.failureRecoveryContext?.nextAction === "LOCAL_RECOVERY_REQUIRED" &&
-    analyzerResult?.sandboxVerification?.status === "FAILED" &&
-    !hasActiveRun;
-  const canPrepareAiHandoff =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "AI_REQUIRED" &&
-    analyzerResult?.localRecovery?.status === "AI_REQUIRED" &&
-    analyzerResult.localRecovery.aiInvoked !== true &&
-    !hasActiveRun;
-  const canApproveAiHandoff =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "APPROVE_AI_HANDOFF" &&
-    analyzerResult?.aiHandoff?.status === "PREPARED" &&
-    analyzerResult.aiHandoff.gateStatus === "AWAITING_EXPLICIT_APPROVAL" &&
-    analyzerResult.aiHandoff.modelInvoked !== true &&
-    !hasActiveRun;
-  const canRevokeAiHandoff =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    Boolean(analyzerResult?.aiHandoff) &&
-    ["PREPARED", "APPROVED"].includes(analyzerResult?.aiHandoff?.status ?? "") &&
-    ["APPROVE_AI_HANDOFF", "AI_HANDOFF_APPROVED"].includes(
-      analyzerResult?.orchestration?.nextAction ?? "",
-    ) &&
-    analyzerResult?.aiHandoff?.modelInvoked !== true &&
-    !hasActiveRun;
   const currentNextAction = analyzerResult?.orchestration?.nextAction ?? "";
   const handoffExpiryMs = analyzerResult?.aiHandoff?.expiresAt
     ? Date.parse(analyzerResult.aiHandoff.expiresAt)
@@ -1862,26 +1810,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     analyzerResult?.aiHandoff?.status === "REVOKED" ||
     analyzerResult?.aiHandoff?.gateStatus === "REVOKED" ||
     Boolean(analyzerResult?.aiHandoff?.revokedAt);
-  const canRunConstrainedAi =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    currentNextAction === "AI_HANDOFF_APPROVED" &&
-    analyzerResult?.aiHandoff?.status === "APPROVED" &&
-    analyzerResult.aiHandoff.gateStatus === "EXPLICITLY_APPROVED" &&
-    analyzerResult.aiHandoff.modelInvoked !== true &&
-    !handoffExpired &&
-    !handoffStale &&
-    !handoffRevoked &&
-    !hasActiveRun;
-  const canApproveAiPatch =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    currentNextAction === "REVIEW_AI_PATCH" &&
-    analyzerResult?.aiExecution?.policyValidation?.ok === true &&
-    analyzerResult?.aiExecution?.patch?.status === "APPLIED" &&
-    analyzerResult.aiExecution.patch.rolledBack !== true &&
-    analyzerResult.aiExecution.patch.scriptsExecuted !== true &&
-    analyzerResult.aiExecution.patch.networkUsed !== true &&
-    !hasActiveRun;
-  const explicitGateActions = [
+  const automaticGateActions = [
     "REVIEW_LOCAL_PATCH",
     "RUN_SANDBOX_VERIFICATION",
     "LOCAL_RECOVERY_REQUIRED",
@@ -1893,10 +1822,10 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     "REVIEW_PR",
     "APPROVE_MERGE",
   ];
-  const explicitGateLocked = explicitGateActions.includes(currentNextAction);
+  const automaticGateLocked = automaticGateActions.includes(currentNextAction);
   const canRunAgent =
     !hasActiveRun &&
-    !explicitGateLocked &&
+    !automaticGateLocked &&
     (task.status === CodingTaskStatus.PENDING || task.status === CodingTaskStatus.FAILED);
   const aiPipelineVisible =
     Boolean(analyzerResult?.aiHandoff) ||
@@ -1922,26 +1851,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   : analyzerResult?.aiHandoff?.status === "PREPARED"
                     ? 3
                     : 0;
-  const canApproveCommit =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "APPROVE_COMMIT" &&
-    analyzerResult?.localPatchApproval?.gateStatus === "PATCH_VALIDATED" &&
-    analyzerResult?.sandboxVerification?.gateStatus === "SANDBOX_VERIFIED" &&
-    analyzerResult.sandboxVerification.status === "PASSED" &&
-    analyzerResult.localPatchApproval.commitCreated !== true &&
-    analyzerResult.localPatchApproval.pushed !== true &&
-    !hasActiveRun;
-  const canVerifyPullRequest =
-    task.status === CodingTaskStatus.PR_CREATED &&
-    analyzerResult?.orchestration?.nextAction === "REVIEW_PR" &&
-    analyzerResult?.localCommitApproval?.status === "PUBLISHED" &&
-    !hasActiveRun;
-  const canApproveMerge =
-    task.status === CodingTaskStatus.PR_CREATED &&
-    analyzerResult?.orchestration?.nextAction === "APPROVE_MERGE" &&
-    analyzerResult?.prVerification?.status === "PASSED" &&
-    analyzerResult.prVerification.gateStatus === "PR_VERIFIED" &&
-    !hasActiveRun;
   const runAgent = () => {
     if (!canRunAgent) return;
     startCodingRun.mutate(
@@ -1962,343 +1871,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     );
   };
 
-  const approveLocalPatch = async () => {
-    setLocalPatchPending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-local-patch`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Local patch validated",
-        description: "Patch still applies to the latest remote HEAD and passed static verification. Sandboxed repository verification is required before commit approval.",
-      });
-    } catch (error) {
-      toast({
-        title: "Local patch validation failed",
-        description: error instanceof Error ? error.message : "Patch approval failed",
-        variant: "destructive",
-      });
-    } finally {
-      setLocalPatchPending(false);
-    }
-  };
-
-  const runSandboxVerification = async () => {
-    setSandboxPending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/run-sandbox-verification`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Sandbox verification started",
-        description: "Repository checks are running with network disabled, scrubbed environment, and bounded Docker resources.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not start sandbox verification",
-        description: error instanceof Error ? error.message : "Sandbox verification failed",
-        variant: "destructive",
-      });
-    } finally {
-      setSandboxPending(false);
-    }
-  };
-
-  const runLocalRecovery = async () => {
-    setRecoveryPending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/run-local-recovery`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Deterministic recovery started",
-        description: "Compiler-backed recovery is running in an isolated clone. It will return a new review-only patch or stop at AI_REQUIRED.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not start deterministic recovery",
-        description: error instanceof Error ? error.message : "Local recovery failed",
-        variant: "destructive",
-      });
-    } finally {
-      setRecoveryPending(false);
-    }
-  };
-
-  const prepareAiHandoff = async () => {
-    setHandoffPreparePending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/prepare-ai-handoff`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "AI handoff preparation started",
-        description: "Preparing a bounded read-only package. No model is being invoked.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not prepare AI handoff",
-        description: error instanceof Error ? error.message : "AI handoff preparation failed",
-        variant: "destructive",
-      });
-    } finally {
-      setHandoffPreparePending(false);
-    }
-  };
-
-  const approveAiHandoff = async () => {
-    setHandoffApprovePending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-ai-handoff`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "AI handoff explicitly approved",
-        description: "Package integrity and remote HEAD were rechecked. Model execution remains locked.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not approve AI handoff",
-        description: error instanceof Error ? error.message : "AI handoff approval failed",
-        variant: "destructive",
-      });
-    } finally {
-      setHandoffApprovePending(false);
-    }
-  };
-
-  const revokeAiHandoff = async () => {
-    setHandoffRevokePending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/revoke-ai-handoff`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "AI handoff revoked",
-        description: "The approved/prepared package is locked again. No model was invoked.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not revoke AI handoff",
-        description: error instanceof Error ? error.message : "AI handoff revocation failed",
-        variant: "destructive",
-      });
-    } finally {
-      setHandoffRevokePending(false);
-    }
-  };
-
-  const runConstrainedAi = async () => {
-    if (!canRunConstrainedAi) return;
-    setAiRunPending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/run-ai-execution`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      const queued = await response.json() as { jobId?: number; jobCode?: string; status?: string };
-      onAiExecutionQueued();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Constrained AI queued",
-        description:
-          `Execution job ${queued.jobCode ?? queued.jobId ?? "queued"} is waiting for the dedicated coding worker. The worker will revalidate the approved lease before one bounded model call; tools, shell, repository, network, filesystem, secrets, and Git actions remain disabled.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Could not run constrained AI",
-        description: error instanceof Error ? error.message : "Constrained AI execution failed",
-        variant: "destructive",
-      });
-    } finally {
-      setAiRunPending(false);
-    }
-  };
-
-  const approveAiPatch = async () => {
-    if (!canApproveAiPatch) return;
-    setAiPatchReviewPending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-ai-patch`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "AI patch explicitly approved",
-        description: "The candidate patch remains uncommitted and must pass sandbox verification before downstream commit/PR gates.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not approve AI patch",
-        description: error instanceof Error ? error.message : "AI patch approval failed",
-        variant: "destructive",
-      });
-    } finally {
-      setAiPatchReviewPending(false);
-    }
-  };
-
-  const approveCommit = async () => {
-    setCommitPending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-commit`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Commit gate started",
-        description: "Creating an isolated task branch, commit, and pull request. The base branch will not be modified or merged automatically.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not start commit gate",
-        description: error instanceof Error ? error.message : "Commit approval failed",
-        variant: "destructive",
-      });
-    } finally {
-      setCommitPending(false);
-    }
-  };
-
-  const verifyPullRequest = async () => {
-    setPrVerifyPending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/verify-pull-request`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "PR verification started",
-        description: "Checking PR head, base, changed files, mergeability, and GitHub CI before merge approval is unlocked.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not verify pull request",
-        description: error instanceof Error ? error.message : "PR verification failed",
-        variant: "destructive",
-      });
-    } finally {
-      setPrVerifyPending(false);
-    }
-  };
-
-  const approveMerge = async () => {
-    setMergePending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-merge`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Explicit merge gate started",
-        description: "The PR will be re-verified against the approved commit and CI immediately before GitHub merge.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not start merge",
-        description: error instanceof Error ? error.message : "Merge approval failed",
-        variant: "destructive",
-      });
-    } finally {
-      setMergePending(false);
-    }
-  };
-
   const update = () => {
-    const updateStatus = explicitGateLocked ? task.status : status;
-    const updateCommitSha = explicitGateLocked ? task.commitSha : commitSha || null;
+    const updateStatus = automaticGateLocked ? task.status : status;
+    const updateCommitSha = automaticGateLocked ? task.commitSha : commitSha || null;
     updateTask.mutate({ id: task.id, data: { status: updateStatus, resultSummary: summary || null, commitSha: updateCommitSha } }, {
       onSuccess: (updated) => {
         queryClient.setQueryData(getGetCodingTaskQueryKey(task.id), (old: CodingTaskDetail | undefined) => old ? { ...old, task: updated } : old);
@@ -2432,20 +2007,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                       )}>
                         {analyzerResult.localExecution?.status ?? analyzerResult.localExecutionPlan.status ?? "PENDING"}
                       </span>
-                      {canApproveLocalPatch && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={approveLocalPatch}
-                          disabled={localPatchPending}
-                          className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
-                          data-testid="button-approve-local-patch"
-                        >
-                          {localPatchPending
-                            ? <><Loader2 className="size-3 animate-spin" />Validating</>
-                            : <><CheckCircle2 className="size-3" />Validate Local Patch</>}
-                        </Button>
-                      )}
+                      
                     </div>
                   </div>
                   {(analyzerResult.localExecution?.reason ?? analyzerResult.localExecutionPlan.reason) && (
@@ -2525,34 +2087,8 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                             Next: {analyzerResult.orchestration?.nextAction
                               ?? (analyzerResult.localMergeApproval?.status === "MERGED" ? "DONE" : "REVIEW")}
                           </span>
-                          {canRunSandboxVerification && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={runSandboxVerification}
-                              disabled={sandboxPending}
-                              className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
-                              data-testid="button-run-sandbox-verification"
-                            >
-                              {sandboxPending
-                                ? <><Loader2 className="size-3 animate-spin" />Starting sandbox</>
-                                : <><TerminalSquare className="size-3" />Run Sandboxed Verification</>}
-                            </Button>
-                          )}
-                          {canApproveCommit && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={approveCommit}
-                              disabled={commitPending}
-                              className="h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
-                              data-testid="button-approve-local-commit"
-                            >
-                              {commitPending
-                                ? <><Loader2 className="size-3 animate-spin" />Creating PR</>
-                                : <><GitCommitHorizontal className="size-3" />Approve Commit & Create PR</>}
-                            </Button>
-                          )}
+                          
+                          
                         </div>
                       </div>
                       <p className="mt-2 text-[10px] leading-4 text-slate-400">
@@ -2679,20 +2215,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   ))}
                                 </div>
                               )}
-                              {canRunLocalRecovery && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={runLocalRecovery}
-                                  disabled={recoveryPending}
-                                  className="mt-3 h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
-                                  data-testid="button-run-local-recovery"
-                                >
-                                  {recoveryPending
-                                    ? <><Loader2 className="size-3 animate-spin" />Recovering</>
-                                    : <><RotateCcw className="size-3" />Run Deterministic Recovery</>}
-                                </Button>
-                              )}
+                              
                               {analyzerResult.localRecovery && (
                                 <div className="mt-3 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-local-recovery-result">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2741,20 +2264,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                   )}
                                 </div>
                               )}
-                              {canPrepareAiHandoff && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={prepareAiHandoff}
-                                  disabled={handoffPreparePending}
-                                  className="mt-3 h-7 bg-amber-300 px-2.5 text-[10px] font-semibold text-[#2b2100] hover:bg-amber-200"
-                                  data-testid="button-prepare-ai-handoff"
-                                >
-                                  {handoffPreparePending
-                                    ? <><Loader2 className="size-3 animate-spin" />Preparing handoff</>
-                                    : <><ArrowUpRight className="size-3" />Prepare AI Handoff</>}
-                                </Button>
-                              )}
+                              
                               {aiPipelineVisible && (
                                 <div className="mt-3 rounded-lg border border-cyan-300/10 bg-[#07101d] p-3" data-testid="panel-ai-pipeline-stages">
                                   <div className="mb-2 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-300">
@@ -2766,11 +2276,11 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                       "AI Required",
                                       "Prepare AI Context",
                                       "AI Context Prepared",
-                                      "Approve AI Handoff",
-                                      "AI Handoff Approved",
+                                      "Validate AI Handoff",
+                                      "AI Handoff Validated",
                                       "Run Constrained AI",
                                       "AI Proposal Ready",
-                                      "Review AI Patch",
+                                      "Automated QC AI Patch",
                                       "Sandbox Verification",
                                     ].map((label, index) => {
                                       const completed = index < aiStageIndex;
@@ -2908,49 +2418,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                     </span>
                                   </div>
                                   <div className="mt-3 flex flex-wrap gap-2">
-                                    {canApproveAiHandoff && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={approveAiHandoff}
-                                        disabled={handoffApprovePending}
-                                        className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
-                                        data-testid="button-approve-ai-handoff"
-                                      >
-                                        {handoffApprovePending
-                                          ? <><Loader2 className="size-3 animate-spin" />Approving handoff</>
-                                          : <><CheckCircle2 className="size-3" />Approve AI Handoff</>}
-                                      </Button>
-                                    )}
-                                    {canRunConstrainedAi && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={runConstrainedAi}
-                                        disabled={aiRunPending}
-                                        className="h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
-                                        data-testid="button-run-constrained-ai"
-                                      >
-                                        {aiRunPending
-                                          ? <><Loader2 className="size-3 animate-spin" />Running constrained AI</>
-                                          : <><Bot className="size-3" />Run Constrained AI</>}
-                                      </Button>
-                                    )}
-                                    {canRevokeAiHandoff && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={revokeAiHandoff}
-                                        disabled={handoffRevokePending}
-                                        className="h-7 border-rose-300/20 bg-transparent px-2.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-300/10 hover:text-rose-200"
-                                        data-testid="button-revoke-ai-handoff"
-                                      >
-                                        {handoffRevokePending
-                                          ? <><Loader2 className="size-3 animate-spin" />Revoking</>
-                                          : <><RotateCcw className="size-3" />Revoke Handoff</>}
-                                      </Button>
-                                    )}
+                                    
+                                    
+                                    
                                   </div>
                                 </div>
                               )}
@@ -3094,20 +2564,7 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                                     </span>
                                   </div>
 
-                                  {canApproveAiPatch && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={approveAiPatch}
-                                      disabled={aiPatchReviewPending}
-                                      className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
-                                      data-testid="button-approve-ai-patch"
-                                    >
-                                      {aiPatchReviewPending
-                                        ? <><Loader2 className="size-3 animate-spin" />Approving AI patch</>
-                                        : <><ShieldCheck className="size-3" />Approve AI Patch for Sandbox</>}
-                                    </Button>
-                                  )}
+                                  
                                 </div>
                               )}
                               {analyzerResult.failureRecoveryContext.warnings.length > 0 && (
@@ -3154,34 +2611,8 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                             )}
                           </div>
                           <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
-                            {canVerifyPullRequest && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={verifyPullRequest}
-                                disabled={prVerifyPending}
-                                className="h-7 bg-emerald-300 px-2.5 text-[10px] font-semibold text-[#08221b] hover:bg-emerald-200"
-                                data-testid="button-verify-pull-request"
-                              >
-                                {prVerifyPending
-                                  ? <><Loader2 className="size-3 animate-spin" />Checking PR</>
-                                  : <><CheckCircle2 className="size-3" />Verify PR & CI</>}
-                              </Button>
-                            )}
-                            {canApproveMerge && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={approveMerge}
-                                disabled={mergePending}
-                                className="h-7 bg-cyan-300 px-2.5 text-[10px] font-semibold text-[#062028] hover:bg-cyan-200"
-                                data-testid="button-approve-pull-request-merge"
-                              >
-                                {mergePending
-                                  ? <><Loader2 className="size-3 animate-spin" />Merging</>
-                                  : <><GitCommitHorizontal className="size-3" />Approve Merge</>}
-                              </Button>
-                            )}
+                            
+                            
                           </div>
                           {analyzerResult.prVerification && (
                             <div className="sm:col-span-2 rounded border border-white/[0.06] bg-[#07101d] p-2" data-testid="panel-pr-verification">
@@ -3355,10 +2786,10 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
       </div>
     )}
   </div>
-)}</div><Button onClick={runAgent} disabled={startCodingRun.isPending || !canRunAgent} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />Starting agent</> : hasActiveRun ? <><Clock3 />Agent running</> : explicitGateLocked ? <><LockKeyhole />Explicit gate required</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
+)}</div><Button onClick={runAgent} disabled={startCodingRun.isPending || !canRunAgent} className="shrink-0 bg-cyan-300 text-[#062028] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60" data-testid="button-run-coding-agent">{startCodingRun.isPending ? <><Loader2 className="animate-spin" />Starting agent</> : hasActiveRun ? <><Clock3 />Agent running</> : automaticGateLocked ? <><LockKeyhole />Automation running</> : <><TerminalSquare />{t("pages.codingWorkspace.runAgent")}</>}</Button></div></section>
           <section><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><FileCode2 className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.changes")}</div><span className="font-mono text-[10px] text-slate-400">{detail.changes.length.toString().padStart(2, "0")}</span></div>{detail.changes.length === 0 ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-400">{t("pages.codingWorkspace.noChanges")}</p> : <div className="space-y-2">{detail.changes.map((change) => <div key={change.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#091222] p-3" data-testid={`card-coding-change-${change.id}`}><span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold", change.changeType === "ADDED" ? "bg-emerald-400/10 text-emerald-300" : change.changeType === "DELETED" ? "bg-rose-400/10 text-rose-300" : "bg-cyan-400/10 text-cyan-300")}>{change.changeType === "ADDED" ? "+" : change.changeType === "DELETED" ? "−" : "M"}</span><div className="min-w-0 flex-1"><div className="truncate font-mono text-xs text-slate-300">{change.filePath}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">{t(`pages.codingWorkspace.changeTypes.${change.changeType.toLowerCase()}`)} · {formatDate(change.createdAt, lang)}</div></div></div>)}</div>}</section>
         </div>
-         <section className="border-t border-white/[0.07] pt-5"><div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><GitCommitHorizontal className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.updateStatus")}</div><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.status")}</span><select value={status} onChange={(event) => setStatus(event.target.value as CodingTaskStatus)} disabled={explicitGateLocked} className="h-9 w-full rounded-md border border-white/10 bg-[#091222] px-3 text-xs text-slate-200 outline-none focus:border-cyan-300/50 disabled:cursor-not-allowed disabled:opacity-50" data-testid="select-coding-status">{STATUSES.map((item) => <option key={item} value={item}>{t(`pages.codingWorkspace.statuses.${item.toLowerCase()}`)}</option>)}</select></label><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.commitSha")}</span><div className="relative"><Copy className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-400" /><Input value={commitSha} onChange={(event) => setCommitSha(event.target.value)} disabled={explicitGateLocked} className="h-9 border-white/10 bg-[#091222] pl-9 font-mono text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50" placeholder="optional" data-testid="input-coding-commit-sha" /></div></label></div>{explicitGateLocked && <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-300"><LockKeyhole className="size-3" />Status and commit SHA are locked while <span className="font-mono">{currentNextAction}</span> requires its explicit gate action.</div>}<label className="mt-3 block space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.resultSummary")}</span><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} className="resize-y border-white/10 bg-[#091222] text-xs leading-5 text-slate-200 placeholder:text-slate-400" placeholder="Add a concise outcome for reviewers." data-testid="input-coding-result-summary" /></label><Button onClick={update} disabled={updateTask.isPending} className="mt-3 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-update-coding-task">{updateTask.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.updating")}</> : <><CheckCircle2 />{t("pages.codingWorkspace.saveUpdate")}</>}</Button></section>
+         <section className="border-t border-white/[0.07] pt-5"><div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"><GitCommitHorizontal className="size-3.5 text-cyan-300" />{t("pages.codingWorkspace.updateStatus")}</div><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.status")}</span><select value={status} onChange={(event) => setStatus(event.target.value as CodingTaskStatus)} disabled={automaticGateLocked} className="h-9 w-full rounded-md border border-white/10 bg-[#091222] px-3 text-xs text-slate-200 outline-none focus:border-cyan-300/50 disabled:cursor-not-allowed disabled:opacity-50" data-testid="select-coding-status">{STATUSES.map((item) => <option key={item} value={item}>{t(`pages.codingWorkspace.statuses.${item.toLowerCase()}`)}</option>)}</select></label><label className="space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.commitSha")}</span><div className="relative"><Copy className="pointer-events-none absolute left-3 top-2.5 size-3.5 text-slate-400" /><Input value={commitSha} onChange={(event) => setCommitSha(event.target.value)} disabled={automaticGateLocked} className="h-9 border-white/10 bg-[#091222] pl-9 font-mono text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50" placeholder="optional" data-testid="input-coding-commit-sha" /></div></label></div>{automaticGateLocked && <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-300"><LockKeyhole className="size-3" />Status and commit SHA are controlled automatically while <span className="font-mono">{currentNextAction}</span> is progressing.</div>}<label className="mt-3 block space-y-2 text-xs text-slate-500"><span>{t("pages.codingWorkspace.resultSummary")}</span><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} className="resize-y border-white/10 bg-[#091222] text-xs leading-5 text-slate-200 placeholder:text-slate-400" placeholder="Add a concise outcome for reviewers." data-testid="input-coding-result-summary" /></label><Button onClick={update} disabled={updateTask.isPending} className="mt-3 bg-cyan-300 text-[#062028] hover:bg-cyan-200" data-testid="button-update-coding-task">{updateTask.isPending ? <><Loader2 className="animate-spin" />{t("pages.codingWorkspace.updating")}</> : <><CheckCircle2 />{t("pages.codingWorkspace.saveUpdate")}</>}</Button></section>
       </CardContent>
     </Card>
   );
