@@ -2,15 +2,23 @@ import express from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ record: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  record: vi.fn(),
+  subscribe: vi.fn(),
+  list: vi.fn(),
+  ack: vi.fn(),
+  unsubscribe: vi.fn(),
+}));
 vi.mock("../services/aiCoreMcpResultEventService.js", () => ({ recordAiCoreMcpTerminalResult: mocks.record }));
 vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
   oauthIssuer: () => "https://example.test", oauthResource: () => "https://example.test/api", verifyMcpAccessToken: vi.fn(),
 }));
 vi.mock("../services/aiCoreWhatsappChatService.js", () => ({ resolveAiCoreInternalBaseUrl: () => "http://localhost:8080/api" }));
 vi.mock("../services/localCodingControlBridgeService.js", () => ({
-  acknowledgeCodingBridgeResponse: vi.fn(), listPendingCodingBridgeResponsesForConversation: vi.fn(),
-  subscribeCodingBridgeConversation: vi.fn(), unsubscribeCodingBridgeConversation: vi.fn(),
+  acknowledgeCodingBridgeResponse: mocks.ack,
+  listPendingCodingBridgeResponsesForConversation: mocks.list,
+  subscribeCodingBridgeConversation: mocks.subscribe,
+  unsubscribeCodingBridgeConversation: mocks.unsubscribe,
 }));
 import router from "../routes/ai-core-mcp.js";
 
@@ -19,6 +27,11 @@ describe("MCP command two-way routing", () => {
     vi.clearAllMocks();
     vi.stubEnv("AI_CORE_CHAT_CONNECTOR_KEY", "test-connector-key");
     mocks.record.mockResolvedValue(undefined);
+    mocks.subscribe.mockResolvedValue({
+      clientId: "chatgpt:conversation-a",
+      leaseExpiresAt: new Date("2026-10-07T16:00:00.000Z"),
+    });
+    mocks.list.mockResolvedValue([]);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ kind: "answer", reply: "OK" }), { status: 200 })));
   });
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -74,19 +87,48 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("accepts plain commands, injects the internal execution gate, and persists the user instruction", async () => {
+  it("accepts plain commands, auto-subscribes terminal events, and persists the user instruction", async () => {
     const response = await send("Uji koneksi MCP");
     expect(response.body.result.isError).toBeFalsy();
+
+    expect(mocks.subscribe).toHaveBeenCalledWith({
+      conversationId: "conversation-a",
+      eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
+      leaseSeconds: 86_400,
+    });
+    expect(mocks.subscribe.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(fetch).mock.invocationCallOrder[0]!,
+    );
+
     const init = vi.mocked(fetch).mock.calls[0][1];
     expect(JSON.parse(String(init?.body))).toMatchObject({
       mode: "auto",
       message: "@ Uji koneksi MCP",
       conversationId: "conversation-a",
     });
+
+    expect(response.body.result.structuredContent).toMatchObject({
+      kind: "answer",
+      reply: "OK",
+      eventSubscription: {
+        subscribed: true,
+        conversationId: "conversation-a",
+        eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
+        clientId: "chatgpt:conversation-a",
+      },
+    });
+
     expect(mocks.record).toHaveBeenCalledWith({
       conversationId: "conversation-a",
       instruction: "Uji koneksi MCP",
-      payload: { kind: "answer", reply: "OK" },
+      payload: expect.objectContaining({
+        kind: "answer",
+        reply: "OK",
+        eventSubscription: expect.objectContaining({
+          subscribed: true,
+          conversationId: "conversation-a",
+        }),
+      }),
     });
   });
   it("keeps a leading @ backward compatible without duplicating the gate", async () => {
@@ -98,6 +140,41 @@ describe("MCP command two-way routing", () => {
       message: "@ Uji koneksi MCP",
     });
   });
+  it("keeps command execution available when automatic subscription cannot be created", async () => {
+    mocks.subscribe.mockRejectedValueOnce(new Error("presence database unavailable"));
+
+    const response = await send("ping");
+
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      reply: "OK",
+      eventSubscription: {
+        subscribed: false,
+        conversationId: "conversation-a",
+        error: "presence database unavailable",
+      },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renews the long conversation lease whenever events are read", async () => {
+    const response = await callTool("read_ai_core_events", {
+      conversationId: "conversation-a",
+      limit: 25,
+    });
+
+    expect(response.body.result.isError).toBeFalsy();
+    expect(mocks.subscribe).toHaveBeenCalledWith({
+      conversationId: "conversation-a",
+      eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
+      leaseSeconds: 86_400,
+    });
+    expect(mocks.list).toHaveBeenCalledWith({
+      conversationId: "conversation-a",
+      limit: 25,
+    });
+  });
+
   it("preserves a completed reply if event persistence fails", async () => {
     mocks.record.mockRejectedValue(new Error("database unavailable"));
     const response = await send("ping");
