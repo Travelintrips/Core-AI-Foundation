@@ -507,6 +507,55 @@ describe("autonomous transient database recovery", () => {
   });
 });
 
+describe("autonomous recoverable operational failures", () => {
+  it.each([
+    "Constrained model provider failed with PROVIDER_UNAVAILABLE",
+    "Ollama worker is unavailable",
+    "No healthy worker capacity is available",
+    "SSH connection timed out during banner exchange",
+    "Connector timeout while calling Hostinger",
+    "HTTP 504 Gateway Time-out",
+    "Rate limit exceeded: HTTP 429",
+    "insufficient_quota from provider",
+    "Repository clone failed: No remote source branch is available to seed isolated workspace",
+    "resource temporarily unavailable",
+  ])("classifies transient operational failure as recoverable: %s", async (message) => {
+    const { isRecoverableAutonomousOperationalFailure } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+    expect(isRecoverableAutonomousOperationalFailure(message)).toBe(true);
+  });
+
+  it.each([
+    "TypeScript compile failed: TS2322 type mismatch",
+    "Unit test assertion failed: expected true to equal false",
+    "Proposal policy rejected: FORBIDDEN_GIT_ACTION",
+    "CODING_TASK_NOT_FOUND",
+  ])("does not hide deterministic or policy failures as recoverable: %s", async (message) => {
+    const { isRecoverableAutonomousOperationalFailure } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+    expect(isRecoverableAutonomousOperationalFailure(message)).toBe(false);
+  });
+
+  it("reports recoverable operational failures as BLOCKER before terminal FAILED fallback", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+    const recoverableIndex = source.indexOf('"RECOVERABLE_OPERATIONAL_FAILURE"');
+    const terminalIndex = source.indexOf('"AUTONOMOUS_CYCLE_FAILED"', recoverableIndex);
+    expect(recoverableIndex).toBeGreaterThan(0);
+    expect(terminalIndex).toBeGreaterThan(recoverableIndex);
+    expect(source.slice(recoverableIndex, terminalIndex)).toContain(
+      'report(\n        taskId,\n        "BLOCKER"',
+    );
+    expect(source.slice(recoverableIndex, terminalIndex)).toContain(
+      "fallbackRequired: true",
+    );
+  });
+});
+
 describe("autonomous repeated provider rejection", () => {
   it("blocks repeated identical non-retryable provider bad requests", async () => {
     const { repeatedNonRetryableAiProviderFailure } = await import(
@@ -939,6 +988,20 @@ describe("READY_REVIEW autonomous recovery policy", () => {
         maxCycles: 40,
         lastAction: "TASK_GRAPH_BLOCKER",
         lastError: "Workstream WS-001 failed: AI proposal policy rejected: EXPIRED_HANDOFF",
+      }),
+    ).toEqual({
+      reactivate: true,
+      extendBudget: false,
+      reason: "RECOVERABLE_TECHNICAL_BLOCKER",
+    });
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 12,
+        maxCycles: 40,
+        lastAction: "RECOVERABLE_OPERATIONAL_FAILURE",
+        lastError: "SSH connection timed out during banner exchange",
       }),
     ).toEqual({
       reactivate: true,
