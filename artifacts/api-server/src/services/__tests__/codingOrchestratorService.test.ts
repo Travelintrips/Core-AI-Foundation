@@ -135,6 +135,23 @@ const run = {
   errorMessage: null,
 };
 
+describe("Coding Orchestrator manual stop fence", () => {
+  it("does not allow late analyzer callbacks to reactivate a manually stopped task", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("async function isManualStopRequested");
+    expect(source).toContain('"MANUAL_STOP"');
+    expect(source).toContain("Manual stop detected before continuation");
+    expect(source).toContain("Manual stop detected after analyzer execution");
+    expect(source).toContain("Ignoring late orchestration error after manual stop");
+    expect(source).toContain("if (await isManualStopRequested(taskId)) return;");
+    expect(source).toContain("last_action = 'MANUAL_STOP'");
+  });
+});
+
 describe("Coding Orchestrator autonomous fail-closed policy", () => {
   it("does not treat an unreadable autonomous state as permission to enable", () => {
     const source = readFileSync(
