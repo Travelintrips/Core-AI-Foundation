@@ -150,6 +150,9 @@ function statusTone(status: string): string {
   if (["DOWN", "OFFLINE", "FAILED", "BLOCKED"].includes(value)) {
     return "border-rose-400/25 bg-rose-400/10 text-rose-300";
   }
+  if (["CANCELLED", "DISABLED", "STOPPED"].includes(value)) {
+    return "border-slate-500/25 bg-slate-500/10 text-slate-400";
+  }
   if (["QR_REQUIRED", "RECONNECT", "DEGRADED", "READY_REVIEW", "TESTING"].includes(value)) {
     return "border-amber-400/25 bg-amber-400/10 text-amber-300";
   }
