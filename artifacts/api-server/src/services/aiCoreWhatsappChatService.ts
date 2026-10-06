@@ -38,8 +38,15 @@ export function resolveAiCoreInternalBaseUrl(): string {
 
 function gatewayConfig() {
   return {
-    baseUrl: (process.env["CST_WA_GATEWAY_URL"] ?? "").trim().replace(/\/$/, ""),
-    apiKey: (process.env["CST_WA_GATEWAY_API_KEY"] ?? "").trim(),
+    baseUrl: (
+      process.env["CST_WA_GATEWAY_URL"] ??
+      "https://wa.cstlogistic.co.id"
+    ).trim().replace(/\/$/, ""),
+    apiKey: (
+      process.env["CST_WA_GATEWAY_API_KEY"] ??
+      process.env["CST_WA_GATEWAY_TOKEN"] ??
+      ""
+    ).trim(),
   };
 }
 

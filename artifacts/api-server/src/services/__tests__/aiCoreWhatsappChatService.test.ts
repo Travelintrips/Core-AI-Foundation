@@ -18,6 +18,7 @@ describe("AI Core WhatsApp gateway delivery", () => {
     vi.unstubAllGlobals();
     delete process.env["CST_WA_GATEWAY_URL"];
     delete process.env["CST_WA_GATEWAY_API_KEY"];
+    delete process.env["CST_WA_GATEWAY_TOKEN"];
     delete process.env["AI_CORE_WA_GATEWAY_RETRY_DELAY_MS"];
   });
 
@@ -29,6 +30,34 @@ describe("AI Core WhatsApp gateway delivery", () => {
     expect(shouldRetryAiCoreWhatsappGatewayStatus(400)).toBe(false);
     expect(shouldRetryAiCoreWhatsappGatewayStatus(401)).toBe(false);
     expect(shouldRetryAiCoreWhatsappGatewayStatus(403)).toBe(false);
+  });
+
+  it("accepts the gateway token alias and stable default gateway URL", async () => {
+    process.env["CST_WA_GATEWAY_TOKEN"] = "token-alias";
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ messageId: "wa-message-alias" }),
+        { status: 202, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await sendAiCoreWhatsappReply({
+      to: "628111111111",
+      incomingMessageId: "incoming-alias",
+      text: "Halo",
+    });
+
+    expect(result).toEqual({
+      status: "queued",
+      gatewayStatus: 202,
+      messageId: "wa-message-alias",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://wa.cstlogistic.co.id/v1/messages");
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer token-alias");
   });
 
   it("retries a transient gateway failure with the same idempotency key", async () => {
