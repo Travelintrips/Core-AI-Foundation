@@ -6,6 +6,34 @@ import {
 } from "../codingTaskPresentationService.js";
 
 describe("coding task presentation status", () => {
+  it("shows explicit manual stops as CANCELLED on the operations dashboard", () => {
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "CWS-MANUAL-STOP",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: "DISABLED",
+        autonomousEnabled: false,
+        autonomousLastAction: "MANUAL_STOP",
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("CANCELLED");
+
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "CWS-TECHNICAL-BLOCKER",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: null,
+        autonomousEnabled: null,
+        autonomousLastAction: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("BLOCKED");
+  });
+
   it("shows completed Multi-Worker child shards as COMPLETED when no critical gate remains", () => {
     expect(
       codingDashboardTaskPresentationStatus({
@@ -182,6 +210,8 @@ describe("coding task presentation status", () => {
       "utf8",
     );
     expect(dashboardRoute).toContain("codingDashboardTaskPresentationStatus");
+    expect(dashboardRoute).toContain("a.enabled AS autonomous_enabled");
+    expect(dashboardRoute).toContain("a.last_action AS autonomous_last_action");
   });
 
   it("workspace list query includes active autonomous states for presentation mapping", () => {
