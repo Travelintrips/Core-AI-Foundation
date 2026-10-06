@@ -393,24 +393,19 @@ async function persistSnapshot(
   if (await isManualStopRequested(taskId)) return;
 
   await db.transaction(async (tx) => {
-    const manualStop = await tx.execute(sql`
-      SELECT EXISTS (
-        SELECT 1
-        FROM ai_platform.ai_coding_autonomous_tasks
-        WHERE task_id = ${taskId}::uuid
-          AND enabled = FALSE
-          AND status = 'DISABLED'
-          AND last_action = 'MANUAL_STOP'
-      ) AS stopped
-    `);
-    if ((manualStop.rows?.[0] as { stopped?: boolean } | undefined)?.stopped === true) {
-      return;
-    }
+    const manualStopFence = sql`NOT EXISTS (
+      SELECT 1
+      FROM ai_platform.ai_coding_autonomous_tasks
+      WHERE task_id = ${taskId}::uuid
+        AND enabled = FALSE
+        AND status = 'DISABLED'
+        AND last_action = 'MANUAL_STOP'
+    )`;
 
     await tx
       .update(aiCodingRunsTable)
       .set({ logs: stringify(payload) })
-      .where(eq(aiCodingRunsTable.id, runId));
+      .where(and(eq(aiCodingRunsTable.id, runId), manualStopFence));
 
     await tx
       .update(aiCodingTasksTable)
@@ -418,7 +413,7 @@ async function persistSnapshot(
         status: taskStatus,
         ...(summary !== undefined ? { resultSummary: summary } : {}),
       })
-      .where(eq(aiCodingTasksTable.id, taskId));
+      .where(and(eq(aiCodingTasksTable.id, taskId), manualStopFence));
   });
 }
 
@@ -494,20 +489,14 @@ async function completeLocalAnalysis(
 
   let preservedAdvancedAiGate = false;
   await db.transaction(async (tx) => {
-    const manualStop = await tx.execute(sql`
-      SELECT EXISTS (
-        SELECT 1
-        FROM ai_platform.ai_coding_autonomous_tasks
-        WHERE task_id = ${input.task.id}::uuid
-          AND enabled = FALSE
-          AND status = 'DISABLED'
-          AND last_action = 'MANUAL_STOP'
-      ) AS stopped
-    `);
-    if ((manualStop.rows?.[0] as { stopped?: boolean } | undefined)?.stopped === true) {
-      preservedAdvancedAiGate = true;
-      return;
-    }
+    const manualStopFence = sql`NOT EXISTS (
+      SELECT 1
+      FROM ai_platform.ai_coding_autonomous_tasks
+      WHERE task_id = ${input.task.id}::uuid
+        AND enabled = FALSE
+        AND status = 'DISABLED'
+        AND last_action = 'MANUAL_STOP'
+    )`;
 
     const [persistedRun] = await tx
       .select({ logs: aiCodingRunsTable.logs })
@@ -529,7 +518,7 @@ async function completeLocalAnalysis(
           logs: stringify(result),
           errorMessage: null,
         })
-        .where(eq(aiCodingRunsTable.id, input.run.id));
+        .where(and(eq(aiCodingRunsTable.id, input.run.id), manualStopFence));
 
       await tx
         .update(aiCodingTasksTable)
@@ -537,7 +526,7 @@ async function completeLocalAnalysis(
           status: "READY_REVIEW",
           resultSummary: summary,
         })
-        .where(eq(aiCodingTasksTable.id, input.task.id));
+        .where(and(eq(aiCodingTasksTable.id, input.task.id), manualStopFence));
     }
 
     await tx
