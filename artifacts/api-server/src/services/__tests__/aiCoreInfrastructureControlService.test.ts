@@ -85,6 +85,10 @@ describe("AI Core Hostinger infrastructure control", () => {
       "Hostinger cek docker project=myapp read-only; lihat apakah container restart otomatis, jangan ubah apa pun",
       "HOSTINGER_DOCKER_STATUS",
     ],
+    [
+      "Hostinger cek status docker project=ai-core-services directory=/opt/ai-core-services read-only; jangan deploy/restart/ubah env",
+      "HOSTINGER_DOCKER_STATUS",
+    ],
   ])("fails closed for explicit read-only infrastructure inspection: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
