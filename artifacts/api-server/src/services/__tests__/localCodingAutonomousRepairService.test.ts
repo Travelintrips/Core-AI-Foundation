@@ -929,16 +929,37 @@ describe("autonomous terminal task status", () => {
 });
 
 
+describe("autonomous lifecycle source recovery", () => {
+  it("reads nextAction from completed incident lifecycle runs, not only Coding Orchestrator", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const start = source.indexOf("async function loadTaskState");
+    const end = source.indexOf("function contextHeadSha", start);
+    const loader = source.slice(start, end);
+    expect(loader).toContain("candidateOrchestration?.nextAction");
+    expect(loader).toContain('run.status !== "COMPLETED"');
+    expect(loader).toContain("runs.find((run) => {");
+  });
+});
+
 describe("autonomous reservation conflict recovery", () => {
-  it("keeps REVIEW_CONFLICT nonterminal and reports a recoverable blocker", () => {
+  it("keeps REVIEW_CONFLICT nonterminal and automatically retries after reservations clear", () => {
     const source = readFileSync(
       new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
       "utf8",
     );
 
     expect(source).toContain('case "REVIEW_CONFLICT"');
+    expect(source).toContain("reserveCodingFileSet({");
+    expect(source).toContain('probe.status !== "CONFLICT"');
+    expect(source).toContain('"RETRY_RESERVATION_CONFLICT"');
+    expect(source).toContain("restartRepositoryAnalysisAfterTransientFailure(");
     expect(source).toContain('"WAIT_RESERVATION_CONFLICT"');
     expect(source).toContain('report(taskId, "BLOCKER"');
+    expect(source).toContain("automaticRetry: true");
     expect(source).toContain("recoverable: true");
   });
 });
@@ -975,6 +996,20 @@ describe("autonomous deterministic workstream child completion", () => {
   });
 });
 
+describe("READY_REVIEW conflict orphan recovery", () => {
+  it("includes REVIEW_CONFLICT in periodic orphan recovery", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const start = source.indexOf("const recoverable = new Set([");
+    const end = source.indexOf("]);", start);
+    const recoverable = source.slice(start, end);
+    expect(recoverable).toContain('"REVIEW_CONFLICT"');
+  });
+});
+
 describe("READY_REVIEW autonomous recovery policy", () => {
   it("reactivates safe technical blockers without bypassing policy blockers", async () => {
     const { readyReviewAutonomousRecoveryDecision } = await import(
@@ -1002,6 +1037,34 @@ describe("READY_REVIEW autonomous recovery policy", () => {
         maxCycles: 40,
         lastAction: "RECOVERABLE_OPERATIONAL_FAILURE",
         lastError: "SSH connection timed out during banner exchange",
+      }),
+    ).toEqual({
+      reactivate: true,
+      extendBudget: false,
+      reason: "RECOVERABLE_TECHNICAL_BLOCKER",
+    });
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 12,
+        maxCycles: 40,
+        lastAction: "WAIT_RESERVATION_CONFLICT",
+        lastError: "Active file reservation conflict is recoverable.",
+      }),
+    ).toEqual({
+      reactivate: true,
+      extendBudget: false,
+      reason: "RECOVERABLE_TECHNICAL_BLOCKER",
+    });
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 12,
+        maxCycles: 40,
+        lastAction: "UNSUPPORTED_NEXT_ACTION",
+        lastError: "Autonomous loop tidak memiliki action aman untuk nextAction=REVIEW_CONFLICT.",
       }),
     ).toEqual({
       reactivate: true,

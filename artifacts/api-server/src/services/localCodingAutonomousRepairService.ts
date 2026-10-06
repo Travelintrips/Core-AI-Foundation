@@ -58,6 +58,7 @@ import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaServ
 import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
 import { purgeExpiredCodingTestTasks, reconcileStaleCodingRuns } from "./localCodingRunRecoveryService.js";
 import { isRetryableRepositoryCloneResourceError } from "./repositoryAnalyzerService.js";
+import { reserveCodingFileSet } from "./codingConflictRegistryService.js";
 
 const DEFAULT_INTERVAL_MS = 8_000;
 const MIN_INTERVAL_MS = 2_000;
@@ -295,12 +296,26 @@ async function loadTaskState(taskId: string) {
   );
 
   const activeRun = runs.find((run) => run.status === "RUNNING") ?? null;
-  const orchestrator = runs.find(
-    (run) =>
-      run.agentName === "Coding Orchestrator" &&
-      run.status === "COMPLETED" &&
-      Boolean(run.logs),
-  ) ?? null;
+  // Incident Auto-Repair and other bounded lifecycle agents can persist the
+  // same orchestration contract as Coding Orchestrator. Prefer the newest
+  // completed run that actually exposes a nextAction, rather than hard-coding
+  // one agent name and leaving incident tasks orphaned in READY_REVIEW.
+  const orchestrator =
+    runs.find((run) => {
+      if (run.status !== "COMPLETED" || !run.logs) return false;
+      const candidate = parseJson(run.logs);
+      const candidateOrchestration = isRecord(candidate.orchestration)
+        ? candidate.orchestration
+        : null;
+      return typeof candidateOrchestration?.nextAction === "string";
+    }) ??
+    runs.find(
+      (run) =>
+        run.agentName === "Coding Orchestrator" &&
+        run.status === "COMPLETED" &&
+        Boolean(run.logs),
+    ) ??
+    null;
   const payload = orchestrator ? parseJson(orchestrator.logs) : {};
   const orchestration = isRecord(payload.orchestration) ? payload.orchestration : {};
   const nextAction =
@@ -361,6 +376,7 @@ function retryableRepositoryAnalyzerFailure(
 
 async function restartRepositoryAnalysisAfterTransientFailure(
   taskId: string,
+  resultSummary = "Retrying Repository Analyzer after transient host resource pressure.",
 ): Promise<void> {
   const { task, run } = await db.transaction(async (tx) => {
     const [task] = await tx
@@ -399,7 +415,7 @@ async function restartRepositoryAnalysisAfterTransientFailure(
       .update(aiCodingTasksTable)
       .set({
         status: "ANALYZING",
-        resultSummary: "Retrying Repository Analyzer after transient host resource pressure.",
+        resultSummary,
       })
       .where(eq(aiCodingTasksTable.id, taskId));
 
@@ -1203,13 +1219,59 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
 
     switch (state.nextAction) {
       case "REVIEW_CONFLICT": {
+        const changeReservation = isRecord(state.payload.changeReservation)
+          ? state.payload.changeReservation
+          : null;
+        const files = Array.isArray(changeReservation?.files)
+          ? [...new Set(
+              changeReservation.files.filter(
+                (file): file is string => typeof file === "string" && file.trim().length > 0,
+              ),
+            )]
+          : [];
+
+        if (files.length > 0) {
+          const probe = await reserveCodingFileSet({
+            repository: state.task.repository,
+            branch: state.task.branch,
+            taskId,
+            files,
+          });
+
+          if (probe.status !== "CONFLICT") {
+            await reserveCycle();
+            await restartRepositoryAnalysisAfterTransientFailure(
+              taskId,
+              "Reservation conflict cleared. Re-running Repository Analyzer from the current repository state.",
+            );
+            await setState(taskId, "WAITING", "RETRY_RESERVATION_CONFLICT", null);
+            await report(
+              taskId,
+              "CHECKPOINT",
+              "Reservation conflict sudah bersih. AI Core otomatis menjalankan ulang analisis tanpa menunggu human review.",
+              {
+                source: "autonomous-repair-loop",
+                previousNextAction: "REVIEW_CONFLICT",
+                reservedFiles: probe.files.length,
+                recoverable: true,
+              },
+            );
+            return {
+              taskId,
+              status: "WAITING",
+              action: "RETRY_RESERVATION_CONFLICT",
+            };
+          }
+        }
+
         const message =
-          "Active file reservation conflict is recoverable. The task stays blocked while ChatGPT/fallback coordination resolves the overlap or retries after the reservation clears.";
+          "Active file reservation conflict is recoverable. AI Core will recheck it automatically; no human review is required.";
         await setState(taskId, "BLOCKED", "WAIT_RESERVATION_CONFLICT", message);
         await report(taskId, "BLOCKER", message, {
           source: "autonomous-repair-loop",
           nextAction: "REVIEW_CONFLICT",
           recoverable: true,
+          automaticRetry: true,
         });
         return { taskId, status: "BLOCKED", action: "WAIT_RESERVATION_CONFLICT" };
       }
@@ -1809,6 +1871,9 @@ export function readyReviewAutonomousRecoveryDecision(input: {
   }
 
   const recoverableTechnicalBlocker =
+    lastAction === "WAIT_RESERVATION_CONFLICT" ||
+    (lastAction === "UNSUPPORTED_NEXT_ACTION" &&
+      /nextAction=REVIEW_CONFLICT/i.test(lastError)) ||
     (lastAction === "TASK_GRAPH_BLOCKER" &&
       /EXPIRED_HANDOFF|Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT|Exact replacement expected|STALE_CONTEXT|stale claim|repository clone failed/i.test(
         lastError,
@@ -1878,6 +1943,7 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
     "APPROVE_COMMIT",
     "REVIEW_PR",
     "APPROVE_MERGE",
+    "REVIEW_CONFLICT",
   ]);
 
   for (const candidate of candidates) {
