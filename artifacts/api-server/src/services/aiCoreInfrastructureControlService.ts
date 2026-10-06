@@ -660,7 +660,7 @@ async function callHostinger(
       attached: true,
       result: attached.data,
     };
-  } else if ([[
+  } else if ([
     "HOSTINGER_DNS_LIST",
     "HOSTINGER_DNS_SUBDOMAIN_CREATE",
     "HOSTINGER_DNS_RECORD_CREATE",
