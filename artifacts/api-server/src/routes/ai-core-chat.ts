@@ -3288,7 +3288,7 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
     }
 
     const delivery = await waitForCodingWhatsappDelivery(outboundMessageId, {
-      timeoutMs: 45_000,
+      timeoutMs: 90_000,
       pollIntervalMs: 1_000,
     });
     if (delivery.status !== "sent") {
