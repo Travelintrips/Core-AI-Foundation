@@ -66,6 +66,28 @@ describe("dispatcher rolling-deploy lease fencing", () => {
     expect(source).toContain("if (_workers.length < DISPATCHER_WORKERS.length)");
     expect(source).toContain("await ensureWorkers().catch");
   });
+
+  it("marks lease release stale when a worker still owns active work", () => {
+    const source = readFileSync(
+      new URL("../workerClusterService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("WHEN running_jobs > 0 OR current_job IS NOT NULL THEN 'stale'");
+    expect(source).toContain("ELSE 'offline'");
+  });
+
+  it("recovers legacy offline workers that still advertise active occupancy", () => {
+    const source = readFileSync(
+      new URL("../workerClusterService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('eq(aiWorkersTable.status, "offline")');
+    expect(source).toContain("${aiWorkersTable.runningJobs} > 0");
+    expect(source).toContain("${aiWorkersTable.currentJob} IS NOT NULL");
+    expect(source).toContain("recoverableWorkers");
+  });
 });
 
 
