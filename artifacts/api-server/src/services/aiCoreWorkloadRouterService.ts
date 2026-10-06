@@ -177,7 +177,11 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
   if (
     RUNTIME_CONTEXT.test(text) &&
     (RUNTIME_MUTATION.test(actionableText) || EXPLICIT_RUNTIME_ONLY.test(text)) &&
-    !(CODING_ACTION.test(actionableText) && /\b(?:kode|code|source|file|repository|repo|typescript|javascript|python|function|class|endpoint|api)\b/i.test(actionableText))
+    !(
+      CODING_ACTION.test(actionableText) &&
+      CODE_CONTEXT.test(actionableText) &&
+      !EXPLICIT_RUNTIME_ONLY.test(text)
+    )
   ) {
     return route("CRITICAL_ACTION");
   }
