@@ -2414,29 +2414,93 @@ async function runAutoMode(
   }
 
   if (parsedConversation.commands.length > 1) {
-    if (!input.projectName || !input.repository || !input.branch) {
-      return {
-        kind: "validation",
-        reply: "Perintah multi-worker membutuhkan Project, Repository, dan Branch.",
-      };
-    }
-    const tasks = [];
+    const results: Array<Record<string, unknown>> = [];
+    let codingTaskCount = 0;
+
     for (const command of parsedConversation.commands) {
       const childInput = { ...executionInput, message: command };
-      tasks.push(await startAgentTask(childInput));
+      const decision = classifyAiCoreChatDispatch(command);
+
+      if (decision.kind === "INFRA_OPERATION") {
+        const result = await runInfrastructureOperation(command);
+        if (result) {
+          results.push({ ...result, executionLane: "NO_WORKER" });
+          continue;
+        }
+      }
+
+      if (decision.kind === "GITHUB_OPERATION") {
+        const result = await runGitHubOperation(command, input.repository);
+        if (result) {
+          results.push({ ...result, executionLane: "NO_WORKER" });
+          continue;
+        }
+      }
+
+      if (decision.kind === "REMOTE_READONLY") {
+        const result = await maybeRunRemoteWorkerPreset(
+          { ...input, message: command },
+          decision.preset,
+        );
+        if (result) {
+          results.push({ ...result, executionLane: "TARGETED" });
+          continue;
+        }
+      }
+
+      if (decision.kind === "EXTERNAL_AGENT") {
+        results.push(await startExternalAgentWork(
+          childInput,
+          decision.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
+        ));
+        continue;
+      }
+
+      if (decision.kind === "CONTROL_PLANE") {
+        if (!input.projectName || !input.repository || !input.branch) {
+          results.push({
+            kind: "validation",
+            executionLane: "CODING",
+            reply:
+              "Sub-perintah coding membutuhkan Project, Repository, dan Branch.",
+          });
+          continue;
+        }
+        codingTaskCount += 1;
+        results.push({
+          ...(await startAgentTask(childInput)),
+          executionLane: "CODING",
+        });
+        continue;
+      }
+
+      results.push({
+        ...(await answerAskMode(
+          command,
+          input.modelPolicy,
+          input.context ?? [],
+          command,
+          teacherScope,
+        )),
+        executionLane: decision.executionLane,
+      });
     }
+
     return {
-      kind: "multi_agent",
-      route: "CONTROL_PLANE",
+      kind: "multi_route",
+      route: "BOUNDED_CONTROL_PLANE",
       provider: null,
       model: null,
       usage: null,
       estimatedCostUsd: 0,
-      workload: "CODING",
-      costClass: "HIGH",
       confidence: parsedConversation.confidence,
-      reply: `${tasks.length} task terpisah sudah dibuat untuk dijalankan paralel oleh control plane.`,
-      tasks,
+      codingTaskCount,
+      noWorkerCount: results.filter((item) => item["executionLane"] === "NO_WORKER").length,
+      reply:
+        codingTaskCount > 0
+          ? `${results.length} sub-perintah diproses; hanya ${codingTaskCount} yang membutuhkan coding worker.`
+          : `${results.length} sub-perintah diproses tanpa membuat coding task.`,
+      results,
     };
   }
 
