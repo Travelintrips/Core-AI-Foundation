@@ -110,10 +110,12 @@ import {
   recordChatLearningEvent,
   retrieveChatLearnings,
   retrieveOpenAiTeacherAnswer,
+  retrieveRecentChatContext,
   type ChatLearningScope,
 } from "../services/aiCoreChatLearningService.js";
 import {
   buildConversationPrompt,
+  contextualizeConversationCommand,
   parseConversationCommand,
   redactConversationText,
   sanitizeConversationContext,
@@ -2283,16 +2285,20 @@ async function runAutoMode(
       model: null,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       estimatedCostUsd: 0,
-      reply: "Perintah setelah @ tidak boleh kosong.",
+      reply: "Perintah tidak boleh kosong.",
     };
   }
   input = { ...input, message: commandMessage };
   executionInput = { ...executionInput, message: commandMessage };
 
-  const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(input.message);
-  if (existingTaskLifecycle) return existingTaskLifecycle;
-
   const parsedConversation = parseConversationCommand(input.message, input.context ?? []);
+  const contextualCommand = contextualizeConversationCommand(
+    input.message,
+    input.context ?? [],
+  );
+
+  const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(contextualCommand);
+  if (existingTaskLifecycle) return existingTaskLifecycle;
   if (parsedConversation.ambiguous) {
     return {
       kind: "clarification",
@@ -2345,7 +2351,7 @@ async function runAutoMode(
     };
   }
 
-  const decision = classifyAiCoreChatDispatch(input.message);
+  const decision = classifyAiCoreChatDispatch(contextualCommand);
   const routingMeta = {
     workload: decision.workload.workload,
     costClass: decision.workload.costClass,
@@ -2360,17 +2366,23 @@ async function runAutoMode(
   }
 
   if (decision.kind === "CONTROL_PLANE") {
-    const result = await startAgentTask(executionInput);
+    const result = await startAgentTask({ ...executionInput, message: contextualCommand });
     return { ...result, ...routingMeta };
   }
 
   if (decision.kind === "EXTERNAL_AGENT") {
-    const external = await startExternalAgentWork(executionInput, decision.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID);
+    const external = await startExternalAgentWork(
+      { ...executionInput, message: contextualCommand },
+      decision.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
+    );
     return { ...external, ...routingMeta };
   }
 
   if (decision.kind === "REMOTE_READONLY") {
-    const remote = await maybeRunRemoteWorkerPreset(input, decision.preset);
+    const remote = await maybeRunRemoteWorkerPreset(
+      { ...input, message: contextualCommand },
+      decision.preset,
+    );
     if (remote) return { ...remote, ...routingMeta };
   }
 
@@ -3114,7 +3126,15 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       branch: parsed.data.branch ?? null,
     };
     const safeMessage = redactConversationText(parsed.data.message);
-    const safeContext = sanitizeConversationContext(parsed.data.context);
+    const explicitContext = sanitizeConversationContext(parsed.data.context);
+    const recoveredContext =
+      explicitContext.length === 0 && parsed.data.conversationId
+        ? await retrieveRecentChatContext(scope).catch(() => [])
+        : [];
+    const safeContext =
+      explicitContext.length > 0
+        ? explicitContext
+        : sanitizeConversationContext(recoveredContext);
     await recordChatLearningEvent({
       role: "user",
       content: safeMessage,
@@ -3225,7 +3245,15 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       branch: parsed.data.branch ?? null,
     };
     const safeMessage = redactConversationText(parsed.data.message);
-    const safeContext = sanitizeConversationContext(parsed.data.context);
+    const explicitContext = sanitizeConversationContext(parsed.data.context);
+    const recoveredContext =
+      explicitContext.length === 0 && parsed.data.conversationId
+        ? await retrieveRecentChatContext(scope).catch(() => [])
+        : [];
+    const safeContext =
+      explicitContext.length > 0
+        ? explicitContext
+        : sanitizeConversationContext(recoveredContext);
     await recordChatLearningEvent({
       role: "user",
       content: safeMessage,
