@@ -1405,13 +1405,10 @@ export default function StartPage() {
   }
 
   function nextStep() {
-    if (step < 5) {
-      setStep((s) => s + 1);
-    } else {
-      // Transition to analysis
-      setPhase("analysis");
-      setTimeout(() => setPhase("workflow"), 800);
-    }
+    // One-question intake: ask only for the core need here. Optional business,
+    // audience, goal, style, and reference details can be completed later.
+    setPhase("analysis");
+    setTimeout(() => setPhase("workflow"), 800);
   }
 
   function prevStep() {
@@ -1512,7 +1509,7 @@ export default function StartPage() {
 
         {isWizard && (
           <div className="hidden sm:block">
-            <StepIndicator step={step} total={5} />
+            <StepIndicator step={1} total={1} />
           </div>
         )}
 
@@ -1536,7 +1533,7 @@ export default function StartPage() {
             <div className="space-y-6">
               {/* Step indicator (mobile) */}
               <div className="sm:hidden flex justify-center">
-                <StepIndicator step={step} total={5} />
+                <StepIndicator step={1} total={1} />
               </div>
 
               {/* Step label */}
@@ -1574,11 +1571,7 @@ export default function StartPage() {
                     boxShadow: canProceedStep() ? "0 4px 20px rgba(124,110,250,0.30)" : "none",
                   }}
                 >
-                  {step === 5 ? (
-                    <><Sparkles className="w-4 h-4" /> Analisis AI</>
-                  ) : (
-                    <>Lanjut <ArrowRight className="w-4 h-4" /></>
-                  )}
+                  <><Sparkles className="w-4 h-4" /> Lihat rekomendasi</>
                 </button>
               </div>
 
