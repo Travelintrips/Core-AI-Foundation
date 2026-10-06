@@ -71,6 +71,7 @@ describe("Ollama coding capacity registry", () => {
     expect(source).toContain("REMOTE_OLLAMA_RUNTIME_KIND");
     expect(source).toContain("REMOTE_OLLAMA_CAPABILITY");
     expect(source).toContain("endpoint_url IS NULL");
-    expect(source).toContain("SUM(GREATEST(max_concurrent_jobs - running_jobs, 0))");
+    expect(source).toContain("SUM(GREATEST(${MAX_ACTIVE_JOBS_PER_WORKER} - running_jobs, 0))");
+    expect(source).toContain("AND running_jobs < ${MAX_ACTIVE_JOBS_PER_WORKER}");
   });
 });
