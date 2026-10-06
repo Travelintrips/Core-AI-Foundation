@@ -71,12 +71,14 @@ export function classifyAiCoreChatDispatch(
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
 
-  // A concrete infrastructure capability must bypass repository analysis.
-  // Operations such as deploy/redeploy, status/health, start/stop/restart and
-  // runtime management already have deterministic executors and do not need
-  // repository indexing. The infrastructure executor remains responsible for
-  // its own mutation/approval policy.
-  if (infrastructureOperation) {
+  // A concrete infrastructure capability bypasses repository analysis unless
+  // the message is actually asking to change repository code and merely mentions
+  // infrastructure as context/example. Direct operational mutations still use
+  // the infrastructure executor, which owns its mutation/approval policy.
+  if (
+    infrastructureOperation &&
+    workload.workload !== "CODING"
+  ) {
     return {
       kind: "INFRA_OPERATION",
       workload,
