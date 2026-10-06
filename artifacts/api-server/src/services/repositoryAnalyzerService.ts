@@ -826,6 +826,24 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       ...contextPackage.relatedTests,
     ])].slice(0, 200);
     const findings: RepositoryAnalyzerResult["findings"] = [
+      ...(changeReservation.status === "CONFLICT"
+        ? [{
+            severity: "warning" as const,
+            title: "Active coding conflict detected",
+            detail:
+              `Coding stopped before file changes because ${changeReservation.conflicts.length} active reservation conflict(s) were found. QC can sequence, revise, or rebase this task first.`,
+            ...(changeReservation.conflicts[0]?.file &&
+            !changeReservation.conflicts[0].file.startsWith("[")
+              ? { file: changeReservation.conflicts[0].file }
+              : {}),
+          }]
+        : [{
+            severity: "info" as const,
+            title: "Predicted change set reserved",
+            detail:
+              `Reserved ${changeReservation.files.length} predicted file(s) before coding execution.`,
+            ...(changeReservation.files[0] ? { file: changeReservation.files[0] } : {}),
+          }]),
       {
         severity: "info",
         title: "Local repository index complete",
@@ -918,11 +936,13 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
     ];
 
     const executionSummary =
-      localExecution?.status === "APPLIED"
-        ? ` Local Coding Executor produced a review-only patch for ${localExecution.changedFiles.length} file(s).`
-        : localExecutionPlan.status === "AI_REQUIRED"
-          ? " Local Coding Executor classified the task as AI_REQUIRED and made no changes."
-          : " Local Coding Executor did not modify the repository.";
+      changeReservation.status === "CONFLICT"
+        ? " Coding stopped before file changes because an active reservation conflict was detected."
+        : localExecution?.status === "APPLIED"
+          ? ` Local Coding Executor produced a review-only patch for ${localExecution.changedFiles.length} file(s).`
+          : localExecutionPlan.status === "AI_REQUIRED"
+            ? " Local Coding Executor classified the task as AI_REQUIRED and made no changes."
+            : " Local Coding Executor did not modify the repository.";
     const summary =
       `Local Coding Engine indexed ${contextPackage.index.filesIndexed} files, selected ${relevantFiles.length} relevant ` +
       `files and ${contextPackage.affectedFiles.length} affected files on ${contextPackage.branch} at ` +
@@ -946,6 +966,7 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       contextPackage,
       localExecutionPlan,
       localExecution,
+      changeReservation,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
