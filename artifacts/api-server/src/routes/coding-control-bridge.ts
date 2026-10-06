@@ -3,7 +3,6 @@ import { z } from "zod";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
   getCodingWhatsappConfigStatus,
-  waitForCodingWhatsappDelivery,
 } from "../services/codingWhatsappNotificationService.js";
 import {
   decideCodingCriticalApprovalById,
@@ -176,8 +175,5 @@ router.post("/ai/coding/bridge/whatsapp-test",async(_req,res):Promise<void>=>{
    ?"WhatsApp admin siap. Notifikasi otomatis hanya dikirim untuk critical human review."
    :"WhatsApp admin belum lengkap konfigurasinya."
  });
-});
- const ok=delivery.status==="sent";
- res.status(ok?200:503).json({ok,result,delivery});
 });
 export default router;
