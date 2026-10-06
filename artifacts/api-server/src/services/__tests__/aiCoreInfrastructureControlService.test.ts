@@ -90,6 +90,26 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
 
+  it("requires explicit SSH configuration when Docker Manager is unsupported", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        message: "[VPS:2044] Currently installed operating system does not support Docker Manager.",
+      }), { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_STATUS",
+      message: "Hostinger cek docker project=aicore status",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    })).rejects.toThrow(
+      "SSH fallback requires HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, and HOSTINGER_SSH_PRIVATE_KEY",
+    );
+  });
+
   it("auto-discovers the only accessible Docker project when no project is configured", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify([
