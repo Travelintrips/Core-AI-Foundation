@@ -161,6 +161,13 @@ jobs:
                   artifacts/api-server/src/**/*zerollm*|artifacts/api-server/src/**/*ZeroLlm*|artifacts/api-server/src/**/*ZeroLLM*)
                     verify_zerollm=true
                     ;;
+                  artifacts/api-server/src/services/aiCoreWorkloadRouterService.ts)
+                    # Workload classification/model selection changes affect
+                    # deterministic chat behavior and cloud provider routing,
+                    # but not MCP, Data Tool, Coding Workspace or ZeroLLM.
+                    verify_chat=true
+                    verify_cloud=true
+                    ;;
                   artifacts/api-server/src/**/*provider*|artifacts/api-server/src/**/*Provider*|artifacts/api-server/src/**/*model*|artifacts/api-server/src/**/*Model*|artifacts/api-server/src/**/*aiExecution*)
                     verify_cloud=true
                     ;;
