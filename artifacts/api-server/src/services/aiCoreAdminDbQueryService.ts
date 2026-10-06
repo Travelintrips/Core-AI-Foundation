@@ -124,7 +124,23 @@ const SENSITIVE_COLUMN =
 
 const MAX_RESULT_ROWS = 200;
 const STATEMENT_TIMEOUT_MS = 8000;
+const ADMIN_DB_COLUMN_CATALOG_CACHE_TTL_MS = 60_000;
 const DEFAULT_BUSINESS_TIMEZONE = "Asia/Jakarta";
+
+type AdminDbColumnCatalogRecord = Record<string, unknown> & {
+  database_id: string;
+  database_label: string;
+};
+
+type AdminDbColumnCatalog = {
+  records: AdminDbColumnCatalogRecord[];
+  discovery: AdminDbDiscovery;
+};
+
+let adminDbColumnCatalogCache:
+  | { expiresAt: number; value: AdminDbColumnCatalog }
+  | null = null;
+let adminDbColumnCatalogInFlight: Promise<AdminDbColumnCatalog> | null = null;
 
 function adminDbBusinessTimezone(): string {
   const candidate =
@@ -140,6 +156,73 @@ function rowsOf<T extends Record<string, unknown>>(value: unknown): T[] {
   if (!value || typeof value !== "object" || !("rows" in value)) return [];
   const rows = (value as { rows?: unknown }).rows;
   return Array.isArray(rows) ? (rows as T[]) : [];
+}
+
+export function resetAdminDbMetadataCacheForTest(): void {
+  adminDbColumnCatalogCache = null;
+  adminDbColumnCatalogInFlight = null;
+}
+
+function normalizeAdminDbColumnCatalog(
+  result: Awaited<ReturnType<typeof discoverAdminDbMetadata>>,
+): AdminDbColumnCatalog {
+  const records: AdminDbColumnCatalogRecord[] = [];
+
+  for (const row of result.records) {
+    const columnName =
+      typeof row.column_name === "string" ? row.column_name.trim() : "";
+    if (columnName) {
+      records.push(row as AdminDbColumnCatalogRecord);
+      continue;
+    }
+
+    // Older callers/tests can still supply grouped column arrays. Expand them
+    // into the richer column catalog shape used by semantic planning.
+    if (Array.isArray(row.columns)) {
+      row.columns.forEach((column, index) => {
+        const name = String(column ?? "").trim();
+        if (!name) return;
+        records.push({
+          ...row,
+          column_name: name,
+          data_type: "",
+          udt_name: "",
+          ordinal_position: index + 1,
+        } as AdminDbColumnCatalogRecord);
+      });
+    }
+  }
+
+  return { records, discovery: result.discovery };
+}
+
+async function getAdminDbColumnMetadataCatalog(): Promise<AdminDbColumnCatalog> {
+  const now = Date.now();
+  if (adminDbColumnCatalogCache && adminDbColumnCatalogCache.expiresAt > now) {
+    return adminDbColumnCatalogCache.value;
+  }
+  if (adminDbColumnCatalogInFlight) return adminDbColumnCatalogInFlight;
+
+  const load = discoverAdminDbMetadata(sql.raw(
+    "SELECT table_schema, table_name, column_name, data_type, udt_name, ordinal_position " +
+    "FROM information_schema.columns " +
+    "WHERE table_schema NOT IN ('pg_catalog','information_schema') " +
+    "ORDER BY table_schema, table_name, ordinal_position"
+  )).then(normalizeAdminDbColumnCatalog);
+
+  adminDbColumnCatalogInFlight = load;
+  try {
+    const value = await load;
+    adminDbColumnCatalogCache = {
+      expiresAt: Date.now() + ADMIN_DB_COLUMN_CATALOG_CACHE_TTL_MS,
+      value,
+    };
+    return value;
+  } finally {
+    if (adminDbColumnCatalogInFlight === load) {
+      adminDbColumnCatalogInFlight = null;
+    }
+  }
 }
 
 function normalizeWords(message: string): string[] {
@@ -561,12 +644,7 @@ function semanticStatusColumnScore(column: AdminDbColumnMetadata): number {
 }
 
 async function getAdminDbSemanticTables(): Promise<{ tables: AdminDbSemanticTable[]; discovery: AdminDbDiscovery }> {
-  const result = await discoverAdminDbMetadata(sql.raw(
-    "SELECT table_schema, table_name, column_name, data_type, udt_name, ordinal_position " +
-    "FROM information_schema.columns " +
-    "WHERE table_schema NOT IN ('pg_catalog','information_schema') " +
-    "ORDER BY table_schema, table_name, ordinal_position"
-  ));
+  const result = await getAdminDbColumnMetadataCatalog();
 
   const grouped = new Map<string, AdminDbSemanticTable>();
   for (const row of result.records) {
@@ -1220,24 +1298,30 @@ export async function getAdminDbSchemaCatalog(
 }
 
 export async function inspectAdminDbSchemaCatalog(message = ""): Promise<{ tables: AdminDbSchemaTable[]; discovery: AdminDbDiscovery }> {
-  const result = await discoverAdminDbMetadata(sql.raw(
-    "SELECT table_schema, table_name, array_agg(column_name ORDER BY ordinal_position) AS columns " +
-    "FROM information_schema.columns " +
-    "WHERE table_schema NOT IN ('pg_catalog', 'information_schema') " +
-    "GROUP BY table_schema, table_name ORDER BY table_schema, table_name"
-  ));
+  const result = await getAdminDbColumnMetadataCatalog();
+  const grouped = new Map<string, AdminDbSchemaTable>();
 
-  const tables = result.records
-    .map((row) => ({
-      schema: String(row.table_schema ?? ""),
-      table: String(row.table_name ?? ""),
+  for (const row of result.records) {
+    const schema = String(row.table_schema ?? "");
+    const table = String(row.table_name ?? "");
+    const column = String(row.column_name ?? "");
+    if (!schema || !table || !column) continue;
+    const key = String(row.database_id) + "." + schema + "." + table;
+    const current = grouped.get(key) ?? {
+      schema,
+      table,
       databaseId: row.database_id,
       databaseLabel: row.database_label,
-      columns: Array.isArray(row.columns)
-        ? row.columns.map((column) => String(column))
-        : [],
-    }))
-    .filter((table) => table.schema && table.table);
+      columns: [],
+    };
+    current.columns.push(column);
+    grouped.set(key, current);
+  }
+
+  const tables = [...grouped.values()].sort((left, right) =>
+    (String(left.databaseId ?? "") + "." + left.schema + "." + left.table)
+      .localeCompare(String(right.databaseId ?? "") + "." + right.schema + "." + right.table),
+  );
 
   const words = normalizeWords(message);
   const scored = tables.map((table) => {
