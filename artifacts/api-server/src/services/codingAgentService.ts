@@ -50,7 +50,7 @@ interface CodingAgentMetadata {
   latencyMs: number;
 }
 
-interface ApprovedContext {
+interface PlannedContext {
   task: AiCodingTask;
   orchestratorRun: AiCodingRun;
   implementationPlan: Record<string, unknown>;
@@ -64,7 +64,7 @@ const CODING_SYSTEM_PROMPT = [
   "changes must be an array of objects with path, changeType (ADDED|MODIFIED|DELETED), content, rationale.",
   "For MODIFIED or ADDED files, content must contain the complete final UTF-8 file contents.",
   "Use only repository-relative paths. Never use absolute paths or .. traversal.",
-  "Keep the change set minimal and directly tied to the approved implementation plan.",
+  "Keep the change set minimal and directly tied to the validated implementation plan.",
 ].join(" ");
 
 function parseJsonObject(content: string): Record<string, unknown> {
@@ -232,7 +232,7 @@ export async function buildProposedDiff(workspace: string): Promise<string> {
   return execStdoutText(result).slice(0, 400_000);
 }
 
-async function latestApprovedContext(taskId: string): Promise<ApprovedContext> {
+async function latestPlannedContext(taskId: string): Promise<PlannedContext> {
   const [task] = await db.select().from(aiCodingTasksTable).where(eq(aiCodingTasksTable.id, taskId));
   if (!task) throw new Error("Coding task not found");
   if (task.status !== "READY_REVIEW") throw new Error("Coding task is not ready for automated plan progression");
@@ -262,7 +262,7 @@ async function latestApprovedContext(taskId: string): Promise<ApprovedContext> {
 }
 
 export async function approvePlanAndStartCoding(taskId: string): Promise<AiCodingRun> {
-  const context = await latestApprovedContext(taskId);
+  const context = await latestPlannedContext(taskId);
 
   const [run] = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -285,7 +285,7 @@ export async function approvePlanAndStartCoding(taskId: string): Promise<AiCodin
 
   await logAudit(
     "coding-orchestrator",
-    "plan_approved",
+    "plan_auto_advanced",
     taskId,
     "coding_task",
     "success",
@@ -297,7 +297,7 @@ export async function approvePlanAndStartCoding(taskId: string): Promise<AiCodin
   return run;
 }
 
-async function executeCodingAgent(context: ApprovedContext, run: AiCodingRun): Promise<void> {
+async function executeCodingAgent(context: PlannedContext, run: AiCodingRun): Promise<void> {
   let workspace: string | null = null;
   try {
     workspace = await cloneRepository(context.task.repository, context.task.branch);
@@ -309,7 +309,7 @@ async function executeCodingAgent(context: ApprovedContext, run: AiCodingRun): P
       `Repository: ${context.task.repository}`,
       `Branch: ${context.task.branch}`,
       `User instruction: ${context.task.instruction}`,
-      "Approved implementation plan:",
+      "Validated implementation plan:",
       JSON.stringify(context.implementationPlan, null, 2),
       "Selected repository files:",
       JSON.stringify(sourceContext, null, 2),
