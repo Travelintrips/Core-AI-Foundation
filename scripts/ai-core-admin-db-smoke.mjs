@@ -20,9 +20,14 @@ function isTransientRequestError(error) {
 }
 
 async function request(path, payload) {
-  const maxAttempts = 3;
+  const semanticChatRequest = path === "/ai/core-chat/messages" || path === "/ai/core-chat/messages/stream";
+  const maxAttempts = semanticChatRequest ? 2 : 3;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    // Metadata/readiness calls should stay fast. The schema-aware chat path can
+    // queue briefly behind production DB activity, so give the retry a larger
+    // bounded window instead of repeating several short requests that all time out.
+    const timeoutMs = semanticChatRequest ? (attempt === 1 ? 35_000 : 75_000) : 25_000;
     try {
       const response = await fetch(baseUrl + path, {
         method: payload ? "POST" : "GET",
@@ -31,7 +36,7 @@ async function request(path, payload) {
           ...(payload ? { "Content-Type": "application/json" } : {}),
         },
         ...(payload ? { body: JSON.stringify(payload) } : {}),
-        signal: AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       if (response.status === 200) return response;
@@ -46,6 +51,7 @@ async function request(path, payload) {
           path,
           attempt,
           maxAttempts,
+          timeoutMs,
           status: response.status,
         }),
       );
@@ -58,6 +64,7 @@ async function request(path, payload) {
           path,
           attempt,
           maxAttempts,
+          timeoutMs,
           error: error?.name || "request_error",
         }),
       );
