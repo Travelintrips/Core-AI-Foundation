@@ -63,6 +63,7 @@ export const en = {
       portfolio:            "Portfolio",
       observability:        "Observability",
       auditLog:             "Audit Log",
+      userManagement:       "User Management",
       settings:             "Settings",
       aiCoreChat:          "AI Core Chat",
       codingWorkspace:     "AI Coding Workspace",
