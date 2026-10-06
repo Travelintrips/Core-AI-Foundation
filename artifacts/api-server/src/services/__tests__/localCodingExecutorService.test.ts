@@ -146,6 +146,39 @@ describe("Local Coding Executor", () => {
     expect(plan.reason).toMatch(/Semantic reasoning/i);
   });
 
+  it("uses explicit target_files as the reservation scope for semantic tasks", () => {
+    const plan = planLocalCodingExecution(
+      [
+        "Selesaikan Image Router secara semantic.",
+        "target_files:",
+        "- artifacts/api-server/src/services/imageRouterService.ts",
+        "- scripts/ai-image-gateway.py",
+        "- .github/workflows/ai-image-worker-gcp.yml",
+      ].join("\n"),
+      context(),
+    );
+
+    expect(plan.status).toBe("AI_REQUIRED");
+    expect(plan.operations).toEqual([]);
+    expect(plan.targetFiles).toEqual([
+      "artifacts/api-server/src/services/imageRouterService.ts",
+      "scripts/ai-image-gateway.py",
+      ".github/workflows/ai-image-worker-gcp.yml",
+    ]);
+    expect(plan.reason).toMatch(/bounded to 3 explicit target file/i);
+  });
+
+  it("rejects unsafe explicit target_files instead of reserving them", () => {
+    const plan = planLocalCodingExecution(
+      ["Audit config.", "target_files:", "- .env"].join("\n"),
+      context(),
+    );
+
+    expect(plan.status).toBe("AI_REQUIRED");
+    expect(plan.targetFiles).toEqual([]);
+    expect(plan.reason).toMatch(/unsafe/i);
+  });
+
   it("refuses deterministic directives outside analyzed context or targeting sensitive files", () => {
     const outside = planLocalCodingExecution(
       'Replace "x" with "y" in src/not-analyzed.ts',

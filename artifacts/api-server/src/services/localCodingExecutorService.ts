@@ -118,6 +118,56 @@ function normalizeRepoPath(value: string): string {
   return value.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
+function extractExplicitTargetFiles(instruction: string): string[] {
+  const lines = instruction.split(/\r?\n/);
+  const targets: string[] = [];
+  let collecting = false;
+
+  for (const line of lines) {
+    const header = line.match(/^\s*target[_ -]?files\s*:\s*(.*)$/i);
+    if (header) {
+      collecting = true;
+      const inline = header[1]?.trim();
+      if (inline) {
+        for (const item of inline.split(",")) {
+          const normalized = normalizeRepoPath(
+            item.replace(/^[-*]\s*/, "").replace(/^['"`]|['"`]$/g, "").trim(),
+          );
+          if (normalized) targets.push(normalized);
+        }
+      }
+      continue;
+    }
+
+    if (!collecting) continue;
+    if (!line.trim()) continue;
+
+    const item = line.match(/^\s*[-*]\s+(.+?)\s*$/);
+    if (!item) break;
+
+    const normalized = normalizeRepoPath(
+      item[1]!.replace(/^['"`]|['"`]$/g, "").trim(),
+    );
+    if (normalized) targets.push(normalized);
+  }
+
+  return [...new Set(targets)].slice(0, 40);
+}
+
+function isSafeExplicitTargetPath(path: string): boolean {
+  const normalized = normalizeRepoPath(path.trim());
+  return Boolean(
+    normalized &&
+      normalized.length <= 500 &&
+      !isAbsolute(normalized) &&
+      normalized !== ".." &&
+      !normalized.startsWith("../") &&
+      !normalized.includes("/../") &&
+      !normalized.includes("\0") &&
+      !isSensitiveRepositoryPath(normalized),
+  );
+}
+
 function isInsideRoot(root: string, candidate: string): boolean {
   const rel = relative(root, candidate);
   return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`));
@@ -571,16 +621,36 @@ export function planLocalCodingExecution(
   instruction: string,
   context: LocalCodingContextPackage,
 ): LocalCodingExecutionPlan {
+  const explicitTargets = extractExplicitTargetFiles(instruction);
+  const invalidExplicitTarget = explicitTargets.find(
+    (path) => !isSafeExplicitTargetPath(path),
+  );
+  if (invalidExplicitTarget) {
+    return {
+      status: "AI_REQUIRED",
+      reason: `Explicit target file is unsafe: ${invalidExplicitTarget}`,
+      operations: [],
+      verificationCommands: context.verificationCommands,
+      targetFiles: [],
+      warnings: ["Explicit target_files scope was rejected by repository path safety policy."],
+    };
+  }
+
   const parsed = parseDeterministicDirectives(instruction);
   if (parsed.length === 0) {
     return {
       status: "AI_REQUIRED",
       reason:
-        "No deterministic local edit directive was detected. Semantic reasoning is required before any file write.",
+        explicitTargets.length > 0
+          ? `Semantic reasoning is required, bounded to ${explicitTargets.length} explicit target file(s).`
+          : "No deterministic local edit directive was detected. Semantic reasoning is required before any file write.",
       operations: [],
       verificationCommands: context.verificationCommands,
-      targetFiles: [],
-      warnings: [],
+      targetFiles: explicitTargets,
+      warnings:
+        explicitTargets.length > 0
+          ? ["Semantic AI execution must remain within the explicit target_files scope."]
+          : [],
     };
   }
 
