@@ -531,3 +531,18 @@ describe("workstream AI automatic repair classification", () => {
     ).toBe(false);
   });
 });
+
+
+describe("workstream AI terminal graph cleanup", () => {
+  it("marks an active parent graph FAILED when exhausted workstream repair becomes terminal", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("A terminal workstream failure makes the parent task graph terminal too.");
+    expect(source).toContain('status: "FAILED"');
+    expect(source).toContain("eq(aiCodingTaskGraphsTable.id, input.payload.graphId)");
+    expect(source).toContain('inArray(aiCodingTaskGraphsTable.status, ["APPROVED", "RUNNING"])');
+  });
+});
