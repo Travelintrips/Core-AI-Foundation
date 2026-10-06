@@ -3,6 +3,16 @@ name: Hostinger Production Verify
 
 on:
   workflow_dispatch:
+    inputs:
+      verify_ollama:
+        description: "Run the GCP Ollama/Economy production smoke"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - "true"
+          - "false"
   workflow_run:
     workflows:
       - CI Verify
@@ -35,6 +45,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The Ollama scope detector compares the deployed commit with its first
+          # parent. Two commits are enough for normal main pushes/merge commits.
+          fetch-depth: 2
 
       - name: Resolve production verification target
         id: target
@@ -52,6 +66,85 @@ jobs:
           else
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Detect whether Ollama verification is required
+        id: ollama_scope
+        if: steps.target.outputs.stale != 'true'
+        shell: bash
+        env:
+          MANUAL_OLLAMA_MODE: ${{ inputs.verify_ollama || 'auto' }}
+        run: |
+          set -euo pipefail
+
+          mode="${MANUAL_OLLAMA_MODE:-auto}"
+          if [ "$mode" = "true" ]; then
+            echo "verify_ollama=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_force" >> "$GITHUB_OUTPUT"
+            echo "ollama_scope=RUN reason=manual_force"
+            exit 0
+          fi
+          if [ "$mode" = "false" ]; then
+            echo "verify_ollama=false" >> "$GITHUB_OUTPUT"
+            echo "reason=manual_skip" >> "$GITHUB_OUTPUT"
+            echo "ollama_scope=SKIP reason=manual_skip"
+            exit 0
+          fi
+
+          base_sha=""
+          if git rev-parse "${EXPECTED_SHA}^1" >/dev/null 2>&1; then
+            base_sha=$(git rev-parse "${EXPECTED_SHA}^1")
+          fi
+
+          # Fail safe when the parent cannot be inspected: run the full Ollama
+          # smoke rather than accidentally skipping a sensitive deployment.
+          if [ -z "$base_sha" ]; then
+            echo "verify_ollama=true" >> "$GITHUB_OUTPUT"
+            echo "reason=parent_unavailable" >> "$GITHUB_OUTPUT"
+            echo "ollama_scope=RUN reason=parent_unavailable"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$base_sha" "$EXPECTED_SHA")
+          printf 'changed_files_since_parent=\n%s\n' "$changed_files"
+
+          verify_ollama=false
+          reason="no_ollama_sensitive_change"
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+
+            case "$file" in
+              .github/workflows/hostinger-deploy.yml|\
+              artifacts/api-server/src/scripts/remoteOllamaWorker.ts|\
+              artifacts/api-server/src/services/*Ollama*.ts|\
+              artifacts/api-server/src/services/*ollama*.ts|\
+              artifacts/api-server/src/services/gcpOllamaVmLifecycleService.ts|\
+              artifacts/api-server/src/services/jobDispatcherService.ts|\
+              artifacts/api-server/src/services/jobWorkerService.ts|\
+              artifacts/api-server/src/services/workerClusterService.ts|\
+              artifacts/api-server/src/routes/cluster.ts|\
+              scripts/ai-gpu-idle-guard.sh|\
+              scripts/install-shared-gpu-image-gateway.sh)
+                verify_ollama=true
+                reason="sensitive_path:$file"
+                break
+                ;;
+              artifacts/api-server/src/routes/ai-core-chat.ts)
+                # ai-core-chat.ts is shared by MCP/WA/Data Tool flows. Only
+                # changes that touch local-model routing should wake Ollama.
+                if git diff -U0 "$base_sha" "$EXPECTED_SHA" -- "$file" \
+                  | grep -Eiq '^[+-].*(ollama|economy|modelPolicy|REMOTE_OLLAMA|providerSlug|localModel|route.*LOCAL)'; then
+                  verify_ollama=true
+                  reason="local_routing_diff:$file"
+                  break
+                fi
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "verify_ollama=$verify_ollama" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "ollama_scope=$([ "$verify_ollama" = "true" ] && echo RUN || echo SKIP) reason=$reason"
 
       - name: Wait for stable exact production commit
         if: steps.target.outputs.stale != 'true'
@@ -331,7 +424,7 @@ jobs:
         run: node scripts/ai-core-admin-db-smoke.mjs
 
       - name: Verify GCP Ollama worker and Economy routing
-        if: steps.target.outputs.stale != 'true'
+        if: steps.target.outputs.stale != 'true' && steps.ollama_scope.outputs.verify_ollama == 'true'
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
@@ -460,6 +553,13 @@ jobs:
           );
           NODE
           fi
+
+      - name: Skip GCP Ollama cold-start for unrelated deploys
+        if: steps.target.outputs.stale != 'true' && steps.ollama_scope.outputs.verify_ollama != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Skipping GCP Ollama/Economy smoke because this deploy does not touch Ollama-sensitive paths."
+          echo "ollama_economy=SKIPPED reason=${{ steps.ollama_scope.outputs.reason }}"
 
       - name: Verify AI Core cloud routing
         if: steps.target.outputs.stale != 'true'
@@ -728,13 +828,20 @@ jobs:
 
       - name: Verification summary
         if: steps.target.outputs.stale != 'true'
+        env:
+          VERIFY_OLLAMA: ${{ steps.ollama_scope.outputs.verify_ollama }}
+          OLLAMA_REASON: ${{ steps.ollama_scope.outputs.reason }}
         run: |
           echo "Production commit verified: $EXPECTED_SHA"
           echo "Health/readiness: PASS"
           echo "Admin auth guard: PASS"
           echo "Authenticated Coding Workspace smoke: PASS"
           echo "Admin DB metadata, revenue, streaming and follow-up: PASS"
-          echo "GCP Ollama worker + Economy routing: PASS"
+          if [ "$VERIFY_OLLAMA" = "true" ]; then
+            echo "GCP Ollama worker + Economy routing: PASS"
+          else
+            echo "GCP Ollama worker + Economy routing: SKIPPED ($OLLAMA_REASON)"
+          fi
           echo "Public sitemap Googlebot fetch: PASS"
 
       - name: Stale trigger summary
