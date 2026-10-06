@@ -68,6 +68,14 @@ vi.mock("../localCodingRunRecoveryService.js", () => ({
   reconcileStaleCodingRuns: vi.fn(async () => ({ inspected: 0, recoveredRuns: 0, recoveredTasks: 0 })),
   purgeExpiredCodingTestTasks: vi.fn(async () => ({ inspected: 0, purgedTasks: 0 })),
 }));
+vi.mock("../codingConflictRegistryService.js", () => ({
+  releaseCodingFileReservations: vi.fn(async () => undefined),
+  reserveCodingFileSet: vi.fn(async ({ files }: { files: string[] }) => ({
+    status: "RESERVED",
+    files,
+    conflicts: [],
+  })),
+}));
 
 describe("autonomous runtime self-heal policy", () => {
   it("attempts recovery only when configured, stopped, and outside cooldown", async () => {
@@ -839,7 +847,7 @@ describe("autonomous action budget behavior", () => {
     expect(autonomous.cycle_count).toBe(40);
   });
 
-  it("waits for Ollama capacity without spending the autonomous cycle budget", async () => {
+  it("releases idle file reservations while waiting for Ollama capacity", async () => {
     const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
     const { getLatestCodingTaskGraph } = await import("../localCodingTaskGraphService.js");
     const {
@@ -847,9 +855,20 @@ describe("autonomous action budget behavior", () => {
       requestCodingWorkstreamCapacity,
     } = await import("../localCodingMultiWorkerExecutionService.js");
     const { getAvailableOllamaCodingSlots } = await import("../ollamaWorkerRegistryService.js");
+    const { releaseCodingFileReservations } = await import("../codingConflictRegistryService.js");
 
     autonomous.cycle_count = 40;
-    runs[0]!.logs = JSON.stringify({ orchestration: { nextAction: "WAIT_TASK_GRAPH" } });
+    task = {
+      id: taskId,
+      status: "READY_REVIEW",
+      repository: "Travelintrips/Core-AI-Foundation",
+      branch: "main",
+      resultSummary: null,
+    };
+    runs[0]!.logs = JSON.stringify({
+      orchestration: { nextAction: "WAIT_TASK_GRAPH" },
+      changeReservation: { files: ["src/a.ts", "src/b.ts"] },
+    });
     vi.mocked(getLatestCodingTaskGraph).mockResolvedValue({
       graph: { id: "graph-1", status: "RUNNING" },
       workstreams: [{
@@ -857,6 +876,7 @@ describe("autonomous action budget behavior", () => {
         status: "READY",
         dependencies: [],
         baseSha: "a".repeat(40),
+        headSha: null,
       }],
     } as never);
     vi.mocked(getAvailableOllamaCodingSlots).mockResolvedValue(0);
@@ -866,9 +886,60 @@ describe("autonomous action budget behavior", () => {
       status: "WAITING",
       action: "WAIT_OLLAMA_CAPACITY:START_REQUESTED",
     });
+    expect(releaseCodingFileReservations).toHaveBeenCalledWith(taskId);
     expect(requestCodingWorkstreamCapacity).toHaveBeenCalledWith(0);
     expect(dispatchReadyCodingWorkstreams).not.toHaveBeenCalled();
     expect(autonomous.cycle_count).toBe(40);
+  });
+
+  it("reacquires released reservations before dispatch and waits on a new conflict", async () => {
+    const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+    const { getLatestCodingTaskGraph } = await import("../localCodingTaskGraphService.js");
+    const { dispatchReadyCodingWorkstreams } = await import("../localCodingMultiWorkerExecutionService.js");
+    const { getAvailableOllamaCodingSlots } = await import("../ollamaWorkerRegistryService.js");
+    const { reserveCodingFileSet } = await import("../codingConflictRegistryService.js");
+
+    autonomous.cycle_count = 39;
+    task = {
+      id: taskId,
+      status: "READY_REVIEW",
+      repository: "Travelintrips/Core-AI-Foundation",
+      branch: "main",
+      resultSummary: null,
+    };
+    runs[0]!.logs = JSON.stringify({
+      orchestration: { nextAction: "WAIT_TASK_GRAPH" },
+      changeReservation: { files: ["src/a.ts", "src/b.ts"] },
+    });
+    vi.mocked(getLatestCodingTaskGraph).mockResolvedValue({
+      graph: { id: "graph-1", status: "RUNNING" },
+      workstreams: [{
+        key: "WS-001",
+        status: "READY",
+        dependencies: [],
+        baseSha: "a".repeat(40),
+        headSha: null,
+      }],
+    } as never);
+    vi.mocked(getAvailableOllamaCodingSlots).mockResolvedValue(1);
+    vi.mocked(reserveCodingFileSet).mockResolvedValueOnce({
+      status: "CONFLICT",
+      files: ["src/a.ts", "src/b.ts"],
+      conflicts: [{ file: "src/a.ts", taskId: "other-task" }],
+    } as never);
+
+    expect(await runAutonomousCodingCycle(taskId)).toMatchObject({
+      status: "WAITING",
+      action: "WAIT_RESERVATION_CONFLICT",
+    });
+    expect(reserveCodingFileSet).toHaveBeenCalledWith({
+      repository: "Travelintrips/Core-AI-Foundation",
+      branch: "main",
+      taskId,
+      files: ["src/a.ts", "src/b.ts"],
+    });
+    expect(dispatchReadyCodingWorkstreams).not.toHaveBeenCalled();
+    expect(autonomous.cycle_count).toBe(39);
   });
 
   it("does not start an action after an explicit stop wins the reservation race", async () => {
