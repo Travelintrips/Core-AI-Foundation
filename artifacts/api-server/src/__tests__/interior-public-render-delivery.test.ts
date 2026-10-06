@@ -16,7 +16,7 @@ describe("Public Interior Design render delivery", () => {
     "utf8",
   );
   const customerPageSource = readFileSync(
-    join(workspaceRoot(), "customer-portal/src/pages/interior-design/project.tsx"),
+    join(workspaceRoot(), "artifacts/customer-portal/src/pages/interior-design/project.tsx"),
     "utf8",
   );
 
