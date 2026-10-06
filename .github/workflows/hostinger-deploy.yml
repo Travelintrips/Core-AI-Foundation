@@ -133,11 +133,15 @@ jobs:
                     break
                     ;;
                   artifacts/api-server/src/routes/ai-core-chat.ts)
+                    # Central chat route also owns coding-control, MCP/events,
+                    # WhatsApp, Data Tool and provider routing entry points.
                     verify_mcp=true
+                    verify_coding=true
                     verify_chat=true
                     verify_wa=true
                     verify_data=true
                     verify_cloud=true
+                    verify_zerollm=true
                     ;;
                   artifacts/api-server/src/*mcp*|artifacts/api-server/src/*Mcp*|artifacts/api-server/src/**/*mcp*|artifacts/api-server/src/**/*Mcp*)
                     verify_mcp=true
