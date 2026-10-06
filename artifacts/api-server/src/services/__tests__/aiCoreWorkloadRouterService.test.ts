@@ -77,6 +77,28 @@ describe("AI Core workload router", () => {
     expect(classifyAiCoreWorkload(message).workload).not.toBe("DETERMINISTIC");
   });
 
+  it.each([
+    "perbaiki langsung Docker WA Gateway di Hostinger",
+    "fix runtime Hostinger jangan route ke Coding Orchestrator",
+    "restart container gateway di VPS",
+    "reconnect WhatsApp session runtime",
+    "benahi Redis queue pada Docker production",
+  ])("keeps runtime mutations on the control plane instead of coding: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "CRITICAL_ACTION",
+      requiresAgent: true,
+    });
+  });
+
+  it("still routes explicit source-code changes to coding even when runtime context is mentioned", () => {
+    expect(
+      classifyAiCoreWorkload("perbaiki kode service Docker Hostinger di repository"),
+    ).toMatchObject({
+      workload: "CODING",
+      requiresAgent: true,
+    });
+  });
+
   it("routes production deploy to the explicit approval gate", () => {
     expect(classifyAiCoreWorkload("deploy ke production sekarang")).toMatchObject({
       workload: "CRITICAL_ACTION",
