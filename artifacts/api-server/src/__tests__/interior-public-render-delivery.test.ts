@@ -72,4 +72,16 @@ describe("Public Interior Design render delivery", () => {
     expect(customerPageSource).toContain('asset.status === "pending" || asset.status === "generating"');
     expect(customerPageSource).toContain("setRenderAssets(d.renderAssets ?? [])");
   });
+
+
+  it("uses the token-owned Supabase Edge fallback with compressed WebP when direct storage is unavailable", () => {
+    expect(renderServiceSource).toContain("persistPublicInteriorRenderViaEdge");
+    expect(renderServiceSource).toContain("compressImageToWebpForStorage");
+    expect(renderServiceSource).toContain('"x-interior-project-id"');
+    expect(renderServiceSource).toContain('"x-interior-access-token"');
+    expect(renderServiceSource).toContain('"x-interior-variant-index"');
+    expect(renderServiceSource).toContain("input.project.accessToken");
+    expect(renderServiceSource).toContain('storagePersistence: "supabase-edge"');
+    expect(renderServiceSource).toContain('compressionGate: "webp-quality-78"');
+  });
 });
