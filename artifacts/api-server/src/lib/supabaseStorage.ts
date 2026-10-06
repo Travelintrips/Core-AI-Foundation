@@ -29,6 +29,19 @@ export interface StorageImageCompressionResult {
   compressed: boolean;
 }
 
+export interface PublicInteriorStorageProxyInput {
+  projectId: number;
+  accessToken: string;
+  variantIndex: number;
+  buffer: Buffer;
+}
+
+export interface PublicInteriorStorageProxyResult {
+  publicUrl: string;
+  storagePath: string;
+  storedBytes: number;
+}
+
 function normalizedEnvironmentValue(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -119,6 +132,36 @@ export async function compressImageForStorage(
   };
 }
 
+export async function compressInteriorRenderForStorage(
+  buffer: Buffer,
+): Promise<StorageImageCompressionResult> {
+  const originalBytes = buffer.byteLength;
+  if (originalBytes === 0) {
+    throw new Error("Interior render image is empty");
+  }
+
+  const encoded = await sharp(buffer, { failOn: "warning" })
+    .rotate()
+    .webp({ quality: 78, effort: 5, smartSubsample: true })
+    .toBuffer();
+
+  const sourceIsWebp =
+    buffer.byteLength >= 12 &&
+    buffer[0] === 0x52 && buffer[1] === 0x49 &&
+    buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 &&
+    buffer[10] === 0x42 && buffer[11] === 0x50;
+  const stored = sourceIsWebp && encoded.byteLength >= originalBytes ? buffer : encoded;
+
+  return {
+    buffer: stored,
+    contentType: "image/webp",
+    originalBytes,
+    storedBytes: stored.byteLength,
+    compressed: true,
+  };
+}
+
 function supabaseUrlFromProjectRef(projectRef: string | undefined): string | undefined {
   const normalized = projectRef?.trim().toLowerCase();
   return normalized && /^[a-z0-9-]+$/.test(normalized)
@@ -168,6 +211,48 @@ function deriveSupabaseUrlFromLegacyJwt(apiKey: string | undefined): string | un
   } catch {
     return undefined;
   }
+}
+
+function getSupabaseBridgeProjectUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const isProduction = isProductionStorageEnvironment(env);
+  const databaseUrl = isProduction
+    ? env["SUPABASE_PROD_DATABASE_URL"] || env["SUPABASE_DATABASE_URL"]
+    : env["SUPABASE_DEV_DATABASE_URL"] || env["SUPABASE_DATABASE_URL_DEV"];
+  const anonKey = isProduction
+    ? env["SUPABASE_ANON_KEY"] || env["VITE_SUPABASE_ANON_KEY"]
+    : env["SUPABASE_ANON_KEY_DEV"] || env["VITE_SUPABASE_ANON_KEY_DEV"];
+  const explicitUrl = isProduction
+    ? env["SUPABASE_URL"] ||
+      env["SUPABASE_PROD_URL"] ||
+      env["VITE_SUPABASE_URL"] ||
+      env["NEXT_PUBLIC_SUPABASE_URL"]
+    : env["SUPABASE_URL_DEV"] ||
+      env["SUPABASE_DEV_URL"] ||
+      env["VITE_SUPABASE_URL_DEV"];
+  const projectRef = isProduction
+    ? env["SUPABASE_PROD_PROJECT_REF"] || env["SUPABASE_PROJECT_REF"]
+    : env["SUPABASE_DEV_PROJECT_REF"] || env["SUPABASE_PROJECT_REF"];
+
+  const url = (
+    isProduction
+      ? deriveSupabaseUrlFromDatabaseUrl(databaseUrl) ||
+        supabaseUrlFromProjectRef(projectRef) ||
+        explicitUrl ||
+        deriveSupabaseUrlFromLegacyJwt(anonKey)
+      : explicitUrl ||
+        deriveSupabaseUrlFromDatabaseUrl(databaseUrl) ||
+        supabaseUrlFromProjectRef(projectRef) ||
+        deriveSupabaseUrlFromLegacyJwt(anonKey)
+  )?.replace(/\/$/, "");
+
+  if (!url) {
+    throw new Error(
+      "Supabase project URL is unavailable for the Interior render storage bridge",
+    );
+  }
+  return url;
 }
 
 function getCredentials(): SupabaseCredentials {
@@ -340,6 +425,73 @@ export async function uploadToSupabase(
   }
 
   return getSupabasePublicUrl(path);
+}
+
+/**
+ * Upload a public Interior Design render through the production Supabase Edge
+ * Function when the web runtime intentionally has no Supabase admin key.
+ *
+ * The Edge Function validates the token against the token-owned project and
+ * writes only to a deterministic project/variant path. Only compressed WebP
+ * bytes leave this API host.
+ */
+export async function uploadPublicInteriorRenderViaEdge(
+  input: PublicInteriorStorageProxyInput,
+): Promise<PublicInteriorStorageProxyResult> {
+  if (!Number.isSafeInteger(input.projectId) || input.projectId <= 0) {
+    throw new Error("Invalid public Interior Design project id");
+  }
+  if (!Number.isInteger(input.variantIndex) || input.variantIndex < 0 || input.variantIndex > 3) {
+    throw new Error("Invalid public Interior Design variant index");
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.accessToken)) {
+    throw new Error("Invalid public Interior Design access token");
+  }
+
+  const prepared = await compressInteriorRenderForStorage(input.buffer);
+  const projectUrl = getSupabaseBridgeProjectUrl(process.env);
+  const response = await fetch(
+    `${projectUrl}/functions/v1/interior-render-storage`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": prepared.contentType,
+        "x-interior-project-id": String(input.projectId),
+        "x-interior-access-token": input.accessToken,
+        "x-interior-variant-index": String(input.variantIndex),
+      },
+      body: prepared.buffer,
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+
+  const responseText = await response.text();
+  let result: {
+    publicUrl?: string;
+    path?: string;
+    storedBytes?: number;
+    error?: string;
+  } = {};
+  try {
+    result = responseText ? JSON.parse(responseText) as typeof result : {};
+  } catch {
+    // Keep parse failures generic and never include request auth headers.
+  }
+
+  if (!response.ok || !result.publicUrl || !result.path) {
+    throw new Error(
+      `Supabase Interior render storage bridge failed (HTTP ${response.status}): ${result.error ?? "unknown"}`,
+    );
+  }
+
+  return {
+    publicUrl: result.publicUrl,
+    storagePath: result.path,
+    storedBytes:
+      typeof result.storedBytes === "number" && result.storedBytes >= 0
+        ? result.storedBytes
+        : prepared.storedBytes,
+  };
 }
 
 /**
