@@ -7,6 +7,10 @@ const eventMocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
 }));
 
+vi.mock("../services/aiAuditService.js", () => ({
+  logAudit: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../services/aiCoreMcpEventWebhookService.js", () => ({
   AI_CORE_TERMINAL_EVENT_NAME: "ai_core.task.terminal",
   McpCallbackEndpointError: class McpCallbackEndpointError extends Error {
