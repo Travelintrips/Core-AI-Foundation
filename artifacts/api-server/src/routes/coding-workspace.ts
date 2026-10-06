@@ -83,6 +83,34 @@ import { getCodingConflictMatrix } from "../services/codingConflictRegistryServi
 
 const router = Router();
 
+const CODING_WORKSPACE_LIST_RECONCILIATION_INTERVAL_MS = 30_000;
+let lastCodingWorkspaceListReconciliationAt = 0;
+
+function scheduleCodingWorkspaceListReconciliation(now = Date.now()): void {
+  if (
+    now - lastCodingWorkspaceListReconciliationAt <
+    CODING_WORKSPACE_LIST_RECONCILIATION_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  lastCodingWorkspaceListReconciliationAt = now;
+  void Promise.all([
+    reconcileStaleMultiWorkerRuns().catch((error) => {
+      logger.warn(
+        { err: error },
+        "[coding-workspace] stale multi-worker reconciliation failed",
+      );
+    }),
+    reconcileStaleCodingRuns().catch((error) => {
+      logger.warn(
+        { err: error },
+        "[coding-workspace] stale coding-run reconciliation failed",
+      );
+    }),
+  ]).catch(() => undefined);
+}
+
 const ProviderSecretAdminRequest = z.object({
   key: z.string().trim().min(1).max(128),
   value: z.string().min(1).max(16_384),
@@ -221,31 +249,22 @@ router.get(
 );
 
 router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
-  // Listing tasks is a read path and must stay responsive even when recovery
-  // work is slow or contending on production locks. Reconciliation is
-  // best-effort maintenance; run it without blocking the HTTP response.
-  void Promise.all([
-    reconcileStaleMultiWorkerRuns().catch((error) => {
-      logger.warn(
-        { err: error },
-        "[coding-workspace] stale multi-worker reconciliation failed",
-      );
-    }),
-    reconcileStaleCodingRuns().catch((error) => {
-      logger.warn(
-        { err: error },
-        "[coding-workspace] stale coding-run reconciliation failed",
-      );
-    }),
-  ]).catch(() => undefined);
+  // This endpoint is polled by both the Workspace UI and production verification.
+  // Keep recovery maintenance out of the critical read path and retry transient
+  // database contention before returning a bounded 503.
+  let tasks: (typeof aiCodingTasksTable.$inferSelect)[];
+  let autonomousPresentation: Awaited<ReturnType<typeof db.execute>>;
 
-  const tasks = await db
-    .select()
-    .from(aiCodingTasksTable)
-    .where(notLike(aiCodingTasksTable.taskNumber, "MW-%"))
-    .orderBy(desc(aiCodingTasksTable.createdAt));
+  try {
+    const snapshot = await withCodingWorkspaceReadRetry(
+      async () => {
+        const taskRows = await db
+          .select()
+          .from(aiCodingTasksTable)
+          .where(notLike(aiCodingTasksTable.taskNumber, "MW-%"))
+          .orderBy(desc(aiCodingTasksTable.createdAt));
 
-  const autonomousPresentation = await db.execute(sql`
+        const presentationRows = await db.execute(sql`
     SELECT t.id AS task_id,
            a.status AS autonomous_status,
            EXISTS (
@@ -266,7 +285,26 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
      AND a.enabled = TRUE
      AND a.status IN ('ACTIVE', 'WAITING', 'APPROVAL_REQUIRED', 'COMPLETED', 'FAILED', 'BLOCKED')
     WHERE t.task_number NOT LIKE 'MW-%'
-  `);
+        `);
+
+        return {
+          tasks: taskRows,
+          autonomousPresentation: presentationRows,
+        };
+      },
+      { attempts: 5, delayMs: 250 },
+    );
+
+    tasks = snapshot.tasks;
+    autonomousPresentation = snapshot.autonomousPresentation;
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "[coding-workspace] task list read remained unavailable after bounded retries",
+    );
+    res.status(503).json({ error: "Coding Workspace task list temporarily unavailable." });
+    return;
+  }
 
   const presentationByTask = new Map(
     (autonomousPresentation.rows ?? []).map((row) => {
@@ -300,6 +338,10 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
   });
 
   res.json(ListCodingTasksResponse.parse(presentedTasks));
+
+  // Reconciliation remains best-effort maintenance, but no longer competes
+  // with every foreground list request for a database connection.
+  scheduleCodingWorkspaceListReconciliation();
 });
 
 router.get("/ai/coding/gcp-usage", async (req, res): Promise<void> => {
