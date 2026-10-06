@@ -269,6 +269,7 @@ export async function waitForCodingWhatsappDelivery(
           sentAt?: unknown;
           waMessageId?: unknown;
           failedReason?: unknown;
+          error?: unknown;
           attemptsMade?: unknown;
         } | null;
 
@@ -292,7 +293,9 @@ export async function waitForCodingWhatsappDelivery(
             reason:
               typeof body?.failedReason === "string"
                 ? body.failedReason
-                : "WhatsApp worker reported a failed send.",
+                : typeof body?.error === "string"
+                  ? body.error
+                  : "WhatsApp worker reported a failed send.",
             ...(typeof body?.attemptsMade === "number"
               ? { attemptsMade: body.attemptsMade }
               : {}),
