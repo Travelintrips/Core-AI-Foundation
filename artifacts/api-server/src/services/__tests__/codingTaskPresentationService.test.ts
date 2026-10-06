@@ -163,6 +163,19 @@ describe("coding task presentation status", () => {
     expect(chatRoute).toContain("persistedStatus: task.status");
   });
 
+  it("aicoding dashboard uses canonical presentation status for parent and MW child tasks", () => {
+    const source = readFileSync(
+      new URL("../../routes/aicoding-dashboard.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("codingTaskPresentationStatus({");
+    expect(source).toContain("has_pending_critical_approval");
+    expect(source).toContain("workstream_status");
+    expect(source).toContain("persistedStatus: task.status");
+    expect(source).toContain("progress: stageProgress(status)");
+  });
+
   it("workspace list query includes active autonomous states for presentation mapping", () => {
     const source = readFileSync(
       new URL("../../routes/coding-workspace.ts", import.meta.url),
