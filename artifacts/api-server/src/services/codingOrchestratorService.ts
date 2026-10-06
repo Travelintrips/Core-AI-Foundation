@@ -376,7 +376,23 @@ async function persistSnapshot(
   taskStatus: string,
   summary?: string,
 ): Promise<void> {
+  if (await isManualStopRequested(taskId)) return;
+
   await db.transaction(async (tx) => {
+    const manualStop = await tx.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM ai_platform.ai_coding_autonomous_tasks
+        WHERE task_id = ${taskId}::uuid
+          AND enabled = FALSE
+          AND status = 'DISABLED'
+          AND last_action = 'MANUAL_STOP'
+      ) AS stopped
+    `);
+    if ((manualStop.rows?.[0] as { stopped?: boolean } | undefined)?.stopped === true) {
+      return;
+    }
+
     await tx
       .update(aiCodingRunsTable)
       .set({ logs: stringify(payload) })
@@ -460,8 +476,25 @@ async function completeLocalAnalysis(
     },
   };
 
+  if (await isManualStopRequested(input.task.id)) return;
+
   let preservedAdvancedAiGate = false;
   await db.transaction(async (tx) => {
+    const manualStop = await tx.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM ai_platform.ai_coding_autonomous_tasks
+        WHERE task_id = ${input.task.id}::uuid
+          AND enabled = FALSE
+          AND status = 'DISABLED'
+          AND last_action = 'MANUAL_STOP'
+      ) AS stopped
+    `);
+    if ((manualStop.rows?.[0] as { stopped?: boolean } | undefined)?.stopped === true) {
+      preservedAdvancedAiGate = true;
+      return;
+    }
+
     const [persistedRun] = await tx
       .select({ logs: aiCodingRunsTable.logs })
       .from(aiCodingRunsTable)
