@@ -71,9 +71,25 @@ export function classifyAiCoreChatDispatch(
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
 
-  // Repository-changing and critical-action intent always outranks incidental
-  // infrastructure keywords that may appear in examples, acceptance criteria,
-  // logs, or explanatory text.
+  // A concrete infrastructure capability must bypass repository analysis.
+  // Operations such as deploy/redeploy, status/health, start/stop/restart and
+  // runtime management already have deterministic executors and do not need
+  // repository indexing. The infrastructure executor remains responsible for
+  // its own mutation/approval policy.
+  if (infrastructureOperation) {
+    return {
+      kind: "INFRA_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation,
+      externalAgentClientId: null,
+      reason:
+        "Concrete infrastructure capability is executed directly without repository indexing or Coding Orchestrator analysis.",
+    };
+  }
+
+  // Repository-changing and other critical actions without a concrete
+  // infrastructure executor continue through the controlled agent path.
   if (workload.requiresAgent) {
     return {
       kind: "CONTROL_PLANE",
@@ -83,19 +99,8 @@ export function classifyAiCoreChatDispatch(
       externalAgentClientId,
       reason:
         workload.workload === "CRITICAL_ACTION"
-          ? "Critical actions must enter the control plane and stop at the explicit approval gate."
+          ? "Critical action has no direct infrastructure executor and must enter the control plane."
           : "Repository-changing coding work must enter the Coding Orchestrator; an explicitly named coding agent may be used only inside that controlled path.",
-    };
-  }
-
-  if (infrastructureOperation) {
-    return {
-      kind: "INFRA_OPERATION",
-      workload,
-      preset: null,
-      infrastructureOperation,
-      externalAgentClientId: null,
-      reason: "Infrastructure request is handled directly by the AI Core capability executor.",
     };
   }
 
