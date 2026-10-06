@@ -520,6 +520,41 @@ const tools = [
   },
 ];
 
+function isMcpDiscoveryQuery(message: string): boolean {
+  const value = message.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!/\bmcp\b/.test(value)) return false;
+
+  const asksDiscovery =
+    /\b(discovery|discover|tools?|tooling|capabilit(?:y|ies))\b/.test(value);
+  const asksStatus =
+    /\b(cek|check|status|aktif|active|terhubung|connected|exposed|expose|jumlah|count|nama|names?|list|daftar|berapa|which|apa saja)\b/.test(value);
+
+  return asksDiscovery && asksStatus;
+}
+
+function buildMcpDiscoveryPayload() {
+  const toolNames = tools.map((tool) => tool.name);
+  const eventNames = nativeEvents.map((event) => event.name);
+  return {
+    kind: "answer",
+    route: "MCP_DISCOVERY",
+    provider: null,
+    model: null,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    estimatedCostUsd: 0,
+    workload: "CONTROL_PLANE_STATUS",
+    costClass: "ZERO",
+    reply:
+      `AI Core MCP ${SERVER_INFO.version} aktif dengan ${toolNames.length} tools: ${toolNames.join(", ")}.` +
+      (eventNames.length > 0 ? ` Native events: ${eventNames.join(", ")}.` : ""),
+    serverInfo: SERVER_INFO,
+    toolCount: toolNames.length,
+    tools: toolNames,
+    events: eventNames,
+    source: "LIVE_MCP_TOOL_REGISTRY",
+  };
+}
+
 async function callAiCore(path: string, init: RequestInit, key: string) {
   const baseUrl = resolveAiCoreInternalBaseUrl().replace(/\/$/, "");
   const response = await fetch(`${baseUrl}/api${path}`, {
@@ -780,19 +815,23 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
-      payload = await callAiCore(
-        "/ai/core-chat/messages",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            ...parsed,
-            message,
-            mode: "ask",
-            source: "text",
-          }),
-        },
-        identity.connectorKey,
-      );
+      if (isMcpDiscoveryQuery(message)) {
+        payload = buildMcpDiscoveryPayload();
+      } else {
+        payload = await callAiCore(
+          "/ai/core-chat/messages",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...parsed,
+              message,
+              mode: "ask",
+              source: "text",
+            }),
+          },
+          identity.connectorKey,
+        );
+      }
     } else if (params.name === "send_ai_core_command") {
       const parsed = SendCommandArgs.parse(params.arguments ?? {});
       const command = executionCommandMessage(parsed.message);
