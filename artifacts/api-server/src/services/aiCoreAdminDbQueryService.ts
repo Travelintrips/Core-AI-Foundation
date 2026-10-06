@@ -1053,6 +1053,19 @@ export async function executeAiCoreAuditHistoryQuery(): Promise<AdminDbQueryExec
 export function isAdminWorkerStatusQuery(message: string): boolean {
   const value = normalizeSemanticText(message);
   if (!/\bworker\b/.test(value)) return false;
+
+  // A coding-task/workspace lifecycle audit may mention WAITING_FOR_WORKER or
+  // worker capacity as context. Do not hijack that request into the worker
+  // inventory query; let the task-aware DB planner inspect coding lifecycle
+  // tables instead.
+  if (
+    /\b(task|tugas|workspace|workstream|lifecycle|ready review|ready_review|queued|analyzing|blocked|failed)\b/.test(
+      value,
+    )
+  ) {
+    return false;
+  }
+
   return /\b(status|sibuk|busy|aktif|active|available|idle|offline|unavailable|tersedia|terpakai|dipakai|job|assignment)\b/.test(value);
 }
 
