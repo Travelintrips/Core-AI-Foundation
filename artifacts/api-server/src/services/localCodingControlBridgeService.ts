@@ -34,6 +34,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+export function isIdempotentCodingBridgeLifecycleKind(
+  kind: "ACK" | "PROGRESS" | "CHECKPOINT" | "BLOCKER" | "COMPLETED" | "FAILED",
+): boolean {
+  return kind === "BLOCKER" || kind === "COMPLETED" || kind === "FAILED";
+}
+
 const GITHUB_REPOSITORY = "Travelintrips/Core-AI-Foundation";
 
 function githubIssueNumberFromCommand(command: {
@@ -254,18 +260,82 @@ export async function appendCodingBridgeResponse(input: {
   metadata?: Record<string, unknown>;
 }) {
   await ensureCodingControlBridgeTables();
-  const [response] = await db
-    .insert(aiCodingBridgeResponsesTable)
-    .values({
-      commandId: input.commandId,
-      taskId: input.taskId ?? null,
-      kind: input.kind,
-      message: input.message,
-      checkpointJson: input.checkpoint ?? {},
-      metadataJson: input.metadata ?? {},
-    })
-    .returning();
-  if (!response) throw new Error("Failed to persist bridge response");
+  const checkpointJson = input.checkpoint ?? {};
+  const metadataJson = input.metadata ?? {};
+
+  let created = true;
+  let response;
+
+  if (isIdempotentCodingBridgeLifecycleKind(input.kind)) {
+    const persisted = await db.transaction(async (tx) => {
+      // Concurrent autonomous cycles can report the same lifecycle transition
+      // within milliseconds. Serialize identical lifecycle writes by
+      // command/task/kind, then reuse the existing durable response when the
+      // message and checkpoint are identical. Returning the existing row also
+      // prevents duplicate WA, Inbox, GitHub and MCP fan-out below.
+      const lockKey =
+        `coding-bridge-lifecycle:${input.commandId}:${input.taskId ?? "none"}:${input.kind}`;
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}::text, 0))`,
+      );
+
+      const taskPredicate = input.taskId
+        ? eq(aiCodingBridgeResponsesTable.taskId, input.taskId)
+        : isNull(aiCodingBridgeResponsesTable.taskId);
+
+      const [existing] = await tx
+        .select()
+        .from(aiCodingBridgeResponsesTable)
+        .where(
+          and(
+            eq(aiCodingBridgeResponsesTable.commandId, input.commandId),
+            taskPredicate,
+            eq(aiCodingBridgeResponsesTable.kind, input.kind),
+            eq(aiCodingBridgeResponsesTable.message, input.message),
+            sql`${aiCodingBridgeResponsesTable.checkpointJson} = ${JSON.stringify(checkpointJson)}::jsonb`,
+          ),
+        )
+        .orderBy(desc(aiCodingBridgeResponsesTable.createdAt))
+        .limit(1);
+
+      if (existing) {
+        return { response: existing, created: false };
+      }
+
+      const [inserted] = await tx
+        .insert(aiCodingBridgeResponsesTable)
+        .values({
+          commandId: input.commandId,
+          taskId: input.taskId ?? null,
+          kind: input.kind,
+          message: input.message,
+          checkpointJson,
+          metadataJson,
+        })
+        .returning();
+      if (!inserted) throw new Error("Failed to persist bridge response");
+      return { response: inserted, created: true };
+    });
+
+    response = persisted.response;
+    created = persisted.created;
+  } else {
+    const [inserted] = await db
+      .insert(aiCodingBridgeResponsesTable)
+      .values({
+        commandId: input.commandId,
+        taskId: input.taskId ?? null,
+        kind: input.kind,
+        message: input.message,
+        checkpointJson,
+        metadataJson,
+      })
+      .returning();
+    if (!inserted) throw new Error("Failed to persist bridge response");
+    response = inserted;
+  }
+
+  if (!created) return response;
 
   publishSafe({
     eventType: "coding.bridge.response.created",
