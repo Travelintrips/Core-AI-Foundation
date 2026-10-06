@@ -27,10 +27,10 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.6.0");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.6.1");
     expect(response.body.result.serverInfo).toEqual({
       name: "ai-core-direct-command",
-      version: "1.6.0",
+      version: "1.6.1",
     });
     expect(response.body.result.protocolVersion).toBe("2025-06-18");
     expect(response.body.result.capabilities).toEqual({
@@ -70,7 +70,7 @@ describe("AI Core MCP discovery compatibility", () => {
       capabilities: { tools: {}, events: {} },
       serverInfo: {
         name: "ai-core-direct-command",
-        version: "1.6.0",
+        version: "1.6.1",
       },
     });
   });
@@ -132,7 +132,7 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.6.0");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.6.1");
     const toolNames = response.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(
       expect.arrayContaining([
@@ -181,7 +181,7 @@ it("exposes the same live tool registry on the fresh v2 endpoint", async () => {
 
   expect(response.status).toBe(200);
   expect(response.headers["cache-control"]).toContain("no-store");
-  expect(response.headers["x-mcp-server-version"]).toBe("1.6.0");
+  expect(response.headers["x-mcp-server-version"]).toBe("1.6.1");
   expect(response.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
     expect.arrayContaining([
       "query_ai_core",
