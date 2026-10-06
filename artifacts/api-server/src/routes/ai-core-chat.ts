@@ -120,6 +120,7 @@ import {
   promoteExplicitChatLearning,
   promoteOpenAiTeacherExample,
   recordChatLearningEvent,
+  listAiCoreChatActivity,
   retrieveChatLearnings,
   retrieveOpenAiTeacherAnswer,
   retrieveRecentChatContext,
@@ -3332,6 +3333,34 @@ router.post("/ai/core-chat/whatsapp/e2e", async (_req, res): Promise<void> => {
       detail: safeProviderFailure(error),
       senderSuffix: sender.slice(-4),
     });
+  }
+});
+
+const AiCoreActivityQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  conversationId: z.string().trim().min(1).max(200).optional(),
+});
+
+router.get("/ai/core-chat/activity", async (req, res): Promise<void> => {
+  const parsed = AiCoreActivityQuery.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  try {
+    const items = await listAiCoreChatActivity({
+      conversationId: parsed.data.conversationId ?? null,
+      limit: parsed.data.limit,
+    });
+    res.json({
+      items,
+      count: items.length,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error({ error }, "[ai-core-chat] failed to list ChatGPT ↔ AI Core activity");
+    res.status(503).json({ error: "AI Core activity timeline is temporarily unavailable." });
   }
 });
 
