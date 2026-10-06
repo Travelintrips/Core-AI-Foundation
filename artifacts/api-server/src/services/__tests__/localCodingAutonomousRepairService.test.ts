@@ -852,7 +852,7 @@ describe("autonomous action budget behavior", () => {
       status: "WAITING",
       action: "WAIT_OLLAMA_CAPACITY:START_REQUESTED",
     });
-    expect(releaseCodingFileReservations).toHaveBeenCalledWith({ taskId });
+    expect(releaseCodingFileReservations).toHaveBeenCalledWith(taskId);
     expect(requestCodingWorkstreamCapacity).toHaveBeenCalledWith(0);
     expect(dispatchReadyCodingWorkstreams).not.toHaveBeenCalled();
     expect(autonomous.cycle_count).toBe(40);
