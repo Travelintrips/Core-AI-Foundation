@@ -1,4 +1,11 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
+
+const execFileAsync = promisify(execFile);
 
 const GCP_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 const GCP_COMPUTE_API = "https://compute.googleapis.com/compute/v1";
@@ -284,6 +291,11 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     hostingUsername: (env["HOSTINGER_HOSTING_USERNAME"] ?? "").trim(),
     hostingDomain: (env["HOSTINGER_HOSTING_DOMAIN"] ?? "").trim(),
     apiBase: (env["HOSTINGER_API_BASE"] ?? "").trim().replace(/\/$/, ""),
+    sshHost: (env["HOSTINGER_SSH_HOST"] ?? "").trim(),
+    sshUser: (env["HOSTINGER_SSH_USER"] ?? "root").trim(),
+    sshPort: (env["HOSTINGER_SSH_PORT"] ?? "22").trim(),
+    sshPrivateKey: (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim(),
+    sshDockerProjectDir: (env["HOSTINGER_DOCKER_PROJECT_DIR"] ?? "").trim(),
   };
 }
 
@@ -329,6 +341,98 @@ async function callHostinger(
   };
   const serializeEnvironment = (vars: Map<string, string>): string =>
     [...vars.entries()].map(([key, value]) => `${key}=${value}`).join("\n");
+
+  const shellQuote = (value: string): string =>
+    `'${value.replace(/'/g, `'"'"'`)}'`;
+
+  const isDockerManagerUnsupported = (error: unknown): boolean =>
+    error instanceof Error && /\[VPS:2044\]|does not support Docker Manager/i.test(error.message);
+
+  const runDockerOverSsh = async (
+    sshOperation: AiCoreInfrastructureOperation,
+    sshProject: string,
+  ): Promise<unknown> => {
+    const host = config.sshHost;
+    const user = config.sshUser;
+    const port = config.sshPort;
+    const privateKey = config.sshPrivateKey;
+    const projectDir = valueOf("directory") || config.sshDockerProjectDir;
+
+    if (!host || !user || !privateKey) {
+      throw new Error(
+        "Hostinger Docker Manager is unavailable on this OS. SSH fallback requires HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, and HOSTINGER_SSH_PRIVATE_KEY.",
+      );
+    }
+    if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+      throw new Error("HOSTINGER_SSH_PORT must be a valid TCP port.");
+    }
+    if (!projectDir || !projectDir.startsWith("/")) {
+      throw new Error(
+        "Hostinger SSH Docker fallback requires HOSTINGER_DOCKER_PROJECT_DIR or directory=<absolute-path>.",
+      );
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(sshProject)) {
+      throw new Error("Docker project name may contain only letters, numbers, dashes, and underscores.");
+    }
+
+    const prefix = `cd ${shellQuote(projectDir)} && docker compose -p ${shellQuote(sshProject)}`;
+    const command =
+      sshOperation === "HOSTINGER_DOCKER_STATUS" || sshOperation === "HOSTINGER_DOCKER_CONTAINERS"
+        ? `${prefix} ps --format json`
+        : sshOperation === "HOSTINGER_DOCKER_LOGS"
+          ? `${prefix} logs --tail 200 --no-color`
+          : sshOperation === "HOSTINGER_DOCKER_START"
+            ? `${prefix} up -d`
+            : sshOperation === "HOSTINGER_DOCKER_STOP"
+              ? `${prefix} stop`
+              : sshOperation === "HOSTINGER_DOCKER_RESTART"
+                ? `${prefix} restart`
+                : sshOperation === "HOSTINGER_DOCKER_UPDATE"
+                  ? `${prefix} pull && ${prefix} up -d --remove-orphans`
+                  : "";
+
+    if (!command) {
+      throw new Error(
+        `Hostinger SSH fallback does not support ${sshOperation}; use an explicit supported Docker operation.`,
+      );
+    }
+
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-core-hostinger-ssh-"));
+    const keyPath = join(tempDir, "id_hostinger");
+    try {
+      await writeFile(keyPath, privateKey.endsWith("\n") ? privateKey : privateKey + "\n", {
+        mode: 0o600,
+      });
+      const { stdout, stderr } = await execFileAsync("ssh", [
+        "-i", keyPath,
+        "-p", port,
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=12",
+        "-o", "StrictHostKeyChecking=accept-new",
+        `${user}@${host}`,
+        command,
+      ], {
+        timeout: 30_000,
+        maxBuffer: 1024 * 1024,
+      });
+      return {
+        transport: "ssh",
+        host,
+        user,
+        port: Number(port),
+        project: sshProject,
+        directory: projectDir,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Hostinger SSH Docker fallback failed: ${detail.slice(0, 800)}`);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  };
+
   let project = valueOf("project") || config.dockerProject;
   const hostingUsername = valueOf("username") || config.hostingUsername;
   const explicitHostingDomain = valueOf("domain");
@@ -738,7 +842,19 @@ async function callHostinger(
       operation !== "HOSTINGER_DOCKER_DEPLOY" &&
       !project
     ) {
-      project = await resolveDockerProject();
+      try {
+        project = await resolveDockerProject();
+      } catch (error) {
+        if (!isDockerManagerUnsupported(error)) throw error;
+        // Docker Manager cannot enumerate projects on a generic Ubuntu VPS.
+        // SSH fallback therefore needs an explicit/configured project name.
+        project = valueOf("project") || config.dockerProject;
+        if (!project) {
+          throw new Error(
+            "Hostinger Docker Manager is unavailable on this OS. SSH fallback requires project=<name> or HOSTINGER_DOCKER_PROJECT.",
+          );
+        }
+      }
     }
 
     if (operation === "HOSTINGER_DOCKER_LIST") {
@@ -822,9 +938,16 @@ async function callHostinger(
           operation === "HOSTINGER_DOCKER_UPDATE" ? "/update" : "";
         const method = ["HOSTINGER_DOCKER_START","HOSTINGER_DOCKER_STOP","HOSTINGER_DOCKER_RESTART","HOSTINGER_DOCKER_UPDATE"].includes(operation)
           ? "POST" : "GET";
-        const result = await firstSuccessful(`${vmBase}/docker/${encodedProject}${suffix}`, method);
-        if (result.status < 200 || result.status >= 300) throw new Error(`Hostinger Docker operation failed with HTTP ${result.status}.`);
-        data = result.data;
+        try {
+          const result = await firstSuccessful(`${vmBase}/docker/${encodedProject}${suffix}`, method);
+          if (result.status < 200 || result.status >= 300) {
+            throw new Error(`Hostinger Docker operation failed with HTTP ${result.status}.`);
+          }
+          data = result.data;
+        } catch (error) {
+          if (!isDockerManagerUnsupported(error)) throw error;
+          data = await runDockerOverSsh(operation, project);
+        }
       }
     } else {
       let suffix = "";
