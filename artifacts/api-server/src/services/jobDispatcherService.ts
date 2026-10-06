@@ -72,6 +72,17 @@ export interface TickResult {
   failed: number;
 }
 
+export const REPOSITORY_ANALYZER_JOB_TIMEOUT_MS = 15 * 60_000;
+
+export function jobTimeoutMsForType(
+  jobType: unknown,
+  defaultTimeoutMs = _settings.jobTimeoutMs,
+): number {
+  return String(jobType ?? "") === "coding_repository_analyzer"
+    ? Math.max(defaultTimeoutMs, REPOSITORY_ANALYZER_JOB_TIMEOUT_MS)
+    : defaultTimeoutMs;
+}
+
 export function stuckJobRetryDisposition(input: {
   retryCount: unknown;
   maxRetry: unknown;
@@ -602,11 +613,24 @@ export async function recover(): Promise<void> {
   // ── Stuck job detector ────────────────────────────────────────────────────
   try {
     const jobCutoff = new Date(now.getTime() - _settings.jobTimeoutMs).toISOString();
+    const analyzerJobCutoff = new Date(
+      now.getTime() - jobTimeoutMsForType("coding_repository_analyzer"),
+    ).toISOString();
 
     const rawStuck = await db.execute(sql`
       SELECT * FROM ai_platform.ai_jobs
       WHERE status = 'running'
-        AND started_at < ${jobCutoff}::timestamptz
+        AND (
+          (
+            job_type = 'coding_repository_analyzer'
+            AND started_at < ${analyzerJobCutoff}::timestamptz
+          )
+          OR
+          (
+            job_type <> 'coding_repository_analyzer'
+            AND started_at < ${jobCutoff}::timestamptz
+          )
+        )
     `);
     const stuckJobs = (rawStuck as unknown as { rows: Record<string, unknown>[] }).rows ?? [];
 
@@ -656,7 +680,8 @@ export async function recover(): Promise<void> {
 
       await logAudit("job-dispatcher", "job_timeout", String(jobId), "ai_job", "failure", {
         startedAt: row["started_at"],
-        timeoutMs: _settings.jobTimeoutMs,
+        timeoutMs: jobTimeoutMsForType(row["job_type"]),
+        jobType: row["job_type"],
         hadWorker: !!holder,
         retryCount: row["retry_count"],
         maxRetry: row["max_retry"],
