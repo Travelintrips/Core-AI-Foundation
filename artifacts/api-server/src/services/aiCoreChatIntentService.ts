@@ -46,6 +46,14 @@ const REPOSITORY_READONLY_CONTEXT =
 const EXPLICIT_SOURCE_CHANGE =
   /\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b.{0,120}\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|typescript|javascript|python|routing|intent|logic|alur|behavior|behaviour|bug|fitur|feature|api|endpoint|service|test|tests|regression)\b|\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|routing|intent|logic|alur|behavior|behaviour|bug|fitur|feature|api|endpoint|service|test|tests|regression)\b.{0,120}\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b/i;
 
+const NEGATED_SOURCE_CHANGE_CLAUSE =
+  /\b(?:jangan|tanpa|do\s+not|don't|without)\b[^.!?;\n]{0,180}/gi;
+
+export function hasExplicitSourceChange(message: string): boolean {
+  const affirmativeText = message.replace(NEGATED_SOURCE_CHANGE_CLAUSE, " ");
+  return EXPLICIT_SOURCE_CHANGE.test(affirmativeText);
+}
+
 export function isAiCoreCapabilityQuery(message: string): boolean {
   const value = message.trim().toLowerCase();
   if (!value) return false;
@@ -81,7 +89,7 @@ export function classifyAiCoreChatDispatch(
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
   const githubOperation = detectAiCoreGitHubOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
-  const sourceChange = EXPLICIT_SOURCE_CHANGE.test(message);
+  const sourceChange = hasExplicitSourceChange(message);
 
   // Explicit, structured operational actions outrank generic CRITICAL_ACTION
   // classification. They execute in the deterministic control plane and must
@@ -111,7 +119,7 @@ export function classifyAiCoreChatDispatch(
       externalAgentClientId: null,
       executionLane: "NO_WORKER",
       reason:
-        "Explicit GitHub status/rerun/cancel/verified-merge action executes directly without Repository Analyzer or coding workers.",
+        "Explicit GitHub status/rerun/cancel/verified-merge/Hostinger-deploy action executes directly without Repository Analyzer or coding workers.",
     };
   }
 

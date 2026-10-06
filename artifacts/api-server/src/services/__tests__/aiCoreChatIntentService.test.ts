@@ -113,6 +113,28 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.executionLane).toBe("NO_WORKER");
   });
 
+  it("routes an existing-commit Hostinger deploy to the no-worker GitHub lane", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Lakukan hanya recovery/deploy operasional Core AI Foundation ke Hostinger untuk exact commit 34e9b7ab317458894555c82205f5fe155189babe. Jangan scan/index repo dan jangan ubah kode.",
+    );
+
+    expect(decision).toMatchObject({
+      kind: "GITHUB_OPERATION",
+      githubOperation: "GITHUB_HOSTINGER_NODEJS_DEPLOY",
+      executionLane: "NO_WORKER",
+    });
+  });
+
+  it("keeps real source changes in the Coding Orchestrator even when Hostinger deploy is mentioned", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Perbaiki kode login lalu deploy hasilnya ke Hostinger production.",
+    );
+
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.workload.workload).toBe("CRITICAL_ACTION");
+    expect(decision.githubOperation).toBeNull();
+  });
+
   it("does not let incidental infrastructure examples hijack a coding-fix request", () => {
     const decision = classifyAiCoreChatDispatch(
       "Perbaiki routing intent AI Core. Tambahkan regression test seperti 'check GCP VM status' dan 'cek Ollama GPU aktif di production'.",
