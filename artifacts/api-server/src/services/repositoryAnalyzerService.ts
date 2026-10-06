@@ -27,6 +27,7 @@ import {
   reserveCodingFileSet,
   type CodingFileReservationResult,
 } from "./codingConflictRegistryService.js";
+import { reportCodingTaskTerminalTransition } from "./codingTaskTerminalReportingService.js";
 
 const execFileAsync = promisify(execFile);
 const CODING_ANALYZER_JOB_TYPE = "coding_repository_analyzer";
@@ -230,6 +231,17 @@ export function isRetryableRepositoryCloneResourceError(detail: string): boolean
     /Cloning into /i.test(detail) &&
     !/fatal:|authentication failed|repository not found|could not read Username|remote branch .* not found/i.test(detail);
   return cloneStartedWithoutDiagnostic;
+}
+
+export function isRecoverableRepositoryAnalyzerOperationalFailure(
+  detail: string,
+): boolean {
+  return (
+    isRetryableRepositoryCloneResourceError(detail) ||
+    /Repository Analyzer run was abandoned before completion and has been recovered|Repository Analyzer job \d+ was not claimed within \d+ms and was recovered|Repository Analyzer job \d+ exceeded its bounded lifetime and was recovered|Repository Analyzer queue claim timeout|Stale Repository Analyzer job recovered/i.test(
+      detail,
+    )
+  );
 }
 
 export function buildRepositoryCloneArgs(
@@ -1301,17 +1313,21 @@ export async function failRepositoryAnalyzerRun(
   if (!codingRunId || !codingTaskId) return;
 
   const now = new Date();
+  const recoverable = isRecoverableRepositoryAnalyzerOperationalFailure(errorMessage);
   const failure = {
     codingTaskId,
     codingRunId,
     executionStatus: "FAILED",
     error: errorMessage,
+    recoverable,
   };
 
-  await db.transaction(async (tx) => {
+  const persisted = await db.transaction(async (tx) => {
     const [updatedRun] = await tx
       .update(aiCodingRunsTable)
       .set({
+        // The child analyzer execution did fail, so keep the run audit trail
+        // terminal even when the overall task can recover.
         status: "FAILED",
         finishedAt: now,
         logs: serializeResult(failure),
@@ -1320,16 +1336,54 @@ export async function failRepositoryAnalyzerRun(
       .where(and(eq(aiCodingRunsTable.id, codingRunId), eq(aiCodingRunsTable.status, "RUNNING")))
       .returning({ id: aiCodingRunsTable.id });
 
-    if (!updatedRun) return;
+    if (!updatedRun) return false;
 
     await tx
       .update(aiCodingTasksTable)
-      .set({
-        status: "FAILED",
-        resultSummary: `Repository Analyzer failed: ${errorMessage.slice(0, 500)}`,
-      })
+      .set(
+        recoverable
+          ? {
+              // READY_REVIEW is the persisted technical intervention state.
+              // Presentation maps it to BLOCKED when no critical approval is pending.
+              status: "READY_REVIEW",
+              resultSummary: `Repository Analyzer recovery pending: ${errorMessage.slice(0, 500)}`,
+            }
+          : {
+              status: "FAILED",
+              resultSummary: `Repository Analyzer failed: ${errorMessage.slice(0, 500)}`,
+            },
+      )
       .where(eq(aiCodingTasksTable.id, codingTaskId));
+
+    if (recoverable) {
+      await tx.execute(sql`
+        UPDATE ai_platform.ai_coding_autonomous_tasks
+        SET status = 'BLOCKED',
+            last_action = 'RECOVERABLE_OPERATIONAL_FAILURE',
+            last_error = ${errorMessage.slice(0, 2000)},
+            completed_at = NULL,
+            updated_at = ${now}
+        WHERE task_id = ${codingTaskId}::uuid
+          AND enabled = TRUE
+      `);
+    }
+
+    return true;
   });
+
+  if (persisted && recoverable) {
+    await reportCodingTaskTerminalTransition({
+      taskId: codingTaskId,
+      status: "BLOCKED",
+      message: `Repository Analyzer hit a recoverable operational failure: ${errorMessage.slice(0, 1200)}`,
+      source: "repository-analyzer-recovery",
+    }).catch((error) => {
+      logger.warn(
+        { taskId: codingTaskId, error },
+        "[coding-analyzer] Failed to report recoverable analyzer blocker",
+      );
+    });
+  }
 }
 
 export { CODING_ANALYZER_JOB_TYPE };
