@@ -25,18 +25,19 @@ export function codingTaskPresentationStatus(input: {
     return "COMPLETED";
   }
 
-  if (input.autonomousStatus === "FAILED") {
-    if (input.taskStatus === "READY_REVIEW" || input.taskStatus === "FAILED") {
-      return "FAILED";
-    }
+  // Human review is reserved for an explicit critical approval gate. A
+  // technical runtime blocker must never masquerade as a review request.
+  if (input.autonomousStatus === "APPROVAL_REQUIRED") {
+    return "READY_REVIEW";
   }
 
-  // BLOCKED means the autonomous runtime needs intervention, not that the
-  // underlying coding task necessarily failed. Present it as review-required
-  // so Workspace does not label recoverable/max-cycle blockers as "GAGAL".
-  if (input.autonomousStatus === "BLOCKED") {
-    if (input.taskStatus === "READY_REVIEW" || input.taskStatus === "FAILED") {
-      return "READY_REVIEW";
+  if (input.autonomousStatus === "FAILED" || input.autonomousStatus === "BLOCKED") {
+    if (
+      input.taskStatus === "READY_REVIEW" ||
+      input.taskStatus === "FAILED" ||
+      input.taskStatus === "ANALYZING"
+    ) {
+      return "FAILED";
     }
   }
 
