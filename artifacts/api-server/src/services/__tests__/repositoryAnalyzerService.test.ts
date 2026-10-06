@@ -385,11 +385,11 @@ describe("repository analyzer queue claim timeout", () => {
     })).toBe(60_000);
   });
 
-  it("defaults stale running recovery to four minutes and bounds overrides", () => {
-    expect(getRepositoryAnalyzerRunningTimeoutMs({})).toBe(240_000);
+  it("defaults stale running recovery to ten minutes and bounds overrides", () => {
+    expect(getRepositoryAnalyzerRunningTimeoutMs({})).toBe(600_000);
     expect(getRepositoryAnalyzerRunningTimeoutMs({
-      REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "180000",
-    })).toBe(180_000);
+      REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "480000",
+    })).toBe(480_000);
     expect(getRepositoryAnalyzerRunningTimeoutMs({
       REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "1000",
     })).toBe(150_000);
@@ -398,7 +398,7 @@ describe("repository analyzer queue claim timeout", () => {
     })).toBe(900_000);
     expect(getRepositoryAnalyzerRunningTimeoutMs({
       REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "invalid",
-    })).toBe(240_000);
+    })).toBe(600_000);
   });
 
   it("recovers stale queued Coding Orchestrator analyzer jobs", () => {
