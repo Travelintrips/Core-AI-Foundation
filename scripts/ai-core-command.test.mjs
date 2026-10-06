@@ -11,13 +11,13 @@ const resolve = inputs => resolveCommand({ inputs }, env);
 const issue = { action: 'labeled', sender: { login: 'Travelintrips' }, label: { name: 'ai-audit' },
   issue: { number: 321, title: 'Audit trigger', body: 'Read-only test', user: { login: 'Travelintrips' } } };
 
-function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initialStatus = 'WAITING', detailRepository = REPOSITORY, graphSnapshot = null } = {}) {
+function fakeApi({ ready = true, tasks = [], state404 = true, runs = [], initialStatus = 'WAITING', detailRepository = REPOSITORY, graphSnapshot = null, releaseSha = null } = {}) {
   const calls = [];
   const api = async (path, options = {}) => {
     calls.push({ path, ...options });
-    if (path === '/healthz') return { status: 200, value: { status: 'ok' } };
-    if (path === '/healthz/full') return { status: 200, value: { status: ready ? 'ok' : 'degraded', checks: { db: { status: ready ? 'ok' : 'fail' } } } };
-    if (path.endsWith('/runtime-status')) return { status: 200, value: { ready, autonomous: { configured: true, running: true }, dependencies: { githubConfigured: true } } };
+    if (path === '/healthz') return { status: 200, value: { status: 'ok' }, releaseSha };
+    if (path === '/healthz/full') return { status: 200, value: { status: ready ? 'ok' : 'degraded', checks: { db: { status: ready ? 'ok' : 'fail' } } }, releaseSha };
+    if (path.endsWith('/runtime-status')) return { status: 200, value: { ready, autonomous: { configured: true, running: true }, dependencies: { githubConfigured: true } }, releaseSha };
     if (path === '/ai/coding/tasks') return options.method === 'POST'
       ? { status: 201, value: { id, ...options.body } } : { status: 200, value: tasks };
     if (path === `/ai/coding/tasks/${id}`) return { status: 200, value: { task: { id, repository: detailRepository, status: 'PENDING' }, runs } };
@@ -59,6 +59,19 @@ test('allowed edge health responses may be non-JSON without aborting the trigger
   assert.equal(result.value.status, 'edge_blocked');
 });
 
+test('createApi exposes the live release SHA from response headers', async () => {
+  const sha = 'a'.repeat(40);
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: name => name.toLowerCase() === 'x-cst-commit-sha' ? sha : null },
+    json: async () => ({ status: 'ok' }),
+  });
+  const api = createApi('test-admin-secret', fetchImpl);
+  const result = await api('/healthz');
+  assert.equal(result.releaseSha, sha);
+});
+
 test('edge-blocked public health probes do not block a ready authenticated control bridge', async () => {
   const api = async (path, options = {}) => {
     if (path === '/healthz' || path === '/healthz/full') {
@@ -93,6 +106,38 @@ test('degraded readiness remains visible and prevents submission', async () => {
   await assert.rejects(execute(resolve({ action: 'submit', instruction: 'Add a unit test' }), f.api), /not ready/);
   assert.ok(f.calls.every(call => !call.method));
 });
+test('submission fails closed before mutation when production runtime SHA is stale', async () => {
+  const liveSha = 'a'.repeat(40);
+  const expectedSha = 'b'.repeat(40);
+  const f = fakeApi({ releaseSha: liveSha });
+  await assert.rejects(
+    execute(resolve({ action: 'submit', instruction: 'Add a unit test', request_id: 'runtime-skew-test' }), f.api, { expectedCommitSha: expectedSha }),
+    /production runtime is stale/,
+  );
+  assert.ok(f.calls.every(call => !call.method));
+});
+
+test('submission fails closed when production runtime omits its release SHA', async () => {
+  const f = fakeApi();
+  await assert.rejects(
+    execute(resolve({ action: 'submit', instruction: 'Add a unit test', request_id: 'runtime-sha-missing' }), f.api, { expectedCommitSha: 'b'.repeat(40) }),
+    /did not report x-cst-commit-sha/,
+  );
+  assert.ok(f.calls.every(call => !call.method));
+});
+
+test('submission proceeds when production runtime SHA exactly matches GitHub SHA', async () => {
+  const sha = 'c'.repeat(40);
+  const f = fakeApi({ releaseSha: sha });
+  const result = await execute(
+    resolve({ action: 'submit', instruction: 'Add a unit test', request_id: 'runtime-sha-match' }),
+    f.api,
+    { expectedCommitSha: sha, waitMs: 0 },
+  );
+  assert.equal(result.result, 'TASK_ACCEPTED_NOT_COMPLETED');
+  assert.ok(f.calls.some(call => call.method === 'POST'));
+});
+
 test('non-owner and unauthorized rerun are rejected', () => {
   for (const patch of [{ GITHUB_ACTOR: 'outsider' }, { GITHUB_TRIGGERING_ACTOR: 'outsider' }, { GITHUB_REPOSITORY: 'other/repo' }]) {
     assert.throws(() => resolveCommand({}, { ...env, ...patch }), /owner/);
