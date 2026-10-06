@@ -62,7 +62,17 @@ jobs:
           set -euo pipefail
           health="https://$HOSTINGER_DOMAIN/api/healthz"
           echo "ready=false" >> "$GITHUB_OUTPUT"
-          for attempt in $(seq 1 6); do
+          # When API fallback credentials are unavailable, native Hostinger Git
+          # deployment is the only valid path. Give it a realistic bounded
+          # window before declaring failure instead of producing a false alarm.
+          if [ -z "${HOSTINGER_API_TOKEN:-}" ]; then
+            max_attempts=30
+            echo "native_grace_mode=extended_no_api_fallback attempts=$max_attempts"
+          else
+            max_attempts=6
+            echo "native_grace_mode=short_with_api_fallback attempts=$max_attempts"
+          fi
+          for attempt in $(seq 1 "$max_attempts"); do
             rm -f /tmp/native.headers /tmp/native.body
             curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
               -D /tmp/native.headers -o /tmp/native.body \
@@ -76,11 +86,15 @@ jobs:
               echo "native_deploy=PASS"
               exit 0
             fi
-            if [ "$attempt" -lt 6 ]; then
+            if [ "$attempt" -lt "$max_attempts" ]; then
               sleep 10
             fi
           done
-          echo "::notice::Native Hostinger deploy did not expose the expected SHA within the short grace period; using API fallback."
+          if [ -n "${HOSTINGER_API_TOKEN:-}" ]; then
+            echo "::notice::Native Hostinger deploy did not expose the expected SHA within the short grace period; using API fallback."
+          else
+            echo "::error::Native Hostinger deploy did not expose the expected SHA within the extended grace period, and HOSTINGER_API_TOKEN is unavailable for API fallback."
+          fi
 
       - name: Validate Hostinger deployment credentials
         if: steps.freshness.outputs.stale != 'true' && steps.native.outputs.ready != 'true'
