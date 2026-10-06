@@ -14,6 +14,7 @@ import {
   enableAutonomousCodingTask,
   getAutonomousCodingTaskStatus,
   getAutonomousRuntimeStatus,
+  recoverAutonomousCodingRuntimeIfDatabaseReady,
   runAutonomousCodingCycle,
 } from "../services/localCodingAutonomousRepairService.js";
 const router=Router(); const Uuid=z.string().uuid();
@@ -134,6 +135,7 @@ router.post("/ai/coding/bridge/critical-approvals/:id/decision",async(req,res):P
 });
 
 router.get("/ai/coding/bridge/runtime-status",async(_req,res):Promise<void>=>{
+ const autonomousRecovery=await recoverAutonomousCodingRuntimeIfDatabaseReady();
  const autonomous=getAutonomousRuntimeStatus();
  const whatsapp=getCodingWhatsappConfigStatus();
  const githubConfigured=Boolean(process.env["AI_CODING_GITHUB_TOKEN"]?.trim());
@@ -155,6 +157,7 @@ router.get("/ai/coding/bridge/runtime-status",async(_req,res):Promise<void>=>{
   production,
   buildCommitSha,
   autonomous,
+  autonomousRecovery,
   dependencies:{
    githubConfigured,
    whatsapp,
