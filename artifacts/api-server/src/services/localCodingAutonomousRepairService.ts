@@ -58,7 +58,10 @@ import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaServ
 import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
 import { purgeExpiredCodingTestTasks, reconcileStaleCodingRuns } from "./localCodingRunRecoveryService.js";
 import { isRetryableRepositoryCloneResourceError } from "./repositoryAnalyzerService.js";
-import { reserveCodingFileSet } from "./codingConflictRegistryService.js";
+import {
+  releaseCodingFileReservations,
+  reserveCodingFileSet,
+} from "./codingConflictRegistryService.js";
 
 const DEFAULT_INTERVAL_MS = 8_000;
 const MIN_INTERVAL_MS = 2_000;
@@ -599,6 +602,8 @@ export function hasDependencyReadyNonReviewWorkstream(
 
 async function processTaskGraph(
   taskId: string,
+  repository: string,
+  branch: string,
   payload: Record<string, unknown>,
   reserveCycle: () => Promise<void>,
   recoverMissingGraph: boolean,
@@ -934,8 +939,39 @@ async function processTaskGraph(
       };
     }
 
+    const changeReservation = isRecord(payload.changeReservation)
+      ? payload.changeReservation
+      : null;
+    const reservationFiles = Array.isArray(changeReservation?.files)
+      ? [
+          ...new Set(
+            changeReservation.files.filter(
+              (file): file is string =>
+                typeof file === "string" && file.trim().length > 0,
+            ),
+          ),
+        ]
+      : [];
+    const graphHasStartedFileWork = snapshot.workstreams.some(
+      (item) =>
+        Boolean(item.startedAt || item.completedAt) ||
+        ["RUNNING", "REVIEW_REQUIRED", "COMPLETED"].includes(item.status),
+    );
+
     const availableOllamaSlots = await getAvailableOllamaCodingSlots();
     if (availableOllamaSlots <= 0) {
+      if (!graphHasStartedFileWork && reservationFiles.length > 0) {
+        await releaseCodingFileReservations({ taskId }).catch(() => undefined);
+        await logAudit(
+          "coding-autonomous",
+          "reservation_released_while_waiting_capacity",
+          taskId,
+          "coding_task",
+          "success",
+          { fileCount: reservationFiles.length },
+        ).catch(() => undefined);
+      }
+
       const gcpAutoStartRequested =
         await requestCodingWorkstreamCapacity(availableOllamaSlots);
       return {
@@ -945,6 +981,22 @@ async function processTaskGraph(
           : "WAIT_OLLAMA_CAPACITY",
         waiting: true,
       };
+    }
+
+    if (!graphHasStartedFileWork && reservationFiles.length > 0) {
+      const reacquired = await reserveCodingFileSet({
+        repository,
+        branch,
+        taskId,
+        files: reservationFiles,
+      });
+      if (reacquired.status === "CONFLICT") {
+        return {
+          handled: true,
+          action: "WAIT_RESERVATION_CONFLICT",
+          waiting: true,
+        };
+      }
     }
 
     await reserveCycle();
@@ -1195,6 +1247,8 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     const reserveCycle = () => reserveActionCycle(taskId);
     const graphAction = await processTaskGraph(
       taskId,
+      state.task.repository,
+      state.task.branch,
       state.payload,
       reserveCycle,
       state.task.status === "READY_REVIEW" &&
