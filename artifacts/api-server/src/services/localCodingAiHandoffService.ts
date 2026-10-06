@@ -23,6 +23,7 @@ import {
 import type { LocalFailureContext } from "./localCodingFailureDiagnosticService.js";
 import type { LocalFailureRecoveryContext } from "./localCodingFailureRecoveryService.js";
 import {
+  buildRepositoryCloneEnvironment,
   prepareRepositoryWorkspace,
   resolveRemoteBranchHead,
 } from "./repositoryAnalyzerService.js";
@@ -342,39 +343,160 @@ async function assertRemoteHeadCurrent(context: HandoffContext): Promise<void> {
   }
 }
 
-async function git(root: string, args: string[]): Promise<string> {
-  const result = await execFileAsync("git", args, {
-    cwd: root,
-    timeout: 20_000,
-    maxBuffer: 2 * 1024 * 1024,
-    env: {
-      PATH: process.env.PATH ?? "",
-      HOME: process.env.HOME ?? "",
-      LANG: "C",
-      LC_ALL: "C",
-      GIT_TERMINAL_PROMPT: "0",
-    },
-  });
+function gitOutputText(result: unknown): string {
   const raw =
     typeof result === "string" || Buffer.isBuffer(result)
       ? result
       : result instanceof Uint8Array
         ? result
         : (result as { stdout?: unknown } | null | undefined)?.stdout;
-  const text = Buffer.isBuffer(raw)
+  return Buffer.isBuffer(raw)
     ? raw.toString("utf8")
     : raw instanceof Uint8Array
       ? Buffer.from(raw).toString("utf8")
       : typeof raw === "string"
         ? raw
         : "";
-  if (!text.trim()) {
+}
+
+async function gitMaybeEmpty(
+  root: string,
+  args: string[],
+  repository?: string,
+  timeoutMs = 20_000,
+): Promise<string> {
+  const result = await execFileAsync("git", args, {
+    cwd: root,
+    timeout: timeoutMs,
+    maxBuffer: 2 * 1024 * 1024,
+    env: repository
+      ? buildRepositoryCloneEnvironment(repository)
+      : {
+          PATH: process.env.PATH ?? "",
+          HOME: process.env.HOME ?? "",
+          LANG: "C",
+          LC_ALL: "C",
+          GIT_TERMINAL_PROMPT: "0",
+        },
+  });
+  return gitOutputText(result).trim();
+}
+
+async function git(root: string, args: string[]): Promise<string> {
+  const text = await gitMaybeEmpty(root, args);
+  if (!text) {
     throw new LocalAiHandoffError(
       `Git command returned empty output while preparing AI handoff: git ${args.join(" ")}`,
       "INVALID_CONTEXT",
     );
   }
-  return text.trim();
+  return text;
+}
+
+export function aiHandoffHeadAdvanceTouchesAllowedFiles(
+  changedFiles: string[],
+  allowedFiles: string[],
+): boolean {
+  const allowed = new Set(
+    allowedFiles
+      .map(normalizeRepoPath)
+      .filter((item): item is string => Boolean(item)),
+  );
+  if (allowed.size === 0) return true;
+
+  return changedFiles
+    .map(normalizeRepoPath)
+    .filter((item): item is string => Boolean(item))
+    .some((file) => allowed.has(file));
+}
+
+async function ensureHandoffBaseCommitAvailable(
+  workspacePath: string,
+  repository: string,
+  baseHeadSha: string,
+): Promise<void> {
+  try {
+    await gitMaybeEmpty(
+      workspacePath,
+      ["cat-file", "-e", `${baseHeadSha}^{commit}`],
+      repository,
+    );
+    return;
+  } catch {
+    // Shallow clones normally contain only the current branch tip. Fetch the
+    // exact previously analyzed commit before comparing the bounded write set.
+  }
+
+  try {
+    await gitMaybeEmpty(
+      workspacePath,
+      ["fetch", "--no-tags", "--depth", "1", "origin", baseHeadSha],
+      repository,
+      60_000,
+    );
+    await gitMaybeEmpty(
+      workspacePath,
+      ["cat-file", "-e", `${baseHeadSha}^{commit}`],
+      repository,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new LocalAiHandoffError(
+      `Unable to verify previous repository HEAD ${baseHeadSha}: ${message.slice(0, 500)}`,
+      "STALE_HEAD",
+    );
+  }
+}
+
+async function rebindUnchangedAllowedFileScopeToHead(
+  workspacePath: string,
+  context: HandoffContext,
+  actualHead: string,
+): Promise<boolean> {
+  const allowedFiles = [
+    ...new Set(
+      context.recoveryContext.focusFiles
+        .map(normalizeRepoPath)
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ].slice(0, MAX_ALLOWED_FILES);
+  if (allowedFiles.length === 0) return false;
+
+  await ensureHandoffBaseCommitAvailable(
+    workspacePath,
+    context.task.repository,
+    context.baseHeadSha,
+  );
+
+  const changedText = await gitMaybeEmpty(
+    workspacePath,
+    [
+      "diff",
+      "--name-only",
+      context.baseHeadSha,
+      actualHead,
+      "--",
+      ...allowedFiles,
+    ],
+    context.task.repository,
+    30_000,
+  );
+  const changedFiles = changedText
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (aiHandoffHeadAdvanceTouchesAllowedFiles(changedFiles, allowedFiles)) {
+    return false;
+  }
+
+  context.baseHeadSha = actualHead;
+  context.contextPackage.headSha = actualHead;
+  const payloadContextPackage = isRecord(context.orchestratorPayload.contextPackage)
+    ? context.orchestratorPayload.contextPackage
+    : null;
+  if (payloadContextPackage) payloadContextPackage.headSha = actualHead;
+  return true;
 }
 
 function isInsideRoot(root: string, candidate: string): boolean {
@@ -848,10 +970,33 @@ async function executePrepareHandoff(
 
     const actualHead = (await git(workspacePath, ["rev-parse", "HEAD"])).toLowerCase();
     if (actualHead !== context.baseHeadSha) {
-      throw new LocalAiHandoffError(
-        `Repository HEAD changed from ${context.baseHeadSha} to ${actualHead}; rerun Local Coding Engine before AI handoff`,
-        "STALE_HEAD",
+      const previousHead = context.baseHeadSha;
+      const safelyRebound = await rebindUnchangedAllowedFileScopeToHead(
+        workspacePath,
+        context,
+        actualHead,
       );
+      if (!safelyRebound) {
+        throw new LocalAiHandoffError(
+          `Repository HEAD changed from ${previousHead} to ${actualHead}; rerun Local Coding Engine before AI handoff`,
+          "STALE_HEAD",
+        );
+      }
+      await logAudit(
+        "coding-ai-handoff",
+        "head_advanced_outside_allowed_scope",
+        context.task.id,
+        "coding_task",
+        "success",
+        {
+          previousHead,
+          actualHead,
+          allowedFiles: context.recoveryContext.focusFiles
+            .map(normalizeRepoPath)
+            .filter((item): item is string => Boolean(item))
+            .slice(0, MAX_ALLOWED_FILES),
+        },
+      ).catch(() => undefined);
     }
 
     if (context.localRecovery.directFromInitialAnalysis === true) {
