@@ -3,10 +3,8 @@ import { z } from "zod";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
   getCodingWhatsappConfigStatus,
-  notifyCodingBridgeResponse,
   waitForCodingWhatsappDelivery,
 } from "../services/codingWhatsappNotificationService.js";
-import { randomUUID } from "crypto";
 import {
   decideCodingCriticalApprovalById,
   getCriticalApproval,
@@ -168,21 +166,17 @@ router.get("/ai/coding/bridge/runtime-status",async(_req,res):Promise<void>=>{
 });
 router.get("/ai/coding/bridge/whatsapp-status",async(_req,res):Promise<void>=>{res.json({configured:getCodingWhatsappConfigStatus()});});
 router.post("/ai/coding/bridge/whatsapp-test",async(_req,res):Promise<void>=>{
- const id=randomUUID();
- const result=await notifyCodingBridgeResponse({
-  responseId:id,
-  commandId:id,
-  kind:"CHECKPOINT",
-  message:"AI Core production WhatsApp diagnostic test."
+ const configured=getCodingWhatsappConfigStatus();
+ const ok=configured.baseUrl&&configured.apiKey&&configured.to;
+ res.status(ok?200:503).json({
+  ok,
+  configured,
+  policy:"critical_human_review_only",
+  message:ok
+   ?"WhatsApp admin siap. Notifikasi otomatis hanya dikirim untuk critical human review."
+   :"WhatsApp admin belum lengkap konfigurasinya."
  });
- if(result.status!=="queued"){
-  res.status(503).json({ok:false,result});
-  return;
- }
- const delivery=await waitForCodingWhatsappDelivery(result.messageId,{
-  timeoutMs:30000,
-  pollIntervalMs:1000
- });
+});
  const ok=delivery.status==="sent";
  res.status(ok?200:503).json({ok,result,delivery});
 });
