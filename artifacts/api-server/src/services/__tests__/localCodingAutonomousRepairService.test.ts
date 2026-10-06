@@ -51,6 +51,7 @@ vi.mock("../localCodingDeterministicRecoveryService.js", () => ({ startDetermini
 vi.mock("../localCodingAiHandoffService.js", () => ({
   approveAiHandoff: vi.fn(),
   assertApprovedAiHandoffFresh: vi.fn(),
+  revokeAiHandoff: vi.fn(),
   startAiHandoffPreparation: vi.fn(),
 }));
 vi.mock("../localCodingAiQueueRuntimeService.js", () => ({ enqueueCodingAiExecution: vi.fn() }));
@@ -533,6 +534,40 @@ describe("autonomous stale AI handoff HEAD recovery", () => {
     expect(source).toContain('"RECOVER_STALE_AI_HANDOFF_HEAD"');
     expect(source).toContain('"RETRY_STALE_AI_HANDOFF_RECOVERY"');
     expect(source).toContain('"stale_ai_handoff_head_recovery_scheduled"');
+  });
+});
+
+describe("autonomous stale AI handoff preparation recovery", () => {
+  it("recognizes an async handoff preparation stale-HEAD failure", async () => {
+    const { isStaleAiHandoffPreparationError } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      isStaleAiHandoffPreparationError(
+        "Repository HEAD changed from aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa to bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; rerun Local Coding Engine before AI handoff",
+      ),
+    ).toBe(true);
+    expect(
+      isStaleAiHandoffPreparationError(
+        "Repository HEAD changed from aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa to bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; prepare the AI handoff again",
+      ),
+    ).toBe(false);
+    expect(
+      isStaleAiHandoffPreparationError("Repository clone failed: resource temporarily unavailable"),
+    ).toBe(false);
+  });
+
+  it("reruns repository analysis from latest HEAD instead of retrying the stale package", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("staleAiHandoffPreparationFailure(state)");
+    expect(source).toContain('"RETRY_STALE_AI_HANDOFF_PREPARATION"');
+    expect(source).toContain('"stale_ai_handoff_preparation_reanalysis_started"');
+    expect(source).toContain("Repository HEAD changed during AI handoff preparation. Re-running Repository Analyzer from the latest HEAD.");
   });
 });
 
