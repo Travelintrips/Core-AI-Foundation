@@ -7,9 +7,10 @@
  *   GET  /internal/auth/me                (requireAuth)
  *   POST /internal/auth/change-password   (requireAuth)
  */
+import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
-import { db, internalUsersTable, toSafeInternalUser } from "@workspace/db";
+import { db, internalUsersTable, toSafeInternalUser, type InternalRole, type InternalUser } from "@workspace/db";
 import { hashPassword, verifyPassword, isPasswordStrongEnough } from "../services/passwordService.js";
 import {
   issueSessionToken,
@@ -22,7 +23,7 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_MS,
 } from "../services/internalAuthService.js";
-import { requireAuth } from "../middleware/internalAuth.js";
+import { requireAuth, requireInternalRole } from "../middleware/internalAuth.js";
 import { loginLimiter } from "../middleware/rateLimiter.js";
 import { logAudit } from "../services/aiAuditService.js";
 import {
@@ -62,6 +63,37 @@ function setSessionCookie(res: import("express").Response, token: string): void 
     maxAge: SESSION_COOKIE_MAX_AGE_MS,
     path: "/",
   });
+}
+
+const MANAGEABLE_INTERNAL_ROLES: InternalRole[] = ["admin", "manager", "internal_staff"];
+
+function isManageableInternalRole(value: unknown): value is InternalRole {
+  return typeof value === "string" && MANAGEABLE_INTERNAL_ROLES.includes(value as InternalRole);
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function sendMagicLoginEmailForUser(
+  req: import("express").Request,
+  user: InternalUser,
+): Promise<{ ok: boolean; error?: string }> {
+  const smtp = await verifyEmailTransport();
+  if (!smtp.ok) return { ok: false, error: smtp.error ?? "smtp_unavailable" };
+
+  const token = issueMagicLoginToken(user.id);
+  const baseUrl = publicPortalBaseUrl(req);
+  const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
+  const sent = await sendEmail({
+    to: user.email,
+    subject: "Link login Portal AI Internal",
+    html: `<p>Klik link berikut untuk login tanpa password:</p><p><a href="${magicUrl}">Login ke Portal AI</a></p><p>Link berlaku 10 menit.</p>`,
+    module: "internal_auth",
+    action: "magic_login_email",
+    resourceId: String(user.id),
+  });
+  return sent.ok ? { ok: true } : { ok: false, error: sent.error ?? "send_failed" };
 }
 
 router.post("/internal/auth/login", loginLimiter, async (req, res): Promise<void> => {
@@ -283,6 +315,181 @@ router.post("/internal/auth/logout", requireAuth, async (req, res): Promise<void
 router.get("/internal/auth/me", requireAuth, async (req, res): Promise<void> => {
   res.json({ user: toSafeInternalUser(req.internalUser!) });
 });
+
+router.get(
+  "/internal/auth/users",
+  requireAuth,
+  requireInternalRole("owner", "admin"),
+  async (_req, res): Promise<void> => {
+    const users = await db.select().from(internalUsersTable).orderBy(internalUsersTable.email);
+    res.json({ users: users.map(toSafeInternalUser) });
+  },
+);
+
+router.post(
+  "/internal/auth/users",
+  requireAuth,
+  requireInternalRole("owner", "admin"),
+  async (req, res): Promise<void> => {
+    const actor = req.internalUser!;
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const requestedRole = req.body?.role ?? "internal_staff";
+    if (!email || !isValidEmail(email)) {
+      res.status(400).json({ error: "Email tidak valid." });
+      return;
+    }
+    if (!isManageableInternalRole(requestedRole)) {
+      res.status(400).json({ error: "Role tidak valid." });
+      return;
+    }
+    if (requestedRole === "admin" && actor.role !== "owner") {
+      res.status(403).json({ error: "Hanya owner yang dapat membuat admin." });
+      return;
+    }
+
+    const existing = await getInternalUserByEmail(email);
+    if (existing) {
+      res.status(409).json({ error: "Email sudah terdaftar.", user: toSafeInternalUser(existing) });
+      return;
+    }
+
+    const passwordHash = await hashPassword(randomBytes(48).toString("base64url"));
+    const [created] = await db
+      .insert(internalUsersTable)
+      .values({
+        email,
+        passwordHash,
+        role: requestedRole,
+        accountType: "internal",
+        status: "active",
+        mustChangePassword: false,
+      })
+      .returning();
+
+    if (!created) {
+      res.status(500).json({ error: "Gagal membuat akun internal." });
+      return;
+    }
+
+    const invite = await sendMagicLoginEmailForUser(req, created);
+    await logAudit("internal_auth", "create_internal_user", String(created.id), "internal_user", "success", {
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      createdEmail: created.email,
+      role: created.role,
+      inviteSent: invite.ok,
+      ip: clientIp(req),
+    });
+
+    res.status(201).json({
+      user: toSafeInternalUser(created),
+      inviteSent: invite.ok,
+      inviteError: invite.ok ? undefined : invite.error,
+    });
+  },
+);
+
+router.patch(
+  "/internal/auth/users/:id",
+  requireAuth,
+  requireInternalRole("owner", "admin"),
+  async (req, res): Promise<void> => {
+    const actor = req.internalUser!;
+    const id = Number.parseInt(String(req.params.id), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "User ID tidak valid." });
+      return;
+    }
+
+    const target = await getInternalUserById(id);
+    if (!target) {
+      res.status(404).json({ error: "Akun tidak ditemukan." });
+      return;
+    }
+    if (target.role === "owner") {
+      res.status(403).json({ error: "Akun owner tidak dapat diubah dari User Management." });
+      return;
+    }
+
+    const nextRole = req.body?.role;
+    const nextStatus = req.body?.status;
+    if (nextRole !== undefined && !isManageableInternalRole(nextRole)) {
+      res.status(400).json({ error: "Role tidak valid." });
+      return;
+    }
+    if (nextRole === "admin" && actor.role !== "owner") {
+      res.status(403).json({ error: "Hanya owner yang dapat menetapkan role admin." });
+      return;
+    }
+    if (nextStatus !== undefined && nextStatus !== "active" && nextStatus !== "suspended") {
+      res.status(400).json({ error: "Status harus active atau suspended." });
+      return;
+    }
+    if (actor.id === target.id && nextStatus === "suspended") {
+      res.status(400).json({ error: "Anda tidak dapat menonaktifkan akun sendiri." });
+      return;
+    }
+
+    const patch: { role?: InternalRole; status?: string; updatedAt?: Date } = { updatedAt: new Date() };
+    if (nextRole !== undefined) patch.role = nextRole;
+    if (nextStatus !== undefined) patch.status = nextStatus;
+
+    const [updated] = await db
+      .update(internalUsersTable)
+      .set(patch)
+      .where(eq(internalUsersTable.id, id))
+      .returning();
+
+    if (!updated) {
+      res.status(500).json({ error: "Gagal memperbarui akun." });
+      return;
+    }
+
+    await logAudit("internal_auth", "update_internal_user", String(updated.id), "internal_user", "success", {
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      previousRole: target.role,
+      nextRole: updated.role,
+      previousStatus: target.status,
+      nextStatus: updated.status,
+      ip: clientIp(req),
+    });
+    res.json({ user: toSafeInternalUser(updated) });
+  },
+);
+
+router.post(
+  "/internal/auth/users/:id/send-magic-link",
+  requireAuth,
+  requireInternalRole("owner", "admin"),
+  async (req, res): Promise<void> => {
+    const actor = req.internalUser!;
+    const id = Number.parseInt(String(req.params.id), 10);
+    const user = Number.isInteger(id) && id > 0 ? await getInternalUserById(id) : null;
+    if (!user) {
+      res.status(404).json({ error: "Akun tidak ditemukan." });
+      return;
+    }
+    if (user.status !== "active") {
+      res.status(400).json({ error: "Akun harus aktif sebelum link login dikirim." });
+      return;
+    }
+
+    const sent = await sendMagicLoginEmailForUser(req, user);
+    await logAudit("internal_auth", "admin_send_magic_login", String(user.id), "internal_user", sent.ok ? "success" : "failure", {
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      targetEmail: user.email,
+      ip: clientIp(req),
+      error: sent.error,
+    });
+    if (!sent.ok) {
+      res.status(503).json({ error: "Gagal mengirim link login. Periksa konfigurasi SMTP." });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
 
 router.post("/internal/auth/change-password", requireAuth, async (req, res): Promise<void> => {
   const user = req.internalUser!;
