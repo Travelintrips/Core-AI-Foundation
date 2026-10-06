@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   aiCodingRunsTable,
@@ -135,6 +135,8 @@ import {
 } from "../services/aiCoreConversationService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
 import { bindAiCoreTaskLifecycleReporting } from "../services/aiCoreTaskLifecycleBindingService.js";
+import { reportCodingTaskTerminalTransition } from "../services/codingTaskTerminalReportingService.js";
+import { releaseCodingFileReservations } from "../services/codingConflictRegistryService.js";
 import { codingTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
 import {
   createAiCoreRealtimeSession,
@@ -2035,16 +2037,104 @@ async function runExistingCodingTaskLifecycleCommand(
   }
 
   if (wantsStop) {
+    const stoppedAt = new Date();
+    const stopSummary =
+      "Task dihentikan manual melalui AI Core control plane. Autonomous, run aktif, analyzer job, dan file reservation telah dihentikan/dilepas; tidak ada dispatch lanjutan.";
+    const wasTerminal = task.status === "COMPLETED" || task.status === "FAILED";
+
     await disableAutonomousCodingTask(task.id);
+
+    const cleanup = await db.transaction(async (tx) => {
+      const closedRuns = await tx
+        .update(aiCodingRunsTable)
+        .set({
+          status: "COMPLETED",
+          finishedAt: stoppedAt,
+        })
+        .where(
+          and(
+            eq(aiCodingRunsTable.taskId, task.id),
+            eq(aiCodingRunsTable.status, "RUNNING"),
+          ),
+        )
+        .returning({ id: aiCodingRunsTable.id });
+
+      const cancelledJobs = await tx.execute(sql`
+        UPDATE ai_platform.ai_jobs
+        SET status = 'cancelled',
+            completed_at = COALESCE(completed_at, ${stoppedAt}),
+            error_message = COALESCE(error_message, ${stopSummary}),
+            updated_at = ${stoppedAt}
+        WHERE status IN ('queued', 'waiting', 'running', 'retrying')
+          AND (
+            payload_json->>'codingTaskId' = ${task.id}
+            OR payload_json->>'taskId' = ${task.id}
+          )
+        RETURNING id
+      `);
+
+      let persistedStatus = task.status;
+      if (!wasTerminal) {
+        await tx
+          .update(aiCodingTasksTable)
+          .set({
+            status: "READY_REVIEW",
+            resultSummary: stopSummary,
+          })
+          .where(eq(aiCodingTasksTable.id, task.id));
+        persistedStatus = "READY_REVIEW";
+      }
+
+      return {
+        closedRuns: closedRuns.length,
+        cancelledJobs: Array.isArray(cancelledJobs.rows)
+          ? cancelledJobs.rows.length
+          : 0,
+        persistedStatus,
+      };
+    });
+
+    const releasedReservations = await releaseCodingFileReservations(task.id)
+      .catch((error) => {
+        logger.warn(
+          { error, taskId: task.id },
+          "[ai-core-chat] manual stop could not release coding file reservations",
+        );
+        return 0;
+      });
+
+    if (!wasTerminal) {
+      await reportCodingTaskTerminalTransition({
+        taskId: task.id,
+        status: "BLOCKED",
+        message: stopSummary,
+        source: "ai-core-chat-manual-stop",
+      }).catch((error) => {
+        logger.warn(
+          { error, taskId: task.id },
+          "[ai-core-chat] manual stop BLOCKED lifecycle report failed",
+        );
+      });
+    }
+
     return {
       kind: "execution",
       route: "CONTROL_PLANE",
-      reply: `Autonomous execution untuk ${task.taskNumber} dihentikan tanpa membuat task baru.`,
+      reply:
+        `Task ${task.taskNumber} dihentikan tanpa membuat task baru; ` +
+        `${cleanup.closedRuns} run aktif ditutup, ${cleanup.cancelledJobs} analyzer/job dibatalkan, ` +
+        `dan ${releasedReservations} file reservation dilepas.`,
       taskId: task.id,
       taskNumber: task.taskNumber,
-      status: task.status,
+      status: cleanup.persistedStatus === "READY_REVIEW"
+        ? "BLOCKED"
+        : cleanup.persistedStatus,
+      persistedStatus: cleanup.persistedStatus,
       workspaceUrl: `/coding-workspace/${task.id}`,
       autonomous: false,
+      closedRuns: cleanup.closedRuns,
+      cancelledJobs: cleanup.cancelledJobs,
+      releasedReservations,
     };
   }
 
