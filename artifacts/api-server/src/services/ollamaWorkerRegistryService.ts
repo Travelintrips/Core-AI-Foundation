@@ -21,7 +21,6 @@ export const OLLAMA_CODING_CAPABILITY = "coding_ai_execution";
 export const OLLAMA_POWERSHELL_CAPABILITY = "coding_powershell_execution";
 
 const DEFAULT_MODEL = "qwen2.5-coder:7b";
-const DEFAULT_MAX_CONCURRENCY = MAX_ACTIVE_JOBS_PER_WORKER;
 const OLLAMA_RESERVATION_STALE_MS = 360_000;
 const RELEASE_RETRY_DELAYS_MS = [0, 150, 500] as const;
 
@@ -366,7 +365,7 @@ async function attemptReserveOllamaWorker(
         AND status IN ('online', 'idle', 'busy')
         AND lease_expires_at IS NOT NULL
         AND lease_expires_at > NOW()
-        AND running_jobs < max_concurrent_jobs
+        AND running_jobs < ${MAX_ACTIVE_JOBS_PER_WORKER}
         AND capabilities @> ${JSON.stringify([OLLAMA_INFERENCE_CAPABILITY])}::jsonb
       ORDER BY
         (running_jobs::numeric / GREATEST(max_concurrent_jobs, 1)) ASC,
