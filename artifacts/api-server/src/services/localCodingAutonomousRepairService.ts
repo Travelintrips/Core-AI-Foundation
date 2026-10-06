@@ -42,6 +42,8 @@ import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecov
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
+  LocalAiHandoffError,
+  revokeAiHandoff,
   startAiHandoffPreparation,
 } from "./localCodingAiHandoffService.js";
 import { enqueueCodingAiExecution } from "./localCodingAiQueueRuntimeService.js";
@@ -1418,6 +1420,69 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
         "coding_task",
         "success",
         { nextAction: state.nextAction },
+      ).catch(() => undefined);
+      return { taskId, status: "ACTIVE", action };
+    }
+
+    const staleAiHandoffHead =
+      error instanceof LocalAiHandoffError &&
+      error.kind === "STALE_HEAD" &&
+      state?.task.status === "READY_REVIEW" &&
+      ["APPROVE_AI_HANDOFF", "AI_HANDOFF_APPROVED"].includes(
+        state.nextAction ?? "",
+      );
+
+    if (staleAiHandoffHead) {
+      await refundReservedActionCycle(taskId).catch(() => undefined);
+
+      try {
+        await revokeAiHandoff(taskId);
+      } catch (revokeError) {
+        const revokeMessage =
+          revokeError instanceof Error ? revokeError.message : String(revokeError);
+        const action = "RETRY_STALE_AI_HANDOFF_RECOVERY";
+        await setState(
+          taskId,
+          "WAITING",
+          action,
+          revokeMessage.slice(0, 2000),
+        ).catch(() => undefined);
+        await logAudit(
+          "coding-autonomous",
+          "stale_ai_handoff_recovery_deferred",
+          taskId,
+          "coding_task",
+          "success",
+          {
+            previousNextAction: state.nextAction,
+            staleHeadError: message.slice(0, 1000),
+            revokeError: revokeMessage.slice(0, 1000),
+          },
+        ).catch(() => undefined);
+        return { taskId, status: "WAITING", action };
+      }
+
+      const action = "RECOVER_STALE_AI_HANDOFF_HEAD";
+      await setState(taskId, "ACTIVE", action, message.slice(0, 2000));
+      await report(
+        taskId,
+        "CHECKPOINT",
+        "Repository HEAD berubah saat handoff. AI Core membatalkan handoff lama dan akan menyiapkan paket baru dari HEAD terbaru.",
+        {
+          source: "autonomous-repair-loop",
+          nextAction: "AI_REQUIRED",
+        },
+      );
+      await logAudit(
+        "coding-autonomous",
+        "stale_ai_handoff_head_recovery_scheduled",
+        taskId,
+        "coding_task",
+        "success",
+        {
+          previousNextAction: state.nextAction,
+          error: message.slice(0, 1000),
+        },
       ).catch(() => undefined);
       return { taskId, status: "ACTIVE", action };
     }
