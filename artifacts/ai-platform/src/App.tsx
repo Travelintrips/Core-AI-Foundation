@@ -118,6 +118,7 @@ import AicodingDashboard from "@/pages/aicoding-dashboard";
 import AicodingDetailPage from "@/pages/aicoding-detail";
 import AiCoreChat from "@/pages/ai-core-chat";
 import McpPairApproval from "@/pages/mcp-pair";
+import UserManagement from "@/pages/user-management";
 
 const queryClient = new QueryClient();
 
@@ -160,6 +161,7 @@ function AdminRouter() {
         <Route path="/memory" component={Memory} />
         <Route path="/audit" component={Audit} />
         <Route path="/settings" component={Settings} />
+        <Route path="/user-management" component={UserManagement} />
         <Route path="/workforce" component={Workforce} />
         <Route path="/operations" component={Operations} />
         <Route path="/queue" component={Queue} />
