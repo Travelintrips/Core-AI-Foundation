@@ -12,7 +12,6 @@ import {
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
-import { approvePlanAndStartCoding } from "./codingAgentService.js";
 import {
   approveCodingTaskGraph,
   getLatestCodingTaskGraph,
@@ -1185,12 +1184,6 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     }
 
     switch (state.nextAction) {
-      case "APPROVE_PLAN":
-        await reserveCycle();
-        await approvePlanAndStartCoding(taskId);
-        await setState(taskId, "WAITING", "AUTO_APPROVE_PLAN");
-        return { taskId, status: "WAITING", action: "AUTO_APPROVE_PLAN" };
-
       case "REVIEW_LOCAL_PATCH":
         await reserveCycle();
         await approveAndValidateLocalPatch(taskId);
@@ -1805,7 +1798,6 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
     .limit(50);
 
   const recoverable = new Set([
-    "APPROVE_PLAN",
     "REVIEW_LOCAL_PATCH",
     "RUN_SANDBOX_VERIFICATION",
     "LOCAL_RECOVERY_REQUIRED",
