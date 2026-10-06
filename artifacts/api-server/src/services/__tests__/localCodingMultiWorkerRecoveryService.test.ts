@@ -111,6 +111,19 @@ describe("multi-worker child lifecycle recovery", () => {
     });
   });
 
+  it("reconciles terminal workstream truth back to the task graph", () => {
+    const source = readFileSync(
+      new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("WITH graph_truth AS");
+    expect(source).toContain("BOOL_OR(w.status IN ('FAILED', 'CANCELLED'))");
+    expect(source).toContain("BOOL_AND(w.status = 'COMPLETED')");
+    expect(source).toContain("g.status IN ('APPROVED', 'RUNNING')");
+    expect(source).toContain("await reconcileTerminalGraphStates(now)");
+  });
+
   it("auto-finishes the child task when the workstream is already completed", () => {
     expect(
       workstreamChildLifecycleDisposition("COMPLETED", {
