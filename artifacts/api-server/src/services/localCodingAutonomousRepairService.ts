@@ -954,14 +954,14 @@ async function processTaskGraph(
       : [];
     const graphHasStartedFileWork = snapshot.workstreams.some(
       (item) =>
-        Boolean(item.startedAt || item.completedAt) ||
+        Boolean(item.headSha) ||
         ["RUNNING", "REVIEW_REQUIRED", "COMPLETED"].includes(item.status),
     );
 
     const availableOllamaSlots = await getAvailableOllamaCodingSlots();
     if (availableOllamaSlots <= 0) {
       if (!graphHasStartedFileWork && reservationFiles.length > 0) {
-        await releaseCodingFileReservations({ taskId }).catch(() => undefined);
+        await releaseCodingFileReservations(taskId).catch(() => undefined);
         await logAudit(
           "coding-autonomous",
           "reservation_released_while_waiting_capacity",
