@@ -1078,6 +1078,39 @@ export async function executeAdminWorkerStatusQuery(): Promise<AdminDbQueryExecu
   );
 }
 
+export function isAdminCodingTaskStatusQuery(message: string): boolean {
+  const value = normalizeSemanticText(message);
+  const codingScope = /\b(task|tugas|workspace|workstream|coding|lifecycle)\b/.test(value);
+  const statusScope = /\b(audit|status|ready review|ready_review|queued|analyzing|blocked|failed|completed|approval)\b/.test(value);
+  return codingScope && statusScope;
+}
+
+export async function executeAdminCodingTaskStatusQuery(): Promise<AdminDbQueryExecution> {
+  // Deterministic parent-task lifecycle audit. Keep joins anchored to the
+  // real schema: ai_coding_task_graphs.task_id is the parent task foreign key;
+  // there is no parent_task_id column.
+  return executeAdminReadOnlySql(
+    "WITH latest_run AS (" +
+      "SELECT DISTINCT ON (task_id) task_id, status AS run_status, agent_name, finished_at " +
+      "FROM ai_platform.ai_coding_runs ORDER BY task_id, created_at DESC" +
+    "), approval_state AS (" +
+      "SELECT task_id, COUNT(*) FILTER (WHERE status IN ('PENDING','REQUESTED','AWAITING_APPROVAL'))::int AS pending_critical_approvals " +
+      "FROM ai_platform.ai_coding_critical_approvals GROUP BY task_id" +
+    ") " +
+    "SELECT t.id, t.task_number, t.project_name, t.status AS persisted_status, " +
+      "t.coding_status, a.status AS autonomous_status, a.last_action, a.last_error, " +
+      "lr.run_status, lr.agent_name, lr.finished_at, " +
+      "COALESCE(ap.pending_critical_approvals, 0) AS pending_critical_approvals, " +
+      "EXISTS (SELECT 1 FROM ai_platform.ai_coding_runs active_run WHERE active_run.task_id=t.id AND active_run.status='RUNNING') AS has_active_run " +
+    "FROM ai_platform.ai_coding_tasks t " +
+    "LEFT JOIN ai_platform.ai_coding_autonomous_tasks a ON a.task_id=t.id AND a.enabled=TRUE " +
+    "LEFT JOIN latest_run lr ON lr.task_id=t.id " +
+    "LEFT JOIN approval_state ap ON ap.task_id=t.id " +
+    "WHERE t.task_number NOT LIKE 'MW-%' " +
+    "ORDER BY t.updated_at DESC LIMIT 100"
+  );
+}
+
 export function isAdminMcpEventStatusQuery(message: string): boolean {
   const value = normalizeSemanticText(message);
   if (!/\bevents?\b/.test(value)) return false;
