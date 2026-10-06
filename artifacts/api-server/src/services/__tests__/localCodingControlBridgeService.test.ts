@@ -8,6 +8,35 @@ vi.mock("@workspace/db", () => ({
 }));
 vi.mock("../aiEventBusService.js", () => ({ publishSafe: vi.fn() }));
 
+describe("coding control bridge lifecycle idempotency", () => {
+  it.each(["BLOCKER", "COMPLETED", "FAILED"] as const)(
+    "deduplicates %s lifecycle responses before fan-out",
+    async (kind) => {
+      const bridge = await import("../localCodingControlBridgeService.js");
+      expect(bridge.isIdempotentCodingBridgeLifecycleKind(kind)).toBe(true);
+    },
+  );
+
+  it.each(["ACK", "PROGRESS", "CHECKPOINT"] as const)(
+    "does not collapse ordinary %s progress responses",
+    async (kind) => {
+      const bridge = await import("../localCodingControlBridgeService.js");
+      expect(bridge.isIdempotentCodingBridgeLifecycleKind(kind)).toBe(false);
+    },
+  );
+
+  it("serializes lifecycle persistence with an advisory transaction lock", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(
+      new URL("../localCodingControlBridgeService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("pg_advisory_xact_lock");
+    expect(source).toContain("if (!created) return response;");
+    expect(source).toContain("checkpointJson} =");
+  });
+});
+
 describe("coding control bridge contract", () => {
   it("exports durable command and response primitives", async () => {
     const bridge = await import("../localCodingControlBridgeService.js");
