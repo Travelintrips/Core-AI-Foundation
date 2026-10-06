@@ -476,6 +476,23 @@ describe("autonomous approved-handoff gate regression recovery", () => {
   });
 });
 
+describe("autonomous stale AI handoff HEAD recovery", () => {
+  it("revokes a stale handoff and retries from AI_REQUIRED instead of terminal FAILED", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("error instanceof LocalAiHandoffError");
+    expect(source).toContain('error.kind === "STALE_HEAD"');
+    expect(source).toContain('["APPROVE_AI_HANDOFF", "AI_HANDOFF_APPROVED"]');
+    expect(source).toContain("await revokeAiHandoff(taskId)");
+    expect(source).toContain('"RECOVER_STALE_AI_HANDOFF_HEAD"');
+    expect(source).toContain('"RETRY_STALE_AI_HANDOFF_RECOVERY"');
+    expect(source).toContain('"stale_ai_handoff_head_recovery_scheduled"');
+  });
+});
+
 describe("autonomous transient database recovery", () => {
   it("retries state reads and defers transient database failures instead of terminal FAILED", () => {
     const source = readFileSync(
