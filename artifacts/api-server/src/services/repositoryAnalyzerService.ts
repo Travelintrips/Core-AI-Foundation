@@ -1118,7 +1118,11 @@ export async function failStaleRepositoryAnalyzerRuns(
       AND r.status = 'RUNNING'
       AND r.agent_name IN ('Coding Orchestrator', 'Incident Auto-Repair')
       AND (
-        (j.status = 'queued' AND j.created_at < ${queuedCutoff})
+        (
+          j.status = 'queued'
+          AND j.created_at < ${queuedCutoff}
+          AND r.agent_name <> 'Coding Orchestrator'
+        )
         OR
         (
           j.status IN ('running', 'retrying')
