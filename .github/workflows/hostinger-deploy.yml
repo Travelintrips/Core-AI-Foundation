@@ -639,7 +639,7 @@ jobs:
           );
           NODE
 
-      - name: Verify schema-aware AI Core Chat database queries
+      - name: Verify schema-aware AI Core Chat database query
         if: steps.target.outputs.stale != 'true' && steps.verify_scope.outputs.verify_data == 'true'
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
