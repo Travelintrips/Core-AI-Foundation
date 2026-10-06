@@ -153,12 +153,19 @@ function sha256Json(value: unknown): string {
 }
 
 export function normalizeGitHeadOutput(raw: unknown): string {
-  const stdout = Buffer.isBuffer(raw)
-    ? raw.toString("utf8")
-    : raw instanceof Uint8Array
-      ? Buffer.from(raw).toString("utf8")
-      : typeof raw === "string"
-        ? raw
+  const candidate =
+    typeof raw === "string" || Buffer.isBuffer(raw) || raw instanceof Uint8Array
+      ? raw
+      : isRecord(raw)
+        ? raw.stdout
+        : "";
+
+  const stdout = Buffer.isBuffer(candidate)
+    ? candidate.toString("utf8")
+    : candidate instanceof Uint8Array
+      ? Buffer.from(candidate).toString("utf8")
+      : typeof candidate === "string"
+        ? candidate
         : "";
   return stdout.trim().toLowerCase();
 }
@@ -176,9 +183,7 @@ async function gitHead(root: string): Promise<string> {
       GIT_TERMINAL_PROMPT: "0",
     },
   });
-  const normalized = normalizeGitHeadOutput(
-    (result as { stdout?: unknown } | null | undefined)?.stdout,
-  );
+  const normalized = normalizeGitHeadOutput(result);
   if (!/^[0-9a-f]{40}$/.test(normalized)) {
     throw new LocalCodingAiExecutionGateError(
       "git rev-parse HEAD returned an invalid or empty commit SHA",
