@@ -11,7 +11,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Only the newest run for a branch/ref is useful. A new main push makes any
+  # older main CI stale, so cancel it instead of consuming the shared runner.
+  cancel-in-progress: true
 
 jobs:
   verify:
