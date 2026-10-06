@@ -16,6 +16,8 @@ describe("AI Core Hostinger infrastructure control", () => {
 
   it.each([
     ["Hostinger list docker projects", "HOSTINGER_DOCKER_LIST"],
+    ["Hostinger cek SSH public key", "HOSTINGER_VPS_SSH_KEY_LIST"],
+    ['Hostinger pasang SSH public key name=chatgpt key="ssh-ed25519 AAAATEST chatgpt"', "HOSTINGER_VPS_SSH_KEY_ATTACH"],
     ["Hostinger cek logs docker project=myapp", "HOSTINGER_DOCKER_LOGS"],
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
@@ -88,6 +90,73 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["GCP stop VM sekarang", "GCP_VM_STOP"],
   ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it("registers and attaches a Hostinger SSH public key without returning the key material", async () => {
+    const publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestOnly chatgpt";
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 778899,
+        name: "chatgpt-ai-task",
+        key: publicKey,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 991122,
+        state: "success",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_VPS_SSH_KEY_ATTACH",
+      message: `Hostinger pasang SSH public key name=chatgpt-ai-task key="${publicKey}"`,
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    });
+
+    expect(result.mutating).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/public-keys",
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({
+      name: "chatgpt-ai-task",
+      key: publicKey,
+    });
+    expect((fetchMock.mock.calls[1] as [string, RequestInit])[0]).toBe(
+      "https://developers.hostinger.com/api/vps/v1/public-keys/attach/1792369",
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[1] as [string, RequestInit])[1].body))).toEqual({
+      ids: [778899],
+    });
+    expect(result.data).toEqual({
+      id: 778899,
+      name: "chatgpt-ai-task",
+      attached: true,
+      virtualMachineId: "1792369",
+    });
+    expect(JSON.stringify(result)).not.toContain("AAAAC3NzaC1lZDI1NTE5AAAAITestOnly");
+  });
+
+  it("lists attached Hostinger SSH keys without returning key material", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      data: [{ id: 778899, name: "chatgpt-ai-task", key: "ssh-ed25519 SECRET" }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_VPS_SSH_KEY_LIST",
+      message: "Hostinger cek SSH public key",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+      },
+    });
+
+    expect(result.mutating).toBe(false);
+    expect(result.data).toEqual([{ id: 778899, name: "chatgpt-ai-task" }]);
+    expect(JSON.stringify(result)).not.toContain("SECRET");
   });
 
   it("auto-discovers the only accessible Docker project when no project is configured", async () => {

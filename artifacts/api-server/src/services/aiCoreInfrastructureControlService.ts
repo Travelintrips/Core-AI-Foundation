@@ -13,6 +13,8 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_VPS_START"
   | "HOSTINGER_VPS_STOP"
   | "HOSTINGER_VPS_RESTART"
+  | "HOSTINGER_VPS_SSH_KEY_LIST"
+  | "HOSTINGER_VPS_SSH_KEY_ATTACH"
   | "HOSTINGER_DOCKER_LIST"
   | "HOSTINGER_DOCKER_STATUS"
   | "HOSTINGER_DOCKER_CONTAINERS"
@@ -101,6 +103,16 @@ export function detectAiCoreInfrastructureOperation(
       /\b(cari|find|discover|discovery|list|daftar|cek|check|lihat)\b/i.test(text) &&
       /\b(hosting username|hosting domain|hosting account|website|websites|akun hosting|domain hosting)\b/i.test(text)) {
     return "HOSTINGER_HOSTING_DISCOVERY";
+  }
+
+  if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
+      /\b(ssh(?:\s+public)?\s+key|public key|kunci ssh)\b/i.test(text)) {
+    if (/\b(list|daftar|cek|check|status|lihat|verify|verifikasi)\b/i.test(text)) {
+      return "HOSTINGER_VPS_SSH_KEY_LIST";
+    }
+    if (/\b(add|attach|pasang|tambah|tambahkan|daftarkan|register)\b/i.test(text)) {
+      return "HOSTINGER_VPS_SSH_KEY_ATTACH";
+    }
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
@@ -741,7 +753,70 @@ async function callHostinger(
       project = await resolveDockerProject();
     }
 
-    if (operation === "HOSTINGER_DOCKER_LIST") {
+    if (operation === "HOSTINGER_VPS_SSH_KEY_LIST") {
+      const result = await firstSuccessful(`${vmBase}/public-keys`, "GET");
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Hostinger VPS SSH key list failed with HTTP ${result.status}.`);
+      }
+      const payload = result.data as { data?: unknown[] } | unknown[] | null;
+      const items = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
+          ? (payload as { data: unknown[] }).data
+          : [];
+      data = items.map((item) => {
+        const value = item && typeof item === "object" ? item as Record<string, unknown> : {};
+        return {
+          id: value["id"] ?? null,
+          name: value["name"] ?? null,
+        };
+      });
+    } else if (operation === "HOSTINGER_VPS_SSH_KEY_ATTACH") {
+      const name = valueOf("name");
+      const publicKey = valueOf("key");
+      if (!name || !/^[A-Za-z0-9._-]{1,100}$/.test(name)) {
+        throw new Error("Hostinger SSH key attach requires name=<safe-key-name>.");
+      }
+      if (!/^(?:ssh-(?:ed25519|rsa)|ecdsa-sha2-nistp\d+)\s+[A-Za-z0-9+/=]+(?:\s+.*)?$/.test(publicKey)) {
+        throw new Error('Hostinger SSH key attach requires key="<OpenSSH public key>".');
+      }
+
+      const created = await firstSuccessful("/vps/v1/public-keys", "POST", {
+        name,
+        key: publicKey,
+      });
+      if (created.status < 200 || created.status >= 300) {
+        throw new Error(`Hostinger SSH public key registration failed with HTTP ${created.status}.`);
+      }
+      const createdValue = created.data && typeof created.data === "object"
+        ? created.data as Record<string, unknown>
+        : {};
+      const nested = createdValue["data"] && typeof createdValue["data"] === "object"
+        ? createdValue["data"] as Record<string, unknown>
+        : {};
+      const rawId = createdValue["id"] ?? nested["id"];
+      const publicKeyId = typeof rawId === "number"
+        ? rawId
+        : Number.parseInt(String(rawId ?? ""), 10);
+      if (!Number.isInteger(publicKeyId) || publicKeyId <= 0) {
+        throw new Error("Hostinger SSH public key registration returned no usable key id.");
+      }
+
+      const attached = await firstSuccessful(
+        `/vps/v1/public-keys/attach/${encodeURIComponent(config.vmId)}`,
+        "POST",
+        { ids: [publicKeyId] },
+      );
+      if (attached.status < 200 || attached.status >= 300) {
+        throw new Error(`Hostinger SSH public key attach failed with HTTP ${attached.status}.`);
+      }
+      data = {
+        id: publicKeyId,
+        name,
+        attached: true,
+        virtualMachineId: config.vmId,
+      };
+    } else if (operation === "HOSTINGER_DOCKER_LIST") {
       const result = await firstSuccessful(`${vmBase}/docker`, "GET");
       if (result.status < 200 || result.status >= 300) throw new Error(`Hostinger Docker list failed with HTTP ${result.status}.`);
       data = result.data;
@@ -870,6 +945,7 @@ async function callHostinger(
 
   const readOnly = new Set<AiCoreInfrastructureOperation>([
     "HOSTINGER_VPS_STATUS",
+    "HOSTINGER_VPS_SSH_KEY_LIST",
     "HOSTINGER_DOCKER_LIST",
     "HOSTINGER_DOCKER_STATUS",
     "HOSTINGER_DOCKER_CONTAINERS",
