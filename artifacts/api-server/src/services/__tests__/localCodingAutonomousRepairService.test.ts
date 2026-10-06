@@ -929,6 +929,24 @@ describe("autonomous terminal task status", () => {
 });
 
 
+describe("autonomous lifecycle source recovery", () => {
+  it("reads nextAction from completed incident lifecycle runs, not only Coding Orchestrator", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const start = source.indexOf("async function loadTaskState");
+    const end = source.indexOf("function contextHeadSha", start);
+    const loader = source.slice(start, end);
+    expect(loader).toContain("candidateOrchestration?.nextAction");
+    expect(loader).toContain('run.status !== "COMPLETED"');
+    expect(loader).not.toContain(
+      'run.agentName === "Coding Orchestrator" &&\n      run.status === "COMPLETED"',
+    );
+  });
+});
+
 describe("autonomous reservation conflict recovery", () => {
   it("keeps REVIEW_CONFLICT nonterminal and automatically retries after reservations clear", () => {
     const source = readFileSync(
