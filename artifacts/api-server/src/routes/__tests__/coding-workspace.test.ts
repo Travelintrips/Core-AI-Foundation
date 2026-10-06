@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ListCodingTasksResponse } from "@workspace/api-zod";
 
 const mockTransaction = vi.hoisted(() => vi.fn());
 const mockDbSelect = vi.hoisted(() => vi.fn());
@@ -385,6 +386,27 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
 });
 
 describe("AI coding workspace task list", () => {
+  it("accepts recoverable BLOCKED task presentation in the API contract", () => {
+    expect(() =>
+      ListCodingTasksResponse.parse([
+        {
+          id: taskId,
+          taskNumber: "CWS-BLOCKED1",
+          projectName: "Core AI Foundation",
+          repository: "Travelintrips/Core-AI-Foundation",
+          branch: "main",
+          instruction: "Recover a transient operational blocker.",
+          status: "BLOCKED",
+          priority: 50,
+          resultSummary: "Recoverable operational blocker.",
+          commitSha: null,
+          createdAt: new Date("2026-10-06T18:00:00.000Z"),
+          updatedAt: new Date("2026-10-06T18:00:00.000Z"),
+        },
+      ]),
+    ).not.toThrow();
+  });
+
   it("keeps multi-worker child executions out of the top-level task queue", () => {
     const source = readFileSync(
       new URL("../coding-workspace.ts", import.meta.url),
