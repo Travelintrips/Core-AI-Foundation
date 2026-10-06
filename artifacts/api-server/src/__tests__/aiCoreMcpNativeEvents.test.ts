@@ -138,10 +138,22 @@ describe("AI Core native MCP events", () => {
     }));
   });
 
-  it("requires the ai_core.events authentication scope", async () => {
+  it("allows plugin scans to discover the static event catalog before OAuth", async () => {
     const response = await request(app())
       .post("/api/ai/core-chat/mcp")
       .send({ jsonrpc: "2.0", id: 4, method: "events/list", params: {} });
+
+    expect(response.status).toBe(200);
+    expect(response.body.result.events[0].name).toBe("ai_core.task.terminal");
+    expect(response.body.result.events[0].delivery).toEqual(["webhook"]);
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(eventMocks.subscribe).not.toHaveBeenCalled();
+  });
+
+  it.each(["events/subscribe", "events/unsubscribe"])("requires ai_core.events authentication for %s", async (method) => {
+    const response = await request(app())
+      .post("/api/ai/core-chat/mcp")
+      .send({ jsonrpc: "2.0", id: 4, method, params: {} });
 
     expect(response.status).toBe(401);
     expect(response.headers["www-authenticate"]).toContain("ai_core.events");
