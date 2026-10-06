@@ -15,6 +15,7 @@ import {
   oauthResource,
   verifyMcpAccessToken,
 } from "../services/aiCoreMcpOAuthService.js";
+import { logAudit } from "../services/aiAuditService.js";
 import {
   acknowledgeCodingBridgeResponse,
   listPendingCodingBridgeResponsesForConversation,
@@ -686,6 +687,19 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
   ) {
     const identity = await authenticate(req);
     if (!identity || !identity.scopes.has("ai_core.events")) {
+      await logAudit({
+        module: "mcp-events",
+        action: "native_event_auth_denied",
+        resourceId: body.method,
+        resourceType: "mcp_event_request",
+        status: "warning",
+        details: {
+          method: body.method,
+          authenticated: Boolean(identity),
+          hasEventsScope: Boolean(identity?.scopes.has("ai_core.events")),
+          userAgent: String(req.headers["user-agent"] ?? "").slice(0, 300),
+        },
+      });
       res.setHeader("WWW-Authenticate", authChallenge("ai_core.events"));
       res.status(401).json(authRequiredResult(body.id ?? null, "ai_core.events"));
       return;
@@ -705,6 +719,24 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
 
       if (body.method === "events/subscribe") {
         const parsed = NativeEventSubscribeParams.parse(body.params ?? {});
+        await logAudit({
+          module: "mcp-events",
+          action: "native_subscription_requested",
+          resourceId: AI_CORE_TERMINAL_EVENT_NAME,
+          resourceType: "mcp_event_subscription",
+          status: "success",
+          details: {
+            callbackHost: (() => {
+              try {
+                return new URL(parsed.delivery.url).hostname.slice(0, 255);
+              } catch {
+                return "invalid-url";
+              }
+            })(),
+            userAgent: String(req.headers["user-agent"] ?? "").slice(0, 300),
+            eventTypes: parsed.arguments.eventTypes ?? [],
+          },
+        });
         const subscription = await subscribeAiCoreMcpEvent({
           principalId: identityPrincipalId(identity),
           eventName: parsed.name,
