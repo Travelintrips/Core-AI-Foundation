@@ -2137,6 +2137,9 @@ async function autonomousTick(): Promise<void> {
 }
 
 
+const AUTONOMOUS_RUNTIME_SELF_HEAL_COOLDOWN_MS = 30_000;
+let lastAutonomousRuntimeSelfHealAt = 0;
+
 export function getAutonomousRuntimeStatus() {
   return {
     configured: envTrue(process.env["AI_CODING_AUTONOMOUS_ENABLED"]),
@@ -2146,6 +2149,84 @@ export function getAutonomousRuntimeStatus() {
     maxTasksPerTick: MAX_TASKS_PER_TICK,
     defaultMaxCycles: DEFAULT_MAX_CYCLES,
   };
+}
+
+export function autonomousRuntimeSelfHealDecision(input: {
+  configured: boolean;
+  running: boolean;
+  nowMs: number;
+  lastAttemptAtMs: number;
+  cooldownMs?: number;
+}): "NOT_CONFIGURED" | "ALREADY_RUNNING" | "COOLDOWN" | "ATTEMPT" {
+  if (!input.configured) return "NOT_CONFIGURED";
+  if (input.running) return "ALREADY_RUNNING";
+  const cooldownMs = Math.max(
+    1_000,
+    input.cooldownMs ?? AUTONOMOUS_RUNTIME_SELF_HEAL_COOLDOWN_MS,
+  );
+  if (
+    input.lastAttemptAtMs > 0 &&
+    input.nowMs - input.lastAttemptAtMs < cooldownMs
+  ) {
+    return "COOLDOWN";
+  }
+  return "ATTEMPT";
+}
+
+export async function recoverAutonomousCodingRuntimeIfDatabaseReady(): Promise<{
+  attempted: boolean;
+  databaseReachable: boolean | null;
+  recovered: boolean;
+  reason: string;
+}> {
+  const before = getAutonomousRuntimeStatus();
+  const nowMs = Date.now();
+  const decision = autonomousRuntimeSelfHealDecision({
+    configured: before.configured,
+    running: before.running,
+    nowMs,
+    lastAttemptAtMs: lastAutonomousRuntimeSelfHealAt,
+  });
+
+  if (decision !== "ATTEMPT") {
+    return {
+      attempted: false,
+      databaseReachable: null,
+      recovered: before.running,
+      reason: decision,
+    };
+  }
+
+  lastAutonomousRuntimeSelfHealAt = nowMs;
+
+  try {
+    // A startup-time Supabase/Supavisor authentication circuit breaker can
+    // recover without a process restart. Probe the DB first so we never start
+    // the autonomous poller while database access is still unhealthy.
+    await withTransientDatabaseRetry(
+      () => db.execute(sql`SELECT 1`),
+      { attempts: 2, baseDelayMs: 250 },
+    );
+    await startAutonomousCodingRuntime();
+    const after = getAutonomousRuntimeStatus();
+    return {
+      attempted: true,
+      databaseReachable: true,
+      recovered: after.running,
+      reason: after.running ? "RECOVERED" : "START_DID_NOT_ACTIVATE",
+    };
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "[coding-autonomous] Protected runtime-status self-heal deferred because DB is unavailable",
+    );
+    return {
+      attempted: true,
+      databaseReachable: false,
+      recovered: false,
+      reason: "DATABASE_UNAVAILABLE",
+    };
+  }
 }
 
 export async function startAutonomousCodingRuntime(): Promise<void> {

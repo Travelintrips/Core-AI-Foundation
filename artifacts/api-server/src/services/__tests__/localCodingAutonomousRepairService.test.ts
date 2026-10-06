@@ -68,6 +68,49 @@ vi.mock("../localCodingRunRecoveryService.js", () => ({
   purgeExpiredCodingTestTasks: vi.fn(async () => ({ inspected: 0, purgedTasks: 0 })),
 }));
 
+describe("autonomous runtime self-heal policy", () => {
+  it("attempts recovery only when configured, stopped, and outside cooldown", async () => {
+    const { autonomousRuntimeSelfHealDecision } = await import(
+      "../localCodingAutonomousRepairService.js"
+    );
+
+    expect(
+      autonomousRuntimeSelfHealDecision({
+        configured: false,
+        running: false,
+        nowMs: 100_000,
+        lastAttemptAtMs: 0,
+      }),
+    ).toBe("NOT_CONFIGURED");
+    expect(
+      autonomousRuntimeSelfHealDecision({
+        configured: true,
+        running: true,
+        nowMs: 100_000,
+        lastAttemptAtMs: 0,
+      }),
+    ).toBe("ALREADY_RUNNING");
+    expect(
+      autonomousRuntimeSelfHealDecision({
+        configured: true,
+        running: false,
+        nowMs: 110_000,
+        lastAttemptAtMs: 100_000,
+        cooldownMs: 30_000,
+      }),
+    ).toBe("COOLDOWN");
+    expect(
+      autonomousRuntimeSelfHealDecision({
+        configured: true,
+        running: false,
+        nowMs: 131_000,
+        lastAttemptAtMs: 100_000,
+        cooldownMs: 30_000,
+      }),
+    ).toBe("ATTEMPT");
+  });
+});
+
 describe("autonomous QC scheduling policy", () => {
   it("lets dependency-ready safe siblings advance before a REVIEW_REQUIRED workstream", async () => {
     const { hasDependencyReadyNonReviewWorkstream } = await import(

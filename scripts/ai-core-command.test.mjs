@@ -85,6 +85,50 @@ test('edge-blocked public health probes do not block a ready authenticated contr
   assert.equal(result.result, 'READY_FOR_BOUNDED_TASKS');
 });
 
+test('audit exposes protected runtime dependency and self-heal diagnostics', async () => {
+  const api = async (path) => {
+    if (path === '/healthz' || path === '/healthz/full') {
+      return { status: 403, value: { status: 'edge_blocked' } };
+    }
+    if (path === '/ai/coding/bridge/runtime-status') {
+      return {
+        status: 503,
+        value: {
+          ready: false,
+          buildCommitSha: 'a'.repeat(40),
+          autonomous: { configured: true, running: false },
+          autonomousRecovery: {
+            attempted: true,
+            databaseReachable: false,
+            recovered: false,
+            reason: 'DATABASE_UNAVAILABLE',
+          },
+          dependencies: {
+            githubConfigured: true,
+            whatsapp: { baseUrl: true, apiKey: true, to: false },
+            incomingSecretConfigured: true,
+            allowedSendersConfigured: false,
+          },
+        },
+      };
+    }
+    throw new Error('unexpected path');
+  };
+
+  const result = await audit(api);
+  assert.equal(result.ready, false);
+  assert.equal(result.runtimeHttpStatus, 503);
+  assert.equal(result.autonomousRunning, false);
+  assert.equal(result.autonomousRecovery.reason, 'DATABASE_UNAVAILABLE');
+  assert.equal(result.githubConfigured, true);
+  assert.equal(result.whatsappBaseUrlConfigured, true);
+  assert.equal(result.whatsappApiKeyConfigured, true);
+  assert.equal(result.whatsappTargetConfigured, false);
+  assert.equal(result.incomingSecretConfigured, true);
+  assert.equal(result.allowedSendersConfigured, false);
+  assert.equal(result.buildCommitSha, 'a'.repeat(40));
+});
+
 test('degraded readiness remains visible and prevents submission', async () => {
   const f = fakeApi({ ready: false });
   const audit = await execute(resolve({}), f.api);
