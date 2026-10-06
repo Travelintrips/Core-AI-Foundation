@@ -362,11 +362,25 @@ async function executePlanner(
 }
 
 async function isManualStopRequested(taskId: string): Promise<boolean> {
-  const state = await getAutonomousCodingTaskStatus(taskId).catch(() => null);
-  return (
-    String(state?.["status"] ?? "").toUpperCase() === "DISABLED" &&
-    String(state?.["last_action"] ?? "").toUpperCase() === "MANUAL_STOP"
-  );
+  try {
+    const result = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM ai_platform.ai_coding_autonomous_tasks
+        WHERE task_id = ${taskId}::uuid
+          AND enabled = FALSE
+          AND status = 'DISABLED'
+          AND last_action = 'MANUAL_STOP'
+      ) AS stopped
+    `);
+    return (result.rows?.[0] as { stopped?: boolean } | undefined)?.stopped === true;
+  } catch (error) {
+    logger.warn(
+      { error, taskId },
+      "[coding-orchestrator] Manual-stop guard lookup failed; continuing existing fail-closed lifecycle",
+    );
+    return false;
+  }
 }
 
 async function persistSnapshot(
