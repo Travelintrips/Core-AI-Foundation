@@ -13,12 +13,24 @@ describe("coding task presentation status", () => {
     ).toBe("FAILED");
   });
 
-  it("shows autonomous blockers as review-required instead of false failure", () => {
-    for (const taskStatus of ["READY_REVIEW", "FAILED"]) {
+  it("shows technical autonomous blockers as failed, not human review", () => {
+    for (const taskStatus of ["READY_REVIEW", "FAILED", "ANALYZING"]) {
       expect(
         codingTaskPresentationStatus({
           taskStatus,
           autonomousStatus: "BLOCKED",
+          hasActiveRun: false,
+        }),
+      ).toBe("FAILED");
+    }
+  });
+
+  it("shows READY_REVIEW only for explicit approval-required state", () => {
+    for (const taskStatus of ["READY_REVIEW", "FAILED", "ANALYZING"]) {
+      expect(
+        codingTaskPresentationStatus({
+          taskStatus,
+          autonomousStatus: "APPROVAL_REQUIRED",
           hasActiveRun: false,
         }),
       ).toBe("READY_REVIEW");
@@ -115,7 +127,7 @@ describe("coding task presentation status", () => {
     );
 
     expect(source).toContain(
-      "a.status IN ('ACTIVE', 'WAITING', 'COMPLETED', 'FAILED', 'BLOCKED')",
+      "a.status IN ('ACTIVE', 'WAITING', 'APPROVAL_REQUIRED', 'COMPLETED', 'FAILED', 'BLOCKED')",
     );
     expect(source).toContain("LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a");
     expect(source).toContain("AND a.enabled = TRUE");
