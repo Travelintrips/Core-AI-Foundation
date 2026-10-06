@@ -308,17 +308,18 @@ test('explicit autonomous E2E mode grants merge and production deploy authority 
   assert.match(bridge.body.instruction, /explicit owner-authorized autonomous E2E validation/);
 });
 
-test('production E2E canary follows successful Hostinger production verification, not a daily schedule', () => {
+test('production E2E canary runs once nightly at 23:00 WIB and supports manual dispatch', () => {
   const source = readFileSync(
     new URL('../.github/workflows/coding-control-plane-e2e-canary.yml', import.meta.url),
     'utf8',
   );
 
-  assert.match(source, /workflow_run:/);
-  assert.match(source, /workflows: \["Hostinger Production Verify"\]/);
-  assert.match(source, /github\.event\.workflow_run\.conclusion == 'success'/);
-  assert.match(source, /github\.event\.workflow_run\.head_branch == 'main'/);
-  assert.doesNotMatch(source, /cron:\s*"0 16 \* \* \*"/);
+  assert.match(source, /workflow_dispatch:/);
+  assert.match(source, /schedule:/);
+  assert.match(source, /cron:\s*"0 16 \* \* \*"/);
+  assert.doesNotMatch(source, /workflow_run:/);
+  assert.match(source, /Check planner capacity/);
+  assert.match(source, /Cleanup verification-only canary artifacts/);
 });
 
 test('successful production control-plane canary finalizes its verification-only task', () => {

@@ -18,6 +18,21 @@ describe("single-slot coding scheduler contracts", () => {
     expect(cluster).toContain('"coding_multi_task_planner"');
   });
 
+  it("reserves a dedicated single-slot dispatcher for planner jobs", () => {
+    const dispatcher = readFileSync(
+      new URL("../jobDispatcherService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(dispatcher).toContain('suffix:            "7"');
+    expect(dispatcher).toContain(
+      'capabilities:      ["coding_multi_task_planner"]',
+    );
+    expect(dispatcher).toContain(
+      "maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER",
+    );
+  });
+
   it("gives every dispatcher coding worker exactly one active slot", () => {
     const dispatcher = readFileSync(
       new URL("../jobDispatcherService.ts", import.meta.url),
