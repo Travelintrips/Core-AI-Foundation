@@ -10,6 +10,8 @@ type CodingBridgeKind =
   | "COMPLETED"
   | "FAILED";
 
+// WhatsApp admin is reserved for critical human-review requests only.
+const LIFECYCLE_NOTIFICATIONS_ENABLED = false;
 const NOTIFIABLE_KINDS = new Set<CodingBridgeKind>([
   "CHECKPOINT",
   "BLOCKER",
@@ -152,12 +154,35 @@ function buildApprovalWebLink(token: string): string | null {
   if (!publicBaseUrl) return null;
   return `${publicBaseUrl}/api/a/${encodeURIComponent(token)}`;
 }
+function friendlyApprovalAction(actionType: string): string {
+  switch (actionType) {
+    case "WORKSTREAM_AI_HANDOFF":
+      return "Serahkan eksekusi workstream ke AI";
+    case "MERGE_PR":
+      return "Merge perubahan ke branch utama";
+    case "PRODUCTION_DEPLOY":
+      return "Deploy ke production";
+    case "PRODUCTION_DB_MIGRATION":
+      return "Migrasi database production";
+    case "DESTRUCTIVE_DB_CHANGE":
+      return "Perubahan database yang bisa mengubah / menghapus data";
+    case "SECURITY_CHANGE":
+      return "Perubahan keamanan atau hak akses";
+    case "PRODUCTION_SERVICE_RESTART":
+      return "Restart service production";
+    default:
+      return actionType.replace(/_/g, " ").toLowerCase();
+  }
+}
+
 
 export type CodingWhatsappNotifyResult =
   | {
       status: "skipped";
       reason:
         | "kind_not_notifiable"
+        | "human_review_only_policy"
+        | "approval_result_notifications_disabled"
         | "missing_config"
         | "duplicate_lifecycle_notification";
       configured: { baseUrl: boolean; apiKey: boolean; to: boolean };
@@ -346,6 +371,13 @@ export async function notifyCodingBridgeResponse(input: {
   eventTimestamp?: string | Date | null;
 }): Promise<CodingWhatsappNotifyResult> {
   const configured = getCodingWhatsappConfigStatus();
+  if (!LIFECYCLE_NOTIFICATIONS_ENABLED) {
+    return {
+      status: "skipped",
+      reason: "human_review_only_policy",
+      configured,
+    };
+  }
   if (!NOTIFIABLE_KINDS.has(input.kind)) {
     return { status: "skipped", reason: "kind_not_notifiable", configured };
   }
@@ -437,22 +469,28 @@ export async function sendCodingApprovalRequest(input: {
   expiresAt: string;
 }): Promise<CodingWhatsappNotifyResult> {
   const approvalLink = buildApprovalWebLink(input.token);
+  const task = await taskNotificationDetails(input.taskId);
 
   const text = [
-    "AI Core - APPROVAL REQUIRED",
-    input.taskId ? `Task: ${input.taskId}` : "",
-    `Action: ${input.actionType}`,
-    input.summary.trim(),
-    `Berlaku sampai: ${input.expiresAt}`,
+    "🚨 Min, butuh keputusan dulu nih.",
+    "Job ini masuk kategori kritis, jadi AI Core sengaja ngerem sebelum lanjut.",
     "",
-    approvalLink ? `👉 Buka Approval: ${approvalLink}` : "",
+    task?.taskNumber
+      ? `Task: ${task.taskNumber}`
+      : input.taskId
+        ? `Task: ${input.taskId}`
+        : "",
+    task?.projectName ? `Project: ${task.projectName}` : "",
+    `Yang mau dijalanin: ${friendlyApprovalAction(input.actionType)}`,
+    `Kenapa perlu dicek: ${input.summary.trim()}`,
+    `Batas keputusan: ${formatJakartaTimestamp(input.expiresAt)}`,
+    "",
+    "Kalau aman, pilih APPROVE. Kalau mau dibatalin atau masih ragu, pilih REJECT.",
+    approvalLink ? `👉 Buka approval: ${approvalLink}` : "",
   ].filter(Boolean).join("\n");
 
-  // Baileys interactive/native-flow messages can render as an undecryptable
-  // "waiting for this message" placeholder on some WhatsApp clients. Approval
-  // messages must remain readable and actionable, so send them as normal text
-  // with signed HTTPS approve/reject links. The manual token command remains a
-  // final fallback.
+  // Keep approval messages as plain text with a short signed HTTPS page. Some
+  // WhatsApp clients render native-flow buttons as an undecryptable placeholder.
   return sendGatewayMessage({
     idempotencyKey: `ai-core-approval-${input.approvalId}`,
     clientMessageId: input.approvalId,
@@ -467,17 +505,10 @@ export async function sendCodingApprovalResult(input: {
   status: "REJECTED" | "EXECUTING" | "COMPLETED" | "FAILED";
   message: string;
 }): Promise<CodingWhatsappNotifyResult> {
-  const text = [
-    "AI Core - Approval Update",
-    input.taskId ? `Task: ${input.taskId}` : "",
-    `Action: ${input.actionType}`,
-    `Status: ${input.status}`,
-    input.message.trim(),
-  ].filter(Boolean).join("\n");
-
-  return sendGatewayMessage({
-    idempotencyKey: `ai-core-approval-result-${input.approvalId}-${input.status}`,
-    clientMessageId: `${input.approvalId}-${input.status.toLowerCase()}`,
-    text,
-  });
+  void input;
+  return {
+    status: "skipped",
+    reason: "approval_result_notifications_disabled",
+    configured: getCodingWhatsappConfigStatus(),
+  };
 }

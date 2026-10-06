@@ -57,3 +57,7 @@ Thumbs.db
 .env.production.local
 .env.*.local
 .runtime/
+
+# Hostinger build metadata generated during deployment
+/.cst-build-sha
+/artifacts/ai-platform/public/build-meta.json
