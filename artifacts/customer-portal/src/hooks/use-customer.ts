@@ -97,6 +97,10 @@ export type PublicAsset = {
   thumbnailUrl?: string;
   aspectRatio: string;
   status: string;
+  assetType?: string | null;
+  renderStage?: string | null;
+  renderSessionId?: number | null;
+  variantIndex?: number | null;
 };
 
 export type ClientComment = {
@@ -142,6 +146,12 @@ export type PublicProjectReview = {
     imagery_direction?: string;
   } | null;
   assets: PublicAsset[];
+  render: {
+    sessionId: number;
+    status: string;
+    progress: number;
+    variantCount: number;
+  } | null;
   comments: ClientComment[];
   createdAt: string;
   quotationStatus: 'draft' | 'sent' | 'approved' | 'rejected' | 'expired' | null;
@@ -183,6 +193,20 @@ export const useGetCustomerDashboard = (dashboardToken: string) => {
   });
 };
 
+const ACTIVE_PUBLIC_RENDER_STATUSES = new Set([
+  'planning',
+  'preview_generating',
+  'final_generating',
+  'quality_check',
+]);
+
+export function shouldPollPublicCreativeReview(data?: PublicProjectReview): boolean {
+  const projectRunning = data?.status === 'running' || data?.status === 'pending';
+  const assetsGenerating = (data?.assets ?? []).some((a) => a.status === 'generating' || a.status === 'pending');
+  const renderRunning = ACTIVE_PUBLIC_RENDER_STATUSES.has(data?.render?.status ?? '');
+  return projectRunning || assetsGenerating || renderRunning;
+}
+
 export const useGetPublicCreativeReview = (token: string) => {
   return useQuery({
     queryKey: ['creative-review', token],
@@ -190,15 +214,7 @@ export const useGetPublicCreativeReview = (token: string) => {
       return customFetch<PublicProjectReview>(`/api/public/creative-review/${token}`, { signal });
     },
     enabled: !!token,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      const projectRunning = data?.status === 'running' || data?.status === 'pending';
-      const assetsGenerating = (data?.assets ?? []).some((a) => a.status === 'generating' || a.status === 'pending');
-      if (projectRunning || assetsGenerating) {
-        return 3000;
-      }
-      return false;
-    }
+    refetchInterval: (query) => shouldPollPublicCreativeReview(query.state.data) ? 3000 : false
   });
 };
 

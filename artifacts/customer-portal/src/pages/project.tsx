@@ -63,8 +63,10 @@ export default function ProjectPage({
   const assetsInProgress = (review.assets ?? []).some(
     (asset) => asset.status === "pending" || asset.status === "generating",
   );
+  const renderInProgress = ["planning", "preview_generating", "final_generating", "quality_check"]
+    .includes(review.render?.status ?? "");
   const isGenerating =
-    review.status === "pending" || review.status === "running" || assetsInProgress;
+    review.status === "pending" || review.status === "running" || assetsInProgress || renderInProgress;
   const stepperStep = stepForProject(review.status, review.reviewStatus);
 
   return (
@@ -137,9 +139,14 @@ export default function ProjectPage({
                     <>
                       <img
                         src={asset.imageUrl}
-                        alt="Generated asset"
+                        alt={asset.assetType === "interior_render" || asset.renderStage === "final" ? "Final interior render" : "Generated asset"}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
+                      {(asset.assetType === "interior_render" || asset.renderStage === "final") && (
+                        <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium">
+                          Final Interior Render{typeof asset.variantIndex === "number" ? ` #${asset.variantIndex + 1}` : ""}
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                         <a
                           href={asset.imageUrl}

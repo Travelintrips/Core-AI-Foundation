@@ -48,8 +48,10 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
 
   const isTerminal = review.reviewStatus === 'approved' || review.reviewStatus === 'rejected';
   const assetsInProgress = (review.assets ?? []).some((a) => a.status === 'generating' || a.status === 'pending');
+  const renderInProgress = ['planning', 'preview_generating', 'final_generating', 'quality_check']
+    .includes(review.render?.status ?? '');
   const awaitingQuotation = review.status === 'pending' && !!review.quotationStatus && review.quotationStatus !== 'approved';
-  const isGenerating = (review.status === 'pending' || review.status === 'running' || assetsInProgress) && !awaitingQuotation;
+  const isGenerating = (review.status === 'pending' || review.status === 'running' || assetsInProgress || renderInProgress) && !awaitingQuotation;
 
   const handleApprove = () => {
     approveReview.mutate({ token: params.token, data: {} }, {
@@ -182,9 +184,14 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                       <>
                         <img
                           src={asset.imageUrl}
-                          alt="Generated asset"
+                          alt={asset.assetType === "interior_render" || asset.renderStage === "final" ? "Final interior render" : "Generated asset"}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
+                        {(asset.assetType === "interior_render" || asset.renderStage === "final") && (
+                          <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium">
+                            Final Interior Render{typeof asset.variantIndex === "number" ? ` #${asset.variantIndex + 1}` : ""}
+                          </div>
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                           <a href={asset.imageUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors">
                             {t('common.view')}

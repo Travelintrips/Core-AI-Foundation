@@ -5,7 +5,7 @@
  */
 
 import { Router } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import {
   db,
   creativeProjectsTable,
@@ -13,6 +13,7 @@ import {
   creativeAiAssetsTable,
   creativeAiClientCommentsTable,
   creativeProjectQuotationsTable,
+  creativeRenderSessionsTable,
 } from "@workspace/db";
 import { hashToken } from "../services/clientReviewService.js";
 import { logAudit } from "../services/aiAuditService.js";
@@ -136,6 +137,35 @@ router.get("/public/creative-review/:token", async (req, res): Promise<void> => 
       )
     );
 
+  // The Interior Design final renderer is job/session based. During the first
+  // render seconds it may not have inserted an asset row yet, so expose the
+  // latest render session separately to keep the customer portal polling until
+  // the final images are actually indexed.
+  const [renderSession] = await db
+    .select({
+      id: creativeRenderSessionsTable.id,
+      status: creativeRenderSessionsTable.sessionStatus,
+      requestedFinalCount: creativeRenderSessionsTable.requestedFinalCount,
+    })
+    .from(creativeRenderSessionsTable)
+    .where(eq(creativeRenderSessionsTable.projectId, review.projectId))
+    .orderBy(desc(creativeRenderSessionsTable.createdAt))
+    .limit(1);
+
+  const completedRenderCount = renderSession
+    ? assets.filter((asset) =>
+        asset.renderSessionId === renderSession.id
+        && asset.renderStage === "final"
+        && !!asset.imageUrl
+        && ["completed", "approved"].includes(asset.status),
+      ).length
+    : 0;
+  const renderProgress = renderSession
+    ? renderSession.status === "completed"
+      ? 100
+      : Math.min(100, Math.round((completedRenderCount / Math.max(1, renderSession.requestedFinalCount)) * 100))
+    : 0;
+
   // Fetch comments for this review
   const comments = await db
     .select()
@@ -173,15 +203,23 @@ router.get("/public/creative-review/:token", async (req, res): Promise<void> => 
     status: project.status,
     copyOutput: formatAgentOutput(result?.copyOutput ?? result?.copy ?? null) || null,
     creativeDirection: formatAgentOutput(result?.creativeDirection ?? result?.direction ?? null) || null,
-    assets: assets
-      .filter((a) => !!a.imageUrl)
-      .map((a) => ({
-        id: a.id,
-        imageUrl: a.imageUrl!,
-        thumbnailUrl: a.thumbnailUrl ?? undefined,
-        aspectRatio: a.aspectRatio ?? "1:1",
-        status: a.status,
-      })),
+    assets: assets.map((a) => ({
+      id: a.id,
+      imageUrl: a.imageUrl ?? null,
+      thumbnailUrl: a.thumbnailUrl ?? undefined,
+      aspectRatio: a.aspectRatio ?? "1:1",
+      status: a.status,
+      assetType: a.assetType,
+      renderStage: a.renderStage,
+      renderSessionId: a.renderSessionId,
+      variantIndex: a.conceptIndex,
+    })),
+    render: renderSession ? {
+      sessionId: renderSession.id,
+      status: renderSession.status,
+      progress: renderProgress,
+      variantCount: renderSession.requestedFinalCount,
+    } : null,
     comments: comments.map((c) => ({
       id: c.id,
       reviewId: c.reviewId,
