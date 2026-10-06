@@ -27,6 +27,7 @@ import {
   failStaleRepositoryAnalyzerRuns,
 } from "./repositoryAnalyzerService.js";
 import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
+import { reportCodingTaskTerminalTransition } from "./codingTaskTerminalReportingService.js";
 
 type CodingStageId =
   | "repository_analyzer"
@@ -688,6 +689,19 @@ export async function continueCodingOrchestration(
         "QC should sequence, revise, or rebase the conflicting task before retry.",
       );
       await completeLocalAnalysis(input, sessionId, stages, analysis);
+      await reportCodingTaskTerminalTransition({
+        taskId: input.task.id,
+        status: "BLOCKED",
+        message:
+          "AI Core menghentikan coding sementara karena file target sedang dipakai task lain. " +
+          "Tidak ada worker/AI yang dijalankan. Task perlu dijadwalkan ulang, direvisi, atau direbase setelah konflik selesai.",
+        source: "coding-orchestrator-active-change-conflict",
+      }).catch((error) => {
+        logger.warn(
+          { error, taskId: input.task.id, codingRunId: input.run.id },
+          "[coding-orchestrator] Failed to report active-change BLOCKED event",
+        );
+      });
       await logAudit(
         "coding-orchestrator",
         "active_change_conflict_waiting_for_qc",
