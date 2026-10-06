@@ -24,11 +24,17 @@ describe("GCP Ollama VM lifecycle config", () => {
     expect(config.zone).toBe("asia-northeast1-c");
     expect(config.instanceName).toBe("gpu-worker");
     expect(config.idleShutdownMs).toBe(5 * 60_000);
+    expect(config.remoteAutoStopEnabled).toBe(false);
   });
 
   it("supports an explicit idle shutdown timeout with a one minute floor", () => {
     expect(readGcpOllamaVmConfig({ GCP_OLLAMA_IDLE_SHUTDOWN_MS: "300000" }).idleShutdownMs).toBe(300000);
     expect(readGcpOllamaVmConfig({ GCP_OLLAMA_IDLE_SHUTDOWN_MS: "1000" }).idleShutdownMs).toBe(60000);
+  });
+
+  it("keeps API-host VM stopping opt-in so shared image workloads are not interrupted", () => {
+    expect(readGcpOllamaVmConfig({ GCP_OLLAMA_REMOTE_AUTOSTOP_ENABLED: "true" }).remoteAutoStopEnabled).toBe(true);
+    expect(readGcpOllamaVmConfig({}).remoteAutoStopEnabled).toBe(false);
   });
 
   it("reissues start for a TERMINATED VM even inside the in-process cooldown", () => {

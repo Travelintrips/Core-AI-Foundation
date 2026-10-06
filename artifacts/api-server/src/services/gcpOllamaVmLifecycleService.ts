@@ -15,6 +15,7 @@ interface GcpOllamaVmConfig {
   instanceName: string;
   credentialJson: string;
   idleShutdownMs: number;
+  remoteAutoStopEnabled: boolean;
 }
 
 export function readGcpOllamaVmConfig(env: NodeJS.ProcessEnv = process.env): GcpOllamaVmConfig {
@@ -31,6 +32,11 @@ export function readGcpOllamaVmConfig(env: NodeJS.ProcessEnv = process.env): Gcp
       60_000,
       Number.parseInt(env["GCP_OLLAMA_IDLE_SHUTDOWN_MS"] ?? "", 10) || DEFAULT_IDLE_SHUTDOWN_MS,
     ),
+    // Keep API-host auto-stop opt-in. A shared GPU VM may also run ComfyUI or
+    // other workloads invisible to the Ollama worker registry. In that setup
+    // the VM-local idle guard is the only safe authority to power the VM off.
+    remoteAutoStopEnabled:
+      (env["GCP_OLLAMA_REMOTE_AUTOSTOP_ENABLED"] ?? "false").trim().toLowerCase() === "true",
   };
 }
 
@@ -164,7 +170,7 @@ export async function stopGcpOllamaVmIfIdle(
   now = Date.now(),
 ): Promise<boolean> {
   const config = readGcpOllamaVmConfig(env);
-  if (!isConfigured(config)) return false;
+  if (!isConfigured(config) || !config.remoteAutoStopEnabled) return false;
 
   const { db } = await import("@workspace/db");
   const { sql } = await import("drizzle-orm");
