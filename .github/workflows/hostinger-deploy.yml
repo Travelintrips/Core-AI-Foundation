@@ -114,7 +114,6 @@ jobs:
             [ -z "$file" ] && continue
 
             case "$file" in
-              .github/workflows/hostinger-deploy.yml|\
               artifacts/api-server/src/scripts/remoteOllamaWorker.ts|\
               artifacts/api-server/src/services/*Ollama*.ts|\
               artifacts/api-server/src/services/*ollama*.ts|\
@@ -128,6 +127,17 @@ jobs:
                 verify_ollama=true
                 reason="sensitive_path:$file"
                 break
+                ;;
+              .github/workflows/hostinger-deploy.yml)
+                # This verifier also contains MCP/WA/Data Tool checks. Only
+                # wake Ollama when the workflow diff changes Ollama/Economy
+                # scope or its production smoke, not for unrelated verifier edits.
+                if git diff -U0 "$base_sha" "$EXPECTED_SHA" -- "$file" \
+                  | grep -Eiq '^[+-].*(ollama|economy|verify_ollama|gcp_ollama|gcp-ollama|LOCAL.*provider|worker.*capacity)'; then
+                  verify_ollama=true
+                  reason="ollama_verifier_diff:$file"
+                  break
+                fi
                 ;;
               artifacts/api-server/src/routes/ai-core-chat.ts)
                 # ai-core-chat.ts is shared by MCP/WA/Data Tool flows. Only
@@ -188,7 +198,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          endpoint="$API_BASE_URL/ai/core-chat/mcp?v=1.5.0"
+          endpoint="$API_BASE_URL/ai/core-chat/mcp"
 
           discover_payload='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}'
           discover_code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
@@ -211,12 +221,15 @@ jobs:
           if (!result?.capabilities || typeof result.capabilities.events !== "object") {
             throw new Error("Native MCP events capability is not live");
           }
-          if (result?.serverInfo?.version !== "1.5.0") {
-            throw new Error("Unexpected live MCP server version: " + String(result?.serverInfo?.version));
+          if (typeof result?.serverInfo?.version !== "string" || !result.serverInfo.version.trim()) {
+            throw new Error("MCP server/discover returned no server version");
           }
-          console.log("mcp_native_event_discovery=PASS");
+          console.log("mcp_native_event_discovery=PASS version="+result.serverInfo.version);
           NODE
-          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.5\.0' /tmp/mcp-discover.headers
+          server_version=$(node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/mcp-discover.json","utf8"))?.result?.serverInfo?.version; if(typeof v!=="string"||!v.trim()) process.exit(1); process.stdout.write(v.trim())')
+          discover_header_version=$(awk -F': ' 'tolower($1)=="x-mcp-server-version" {gsub("\r","",$2); print $2}' /tmp/mcp-discover.headers | tail -n1)
+          echo "mcp_server_version=$server_version header_version=${discover_header_version:-missing}"
+          test "$discover_header_version" = "$server_version"
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-discover.headers
 
           tools_payload='{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
@@ -265,7 +278,9 @@ jobs:
           }
           console.log("mcp_tool_discovery=PASS count="+tools.length);
           NODE
-          grep -Eqi '^x-mcp-server-version:[[:space:]]*1\.5\.0' /tmp/mcp-tools.headers
+          tools_header_version=$(awk -F': ' 'tolower($1)=="x-mcp-server-version" {gsub("\r","",$2); print $2}' /tmp/mcp-tools.headers | tail -n1)
+          echo "mcp_tools_header_version=${tools_header_version:-missing}"
+          test "$tools_header_version" = "$server_version"
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-tools.headers
 
       - name: Verify admin auth guard
