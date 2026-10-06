@@ -44,7 +44,7 @@ const REPOSITORY_READONLY_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
 
 const EXPLICIT_SOURCE_CHANGE =
-  /\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b.{0,80}\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|typescript|javascript|python)\b|\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul)\b.{0,80}\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b/i;
+  /\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b.{0,120}\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|typescript|javascript|python|routing|intent|logic|alur|behavior|behaviour|bug|fitur|feature|api|endpoint|service|test|tests|regression)\b|\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|routing|intent|logic|alur|behavior|behaviour|bug|fitur|feature|api|endpoint|service|test|tests|regression)\b.{0,120}\b(?:fix|perbaiki|ubah|edit|patch|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b/i;
 
 export function isAiCoreCapabilityQuery(message: string): boolean {
   const value = message.trim().toLowerCase();
