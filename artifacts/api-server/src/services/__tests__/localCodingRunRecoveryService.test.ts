@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@workspace/db", () => ({
@@ -46,6 +47,25 @@ describe("local coding run recovery policy", () => {
       now,
       activeStaleMs: 90 * 60_000,
     })).toBe(true);
+  });
+
+  it("keeps stale active task recovery nonterminal and callback-capable", () => {
+    const source = readFileSync(
+      new URL("../localCodingRunRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+    const recoveryBlock = source.slice(
+      source.indexOf('if (ACTIVE_TASK_STATUSES.has(task.status))'),
+      source.indexOf('export interface CodingTestTaskRetentionResult'),
+    );
+
+    expect(recoveryBlock).toContain('status: "READY_REVIEW"');
+    expect(recoveryBlock).toContain("status = 'BLOCKED'");
+    expect(recoveryBlock).toContain("last_action = 'RECOVERABLE_OPERATIONAL_FAILURE'");
+    expect(recoveryBlock).toContain('status: "BLOCKED"');
+    expect(recoveryBlock).toContain('source: "coding-run-stale-recovery"');
+    expect(recoveryBlock).not.toContain('status: "FAILED",\n            resultSummary');
+    expect(recoveryBlock).not.toContain("enabled = FALSE");
   });
 
   it("never recovers a non-running lifecycle", () => {
