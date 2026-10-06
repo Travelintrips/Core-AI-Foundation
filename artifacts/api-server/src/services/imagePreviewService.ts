@@ -266,12 +266,8 @@ async function persistImage(
   url: string,
   storagePath: string,
 ): Promise<string> {
-  const { isSupabaseStorageAvailable, ensureStorageBucket, uploadToSupabase } =
+  const { ensureStorageBucket, uploadToSupabase } =
     await import("../lib/supabaseStorage.js");
-
-  if (!isSupabaseStorageAvailable()) {
-    throw new Error("Supabase Storage credentials are unavailable");
-  }
 
   let buffer: Buffer | null = null;
   let contentType = "image/webp";
