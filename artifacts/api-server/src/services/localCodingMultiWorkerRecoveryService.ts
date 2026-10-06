@@ -35,7 +35,7 @@ export function workstreamChildLifecycleDisposition(
   resultJson: unknown,
 ): {
   runStatus: "COMPLETED" | "FAILED";
-  taskStatus: "READY_REVIEW" | "COMPLETED" | "FAILED";
+  taskStatus: "TESTING" | "COMPLETED" | "FAILED";
   aiFailure: boolean;
 } {
   const result = record(resultJson);
@@ -65,7 +65,7 @@ export function workstreamChildLifecycleDisposition(
   if (workstreamStatus === "REVIEW_REQUIRED") {
     return {
       runStatus: "COMPLETED",
-      taskStatus: "READY_REVIEW",
+      taskStatus: "TESTING",
       aiFailure: false,
     };
   }
@@ -182,7 +182,30 @@ async function reconcileReadyReviewMultiWorkerChildren(
   const cutoff = new Date(now.getTime() - DETACHED_READY_REVIEW_GRACE_MS);
 
   const result = await db.execute(sql`
-    WITH linked_terminal AS (
+    WITH linked_review AS (
+      SELECT
+        t.id AS task_id
+      FROM ai_platform.ai_coding_tasks AS t
+      JOIN ai_platform.ai_coding_workstreams AS w
+        ON w.child_task_id = t.id
+      WHERE t.status = 'READY_REVIEW'
+        AND t.task_number LIKE 'MW-%'
+        AND w.status = 'REVIEW_REQUIRED'
+    ),
+    review_updated AS (
+      UPDATE ai_platform.ai_coding_tasks AS t
+      SET status = 'TESTING',
+          result_summary = COALESCE(
+            NULLIF(t.result_summary, ''),
+            'Automated QC is validating the workstream candidate.'
+          ),
+          updated_at = ${now}
+      FROM linked_review
+      WHERE t.id = linked_review.task_id
+        AND t.status = 'READY_REVIEW'
+      RETURNING t.id
+    ),
+    linked_terminal AS (
       SELECT
         t.id AS task_id,
         w.status AS workstream_status,
@@ -279,10 +302,12 @@ async function reconcileReadyReviewMultiWorkerChildren(
     )
     SELECT
       (
+        (SELECT COUNT(*) FROM linked_review) +
         (SELECT COUNT(*) FROM linked_terminal) +
         (SELECT COUNT(*) FROM detached)
       )::int AS inspected,
       (
+        (SELECT COUNT(*) FROM review_updated) +
         (SELECT COUNT(*) FROM linked_updated) +
         (SELECT COUNT(*) FROM detached_updated)
       )::int AS recovered_tasks
@@ -480,6 +505,7 @@ export async function reconcileStaleMultiWorkerRuns(
               "CODING",
               "TESTING",
               "COMMITTING",
+              "TESTING",
               "READY_REVIEW",
             ]),
           ),
