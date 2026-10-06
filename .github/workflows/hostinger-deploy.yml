@@ -463,7 +463,7 @@ jobs:
           }
           console.log("mcp_events_protocol_negotiation=PASS protocol="+result.protocolVersion);
           NODE
-          initialize_header_version=$(awk -F': ' 'tolower($1)=="x-mcp-server-version" {gsub("\\r","",$2); print $2}' /tmp/mcp-initialize.headers | tail -n1)
+          initialize_header_version=$(awk -F': ' 'tolower($1)=="x-mcp-server-version" {gsub("\r","",$2); print $2}' /tmp/mcp-initialize.headers | tail -n1)
           echo "mcp_initialize_header_version=${initialize_header_version:-missing}"
           test "$initialize_header_version" = "$server_version"
           grep -Eqi '^cache-control:.*no-store' /tmp/mcp-initialize.headers
