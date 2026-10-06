@@ -45,6 +45,22 @@ describe("multi-worker child lifecycle recovery", () => {
     expect(source).toContain("Auto-reconciled completed Multi-Worker child");
   });
 
+  it("purges only superseded queued workstream jobs whose execution binding no longer matches", () => {
+    const source = readFileSync(
+      new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("reconcileSupersededQueuedWorkstreamJobs");
+    expect(source).toContain("j.job_type = 'coding_workstream_execution'");
+    expect(source).toContain("j.status IN ('queued', 'waiting', 'retrying')");
+    expect(source).toContain("w.job_id = j.id");
+    expect(source).toContain("w.lease_token = j.payload_json->>'leaseToken'");
+    expect(source).toContain("w.child_task_id::text = j.payload_json->>'codingTaskId'");
+    expect(source).toContain("w.child_run_id::text = j.payload_json->>'codingRunId'");
+    expect(source).toContain("Superseded workstream execution binding");
+  });
+
   it("synchronizes READY_REVIEW children from terminal workstream truth", () => {
     const source = readFileSync(
       new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
