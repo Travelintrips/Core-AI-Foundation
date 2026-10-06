@@ -238,13 +238,13 @@ function hasContent(brief: BriefData): boolean {
 // ── Steps ─────────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, title: "Informasi Bisnis",        description: "Ceritakan sedikit tentang bisnis Anda.",              icon: Building2 },
-  { id: 2, title: "Tujuan Project",          description: "Apa yang ingin Anda capai dengan project ini?",       icon: Target },
-  { id: 3, title: "Target Audiens",          description: "Siapa yang paling ingin Anda jangkau?",              icon: Users },
-  { id: 4, title: "Gaya Visual & Referensi", description: "Bantu tim kami memahami arah visual yang Anda mau.", icon: Palette },
-  { id: 5, title: "Deliverables",            description: "Format dan jumlah output yang Anda butuhkan.",       icon: Package },
-  { id: 6, title: "Deadline",                description: "Kapan Anda membutuhkan hasil akhirnya?",             icon: Calendar },
-  { id: 7, title: "Review",                  description: "Periksa kembali sebelum mengirim ke tim kami.",      icon: ClipboardList },
+  { id: 1, title: "Tentang Bisnis Anda",       description: "Isi seperlunya. Bagian ini boleh dilewati jika tidak relevan.", icon: Building2 },
+  { id: 2, title: "Tujuan Pesanan",            description: "Ceritakan hasil utama yang ingin Anda dapatkan.",               icon: Target },
+  { id: 3, title: "Siapa yang Ingin Dijangkau",description: "Opsional — isi jika Anda sudah tahu targetnya.",                icon: Users },
+  { id: 4, title: "Gaya yang Disukai",         description: "Opsional — pilih gaya atau referensi jika ada.",                icon: Palette },
+  { id: 5, title: "Hasil yang Dibutuhkan",     description: "Pilih atau jelaskan hasil akhir yang Anda perlukan.",           icon: Package },
+  { id: 6, title: "Kapan Dibutuhkan",          description: "Opsional — isi jika ada tanggal atau waktu khusus.",            icon: Calendar },
+  { id: 7, title: "Cek & Kirim",               description: "Pastikan kebutuhan utama sudah benar, lalu kirim.",             icon: ClipboardList },
 ];
 
 const TOTAL_STEPS = STEPS.length;
@@ -256,25 +256,19 @@ type FieldErrors = Partial<Record<keyof BriefData, string>>;
 
 function validateStep(step: number, brief: BriefData, isCP = false): FieldErrors {
   const errors: FieldErrors = {};
-  if (step === 1) {
+  if (step === 1 && isCP) {
     const ind = brief.companyIndustry.trim();
     if (!ind || ind === "Lainnya")
-      errors.companyIndustry = "Pilih atau tuliskan industri bisnis Anda sebelum melanjutkan";
-    if (isCP && !brief.cpLegalName.trim())
+      errors.companyIndustry = "Pilih atau tuliskan bidang usaha perusahaan";
+    if (!brief.cpLegalName.trim())
       errors.cpLegalName = "Nama resmi perusahaan wajib diisi";
-    if (isCP && !brief.cpContactEmail.trim() && !brief.cpContactPhone.trim())
-      errors.cpContactEmail = "Minimal email atau nomor telepon kontak wajib diisi";
+    if (!brief.cpContactEmail.trim() && !brief.cpContactPhone.trim())
+      errors.cpContactEmail = "Isi minimal email atau nomor telepon yang bisa dihubungi";
   }
   if (step === 2 && !hasAnySelection(brief.primaryGoal))
-    errors.primaryGoal = "Pilih minimal satu tujuan project sebelum melanjutkan";
-  if (step === 3 && !hasAnySelection(brief.audienceDemographics))
-    errors.audienceDemographics = "Pilih minimal satu segmen audiens sebelum melanjutkan";
-  if (step === 4 && !hasAnySelection(brief.stylePreference))
-    errors.stylePreference = "Pilih minimal satu gaya visual sebelum melanjutkan";
+    errors.primaryGoal = "Pilih minimal satu tujuan pesanan";
   if (step === 5 && !brief.outputFormats.trim())
-    errors.outputFormats = "Jelaskan format output yang Anda butuhkan";
-  if (step === 6 && !brief.deadline.trim())
-    errors.deadline = "Tentukan deadline project Anda";
+    errors.outputFormats = "Jelaskan hasil akhir yang Anda butuhkan";
   return errors;
 }
 
@@ -625,7 +619,7 @@ export default function BriefPage() {
       setErrors(stepErrors);
       const firstField = Object.keys(stepErrors)[0] as keyof BriefData;
       document.getElementById(`brief-${firstField}`)?.focus();
-      toast({ title: "Lengkapi field yang wajib diisi", description: Object.values(stepErrors)[0], variant: "destructive" });
+      toast({ title: "Lengkapi informasi utama", description: Object.values(stepErrors)[0], variant: "destructive" });
       return;
     }
     setErrors({});
@@ -653,7 +647,7 @@ export default function BriefPage() {
       {
         onSuccess: () => {
           localStorage.removeItem(STORAGE_KEY);
-          toast({ title: "Brief tersimpan!", description: "Brief Anda berhasil dikirim." });
+          toast({ title: "Detail pesanan tersimpan!", description: "Kebutuhan Anda berhasil dikirim." });
           setLocation(`/request-service/${requestId}/pricing`);
         },
         onError: (err) => {
