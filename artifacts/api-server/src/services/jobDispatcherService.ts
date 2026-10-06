@@ -35,6 +35,7 @@ import {
   rebalanceJobs,
   DEFAULT_LEASE_TTL_MS,
   WORKER_TYPE_CAPABILITIES,
+  MAX_ACTIVE_JOBS_PER_WORKER,
 } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
@@ -103,7 +104,7 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     suffix:            "1",
     workerType:        "text_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["text_worker"]!,
-    maxConcurrentJobs: 3,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     providerSlug:       "dynamic",
     modelId:            "per-job",
     runtimeKind:        "dispatcher",
@@ -118,7 +119,7 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
       "noop",
       "custom",
     ],
-    maxConcurrentJobs: 3,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     providerSlug:       "dynamic",
     modelId:            "per-job",
     runtimeKind:        "dispatcher",
@@ -129,7 +130,7 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     suffix:            "3",
     workerType:        "storage_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["storage_worker"]!,
-    maxConcurrentJobs: 4,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     providerSlug:       "internal",
     modelId:            "n/a",
     runtimeKind:        "dispatcher",
@@ -142,7 +143,7 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     suffix:            "4",
     workerType:        "coding_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["coding_worker"]!,
-    maxConcurrentJobs: 5,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     providerSlug:       "dynamic",
     modelId:            "per-job",
     runtimeKind:        "dispatcher",
@@ -156,7 +157,7 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     suffix:            "6",
     workerType:        "coding_worker",
     capabilities:      WORKER_TYPE_CAPABILITIES["coding_worker"]!,
-    maxConcurrentJobs: 5,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     providerSlug:       "dynamic",
     modelId:            "per-job",
     runtimeKind:        "dispatcher",
@@ -168,7 +169,7 @@ if (process.env["BLENDER_WORKER_RUNTIME_ENABLED"] === "true") {
     suffix: "5",
     workerType: "3d_worker",
     capabilities: WORKER_TYPE_CAPABILITIES["3d_worker"]!,
-    maxConcurrentJobs: 1,
+    maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     providerSlug: "internal",
     modelId: "blender",
     runtimeKind: "dispatcher",
@@ -183,7 +184,7 @@ const _settings: DispatcherSettings = {
   workerHeartbeatIntervalMs: 10_000,
   workerTimeoutMs:          60_000,
   jobTimeoutMs:            300_000,
-  maxConcurrentJobs:             10,
+  maxConcurrentJobs:             DISPATCHER_WORKERS.length,
 };
 
 let _running         = false;
@@ -476,7 +477,7 @@ export async function tick(): Promise<TickResult> {
       workerId: worker.id,
       remaining: Math.max(
         0,
-        worker.maxConcurrentJobs - worker.runningJobs,
+        MAX_ACTIVE_JOBS_PER_WORKER - worker.runningJobs,
       ),
     }));
     const dispatchWorkerIds: number[] = [];
