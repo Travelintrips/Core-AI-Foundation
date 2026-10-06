@@ -128,6 +128,9 @@ jobs:
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
           API_BASE_URL: https://aicore.cstlogistic.co.id/api
+          STATIC_RESULT: ${{ needs.static.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
         run: |
           set +e
           payload=$(node -e 'console.log(JSON.stringify({
@@ -155,12 +158,6 @@ jobs:
             -H "x-admin-api-key: $ADMIN_API_KEY" \
             -d "$payload" \
             "$API_BASE_URL/ai/incidents" || true
-        env:
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-          API_BASE_URL: https://aicore.cstlogistic.co.id/api
-          STATIC_RESULT: ${{ needs.static.result }}
-          TEST_RESULT: ${{ needs.test.result }}
-          BUILD_RESULT: ${{ needs.build.result }}
 
       - name: Fail final gate when any CI job failed
         if: >-
