@@ -1961,7 +1961,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const [status, setStatus] = useState<CodingTaskStatus>(CodingTaskStatus.PENDING);
   const [summary, setSummary] = useState("");
   const [commitSha, setCommitSha] = useState("");
-  const [approvePending, setApprovePending] = useState(false);
   const [localPatchPending, setLocalPatchPending] = useState(false);
   const [sandboxPending, setSandboxPending] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(false);
@@ -2033,10 +2032,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     liveProgress.startedAt ?? activeRun?.startedAt ?? null,
     progressNow,
   );
-  const canApprovePlan =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
-    !hasActiveRun;
   const canApproveLocalPatch =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "REVIEW_LOCAL_PATCH" &&
@@ -2116,7 +2111,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     analyzerResult.aiExecution.patch.networkUsed !== true &&
     !hasActiveRun;
   const explicitGateActions = [
-    "APPROVE_PLAN",
     "REVIEW_LOCAL_PATCH",
     "RUN_SANDBOX_VERIFICATION",
     "LOCAL_RECOVERY_REQUIRED",
@@ -2195,36 +2189,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
         },
       },
     );
-  };
-
-  const approvePlan = async () => {
-    setApprovePending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-plan`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Plan approved",
-        description: "Coding Agent started in an isolated workspace. No commit or push will be created automatically.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not approve plan",
-        description: error instanceof Error ? error.message : "Approval failed",
-        variant: "destructive",
-      });
-    } finally {
-      setApprovePending(false);
-    }
   };
 
   const approveLocalPatch = async () => {
@@ -3567,18 +3531,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-300">Implementation plan</div>
                     <div className="flex flex-wrap items-center gap-2">
-                      {canApprovePlan && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={approvePlan}
-                          disabled={approvePending}
-                          className="h-7 bg-violet-300 px-2.5 text-[10px] font-semibold text-[#1b1230] hover:bg-violet-200"
-                          data-testid="button-approve-coding-plan"
-                        >
-                          {approvePending ? <><Loader2 className="size-3 animate-spin" />Starting Coding Agent</> : <><CheckCircle2 className="size-3" />Run Plan & Start Coding</>}
-                        </Button>
-                      )}
                     </div>
                   </div>
                   {analyzerResult.implementationPlan.summary && (
