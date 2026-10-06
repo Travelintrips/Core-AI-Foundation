@@ -114,6 +114,7 @@ import CustomsTariff from "@/pages/customs-tariff";
 import TarifKalkulator from "@/pages/tarif-kalkulator";
 import PricingCalculator from "@/pages/pricing-calculator";
 import CodingWorkspace from "@/pages/coding-workspace";
+import AicodingDashboard from "@/pages/aicoding-dashboard";
 import AiCoreChat from "@/pages/ai-core-chat";
 import McpPairApproval from "@/pages/mcp-pair";
 
@@ -130,6 +131,11 @@ function AdminRouter() {
 
   if (standaloneAiCore) {
     return <AiCoreChat />;
+  }
+
+  const isAiCodingHost = window.location.hostname.toLowerCase() === "aicoding.travelintrips.co.id";
+  if ((isAiCodingHost && pathname === "/") || pathname === "/aicoding") {
+    return <AicodingDashboard />;
   }
 
   return (

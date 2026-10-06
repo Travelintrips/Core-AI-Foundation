@@ -56,6 +56,7 @@ const productionDefaultOrigins =
   process.env["NODE_ENV"] === "production"
     ? [
         "https://aicore.cstlogistic.co.id",
+        "https://aicoding.travelintrips.co.id",
         "https://aifront.cstlogistic.co.id",
         "https://lightsalmon-cheetah-642414.hostingersite.com",
         "https://grey-crocodile-883871.hostingersite.com",
