@@ -197,6 +197,51 @@ describe("Local Coding Engine", () => {
     expect(second.index.sourceFilesParsedThisRun).toBe(0);
   });
 
+  it("uses repository-map modules instead of rebuilding the whole repository index", async () => {
+    const root = await createFixtureRepository();
+    await mkdir(join(root, ".ai-core"), { recursive: true });
+    for (let i = 0; i < 30; i += 1) {
+      await writeFile(
+        join(root, "src", `unrelated-${i}.ts`),
+        `export const unrelated${i} = ${i};\n`,
+        "utf8",
+      );
+    }
+    await writeFile(
+      join(root, ".ai-core", "repository-map.json"),
+      JSON.stringify({
+        version: 1,
+        modules: [{
+          id: "payments",
+          keywords: ["qris", "payment", "reconciliation"],
+          files: ["src/reconciliation.ts", "src/payment.ts"],
+          tests: ["tests/reconciliation.test.ts"],
+        }],
+      }),
+      "utf8",
+    );
+
+    const result = await buildLocalCodingContextPackage({
+      root,
+      repository: "fixture/repo",
+      requestedBranch: "main",
+      task: "Perbaiki kandidat QRIS pada reconciliation payment",
+    });
+
+    expect(result.repositoryMap).toMatchObject({
+      used: true,
+      path: ".ai-core/repository-map.json",
+      moduleIds: ["payments"],
+      matchedFiles: 2,
+    });
+    expect(result.index.cacheStrategy).toBe("MANIFEST");
+    expect(result.index.searchBackend).toBe("repository-map");
+    expect(result.index.sourceFilesParsed).toBeLessThanOrEqual(2);
+    expect(result.index.filesIndexed).toBeLessThan(10);
+    expect(result.relevantFiles.map((item) => item.path)).toContain("src/reconciliation.ts");
+    expect(result.symbols.some((symbol) => symbol.file.startsWith("src/unrelated-"))).toBe(false);
+  });
+
   it("allows only deterministic pnpm verification scripts", () => {
     expect(parseAllowlistedVerificationCommand("pnpm test")).toEqual({ file: "pnpm", args: ["test"] });
     expect(parseAllowlistedVerificationCommand("pnpm --filter @workspace/api-server typecheck")).toEqual({

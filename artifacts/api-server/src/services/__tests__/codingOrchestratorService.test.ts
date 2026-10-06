@@ -183,6 +183,23 @@ describe("Coding Orchestrator AI gate monotonicity", () => {
   });
 });
 
+describe("Coding Orchestrator active-change conflict guard", () => {
+  it("stops conflict results before AI planner or coding-worker escalation", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('changeReservation?.status === "CONFLICT"');
+    expect(source).toContain('"active_change_conflict_waiting_for_qc"');
+    expect(source).toContain("workerDispatched: false");
+    const guard = source.indexOf('changeReservation?.status === "CONFLICT"');
+    const planner = source.indexOf("generateAndPersistCodingMultiTaskPlan(input.task.id, analysis)");
+    expect(guard).toBeGreaterThan(-1);
+    expect(planner).toBeGreaterThan(guard);
+    expect(source.slice(guard, planner)).toContain("return;");
+  });
+});
+
 describe("Coding Orchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();

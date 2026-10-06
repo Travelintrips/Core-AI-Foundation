@@ -91,6 +91,28 @@ describe("AI Core Chat automatic dispatch", () => {
     });
   });
 
+  it.each([
+    ["Hostinger restart VPS production sekarang", "HOSTINGER_VPS_RESTART"],
+    ["Hostinger deploy docker project=aicore content=https://example.test/compose.yml ke production", "HOSTINGER_DOCKER_DEPLOY"],
+    ["GCP restart VM production sekarang", "GCP_VM_RESTART"],
+  ])("routes bounded production operations to the no-worker lane: %s", (message, operation) => {
+    const decision = classifyAiCoreChatDispatch(message);
+    expect(decision.kind).toBe("INFRA_OPERATION");
+    expect(decision.infrastructureOperation).toBe(operation);
+    expect(decision.executionLane).toBe("NO_WORKER");
+  });
+
+  it.each([
+    "rerun GitHub workflow run=37470000000 repo=Travelintrips/Core-AI-Foundation",
+    "rerun failed GitHub workflow run=37470000000 repo=Travelintrips/Core-AI-Foundation",
+    "cancel GitHub workflow run=37470000000 repo=Travelintrips/Core-AI-Foundation",
+    "merge PR #721 repo=Travelintrips/Core-AI-Foundation",
+  ])("keeps explicit GitHub operations out of the Coding Orchestrator: %s", (message) => {
+    const decision = classifyAiCoreChatDispatch(message);
+    expect(decision.kind).toBe("GITHUB_OPERATION");
+    expect(decision.executionLane).toBe("NO_WORKER");
+  });
+
   it("does not let incidental infrastructure examples hijack a coding-fix request", () => {
     const decision = classifyAiCoreChatDispatch(
       "Perbaiki routing intent AI Core. Tambahkan regression test seperti 'check GCP VM status' dan 'cek Ollama GPU aktif di production'.",

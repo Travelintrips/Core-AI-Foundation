@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "generatedPolicy": "maintained-by-ai-core-incremental",
+  "modules": [
+    {
+      "id": "ai-core-chat",
+      "keywords": [
+        "ai",
+        "core",
+        "chat",
+        "routing",
+        "intent",
+        "command",
+        "control",
+        "fast",
+        "action"
+      ],
+      "files": [
+        "artifacts/api-server/src/routes/ai-core-chat.ts",
+        "artifacts/api-server/src/services/aiCoreChatIntentService.ts",
+        "artifacts/api-server/src/services/aiCoreWorkloadRouterService.ts",
+        "artifacts/api-server/src/services/aiCoreInfrastructureControlService.ts",
+        "artifacts/api-server/src/services/aiCoreGitHubControlService.ts",
+        "artifacts/api-server/src/services/aiCoreTrustedHandoffService.ts"
+      ],
+      "tests": [
+        "artifacts/api-server/src/services/__tests__/aiCoreChatIntentService.test.ts",
+        "artifacts/api-server/src/services/__tests__/aiCoreWorkloadRouterService.test.ts",
+        "artifacts/api-server/src/services/__tests__/aiCoreInfrastructureControlService.test.ts"
+      ]
+    },
+    {
+      "id": "scheduler-workers",
+      "keywords": [
+        "scheduler",
+        "worker",
+        "workers",
+        "job",
+        "jobs",
+        "capacity",
+        "lease",
+        "queue",
+        "queued",
+        "concurrency",
+        "dispatch"
+      ],
+      "files": [
+        "artifacts/api-server/src/services/jobDispatcherService.ts",
+        "artifacts/api-server/src/services/jobWorkerService.ts",
+        "artifacts/api-server/src/services/workerClusterService.ts",
+        "artifacts/api-server/src/services/ollamaWorkerRegistryService.ts",
+        "artifacts/api-server/src/services/remoteOllamaWorkerService.ts",
+        "artifacts/api-server/src/services/ollamaWorkerRuntimeService.ts"
+      ],
+      "tests": [
+        "artifacts/api-server/src/services/__tests__/parallelCodingScheduler.test.ts",
+        "artifacts/api-server/src/services/__tests__/ollamaWorkerRuntimeService.test.ts",
+        "artifacts/api-server/src/services/__tests__/ollamaWorkerRegistryService.test.ts"
+      ]
+    },
+    {
+      "id": "coding-orchestrator",
+      "keywords": [
+        "coding",
+        "orchestrator",
+        "analyzer",
+        "repository",
+        "index",
+        "context",
+        "planner",
+        "conflict",
+        "qc",
+        "review"
+      ],
+      "files": [
+        "artifacts/api-server/src/services/codingOrchestratorService.ts",
+        "artifacts/api-server/src/services/repositoryAnalyzerService.ts",
+        "artifacts/api-server/src/services/localCodingEngineService.ts",
+        "artifacts/api-server/src/services/localCodingExecutorService.ts",
+        "artifacts/api-server/src/services/codingAgentService.ts",
+        "artifacts/api-server/src/services/codingConflictRegistryService.ts"
+      ],
+      "tests": [
+        "artifacts/api-server/src/services/__tests__/codingOrchestratorService.test.ts",
+        "artifacts/api-server/src/services/__tests__/repositoryAnalyzerService.test.ts",
+        "artifacts/api-server/src/services/__tests__/localCodingEngineService.test.ts"
+      ]
+    },
+    {
+      "id": "hostinger",
+      "keywords": [
+        "hostinger",
+        "vps",
+        "docker",
+        "compose",
+        "dns",
+        "domain",
+        "subdomain",
+        "env",
+        "deploy",
+        "redeploy",
+        "restart"
+      ],
+      "files": [
+        "artifacts/api-server/src/services/aiCoreInfrastructureControlService.ts",
+        "artifacts/api-server/src/routes/ai-core-chat.ts"
+      ],
+      "tests": [
+        "artifacts/api-server/src/services/__tests__/aiCoreInfrastructureControlService.test.ts",
+        "artifacts/api-server/src/services/__tests__/aiCoreChatIntentService.test.ts"
+      ]
+    },
+    {
+      "id": "github-delivery",
+      "keywords": [
+        "github",
+        "workflow",
+        "actions",
+        "rerun",
+        "cancel",
+        "pr",
+        "pull",
+        "request",
+        "merge",
+        "commit",
+        "ci"
+      ],
+      "files": [
+        "artifacts/api-server/src/services/aiCoreGitHubControlService.ts",
+        "artifacts/api-server/src/services/localCodingGitHubPublisherService.ts",
+        "artifacts/api-server/src/services/localCodingGitHubPullRequestService.ts",
+        "artifacts/api-server/src/services/localCodingPullRequestGateService.ts"
+      ],
+      "tests": [
+        "artifacts/api-server/src/services/__tests__/localCodingGitHubPublisherService.test.ts",
+        "artifacts/api-server/src/services/__tests__/localCodingGitHubPullRequestService.test.ts",
+        "artifacts/api-server/src/services/__tests__/aiCoreChatIntentService.test.ts"
+      ]
+    },
+    {
+      "id": "whatsapp",
+      "keywords": [
+        "whatsapp",
+        "wa",
+        "device",
+        "message",
+        "delivery",
+        "outbound",
+        "inbound",
+        "notification"
+      ],
+      "files": [
+        "artifacts/api-server/src/services/codingWhatsappTaskRuntimeService.ts",
+        "artifacts/api-server/src/services/codingWhatsappNotificationService.ts",
+        "artifacts/api-server/src/routes/coding-whatsapp-webhook.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "workspace",
+      "keywords": [
+        "workspace",
+        "task",
+        "workstream",
+        "ready",
+        "review",
+        "status",
+        "completed",
+        "analyzing",
+        "blocked"
+      ],
+      "files": [
+        "artifacts/api-server/src/routes/coding-workspace.ts",
+        "artifacts/api-server/src/services/codingTaskPresentationService.ts",
+        "artifacts/api-server/src/services/localCodingAutonomousRepairService.ts"
+      ],
+      "tests": [
+        "artifacts/api-server/src/routes/__tests__/coding-workspace.test.ts"
+      ]
+    }
+  ]
+}

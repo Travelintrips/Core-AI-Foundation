@@ -79,6 +79,7 @@ import {
   isCodingRelevantWorker,
   isHealthyCodingWorker,
 } from "../services/codingWorkspaceOperationalStateService.js";
+import { getCodingConflictMatrix } from "../services/codingConflictRegistryService.js";
 
 const router = Router();
 
@@ -90,6 +91,23 @@ const ProviderSecretAdminRequest = z.object({
 function createTaskNumber(): string {
   return `CWS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
+
+router.get("/ai/coding/conflicts", async (_req, res): Promise<void> => {
+  try {
+    const matrix = await getCodingConflictMatrix();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      ...matrix,
+      activeReservationCount: matrix.reservations.length,
+      activeConflictCount: matrix.conflicts.length,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Coding conflict matrix unavailable.";
+    logger.warn({ message }, "[coding-workspace] conflict matrix read failed");
+    res.status(503).json({ error: message });
+  }
+});
 
 router.get("/ai/coding/provider-secrets", async (_req, res): Promise<void> => {
   try {

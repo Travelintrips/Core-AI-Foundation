@@ -23,6 +23,10 @@ import {
   type LocalCodingExecutionPlan,
   type LocalCodingExecutionResult,
 } from "./localCodingExecutorService.js";
+import {
+  reserveCodingFileSet,
+  type CodingFileReservationResult,
+} from "./codingConflictRegistryService.js";
 
 const execFileAsync = promisify(execFile);
 const CODING_ANALYZER_JOB_TYPE = "coding_repository_analyzer";
@@ -117,6 +121,16 @@ export interface RepositoryAnalyzerResult {
   contextPackage: LocalCodingContextPackage;
   localExecutionPlan: LocalCodingExecutionPlan;
   localExecution: LocalCodingExecutionResult | null;
+  changeReservation: CodingFileReservationResult;
+  changeManifest: {
+    baseSha: string;
+    readSet: string[];
+    writeSet: string[];
+    affectedFiles: string[];
+    relatedTests: string[];
+    symbols: string[];
+    conflictStatus: CodingFileReservationResult["status"];
+  };
 }
 
 interface AnalyzerInput {
@@ -767,15 +781,52 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       `${input.title}\n${input.description}`,
       contextPackage,
     );
+
+    const predictedChangeFiles = [
+      ...new Set(
+        localExecutionPlan.targetFiles.length > 0
+          ? localExecutionPlan.targetFiles
+          : [
+              ...contextPackage.relevantFiles.slice(0, 8).map((item) => item.path),
+              ...contextPackage.affectedFiles.slice(0, 8),
+            ],
+      ),
+    ].slice(0, 40);
+
+    phase = "reserve_change_set";
+    const changeReservation = await reserveCodingFileSet({
+      repository: input.repository,
+      branch: input.branch,
+      taskId: input.codingTaskId,
+      runId: input.codingRunId,
+      files: predictedChangeFiles,
+    });
+
     phase = "execute_local_plan";
-    const localExecution =
-      workspace.cleanup && localExecutionPlan.status === "EXECUTABLE"
-        ? await executeLocalCodingPlan(workspace.path, localExecutionPlan, {
-            trustedWorkspace: true,
-            expectedHeadSha: contextPackage.headSha,
-            runVerification: false,
-          })
-        : null;
+    const localExecution: LocalCodingExecutionResult | null =
+      changeReservation.status === "CONFLICT"
+        ? {
+            status: "BLOCKED",
+            reason:
+              "Predicted file changes overlap another active coding task. " +
+              "Sequence or revise this task before coding continues.",
+            changedFiles: [],
+            patch: "",
+            verification: [],
+            scriptsExecuted: false,
+            rolledBack: false,
+            warnings: changeReservation.conflicts.slice(0, 12).map(
+              (conflict) =>
+                `Conflict: ${conflict.file} reserved by task ${conflict.taskId}`,
+            ),
+          }
+        : workspace.cleanup && localExecutionPlan.status === "EXECUTABLE"
+          ? await executeLocalCodingPlan(workspace.path, localExecutionPlan, {
+              trustedWorkspace: true,
+              expectedHeadSha: contextPackage.headSha,
+              runVerification: false,
+            })
+          : null;
 
     const relevantFiles = contextPackage.relevantFiles.map((item) => item.path);
     const filesInspected = [...new Set([
@@ -784,6 +835,24 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       ...contextPackage.relatedTests,
     ])].slice(0, 200);
     const findings: RepositoryAnalyzerResult["findings"] = [
+      ...(changeReservation.status === "CONFLICT"
+        ? [{
+            severity: "warning" as const,
+            title: "Active coding conflict detected",
+            detail:
+              `Coding stopped before file changes because ${changeReservation.conflicts.length} active reservation conflict(s) were found. QC can sequence, revise, or rebase this task first.`,
+            ...(changeReservation.conflicts[0]?.file &&
+            !changeReservation.conflicts[0].file.startsWith("[")
+              ? { file: changeReservation.conflicts[0].file }
+              : {}),
+          }]
+        : [{
+            severity: "info" as const,
+            title: "Predicted change set reserved",
+            detail:
+              `Reserved ${changeReservation.files.length} predicted file(s) before coding execution.`,
+            ...(changeReservation.files[0] ? { file: changeReservation.files[0] } : {}),
+          }]),
       {
         severity: "info",
         title: "Local repository index complete",
@@ -876,15 +945,29 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
     ];
 
     const executionSummary =
-      localExecution?.status === "APPLIED"
-        ? ` Local Coding Executor produced a review-only patch for ${localExecution.changedFiles.length} file(s).`
-        : localExecutionPlan.status === "AI_REQUIRED"
-          ? " Local Coding Executor classified the task as AI_REQUIRED and made no changes."
-          : " Local Coding Executor did not modify the repository.";
+      changeReservation.status === "CONFLICT"
+        ? " Coding stopped before file changes because an active reservation conflict was detected."
+        : localExecution?.status === "APPLIED"
+          ? ` Local Coding Executor produced a review-only patch for ${localExecution.changedFiles.length} file(s).`
+          : localExecutionPlan.status === "AI_REQUIRED"
+            ? " Local Coding Executor classified the task as AI_REQUIRED and made no changes."
+            : " Local Coding Executor did not modify the repository.";
     const summary =
       `Local Coding Engine indexed ${contextPackage.index.filesIndexed} files, selected ${relevantFiles.length} relevant ` +
       `files and ${contextPackage.affectedFiles.length} affected files on ${contextPackage.branch} at ` +
       `${contextPackage.headSha.slice(0, 12)}.${executionSummary} No AI/LLM was used.`;
+
+    const changeManifest = {
+      baseSha: contextPackage.headSha,
+      readSet: [...new Set(filesInspected)].slice(0, 200),
+      writeSet: [...changeReservation.files],
+      affectedFiles: [...contextPackage.affectedFiles],
+      relatedTests: [...contextPackage.relatedTests],
+      symbols: contextPackage.symbols.slice(0, 80).map(
+        (symbol) => `${symbol.file}#${symbol.name}`,
+      ),
+      conflictStatus: changeReservation.status,
+    };
 
     return {
       codingTaskId: input.codingTaskId,
@@ -904,6 +987,8 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
       contextPackage,
       localExecutionPlan,
       localExecution,
+      changeReservation,
+      changeManifest,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

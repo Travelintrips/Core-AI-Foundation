@@ -58,6 +58,14 @@ import {
   executeAiCoreInfrastructureOperation,
 } from "../services/aiCoreInfrastructureControlService.js";
 import {
+  detectAiCoreGitHubOperation,
+  executeAiCoreGitHubOperation,
+} from "../services/aiCoreGitHubControlService.js";
+import {
+  parseAiCoreTrustedExecutionHandoff,
+  stripAiCoreTrustedExecutionHandoff,
+} from "../services/aiCoreTrustedHandoffService.js";
+import {
   getAiCoreCapabilityRegistrySnapshot,
   renderAiCoreCapabilityRegistry,
 } from "../services/aiCoreCapabilityRegistryService.js";
@@ -2209,18 +2217,21 @@ async function runAdminDbMutationOperation(
 async function runInfrastructureOperation(
   message: string,
 ): Promise<Record<string, unknown> | null> {
-  const operation = detectAiCoreInfrastructureOperation(message);
+  const handoff = parseAiCoreTrustedExecutionHandoff(message);
+  const command = stripAiCoreTrustedExecutionHandoff(message);
+  const operation = detectAiCoreInfrastructureOperation(command);
   if (!operation) return null;
 
   const result = await executeAiCoreInfrastructureOperation({
     operation,
-    requestedBy: "ai-core-chat",
-    message,
+    requestedBy: handoff?.source ?? "ai-core-chat",
+    message: command,
   });
 
   return {
     kind: "execution",
     route: "INFRA_CONTROL_PLANE",
+    executionLane: "NO_WORKER",
     provider: result.provider,
     model: null,
     usage: null,
@@ -2229,6 +2240,58 @@ async function runInfrastructureOperation(
     mutating: result.mutating,
     reply: result.reply,
     data: result.data,
+    ...(handoff ? {
+      trustedHandoff: {
+        source: handoff.source,
+        action: handoff.action,
+        scope: handoff.scope,
+        verifiedSha: handoff.verifiedSha,
+        analysisComplete: handoff.analysisComplete,
+        sourceVerified: handoff.sourceVerified,
+      },
+    } : {}),
+  };
+}
+
+async function runGitHubOperation(
+  message: string,
+  repository?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const handoff = parseAiCoreTrustedExecutionHandoff(message);
+  const command = stripAiCoreTrustedExecutionHandoff(message);
+  const operation = detectAiCoreGitHubOperation(command);
+  if (!operation) return null;
+
+  const result = await executeAiCoreGitHubOperation({
+    operation,
+    message: command,
+    repository,
+    requestedBy: handoff?.source ?? "ai-core-chat",
+  });
+
+  return {
+    kind: "execution",
+    route: "GITHUB_CONTROL_PLANE",
+    executionLane: "NO_WORKER",
+    provider: "github",
+    model: null,
+    usage: null,
+    estimatedCostUsd: 0,
+    operation: result.operation,
+    mutating: result.mutating,
+    reply: result.reply,
+    data: result.data,
+    repository: result.repository,
+    ...(handoff ? {
+      trustedHandoff: {
+        source: handoff.source,
+        action: handoff.action,
+        scope: handoff.scope,
+        verifiedSha: handoff.verifiedSha,
+        analysisComplete: handoff.analysisComplete,
+        sourceVerified: handoff.sourceVerified,
+      },
+    } : {}),
   };
 }
 
@@ -2351,29 +2414,93 @@ async function runAutoMode(
   }
 
   if (parsedConversation.commands.length > 1) {
-    if (!input.projectName || !input.repository || !input.branch) {
-      return {
-        kind: "validation",
-        reply: "Perintah multi-worker membutuhkan Project, Repository, dan Branch.",
-      };
-    }
-    const tasks = [];
+    const results: Array<Record<string, unknown>> = [];
+    let codingTaskCount = 0;
+
     for (const command of parsedConversation.commands) {
       const childInput = { ...executionInput, message: command };
-      tasks.push(await startAgentTask(childInput));
+      const decision = classifyAiCoreChatDispatch(command);
+
+      if (decision.kind === "INFRA_OPERATION") {
+        const result = await runInfrastructureOperation(command);
+        if (result) {
+          results.push({ ...result, executionLane: "NO_WORKER" });
+          continue;
+        }
+      }
+
+      if (decision.kind === "GITHUB_OPERATION") {
+        const result = await runGitHubOperation(command, input.repository);
+        if (result) {
+          results.push({ ...result, executionLane: "NO_WORKER" });
+          continue;
+        }
+      }
+
+      if (decision.kind === "REMOTE_READONLY") {
+        const result = await maybeRunRemoteWorkerPreset(
+          { ...input, message: command },
+          decision.preset,
+        );
+        if (result) {
+          results.push({ ...result, executionLane: "TARGETED" });
+          continue;
+        }
+      }
+
+      if (decision.kind === "EXTERNAL_AGENT") {
+        results.push(await startExternalAgentWork(
+          childInput,
+          decision.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
+        ));
+        continue;
+      }
+
+      if (decision.kind === "CONTROL_PLANE") {
+        if (!input.projectName || !input.repository || !input.branch) {
+          results.push({
+            kind: "validation",
+            executionLane: "CODING",
+            reply:
+              "Sub-perintah coding membutuhkan Project, Repository, dan Branch.",
+          });
+          continue;
+        }
+        codingTaskCount += 1;
+        results.push({
+          ...(await startAgentTask(childInput)),
+          executionLane: "CODING",
+        });
+        continue;
+      }
+
+      results.push({
+        ...(await answerAskMode(
+          command,
+          input.modelPolicy,
+          input.context ?? [],
+          command,
+          teacherScope,
+        )),
+        executionLane: decision.executionLane,
+      });
     }
+
     return {
-      kind: "multi_agent",
-      route: "CONTROL_PLANE",
+      kind: "multi_route",
+      route: "BOUNDED_CONTROL_PLANE",
       provider: null,
       model: null,
       usage: null,
       estimatedCostUsd: 0,
-      workload: "CODING",
-      costClass: "HIGH",
       confidence: parsedConversation.confidence,
-      reply: `${tasks.length} task terpisah sudah dibuat untuk dijalankan paralel oleh control plane.`,
-      tasks,
+      codingTaskCount,
+      noWorkerCount: results.filter((item) => item["executionLane"] === "NO_WORKER").length,
+      reply:
+        codingTaskCount > 0
+          ? `${results.length} sub-perintah diproses; hanya ${codingTaskCount} yang membutuhkan coding worker.`
+          : `${results.length} sub-perintah diproses tanpa membuat coding task.`,
+      results,
     };
   }
 
@@ -2396,10 +2523,16 @@ async function runAutoMode(
     autoRouted: true,
     dispatch: decision.kind,
     dispatchReason: decision.reason,
+    executionLane: decision.executionLane,
   };
 
   if (decision.kind === "INFRA_OPERATION") {
     const result = await runInfrastructureOperation(input.message);
+    if (result) return { ...result, ...routingMeta };
+  }
+
+  if (decision.kind === "GITHUB_OPERATION") {
+    const result = await runGitHubOperation(input.message, input.repository);
     if (result) return { ...result, ...routingMeta };
   }
 
@@ -3318,14 +3451,21 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       effectiveInput.mode === "agent"
         ? (await runGcpBillingStatusOperation(rawInput.message)) ??
           (await runAdminDbMutationOperation(rawInput.message)) ??
-          (await runInfrastructureOperation(rawInput.message)) ??
+          (rawDispatch.kind === "INFRA_OPERATION"
+            ? await runInfrastructureOperation(rawInput.message)
+            : null) ??
+          (rawDispatch.kind === "GITHUB_OPERATION"
+            ? await runGitHubOperation(rawInput.message, rawInput.repository)
+            : null) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
                 effectiveInput,
                 rawDispatch.externalAgentClientId ?? OPENCLAW_AGENT_CLIENT_ID,
               )
             : null) ??
-          (await maybeRunRemoteWorkerPreset(rawInput)) ??
+          (rawDispatch.kind === "REMOTE_READONLY"
+            ? await maybeRunRemoteWorkerPreset(rawInput)
+            : null) ??
           await startAgentTask(effectiveInput)
         : effectiveInput.mode === "ask"
           ? await answerAskMode(
