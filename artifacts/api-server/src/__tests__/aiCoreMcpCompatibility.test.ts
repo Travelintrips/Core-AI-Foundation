@@ -165,6 +165,11 @@ describe("AI Core MCP discovery compatibility", () => {
     });
     const subscribeTool = response.body.result.tools.find((item: { name: string }) => item.name === "subscribe_ai_core_events");
     expect(subscribeTool.inputSchema.properties.eventTypes.items.enum).toContain("BLOCKED");
+    expect(subscribeTool.inputSchema.properties.leaseSeconds).toMatchObject({
+      minimum: 30,
+      maximum: 604800,
+      default: 86400,
+    });
   });
 });
 
