@@ -75,6 +75,7 @@ const {
   executeRepositoryAnalyzerJob,
   failRepositoryAnalyzerRun,
   getRepositoryAnalyzerQueueClaimTimeoutMs,
+  getRepositoryAnalyzerRunningTimeoutMs,
   prepareRepositoryWorkspace,
 } = await import("../repositoryAnalyzerService.js");
 
@@ -382,6 +383,22 @@ describe("repository analyzer queue claim timeout", () => {
     expect(getRepositoryAnalyzerQueueClaimTimeoutMs({
       REPOSITORY_ANALYZER_QUEUE_CLAIM_TIMEOUT_MS: "invalid",
     })).toBe(60_000);
+  });
+
+  it("defaults stale running recovery to four minutes and bounds overrides", () => {
+    expect(getRepositoryAnalyzerRunningTimeoutMs({})).toBe(240_000);
+    expect(getRepositoryAnalyzerRunningTimeoutMs({
+      REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "180000",
+    })).toBe(180_000);
+    expect(getRepositoryAnalyzerRunningTimeoutMs({
+      REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "1000",
+    })).toBe(150_000);
+    expect(getRepositoryAnalyzerRunningTimeoutMs({
+      REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "9999999",
+    })).toBe(900_000);
+    expect(getRepositoryAnalyzerRunningTimeoutMs({
+      REPOSITORY_ANALYZER_RUNNING_TIMEOUT_MS: "invalid",
+    })).toBe(240_000);
   });
 
   it("recovers stale queued Coding Orchestrator analyzer jobs", () => {
