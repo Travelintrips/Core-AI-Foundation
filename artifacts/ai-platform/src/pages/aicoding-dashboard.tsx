@@ -142,6 +142,16 @@ const navItems = [
   { id: "users", label: "User Management", icon: Users, adminOnly: true },
 ];
 
+function statusLabel(status: string): string {
+  const value = status.toUpperCase();
+  if (value === "READY_REVIEW") return "APPROVAL KRITIS";
+  if (value === "TESTING") return "QC OTOMATIS";
+  if (value === "WAITING_FOR_WORKER") return "MENUNGGU WORKER";
+  if (value === "WAITING_FOR_CAPACITY") return "MENUNGGU KAPASITAS";
+  if (value === "QUEUED") return "ANTRIAN";
+  return value.replaceAll("_", " ");
+}
+
 function statusTone(status: string): string {
   const value = status.toUpperCase();
   if (["ACTIVE", "ONLINE", "COMPLETED", "SELESAI", "RUNNING", "CODING"].includes(value)) {
@@ -551,7 +561,7 @@ export default function AicodingDashboard() {
                             <p className="font-medium text-slate-300">{task.projectName}</p>
                             <p className="mt-0.5 max-w-[250px] truncate text-[11px] text-slate-600">{shortText(task.instruction)}</p>
                           </td>
-                          <td className="px-3 py-2.5"><span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${statusTone(task.status)}`}>{task.status.replaceAll("_", " ")}</span></td>
+                          <td className="px-3 py-2.5"><span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${statusTone(task.status)}`}>{statusLabel(task.status)}</span></td>
                           <td className="px-3 py-2.5">
                             <div className="w-24 space-y-1">
                               <div className="flex justify-between text-[10px] text-slate-500"><span>{task.progress}%</span><span>stage</span></div>
@@ -682,7 +692,7 @@ export default function AicodingDashboard() {
                   <div className="rounded-xl border border-slate-800 bg-slate-900/35 p-4">
                     <GitBranch className="h-5 w-5 text-violet-400" />
                     <p className="mt-3 text-2xl font-semibold">{codingTasks.filter((task) => task.status === "PR_CREATED" || task.status === "READY_REVIEW").length}</p>
-                    <p className="text-[11px] text-slate-600">PR / review terbaru</p>
+                    <p className="text-[11px] text-slate-600">PR / approval kritis</p>
                   </div>
                   <div className="rounded-xl border border-slate-800 bg-slate-900/35 p-4">
                     <HardDrive className="h-5 w-5 text-amber-400" />
