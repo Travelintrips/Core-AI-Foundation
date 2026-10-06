@@ -108,6 +108,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import {
+  boundedLeaseSeconds,
   buildCodingWorkstreamBranchName,
   claimReadyCodingWorkstreams,
   selectClaimableCodingWorkstreams,
@@ -238,6 +239,13 @@ describe("multi-worker coding claim runtime", () => {
     expect(
       selectClaimableCodingWorkstreams([malformed], [], now),
     ).toEqual([]);
+  });
+
+  it("keeps queued workstream claims alive long enough for a busy dispatcher", () => {
+    expect(boundedLeaseSeconds(undefined)).toBe(600);
+    expect(boundedLeaseSeconds(5)).toBe(30);
+    expect(boundedLeaseSeconds(120)).toBe(120);
+    expect(boundedLeaseSeconds(9999)).toBe(900);
   });
 
   it("builds deterministic isolated branch names per workstream attempt", () => {
