@@ -32,6 +32,13 @@ jobs:
             "$base/builds/settings" \
             | jq '{node_version,app_type,root_directory,output_directory,build_script,entry_file,package_manager}'
 
+          echo "=== PROD_AICORE_BUILD_SETTINGS ==="
+          prod_base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/aicore.cstlogistic.co.id/nodejs"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            "$prod_base/builds/settings" \
+            | jq '{node_version,app_type,root_directory,output_directory,build_script,entry_file,package_manager}'
+
           echo "=== ENV_KEYS ==="
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
