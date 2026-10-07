@@ -245,6 +245,37 @@ services:
     command: ["node", "/app/openclaw-supervisor.mjs"]
 
 
+  openclaw-work-supervisor:
+    image: python:3.13-slim
+    restart: unless-stopped
+    depends_on:
+      openclaw:
+        condition: service_started
+    environment:
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-https://aicore.cstlogistic.co.id/api}
+      AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
+      AI_CORE_EXTERNAL_AGENT_CLIENT_ID: gcp-openclaw-main
+      AI_CORE_EXTERNAL_AGENT_RUNTIME: openclaw
+      AI_CORE_AGENT_WORK_POLL_SECONDS: ${AI_CORE_AGENT_WORK_POLL_SECONDS:-5}
+      AI_CORE_AGENT_WORK_LEASE_SECONDS: ${AI_CORE_AGENT_WORK_LEASE_SECONDS:-120}
+      AI_CORE_AGENT_WORK_TIMEOUT_SECONDS: ${OPENCLAW_WORK_TIMEOUT_SECONDS:-180}
+      OPENCLAW_INTERNAL_URL: http://openclaw:18789
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?set OPENCLAW_GATEWAY_TOKEN}
+    volumes:
+      - ./external-agent-supervisor.py:/app/external-agent-supervisor.py:ro
+    command: ["python", "/app/external-agent-supervisor.py"]
+    networks:
+      - control
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 96m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+
   openhands-work-supervisor:
     image: python:3.13-slim
     restart: unless-stopped
