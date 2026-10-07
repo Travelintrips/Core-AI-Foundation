@@ -91,6 +91,35 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("auto-confirms safe # PC actions and forwards them to the OpenClaw route", async () => {
+    const response = await send("# ketik cek", false);
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({ reply: "OK" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const init = vi.mocked(fetch).mock.calls[0][1];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      mode: "auto",
+      message: "@ # ketik cek",
+    });
+    expect(mocks.learning).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        kind: "direct_openclaw_pc_command",
+        status: "auto_confirmed_safe_pc_action",
+      }),
+    }));
+  });
+
+  it("keeps sensitive # PC actions behind the confirmation gate", async () => {
+    const response = await send("# hapus file Downloads/data.csv", false);
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      kind: "intent_confirmation",
+      route: "INTENT_CONFIRMATION",
+      requiresConfirmation: true,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("returns an intent summary without executing until explicitly confirmed", async () => {
     const response = await send("Deploy aplikasi", false);
     expect(response.body.result.isError).toBeFalsy();
