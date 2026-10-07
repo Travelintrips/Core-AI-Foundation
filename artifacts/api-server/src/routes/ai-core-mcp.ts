@@ -4,7 +4,10 @@ import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
-import { classifyAiCoreChatDispatch } from "../services/aiCoreChatIntentService.js";
+import {
+  classifyAiCoreChatDispatch,
+  isSafeDirectOpenClawPcCommand,
+} from "../services/aiCoreChatIntentService.js";
 import { recordChatLearningEvent } from "../services/aiCoreChatLearningService.js";
 import {
   AI_CORE_TERMINAL_EVENT_NAME,
@@ -968,13 +971,36 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
+      const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(parsed.message);
       if (!parsed.confirmed) {
-        payload = buildIntentConfirmation(command.instruction);
-        await recordChatLearningEvent({ role: "assistant", content: JSON.stringify(payload), scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "awaiting_confirmation", originalInstruction: command.instruction } }).catch(() => undefined);
-        res.status(200).json(rpcResult(body.id ?? null, { content: [{ type: "text", text: JSON.stringify(payload) }], structuredContent: payload, isError: false }));
-        return;
+        if (!safeDirectPcCommand) {
+          payload = buildIntentConfirmation(command.instruction);
+          await recordChatLearningEvent({ role: "assistant", content: JSON.stringify(payload), scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "awaiting_confirmation", originalInstruction: command.instruction } }).catch(() => undefined);
+          res.status(200).json(rpcResult(body.id ?? null, { content: [{ type: "text", text: JSON.stringify(payload) }], structuredContent: payload, isError: false }));
+          return;
+        }
+        await recordChatLearningEvent({
+          role: "user",
+          content: command.instruction,
+          scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch },
+          metadata: {
+            kind: "direct_openclaw_pc_command",
+            status: "auto_confirmed_safe_pc_action",
+            confirmed: true,
+          },
+        }).catch(() => undefined);
+      } else {
+        await recordChatLearningEvent({
+          role: "user",
+          content: command.instruction,
+          scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch },
+          metadata: {
+            kind: "intent_confirmation",
+            status: "confirmed",
+            confirmed: true,
+          },
+        }).catch(() => undefined);
       }
-      await recordChatLearningEvent({ role: "user", content: command.instruction, scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "confirmed", confirmed: true } }).catch(() => undefined);
       let eventSubscription:
         | {
             subscribed: true;
