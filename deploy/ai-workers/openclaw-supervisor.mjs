@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import process from "node:process";
 
@@ -9,6 +9,7 @@ const POLL_MS = Math.max(2000, Math.min(60000, Number(process.env.AI_CORE_AGENT_
 const EXEC_TIMEOUT_SECONDS = Math.max(30, Math.min(900, Number(process.env.OPENCLAW_WORK_TIMEOUT_SECONDS || 180)));
 const MAX_RESULT_CHARS = 20000;
 const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || "/home/node/.openclaw/openclaw.json";
+const OPENCLAW_STATE_MANAGER_ID = (process.env.OPENCLAW_STATE_MANAGER_ID || "ai-core-workers-openclaw").trim();
 const CONTROL_UI_ALLOWED_ORIGINS = (process.env.OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS || "http://127.0.0.1:28789,http://localhost:28789,http://127.0.0.1:18789,http://localhost:18789")
   .split(",")
   .map((origin) => origin.trim())
@@ -42,6 +43,66 @@ function ensureGatewayControlUiOrigins() {
 
 function log(message) {
   process.stdout.write("[openclaw-supervisor] " + message + "\n");
+}
+
+function runOpenClawCli(args) {
+  const result = spawnSync("node", ["dist/index.js", ...args], {
+    env: process.env,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    const detail = String(result.stderr || result.stdout || "").trim().slice(-2000);
+    throw new Error("OpenClaw CLI failed: " + detail);
+  }
+  return String(result.stdout || "").trim();
+}
+
+function ensureExternalStateOwnership() {
+  if (process.env.OPENCLAW_SUPERVISOR_MODE !== "external") {
+    throw new Error(
+      "OPENCLAW_SUPERVISOR_MODE=external is required for Docker-supervised shared-state ownership",
+    );
+  }
+
+  const status = JSON.parse(
+    runOpenClawCli(["database", "ownership", "status", "--json"]),
+  );
+
+  if (status.status === "unowned") {
+    const claimed = JSON.parse(
+      runOpenClawCli([
+        "database",
+        "ownership",
+        "claim",
+        "--manager",
+        OPENCLAW_STATE_MANAGER_ID,
+        "--json",
+      ]),
+    );
+    log(
+      "claimed shared-state ownership manager=" +
+        String(claimed?.ownership?.managerId || OPENCLAW_STATE_MANAGER_ID),
+    );
+    return;
+  }
+
+  if (status.status !== "external") {
+    throw new Error(
+      "Unexpected OpenClaw shared-state ownership mode: " + String(status.status),
+    );
+  }
+
+  const managerId = String(status?.ownership?.managerId || "").trim();
+  if (managerId && managerId !== OPENCLAW_STATE_MANAGER_ID) {
+    throw new Error(
+      "OpenClaw shared-state is owned by a different external manager: " + managerId,
+    );
+  }
+
+  log(
+    "shared-state ownership ready manager=" +
+      (managerId || OPENCLAW_STATE_MANAGER_ID),
+  );
 }
 
 function sleep(ms) {
@@ -300,6 +361,7 @@ process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("SIGINT", () => stop("SIGINT"));
 
 ensureGatewayControlUiOrigins();
+ensureExternalStateOwnership();
 
 gateway = spawn(
   "node",
