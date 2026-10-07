@@ -1,4 +1,5 @@
 name: Hostinger DEV Runtime Diagnostic
+# refresh: runtime-after-output-root
 
 on:
   push:
