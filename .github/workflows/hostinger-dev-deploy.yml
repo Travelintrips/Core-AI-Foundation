@@ -193,15 +193,49 @@ jobs:
             exit 1
           fi
 
-          patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0" -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0" --data-binary "@$ARCHIVE_PATH" "$target")
-          if [ "$patch_code" != "204" ]; then
-            echo "::error::Hostinger TUS upload returned HTTP $patch_code"
-            cat /tmp/tus-patch.body || true
-            exit 1
-          fi
-          uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)
-          if [ "$uploaded" != "$size" ]; then
-            echo "::error::Hostinger upload offset mismatch: uploaded=${uploaded:-missing} expected=$size"
+          offset=0
+          chunk_size=$((8 * 1024 * 1024))
+          while [ "$offset" -lt "$size" ]; do
+            remaining=$((size - offset))
+            count=$chunk_size
+            if [ "$remaining" -lt "$chunk_size" ]; then
+              count=$remaining
+            fi
+
+            dd if="$ARCHIVE_PATH" of=/tmp/tus-chunk.bin \
+              iflag=skip_bytes,count_bytes skip="$offset" count="$count" status=none
+
+            patch_code=$(curl --silent --show-error \
+              -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}" \
+              -X PATCH \
+              -H "X-Auth: $auth_key" \
+              -H "X-Auth-Rest: $rest_auth_key" \
+              -H "Tus-Resumable: 1.0.0" \
+              -H "Content-Type: application/offset+octet-stream" \
+              -H "Upload-Offset: $offset" \
+              --data-binary @/tmp/tus-chunk.bin \
+              "$target")
+
+            if [ "$patch_code" != "204" ]; then
+              echo "::error::Hostinger TUS upload returned HTTP $patch_code at offset=$offset"
+              cat /tmp/tus-patch.body || true
+              exit 1
+            fi
+
+            uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\\r","",$2); print $2}' \
+              /tmp/tus-patch.headers | tail -n1)
+            if ! [[ "$uploaded" =~ ^[0-9]+$ ]] || [ "$uploaded" -le "$offset" ]; then
+              echo "::error::Invalid Hostinger upload offset: uploaded=${uploaded:-missing} previous=$offset"
+              exit 1
+            fi
+
+            offset=$uploaded
+            echo "archive_upload_progress=$offset/$size"
+          done
+
+          rm -f /tmp/tus-chunk.bin
+          if [ "$offset" != "$size" ]; then
+            echo "::error::Hostinger upload offset mismatch: uploaded=$offset expected=$size"
             exit 1
           fi
           echo "archive_upload=PASS bytes=$size"
