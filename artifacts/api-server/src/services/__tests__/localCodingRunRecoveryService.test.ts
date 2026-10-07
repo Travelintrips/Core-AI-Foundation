@@ -68,6 +68,28 @@ describe("local coding run recovery policy", () => {
     expect(recoveryBlock).not.toContain("enabled = FALSE");
   });
 
+  it("reconciles only detached completed Multi-Worker shards and preserves live/critical work", () => {
+    const source = readFileSync(
+      new URL("../localCodingRunRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const start = source.indexOf("export async function reconcileDetachedCompletedMultiWorkerTasks");
+    const end = source.indexOf("export async function reconcileStaleCodingRuns", start);
+    const block = source.slice(start, end);
+
+    expect(block).toContain("t.task_number LIKE 'MW-%'");
+    expect(block).toContain("t.status IN ('ANALYZING', 'READY_REVIEW')");
+    expect(block).toContain("FROM ai_platform.ai_coding_workstreams AS w");
+    expect(block).toContain("active_run.status = 'RUNNING'");
+    expect(block).toContain("active_job.status IN ('queued', 'waiting', 'retrying', 'running')");
+    expect(block).toContain("approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')");
+    expect(block).toContain("autonomous.last_action = 'MANUAL_STOP'");
+    expect(block).toContain("latest_run.status");
+    expect(block).toContain("= 'COMPLETED'");
+    expect(block).toContain("SET status = 'COMPLETED'");
+  });
+
   it("never recovers a non-running lifecycle", () => {
     expect(isRecoverableStaleCodingRun({
       taskStatus: "READY_REVIEW",
