@@ -250,7 +250,7 @@ async function temporalResource(): Promise<AiCoreCapabilityResource> {
       state: "unavailable",
       actions: ["task-orchestration", "workflow-recovery", "worker-coordination"],
       mutatingActions: ["task-orchestration"],
-      approvalRequiredActions: ["production-deploy", "merge"],
+      approvalRequiredActions: [],
     };
   }
 }
