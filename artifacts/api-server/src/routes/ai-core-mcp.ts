@@ -18,6 +18,7 @@ import {
   verifyMcpAccessToken,
 } from "../services/aiCoreMcpOAuthService.js";
 import { logAudit } from "../services/aiAuditService.js";
+import { getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
 import {
   acknowledgeCodingBridgeResponse,
   listPendingCodingBridgeResponsesForConversation,
@@ -31,7 +32,7 @@ const router = Router();
 const MCP_PROTOCOL_VERSION = "2026-07-28";
 const COMPAT_MCP_PROTOCOL_VERSION = "2025-06-18";
 const LEGACY_MCP_PROTOCOL_VERSION = "2025-03-26";
-const SERVER_INFO = { name: "ai-core-direct-command", version: "1.6.1" };
+const SERVER_INFO = { name: "ai-core-direct-command", version: "1.7.0" };
 const DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS = 24 * 60 * 60;
 const MAX_CONVERSATION_EVENT_LEASE_SECONDS = 7 * 24 * 60 * 60;
 const DEFAULT_TERMINAL_EVENT_TYPES = [
@@ -101,6 +102,9 @@ function buildIntentConfirmation(instruction: string) {
 }
 const TaskProgressArgs = z.object({
   taskId: z.string().uuid(),
+}).strict();
+const ExternalCommandProgressArgs = z.object({
+  commandId: z.string().uuid(),
 }).strict();
 
 const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]);
@@ -420,6 +424,27 @@ const tools = [
     securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
     annotations: {
       title: "Get AI Core Task Progress",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "get_external_agent_command_progress",
+    description:
+      "Read status and latest result for an AI Core external-agent command such as OpenClaw, OpenHands, or n8n.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["commandId"],
+      properties: {
+        commandId: { type: "string", format: "uuid" },
+      },
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    annotations: {
+      title: "Get External Agent Command Progress",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -878,7 +903,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       ? "ai_core.progress"
       : params.name === "send_ai_core_command"
         ? "ai_core.command"
-        : params.name === "get_ai_core_task_progress"
+        : params.name === "get_ai_core_task_progress" || params.name === "get_external_agent_command_progress"
           ? "ai_core.progress"
         : ["subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event", "unsubscribe_ai_core_events"].includes(params.name)
           ? "ai_core.events"
@@ -1045,6 +1070,42 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         { method: "GET" },
         identity.connectorKey,
       );
+    } else if (params.name === "get_external_agent_command_progress") {
+      const parsed = ExternalCommandProgressArgs.parse(params.arguments ?? {});
+      const state = await getExternalAgentWorkState(parsed.commandId);
+      if (!state) {
+        payload = {
+          found: false,
+          commandId: parsed.commandId,
+          status: "NOT_FOUND",
+          latestResponse: null,
+        };
+      } else {
+        payload = {
+          found: true,
+          commandId: parsed.commandId,
+          status: state.command.status,
+          externalCommandId: state.command.externalCommandId,
+          commandType: state.command.commandType,
+          taskId: state.command.taskId ?? null,
+          assignedClientId:
+            state.command.metadataJson && typeof state.command.metadataJson === "object"
+              ? (state.command.metadataJson as Record<string, unknown>)["assignedClientId"] ?? null
+              : null,
+          receivedAt: state.command.receivedAt ?? null,
+          processedAt: state.command.processedAt ?? null,
+          latestResponse: state.latestResponse
+            ? {
+                id: state.latestResponse.id,
+                kind: state.latestResponse.kind,
+                message: state.latestResponse.message,
+                checkpoint: state.latestResponse.checkpointJson ?? {},
+                metadata: state.latestResponse.metadataJson ?? {},
+                createdAt: state.latestResponse.createdAt,
+              }
+            : null,
+        };
+      }
     } else if (params.name === "subscribe_ai_core_events") {
       const parsed = SubscribeEventsArgs.parse(params.arguments ?? {});
       const subscription = await subscribeCodingBridgeConversation(parsed);

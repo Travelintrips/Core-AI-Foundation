@@ -28,10 +28,10 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.6.1");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.7.0");
     expect(response.body.result.serverInfo).toEqual({
       name: "ai-core-direct-command",
-      version: "1.6.1",
+      version: "1.7.0",
     });
     expect(response.body.result.protocolVersion).toBe("2025-06-18");
     expect(response.body.result.capabilities).toEqual({
@@ -71,7 +71,7 @@ describe("AI Core MCP discovery compatibility", () => {
       capabilities: { tools: {}, events: {} },
       serverInfo: {
         name: "ai-core-direct-command",
-        version: "1.6.1",
+        version: "1.7.0",
       },
     });
   });
@@ -133,13 +133,14 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-mcp-server-version"]).toBe("1.6.1");
+    expect(response.headers["x-mcp-server-version"]).toBe("1.7.0");
     const toolNames = response.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(
       expect.arrayContaining([
         "query_ai_core",
         "send_ai_core_command",
         "get_ai_core_task_progress",
+        "get_external_agent_command_progress",
         "subscribe_ai_core_events",
         "read_ai_core_events",
         "ack_ai_core_event",
@@ -184,12 +185,13 @@ it("exposes the same live tool registry on the fresh v2 endpoint", async () => {
 
   expect(response.status).toBe(200);
   expect(response.headers["cache-control"]).toContain("no-store");
-  expect(response.headers["x-mcp-server-version"]).toBe("1.6.1");
+  expect(response.headers["x-mcp-server-version"]).toBe("1.7.0");
   expect(response.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
     expect.arrayContaining([
       "query_ai_core",
       "send_ai_core_command",
       "get_ai_core_task_progress",
+      "get_external_agent_command_progress",
       "subscribe_ai_core_events",
       "read_ai_core_events",
       "ack_ai_core_event",
