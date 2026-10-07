@@ -22,6 +22,7 @@ import {
   SubmitCustomerProjectBody,
   RequestCustomerAccessBody,
 } from "@workspace/api-zod";
+import { fashionDesignOrdersTable } from "../domains/fashion-design/schema.js";
 import { generateReviewToken, hashToken } from "../services/clientReviewService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
@@ -542,6 +543,23 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
     .where(eq(aiServiceRequestsTable.customerEmail, session.clientEmail))
     .orderBy(aiServiceRequestsTable.createdAt);
 
+  // Fashion orders share the same customer identity and belong in the same
+  // dashboard so customers do not need to remember an order number manually.
+  const rawFashionOrders = await db
+    .select({
+      id: fashionDesignOrdersTable.id,
+      orderName: fashionDesignOrdersTable.orderName,
+      serviceType: fashionDesignOrdersTable.serviceType,
+      status: fashionDesignOrdersTable.status,
+      outputs: fashionDesignOrdersTable.outputs,
+      colorways: fashionDesignOrdersTable.colorways,
+      createdAt: fashionDesignOrdersTable.createdAt,
+      updatedAt: fashionDesignOrdersTable.updatedAt,
+    })
+    .from(fashionDesignOrdersTable)
+    .where(eq(fashionDesignOrdersTable.customerEmail, session.clientEmail))
+    .orderBy(fashionDesignOrdersTable.createdAt);
+
   // For each review, fetch the associated project and asset count
   const projects = await Promise.all(
     reviews.map(async (review) => {
@@ -645,16 +663,50 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
     ["waiting_customer_approval", "quotation_ready"].includes(r.status),
   ).length;
 
+  const fashionOrders = rawFashionOrders.map((order) => ({
+    id: order.id,
+    orderName: order.orderName,
+    serviceType: order.serviceType,
+    status: order.status,
+    statusLabel: ((): string => {
+      const map: Record<string, string> = {
+        draft: "Draft",
+        blueprint_ready: "Blueprint Siap",
+        generating: "AI Generating",
+        review: "Siap Direview",
+        revision_requested: "Revisi Diminta",
+        revision_in_progress: "Designer Bekerja",
+        approved: "Disetujui",
+        delivered: "Terkirim",
+        trademark_flagged: "Perlu Review Trademark",
+        cancelled: "Dibatalkan",
+      };
+      return map[order.status] ?? order.status;
+    })(),
+    outputs: order.outputs ?? null,
+    colorways: order.colorways ?? [],
+    portalPath: "/fashion-design",
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+  }));
+
+  const pendingFashionOrders = fashionOrders.filter((order) =>
+    ["review", "revision_requested", "revision_in_progress"].includes(order.status),
+  ).length;
+
   res.json({
     clientName: session.clientName,
     clientEmail: session.clientEmail,
     projects: validProjects,
     serviceRequests,
-    totalProjects: validProjects.length + serviceRequests.length,
+    fashionOrders,
+    totalProjects: validProjects.length + serviceRequests.length + fashionOrders.length,
     pendingReview: validProjects.filter((p) =>
       ["not_shared", "shared", "viewed"].includes(p.reviewStatus),
-    ).length + pendingServiceRequests,
-    approved: validProjects.filter((p) => p.reviewStatus === "approved").length,
+    ).length + pendingServiceRequests + pendingFashionOrders,
+    approved:
+      validProjects.filter((p) => p.reviewStatus === "approved").length +
+      fashionOrders.filter((order) => ["approved", "delivered"].includes(order.status)).length,
   });
 });
 

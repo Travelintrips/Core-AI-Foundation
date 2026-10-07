@@ -27,6 +27,7 @@ import { validateBlueprintUrls } from "../domains/fashion-design/fileSafety.js";
 import { desc, and, like, SQL } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { uploadToSupabase } from "../lib/supabaseStorage.js";
+import { tryGenerateImageViaRouter } from "./imageRouterService.js";
 import { aiProvidersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -582,6 +583,101 @@ function normalize3DAsset(value: unknown): Generated3DAsset | undefined {
   return asset.glbUrl || asset.gltfUrl ? asset : undefined;
 }
 
+type FashionPreviewImage = {
+  imageUrl: string;
+  provider: string;
+  model: string;
+  width: number;
+  height: number;
+  storagePath: string;
+};
+
+function compactPromptValue(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return value.map(compactPromptValue).filter(Boolean).join(", ");
+  if (value && typeof value === "object") {
+    try { return JSON.stringify(value); } catch { return ""; }
+  }
+  return "";
+}
+
+async function generateFashion2DPreviews(
+  order: FashionDesignOrder,
+  blueprint: FashionDesignBlueprint,
+): Promise<{
+  flatDesign?: FashionPreviewImage;
+  frontBackPreview?: FashionPreviewImage;
+  warnings: string[];
+}> {
+  const colors = (order.colorways as string[]).join(", ") || "unspecified";
+  const nameValue = blueprint.nameValue?.trim();
+  const numberValue = blueprint.numberValue?.trim();
+  const placement = compactPromptValue(blueprint.placementSpec);
+  const motif = compactPromptValue(order.motifConfig);
+  const common = [
+    "Original fashion and apparel design. Do not copy any existing brand, club, or trademarked uniform.",
+    `Garment type: ${order.serviceType}.`,
+    `Design brief: ${order.description ?? order.orderName}.`,
+    `Color palette: ${colors}.`,
+    nameValue ? `Garment name text: ${nameValue}.` : "",
+    numberValue ? `Garment number: ${numberValue}.` : "",
+    placement ? `Placement guidance: ${placement.slice(0, 600)}.` : "",
+    motif ? `Motif guidance: ${motif.slice(0, 400)}.` : "",
+  ].filter(Boolean).join(" ");
+
+  const warnings: string[] = [];
+  const negativePrompt =
+    "brand logos, trademarked logos, watermark, copied sports jersey, distorted garment, duplicate garment, illegible layout";
+
+  const flat = await tryGenerateImageViaRouter({
+    prompt: [
+      common,
+      "Create a clean technical flat fashion illustration, front view, no human model, centered garment, neutral light background, crisp seams and panel boundaries, presentation-ready.",
+    ].join(" "),
+    negativePrompt,
+    aspectRatio: "3:4",
+    filenamePrefix: `fashion-${order.id}-flat`,
+    timeoutMs: 420_000,
+  });
+  if (!flat) warnings.push("Flat design render was unavailable; the structural composition is still available.");
+
+  const frontBack = await tryGenerateImageViaRouter({
+    prompt: [
+      common,
+      "Create a professional apparel presentation board showing FRONT and BACK views side by side, no human model, same garment and colors in both views, neutral studio background, realistic fabric texture, clear production visualization.",
+    ].join(" "),
+    negativePrompt,
+    aspectRatio: "4:3",
+    filenamePrefix: `fashion-${order.id}-front-back`,
+    timeoutMs: 420_000,
+  });
+  if (!frontBack) warnings.push("Front/back preview render was unavailable; the structural composition is still available.");
+
+  return {
+    ...(flat ? {
+      flatDesign: {
+        imageUrl: flat.imageUrl,
+        provider: flat.provider,
+        model: flat.model,
+        width: flat.width,
+        height: flat.height,
+        storagePath: flat.storagePath,
+      },
+    } : {}),
+    ...(frontBack ? {
+      frontBackPreview: {
+        imageUrl: frontBack.imageUrl,
+        provider: frontBack.provider,
+        model: frontBack.model,
+        width: frontBack.width,
+        height: frontBack.height,
+        storagePath: frontBack.storagePath,
+      },
+    } : {}),
+    warnings,
+  };
+}
+
 export interface GenerationOptions {
   /** Caller identifier (admin key suffix or IP) for domain rate limiting */
   callerId?: string;
@@ -642,16 +738,39 @@ export async function generateOutputs(
   const bp = await getBlueprint(orderId);
   if (!bp) throw new Error("No blueprint found. Save a blueprint before generating.");
 
-  // Generate a real 3D asset when an active Replicate provider is configured.
-  // Absence of provider configuration keeps the existing safe 2D/structural fallback.
-  const generated3d = opts.asset3d ?? await generateFashion3DAsset(orderId);
-
-  // Validate motif before generation
-  const motifResult = validateMotifRepeat(order.motifConfig as Record<string, unknown> | null);
   const warnings: string[] = [];
+
+  // Generate real 2D previews through the shared Image Router. The router
+  // persists compressed output in Supabase Storage and returns permanent URLs.
+  const previews = await generateFashion2DPreviews(order, bp);
+  warnings.push(...previews.warnings);
+
+  // 3D is an optional enhancement. A provider failure must not discard valid
+  // 2D renders or leave the order stuck outside review.
+  let generated3d = opts.asset3d;
+  if (!generated3d) {
+    try {
+      generated3d = await generateFashion3DAsset(orderId);
+    } catch (error) {
+      logger.warn({ err: error, orderId }, "[fashion-design] Optional 3D generation failed");
+      warnings.push("3D preview was unavailable; 2D fashion previews remain available.");
+    }
+  }
+
+  // Validate motif before finalizing output metadata.
+  const motifResult = validateMotifRepeat(order.motifConfig as Record<string, unknown> | null);
   if (!motifResult.valid && motifResult.error) warnings.push(motifResult.error);
 
-  // Build the composition JSON output (editable re-import format)
+  const asset3d = normalize3DAsset(generated3d);
+  const canonicalAsset = asset3d ? {
+    mode: "real-3d",
+    ...asset3d,
+  } : undefined;
+
+  const previewOutput = (value: FashionPreviewImage | undefined) =>
+    value ? { status: "completed", ...value } : null;
+
+  // Build the composition JSON output (editable re-import format).
   const compositionJson = {
     version: "1.0",
     serviceType: order.serviceType,
@@ -669,13 +788,13 @@ export async function generateOutputs(
       sponsors: bp.sponsors,
     },
     outputs: {
-      "flat-design": { status: "pending", note: "Requires AI image generation pipeline" },
-      "front-back-preview": { status: "pending", note: "Requires rendering service" },
+      "flat-design": previewOutput(previews.flatDesign),
+      "front-back-preview": previewOutput(previews.frontBackPreview),
       "colorways": { generated: order.colorways, count: (order.colorways as string[]).length },
-      "motif-variants": { config: order.motifConfig, status: "pending" },
+      "motif-variants": { config: order.motifConfig, status: order.motifConfig ? "available" : "not_requested" },
       "placement-spec": bp.placementSpec ?? {},
       "composition-json": "self",
-      ...(generated3d ? { asset: normalize3DAsset(generated3d) } : {}),
+      ...(canonicalAsset ? { asset: canonicalAsset } : {}),
     },
     generatedAt: new Date().toISOString(),
     warnings: [
@@ -684,16 +803,10 @@ export async function generateOutputs(
     ],
   };
 
-  const asset3d = normalize3DAsset(generated3d);
-  const canonicalAsset = asset3d ? {
-    mode: "real-3d",
-    ...asset3d,
-  } : undefined;
-
   const outputs = {
     ...(canonicalAsset ? { asset: canonicalAsset } : {}),
-    "flat-design": null, // requires AI pipeline
-    "front-back-preview": null, // requires rendering
+    "flat-design": previewOutput(previews.flatDesign),
+    "front-back-preview": previewOutput(previews.frontBackPreview),
     "colorways": order.colorways,
     "motif-variants": order.motifConfig ? { config: order.motifConfig } : null,
     "placement-spec": bp.placementSpec ?? {},
@@ -705,15 +818,22 @@ export async function generateOutputs(
     .set({ status: "review", outputs, compositionJson })
     .where(eq(fashionDesignOrdersTable.id, orderId));
 
-  logger.info({ orderId }, "[fashion-design] Outputs generated");
+  logger.info(
+    {
+      orderId,
+      hasFlatDesign: Boolean(previews.flatDesign),
+      hasFrontBackPreview: Boolean(previews.frontBackPreview),
+      has3d: Boolean(canonicalAsset),
+    },
+    "[fashion-design] Outputs generated",
+  );
 
   // Record rate slot and cache for idempotency
   recordGenerationUsed(callerId);
   const result: GenerationResult = {
     outputs,
     warnings: [
-      "Flat design and front/back preview require AI image generation pipeline connection.",
-      "This output is a structural composition only — not a production-ready pattern.",
+      "This output is a design visualization — final production patterns still require size specification and technical review.",
       ...warnings,
     ],
   };

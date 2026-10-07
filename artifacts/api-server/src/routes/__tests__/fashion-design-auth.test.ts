@@ -123,6 +123,45 @@ beforeEach(() => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Customer order detail privacy
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("GET /ai/fashion-design/orders/:id — customer privacy", () => {
+  it("session admin can read order detail without customer email", async () => {
+    const res = await request(buildAppWithSession())
+      .get("/ai/fashion-design/orders/1");
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(1);
+  });
+
+  it("API key admin can read order detail without customer email", async () => {
+    const res = await request(buildApp())
+      .get("/ai/fashion-design/orders/1")
+      .set("x-admin-api-key", ADMIN_KEY);
+    expect(res.status).toBe(200);
+  });
+
+  it("public request without customerEmail is rejected", async () => {
+    const res = await request(buildApp())
+      .get("/ai/fashion-design/orders/1");
+    expect(res.status).toBe(401);
+  });
+
+  it("customer can read own order with matching email", async () => {
+    const res = await request(buildApp())
+      .get("/ai/fashion-design/orders/1?customerEmail=customer@example.com");
+    expect(res.status).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("customer cannot read another customer's order", async () => {
+    const res = await request(buildApp())
+      .get("/ai/fashion-design/orders/1?customerEmail=other@example.com");
+    expect(res.status).toBe(403);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // B3 — GET /ai/fashion-design/orders/:id/revisions auth
 // ═══════════════════════════════════════════════════════════════════════════════
 
