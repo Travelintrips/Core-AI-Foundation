@@ -365,10 +365,13 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     hostingUsername: (env["HOSTINGER_HOSTING_USERNAME"] ?? "").trim(),
     hostingDomain: (env["HOSTINGER_HOSTING_DOMAIN"] ?? "").trim(),
     apiBase: (env["HOSTINGER_API_BASE"] ?? "").trim().replace(/\/$/, ""),
-    sshHost: (env["HOSTINGER_SSH_HOST"] ?? "").trim(),
-    sshUser: (env["HOSTINGER_SSH_USER"] ?? "root").trim(),
-    sshPort: (env["HOSTINGER_SSH_PORT"] ?? "22").trim(),
-    sshPrivateKey: (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim(),
+    // AI Workers deployments already have a dedicated protected SSH profile.
+    // Reuse that profile as a fallback so infrastructure control does not require
+    // duplicating the same credential under HOSTINGER_* names.
+    sshHost: (env["HOSTINGER_SSH_HOST"] ?? env["AI_WORKERS_SSH_HOST"] ?? "").trim(),
+    sshUser: (env["HOSTINGER_SSH_USER"] ?? env["AI_WORKERS_SSH_USER"] ?? "root").trim(),
+    sshPort: (env["HOSTINGER_SSH_PORT"] ?? env["AI_WORKERS_SSH_PORT"] ?? "22").trim(),
+    sshPrivateKey: (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? env["AI_WORKERS_SSH_PRIVATE_KEY"] ?? "").trim(),
     sshDockerProjectDir: (env["HOSTINGER_DOCKER_PROJECT_DIR"] ?? "").trim(),
     aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-foundation").trim(),
     aiWorkersEnvFile: (env["AI_WORKERS_REMOTE_ENV_FILE"] ?? "/etc/ai-core/ai-workers.env").trim(),
@@ -438,7 +441,7 @@ async function callHostinger(
 
     if (!host || !user || !privateKey) {
       throw new Error(
-        "AI Workers deploy requires HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, and HOSTINGER_SSH_PRIVATE_KEY.",
+        "AI Workers deploy requires SSH configuration from HOSTINGER_SSH_* or AI_WORKERS_SSH_*.",
       );
     }
     if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
