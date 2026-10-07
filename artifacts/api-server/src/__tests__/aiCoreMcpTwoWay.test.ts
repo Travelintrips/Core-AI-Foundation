@@ -8,8 +8,10 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   ack: vi.fn(),
   unsubscribe: vi.fn(),
+  learning: vi.fn(),
 }));
 vi.mock("../services/aiCoreMcpResultEventService.js", () => ({ recordAiCoreMcpTerminalResult: mocks.record }));
+vi.mock("../services/aiCoreChatLearningService.js", () => ({ recordChatLearningEvent: mocks.learning }));
 vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
   oauthIssuer: () => "https://example.test", oauthResource: () => "https://example.test/api", verifyMcpAccessToken: vi.fn(),
 }));
@@ -27,6 +29,7 @@ describe("MCP command two-way routing", () => {
     vi.clearAllMocks();
     vi.stubEnv("AI_CORE_CHAT_CONNECTOR_KEY", "test-connector-key");
     mocks.record.mockResolvedValue(undefined);
+    mocks.learning.mockResolvedValue(undefined);
     mocks.subscribe.mockResolvedValue({
       clientId: "chatgpt:conversation-a",
       leaseExpiresAt: new Date("2026-10-07T16:00:00.000Z"),
@@ -40,8 +43,8 @@ describe("MCP command two-way routing", () => {
     return request(app).post("/api/ai/core-chat/mcp").set("Authorization", "Bearer test-connector-key")
       .send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
   }
-  function send(message: string) {
-    return callTool("send_ai_core_command", { message, conversationId: "conversation-a" });
+  function send(message: string, confirmed = true) {
+    return callTool("send_ai_core_command", { message, conversationId: "conversation-a", confirmed });
   }
   it("routes read-only queries through ask mode and strips an execution-looking prefix", async () => {
     const response = await callTool("query_ai_core", {
@@ -87,7 +90,24 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("accepts plain commands, auto-subscribes terminal events, and persists the user instruction", async () => {
+  it("returns an intent summary without executing until explicitly confirmed", async () => {
+    const response = await send("Deploy aplikasi", false);
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      kind: "intent_confirmation",
+      route: "INTENT_CONFIRMATION",
+      requiresConfirmation: true,
+      understoodIntent: "Deploy aplikasi",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+    expect(mocks.learning).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ status: "awaiting_confirmation" }),
+    }));
+  });
+
+  it("accepts confirmed plain commands, auto-subscribes terminal events, and persists the user instruction", async () => {
     const response = await send("Uji koneksi MCP");
     expect(response.body.result.isError).toBeFalsy();
 
