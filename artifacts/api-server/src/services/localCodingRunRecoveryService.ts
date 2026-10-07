@@ -54,10 +54,103 @@ export interface CodingRunRecoveryResult {
   recoveredTasks: number;
 }
 
+export interface DetachedMultiWorkerRecoveryResult {
+  recoveredTasks: number;
+}
+
+export async function reconcileDetachedCompletedMultiWorkerTasks(
+  options: { taskId?: string } = {},
+): Promise<DetachedMultiWorkerRecoveryResult> {
+  const scopedTaskId = options.taskId ?? null;
+  const result = await db.execute(sql`
+    WITH candidates AS (
+      SELECT t.id
+      FROM ai_platform.ai_coding_tasks AS t
+      WHERE t.task_number LIKE 'MW-%'
+        AND t.status IN ('ANALYZING', 'READY_REVIEW')
+        AND (${scopedTaskId}::uuid IS NULL OR t.id = ${scopedTaskId}::uuid)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_workstreams AS w
+          WHERE w.child_task_id = t.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_runs AS active_run
+          WHERE active_run.task_id = t.id
+            AND active_run.status = 'RUNNING'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_jobs AS active_job
+          WHERE active_job.status IN ('queued', 'waiting', 'retrying', 'running')
+            AND (
+              active_job.payload_json->>'codingTaskId' = t.id::text
+              OR active_job.payload_json->>'childTaskId' = t.id::text
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_critical_approvals AS approval
+          WHERE approval.task_id = t.id
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_autonomous_tasks AS autonomous
+          WHERE autonomous.task_id = t.id
+            AND (
+              autonomous.last_action = 'MANUAL_STOP'
+              OR (
+                autonomous.enabled = TRUE
+                AND autonomous.status IN (
+                  'ACTIVE',
+                  'WAITING',
+                  'APPROVAL_REQUIRED',
+                  'BLOCKED',
+                  'FAILED'
+                )
+              )
+            )
+        )
+        AND (
+          SELECT latest_run.status
+          FROM ai_platform.ai_coding_runs AS latest_run
+          WHERE latest_run.task_id = t.id
+          ORDER BY latest_run.created_at DESC
+          LIMIT 1
+        ) = 'COMPLETED'
+    ),
+    updated AS (
+      UPDATE ai_platform.ai_coding_tasks AS task
+      SET status = 'COMPLETED',
+          result_summary = COALESCE(
+            task.result_summary,
+            'Detached Multi-Worker shard completed; stale lifecycle state reconciled automatically.'
+          ),
+          updated_at = NOW()
+      FROM candidates
+      WHERE task.id = candidates.id
+        AND task.status IN ('ANALYZING', 'READY_REVIEW')
+      RETURNING task.id
+    )
+    SELECT COUNT(*)::int AS recovered_tasks
+    FROM updated
+  `);
+
+  const row = result.rows?.[0] as { recovered_tasks?: number | string } | undefined;
+  return {
+    recoveredTasks: Number(row?.recovered_tasks ?? 0),
+  };
+}
+
 export async function reconcileStaleCodingRuns(
   options: { taskId?: string; now?: Date } = {},
 ): Promise<CodingRunRecoveryResult> {
   const now = options.now ?? new Date();
+  const detachedRecovery = await reconcileDetachedCompletedMultiWorkerTasks({
+    taskId: options.taskId,
+  });
   const rows = await db
     .select({
       runId: aiCodingRunsTable.id,
@@ -87,7 +180,7 @@ export async function reconcileStaleCodingRuns(
   const result: CodingRunRecoveryResult = {
     inspected: rows.length,
     recoveredRuns: 0,
-    recoveredTasks: 0,
+    recoveredTasks: detachedRecovery.recoveredTasks,
   };
 
   for (const candidate of candidates) {

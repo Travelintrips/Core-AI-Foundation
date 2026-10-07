@@ -128,7 +128,7 @@ export function codingDashboardTaskPresentationStatus(input: {
   // completed child run when no live workstream binding remains.
   if (
     taskNumber.startsWith("MW-") &&
-    input.taskStatus === "READY_REVIEW" &&
+    ["READY_REVIEW", "ANALYZING"].includes(input.taskStatus) &&
     latestRunStatus === "COMPLETED" &&
     !input.hasActiveRun &&
     !input.hasPendingCriticalApproval &&
