@@ -46,7 +46,7 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
   const quotationToken = search.get("quotationToken") ?? "";
   const focusedQuotationHref =
     focusRequest && quotationToken
-      ? `/request-service/${focusRequest}/quotation?token=${encodeURIComponent(quotationToken)}`
+      ? `/request-service/${focusRequest}/quotation?token=${encodeURIComponent(quotationToken)}&fromDashboard=1`
       : "";
 
   useEffect(() => {
