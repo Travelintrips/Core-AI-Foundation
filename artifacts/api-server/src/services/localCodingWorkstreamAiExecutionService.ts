@@ -1594,9 +1594,9 @@ async function persistCandidate(input: {
   await db
     .update(aiCodingTasksTable)
     .set({
-      status: "READY_REVIEW",
+      status: "TESTING",
       resultSummary:
-        "Per-workstream constrained AI produced a deterministic candidate patch. The autonomous runtime will approve and continue automatically when policy checks are safe; manual REVIEW_AI_PATCH is only required when explicitly flagged. No scripts, network, commit, push, or merge were executed.",
+        "Per-workstream constrained AI produced a deterministic candidate patch. Automated QC will validate and continue it when policy checks are safe. No scripts, network, commit, push, or merge were executed.",
     })
     .where(eq(aiCodingTasksTable.id, input.payload.childTaskId));
 }
@@ -1659,17 +1659,19 @@ async function persistExecutionFailure(
     .returning({ id: aiCodingWorkstreamsTable.id });
 
   // A newer recovery attempt may already own this workstream. In that case
-  // the exhausted/stale job must not push the shared child task back to
-  // READY_REVIEW and hide the active repair attempt.
+  // the exhausted/stale job must not push the shared child task back to a
+  // stale review state and hide the active repair attempt.
   if (!updatedWorkstream) return false;
 
   await db
     .update(aiCodingTasksTable)
     .set({
-      status: "READY_REVIEW",
-      resultSummary: consumed
-        ? "Per-workstream constrained AI failed after the one-shot authorization was consumed. Prepare a fresh workstream AI handoff."
-        : "Per-workstream constrained AI failed before model invocation. Prepare a fresh workstream AI handoff.",
+      status: repairDecision?.shouldRetry ? "TESTING" : "BLOCKED",
+      resultSummary: repairDecision?.shouldRetry
+        ? "Constrained AI attempt failed but bounded automatic repair is pending."
+        : consumed
+          ? "Constrained AI failed after the one-shot authorization was consumed; automatic recovery was exhausted."
+          : "Constrained AI failed before model invocation; automatic recovery was exhausted.",
     })
     .where(eq(aiCodingTasksTable.id, payload.childTaskId))
     .catch(() => undefined);
