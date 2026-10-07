@@ -2397,6 +2397,7 @@ async function runGit(
   args: string[],
   repository: string,
   timeout = 30_000,
+  preserveOutput = false,
 ): Promise<string> {
   const result = await execFileAsync("git", args, {
     cwd: root,
@@ -2415,7 +2416,10 @@ async function runGit(
       : typeof raw === "string"
         ? raw
         : "";
-  return stdout.trim();
+  // Porcelain -z status is a byte-structured protocol. Its first byte may be
+  // a significant space (for example " M path"), so trimming corrupts the
+  // first record and makes a valid changed file appear missing.
+  return preserveOutput ? stdout : stdout.trim();
 }
 
 function patchTargetFiles(patch: string): string[] {
@@ -2629,6 +2633,8 @@ export async function materializeApprovedWorkstreamAiCandidate(
           workspace.path,
           ["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
           childTask.repository,
+          30_000,
+          true,
         ),
       ),
     );
@@ -2664,6 +2670,8 @@ export async function materializeApprovedWorkstreamAiCandidate(
         workspace.path,
         ["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
         childTask.repository,
+        30_000,
+        true,
       ),
     );
     const normalizedStatusPaths = normalizedChangedFiles(statusPaths);
