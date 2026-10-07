@@ -1,0 +1,23 @@
+services:
+  ai-core-dev:
+    build:
+      context: ../..
+      dockerfile: deploy/dev-hostinger/Dockerfile
+    image: ai-core-dev:develop
+    container_name: ai-core-dev
+    env_file:
+      - ../../.env.dev
+    environment:
+      NODE_ENV: development
+      APP_ENV: development
+      SERVE_FRONTEND: "true"
+      PORT: "8080"
+      PUBLIC_APP_URL: https://dev-aicore.cstlogistic.co.id
+      ALLOWED_ORIGINS: https://dev-aicore.cstlogistic.co.id
+      AI_PROVIDER_BILLING_MONITOR_ENABLED: "false"
+      GCP_OLLAMA_AUTOSTART_ENABLED: "false"
+      GCP_CODING_WORKER_AUTOSTART_ENABLED: "false"
+      OLLAMA_WORKER_RUNTIME_ENABLED: "false"
+    ports:
+      - "127.0.0.1:18082:8080"
+    restart: unless-stopped
