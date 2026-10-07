@@ -246,32 +246,32 @@ jobs:
             exit 1
           fi
 
-      - name: Copy production build settings as DEV template
+      - name: Configure explicit DEV Node.js build settings
         shell: bash
         env:
           HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100"             -o /tmp/websites.json
+          jq -n '{
+            node_version:22,
+            app_type:"express",
+            root_directory:".",
+            output_directory:"artifacts/api-server/dist",
+            build_script:"build",
+            entry_file:"artifacts/api-server/dist/index.mjs",
+            package_manager:"pnpm"
+          }' > /tmp/dev-build-settings.json
 
-          prod_user=$(jq -r --arg d "$PROD_TEMPLATE_DOMAIN"             '.data[] | select(.domain == $d and .is_enabled == true) | .username // empty'             /tmp/websites.json | head -n1)
-          test -n "$prod_user"
+          echo "DEV Hostinger build settings:"
+          cat /tmp/dev-build-settings.json
 
-          curl --fail-with-body --silent --show-error             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/accounts/$prod_user/websites/$PROD_TEMPLATE_DOMAIN/nodejs/builds/settings"             -o /tmp/build-settings.json
-
-          jq '{
-            node_version,
-            app_type,
-            root_directory,
-            output_directory,
-            build_script,
-            entry_file,
-            package_manager
-          }' /tmp/build-settings.json > /tmp/dev-build-settings.json
-
-          jq -e '.node_version != null and .package_manager != null' /tmp/dev-build-settings.json >/dev/null
-
-          curl --fail-with-body --silent --show-error             -X PUT             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/dev-build-settings.json             "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds/settings"             >/tmp/settings-update.json
+          curl --fail-with-body --silent --show-error \
+            -X PUT \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/dev-build-settings.json \
+            "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds/settings" \
+            >/tmp/settings-update.json
 
       - name: Start DEV Node.js build
         id: build
