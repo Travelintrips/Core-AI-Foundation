@@ -56,6 +56,7 @@ import {
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { finalizeCodingTaskGraphIntegration } from "./localCodingMultiWorkerIntegrationFinalizerService.js";
 import { purgeExpiredCodingTestTasks, reconcileStaleCodingRuns } from "./localCodingRunRecoveryService.js";
+import { reconcileStaleMultiWorkerRuns } from "./localCodingMultiWorkerRecoveryService.js";
 import { isRetryableRepositoryCloneResourceError } from "./repositoryAnalyzerService.js";
 import {
   releaseCodingFileReservations,
@@ -2091,6 +2092,15 @@ async function maybeRecoverOrphanedReadyReviewTasks(): Promise<void> {
   // Reserve the interval before the DB sweep so concurrent local/Temporal polls
   // cannot stampede the same recovery scan.
   lastReadyReviewRecoveryAt = nowMs;
+  // Multi-worker REVIEW_REQUIRED is an automated QC state. Sweep it on the
+  // same bounded cadence as legacy READY_REVIEW recovery so an APPROVED
+  // candidate missed during a rolling-deploy startup cannot remain parked.
+  await reconcileStaleMultiWorkerRuns().catch((error) => {
+    logger.warn(
+      { err: error },
+      "[coding-autonomous] periodic multi-worker recovery failed",
+    );
+  });
   await recoverOrphanedReadyReviewTasks().catch((error) => {
     logger.warn(
       { err: error },
