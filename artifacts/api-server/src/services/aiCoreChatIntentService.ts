@@ -48,7 +48,7 @@ const SAFE_DIRECT_PC_ACTION =
   /^(?:buka|open|fokus(?:kan)?|focus|klik|click|ketik|type|tulis|write|scroll|gulir|screenshot|ambil\s+screenshot|capture\s+(?:the\s+)?screen|tekan\s+(?:enter|tab|escape|esc)|press\s+(?:enter|tab|escape|esc))\b/i;
 
 const SENSITIVE_DIRECT_PC_ACTION =
-  /\b(?:hapus|delete|remove|uninstall|install|download|unggah|upload|kirim|send|submit|bayar|payment|purchase|beli|transfer|password|kata\s+sandi|credential|secret|token|api\s*key|security|keamanan|powershell|cmd|terminal|shell|registry|regedit|format|shutdown|restart|reboot|kill|terminate|deploy|merge|commit|push|database|sql|ssh|rdp)\b/i;
+  /\b(?:hapus|delete|remove|uninstall|install|download|unggah|upload|bayar|payment|purchase|beli|transfer|password|kata\s+sandi|credential|secret|token|api\s*key|security|keamanan|powershell|cmd|terminal|shell|registry|regedit|format|shutdown|restart|reboot|kill|terminate|deploy|merge|commit|push|database|sql|ssh|rdp)\b/i;
 
 export function parseDirectOpenClawPcCommand(message: string): string | null {
   const value = message.trim().replace(/^@\s*/, "");
