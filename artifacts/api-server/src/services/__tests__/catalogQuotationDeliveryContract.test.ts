@@ -58,5 +58,18 @@ describe("catalog quotation delivery contract", () => {
     expect(dashboardSource).toContain('search.get("quotationToken")');
     expect(dashboardSource).toContain("Penawaran Anda sudah siap");
     expect(dashboardSource).toContain("Lihat Penawaran");
+    expect(dashboardSource).toContain("&fromDashboard=1");
+  });
+
+  it("routes legacy direct quotation links through the dashboard exactly once", () => {
+    const requestQuotationSource = readFileSync(
+      new URL("../../../../customer-portal/src/pages/request-quotation.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(requestQuotationSource).toContain('query.get("fromDashboard") === "1"');
+    expect(requestQuotationSource).toContain(
+      "/api/public/customer/quotation-access/",
+    );
+    expect(requestQuotationSource).toContain("window.location.replace");
   });
 });
