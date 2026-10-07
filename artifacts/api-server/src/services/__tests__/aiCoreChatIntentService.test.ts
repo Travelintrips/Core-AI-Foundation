@@ -70,6 +70,19 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(detectRemoteWorkerPreset("uji test API secara read-only")).toBe("test");
   });
 
+  it.each([
+    "cek live koneksi AI Task ke WA Admin",
+    "verifikasi health WhatsApp Gateway dan device WA admin tanpa mengubah konfigurasi",
+    "periksa apakah WA admin online dan terhubung",
+    "check WhatsApp gateway connectivity read-only",
+  ])("routes WhatsApp runtime verification to the bounded gateway status lane: %s", (message) => {
+    expect(classifyAiCoreChatDispatch(message)).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "WHATSAPP_GATEWAY_STATUS",
+      executionLane: "NO_WORKER",
+    });
+  });
+
   it("routes Hostinger and GCP operations to the infrastructure executor", () => {
     expect(classifyAiCoreChatDispatch("cek status Hostinger VPS")).toMatchObject({
       kind: "INFRA_OPERATION",
