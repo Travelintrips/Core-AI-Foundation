@@ -199,10 +199,10 @@ jobs:
                 owner,
                 repo,
                 workflow_id: "ci.yml",
-                ref: "main",
+                ref: merged.data.sha,
               });
               core.info(
-                `Dispatched CI Verify for main after auto-merge #${pullNumber}; deploy workflows will continue from the successful CI workflow_run.`,
+                `Dispatched CI Verify for exact merged SHA ${merged.data.sha} after auto-merge #${pullNumber}; deploy workflows will continue only if that SHA is still current main.`,
               );
 
               if (
