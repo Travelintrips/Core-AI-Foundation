@@ -19,20 +19,79 @@ export function isProductionDatabaseEnvironment(
   );
 }
 
+function projectRefFromMetadataUrl(
+  value: string | undefined,
+): string | null {
+  if (!value) return null;
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    const match = /^([a-z0-9-]+)\.supabase\.co$/.exec(host);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function projectRefFromSupabaseUrl(env: NodeJS.ProcessEnv): string | null {
   for (const key of ["SUPABASE_URL", "VITE_SUPABASE_URL"]) {
-    const value = env[key];
-    if (!value) continue;
-    try {
-      const host = new URL(value).hostname.toLowerCase();
-      const match = /^([a-z0-9-]+)\.supabase\.co$/.exec(host);
-      if (match?.[1]) return match[1];
-    } catch {
-      // Ignore malformed metadata URLs. The database URL validation below
-      // remains authoritative for the actual connection.
-    }
+    const projectRef = projectRefFromMetadataUrl(env[key]);
+    if (projectRef) return projectRef;
   }
   return null;
+}
+
+function projectRefFromDevSupabaseUrl(env: NodeJS.ProcessEnv): string | null {
+  for (const key of ["SUPABASE_URL_DEV", "VITE_SUPABASE_URL_DEV"]) {
+    const projectRef = projectRefFromMetadataUrl(env[key]);
+    if (projectRef) return projectRef;
+  }
+  return null;
+}
+
+function projectRefFromDatabaseUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    const directMatch = /^db\.([a-z0-9-]+)\.supabase\.co$/.exec(
+      parsed.hostname.toLowerCase(),
+    );
+    if (directMatch?.[1]) return directMatch[1];
+
+    if (parsed.hostname.toLowerCase().endsWith(".pooler.supabase.com")) {
+      const usernameMatch = /^postgres\.([a-z0-9-]+)$/i.exec(parsed.username);
+      if (usernameMatch?.[1]) return usernameMatch[1].toLowerCase();
+    }
+  } catch {
+    // The caller will pass the original URL to node-postgres, which reports
+    // malformed URLs precisely. Isolation checks only act on parseable refs.
+  }
+  return null;
+}
+
+function assertDevelopmentDatabaseIsolation(
+  value: string,
+  env: NodeJS.ProcessEnv,
+): void {
+  const expectedDevRef = projectRefFromDevSupabaseUrl(env);
+  const productionRef = projectRefFromSupabaseUrl(env);
+  const actualRef = projectRefFromDatabaseUrl(value);
+
+  if (expectedDevRef && !actualRef) {
+    throw new Error(
+      "Development database isolation check failed: the active database URL does not expose a Supabase project ref.",
+    );
+  }
+
+  if (expectedDevRef && actualRef !== expectedDevRef) {
+    throw new Error(
+      `Development database isolation check failed: expected Supabase DEV project ${expectedDevRef}, got ${actualRef ?? "unknown"}.`,
+    );
+  }
+
+  if (productionRef && actualRef === productionRef) {
+    throw new Error(
+      "Development database isolation check failed: production Supabase is configured as the active DEV database.",
+    );
+  }
 }
 
 export function normalizeProductionPoolerUrl(
@@ -83,5 +142,10 @@ export function resolveDatabaseUrl(
     );
   }
 
-  return isProduction ? normalizeProductionPoolerUrl(url, env) : url;
+  if (!isProduction) {
+    assertDevelopmentDatabaseIsolation(url, env);
+    return url;
+  }
+
+  return normalizeProductionPoolerUrl(url, env);
 }
