@@ -87,6 +87,48 @@ export function expiredLeaseRecoveryDisposition() {
   };
 }
 
+async function reconcileSupersededQueuedWorkstreamJobs(
+  now: Date,
+): Promise<number> {
+  const result = await db.execute(sql`
+    WITH stale_jobs AS (
+      SELECT j.id
+      FROM ai_platform.ai_jobs AS j
+      LEFT JOIN ai_platform.ai_coding_workstreams AS w
+        ON w.id::text = j.payload_json->>'workstreamId'
+      WHERE j.job_type = 'coding_workstream_execution'
+        AND j.status IN ('queued', 'waiting', 'retrying')
+        AND NOT (
+          w.id IS NOT NULL
+          AND w.job_id = j.id
+          AND w.lease_token = j.payload_json->>'leaseToken'
+          AND w.status IN ('CLAIMED', 'RUNNING')
+          AND w.child_task_id::text = j.payload_json->>'codingTaskId'
+          AND w.child_run_id::text = j.payload_json->>'codingRunId'
+        )
+    ),
+    failed_jobs AS (
+      UPDATE ai_platform.ai_jobs AS j
+      SET status = 'failed',
+          completed_at = COALESCE(j.completed_at, ${now}),
+          error_message =
+            'Superseded workstream execution binding; stale queued job removed from active queue.',
+          updated_at = ${now}
+      FROM stale_jobs
+      WHERE j.id = stale_jobs.id
+        AND j.status IN ('queued', 'waiting', 'retrying')
+      RETURNING j.id
+    )
+    SELECT COUNT(*)::int AS recovered_jobs
+    FROM failed_jobs
+  `);
+
+  const row = result.rows?.[0] as
+    | { recovered_jobs?: number | string }
+    | undefined;
+  return Number(row?.recovered_jobs ?? 0);
+}
+
 async function reconcileTerminalMultiWorkerJobOrphans(
   now: Date,
 ): Promise<{ inspected: number; recoveredRuns: number; recoveredTasks: number }> {
@@ -343,16 +385,22 @@ export async function reconcileStaleMultiWorkerRuns(
   for (const item of terminal) candidates.set(item.id, item);
   for (const item of expired) candidates.set(item.id, item);
 
+  const supersededQueuedJobs = options.taskId
+    ? 0
+    : await reconcileSupersededQueuedWorkstreamJobs(now);
   const orphanRecovery = options.taskId
     ? { inspected: 0, recoveredRuns: 0, recoveredTasks: 0 }
     : await reconcileTerminalMultiWorkerJobOrphans(now);
 
   const result: MultiWorkerRecoveryResult = {
-    inspected: candidates.size + orphanRecovery.inspected,
+    inspected:
+      candidates.size +
+      orphanRecovery.inspected +
+      supersededQueuedJobs,
     recoveredRuns: orphanRecovery.recoveredRuns,
     recoveredWorkstreams: 0,
     recoveredTasks: orphanRecovery.recoveredTasks,
-    recoveredJobs: 0,
+    recoveredJobs: supersededQueuedJobs,
   };
 
   for (const candidate of candidates.values()) {
