@@ -566,11 +566,11 @@ describe("validateFileSize", () => {
 
 describe("fashion render E2E contract", () => {
   const serviceSource = fs.readFileSync(
-    path.resolve(process.cwd(), "artifacts/api-server/src/services/fashionDesignService.ts"),
+    path.resolve(process.cwd(), "src/services/fashionDesignService.ts"),
     "utf-8",
   );
   const portalSource = fs.readFileSync(
-    path.resolve(process.cwd(), "artifacts/customer-portal/src/pages/fashion-design/index.tsx"),
+    path.resolve(process.cwd(), "../customer-portal/src/pages/fashion-design/index.tsx"),
     "utf-8",
   );
 
@@ -602,11 +602,11 @@ describe("fashion render E2E contract", () => {
 
   it("main customer dashboard includes fashion orders and their preview output", () => {
     const customerRouteSource = fs.readFileSync(
-      path.resolve(process.cwd(), "artifacts/api-server/src/routes/customer-portal.ts"),
+      path.resolve(process.cwd(), "src/routes/customer-portal.ts"),
       "utf-8",
     );
     const dashboardSource = fs.readFileSync(
-      path.resolve(process.cwd(), "artifacts/customer-portal/src/pages/dashboard.tsx"),
+      path.resolve(process.cwd(), "../customer-portal/src/pages/dashboard.tsx"),
       "utf-8",
     );
     expect(customerRouteSource).toContain("fashionDesignOrdersTable");
