@@ -23,6 +23,7 @@ describe("AI Core Hostinger infrastructure control", () => {
   it.each([
     ["Hostinger list docker projects", "HOSTINGER_DOCKER_LIST"],
     ["Hostinger cek SSH public key VPS", "HOSTINGER_SSH_PUBLIC_KEY_LIST"],
+    ["Hostinger diagnostik fingerprint SSH private key runtime", "HOSTINGER_SSH_AUTH_DIAGNOSTIC"],
     ["Hostinger cek logs docker project=myapp", "HOSTINGER_DOCKER_LOGS"],
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
@@ -230,6 +231,36 @@ describe("AI Core Hostinger infrastructure control", () => {
         AI_WORKERS_SSH_PRIVATE_KEY_B64: Buffer.from("not-a-private-key", "utf8").toString("base64"),
       },
     })).rejects.toThrow("AI_WORKERS_SSH_PRIVATE_KEY_B64 is not a valid base64-encoded private key.");
+  });
+
+  it("derives only public key material from configured SSH private key", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "ssh-ed25519 AAAATESTPUBLICKEY\n", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_SSH_AUTH_DIAGNOSTIC",
+      message: "Hostinger diagnostik fingerprint SSH private key runtime",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_PRIVATE_KEY_B64: Buffer.from(
+          "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST-PRIVATE\n-----END OPENSSH PRIVATE KEY-----",
+          "utf8",
+        ).toString("base64"),
+      },
+    });
+
+    expect(result.data).toMatchObject({
+      keyType: "ssh-ed25519",
+      publicKey: "ssh-ed25519 AAAATESTPUBLICKEY",
+      source: "AI_WORKERS_SSH_PRIVATE_KEY_B64",
+      privateKeyExposed: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("TEST-PRIVATE");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
   it("lists attached Hostinger SSH keys without returning key material", async () => {

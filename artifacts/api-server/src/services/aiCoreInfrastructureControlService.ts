@@ -67,6 +67,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DOCKER_ENV_SET"
   | "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"
   | "HOSTINGER_SSH_PUBLIC_KEY_LIST"
+  | "HOSTINGER_SSH_AUTH_DIAGNOSTIC"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
   | "EXTERNAL_AGENT_STATUS"
@@ -153,6 +154,12 @@ export function detectAiCoreInfrastructureOperation(
       /\b(cari|find|discover|discovery|list|daftar|cek|check|lihat)\b/i.test(text) &&
       /\b(hosting username|hosting domain|hosting account|website|websites|akun hosting|domain hosting)\b/i.test(text)) {
     return "HOSTINGER_HOSTING_DISCOVERY";
+  }
+
+  if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
+      /\b(ssh|private key|ssh key|kunci ssh)\b/i.test(text) &&
+      /\b(diagnostic|diagnostik|fingerprint|cocok|match|pasangan|derive|turunkan)\b/i.test(text)) {
+    return "HOSTINGER_SSH_AUTH_DIAGNOSTIC";
   }
 
   if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
@@ -863,6 +870,32 @@ async function callHostinger(
 
   if (operation === "HOSTINGER_AI_WORKERS_DEPLOY") {
     data = await runAiWorkersDeployOverSsh();
+  } else if (operation === "HOSTINGER_SSH_AUTH_DIAGNOSTIC") {
+    const privateKey = config.sshPrivateKey;
+    if (!privateKey) throw new Error("Hostinger SSH diagnostic requires configured SSH private key.");
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-core-hostinger-ssh-diag-"));
+    const keyPath = join(tempDir, "id_hostinger");
+    try {
+      await writeFile(keyPath, privateKey.endsWith("\n") ? privateKey : privateKey + "\n", { mode: 0o600 });
+      const { stdout } = await execFileWithInput("ssh-keygen", ["-y", "-f", keyPath], {
+        timeout: 10_000,
+        maxBuffer: 64 * 1024,
+      });
+      const derived = stdout.trim().split(/\s+/);
+      if (derived.length < 2) throw new Error("ssh-keygen returned no usable public key.");
+      data = {
+        keyType: derived[0],
+        publicKey: derived.slice(0, 2).join(" "),
+        source: (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim()
+          ? "HOSTINGER_SSH_PRIVATE_KEY"
+          : (env["AI_WORKERS_SSH_PRIVATE_KEY_B64"] ?? "").trim()
+            ? "AI_WORKERS_SSH_PRIVATE_KEY_B64"
+            : "AI_WORKERS_SSH_PRIVATE_KEY",
+        privateKeyExposed: false,
+      };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   } else if (operation === "HOSTINGER_SSH_PUBLIC_KEY_LIST") {
     if (!config.vmId) throw new Error("Hostinger SSH key list requires HOSTINGER_VPS_ID.");
     const listed = await firstSuccessful(
