@@ -41,8 +41,8 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
   // Repository Analyzer or Coding Orchestrator work just to redeploy existing code.
   const directMainProductionDeploy =
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
-    /\b(?:main|production|prod|produksi|ai\s*core|aicore|core\s+ai\s+foundation)\b/i.test(text) &&
-    !/\b(?:docker|compose|container|coding\s+orchestrator|ubah\s+kode|edit\s+kode|patch\s+kode|fix\s+kode|perbaiki\s+kode)\b/i.test(text);
+    /\bmain\b/i.test(text) &&
+    !/\b(?:openclaw|openhands|n8n|external\s+agent|agent\s+eksternal|coding\s+orchestrator|docker|compose|container|ubah\s+kode|edit\s+kode|patch\s+kode|fix\s+kode|perbaiki\s+kode)\b/i.test(text);
 
   const codingDomainRecovery =
     /\b(?:coding\.cstlogistic\.co\.id|aicoding\.travelintrips\.co\.id)\b/i.test(text) &&
