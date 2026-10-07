@@ -17,6 +17,11 @@ N8N_WORK_URL = os.environ.get(
     "N8N_AGENT_WORK_WEBHOOK_URL",
     "http://n8n:5678/webhook/ai-core-external-work",
 ).strip()
+OPENCLAW_URL = os.environ.get(
+    "OPENCLAW_INTERNAL_URL",
+    "http://openclaw:18789",
+).rstrip("/")
+OPENCLAW_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "").strip()
 
 
 def _request(method, url, body=None, headers=None, timeout=None):
@@ -182,11 +187,60 @@ def run_n8n(work):
     return message, {"runtime": "n8n-webhook", "workflow": "AI Core External Work"}
 
 
+def _openclaw_output_text(payload):
+    if not isinstance(payload, dict):
+        return ""
+    direct = payload.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    chunks = []
+    for item in payload.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        for part in item.get("content") or []:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                chunks.append(text.strip())
+    return "\n".join(chunks).strip()
+
+
+def run_openclaw(work):
+    if not OPENCLAW_TOKEN:
+        raise RuntimeError("OPENCLAW_GATEWAY_TOKEN is required")
+    status, result = _request(
+        "POST",
+        OPENCLAW_URL + "/v1/responses",
+        {
+            "model": "openclaw/main",
+            "input": str(work["instruction"]),
+            "user": "ai-core-external-agent",
+        },
+        headers={
+            "authorization": "Bearer " + OPENCLAW_TOKEN,
+            "x-openclaw-agent-id": "main",
+        },
+        timeout=TIMEOUT_SECONDS,
+    )
+    if status < 200 or status >= 300:
+        raise RuntimeError("OpenClaw returned HTTP " + str(status))
+    message = _openclaw_output_text(result)
+    if not message:
+        message = json.dumps(result, ensure_ascii=False)[:20000]
+    return message[:20000], {
+        "runtime": "openclaw-responses",
+        "agentId": "main",
+    }
+
+
 def execute(work):
     if RUNTIME == "openhands":
         return run_openhands(work)
     if RUNTIME == "n8n":
         return run_n8n(work)
+    if RUNTIME == "openclaw":
+        return run_openclaw(work)
     raise RuntimeError("Unsupported external agent runtime: " + RUNTIME)
 
 
