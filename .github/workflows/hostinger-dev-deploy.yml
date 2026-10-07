@@ -305,9 +305,14 @@ jobs:
             echo "build_attempt=$attempt state=$state"
             [ "$state" = "completed" ] && exit 0
             if [ "$state" = "failed" ]; then
-              curl --silent --show-error                 -H "Authorization: Bearer $HOSTINGER_API_TOKEN"                 "$base/$BUILD_UUID/logs" || true
-              echo
-              curl --silent --show-error                 -H "Authorization: Bearer $HOSTINGER_API_TOKEN"                 "$base/$BUILD_UUID/analysis" || true
+              curl --silent --show-error \
+                -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+                "$base/$BUILD_UUID/analysis" -o /tmp/dev-build-analysis.json || true
+              analysis=$(jq -r '.analysis // empty' /tmp/dev-build-analysis.json 2>/dev/null | tr '\n' ' ' | cut -c1-1800)
+              solution=$(jq -r '.solution // empty' /tmp/dev-build-analysis.json 2>/dev/null | tr '\n' ' ' | cut -c1-1800)
+              [ -n "$analysis" ] && echo "::error title=Hostinger DEV build analysis::$analysis"
+              [ -n "$solution" ] && echo "::error title=Hostinger DEV build solution::$solution"
+              echo "::error::Hostinger DEV Node.js build failed."
               exit 1
             fi
             sleep 10
