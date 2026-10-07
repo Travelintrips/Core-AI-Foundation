@@ -223,7 +223,7 @@ async function initializeRuntimeServices(): Promise<void> {
   const dispatcherFlag = process.env["AI_DISPATCHER_ENABLED"];
   const dispatcherEnabled = isProduction
     ? productionWorkersAllowed && dispatcherFlag === "true"
-    : true;
+    : dispatcherFlag !== "false";
 
   if (dispatcherEnabled) {
     try {
@@ -248,7 +248,7 @@ async function initializeRuntimeServices(): Promise<void> {
   const schedulerFlag = process.env["AI_SCHEDULER_ENABLED"];
   const schedulerEnabled = isProduction
     ? productionWorkersAllowed && schedulerFlag === "true"
-    : true;
+    : schedulerFlag !== "false";
 
   const pollIntervalMs = Number(process.env["AI_SCHEDULER_POLL_INTERVAL_MS"]);
   const timezone = process.env["AI_SCHEDULER_TIMEZONE"];
