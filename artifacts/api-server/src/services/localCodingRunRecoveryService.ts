@@ -144,10 +144,168 @@ export async function reconcileDetachedCompletedMultiWorkerTasks(
   };
 }
 
+export interface OrphanedParentLifecycleRecoveryResult {
+  releasedReservations: number;
+  recoveredTasks: number;
+}
+
+export async function reconcileOrphanedParentTaskLifecycle(
+  options: { taskId?: string } = {},
+): Promise<OrphanedParentLifecycleRecoveryResult> {
+  const scopedTaskId = options.taskId ?? null;
+
+  const released = await db.execute(sql`
+    WITH orphan_reservations AS (
+      SELECT reservation.reservation_id
+      FROM ai_platform.ai_coding_active_file_reservations AS reservation
+      JOIN ai_platform.ai_coding_tasks AS task
+        ON task.id::text = reservation.task_id
+      WHERE task.task_number NOT LIKE 'MW-%'
+        AND (${scopedTaskId}::uuid IS NULL OR task.id = ${scopedTaskId}::uuid)
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_coding_runs AS run
+          WHERE run.task_id = task.id AND run.status = 'RUNNING'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_jobs AS job
+          WHERE job.status IN ('queued', 'waiting', 'retrying', 'running')
+            AND (
+              job.payload_json->>'codingTaskId' = task.id::text
+              OR job.payload_json->>'childTaskId' = task.id::text
+              OR EXISTS (
+                SELECT 1
+                FROM ai_platform.ai_coding_workstreams AS workstream
+                JOIN ai_platform.ai_coding_task_graphs AS graph ON graph.id = workstream.graph_id
+                WHERE graph.task_id = task.id
+                  AND workstream.id::text = job.payload_json->>'workstreamId'
+              )
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_task_graphs AS graph
+          JOIN ai_platform.ai_coding_workstreams AS workstream ON workstream.graph_id = graph.id
+          WHERE graph.task_id = task.id
+            AND graph.status IN ('PREPARED', 'APPROVED', 'RUNNING')
+            AND workstream.status IN ('PENDING', 'READY', 'CLAIMED', 'RUNNING', 'REVIEW_REQUIRED')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_coding_critical_approvals AS approval
+          WHERE approval.task_id = task.id
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        )
+    ), deleted AS (
+      DELETE FROM ai_platform.ai_coding_active_file_reservations AS reservation
+      USING orphan_reservations
+      WHERE reservation.reservation_id = orphan_reservations.reservation_id
+      RETURNING reservation.reservation_id
+    )
+    SELECT COUNT(*)::int AS released_reservations FROM deleted
+  `);
+
+  const reconciled = await db.execute(sql`
+    WITH latest_run AS (
+      SELECT DISTINCT ON (run.task_id)
+        run.task_id,
+        run.status AS run_status
+      FROM ai_platform.ai_coding_runs AS run
+      ORDER BY run.task_id, run.created_at DESC
+    ), candidates AS (
+      SELECT
+        task.id,
+        CASE
+          WHEN autonomous.status = 'COMPLETED'
+            OR task.commit_sha IS NOT NULL
+            OR task.pull_request_url IS NOT NULL
+          THEN 'COMPLETED'
+          ELSE 'BLOCKED'
+        END AS terminal_status
+      FROM ai_platform.ai_coding_tasks AS task
+      LEFT JOIN latest_run ON latest_run.task_id = task.id
+      LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS autonomous
+        ON autonomous.task_id = task.id
+       AND autonomous.enabled = TRUE
+      WHERE task.task_number NOT LIKE 'MW-%'
+        AND task.status IN ('ANALYZING', 'READY_REVIEW')
+        AND (${scopedTaskId}::uuid IS NULL OR task.id = ${scopedTaskId}::uuid)
+        AND latest_run.run_status IN ('COMPLETED', 'FAILED')
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_coding_runs AS run
+          WHERE run.task_id = task.id AND run.status = 'RUNNING'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_jobs AS job
+          WHERE job.status IN ('queued', 'waiting', 'retrying', 'running')
+            AND (
+              job.payload_json->>'codingTaskId' = task.id::text
+              OR job.payload_json->>'childTaskId' = task.id::text
+              OR EXISTS (
+                SELECT 1
+                FROM ai_platform.ai_coding_workstreams AS workstream
+                JOIN ai_platform.ai_coding_task_graphs AS graph ON graph.id = workstream.graph_id
+                WHERE graph.task_id = task.id
+                  AND workstream.id::text = job.payload_json->>'workstreamId'
+              )
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_task_graphs AS graph
+          JOIN ai_platform.ai_coding_workstreams AS workstream ON workstream.graph_id = graph.id
+          WHERE graph.task_id = task.id
+            AND graph.status IN ('PREPARED', 'APPROVED', 'RUNNING')
+            AND workstream.status IN ('PENDING', 'READY', 'CLAIMED', 'RUNNING', 'REVIEW_REQUIRED')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_coding_critical_approvals AS approval
+          WHERE approval.task_id = task.id
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_coding_active_file_reservations AS reservation
+          WHERE reservation.task_id = task.id::text
+        )
+    ), disabled_autonomous AS (
+      UPDATE ai_platform.ai_coding_autonomous_tasks AS autonomous
+      SET enabled = FALSE,
+          status = 'DISABLED',
+          last_action = 'STALE_LIFECYCLE_RECONCILED',
+          updated_at = NOW()
+      FROM candidates
+      WHERE autonomous.task_id = candidates.id
+        AND autonomous.enabled = TRUE
+      RETURNING autonomous.task_id
+    ), updated AS (
+      UPDATE ai_platform.ai_coding_tasks AS task
+      SET status = candidates.terminal_status,
+          result_summary = CASE
+            WHEN candidates.terminal_status = 'COMPLETED'
+            THEN COALESCE(task.result_summary, 'Stale lifecycle reconciled from verified completion evidence.')
+            ELSE COALESCE(task.result_summary, 'Stale lifecycle has no live execution or completion evidence; parked as recoverable BLOCKED for fallback handling.')
+          END,
+          updated_at = NOW()
+      FROM candidates
+      WHERE task.id = candidates.id
+      RETURNING task.id
+    )
+    SELECT COUNT(*)::int AS recovered_tasks FROM updated
+  `);
+
+  const releasedRow = released.rows?.[0] as { released_reservations?: number | string } | undefined;
+  const recoveredRow = reconciled.rows?.[0] as { recovered_tasks?: number | string } | undefined;
+  return {
+    releasedReservations: Number(releasedRow?.released_reservations ?? 0),
+    recoveredTasks: Number(recoveredRow?.recovered_tasks ?? 0),
+  };
+}
+
 export async function reconcileStaleCodingRuns(
   options: { taskId?: string; now?: Date } = {},
 ): Promise<CodingRunRecoveryResult> {
   const now = options.now ?? new Date();
+  const orphanRecovery = await reconcileOrphanedParentTaskLifecycle({
+    taskId: options.taskId,
+  });
   const detachedRecovery = await reconcileDetachedCompletedMultiWorkerTasks({
     taskId: options.taskId,
   });
@@ -180,7 +338,7 @@ export async function reconcileStaleCodingRuns(
   const result: CodingRunRecoveryResult = {
     inspected: rows.length,
     recoveredRuns: 0,
-    recoveredTasks: detachedRecovery.recoveredTasks,
+    recoveredTasks: orphanRecovery.recoveredTasks + detachedRecovery.recoveredTasks,
   };
 
   for (const candidate of candidates) {

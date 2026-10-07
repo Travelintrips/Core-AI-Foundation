@@ -91,6 +91,28 @@ describe("local coding run recovery policy", () => {
     expect(block).toContain("SET status = 'COMPLETED'");
   });
 
+  it("reconciles orphan parent lifecycle rows and releases only orphan reservations", () => {
+    const source = readFileSync(
+      new URL("../localCodingRunRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const start = source.indexOf("export async function reconcileOrphanedParentTaskLifecycle");
+    const end = source.indexOf("export async function reconcileStaleCodingRuns", start);
+    const block = source.slice(start, end);
+
+    expect(block).toContain("ai_coding_active_file_reservations");
+    expect(block).toContain("job.status IN ('queued', 'waiting', 'retrying', 'running')");
+    expect(block).toContain("graph.status IN ('PREPARED', 'APPROVED', 'RUNNING')");
+    expect(block).toContain("workstream.status IN ('PENDING', 'READY', 'CLAIMED', 'RUNNING', 'REVIEW_REQUIRED')");
+    expect(block).toContain("approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')");
+    expect(block).toContain("task.status IN ('ANALYZING', 'READY_REVIEW')");
+    expect(block).toContain("THEN 'COMPLETED'");
+    expect(block).toContain("ELSE 'BLOCKED'");
+    expect(block).not.toContain("ELSE 'FAILED'");
+    expect(block).toContain("last_action = 'STALE_LIFECYCLE_RECONCILED'");
+  });
+
   it("never recovers a non-running lifecycle", () => {
     expect(isRecoverableStaleCodingRun({
       taskStatus: "READY_REVIEW",
