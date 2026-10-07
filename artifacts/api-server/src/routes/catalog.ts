@@ -847,6 +847,11 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
   const base = buildBaseUrl(req);
   const quotationUrl = `${base}/request-service/${serviceReq.requestId}/quotation?token=${token}`;
 
+  // Email delivery is best-effort. A quotation has already been persisted and
+  // its one-time review token has already been rotated at this point, so an
+  // SMTP/provider problem must never turn this endpoint into HTTP 500. Doing
+  // so makes the admin lose the newly-issued plaintext link even though the
+  // quotation itself succeeded.
   const emailResult = await sendEmail({
     to: serviceReq.customerEmail,
     subject: `Penawaran Harga Siap — ${serviceReq.requestId}`,
@@ -860,7 +865,10 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
     module: "catalog",
     action: "quotation_email_sent",
     resourceId: String(quotationId),
-  });
+  }).catch((error) => ({
+    ok: false as const,
+    error: error instanceof Error ? error.message : "Email transport failed unexpectedly",
+  }));
 
   res.json({
     ok: true,
