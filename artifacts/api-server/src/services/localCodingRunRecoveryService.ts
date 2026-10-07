@@ -201,7 +201,7 @@ export async function reconcileOrphanedParentTaskLifecycle(
       RETURNING reservation.reservation_id
     )
     SELECT COUNT(*)::int AS released_reservations FROM deleted
-  \`);
+  `);
 
   const reconciled = await db.execute(sql`
     WITH latest_run AS (
@@ -284,7 +284,7 @@ export async function reconcileOrphanedParentTaskLifecycle(
       RETURNING task.id
     )
     SELECT COUNT(*)::int AS recovered_tasks FROM updated
-  \`);
+  `);
 
   const releasedRow = released.rows?.[0] as { released_reservations?: number | string } | undefined;
   const recoveredRow = reconciled.rows?.[0] as { recovered_tasks?: number | string } | undefined;
