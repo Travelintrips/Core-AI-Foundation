@@ -258,7 +258,7 @@ jobs:
             root_directory:".",
             output_directory:"artifacts/api-server/dist",
             build_script:"build",
-            entry_file:"artifacts/api-server/dist/index.mjs",
+            entry_file:"index.mjs",
             package_manager:"pnpm"
           }' > /tmp/dev-build-settings.json
 
