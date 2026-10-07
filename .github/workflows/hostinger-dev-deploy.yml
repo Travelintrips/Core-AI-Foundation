@@ -109,7 +109,7 @@ jobs:
             {env_vars: (
               [
                 {key:"APP_ENV",value:"development"},
-                {key:"NODE_ENV",value:"production"},
+                {key:"NODE_ENV",value:"development"},
                 {key:"SERVE_FRONTEND",value:"true"},
                 {key:"PORT",value:"3000"},
                 {key:"BASE_PATH",value:"/"},
@@ -149,7 +149,7 @@ jobs:
           curl --fail-with-body --silent --show-error             -X PUT             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/dev-env.json             "$base/settings/env" >/tmp/env-update.json
 
           env_count=$(jq '.env_vars | length' /tmp/dev-env.json)
-          rm -f /tmp/dev-env.json /tmp/aicore-secrets.json
+          rm -f /tmp/aicore-secrets.json
           echo "dev_env=CONFIGURED keys=$env_count"
 
       - name: Create source archive
@@ -318,6 +318,26 @@ jobs:
             sleep 10
           done
           exit 1
+
+      - name: Switch deployed DEV runtime to production Node mode
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+        run: |
+          set -euo pipefail
+          jq '(.env_vars[] | select(.key == "NODE_ENV") | .value) = "production"' \
+            /tmp/dev-env.json > /tmp/dev-runtime-env.json
+
+          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds"
+          curl --fail-with-body --silent --show-error \
+            -X PUT \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/dev-runtime-env.json \
+            "$base/settings/env" >/tmp/runtime-env-update.json
+
+          rm -f /tmp/dev-env.json /tmp/dev-runtime-env.json
+          echo "dev_runtime_env=CONFIGURED node_env=production app_env=development"
 
       - name: Verify DEV runtime and exact commit
         shell: bash
