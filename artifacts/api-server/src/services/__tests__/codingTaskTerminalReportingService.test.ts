@@ -24,6 +24,10 @@ vi.mock("@workspace/db", () => ({
   db: {
     select: mocks.select,
   },
+  aiCodingTasksTable: {
+    id: "tasks.id",
+    status: "tasks.status",
+  },
   aiCodingBridgeCommandsTable: {
     id: "commands.id",
     taskId: "commands.taskId",
@@ -44,7 +48,10 @@ vi.mock("../localCodingControlBridgeService.js", () => ({
   appendCodingBridgeResponse: mocks.appendCodingBridgeResponse,
 }));
 
-import { reportCodingTaskTerminalTransition } from "../codingTaskTerminalReportingService.js";
+import {
+  canonicalTerminalEventStatus,
+  reportCodingTaskTerminalTransition,
+} from "../codingTaskTerminalReportingService.js";
 
 describe("coding task terminal reporting", () => {
   beforeEach(() => {
@@ -52,8 +59,44 @@ describe("coding task terminal reporting", () => {
     mocks.select.mockReturnValue(builder);
   });
 
+
+  it("uses the persisted terminal task status as the canonical event status", () => {
+    expect(canonicalTerminalEventStatus("BLOCKED", "FAILED")).toBe("FAILED");
+    expect(canonicalTerminalEventStatus("FAILED", "COMPLETED")).toBe("COMPLETED");
+    expect(canonicalTerminalEventStatus("BLOCKED", "PENDING")).toBe("BLOCKED");
+  });
+
+  it("does not emit BLOCKED when the persisted task is already FAILED", async () => {
+    mocks.limit
+      .mockResolvedValueOnce([{ status: "FAILED" }])
+      .mockResolvedValueOnce([{ id: "command-1" }])
+      .mockResolvedValueOnce([]);
+    mocks.appendCodingBridgeResponse.mockResolvedValue({ id: "response-failed" });
+
+    const result = await reportCodingTaskTerminalTransition({
+      taskId: "11111111-1111-4111-8111-111111111111",
+      status: "BLOCKED",
+      message: "Task membutuhkan tindak lanjut.",
+      source: "test-mismatch",
+    });
+
+    expect(result).toEqual({ reported: true, responseId: "response-failed" });
+    expect(mocks.appendCodingBridgeResponse).toHaveBeenCalledWith({
+      commandId: "command-1",
+      taskId: "11111111-1111-4111-8111-111111111111",
+      kind: "FAILED",
+      message: "Task membutuhkan tindak lanjut.",
+      checkpoint: {
+        eventType: "FAILED",
+        status: "FAILED",
+        source: "test-mismatch",
+      },
+    });
+  });
+
   it("emits a COMPLETED bridge response for a bound task exactly once", async () => {
     mocks.limit
+      .mockResolvedValueOnce([{ status: "COMPLETED" }])
       .mockResolvedValueOnce([{ id: "command-1" }])
       .mockResolvedValueOnce([]);
     mocks.appendCodingBridgeResponse.mockResolvedValue({
@@ -89,6 +132,7 @@ describe("coding task terminal reporting", () => {
 
   it("emits a BLOCKED bridge response for a recoverable conflict exactly once", async () => {
     mocks.limit
+      .mockResolvedValueOnce([{ status: "BLOCKED" }])
       .mockResolvedValueOnce([{ id: "command-1" }])
       .mockResolvedValueOnce([]);
     mocks.appendCodingBridgeResponse.mockResolvedValue({
@@ -117,7 +161,9 @@ describe("coding task terminal reporting", () => {
   });
 
   it("does nothing when the task has no lifecycle binding", async () => {
-    mocks.limit.mockResolvedValueOnce([]);
+    mocks.limit
+      .mockResolvedValueOnce([{ status: "COMPLETED" }])
+      .mockResolvedValueOnce([]);
 
     const result = await reportCodingTaskTerminalTransition({
       taskId: "11111111-1111-4111-8111-111111111111",
@@ -132,6 +178,7 @@ describe("coding task terminal reporting", () => {
   it("retries a transient database failure before persisting the terminal response", async () => {
     mocks.limit
       .mockRejectedValueOnce(new Error("temporary database error"))
+      .mockResolvedValueOnce([{ status: "COMPLETED" }])
       .mockResolvedValueOnce([{ id: "command-1" }])
       .mockResolvedValueOnce([]);
     mocks.appendCodingBridgeResponse.mockResolvedValue({
@@ -150,8 +197,10 @@ describe("coding task terminal reporting", () => {
 
   it("repairs an ambiguous append without creating a duplicate response", async () => {
     mocks.limit
+      .mockResolvedValueOnce([{ status: "COMPLETED" }])
       .mockResolvedValueOnce([{ id: "command-1" }])
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ status: "COMPLETED" }])
       .mockResolvedValueOnce([{ id: "command-1" }])
       .mockResolvedValueOnce([{ id: "response-existing" }]);
     mocks.appendCodingBridgeResponse.mockRejectedValueOnce(
@@ -174,6 +223,7 @@ describe("coding task terminal reporting", () => {
 
   it("does not duplicate a terminal response already persisted", async () => {
     mocks.limit
+      .mockResolvedValueOnce([{ status: "COMPLETED" }])
       .mockResolvedValueOnce([{ id: "command-1" }])
       .mockResolvedValueOnce([{ id: "response-existing" }]);
 
