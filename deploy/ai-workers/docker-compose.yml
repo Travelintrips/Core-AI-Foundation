@@ -203,7 +203,7 @@ services:
       - NET_ADMIN
 
   openclaw:
-    image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-2026.9.6}
+    image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-2026.9.8}
     restart: unless-stopped
     init: true
     mem_limit: ${OPENCLAW_MEMORY_LIMIT:-1536m}
