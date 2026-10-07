@@ -350,6 +350,26 @@ describe("AI Core Chat automatic dispatch", () => {
 });
 
 
+
+describe("WhatsApp runtime status route precedence", () => {
+  it("keeps WhatsApp runtime checks out of the legacy admin DB path", () => {
+    const source = readFileSync(
+      new URL("../../routes/ai-core-chat.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toContain("isAdminWhatsappDeviceStatusQuery(message)");
+    expect(source).not.toContain("executeAdminWhatsappDeviceStatusQuery()");
+    expect(classifyAiCoreChatDispatch(
+      "cek live koneksi AI Task ke WA Admin. Verifikasi read-only WhatsApp Gateway health dan device WA admin.",
+    )).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "WHATSAPP_GATEWAY_STATUS",
+      executionLane: "NO_WORKER",
+    });
+  });
+});
+
 describe("direct OpenClaw PC hard routing", () => {
   it("routes # commands before Ask/Auto branching in both chat endpoints", () => {
     const source = readFileSync(
