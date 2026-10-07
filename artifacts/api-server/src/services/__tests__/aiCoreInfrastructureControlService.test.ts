@@ -37,6 +37,8 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger hapus hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_DELETE"],
     ["Hostinger cek dns subdomain domain=example.com", "HOSTINGER_DNS_LIST"],
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
+    ["Hostinger list subdomains domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
+    ["Hostinger list parked domains domain=example.com", "HOSTINGER_PARKED_DOMAIN_LIST"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
     ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
     ["Hostinger pasang SSH public key key=ssh-ed25519-AAAA", "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"],
