@@ -16,6 +16,7 @@ import {
   creativeProjectQuotationsTable,
   aiServiceRequestsTable,
   aiServicesTable,
+  aiQuotationsTable,
 } from "@workspace/db";
 import {
   SubmitCustomerProjectBody,
@@ -65,6 +66,67 @@ function buildBaseUrl(req: import("express").Request): string {
 
 const DASHBOARD_TOKEN_EXPIRY_DAYS = 30;
 const REVIEW_TOKEN_EXPIRY_DAYS = 60;
+
+async function issueDashboardAccessForEmail(email: string, preferredName?: string) {
+  const normalizedEmail = email.toLowerCase().trim();
+  const emailHash = hashEmail(normalizedEmail);
+
+  const [existing] = await db
+    .select()
+    .from(customerDashboardTokensTable)
+    .where(eq(customerDashboardTokensTable.emailHash, emailHash));
+
+  const reviews = await db
+    .select({ id: creativeAiClientReviewsTable.id })
+    .from(creativeAiClientReviewsTable)
+    .where(eq(creativeAiClientReviewsTable.clientEmail, normalizedEmail));
+
+  const serviceReqs = await db
+    .select({ id: aiServiceRequestsTable.id, customerName: aiServiceRequestsTable.customerName })
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.customerEmail, normalizedEmail));
+
+  const projectCount = reviews.length + serviceReqs.length;
+  const serviceName = serviceReqs[0]?.customerName;
+  const clientName =
+    preferredName?.trim() ||
+    (existing?.clientName && existing.clientName !== "Customer" ? existing.clientName : undefined) ||
+    serviceName ||
+    existing?.clientName ||
+    "Customer";
+
+  const { plaintext: dashboardToken, hash: dashboardTokenHash } = generateReviewToken();
+  const dashboardExpiry = new Date(
+    Date.now() + DASHBOARD_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+  );
+
+  if (existing) {
+    await db
+      .update(customerDashboardTokensTable)
+      .set({
+        clientEmail: normalizedEmail,
+        clientName,
+        tokenHash: dashboardTokenHash,
+        expiresAt: dashboardExpiry,
+      })
+      .where(eq(customerDashboardTokensTable.id, existing.id));
+  } else {
+    await db.insert(customerDashboardTokensTable).values({
+      emailHash,
+      clientEmail: normalizedEmail,
+      clientName,
+      tokenHash: dashboardTokenHash,
+      expiresAt: dashboardExpiry,
+    });
+  }
+
+  return {
+    dashboardToken,
+    clientEmail: normalizedEmail,
+    clientName,
+    projectCount,
+  };
+}
 
 // ── DEF-001: In-process deduplication map (60-second window) ─────────────────
 // Protects against concurrent duplicate submissions with the same identity
@@ -314,81 +376,112 @@ router.post("/public/customer/request-access", async (req, res): Promise<void> =
   }
 
   const { email } = parsed.data;
-  const emailHash = hashEmail(email);
-
-  // Find existing dashboard token for this email
-  const [existing] = await db
-    .select()
-    .from(customerDashboardTokensTable)
-    .where(eq(customerDashboardTokensTable.emailHash, emailHash));
-
-  // Count projects for this email from client reviews (old flow)
-  const reviews = await db
-    .select({ id: creativeAiClientReviewsTable.id })
-    .from(creativeAiClientReviewsTable)
-    .where(eq(creativeAiClientReviewsTable.clientEmail, email.toLowerCase().trim()));
-
-  // Count service requests for this email (new catalog flow)
-  const serviceReqs = await db
-    .select({ id: aiServiceRequestsTable.id, customerName: aiServiceRequestsTable.customerName })
-    .from(aiServiceRequestsTable)
-    .where(eq(aiServiceRequestsTable.customerEmail, email.toLowerCase().trim()));
-
-  const projectCount = reviews.length + serviceReqs.length;
-
-  let dashboardToken: string;
-  // Prefer name from service requests if available and not already set
-  const nameFromServiceReq = serviceReqs[0]?.customerName;
-  let clientName = existing?.clientName && existing.clientName !== "Customer"
-    ? existing.clientName
-    : (nameFromServiceReq ?? existing?.clientName ?? "Customer");
-
-  if (existing && new Date() < existing.expiresAt) {
-    // Reuse existing token — regenerate a new one pointing to same email
-    // (We can't recover the plaintext, so we always issue a new token)
-    const { plaintext, hash } = generateReviewToken();
-    dashboardToken = plaintext;
-    const dashboardExpiry = new Date(Date.now() + DASHBOARD_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-
-    await db
-      .update(customerDashboardTokensTable)
-      .set({ tokenHash: hash, expiresAt: dashboardExpiry })
-      .where(eq(customerDashboardTokensTable.id, existing.id));
-  } else if (existing) {
-    // Expired — refresh
-    const { plaintext, hash } = generateReviewToken();
-    dashboardToken = plaintext;
-    const dashboardExpiry = new Date(Date.now() + DASHBOARD_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-
-    await db
-      .update(customerDashboardTokensTable)
-      .set({ tokenHash: hash, expiresAt: dashboardExpiry })
-      .where(eq(customerDashboardTokensTable.id, existing.id));
-  } else {
-    // No record — create new entry with unknown clientName
-    const { plaintext, hash } = generateReviewToken();
-    dashboardToken = plaintext;
-    const dashboardExpiry = new Date(Date.now() + DASHBOARD_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-
-    await db.insert(customerDashboardTokensTable).values({
-      emailHash,
-      clientEmail: email.toLowerCase().trim(),
-      clientName: "Customer",
-      tokenHash: hash,
-      expiresAt: dashboardExpiry,
-    });
-  }
+  const access = await issueDashboardAccessForEmail(email);
 
   const base = buildBaseUrl(req);
-  const dashboardUrl = `${base}/dashboard/${dashboardToken}`;
+  const dashboardUrl = `${base}/dashboard/${access.dashboardToken}`;
 
   res.json({
-    dashboardToken,
+    dashboardToken: access.dashboardToken,
     dashboardUrl,
-    clientEmail: email.toLowerCase().trim(),
-    projectCount,
+    clientEmail: access.clientEmail,
+    projectCount: access.projectCount,
     message: "Dashboard access granted. Save this link — it expires in 30 days.",
   });
+});
+
+// ── GET /api/public/customer/quotation-access/:token ────────────────────────
+// Token-protected handoff used by quotation emails. A valid quotation token is
+// exchanged for a fresh dashboard token, then the browser lands on the user's
+// dashboard with the target quotation highlighted. This keeps email entry
+// inside the customer dashboard instead of bypassing it with a raw public page.
+router.get("/public/customer/quotation-access/:token", async (req, res): Promise<void> => {
+  const ip =
+    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0] ??
+    req.socket.remoteAddress ??
+    "unknown";
+
+  if (!checkRateLimit(ip)) {
+    res.status(429).json({ error: "Too many requests, please try again later" });
+    return;
+  }
+
+  const token = String(req.params.token ?? "").trim();
+  if (!token) {
+    res.status(400).json({ error: "Quotation token is required" });
+    return;
+  }
+
+  const tokenHash = hashToken(token);
+  const [quotation] = await db
+    .select({
+      id: aiQuotationsTable.id,
+      serviceRequestId: aiQuotationsTable.serviceRequestId,
+      customerName: aiQuotationsTable.customerName,
+      customerEmail: aiQuotationsTable.customerEmail,
+      reviewTokenExpiresAt: aiQuotationsTable.reviewTokenExpiresAt,
+      deletedAt: aiQuotationsTable.deletedAt,
+    })
+    .from(aiQuotationsTable)
+    .where(eq(aiQuotationsTable.reviewTokenHash, tokenHash))
+    .limit(1);
+
+  if (!quotation || quotation.deletedAt) {
+    res.status(404).json({ error: "Quotation link not found" });
+    return;
+  }
+
+  if (quotation.reviewTokenExpiresAt && new Date() > quotation.reviewTokenExpiresAt) {
+    res.status(401).json({ error: "Quotation link has expired" });
+    return;
+  }
+
+  if (!quotation.serviceRequestId) {
+    res.status(409).json({ error: "Quotation is not linked to a service request" });
+    return;
+  }
+
+  const [serviceRequest] = await db
+    .select({
+      requestId: aiServiceRequestsTable.requestId,
+      customerEmail: aiServiceRequestsTable.customerEmail,
+      customerName: aiServiceRequestsTable.customerName,
+    })
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.id, quotation.serviceRequestId))
+    .limit(1);
+
+  if (!serviceRequest) {
+    res.status(404).json({ error: "Service request not found" });
+    return;
+  }
+
+  if (serviceRequest.customerEmail.toLowerCase().trim() !== quotation.customerEmail.toLowerCase().trim()) {
+    res.status(409).json({ error: "Quotation customer does not match service request" });
+    return;
+  }
+
+  const access = await issueDashboardAccessForEmail(
+    quotation.customerEmail,
+    quotation.customerName || serviceRequest.customerName,
+  );
+  const base = buildBaseUrl(req);
+  const dashboardUrl =
+    `${base}/dashboard/${access.dashboardToken}` +
+    `?focusRequest=${encodeURIComponent(serviceRequest.requestId)}` +
+    `&quotationToken=${encodeURIComponent(token)}`;
+
+  res.setHeader("Cache-Control", "no-store");
+  await logAudit(
+    "customer-portal",
+    "quotation_dashboard_handoff",
+    String(quotation.id),
+    "ai_quotation",
+    "success",
+    { requestId: serviceRequest.requestId, customerEmail: access.clientEmail },
+  );
+
+  res.redirect(302, dashboardUrl);
 });
 
 // ── GET /api/public/customer/dashboard/:dashboardToken ─────────────────────

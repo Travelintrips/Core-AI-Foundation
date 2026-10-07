@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetCustomerDashboard } from "@/hooks/use-customer";
@@ -41,6 +41,21 @@ function serviceRequestStatusColor(status: string) {
 export default function DashboardPage({ params }: { params: { dashboardToken: string } }) {
   const { t } = useTranslation();
   const { data, isLoading, error } = useGetCustomerDashboard(params.dashboardToken);
+  const search = new URLSearchParams(window.location.search);
+  const focusRequest = search.get("focusRequest") ?? "";
+  const quotationToken = search.get("quotationToken") ?? "";
+  const focusedQuotationHref =
+    focusRequest && quotationToken
+      ? `/request-service/${focusRequest}/quotation?token=${encodeURIComponent(quotationToken)}`
+      : "";
+
+  useEffect(() => {
+    if (!isLoading && focusRequest) {
+      document
+        .getElementById(`service-request-${focusRequest}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [focusRequest, isLoading]);
 
   if (isLoading) {
     return (
@@ -95,6 +110,26 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
           </Link>
         </div>
 
+        {focusedQuotationHref && (
+          <div className="mb-8 rounded-2xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold text-foreground">Penawaran Anda sudah siap</p>
+                <p className="text-sm text-muted-foreground">
+                  Anda sudah masuk ke dashboard. Buka penawaran untuk meninjau dan menyetujui harga.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={focusedQuotationHref}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
+            >
+              Lihat Penawaran <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
           <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm flex items-center gap-4">
             <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center">
@@ -140,9 +175,23 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests!.map((sr) => {
                 const needsAction = ["waiting_customer_approval", "quotation_ready"].includes(sr.status);
+                const isFocusedQuotation =
+                  sr.requestId === focusRequest && Boolean(quotationToken);
+                const href = isFocusedQuotation ? focusedQuotationHref : sr.portalPath;
                 return (
-                  <Link key={sr.requestId} href={sr.portalPath} className="group block">
-                    <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm transition-all h-full flex flex-col group-hover:shadow-md group-hover:border-primary/30">
+                  <Link
+                    key={sr.requestId}
+                    href={href}
+                    className="group block"
+                  >
+                    <div
+                      id={`service-request-${sr.requestId}`}
+                      className={`bg-card border rounded-2xl p-6 shadow-sm transition-all h-full flex flex-col group-hover:shadow-md group-hover:border-primary/30 ${
+                        isFocusedQuotation
+                          ? "border-amber-400 ring-2 ring-amber-300/30"
+                          : "border-card-border"
+                      }`}
+                    >
                       <div className="flex justify-between items-start mb-4 gap-4">
                         <div>
                           <h3 className="text-lg font-serif font-medium line-clamp-1">{sr.serviceName}</h3>
@@ -169,7 +218,7 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                           <span className="font-semibold text-foreground">{fmtMoney(sr.total, sr.currency)}</span>
                         </div>
                         <div className="text-primary flex items-center gap-1 text-sm font-medium group-hover:translate-x-1 transition-transform">
-                          {t('dashboard.view')} <ArrowRight className="w-4 h-4" />
+                          {isFocusedQuotation ? "Lihat Penawaran" : t('dashboard.view')} <ArrowRight className="w-4 h-4" />
                         </div>
                       </div>
                     </div>
