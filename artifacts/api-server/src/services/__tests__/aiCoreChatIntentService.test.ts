@@ -322,6 +322,29 @@ describe("AI Core Chat automatic dispatch", () => {
 });
 
 
+describe("direct OpenClaw PC hard routing", () => {
+  it("routes # commands before Ask/Auto branching in both chat endpoints", () => {
+    const source = readFileSync(
+      new URL("../../routes/ai-core-chat.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("const directOpenClawPcCommand =");
+    expect(source).toContain("parseDirectOpenClawPcCommand(safeMessage)");
+    expect(source).toContain("parseDirectOpenClawPcCommand(rawInput.message)");
+
+    const streamHardRoute = source.indexOf("parseDirectOpenClawPcCommand(safeMessage)");
+    const autoBranch = source.indexOf('if (parsed.data.mode === "auto")', streamHardRoute);
+    expect(streamHardRoute).toBeGreaterThan(-1);
+    expect(autoBranch).toBeGreaterThan(streamHardRoute);
+
+    const nonStreamHardRoute = source.indexOf("parseDirectOpenClawPcCommand(rawInput.message)");
+    const askBranch = source.indexOf('effectiveInput.mode === "ask"', nonStreamHardRoute);
+    expect(nonStreamHardRoute).toBeGreaterThan(-1);
+    expect(askBranch).toBeGreaterThan(nonStreamHardRoute);
+  });
+});
+
 describe("existing CWS lifecycle command wiring", () => {
   it("routes named CWS lifecycle mutations to the existing-task handler before new task creation", () => {
     const source = readFileSync(
