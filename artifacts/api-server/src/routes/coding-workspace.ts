@@ -443,7 +443,13 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
             FROM ai_platform.ai_coding_runs r
             WHERE r.task_id = t.id
               AND r.status = 'RUNNING'
-          ) AS has_active_run
+          ) AS has_active_run,
+          EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_coding_critical_approvals approval
+            WHERE approval.task_id = t.id
+              AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+          ) AS has_pending_critical_approval
         FROM ai_platform.ai_coding_tasks t
         LEFT JOIN ai_platform.ai_coding_autonomous_tasks a
           ON a.task_id = t.id
@@ -499,6 +505,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
         p.task_status,
         p.autonomous_status,
         p.has_active_run,
+        p.has_pending_critical_approval,
         l.job_status,
         l.required_capability
       FROM parent_tasks p
@@ -558,6 +565,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
       taskStatus: String(row["task_status"] ?? ""),
       autonomousStatus,
       hasActiveRun,
+      hasPendingCriticalApproval: row["has_pending_critical_approval"] === true,
     });
     const requiredCapability =
       typeof row["required_capability"] === "string"
