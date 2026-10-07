@@ -151,6 +151,61 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
+  it("uses the isolated /opt/core-ai-workers path by default and adds deploy preflight checks", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "AI_WORKERS_DEPLOY_OK commit=100a7f0b8957628441589aae004a7be0049fd91a", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS commit 100a7f0b8957628441589aae004a7be0049fd91a",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
+        AI_WORKERS_REMOTE_ENV_FILE: "/etc/ai-core/ai-workers.env",
+      },
+    });
+
+    expect(result.data).toMatchObject({
+      directory: "/opt/core-ai-workers",
+      envFile: "/etc/ai-core/ai-workers.env",
+      deployed: true,
+    });
+    const args = execFileMock.mock.calls[0] as unknown[];
+    const command = (args[1] as string[]).at(-1) ?? "";
+    expect(command).toContain("AI_WORKERS_DEPLOY_PRECHECK_FAIL missing=git");
+    expect(command).toContain("AI_WORKERS_DEPLOY_PRECHECK_FAIL path_not_git_nonempty=");
+    expect(command).toContain("AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=");
+    expect(command).toContain("/opt/core-ai-workers");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
+  });
+
+  it("includes bounded SSH stderr when AI Workers deploy fails", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(new Error("Command failed: ssh"), "", "AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=/etc/ai-core/ai-workers.env");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    await expect(executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
+      },
+    })).rejects.toThrow("env_file_missing=/etc/ai-core/ai-workers.env");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
+  });
+
   it("reuses existing AI Workers deployment SSH configuration when HOSTINGER_SSH_* is absent", async () => {
     const stdinEnd = vi.fn();
     execFileMock.mockImplementation((...args: unknown[]) => {
