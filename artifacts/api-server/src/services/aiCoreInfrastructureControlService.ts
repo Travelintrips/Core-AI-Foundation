@@ -386,12 +386,10 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     sshHost: (env["HOSTINGER_SSH_HOST"] ?? env["AI_WORKERS_SSH_HOST"] ?? "").trim(),
     sshUser: (env["HOSTINGER_SSH_USER"] ?? env["AI_WORKERS_SSH_USER"] ?? "root").trim(),
     sshPort: (env["HOSTINGER_SSH_PORT"] ?? env["AI_WORKERS_SSH_PORT"] ?? "22").trim(),
-    sshPrivateKey: (
-      env["HOSTINGER_SSH_PRIVATE_KEY"] ??
+    sshPrivateKey:
+      (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim() ||
       b64PrivateKey ||
-      env["AI_WORKERS_SSH_PRIVATE_KEY"] ??
-      ""
-    ).trim(),
+      (env["AI_WORKERS_SSH_PRIVATE_KEY"] ?? "").trim(),
     sshDockerProjectDir: (env["HOSTINGER_DOCKER_PROJECT_DIR"] ?? "").trim(),
     aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-foundation").trim(),
     aiWorkersEnvFile: (env["AI_WORKERS_REMOTE_ENV_FILE"] ?? "/etc/ai-core/ai-workers.env").trim(),
