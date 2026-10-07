@@ -319,26 +319,6 @@ jobs:
           done
           exit 1
 
-      - name: Switch deployed DEV runtime to production Node mode
-        shell: bash
-        env:
-          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
-        run: |
-          set -euo pipefail
-          jq '(.env_vars[] | select(.key == "NODE_ENV") | .value) = "production"' \
-            /tmp/dev-env.json > /tmp/dev-runtime-env.json
-
-          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds"
-          curl --fail-with-body --silent --show-error \
-            -X PUT \
-            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary @/tmp/dev-runtime-env.json \
-            "$base/settings/env" >/tmp/runtime-env-update.json
-
-          rm -f /tmp/dev-env.json /tmp/dev-runtime-env.json
-          echo "dev_runtime_env=CONFIGURED node_env=production app_env=development"
-
       - name: Restart DEV Node.js application
         shell: bash
         env:
