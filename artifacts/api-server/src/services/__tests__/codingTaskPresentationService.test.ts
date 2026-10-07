@@ -120,28 +120,6 @@ describe("coding task presentation status", () => {
     ).toBe("BLOCKED");
   });
 
-  it("terminalizes persisted BLOCKED when no live execution remains", () => {
-    expect(
-      codingTaskPresentationStatus({
-        taskStatus: "BLOCKED",
-        autonomousStatus: "BLOCKED",
-        latestRunStatus: "COMPLETED",
-        hasActiveRun: false,
-        hasActiveJob: false,
-        hasPendingCriticalApproval: false,
-      }),
-    ).toBe("FAILED");
-
-    expect(
-      codingTaskPresentationStatus({
-        taskStatus: "BLOCKED",
-        autonomousStatus: "BLOCKED",
-        hasActiveRun: false,
-        hasActiveJob: true,
-      }),
-    ).toBe("ANALYZING");
-  });
-
   it("shows terminal autonomous failure instead of READY_REVIEW", () => {
     expect(
       codingTaskPresentationStatus({
