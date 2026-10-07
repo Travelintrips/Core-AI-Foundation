@@ -185,15 +185,19 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
-  it("includes bounded SSH stderr when AI Workers deploy fails", async () => {
+  it("returns structured SSH diagnostics when AI Workers deploy fails", async () => {
     const stdinEnd = vi.fn();
     execFileMock.mockImplementation((...args: unknown[]) => {
       const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
-      callback(new Error("Command failed: ssh"), "", "AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=/etc/ai-core/ai-workers.env");
+      callback(
+        new Error("Command failed: ssh"),
+        "",
+        "AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=/etc/ai-core/ai-workers.env API_KEY=super-secret",
+      );
       return { stdin: { end: stdinEnd } };
     });
 
-    await expect(executeAiCoreInfrastructureOperation({
+    const result = await executeAiCoreInfrastructureOperation({
       operation: "HOSTINGER_AI_WORKERS_DEPLOY",
       message: "Deploy AI Workers VPS",
       env: {
@@ -202,7 +206,20 @@ describe("AI Core Hostinger infrastructure control", () => {
         AI_WORKERS_SSH_USER: "root",
         AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
       },
-    })).rejects.toThrow("env_file_missing=/etc/ai-core/ai-workers.env");
+    });
+
+    expect(result.reply).toContain("gagal");
+    expect(result.data).toMatchObject({
+      deployed: false,
+      failed: true,
+      stage: "preflight_env_file",
+      retryable: false,
+      directory: "/opt/core-ai-workers",
+      envFile: "/etc/ai-core/ai-workers.env",
+    });
+    expect(JSON.stringify(result)).toContain("env_file_missing=/etc/ai-core/ai-workers.env");
+    expect(JSON.stringify(result)).not.toContain("super-secret");
+    expect(JSON.stringify(result)).toContain("[REDACTED]");
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
