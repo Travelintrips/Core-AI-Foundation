@@ -113,6 +113,19 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.executionLane).toBe("NO_WORKER");
   });
 
+  it("routes coding website repair to GitHub deploy instead of Hostinger VPS status", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Perbaiki website coding.cstlogistic.co.id karena masih tampil halaman default Hostinger dan buat dashboard live.",
+    );
+
+    expect(decision).toMatchObject({
+      kind: "GITHUB_OPERATION",
+      githubOperation: "GITHUB_HOSTINGER_NODEJS_DEPLOY",
+      executionLane: "NO_WORKER",
+    });
+    expect(decision.infrastructureOperation).toBeNull();
+  });
+
   it("routes an existing-commit Hostinger deploy to the no-worker GitHub lane", () => {
     const decision = classifyAiCoreChatDispatch(
       "Lakukan hanya recovery/deploy operasional Core AI Foundation ke Hostinger untuk exact commit 34e9b7ab317458894555c82205f5fe155189babe. Jangan scan/index repo dan jangan ubah kode.",
