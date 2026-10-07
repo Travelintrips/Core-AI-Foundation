@@ -218,7 +218,7 @@ export async function reconcileOrphanedParentTaskLifecycle(
             OR task.commit_sha IS NOT NULL
             OR task.pull_request_url IS NOT NULL
           THEN 'COMPLETED'
-          ELSE 'FAILED'
+          ELSE 'BLOCKED'
         END AS terminal_status
       FROM ai_platform.ai_coding_tasks AS task
       LEFT JOIN latest_run ON latest_run.task_id = task.id
@@ -226,7 +226,7 @@ export async function reconcileOrphanedParentTaskLifecycle(
         ON autonomous.task_id = task.id
        AND autonomous.enabled = TRUE
       WHERE task.task_number NOT LIKE 'MW-%'
-        AND task.status IN ('ANALYZING', 'READY_REVIEW', 'BLOCKED')
+        AND task.status IN ('ANALYZING', 'READY_REVIEW')
         AND (${scopedTaskId}::uuid IS NULL OR task.id = ${scopedTaskId}::uuid)
         AND latest_run.run_status IN ('COMPLETED', 'FAILED')
         AND NOT EXISTS (
@@ -278,6 +278,11 @@ export async function reconcileOrphanedParentTaskLifecycle(
     ), updated AS (
       UPDATE ai_platform.ai_coding_tasks AS task
       SET status = candidates.terminal_status,
+          result_summary = CASE
+            WHEN candidates.terminal_status = 'COMPLETED'
+            THEN COALESCE(task.result_summary, 'Stale lifecycle reconciled from verified completion evidence.')
+            ELSE COALESCE(task.result_summary, 'Stale lifecycle has no live execution or completion evidence; parked as recoverable BLOCKED for fallback handling.')
+          END,
           updated_at = NOW()
       FROM candidates
       WHERE task.id = candidates.id
