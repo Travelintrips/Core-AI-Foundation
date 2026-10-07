@@ -98,6 +98,8 @@ services:
       - control
 
   temporal-coding-worker:
+    profiles:
+      - temporal-coding
     image: ai-core-temporal-coding-worker:${TEMPORAL_CODING_WORKER_VERSION:-1.0.0}
     build:
       context: .
