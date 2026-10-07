@@ -1275,6 +1275,15 @@ export function shouldAttemptAdminDbQuery(message: string): boolean {
   const value = message.trim();
   if (!value || MUTATION.test(value)) return false;
   if (extractExplicitReadOnlySql(value)) return true;
+
+  // Fail closed only for generic operational status checks. Specialized
+  // detectors handle these surfaces before the generic DB fallback.
+  const operationalStatusScope =
+    /\b(mcp|deployment|deploy|worker|ollama|workflow|ci|github|hostinger|server|service|api|webhook|subscription|event|queue|antrian)\b/i;
+  if (/\b(cek|check|status|monitor|pantau|lihat|verify|verifikasi)\b/i.test(value) && operationalStatusScope.test(value)) {
+    return false;
+  }
+
   if (!READ_INTENT.test(value)) return false;
   if (
     EXPLANATION_ONLY.test(value) &&
