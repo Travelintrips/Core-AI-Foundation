@@ -13,10 +13,10 @@ function normalizedEnvironmentValue(value: unknown): string {
 export function isProductionDatabaseEnvironment(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return (
-    normalizedEnvironmentValue(env["NODE_ENV"]) === "production" ||
-    normalizedEnvironmentValue(env["APP_ENV"]) === "production"
-  );
+  const appEnv = normalizedEnvironmentValue(env["APP_ENV"]);
+  if (appEnv === "development" || appEnv === "dev") return false;
+  if (appEnv === "production" || appEnv === "prod") return true;
+  return normalizedEnvironmentValue(env["NODE_ENV"]) === "production";
 }
 
 function projectRefFromUrlValue(value: string | undefined): string | null {
