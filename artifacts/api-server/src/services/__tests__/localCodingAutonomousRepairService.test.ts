@@ -141,7 +141,7 @@ describe("autonomous QC scheduling policy", () => {
     ).toBe(false);
   });
 
-  it("routes candidate warnings into bounded QC revision before human review", () => {
+  it("routes candidate warnings into bounded automated QC revision before alternate recovery", () => {
     const source = readFileSync(
       new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
       "utf8",
@@ -149,7 +149,8 @@ describe("autonomous QC scheduling policy", () => {
 
     expect(source).toContain("QC review requested revision:");
     expect(source).toContain("AUTO_QC_REVISION:");
-    expect(source).toContain("bounded QC revisions were exhausted");
+    expect(source).toContain("exhausted bounded automated QC revisions");
+    expect(source).toContain("blocked for alternate recovery");
   });
 });
 
