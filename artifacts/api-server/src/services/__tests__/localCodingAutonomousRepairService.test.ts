@@ -1075,6 +1075,11 @@ describe("autonomous terminal task status", () => {
     expect(source).toContain('"RECOVER_FALSE_COMPLETION"');
     expect(source).toContain('state.nextAction === "DONE" && completionVerified');
     expect(source).toContain("COMPLETION_EVIDENCE_MISSING");
+    const missingEvidenceStart = source.indexOf('state.nextAction === "DONE" && !completionVerified');
+    const missingEvidenceEnd = source.indexOf("if (state.activeRun)", missingEvidenceStart);
+    const missingEvidenceBlock = source.slice(missingEvidenceStart, missingEvidenceEnd);
+    expect(missingEvidenceBlock).toContain('status: "BLOCKED"');
+    expect(missingEvidenceBlock).not.toContain('status: "READY_REVIEW"');
   });
 });
 
