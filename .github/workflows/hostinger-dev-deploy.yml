@@ -186,11 +186,24 @@ jobs:
           size=$(stat -c%s "$ARCHIVE_PATH")
           target="${upload_base%/}/$ARCHIVE_NAME?override=true"
 
-          create_code=$(curl --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0" -H "Upload-Length: $size" -H "Upload-Offset: 0" "$target")
-          test "$create_code" = "201"
+          create_code=$(curl --retry 3 --retry-delay 2 --retry-all-errors --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0" -H "Upload-Length: $size" -H "Upload-Offset: 0" "$target")
+          if [ "$create_code" != "201" ]; then
+            echo "::error::Hostinger TUS create returned HTTP $create_code"
+            cat /tmp/tus-create.body || true
+            exit 1
+          fi
 
           patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0" -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0" --data-binary "@$ARCHIVE_PATH" "$target")
-          test "$patch_code" = "204"
+          if [ "$patch_code" != "204" ]; then
+            echo "::error::Hostinger TUS upload returned HTTP $patch_code"
+            cat /tmp/tus-patch.body || true
+            exit 1
+          fi
+          uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)
+          if [ "$uploaded" != "$size" ]; then
+            echo "::error::Hostinger upload offset mismatch: uploaded=${uploaded:-missing} expected=$size"
+            exit 1
+          fi
           echo "archive_upload=PASS bytes=$size"
 
       - name: Copy production build settings as DEV template
