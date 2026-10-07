@@ -128,7 +128,7 @@ describe("AI Core Hostinger infrastructure control", () => {
         HOSTINGER_SSH_USER: "root",
         HOSTINGER_SSH_PORT: "22",
         HOSTINGER_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
-        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-foundation",
+        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-workers",
         AI_WORKERS_REMOTE_ENV_FILE: "/etc/ai-core/ai-workers.env",
       },
     });
@@ -152,7 +152,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
-  it("uses the isolated /opt/core-ai-foundation path by default and adds deploy preflight checks", async () => {
+  it("uses the isolated /opt/core-ai-workers path by default and adds deploy preflight checks", async () => {
     const stdinEnd = vi.fn();
     execFileMock.mockImplementation((...args: unknown[]) => {
       const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
@@ -173,7 +173,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     });
 
     expect(result.data).toMatchObject({
-      directory: "/opt/core-ai-foundation",
+      directory: "/opt/core-ai-workers",
       envFile: "/etc/ai-core/ai-workers.env",
       deployed: true,
     });
@@ -182,7 +182,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(command).toContain("AI_WORKERS_DEPLOY_PRECHECK_FAIL missing=git");
     expect(command).toContain("AI_WORKERS_DEPLOY_PRECHECK_FAIL path_not_git_nonempty=");
     expect(command).toContain("AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=");
-    expect(command).toContain("/opt/core-ai-foundation");
+    expect(command).toContain("/opt/core-ai-workers");
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
@@ -215,7 +215,7 @@ describe("AI Core Hostinger infrastructure control", () => {
       failed: true,
       stage: "preflight_env_file",
       retryable: false,
-      directory: "/opt/core-ai-foundation",
+      directory: "/opt/core-ai-workers",
       envFile: "/etc/ai-core/ai-workers.env",
     });
     expect(JSON.stringify(result)).toContain("env_file_missing=/etc/ai-core/ai-workers.env");
@@ -241,7 +241,7 @@ describe("AI Core Hostinger infrastructure control", () => {
         AI_WORKERS_SSH_USER: "deployer",
         AI_WORKERS_SSH_PORT: "2222",
         AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST-FALLBACK\n-----END PRIVATE KEY-----",
-        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-foundation",
+        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-workers",
         AI_WORKERS_REMOTE_ENV_FILE: "/etc/ai-core/ai-workers.env",
       },
     });
