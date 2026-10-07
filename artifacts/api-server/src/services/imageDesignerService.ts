@@ -761,38 +761,31 @@ CRITICAL: Respond with ONLY the JSON array. No markdown fences. No explanation.`
 
 // ── Step 2: Replicate Image Generation ───────────────────────────────────────
 
-async function generateReplicateImage(
-  modelId: string,
-  input: {
-    prompt: string;
-    negativePrompt?: string;
-    aspectRatio?: string;
-  },
-  apiKey: string | null,
-  timeoutMs: number,
-): Promise<{
+export interface ReplicateImageInput {
+  prompt: string;
+  negativePrompt?: string;
+  aspectRatio?: string;
+}
+
+export interface ReplicateImageResult {
   imageUrl: string;
   latencyMs: number;
-  provider: "gcp-comfyui" | "replicate";
+  provider: "replicate";
   model: string;
-}> {
-  const startTime = Date.now();
+}
 
-  const local = await tryGenerateImageViaRouter({
-    prompt: input.prompt,
-    negativePrompt: input.negativePrompt,
-    aspectRatio: input.aspectRatio,
-    timeoutMs,
-    filenamePrefix: "creative-ai",
-  });
-  if (local) {
-    return {
-      imageUrl: local.imageUrl,
-      latencyMs: local.latencyMs,
-      provider: "gcp-comfyui",
-      model: local.model,
-    };
-  }
+/**
+ * Direct Replicate image generation primitive.
+ * Exported so feature domains can keep a provider fallback even when the
+ * private GCP Image Router is unavailable or its GPU capacity is exhausted.
+ */
+export async function generateReplicateImageDirect(
+  modelId: string,
+  input: ReplicateImageInput,
+  apiKey: string | null,
+  timeoutMs: number,
+): Promise<ReplicateImageResult> {
+  const startTime = Date.now();
   if (!apiKey) {
     throw new Error("Replicate fallback is not configured.");
   }
@@ -802,10 +795,9 @@ async function generateReplicateImage(
     {
       method: "POST",
       headers: {
-        // Replicate uses the "Token" auth scheme, not Bearer.
         Authorization: `Token ${apiKey}`,
         "Content-Type": "application/json",
-        Prefer: "wait", // use sync mode if supported (waits up to 60s)
+        Prefer: "wait",
       },
       body: JSON.stringify({
         input: {
@@ -814,7 +806,6 @@ async function generateReplicateImage(
           output_format: "webp",
           output_quality: 80,
           num_outputs: 1,
-          // FLUX Schnell/Dev parameter for negative prompt
           ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
         },
       }),
@@ -834,7 +825,6 @@ async function generateReplicateImage(
     urls?: { get?: string };
   };
 
-  // If prediction already succeeded (Prefer: wait)
   if (prediction.status === "succeeded" && Array.isArray(prediction.output)) {
     const url = prediction.output[0];
     if (url) {
@@ -851,7 +841,6 @@ async function generateReplicateImage(
     throw new Error(`Replicate prediction failed immediately: ${prediction.error ?? "unknown"}`);
   }
 
-  // Poll until done
   const pollUrl =
     prediction.urls?.get ?? `https://api.replicate.com/v1/predictions/${prediction.id}`;
 
@@ -886,6 +875,36 @@ async function generateReplicateImage(
   }
 
   throw new Error(`Replicate timed out after ${timeoutMs}ms`);
+}
+
+async function generateReplicateImage(
+  modelId: string,
+  input: ReplicateImageInput,
+  apiKey: string | null,
+  timeoutMs: number,
+): Promise<{
+  imageUrl: string;
+  latencyMs: number;
+  provider: "gcp-comfyui" | "replicate";
+  model: string;
+}> {
+  const local = await tryGenerateImageViaRouter({
+    prompt: input.prompt,
+    negativePrompt: input.negativePrompt,
+    aspectRatio: input.aspectRatio,
+    timeoutMs,
+    filenamePrefix: "creative-ai",
+  });
+  if (local) {
+    return {
+      imageUrl: local.imageUrl,
+      latencyMs: local.latencyMs,
+      provider: "gcp-comfyui",
+      model: local.model,
+    };
+  }
+
+  return generateReplicateImageDirect(modelId, input, apiKey, timeoutMs);
 }
 
 // ── Step 3: Image QC ──────────────────────────────────────────────────────────
