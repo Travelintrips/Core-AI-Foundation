@@ -33,6 +33,10 @@ describe("approved candidate recovery continuation", () => {
     expect(source).toContain("materializeApprovedWorkstreamAiCandidate(candidate.id)");
     expect(source).toContain("completeReviewedCodingWorkstream(materialized.id");
     expect(source).toContain("completeChildTask: true");
+    expect(source).toContain('materializationStatus: "FAILED"');
+    expect(source).toContain("materializationError: message.slice(0, 2000)");
+    expect(source).toContain("materializationFailedAt: now.toISOString()");
+    expect(source).toContain("continue;");
   });
 });
 
