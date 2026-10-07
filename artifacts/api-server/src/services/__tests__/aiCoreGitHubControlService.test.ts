@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   detectAiCoreGitHubOperation,
   requestedCommitSha,
+  requestedWorkflowDispatch,
 } from "../aiCoreGitHubControlService.js";
 
 describe("AI Core no-worker GitHub control", () => {
@@ -10,6 +11,10 @@ describe("AI Core no-worker GitHub control", () => {
     ["rerun GitHub workflow run=37470000000", "GITHUB_WORKFLOW_RERUN"],
     ["rerun failed GitHub workflow run=37470000000", "GITHUB_WORKFLOW_RERUN_FAILED"],
     ["cancel GitHub workflow run=37470000000", "GITHUB_WORKFLOW_CANCEL"],
+    [
+      "trigger workflow=chatgpt-event-wake-canary.yml ref=main conversation_id=6ac56e2f-e6e0-83ec-b9e4-febea0929e10 delay_seconds=120",
+      "GITHUB_WORKFLOW_DISPATCH",
+    ],
     [
       "Deploy operasional Core AI Foundation ke Hostinger untuk exact commit 34e9b7ab317458894555c82205f5fe155189babe. Jangan scan repo dan jangan ubah kode.",
       "GITHUB_HOSTINGER_NODEJS_DEPLOY",
@@ -27,6 +32,23 @@ describe("AI Core no-worker GitHub control", () => {
       ),
     ).toBe("34e9b7ab317458894555c82205f5fe155189babe");
     expect(requestedCommitSha("deploy Hostinger current main")).toBeNull();
+  });
+
+
+  it("parses bounded workflow dispatch inputs", () => {
+    expect(
+      requestedWorkflowDispatch(
+        "trigger workflow=chatgpt-event-wake-canary.yml ref=main conversation_id=6ac56e2f-e6e0-83ec-b9e4-febea0929e10 delay_seconds=120 input.mode=probe",
+      ),
+    ).toEqual({
+      workflow: "chatgpt-event-wake-canary.yml",
+      ref: "main",
+      inputs: {
+        conversation_id: "6ac56e2f-e6e0-83ec-b9e4-febea0929e10",
+        delay_seconds: "120",
+        mode: "probe",
+      },
+    });
   });
 
   it("does not convert ordinary coding requests into GitHub fast actions", () => {
