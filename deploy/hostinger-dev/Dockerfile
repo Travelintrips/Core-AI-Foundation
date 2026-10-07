@@ -19,6 +19,11 @@ RUN pnpm run build
 FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
+# esbuild-plugin-pino records the build-stage absolute /workspace path in its
+# worker metadata. Keep that path valid in the runtime image without duplicating
+# application files.
+RUN ln -s /app /workspace
+
 ENV APP_ENV=development \
     NODE_ENV=development \
     PORT=3000 \
