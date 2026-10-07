@@ -59,11 +59,12 @@ describe("local coding run recovery policy", () => {
       source.indexOf('export interface CodingTestTaskRetentionResult'),
     );
 
-    expect(recoveryBlock).toContain('status: "READY_REVIEW"');
+    expect(recoveryBlock).toContain('status: "BLOCKED"');
     expect(recoveryBlock).toContain("status = 'BLOCKED'");
     expect(recoveryBlock).toContain("last_action = 'RECOVERABLE_OPERATIONAL_FAILURE'");
     expect(recoveryBlock).toContain('status: "BLOCKED"');
     expect(recoveryBlock).toContain('source: "coding-run-stale-recovery"');
+    expect(recoveryBlock).not.toContain('status: "READY_REVIEW",\n            resultSummary');
     expect(recoveryBlock).not.toContain('status: "FAILED",\n            resultSummary');
     expect(recoveryBlock).not.toContain("enabled = FALSE");
   });
