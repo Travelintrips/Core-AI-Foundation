@@ -416,7 +416,7 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
       b64PrivateKey ||
       (env["AI_WORKERS_SSH_PRIVATE_KEY"] ?? "").trim(),
     sshDockerProjectDir: (env["HOSTINGER_DOCKER_PROJECT_DIR"] ?? "").trim(),
-    aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-workers").trim(),
+    aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-foundation").trim(),
     aiWorkersEnvFile: (env["AI_WORKERS_REMOTE_ENV_FILE"] ?? "/etc/ai-core/ai-workers.env").trim(),
   };
 }
