@@ -35,7 +35,16 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
     !/\b(?:docker|compose|container)\b/i.test(text) &&
     /\b(?:node(?:\.?js|\s+js)|aicore|ai\s+core|commit|sha|production|produksi)\b/i.test(text);
-  if (hostingerNodeDeploy) return "GITHUB_HOSTINGER_NODEJS_DEPLOY";
+
+  const codingDomainRecovery =
+    /\b(?:coding\.cstlogistic\.co\.id|aicoding\.travelintrips\.co\.id)\b/i.test(text) &&
+    /\b(?:perbaiki|benahi|fix|pulihkan|recovery|tampilkan|tampil|live|deploy|redeploy|publish|rilis)\b/i.test(text) &&
+    /\b(?:website|web|domain|subdomain|dashboard|hostinger|halaman|page|default)\b/i.test(text) &&
+    !/\b(?:docker|compose|container)\b/i.test(text);
+
+  if (hostingerNodeDeploy || codingDomainRecovery) {
+    return "GITHUB_HOSTINGER_NODEJS_DEPLOY";
+  }
 
   const workflowContext = /\b(?:github\s+actions?|workflow|action\s+run|ci\s+run)\b/i.test(text);
   if (workflowContext) {
