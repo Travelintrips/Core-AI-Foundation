@@ -339,6 +339,19 @@ jobs:
           rm -f /tmp/dev-env.json /tmp/dev-runtime-env.json
           echo "dev_runtime_env=CONFIGURED node_env=production app_env=development"
 
+      - name: Restart DEV Node.js application
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/server/restart"
+          echo
+          echo "dev_runtime_restart=PASS"
+
       - name: Verify DEV runtime and exact commit
         shell: bash
         run: |
