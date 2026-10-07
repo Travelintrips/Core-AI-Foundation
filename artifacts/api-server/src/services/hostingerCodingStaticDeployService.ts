@@ -120,6 +120,48 @@ async function waitForWebsite(
   return null;
 }
 
+export async function removeLegacyCodingParkedDomain(
+  token: string,
+  username: string,
+): Promise<boolean> {
+  const path =
+    `/hosting/v1/accounts/${encodeURIComponent(username)}/websites/${encodeURIComponent(SOURCE_DOMAIN)}/parked-domains`;
+  const listed = await hostingerRequest(token, path);
+  if (!listed.response.ok) {
+    throw new Error(
+      `Hostinger parked-domain discovery failed with HTTP ${listed.response.status}.`,
+    );
+  }
+
+  const parkedDomains = Array.isArray(listed.data)
+    ? listed.data
+    : listed.data &&
+        typeof listed.data === "object" &&
+        Array.isArray((listed.data as { data?: unknown[] }).data)
+      ? (listed.data as { data: unknown[] }).data
+      : [];
+
+  const exact = parkedDomains.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    const domain = (item as Record<string, unknown>)["domain"];
+    return typeof domain === "string" &&
+      domain.toLowerCase() === CODING_DOMAIN.toLowerCase();
+  });
+  if (!exact) return false;
+
+  const removed = await hostingerRequest(
+    token,
+    `${path}/${encodeURIComponent(CODING_DOMAIN)}`,
+    { method: "DELETE" },
+  );
+  if (!removed.response.ok && removed.response.status !== 404) {
+    throw new Error(
+      `Hostinger legacy coding parked-domain cleanup failed with HTTP ${removed.response.status}.`,
+    );
+  }
+  return removed.response.ok;
+}
+
 async function ensureCodingWebsite(
   token: string,
 ): Promise<{
@@ -157,27 +199,53 @@ async function ensureCodingWebsite(
 
   if (
     create.response.status === 422 &&
-    /already hosted/i.test(responseMessage(create.data))
+    /already (?:hosted|in use)/i.test(responseMessage(create.data))
   ) {
-    // A removed subdomain can remain in Hostinger's domain registry after it
-    // disappears from normal website/subdomain discovery. Delete the exact
-    // website identity once, then retry provisioning after propagation.
-    const cleanup = await hostingerRequest(
-      token,
-      `/hosting/v1/websites/${encodeURIComponent(CODING_DOMAIN)}`,
-      { method: "DELETE" },
-    );
-    if (cleanup.response.ok || cleanup.response.status === 404) {
-      staleBindingRemoved = cleanup.response.ok;
-      await waitForWebsite(token, CODING_DOMAIN, false, 12);
-      await sleep(5_000);
-      create = await hostingerRequest(token, "/hosting/v1/websites", {
-        method: "POST",
-        body: JSON.stringify({
-          domain: CODING_DOMAIN,
-          order_id: source.order_id,
-        }),
-      });
+    // The old coding site existed as a parked-domain alias on the aicore
+    // website. Remove only that exact legacy binding, then immediately retry
+    // provisioning so the repair does not leave the hostname detached.
+    if (typeof source.username === "string") {
+      const removedParked = await removeLegacyCodingParkedDomain(
+        token,
+        source.username,
+      );
+      if (removedParked) {
+        staleBindingRemoved = true;
+        await sleep(5_000);
+        create = await hostingerRequest(token, "/hosting/v1/websites", {
+          method: "POST",
+          body: JSON.stringify({
+            domain: CODING_DOMAIN,
+            order_id: source.order_id,
+          }),
+        });
+      }
+    }
+
+    if (
+      create.response.status === 422 &&
+      /already (?:hosted|in use)/i.test(responseMessage(create.data))
+    ) {
+      // A removed subdomain can remain in Hostinger's website registry after
+      // it disappears from normal discovery. Delete the exact website identity
+      // once, then retry provisioning after propagation.
+      const cleanup = await hostingerRequest(
+        token,
+        `/hosting/v1/websites/${encodeURIComponent(CODING_DOMAIN)}`,
+        { method: "DELETE" },
+      );
+      if (cleanup.response.ok || cleanup.response.status === 404) {
+        staleBindingRemoved ||= cleanup.response.ok;
+        await waitForWebsite(token, CODING_DOMAIN, false, 12);
+        await sleep(5_000);
+        create = await hostingerRequest(token, "/hosting/v1/websites", {
+          method: "POST",
+          body: JSON.stringify({
+            domain: CODING_DOMAIN,
+            order_id: source.order_id,
+          }),
+        });
+      }
     }
   }
 
