@@ -886,9 +886,9 @@ async function callHostinger(
       data = {
         keyType: derived[0],
         publicKey: derived.slice(0, 2).join(" "),
-        source: (process.env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim()
+        source: (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim()
           ? "HOSTINGER_SSH_PRIVATE_KEY"
-          : (process.env["AI_WORKERS_SSH_PRIVATE_KEY_B64"] ?? "").trim()
+          : (env["AI_WORKERS_SSH_PRIVATE_KEY_B64"] ?? "").trim()
             ? "AI_WORKERS_SSH_PRIVATE_KEY_B64"
             : "AI_WORKERS_SSH_PRIVATE_KEY",
         privateKeyExposed: false,
