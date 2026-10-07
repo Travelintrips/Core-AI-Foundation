@@ -1,7 +1,92 @@
-import { and, eq } from "drizzle-orm";
-import { aiCodingCiBindingsTable, aiCodingWorkstreamsTable, db } from "@workspace/db";
+import { and, desc, eq } from "drizzle-orm";
+import {
+  aiCodingBridgeCommandsTable,
+  aiCodingCiBindingsTable,
+  aiCodingTaskGraphsTable,
+  aiCodingWorkstreamsTable,
+  db,
+} from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
+import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js";
 import { scheduleCiSelfRepair } from "./localCodingCiSelfRepairService.js";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function shouldEmitGithubGreenConversationEvent(input: {
+  success: boolean;
+  previousState: string | null | undefined;
+}): boolean {
+  return input.success && input.previousState !== "GREEN";
+}
+
+async function emitGithubGreenConversationEvent(input: {
+  graphId: string;
+  eventId: string;
+  repository: string;
+  headSha: string;
+  pullRequestNumber: string | null;
+  checkName: string | null;
+}) {
+  const [graph] = await db
+    .select()
+    .from(aiCodingTaskGraphsTable)
+    .where(eq(aiCodingTaskGraphsTable.id, input.graphId))
+    .limit(1);
+  if (!graph) return { emitted: false, reason: "GRAPH_NOT_FOUND" as const };
+
+  const commands = await db
+    .select()
+    .from(aiCodingBridgeCommandsTable)
+    .where(
+      and(
+        eq(aiCodingBridgeCommandsTable.taskId, graph.taskId),
+        eq(aiCodingBridgeCommandsTable.commandType, "EVENT_BINDING"),
+      ),
+    )
+    .orderBy(desc(aiCodingBridgeCommandsTable.createdAt))
+    .limit(20);
+
+  const command = commands.find((row) => {
+    const metadata = isRecord(row.metadataJson) ? row.metadataJson : {};
+    return typeof metadata["conversationId"] === "string" &&
+      Boolean(String(metadata["conversationId"]).trim());
+  });
+  if (!command) return { emitted: false, reason: "NO_CONVERSATION_BINDING" as const };
+
+  await appendCodingBridgeResponse({
+    commandId: command.id,
+    taskId: graph.taskId,
+    kind: "COMPLETED",
+    message:
+      `GitHub CI is green for ${input.repository} @ ${input.headSha}` +
+      (input.pullRequestNumber ? ` (PR #${input.pullRequestNumber})` : "") +
+      ". Continue the approved next action without waiting for a manual status check.",
+    checkpoint: {
+      status: "CI_GREEN",
+      eventType: "COMPLETED",
+      githubEventId: input.eventId,
+      repository: input.repository,
+      headSha: input.headSha,
+      pullRequestNumber: input.pullRequestNumber,
+      checkName: input.checkName,
+      autoContinueRequested: true,
+    },
+    metadata: {
+      eventType: "COMPLETED",
+      githubCiGreen: true,
+      githubEventId: input.eventId,
+      repository: input.repository,
+      headSha: input.headSha,
+      pullRequestNumber: input.pullRequestNumber,
+      checkName: input.checkName,
+      autoContinueRequested: true,
+    },
+  });
+
+  return { emitted: true, taskId: graph.taskId, commandId: command.id };
+}
 
 type CiPayload = {
   repository?: unknown;
@@ -119,6 +204,23 @@ export async function handleCodingGithubCiEvent(event: {
         eventId: event.eventId,
       });
       await executeGreenCiNextAction(checkpoint);
+
+      if (
+        checkpoint.continued &&
+        shouldEmitGithubGreenConversationEvent({
+          success,
+          previousState: binding.state,
+        })
+      ) {
+        await emitGithubGreenConversationEvent({
+          graphId: checkpoint.graphId,
+          eventId: event.eventId,
+          repository: binding.repository,
+          headSha: binding.headSha,
+          pullRequestNumber: binding.pullRequestNumber,
+          checkName: typeof p.checkName === "string" ? p.checkName : null,
+        });
+      }
     } else if (failure) {
       await scheduleCiSelfRepair({
         bindingId: binding.id,
