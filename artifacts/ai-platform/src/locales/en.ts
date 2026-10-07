@@ -815,6 +815,7 @@ export const en = {
         ready_review: "Ready for review",
         completed: "Completed",
         failed: "Failed",
+        blocked: "Blocked",
       },
       runStatuses: {
         pending: "Pending",
