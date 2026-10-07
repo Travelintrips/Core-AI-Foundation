@@ -456,6 +456,29 @@ async function callHostinger(
   const shellQuote = (value: string): string =>
     `'${value.replace(/'/g, `'"'"'`)}'`;
 
+  const sanitizeAiWorkersDeployDiagnostic = (value: string): string => {
+    return value
+      .replace(/-----BEGIN [^-]+PRIVATE KEY-----[\s\S]*?-----END [^-]+PRIVATE KEY-----/gi, "[REDACTED_PRIVATE_KEY]")
+      .replace(/\b(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]")
+      .replace(/\b([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\s*=\s*)[^\s]+/gi, "$1[REDACTED]")
+      .trim()
+      .slice(-4000);
+  };
+
+  const classifyAiWorkersDeployFailure = (detail: string): string => {
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+missing=git/i.test(detail)) return "preflight_git";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+missing=bash/i.test(detail)) return "preflight_bash";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+missing=docker/i.test(detail)) return "preflight_docker";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+path_not_git_nonempty=/i.test(detail)) return "preflight_target_path";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+env_file_missing=/i.test(detail)) return "preflight_env_file";
+    if (/permission denied|authentication failed|publickey/i.test(detail)) return "ssh_auth";
+    if (/could not resolve hostname|name or service not known|connection timed out|connection refused/i.test(detail)) return "ssh_connectivity";
+    if (/git clone|git -c|git fetch|git checkout|repository not found/i.test(detail)) return "git_sync";
+    if (/install-ai-workers\.sh/i.test(detail)) return "installer";
+    if (/ai-workers-healthcheck\.sh/i.test(detail)) return "healthcheck";
+    return "remote_command";
+  };
+
   const isDockerManagerUnsupported = (error: unknown): boolean =>
     error instanceof Error && /\[VPS:2044\]|does not support Docker Manager/i.test(error.message);
 
@@ -881,7 +904,25 @@ async function callHostinger(
   let data: unknown = null;
 
   if (operation === "HOSTINGER_AI_WORKERS_DEPLOY") {
-    data = await runAiWorkersDeployOverSsh();
+    try {
+      data = await runAiWorkersDeployOverSsh();
+    } catch (error) {
+      const rawDetail = error instanceof Error ? error.message : String(error);
+      const diagnostic = sanitizeAiWorkersDeployDiagnostic(rawDetail);
+      data = {
+        transport: "ssh",
+        host: config.sshHost,
+        user: config.sshUser,
+        port: Number(config.sshPort),
+        directory: valueOf("directory") || config.aiWorkersDeployPath,
+        envFile: valueOf("envfile") || config.aiWorkersEnvFile,
+        deployed: false,
+        failed: true,
+        stage: classifyAiWorkersDeployFailure(diagnostic),
+        diagnostic,
+        retryable: !/preflight_target_path|preflight_env_file/.test(classifyAiWorkersDeployFailure(diagnostic)),
+      };
+    }
   } else if (operation === "HOSTINGER_SSH_AUTH_DIAGNOSTIC") {
     const privateKey = config.sshPrivateKey;
     if (!privateKey) throw new Error("Hostinger SSH diagnostic requires configured SSH private key.");
@@ -1478,13 +1519,18 @@ async function callHostinger(
     "HOSTINGER_HOSTING_DISCOVERY",
   ]);
   const mutating = !readOnly.has(operation);
+  const aiWorkersDeployFailed =
+    operation === "HOSTINGER_AI_WORKERS_DEPLOY" &&
+    Boolean(data && typeof data === "object" && (data as Record<string, unknown>)["failed"] === true);
   return {
     operation,
     provider: "hostinger",
     mutating,
-    reply: mutating
-      ? `Operasi ${operation} diterima Hostinger.`
-      : `Status Hostinger untuk ${operation} berhasil dibaca.`,
+    reply: aiWorkersDeployFailed
+      ? "Deploy AI Workers gagal di remote runtime; detail aman dikembalikan untuk diagnosis dan retry."
+      : mutating
+        ? `Operasi ${operation} diterima Hostinger.`
+        : `Status Hostinger untuk ${operation} berhasil dibaca.`,
     data: safeJson(data),
   };
 }
