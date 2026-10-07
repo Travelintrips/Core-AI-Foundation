@@ -277,7 +277,7 @@ async function completeLocalAnalysis(
     summary,
     orchestration: {
       sessionId,
-      status: "READY_REVIEW",
+      status: "COMPLETED",
       stages,
       nextAction,
       ...(aiEscalation
@@ -333,7 +333,7 @@ async function completeLocalAnalysis(
       await tx
         .update(aiCodingTasksTable)
         .set({
-          status: "READY_REVIEW",
+          status: "COMPLETED",
           resultSummary: summary,
         })
         .where(and(eq(aiCodingTasksTable.id, input.task.id), manualStopFence));
@@ -1196,7 +1196,7 @@ export async function reconcileTerminalRepositoryAnalyzerOrchestrations(): Promi
       RETURNING a.task_id
     )
     UPDATE ai_platform.ai_coding_tasks AS t
-    SET status = 'READY_REVIEW',
+    SET status = 'BLOCKED',
         result_summary = LEFT(
           'Repository Analyzer needs recoverable retry: ' || terminal_jobs.job_error,
           500
