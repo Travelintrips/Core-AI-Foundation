@@ -847,11 +847,12 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
       await db.insert(aiQuotationItemsTable).values(
         lineItems.map((item, idx) => ({
           quotationId,
-          itemCode: item.code,
+          itemType: "service",
           description: item.label,
           quantity: 1,
           unitPrice: item.amount,
           amount: item.amount,
+          metadataJson: { code: item.code },
           displayOrder: idx,
         })),
       );
