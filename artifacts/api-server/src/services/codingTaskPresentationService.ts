@@ -130,6 +130,7 @@ export function codingDashboardTaskPresentationStatus(input: {
   // human-review gate. Keep it visible as a neutral terminal display state.
   if (
     !input.hasActiveRun &&
+    !input.hasActiveJob &&
     input.autonomousEnabled === false &&
     input.autonomousStatus === "DISABLED" &&
     input.autonomousLastAction === "MANUAL_STOP"
@@ -151,6 +152,7 @@ export function codingDashboardTaskPresentationStatus(input: {
     ["READY_REVIEW", "ANALYZING"].includes(input.taskStatus) &&
     latestRunStatus === "COMPLETED" &&
     !input.hasActiveRun &&
+    !input.hasActiveJob &&
     !input.hasPendingCriticalApproval &&
     (
       input.autonomousStatus == null ||
