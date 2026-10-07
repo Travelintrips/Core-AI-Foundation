@@ -110,9 +110,12 @@ type ServiceRequest = {
 const NEXT_ACTIONS: Record<string, { label: string; status: string; variant: "primary" | "secondary" | "danger" }[]> = {
   draft:                      [{ label: "Mulai Brief", status: "brief_in_progress", variant: "primary" }],
   brief_in_progress:          [{ label: "Tandai Brief Selesai", status: "brief_completed", variant: "primary" }],
-  brief_completed:            [{ label: "Kirim Penawaran ke Customer", status: "quotation_ready", variant: "primary" }],
-  quoted:                     [{ label: "Penawaran Siap Dikirim", status: "quotation_ready", variant: "primary" }],
-  quotation_ready:            [{ label: "Tandai Menunggu Persetujuan", status: "waiting_customer_approval", variant: "secondary" }],
+  // Quotation states are advanced only by the "Kirim Email Penawaran" action
+  // below. Never let a manual status button claim the customer is waiting when
+  // no quotation/token/email exists.
+  brief_completed:            [],
+  quoted:                     [],
+  quotation_ready:            [],
   waiting_customer_approval:  [],   // customer action
   approved:                   [{ label: "Proses Gate Komersial", status: "waiting_commercial_gate", variant: "primary" }, { label: "Langsung ke Produksi", status: "in_progress", variant: "secondary" }],
   waiting_commercial_gate:    [{ label: "Siap Produksi", status: "ready_to_build", variant: "primary" }],
@@ -203,14 +206,25 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
 
   const generateLink = useMutation({
     mutationFn: () =>
-      apiFetch<{ ok: boolean; quotationUrl: string; validUntil: string; customerEmail: string; emailSent: boolean; emailError?: string }>(
+      apiFetch<{ ok: boolean; quotationUrl: string; validUntil: string; customerEmail: string; requestStatus: string; emailSent: boolean; emailError?: string }>(
         `/api/ai/catalog/requests/${req.id}/issue-quotation`,
         { method: "POST" },
       ),
     onSuccess: (data) => {
       setQuotationLink({ url: data.quotationUrl, validUntil: data.validUntil });
       qc.invalidateQueries({ queryKey: ["service-requests"] });
+      if (data.emailSent) {
+        toast({ title: `Email penawaran terkirim ke ${data.customerEmail}` });
+      } else {
+        toast({
+          title: "Email penawaran belum terkirim",
+          description: data.emailError ?? "SMTP menolak pengiriman. Silakan coba kirim ulang.",
+          variant: "destructive",
+        });
+      }
     },
+    onError: (err: Error) =>
+      toast({ title: "Gagal membuat/kirim penawaran", description: err.message, variant: "destructive" }),
   });
 
   function copyLink() {
@@ -580,14 +594,18 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
         {/* Send / Resend Quotation Email */}
         {snapshot && (
           <div className="shrink-0 border-t border-border px-6 py-4 bg-muted/10 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Email Penawaran</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Email Penawaran</p>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Status akan otomatis menjadi "Menunggu Persetujuan" hanya setelah email diterima oleh SMTP.
+            </p>
             <button
               onClick={() => generateLink.mutate()}
-              disabled={generateLink.isPending}
+              disabled={generateLink.isPending || marginNeeded}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 bg-muted text-foreground hover:bg-muted/80 border border-border"
             >
               {generateLink.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               {quotationLink ? "Kirim Ulang Email Penawaran" : "Kirim Email Penawaran"}
+              {marginNeeded && <span className="ml-1 text-[10px] opacity-70">(approve margin dulu)</span>}
             </button>
 
             {generateLink.isError && (

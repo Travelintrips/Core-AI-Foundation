@@ -621,6 +621,19 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
   const { status, createdProjectId } = req.body as { status?: string; createdProjectId?: string };
   if (!status) { res.status(400).json({ error: "status is required" }); return; }
 
+  // waiting_customer_approval is a delivery state, not an admin-editable
+  // workflow shortcut. It may only be entered by /issue-quotation after the
+  // quotation/token exists and SMTP accepted the message. This prevents the
+  // UI from claiming that the customer is reviewing an offer that was never
+  // actually created or sent.
+  if (status === "waiting_customer_approval") {
+    res.status(409).json({
+      error:
+        "Cannot set waiting_customer_approval manually. Use POST /api/ai/catalog/requests/:id/issue-quotation so the quotation is created and the email is sent first.",
+    });
+    return;
+  }
+
   if (POST_GATE_STATUSES.has(status)) {
     const [existing] = await db
       .select()
@@ -746,6 +759,18 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
 
   if (!serviceReq) { res.status(404).json({ error: "Request not found" }); return; }
 
+  if (!serviceReq.customerEmail?.trim()) {
+    res.status(400).json({ error: "Customer email is required before issuing a quotation" });
+    return;
+  }
+
+  if (serviceReq.marginApprovalRequired && !serviceReq.marginApprovedBy) {
+    res.status(409).json({
+      error: "Margin approval is required before the quotation can be sent to the customer",
+    });
+    return;
+  }
+
   const snapshot = serviceReq.pricingSnapshotJson as Record<string, unknown> | null;
   if (!snapshot) { res.status(400).json({ error: "No pricing snapshot available — quote the service first" }); return; }
 
@@ -822,22 +847,17 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
       await db.insert(aiQuotationItemsTable).values(
         lineItems.map((item, idx) => ({
           quotationId,
-          itemCode: item.code,
+          itemType: "service",
           description: item.label,
           quantity: 1,
           unitPrice: item.amount,
           amount: item.amount,
+          metadataJson: { code: item.code },
           displayOrder: idx,
         })),
       );
     }
   }
-
-  // Advance service request status to quotation_ready
-  await db
-    .update(aiServiceRequestsTable)
-    .set({ status: "quotation_ready", updatedAt: now })
-    .where(eq(aiServiceRequestsTable.id, id));
 
   await logAudit("catalog", "issue_quotation_link", String(id), "ai_service_request", "success", {
     quotationId,
@@ -862,12 +882,22 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
     resourceId: String(quotationId),
   });
 
+  // Only report "waiting for customer approval" after SMTP accepted the
+  // quotation email. If delivery fails, keep the request at quotation_ready so
+  // the admin sees a retryable state instead of a false customer-wait state.
+  const requestStatus = emailResult.ok ? "waiting_customer_approval" : "quotation_ready";
+  await db
+    .update(aiServiceRequestsTable)
+    .set({ status: requestStatus, updatedAt: new Date() })
+    .where(eq(aiServiceRequestsTable.id, id));
+
   res.json({
     ok: true,
     quotationId,
     quotationUrl,
     validUntil: validUntil.toISOString(),
     customerEmail: serviceReq.customerEmail,
+    requestStatus,
     emailSent: emailResult.ok,
     emailError: emailResult.ok ? undefined : emailResult.error,
     note: "Store or share this URL immediately — the plaintext token is not stored and cannot be recovered.",
