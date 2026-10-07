@@ -1,5 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import process from "node:process";
 
 const API_BASE = (process.env.AI_CORE_BASE_URL || "https://aicore.cstlogistic.co.id/api").replace(/\/$/, "");
@@ -10,6 +12,9 @@ const EXEC_TIMEOUT_SECONDS = Math.max(30, Math.min(900, Number(process.env.OPENC
 const MAX_RESULT_CHARS = 20000;
 const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || "/home/node/.openclaw/openclaw.json";
 const OPENCLAW_STATE_MANAGER_ID = (process.env.OPENCLAW_STATE_MANAGER_ID || "ai-core-workers-openclaw").trim();
+const OPENCLAW_STATE_DIR = process.env.OPENCLAW_STATE_DIR || "/home/node/.openclaw";
+const OPENCLAW_STATE_DB_PATH = OPENCLAW_STATE_DIR + "/state/openclaw.sqlite";
+const GATEWAY_LEASE_STALE_MS = 60_000;
 const CONTROL_UI_ALLOWED_ORIGINS = (process.env.OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS || "http://127.0.0.1:28789,http://localhost:28789,http://127.0.0.1:18789,http://localhost:18789")
   .split(",")
   .map((origin) => origin.trim())
@@ -107,6 +112,117 @@ function ensureExternalStateOwnership() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readGatewayLease(db) {
+  return db.prepare(
+    "select owner, expires_at, heartbeat_at, payload_json, updated_at " +
+      "from state_leases where scope = 'gateway-owner' and lease_key = 'global'",
+  ).get();
+}
+
+function parseGatewayLeaseOwner(row) {
+  try {
+    const payload = JSON.parse(String(row?.payload_json || "{}"));
+    return {
+      host: String(payload?.owner?.host || ""),
+      pid: Number(payload?.owner?.pid || 0),
+    };
+  } catch {
+    return { host: "", pid: 0 };
+  }
+}
+
+function localPidIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "ESRCH") return false;
+    throw error;
+  }
+}
+
+function deleteGatewayLeaseIfUnchanged(db, expected) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const latest = readGatewayLease(db);
+    if (
+      !latest ||
+      String(latest.owner) !== String(expected.owner) ||
+      Number(latest.heartbeat_at) !== Number(expected.heartbeat_at) ||
+      Number(latest.updated_at) !== Number(expected.updated_at)
+    ) {
+      db.exec("ROLLBACK");
+      return false;
+    }
+
+    const deleted = db.prepare(
+      "delete from state_leases " +
+        "where scope = 'gateway-owner' and lease_key = 'global' " +
+        "and owner = ? and heartbeat_at = ? and updated_at = ?",
+    ).run(
+      String(expected.owner),
+      Number(expected.heartbeat_at),
+      Number(expected.updated_at),
+    );
+    db.exec("COMMIT");
+    return Number(deleted.changes || 0) === 1;
+  } catch (error) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // Best effort rollback if BEGIN succeeded.
+    }
+    throw error;
+  }
+}
+
+async function reconcileStaleGatewayLease() {
+  const currentHost = hostname();
+
+  while (true) {
+    const db = new DatabaseSync(OPENCLAW_STATE_DB_PATH);
+    try {
+      const row = readGatewayLease(db);
+      if (!row) return;
+
+      const owner = parseGatewayLeaseOwner(row);
+      if (owner.host === currentHost && localPidIsAlive(owner.pid)) {
+        throw new Error(
+          "Gateway lease is still owned by a live local process pid=" + owner.pid,
+        );
+      }
+
+      const heartbeatAgeMs = Math.max(0, Date.now() - Number(row.heartbeat_at || 0));
+      if (owner.host !== currentHost && heartbeatAgeMs < GATEWAY_LEASE_STALE_MS) {
+        const waitMs = Math.min(
+          5_000,
+          Math.max(1_000, GATEWAY_LEASE_STALE_MS - heartbeatAgeMs),
+        );
+        log(
+          "waiting for previous gateway lease heartbeat to become stale" +
+            " ownerHost=" + owner.host +
+            " ageMs=" + heartbeatAgeMs,
+        );
+        await sleep(waitMs);
+        continue;
+      }
+
+      if (deleteGatewayLeaseIfUnchanged(db, row)) {
+        log(
+          "cleared stale gateway lease ownerHost=" +
+            (owner.host || "unknown") +
+            " ownerPid=" +
+            String(owner.pid || "unknown"),
+        );
+      }
+      return;
+    } finally {
+      db.close();
+    }
+  }
 }
 
 async function aiCoreRequest(path, options = {}) {
@@ -362,6 +478,7 @@ process.on("SIGINT", () => stop("SIGINT"));
 
 ensureGatewayControlUiOrigins();
 ensureExternalStateOwnership();
+await reconcileStaleGatewayLease();
 
 gateway = spawn(
   "node",
