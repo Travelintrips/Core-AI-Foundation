@@ -3563,6 +3563,19 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       return;
     }
 
+    const directOpenClawPcCommand =
+      !parsed.data.image
+        ? parseDirectOpenClawPcCommand(safeMessage)
+        : null;
+    if (directOpenClawPcCommand) {
+      const result = await startExternalAgentWork(
+        { ...parsed.data, message: safeMessage, context: safeContext },
+        OPENCLAW_AGENT_CLIENT_ID,
+      );
+      writeBufferedChatStream(res, result);
+      return;
+    }
+
     if (parsed.data.mode === "auto") {
       const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
       const effectiveInput = {
@@ -3694,8 +3707,14 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       !parsed.data.image
         ? parseDirectConversationEventRequest(rawInput.message)
         : null;
+    const directOpenClawPcCommand =
+      !parsed.data.image
+        ? parseDirectOpenClawPcCommand(rawInput.message)
+        : null;
     const result =
-      directConversationEvent
+      directOpenClawPcCommand
+        ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)
+        : directConversationEvent
         ? await executeDirectConversationEvent(directConversationEvent)
         : effectiveInput.mode !== "agent" &&
       !parsed.data.image &&
