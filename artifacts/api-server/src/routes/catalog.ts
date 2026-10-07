@@ -13,7 +13,7 @@
  * GET        /ai/catalog/analytics
  */
 import { Router } from "express";
-import { eq, desc, and, ne, inArray, or, asc } from "drizzle-orm";
+import { eq, desc, and, ne, inArray, or, asc, like } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -778,14 +778,21 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
       .where(eq(aiQuotationsTable.id, existing.id));
     quotationId = existing.id;
   } else {
-    // Sequential quotation code: QT-YYYY-NNNN
+    // Sequential quotation code: QT-YYYY-NNNN.
+    // Never derive the sequence from the table id. IDs can be restored,
+    // imported, or inserted out of order; production already contains that
+    // shape, which caused id=11 to generate QT-2026-0012 even though
+    // QT-2026-0012 already existed. Read the greatest quotation code for the
+    // current year instead.
     const year = now.getFullYear();
-    const countRow = await db
-      .select({ cnt: aiQuotationsTable.id })
+    const [lastQuotation] = await db
+      .select({ quotationCode: aiQuotationsTable.quotationCode })
       .from(aiQuotationsTable)
-      .orderBy(desc(aiQuotationsTable.id))
+      .where(like(aiQuotationsTable.quotationCode, `QT-${year}-%`))
+      .orderBy(desc(aiQuotationsTable.quotationCode))
       .limit(1);
-    const seq = (countRow[0]?.cnt ?? 0) + 1;
+    const lastSeq = Number(lastQuotation?.quotationCode?.split("-").at(-1) ?? 0);
+    const seq = Number.isFinite(lastSeq) ? lastSeq + 1 : 1;
     const quotationCode = `QT-${year}-${String(seq).padStart(4, "0")}`;
 
     const total = Number(serviceReq.total) || 0;
