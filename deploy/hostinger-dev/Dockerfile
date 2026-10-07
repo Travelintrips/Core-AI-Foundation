@@ -3,13 +3,10 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /workspace
 ENV CI=true
 ARG GITHUB_SHA=unknown
-ARG VITE_SUPABASE_URL_DEV
-ARG VITE_SUPABASE_ANON_KEY_DEV
 ENV GITHUB_SHA=$GITHUB_SHA \
     APP_ENV=development \
     NODE_ENV=development \
-    VITE_SUPABASE_URL_DEV=$VITE_SUPABASE_URL_DEV \
-    VITE_SUPABASE_ANON_KEY_DEV=$VITE_SUPABASE_ANON_KEY_DEV
+    PORT=3000
 
 RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
