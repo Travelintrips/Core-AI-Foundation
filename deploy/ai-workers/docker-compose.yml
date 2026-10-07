@@ -208,6 +208,7 @@ services:
     image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-2026.9.8}
     restart: unless-stopped
     init: true
+    stop_grace_period: 330s
     mem_limit: ${OPENCLAW_MEMORY_LIMIT:-1536m}
     memswap_limit: ${OPENCLAW_MEMORY_SWAP_LIMIT:-2g}
     environment:
@@ -227,6 +228,10 @@ services:
       AI_CORE_SCOPED_AGENT_TOKEN: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
       AI_CORE_AGENT_WORK_POLL_MS: ${AI_CORE_AGENT_WORK_POLL_MS:-5000}
       OPENCLAW_WORK_TIMEOUT_SECONDS: ${OPENCLAW_WORK_TIMEOUT_SECONDS:-180}
+      OPENCLAW_SUPERVISOR_MODE: ${OPENCLAW_SUPERVISOR_MODE:-external}
+      OPENCLAW_SERVICE_REPAIR_POLICY: ${OPENCLAW_SERVICE_REPAIR_POLICY:-external}
+      OPENCLAW_NO_AUTO_UPDATE: ${OPENCLAW_NO_AUTO_UPDATE:-1}
+      OPENCLAW_STATE_MANAGER_ID: ${OPENCLAW_STATE_MANAGER_ID:-ai-core-workers-openclaw}
       CUSTOM_API_KEY: ${AI_CORE_SCOPED_AGENT_TOKEN:-}
       TZ: ${TZ:-Asia/Jakarta}
     volumes:
