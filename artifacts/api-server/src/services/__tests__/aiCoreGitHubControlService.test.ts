@@ -19,6 +19,14 @@ describe("AI Core no-worker GitHub control", () => {
       "Deploy operasional Core AI Foundation ke Hostinger untuk exact commit 34e9b7ab317458894555c82205f5fe155189babe. Jangan scan repo dan jangan ubah kode.",
       "GITHUB_HOSTINGER_NODEJS_DEPLOY",
     ],
+    [
+      "Perbaiki website coding.cstlogistic.co.id karena masih tampil halaman default Hostinger dan buat dashboard live.",
+      "GITHUB_HOSTINGER_NODEJS_DEPLOY",
+    ],
+    [
+      "Benahi domain aicoding.travelintrips.co.id supaya dashboard coding tampil live.",
+      "GITHUB_HOSTINGER_NODEJS_DEPLOY",
+    ],
     ["cek PR #721", "GITHUB_PR_STATUS"],
     ["merge PR #721", "GITHUB_PR_MERGE"],
   ])("detects bounded operation %s", (message, operation) => {
