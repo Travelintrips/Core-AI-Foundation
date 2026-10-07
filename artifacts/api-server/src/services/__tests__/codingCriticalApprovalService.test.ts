@@ -17,6 +17,7 @@ vi.mock("../codingControlBridgeSchemaService.js", () => ({
 }));
 
 import {
+  isHumanCriticalApprovalActionType,
   parseCriticalApprovalCommand,
 } from "../codingCriticalApprovalService.js";
 
@@ -42,5 +43,18 @@ describe("critical coding approval command parser", () => {
     "APPROVE AbCdEfGhIjKl extra",
   ])("rejects malformed approval input: %s", (text) => {
     expect(parseCriticalApprovalCommand(text)).toBeNull();
+  });
+});
+
+
+describe("critical coding approval policy", () => {
+  it("reserves human approval for destructive database/security actions", () => {
+    expect(isHumanCriticalApprovalActionType("PRODUCTION_DB_MIGRATION")).toBe(true);
+    expect(isHumanCriticalApprovalActionType("DESTRUCTIVE_DB_CHANGE")).toBe(true);
+    expect(isHumanCriticalApprovalActionType("SECURITY_CHANGE")).toBe(true);
+    expect(isHumanCriticalApprovalActionType("MERGE_PR")).toBe(false);
+    expect(isHumanCriticalApprovalActionType("PRODUCTION_DEPLOY")).toBe(false);
+    expect(isHumanCriticalApprovalActionType("PRODUCTION_SERVICE_RESTART")).toBe(false);
+    expect(isHumanCriticalApprovalActionType("WORKSTREAM_AI_HANDOFF")).toBe(false);
   });
 });
