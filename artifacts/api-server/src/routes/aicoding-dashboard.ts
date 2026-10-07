@@ -206,7 +206,14 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
           FROM ai_platform.ai_coding_critical_approvals AS approval
           WHERE approval.task_id = t.id
             AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
-        ) AS has_pending_critical_approval
+        ) AS has_pending_critical_approval,
+        (
+          SELECT w.status
+          FROM ai_platform.ai_coding_workstreams AS w
+          WHERE w.child_task_id = t.id
+          ORDER BY w.updated_at DESC
+          LIMIT 1
+        ) AS workstream_status
       FROM recent_tasks rt
       JOIN ai_platform.ai_coding_tasks t ON t.id = rt.id
       LEFT JOIN ai_platform.ai_coding_autonomous_tasks a
@@ -226,6 +233,7 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
         autonomous_last_action?: string | null;
         has_active_run?: boolean;
         has_pending_critical_approval?: boolean;
+        workstream_status?: string | null;
       };
       return [
         item.task_id ?? "",
@@ -238,6 +246,7 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
           autonomousLastAction: item.autonomous_last_action ?? null,
           hasActiveRun: item.has_active_run === true,
           hasPendingCriticalApproval: item.has_pending_critical_approval === true,
+          workstreamStatus: item.workstream_status ?? null,
         },
       ] as const;
     }),
@@ -256,6 +265,7 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
       hasActiveRun: presentation?.hasActiveRun ?? run?.status === "RUNNING",
       hasPendingCriticalApproval:
         presentation?.hasPendingCriticalApproval ?? false,
+      workstreamStatus: presentation?.workstreamStatus ?? null,
     });
 
     return {

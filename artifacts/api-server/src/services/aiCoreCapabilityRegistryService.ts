@@ -112,7 +112,7 @@ function baseResources(env: NodeJS.ProcessEnv): AiCoreCapabilityResource[] {
         "workstream-delegation",
       ],
       mutatingActions: ["patch", "commit", "push"],
-      approvalRequiredActions: ["merge", "production-deploy"],
+      approvalRequiredActions: [],
       details: {
         controlPlane: "coding-orchestrator",
         readOnlyWorker: true,
@@ -201,7 +201,7 @@ async function externalAgentResources(): Promise<AiCoreCapabilityResource[]> {
       mutatingActions: Object.entries(agent.permissions)
         .filter(([, allowed]) => allowed)
         .map(([permission]) => permission),
-      approvalRequiredActions: ["productionDeploy"],
+      approvalRequiredActions: [],
       details: {
         role: agent.role,
         reportedHealth: agent.reportedHealth,
@@ -234,7 +234,7 @@ async function temporalResource(): Promise<AiCoreCapabilityResource> {
       state: availability.state === "ACTIVE" ? "available" : "unavailable",
       actions: ["task-orchestration", "workflow-recovery", "worker-coordination"],
       mutatingActions: ["task-orchestration"],
-      approvalRequiredActions: ["production-deploy", "merge"],
+      approvalRequiredActions: [],
       details: {
         presenceState: availability.state,
         lastSeenAt: availability.lastSeenAt,
@@ -250,7 +250,7 @@ async function temporalResource(): Promise<AiCoreCapabilityResource> {
       state: "unavailable",
       actions: ["task-orchestration", "workflow-recovery", "worker-coordination"],
       mutatingActions: ["task-orchestration"],
-      approvalRequiredActions: ["production-deploy", "merge"],
+      approvalRequiredActions: [],
     };
   }
 }

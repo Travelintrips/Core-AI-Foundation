@@ -5,7 +5,26 @@ export function codingTaskPresentationStatus(input: {
   autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
   hasPendingCriticalApproval?: boolean;
+  workstreamStatus?: string | null;
 }): string {
+  const workstreamStatus = input.workstreamStatus?.toUpperCase() ?? null;
+
+  // Multi-worker child rows are execution shards. REVIEW_REQUIRED means
+  // automated QC/reconciliation is pending; it is not a human-review gate.
+  if (workstreamStatus === "COMPLETED") return "COMPLETED";
+  if (workstreamStatus === "FAILED") return "FAILED";
+  if (workstreamStatus === "CANCELLED") return "CANCELLED";
+  if (workstreamStatus === "BLOCKED") return "BLOCKED";
+  if (workstreamStatus === "REVIEW_REQUIRED") {
+    return input.hasPendingCriticalApproval ? "READY_REVIEW" : "TESTING";
+  }
+  if (workstreamStatus === "CLAIMED" || workstreamStatus === "RUNNING") {
+    return "CODING";
+  }
+  if (workstreamStatus === "PENDING" || workstreamStatus === "READY") {
+    return "QUEUED";
+  }
+
   // A live run/recovery always wins over stale persisted terminal state.
   if (input.hasActiveRun) {
     return "ANALYZING";
@@ -28,13 +47,14 @@ export function codingTaskPresentationStatus(input: {
     return "COMPLETED";
   }
 
-  // Human review is reserved for an explicit critical approval gate. A
-  // technical runtime blocker must never masquerade as a review request.
-  if (
-    input.autonomousStatus === "APPROVAL_REQUIRED" ||
-    input.hasPendingCriticalApproval
-  ) {
+  // Human review is reserved for a live critical-approval row. A stale
+  // autonomous APPROVAL_REQUIRED marker by itself must never summon a human.
+  if (input.hasPendingCriticalApproval) {
     return "READY_REVIEW";
+  }
+
+  if (input.autonomousStatus === "APPROVAL_REQUIRED") {
+    return "BLOCKED";
   }
 
   // A recoverable technical blocker is not a terminal task failure. Keep it
@@ -81,6 +101,7 @@ export function codingDashboardTaskPresentationStatus(input: {
   autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
   hasPendingCriticalApproval?: boolean;
+  workstreamStatus?: string | null;
 }): string {
   const taskNumber = input.taskNumber?.trim() ?? "";
   const latestRunStatus = input.latestRunStatus?.toUpperCase() ?? null;
@@ -96,10 +117,15 @@ export function codingDashboardTaskPresentationStatus(input: {
     return "CANCELLED";
   }
 
-  // Multi-worker child rows are execution shards, not independent human-review
-  // gates. Once their latest execution is completed and no critical approval or
-  // active recovery remains, show them as completed even if legacy persistence
-  // still says READY_REVIEW.
+  // A live workstream binding is authoritative for multi-worker children.
+  // In particular REVIEW_REQUIRED is automated QC and must not be hidden by a
+  // legacy completed child run.
+  if (input.workstreamStatus) {
+    return codingTaskPresentationStatus(input);
+  }
+
+  // Detached legacy Multi-Worker rows can still be normalized from their
+  // completed child run when no live workstream binding remains.
   if (
     taskNumber.startsWith("MW-") &&
     input.taskStatus === "READY_REVIEW" &&

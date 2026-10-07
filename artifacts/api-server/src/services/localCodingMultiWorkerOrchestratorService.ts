@@ -641,8 +641,8 @@ export async function markCodingWorkstreamReviewRequired(
       await tx
         .update(aiCodingTasksTable)
         .set({
-          status: "READY_REVIEW",
-          resultSummary: "Repository analysis completed; workstream is ready for review.",
+          status: "TESTING",
+          resultSummary: "Repository analysis completed; automated workstream QC is running.",
         })
         .where(eq(aiCodingTasksTable.id, updated.childTaskId));
     }
@@ -696,7 +696,7 @@ export async function completeReviewedCodingWorkstream(
     if (aiExecution?.status === "CANDIDATE_READY") {
       if (aiExecution.reviewStatus !== "APPROVED") {
         throw new LocalCodingMultiWorkerError(
-          "Workstream AI candidate must pass REVIEW_AI_PATCH approval before completion.",
+          "Workstream AI candidate must pass the automated REVIEW_AI_PATCH gate before completion.",
           "NOT_READY",
           { nextAction: "REVIEW_AI_PATCH" },
         );

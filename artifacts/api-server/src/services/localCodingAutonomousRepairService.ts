@@ -12,7 +12,6 @@ import {
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
-import { approvePlanAndStartCoding } from "./codingAgentService.js";
 import {
   approveCodingTaskGraph,
   getLatestCodingTaskGraph,
@@ -750,7 +749,7 @@ async function processTaskGraph(
           return {
             handled: true,
             blocker:
-              `Workstream ${review.key} requires human review after bounded QC revisions were exhausted: ${manualReviewReason}`,
+              `Workstream ${review.key} exhausted bounded automated QC revisions and is blocked for alternate recovery: ${manualReviewReason}`,
           };
         }
 
@@ -1383,10 +1382,20 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       }
 
       case "APPROVE_PLAN":
+        // Legacy plan-approval checkpoints are migrated onto the current
+        // autonomous pipeline. Re-analyzing from HEAD is safer than executing
+        // the removed manual Coding Agent path.
         await reserveCycle();
-        await approvePlanAndStartCoding(taskId);
-        await setState(taskId, "WAITING", "AUTO_APPROVE_PLAN");
-        return { taskId, status: "WAITING", action: "AUTO_APPROVE_PLAN" };
+        await restartRepositoryAnalysisAfterTransientFailure(
+          taskId,
+          "Legacy plan approval checkpoint migrated. Re-running Repository Analyzer for autonomous continuation.",
+        );
+        await setState(taskId, "WAITING", "MIGRATE_LEGACY_PLAN_GATE", null);
+        return {
+          taskId,
+          status: "WAITING",
+          action: "MIGRATE_LEGACY_PLAN_GATE",
+        };
 
       case "REVIEW_LOCAL_PATCH":
         await reserveCycle();
@@ -1456,6 +1465,35 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
           status: "WAITING",
           action: "AUTO_MERGE_VERIFIED_PR",
         };
+
+      case "AI_EXECUTION_RUNNING": {
+        // A live run/job is handled before the switch. Reaching this branch
+        // means a legacy/stale orchestration checkpoint survived after its
+        // execution disappeared. Re-analyze from current HEAD instead of
+        // converting the stale machine checkpoint into human review.
+        await reserveCycle();
+        await restartRepositoryAnalysisAfterTransientFailure(
+          taskId,
+          "Stale AI execution checkpoint recovered. Re-running Repository Analyzer from the current repository state.",
+        );
+        await setState(taskId, "WAITING", "RECOVER_STALE_AI_EXECUTION", null);
+        await report(
+          taskId,
+          "CHECKPOINT",
+          "AI execution checkpoint lama ditemukan tanpa run/job aktif. AI Core otomatis menjalankan ulang analisis dari HEAD terbaru.",
+          {
+            source: "autonomous-repair-loop",
+            previousNextAction: "AI_EXECUTION_RUNNING",
+            recoverable: true,
+            humanReviewRequired: false,
+          },
+        ).catch(() => undefined);
+        return {
+          taskId,
+          status: "WAITING",
+          action: "RECOVER_STALE_AI_EXECUTION",
+        };
+      }
 
       default: {
         const message =
@@ -1986,7 +2024,7 @@ export function readyReviewAutonomousRecoveryDecision(input: {
   const recoverableTechnicalBlocker =
     lastAction === "WAIT_RESERVATION_CONFLICT" ||
     (lastAction === "UNSUPPORTED_NEXT_ACTION" &&
-      /nextAction=REVIEW_CONFLICT/i.test(lastError)) ||
+      /nextAction=(?:REVIEW_CONFLICT|AI_EXECUTION_RUNNING)/i.test(lastError)) ||
     (lastAction === "TASK_GRAPH_BLOCKER" &&
       /EXPIRED_HANDOFF|Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT|Exact replacement expected|STALE_CONTEXT|stale claim|repository clone failed/i.test(
         lastError,
@@ -2077,6 +2115,7 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
     "REVIEW_PR",
     "APPROVE_MERGE",
     "REVIEW_CONFLICT",
+    "AI_EXECUTION_RUNNING",
   ]);
 
   for (const candidate of candidates) {

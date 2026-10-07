@@ -35,7 +35,7 @@ export function workstreamChildLifecycleDisposition(
   resultJson: unknown,
 ): {
   runStatus: "COMPLETED" | "FAILED";
-  taskStatus: "READY_REVIEW" | "COMPLETED" | "FAILED";
+  taskStatus: "TESTING" | "COMPLETED" | "FAILED";
   aiFailure: boolean;
 } {
   const result = record(resultJson);
@@ -65,7 +65,7 @@ export function workstreamChildLifecycleDisposition(
   if (workstreamStatus === "REVIEW_REQUIRED") {
     return {
       runStatus: "COMPLETED",
-      taskStatus: "READY_REVIEW",
+      taskStatus: "TESTING",
       aiFailure: false,
     };
   }

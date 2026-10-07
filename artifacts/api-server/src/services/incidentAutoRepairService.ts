@@ -4,6 +4,7 @@ import { aiCodingRunsTable, aiCodingTasksTable, aiIncidentsTable, db } from "@wo
 import { startCodingOrchestration } from "./codingOrchestratorService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { logger } from "../lib/logger.js";
+import { codingTaskPresentationStatus } from "./codingTaskPresentationService.js";
 
 export type IncidentSource = "github" | "supabase" | "hostinger" | "system";
 export type IncidentRisk = "SAFE" | "GUARDED" | "OWNER_APPROVAL";
@@ -268,7 +269,41 @@ export async function syncIncidentRepairStatuses(limit = 50) {
       .limit(1);
     if (!task) continue;
 
-    if (task.status === "FAILED") {
+    const lifecycle = await db.execute(sql`
+      SELECT
+        a.status AS autonomous_status,
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_runs AS active_run
+          WHERE active_run.task_id = ${task.id}::uuid
+            AND active_run.status = 'RUNNING'
+        ) AS has_active_run,
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_critical_approvals AS approval
+          WHERE approval.task_id = ${task.id}::uuid
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        ) AS has_pending_critical_approval
+      FROM ai_platform.ai_coding_tasks AS t
+      LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a
+        ON a.task_id = t.id
+       AND a.enabled = TRUE
+      WHERE t.id = ${task.id}::uuid
+      LIMIT 1
+    `);
+    const row = lifecycle.rows?.[0] as {
+      autonomous_status?: string | null;
+      has_active_run?: boolean;
+      has_pending_critical_approval?: boolean;
+    } | undefined;
+    const presentedStatus = codingTaskPresentationStatus({
+      taskStatus: task.status,
+      autonomousStatus: row?.autonomous_status ?? null,
+      hasActiveRun: row?.has_active_run === true,
+      hasPendingCriticalApproval: row?.has_pending_critical_approval === true,
+    });
+
+    if (presentedStatus === "FAILED") {
       const metadata = (incident.metadataJson as Record<string, unknown> | null) ?? {};
       const previousFailures = Number(metadata.autoRepairTaskFailures ?? 0);
       const disposition = incidentRepairFailureDisposition(previousFailures);
@@ -304,7 +339,18 @@ export async function syncIncidentRepairStatuses(limit = 50) {
       continue;
     }
 
-    if (task.status === "READY_REVIEW" && incident.status !== "VERIFYING") {
+    if (presentedStatus === "READY_REVIEW") {
+      if (incident.status !== "BLOCKED") {
+        await db.update(aiIncidentsTable).set({
+          status: "BLOCKED",
+          lastError: "Critical owner approval is required before the repair can continue.",
+        }).where(eq(aiIncidentsTable.id, incident.id));
+        updated += 1;
+      }
+      continue;
+    }
+
+    if (presentedStatus === "COMPLETED" && incident.status !== "VERIFYING") {
       await db.update(aiIncidentsTable).set({
         status: "VERIFYING",
         lastError: null,

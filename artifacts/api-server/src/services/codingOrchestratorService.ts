@@ -19,8 +19,6 @@ import {
   getAutonomousCodingTaskStatus,
 } from "./localCodingAutonomousRepairService.js";
 import { logAudit } from "./aiAuditService.js";
-import { executeAI, type ExecutionOutput } from "./aiExecutionService.js";
-import { getFallbackModels, routeToModel } from "./aiModelRouter.js";
 import { enqueue } from "./queueManagerService.js";
 import {
   executeRepositoryAnalyzerJobOnDemand,
@@ -52,26 +50,6 @@ interface CodingStage {
   detail?: string;
 }
 
-export interface CodingImplementationPlan {
-  summary: string;
-  objectives: string[];
-  filesToInspect: string[];
-  implementationSteps: string[];
-  verificationSteps: string[];
-  risks: string[];
-  approvalRequired: boolean;
-}
-
-interface PlannerMetadata {
-  modelUsed: string;
-  provider: string;
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-  latencyMs: number;
-  parsedAsJson: boolean;
-}
-
 interface CodingOrchestrationInput {
   task: AiCodingTask;
   run: AiCodingRun;
@@ -82,14 +60,6 @@ const REPOSITORY_ANALYZER_CLAIM_FAILOVER_MS = 15_000;
 const WAIT_REPOSITORY_ANALYZER_SLOT = "WAIT_REPOSITORY_ANALYZER_SLOT";
 let orchestrationRecoveryTimer: NodeJS.Timeout | null = null;
 let orchestrationRecoveryRunning = false;
-
-const PLANNER_SYSTEM_PROMPT = [
-  "You are the Planning Agent inside a software-engineering orchestrator.",
-  "Create a safe implementation plan from the repository analysis and user instruction.",
-  "Do not claim to have edited files. Do not execute code. Do not invent repository files.",
-  "Return JSON only with keys: summary, objectives, filesToInspect, implementationSteps, verificationSteps, risks.",
-  "All list values must be arrays of strings.",
-].join(" ");
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -118,9 +88,9 @@ function initStages(): CodingStage[] {
     },
     {
       id: "review",
-      label: "Review",
+      label: "Automated QC",
       status: "BLOCKED",
-      detail: "Review is required before a local patch can be applied to a repository branch.",
+      detail: "Automated QC advances safe patches; human approval is reserved for explicit critical actions.",
     },
   ];
 }
@@ -199,166 +169,6 @@ export function shouldPreserveAdvancedAiGate(
   } catch {
     return false;
   }
-}
-
-function extractJsonObject(content: string): Record<string, unknown> | null {
-  const cleaned = content
-    .trim()
-    .replace(/^\`\`\`(?:json)?\s*/i, "")
-    .replace(/\s*\`\`\`$/i, "");
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(cleaned.slice(start, end + 1));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    : [];
-}
-
-function normalizePlan(
-  rawContent: string,
-  analysis: Record<string, unknown>,
-): { plan: CodingImplementationPlan; parsedAsJson: boolean } {
-  const parsed = extractJsonObject(rawContent);
-  const recommendedChanges = stringArray(analysis.recommendedChanges);
-  const relevantFiles = stringArray(analysis.relevantFiles);
-  const analysisSummary =
-    typeof analysis.summary === "string"
-      ? analysis.summary
-      : "Repository analysis completed.";
-
-  if (!parsed) {
-    return {
-      parsedAsJson: false,
-      plan: {
-        summary: rawContent.trim() || analysisSummary,
-        objectives: recommendedChanges.length > 0
-          ? recommendedChanges
-          : ["Review the repository analysis and implement the requested change safely."],
-        filesToInspect: relevantFiles,
-        implementationSteps: recommendedChanges,
-        verificationSteps: [
-          "Run repository typecheck or compile validation.",
-          "Run the relevant automated test suite.",
-          "Review the resulting diff before commit or deployment.",
-        ],
-        risks: [
-          "Planner response was not strict JSON; implementation requires human review before write access.",
-        ],
-        approvalRequired: true,
-      },
-    };
-  }
-
-  return {
-    parsedAsJson: true,
-    plan: {
-      summary:
-        typeof parsed.summary === "string" && parsed.summary.trim()
-          ? parsed.summary.trim()
-          : analysisSummary,
-      objectives: stringArray(parsed.objectives),
-      filesToInspect: stringArray(parsed.filesToInspect),
-      implementationSteps: stringArray(parsed.implementationSteps),
-      verificationSteps: stringArray(parsed.verificationSteps),
-      risks: stringArray(parsed.risks),
-      approvalRequired: true,
-    },
-  };
-}
-
-async function executePlanner(
-  task: AiCodingTask,
-  analysis: Record<string, unknown>,
-): Promise<{ plan: CodingImplementationPlan; metadata: PlannerMetadata }> {
-  const compactAnalysis = {
-    summary: analysis.summary,
-    relevantFiles: analysis.relevantFiles,
-    findings: analysis.findings,
-    recommendedChanges: analysis.recommendedChanges,
-  };
-
-  const prompt = [
-    "Create an implementation plan for this coding task.",
-    `Repository: ${task.repository}`,
-    `Branch: ${task.branch}`,
-    `Instruction: ${task.instruction}`,
-    "Repository analysis:",
-    stringify(compactAnalysis),
-  ].join("\n\n");
-
-  const routed = await routeToModel(
-    `code implementation plan repository ${task.repository}: ${task.instruction}`,
-  );
-  const supportsCodingText = (candidate: {
-    model: { capabilities?: string[] | null };
-    provider: { slug: string };
-  }) => {
-    const capabilities = candidate.model.capabilities ?? [];
-    return (
-      candidate.provider.slug !== "replicate" &&
-      (capabilities.includes("code") || capabilities.includes("text"))
-    );
-  };
-
-  if (!routed || !supportsCodingText(routed)) {
-    throw new Error("Planning Agent could not find an active text/code model with a configured provider key");
-  }
-
-  const candidates = [
-    routed,
-    ...(await getFallbackModels(routed.model.id)).filter(supportsCodingText),
-  ];
-
-  let lastError: unknown = null;
-  for (const candidate of candidates) {
-    try {
-      const output: ExecutionOutput = await executeAI({
-        prompt,
-        systemPrompt: PLANNER_SYSTEM_PROMPT,
-        model: candidate.model,
-        provider: candidate.provider,
-        temperature: 0.2,
-        maxTokens: 1800,
-        observability: {
-          agentName: "Coding Planning Agent",
-          requestType: "code",
-          createdBy: "coding-orchestrator",
-        },
-      });
-      const normalized = normalizePlan(output.content, analysis);
-      return {
-        plan: normalized.plan,
-        metadata: {
-          modelUsed: candidate.model.modelId,
-          provider: candidate.provider.slug,
-          promptTokens: output.promptTokens,
-          completionTokens: output.completionTokens,
-          totalTokens: output.tokensUsed,
-          latencyMs: output.latencyMs,
-          parsedAsJson: normalized.parsedAsJson,
-        },
-      };
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw new Error(
-    `Planning Agent failed across all available models: ${
-      lastError instanceof Error ? lastError.message : String(lastError)
-    }`,
-  );
 }
 
 async function isManualStopRequested(taskId: string): Promise<boolean> {
@@ -454,12 +264,12 @@ async function completeLocalAnalysis(
     nextAction === "REVIEW_CONFLICT"
       ? `${analysisSummary} Coding stopped before worker execution because the predicted change set overlaps an active task. QC can sequence, revise, or rebase the conflicting task; no AI/LLM worker was invoked.`
       : nextAction === "REVIEW_LOCAL_PATCH"
-        ? `${analysisSummary} A deterministic local patch is ready for review; repository scripts were not executed. No AI/LLM was invoked.`
+        ? `${analysisSummary} A deterministic local patch is ready for automated QC; repository scripts were not executed. No AI/LLM was invoked.`
         : nextAction === "APPROVE_TASK_GRAPH"
         ? `${analysisSummary} The deterministic executor declined to guess, so the bounded AI planner generated a PREPARED task graph. The autonomous controller will approve and dispatch the graph automatically when policy checks pass; no patch, commit, push, or merge was performed yet.`
         : nextAction === "AI_REQUIRED"
           ? `${analysisSummary} The deterministic executor declined to guess; AI reasoning is required for the remaining semantic work. No AI/LLM was invoked.`
-          : `${analysisSummary} Local context is ready for review. No AI/LLM was invoked.`;
+          : `${analysisSummary} Local context is ready for automated continuation. No AI/LLM was invoked.`;
 
   const result: Record<string, unknown> = {
     ...analysis,
@@ -869,7 +679,11 @@ export async function continueCodingOrchestration(
 
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
-    if (localPlan?.status === "AI_REQUIRED") {
+    const shouldAutoAdvance =
+      localExecution?.status === "APPLIED" ||
+      localPlan?.status === "AI_REQUIRED";
+
+    if (shouldAutoAdvance) {
       let autonomousState:
         | Awaited<ReturnType<typeof getAutonomousCodingTaskStatus>>
         | null;
@@ -921,7 +735,7 @@ export async function continueCodingOrchestration(
       },
       aiEscalation
         ? "[coding-orchestrator] AI_REQUIRED escalated to a PREPARED task graph"
-        : "[coding-orchestrator] Local Coding Engine ready for review without AI/LLM",
+        : "[coding-orchestrator] Local Coding Engine ready for automated continuation",
     );
   } catch (error) {
     if (await isManualStopRequested(input.task.id)) {

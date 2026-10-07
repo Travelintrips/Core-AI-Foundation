@@ -6,6 +6,30 @@ import {
 } from "../codingTaskPresentationService.js";
 
 describe("coding task presentation status", () => {
+  it("maps workstream lifecycle to operational states without fake human review", () => {
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "REVIEW_REQUIRED",
+      hasPendingCriticalApproval: false,
+    })).toBe("TESTING");
+
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "REVIEW_REQUIRED",
+      hasPendingCriticalApproval: true,
+    })).toBe("READY_REVIEW");
+
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "RUNNING",
+    })).toBe("CODING");
+
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "COMPLETED",
+    })).toBe("COMPLETED");
+  });
+
   it("shows explicit manual stops as CANCELLED on the operations dashboard", () => {
     expect(
       codingDashboardTaskPresentationStatus({
@@ -32,6 +56,20 @@ describe("coding task presentation status", () => {
         hasPendingCriticalApproval: false,
       }),
     ).toBe("BLOCKED");
+  });
+
+  it("uses live workstream status before detached child-run heuristics", () => {
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "MW-CWS-12345678-V1-WS-001-A1",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+        workstreamStatus: "REVIEW_REQUIRED",
+      }),
+    ).toBe("TESTING");
   });
 
   it("shows completed Multi-Worker child shards as COMPLETED when no critical gate remains", () => {
@@ -91,13 +129,23 @@ describe("coding task presentation status", () => {
     }
   });
 
-  it("shows READY_REVIEW only for explicit approval-required state", () => {
+  it("shows READY_REVIEW only when a live critical approval exists", () => {
     for (const taskStatus of ["READY_REVIEW", "FAILED", "ANALYZING"]) {
       expect(
         codingTaskPresentationStatus({
           taskStatus,
           autonomousStatus: "APPROVAL_REQUIRED",
           hasActiveRun: false,
+          hasPendingCriticalApproval: false,
+        }),
+      ).toBe("BLOCKED");
+
+      expect(
+        codingTaskPresentationStatus({
+          taskStatus,
+          autonomousStatus: "APPROVAL_REQUIRED",
+          hasActiveRun: false,
+          hasPendingCriticalApproval: true,
         }),
       ).toBe("READY_REVIEW");
     }
