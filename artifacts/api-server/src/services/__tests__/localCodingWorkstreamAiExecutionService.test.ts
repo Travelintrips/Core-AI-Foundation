@@ -269,6 +269,18 @@ describe("workstream AI isolated branch binding", () => {
 });
 
 
+describe("approved workstream candidate porcelain status preservation", () => {
+  it("preserves the leading XY status byte when reading porcelain -z output", () => {
+    const source = readFileSync(
+      new URL("../localCodingWorkstreamAiExecutionService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("return preserveOutput ? stdout : stdout.trim()");
+    expect(source).toContain('["status", "--porcelain=v1", "-z", "--untracked-files=normal"]');
+    expect(source.match(/30_000,\n\s+true,/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("approved workstream candidate materialization branch binding", () => {
   it("uses the authorized workstream branch rather than the moving parent branch", () => {
     const parentBranch = "main";
