@@ -104,16 +104,23 @@ export function requestedWorkflowDispatch(message: string): {
     message.match(/\bref\s*[:=]\s*([A-Za-z0-9._/-]+)\b/i)?.[1] ??
     "main";
 
+  const sanitizeInputValue = (value: string): string =>
+    value
+      .trim()
+      .replace(/[.!?]+$/g, "")
+      .replace(/^["'`]+|["'`]+$/g, "");
+
   const inputs: Record<string, string> = {};
   for (const match of message.matchAll(/\binput\.([A-Za-z_][A-Za-z0-9_-]{0,63})\s*=\s*([^\s,;]+)/gi)) {
     const key = match[1];
-    const value = match[2];
+    const value = match[2] ? sanitizeInputValue(match[2]) : "";
     if (key && value) inputs[key] = value;
   }
 
   for (const key of ["conversation_id", "delay_seconds"]) {
     const match = message.match(new RegExp(`\\b${key}\\s*=\\s*([^\\s,;]+)`, "i"));
-    if (match?.[1]) inputs[key] = match[1];
+    const value = match?.[1] ? sanitizeInputValue(match[1]) : "";
+    if (value) inputs[key] = value;
   }
 
   return { workflow, ref, inputs };
