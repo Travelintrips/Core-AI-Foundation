@@ -109,7 +109,7 @@ jobs:
             {env_vars: (
               [
                 {key:"APP_ENV",value:"development"},
-                {key:"NODE_ENV",value:"development"},
+                {key:"NODE_ENV",value:"production"},
                 {key:"SERVE_FRONTEND",value:"true"},
                 {key:"PORT",value:"3000"},
                 {key:"BASE_PATH",value:"/"},
