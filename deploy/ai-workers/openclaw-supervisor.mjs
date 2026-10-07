@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import process from "node:process";
 
 const API_BASE = (process.env.AI_CORE_BASE_URL || "https://aicore.cstlogistic.co.id/api").replace(/\/$/, "");
@@ -7,10 +8,37 @@ const CLIENT_ID = "gcp-openclaw-main";
 const POLL_MS = Math.max(2000, Math.min(60000, Number(process.env.AI_CORE_AGENT_WORK_POLL_MS || 5000)));
 const EXEC_TIMEOUT_SECONDS = Math.max(30, Math.min(900, Number(process.env.OPENCLAW_WORK_TIMEOUT_SECONDS || 180)));
 const MAX_RESULT_CHARS = 20000;
+const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || "/home/node/.openclaw/openclaw.json";
+const CONTROL_UI_ALLOWED_ORIGINS = (process.env.OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS || "http://127.0.0.1:28789,http://localhost:28789,http://127.0.0.1:18789,http://localhost:18789")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 let stopping = false;
 let gateway = null;
 let activeAgent = null;
+
+function ensureGatewayControlUiOrigins() {
+  let config = {};
+  try {
+    config = JSON.parse(readFileSync(OPENCLAW_CONFIG_PATH, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+
+  config.gateway ||= {};
+  config.gateway.controlUi ||= {};
+  const existing = Array.isArray(config.gateway.controlUi.allowedOrigins)
+    ? config.gateway.controlUi.allowedOrigins.filter((value) => typeof value === "string")
+    : [];
+  const allowedOrigins = [...new Set([...existing, ...CONTROL_UI_ALLOWED_ORIGINS])];
+  config.gateway.controlUi.allowedOrigins = allowedOrigins;
+
+  const tmpPath = OPENCLAW_CONFIG_PATH + ".tmp-control-ui";
+  writeFileSync(tmpPath, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  renameSync(tmpPath, OPENCLAW_CONFIG_PATH);
+  log("gateway control UI origins ready: " + allowedOrigins.join(","));
+}
 
 function log(message) {
   process.stdout.write("[openclaw-supervisor] " + message + "\n");
@@ -213,6 +241,8 @@ if (!TOKEN) {
 
 process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("SIGINT", () => stop("SIGINT"));
+
+ensureGatewayControlUiOrigins();
 
 gateway = spawn(
   "node",
