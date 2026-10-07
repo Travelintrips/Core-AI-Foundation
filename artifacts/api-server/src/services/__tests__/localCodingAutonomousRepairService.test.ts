@@ -1113,6 +1113,18 @@ describe("autonomous reservation conflict recovery", () => {
   });
 });
 
+describe("autonomous stale AI execution recovery", () => {
+  it("re-analyzes an orphan AI_EXECUTION_RUNNING checkpoint instead of requiring review", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('case "AI_EXECUTION_RUNNING"');
+    expect(source).toContain('"RECOVER_STALE_AI_EXECUTION"');
+    expect(source).toContain("humanReviewRequired: false");
+  });
+});
+
 describe("autonomous repository analyzer resource-pressure recovery", () => {
   it("restarts failed analyzer work instead of falling through to unsupported nextAction", () => {
     const source = readFileSync(
@@ -1238,6 +1250,20 @@ describe("READY_REVIEW autonomous recovery policy", () => {
         maxCycles: 40,
         lastAction: "UNSUPPORTED_NEXT_ACTION",
         lastError: "Autonomous loop tidak memiliki action aman untuk nextAction=REVIEW_CONFLICT.",
+      }),
+    ).toEqual({
+      reactivate: true,
+      extendBudget: false,
+      reason: "RECOVERABLE_TECHNICAL_BLOCKER",
+    });
+
+    expect(
+      readyReviewAutonomousRecoveryDecision({
+        status: "BLOCKED",
+        cycleCount: 12,
+        maxCycles: 40,
+        lastAction: "UNSUPPORTED_NEXT_ACTION",
+        lastError: "Autonomous loop tidak memiliki action aman untuk nextAction=AI_EXECUTION_RUNNING.",
       }),
     ).toEqual({
       reactivate: true,
