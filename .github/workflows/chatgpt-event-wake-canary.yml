@@ -29,6 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CONVERSATION_ID"
+          DELAY_SECONDS="${DELAY_SECONDS//[^0-9]/}"
           case "$DELAY_SECONDS" in
             ''|*[!0-9]*) echo "::error::delay_seconds must be numeric"; exit 1 ;;
           esac
@@ -41,7 +42,9 @@ jobs:
         shell: bash
         env:
           DELAY_SECONDS: ${{ inputs.delay_seconds }}
-        run: sleep "$DELAY_SECONDS"
+        run: |
+          DELAY_SECONDS="${DELAY_SECONDS//[^0-9]/}"
+          sleep "$DELAY_SECONDS"
 
       - name: Create conversation-bound event command
         id: command
@@ -108,10 +111,10 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## ChatGPT Event Wake Canary"
-            echo
-            echo "- Conversation: `${{ inputs.conversation_id }}`"
-            echo "- Delay: `${{ inputs.delay_seconds }}s`"
-            echo "- Expected event: `WAKE_UP_E2E_TEST_COMPLETED`"
-            echo "- GitHub run: `$GITHUB_RUN_ID`"
+            printf '%s\n' "## ChatGPT Event Wake Canary"
+            printf '\n'
+            printf '%s\n' "- Conversation: ${{ inputs.conversation_id }}"
+            printf '%s\n' "- Delay: ${{ inputs.delay_seconds }}s"
+            printf '%s\n' "- Expected event: WAKE_UP_E2E_TEST_COMPLETED"
+            printf '%s\n' "- GitHub run: $GITHUB_RUN_ID"
           } >> "$GITHUB_STEP_SUMMARY"
