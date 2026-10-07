@@ -1170,6 +1170,21 @@ describe("READY_REVIEW conflict orphan recovery", () => {
     const recoverable = source.slice(start, end);
     expect(recoverable).toContain('"REVIEW_CONFLICT"');
   });
+
+  it("also sweeps only the legacy FAILED AI_EXECUTION_RUNNING blocker", () => {
+    const source = readFileSync(
+      new URL("../localCodingAutonomousRepairService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const start = source.indexOf("const staleAiExecutionCandidates");
+    const end = source.indexOf("const candidates = [", start);
+    const recoverySource = source.slice(start, end);
+    expect(recoverySource).toContain("t.status = 'FAILED'");
+    expect(recoverySource).toContain("a.status = 'BLOCKED'");
+    expect(recoverySource).toContain("a.last_action = 'UNSUPPORTED_NEXT_ACTION'");
+    expect(recoverySource).toContain("nextAction=AI_EXECUTION_RUNNING");
+  });
 });
 
 describe("Temporal autonomous READY_REVIEW recovery", () => {

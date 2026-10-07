@@ -2094,12 +2094,44 @@ async function maybeRecoverOrphanedReadyReviewTasks(): Promise<void> {
 }
 
 export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
-  const candidates = await db
+  const readyReviewCandidates = await db
     .select({ id: aiCodingTasksTable.id })
     .from(aiCodingTasksTable)
     .where(eq(aiCodingTasksTable.status, "READY_REVIEW"))
     .orderBy(aiCodingTasksTable.updatedAt)
     .limit(50);
+
+  // Legacy rows created before AI_EXECUTION_RUNNING recovery shipped can be
+  // persisted as FAILED while the autonomous row is still a recoverable
+  // UNSUPPORTED_NEXT_ACTION blocker. Include only this exact technical case;
+  // do not reopen arbitrary FAILED tasks or policy/security failures.
+  const staleAiExecutionCandidates = await db.execute(sql`
+    SELECT t.id
+    FROM ai_platform.ai_coding_tasks t
+    JOIN ai_platform.ai_coding_autonomous_tasks a
+      ON a.task_id = t.id
+    WHERE t.status = 'FAILED'
+      AND a.enabled = TRUE
+      AND a.status = 'BLOCKED'
+      AND a.last_action = 'UNSUPPORTED_NEXT_ACTION'
+      AND COALESCE(a.last_error, '') ILIKE '%nextAction=AI_EXECUTION_RUNNING%'
+    ORDER BY t.updated_at ASC
+    LIMIT 50
+  `);
+
+  const candidates = [
+    ...readyReviewCandidates,
+    ...(staleAiExecutionCandidates.rows ?? [])
+      .map((row) => ({
+        id: String((row as Record<string, unknown>)["id"] ?? ""),
+      }))
+      .filter((row) => row.id),
+  ]
+    .filter(
+      (candidate, index, all) =>
+        all.findIndex((item) => item.id === candidate.id) === index,
+    )
+    .slice(0, 50);
 
   const recoverable = new Set([
     "APPROVE_PLAN",
