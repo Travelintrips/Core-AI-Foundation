@@ -69,7 +69,8 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_SSH_PUBLIC_KEY_LIST"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
-  | "EXTERNAL_AGENT_STATUS";
+  | "EXTERNAL_AGENT_STATUS"
+  | "WHATSAPP_GATEWAY_STATUS";
 
 export type AiCoreInfrastructureResult = {
   operation: AiCoreInfrastructureOperation;
@@ -136,6 +137,11 @@ export function detectAiCoreInfrastructureOperation(
       /\b(deploy|redeploy|install|installer|apply|rollout|perbarui|update)\b/i.test(text) &&
       /\b(hostinger|vps|worker|openclaw|openhands|n8n)\b/i.test(text)) {
     return "HOSTINGER_AI_WORKERS_DEPLOY";
+  }
+
+  if (/\b(whatsapp|wa gateway|wa admin|device wa|whatsapp admin)\b/i.test(text) &&
+      /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|koneksi|connection|connectivity|online|terhubung)\b/i.test(text)) {
+    return "WHATSAPP_GATEWAY_STATUS";
   }
 
   if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
@@ -1417,6 +1423,58 @@ async function callHostinger(
   };
 }
 
+async function callWhatsappGatewayStatus(env: NodeJS.ProcessEnv): Promise<AiCoreInfrastructureResult> {
+  const baseUrl = (env["CST_WA_GATEWAY_URL"] ?? "https://wa.cstlogistic.co.id").trim().replace(/\/$/, "");
+  const apiKey = (env["CST_WA_GATEWAY_API_KEY"] ?? env["CST_WA_GATEWAY_TOKEN"] ?? "").trim();
+  const notifyTo = (env["AI_CODING_WA_NOTIFY_TO"] ?? "").trim();
+  const configuredDevice = (env["AI_CORE_WA_REPLY_DEVICE_ID"] ?? "").trim();
+  const configured = {
+    baseUrl: Boolean(baseUrl),
+    apiKey: Boolean(apiKey),
+    adminTarget: Boolean(notifyTo),
+    replyDevice: Boolean(configuredDevice),
+  };
+  if (!baseUrl || !apiKey) {
+    return {
+      operation: "WHATSAPP_GATEWAY_STATUS",
+      provider: "ai-core",
+      mutating: false,
+      reply: "Konfigurasi WhatsApp Gateway belum lengkap.",
+      data: { configured, reachable: false, adminTargetConfigured: Boolean(notifyTo) },
+    };
+  }
+
+  const headers = { authorization: `Bearer ${apiKey}`, accept: "application/json" };
+  const attempts: Array<{ path: string; status: number | null; ok: boolean; data?: unknown }> = [];
+  for (const path of ["/healthz", "/health", "/v1/devices"]) {
+    try {
+      const response = await fetch(baseUrl + path, { headers, signal: AbortSignal.timeout(10_000) });
+      const body = await response.text();
+      let data: unknown = body;
+      try { data = body ? JSON.parse(body) : null; } catch { /* text response */ }
+      attempts.push({ path, status: response.status, ok: response.ok, data: safeJson(data) });
+    } catch (error) {
+      attempts.push({ path, status: null, ok: false, data: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  const reachable = attempts.some((attempt) => attempt.ok);
+  return {
+    operation: "WHATSAPP_GATEWAY_STATUS",
+    provider: "ai-core",
+    mutating: false,
+    reply: reachable
+      ? "WhatsApp Gateway dapat dijangkau; konfigurasi admin dibaca tanpa mengirim pesan."
+      : "WhatsApp Gateway belum dapat diverifikasi dari runtime AI Core.",
+    data: {
+      configured,
+      reachable,
+      adminTargetConfigured: Boolean(notifyTo),
+      adminTargetMasked: notifyTo ? `***${notifyTo.slice(-4)}` : null,
+      checks: attempts,
+    },
+  };
+}
+
 export async function executeAiCoreInfrastructureOperation(input: {
   operation: AiCoreInfrastructureOperation;
   requestedBy?: string;
@@ -1426,7 +1484,9 @@ export async function executeAiCoreInfrastructureOperation(input: {
   const env = input.env ?? process.env;
   let result: AiCoreInfrastructureResult;
 
-  if (input.operation === "EXTERNAL_AGENT_STATUS") {
+  if (input.operation === "WHATSAPP_GATEWAY_STATUS") {
+    result = await callWhatsappGatewayStatus(env);
+  } else if (input.operation === "EXTERNAL_AGENT_STATUS") {
     const { getExternalAgentRegistrySnapshot } = await import("./externalAgentRegistryService.js");
     const agents = await getExternalAgentRegistrySnapshot();
     result = {
