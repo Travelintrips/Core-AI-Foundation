@@ -92,6 +92,8 @@ ensure_env_secret AI_CORE_SCOPED_AGENT_TOKEN 32
 
 scoped_agent_token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
 temporal_coding_token="$(env_value AI_CORE_TEMPORAL_CODING_TOKEN)"
+temporal_coding_enabled="$(env_value AI_WORKERS_ENABLE_TEMPORAL_CODING)"
+temporal_coding_enabled="${temporal_coding_enabled:-false}"
 ai_core_base_url="$(env_value AI_CORE_BASE_URL)"
 ai_core_base_url="${ai_core_base_url:-https://aicore.cstlogistic.co.id/api}"
 ai_core_agent_base_url="${ai_core_base_url%/}/ai/agent-runtime/v1"
@@ -118,11 +120,12 @@ compose config --quiet
 log "Pulling pinned worker images"
 compose pull --ignore-buildable
 
-if [ -n "$temporal_coding_token" ]; then
+if [ "$temporal_coding_enabled" = "true" ]; then
+  [ -n "$temporal_coding_token" ] || fail "AI_WORKERS_ENABLE_TEMPORAL_CODING=true requires AI_CORE_TEMPORAL_CODING_TOKEN"
   log "Building Temporal coding orchestrator image"
   compose build temporal-coding-worker
 else
-  log "AI_CORE_TEMPORAL_CODING_TOKEN not present; Temporal coding orchestrator will remain disabled"
+  log "Temporal coding orchestrator disabled; coding route defaults to GitHub"
 fi
 
 projects_path="$(env_value OPENHANDS_PROJECTS_PATH)"
@@ -191,7 +194,7 @@ fi
 compose exec -T n8n n8n import:workflow --input=/opt/ai-core-n8n/ai-core-external-work.json >/dev/null
 compose exec -T n8n n8n update:workflow --id=AIcoreExternalWork001 --active=true >/dev/null
 
-if [ -n "$temporal_coding_token" ]; then
+if [ "$temporal_coding_enabled" = "true" ]; then
   log "Starting Temporal coding orchestrator"
   compose up -d temporal-coding-worker
 fi
