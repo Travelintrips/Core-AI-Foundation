@@ -51,6 +51,21 @@ describe("AI Core no-worker GitHub control", () => {
     });
   });
 
+  it("sanitizes punctuation from workflow dispatch input values", () => {
+    expect(
+      requestedWorkflowDispatch(
+        "trigger workflow=chatgpt-event-wake-canary.yml ref=main conversation_id=6ac56e2f-e6e0-83ec-b9e4-febea0929e10 delay_seconds=60.",
+      ),
+    ).toEqual({
+      workflow: "chatgpt-event-wake-canary.yml",
+      ref: "main",
+      inputs: {
+        conversation_id: "6ac56e2f-e6e0-83ec-b9e4-febea0929e10",
+        delay_seconds: "60",
+      },
+    });
+  });
+
   it("does not convert ordinary coding requests into GitHub fast actions", () => {
     expect(detectAiCoreGitHubOperation("perbaiki kode scheduler lalu commit")).toBeNull();
   });
