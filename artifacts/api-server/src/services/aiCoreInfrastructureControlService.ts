@@ -435,7 +435,7 @@ async function callHostinger(
 
     if (!host || !user || !privateKey) {
       throw new Error(
-        "AI Workers deploy requires HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, and HOSTINGER_SSH_PRIVATE_KEY.",
+        "AI Workers deploy requires SSH configuration from HOSTINGER_SSH_* or AI_WORKERS_SSH_*.",
       );
     }
     if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
