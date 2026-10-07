@@ -170,9 +170,34 @@ export function classifyAiCoreChatDispatch(
   // classification. They execute in the deterministic control plane and must
   // not create repository-analysis/coding jobs. Source-code mutation still
   // outranks incidental infrastructure/GitHub examples.
-  // A specific GitHub delivery/recovery action outranks a generic Hostinger
-  // status interpretation. This prevents domain repair requests from being
-  // reduced to HOSTINGER_VPS_STATUS.
+  //
+  // Specific Hostinger/GCP control-plane operations must win over the generic
+  // coding-domain recovery heuristic. The only intentional exception is the
+  // historical coding-domain recovery case where the infrastructure detector
+  // sees only HOSTINGER_VPS_STATUS; that request should still trigger the
+  // GitHub Hostinger deploy lane.
+  const githubRecoveryOutranksGenericHostingerStatus =
+    githubOperation === "GITHUB_HOSTINGER_NODEJS_DEPLOY" &&
+    infrastructureOperation === "HOSTINGER_VPS_STATUS";
+
+  if (
+    infrastructureOperation &&
+    !sourceChange &&
+    !githubRecoveryOutranksGenericHostingerStatus
+  ) {
+    return {
+      kind: "INFRA_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation,
+      githubOperation: null,
+      externalAgentClientId: null,
+      executionLane: "NO_WORKER",
+      reason:
+        "Explicit infrastructure action is bounded to its target system and executes directly without Repository Analyzer or coding workers.",
+    };
+  }
+
   if (githubOperation && !sourceChange) {
     return {
       kind: "GITHUB_OPERATION",
