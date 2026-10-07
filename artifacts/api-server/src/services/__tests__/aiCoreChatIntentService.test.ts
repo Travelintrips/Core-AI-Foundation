@@ -5,6 +5,8 @@ import {
   DEFAULT_AI_CORE_CHAT_MODE,
   detectRemoteWorkerPreset,
   isAiCoreCapabilityQuery,
+  isSafeDirectOpenClawPcCommand,
+  parseDirectOpenClawPcCommand,
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
@@ -178,6 +180,23 @@ describe("AI Core Chat automatic dispatch", () => {
     const decision = classifyAiCoreChatDispatch(message);
     expect(decision.kind).not.toBe("CONTROL_PLANE");
     expect(decision.workload.requiresAgent).toBe(false);
+  });
+
+  it("reserves # for direct OpenClaw PC control and keeps it out of Coding Orchestrator", () => {
+    expect(parseDirectOpenClawPcCommand("# ketik cek")).toBe("ketik cek");
+    expect(parseDirectOpenClawPcCommand("@ # buka ChatGPT")).toBe("buka ChatGPT");
+    expect(isSafeDirectOpenClawPcCommand("# ketik cek")).toBe(true);
+    expect(isSafeDirectOpenClawPcCommand("# klik tombol kirim")).toBe(true);
+    expect(isSafeDirectOpenClawPcCommand("# hapus file Downloads\\data.csv")).toBe(false);
+
+    const decision = classifyAiCoreChatDispatch("# ketik cek");
+    expect(decision).toMatchObject({
+      kind: "EXTERNAL_AGENT",
+      externalAgentClientId: "gcp-openclaw-main",
+      executionLane: "TARGETED",
+    });
+    expect(decision.kind).not.toBe("CONTROL_PLANE");
+    expect(decision.kind).not.toBe("GITHUB_DIRECT_REQUIRED");
   });
 
   it("routes explicit bounded OpenClaw delegation to the external-agent queue", () => {
