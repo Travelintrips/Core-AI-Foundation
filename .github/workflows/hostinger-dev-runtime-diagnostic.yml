@@ -44,6 +44,25 @@ jobs:
             "$base/builds?per_page=8" \
             | jq '.data | map({uuid,state,created_at,updated_at,options:{node_version:.options.node_version,app_type:.options.app_type,root_directory:.options.root_directory,output_directory:.options.output_directory,build_script:.options.build_script,entry_file:.options.entry_file,package_manager:.options.package_manager}})'
 
+          echo "=== LATEST_FAILED_BUILD_DETAIL ==="
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            "$base/builds?per_page=20" -o /tmp/dev-builds.json
+          failed_uuid=$(jq -r '.data[] | select(.state == "failed") | .uuid' /tmp/dev-builds.json | head -n1)
+          if [ -n "$failed_uuid" ]; then
+            echo "failed_uuid=$failed_uuid"
+            echo "--- BUILD_LOGS ---"
+            curl --silent --show-error \
+              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+              "$base/builds/$failed_uuid/logs" \
+              | jq '{lines,logs}'
+            echo "--- BUILD_ANALYSIS ---"
+            curl --silent --show-error \
+              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+              "$base/builds/$failed_uuid/analysis" \
+              | jq '{analysis,solution}'
+          fi
+
           echo "=== RUNTIME_LOGS ==="
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
