@@ -454,7 +454,6 @@ describe("AI coding workspace run endpoint", () => {
     mockUpdateSet.mockReturnValue(updateBuilder);
     mockUpdateWhere.mockResolvedValue([]);
     mockStartCodingOrchestration.mockResolvedValue({ sessionId: `coding-${runId}` });
-    mockApprovePlanAndStartCoding.mockResolvedValue({ ...run, agentName: "Coding Agent" });
     mockApproveAndValidateLocalPatch.mockResolvedValue({
       ...run,
       agentName: "Local Patch Gate",
