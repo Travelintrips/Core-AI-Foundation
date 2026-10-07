@@ -43,6 +43,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger hapus parked domain domain=example.com parked_domain=alias.example.com", "HOSTINGER_PARKED_DOMAIN_DELETE"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
     ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
+    ["Hostinger deploy coding.cstlogistic.co.id static dashboard", "HOSTINGER_CODING_STATIC_DEPLOY"],
     ["Hostinger pasang SSH public key key=ssh-ed25519-AAAA", "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"],
     ["Deploy AI Workers VPS commit a1939541ae36e1b1702172a62e85a84361f55473 dan jalankan installer", "HOSTINGER_AI_WORKERS_DEPLOY"],
     ["Hostinger redeploy worker stack OpenClaw ke commit a1939541ae36e1b1702172a62e85a84361f55473", "HOSTINGER_AI_WORKERS_DEPLOY"],

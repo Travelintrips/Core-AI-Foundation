@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
+import { deployCodingStaticSite } from "./hostingerCodingStaticDeployService.js";
 
 function execFileWithInput(
   file: string,
@@ -77,6 +78,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_SSH_AUTH_DIAGNOSTIC"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
+  | "HOSTINGER_CODING_STATIC_DEPLOY"
   | "EXTERNAL_AGENT_STATUS"
   | "WHATSAPP_GATEWAY_STATUS";
 
@@ -129,6 +131,15 @@ export function detectAiCoreInfrastructureOperation(
 ): AiCoreInfrastructureOperation | null {
   const text = normalizedMessage(message);
   if (!text) return null;
+
+  if (
+    /\b(hostinger|hpanel)\b/i.test(text) &&
+    /\bcoding\.cstlogistic\.co\.id\b/i.test(text) &&
+    /\b(static|dashboard|website|site|frontend)\b/i.test(text) &&
+    /\b(deploy|publish|buat|create|benahi|fix|repair|pulihkan)\b/i.test(text)
+  ) {
+    return "HOSTINGER_CODING_STATIC_DEPLOY";
+  }
 
   // Hostinger capacity/resource inspection must outrank incidental external-agent
   // names (for example when evaluating whether OpenClaw can be moved there).
@@ -418,6 +429,17 @@ async function callHostinger(
   const config = hostingerConfig(env);
   if (!config.token) {
     throw new Error("Hostinger control plane requires HOSTINGER_API_TOKEN.");
+  }
+
+  if (operation === "HOSTINGER_CODING_STATIC_DEPLOY") {
+    const data = await deployCodingStaticSite({ env });
+    return {
+      operation,
+      provider: "hostinger",
+      mutating: true,
+      reply: "AI Coding static dashboard diterima Hostinger untuk deployment.",
+      data: safeJson(data),
+    };
   }
 
   const valueOf = (key: string): string => {
