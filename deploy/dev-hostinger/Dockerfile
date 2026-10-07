@@ -9,6 +9,8 @@ WORKDIR /app
 COPY . .
 
 RUN pnpm install --frozen-lockfile
+
+ENV HOSTINGER_FRONTEND=ai-platform
 RUN pnpm run build:workspace
 
 ENV NODE_ENV=development
