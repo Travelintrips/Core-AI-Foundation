@@ -562,3 +562,41 @@ describe("validateFileSize", () => {
     expect(validateFileSize(10 * 1024 * 1024).safe).toBe(false); // 10 MB
   });
 });
+
+
+describe("fashion render E2E contract", () => {
+  const serviceSource = fs.readFileSync(
+    path.resolve(process.cwd(), "artifacts/api-server/src/services/fashionDesignService.ts"),
+    "utf-8",
+  );
+  const portalSource = fs.readFileSync(
+    path.resolve(process.cwd(), "artifacts/customer-portal/src/pages/fashion-design/index.tsx"),
+    "utf-8",
+  );
+
+  it("generates and persists flat plus front/back previews through the shared image router", () => {
+    expect(serviceSource).toContain("tryGenerateImageViaRouter");
+    expect(serviceSource).toContain('filenamePrefix: `fashion-${order.id}-flat`');
+    expect(serviceSource).toContain('filenamePrefix: `fashion-${order.id}-front-back`');
+    expect(serviceSource).toContain('"flat-design": previewOutput(previews.flatDesign)');
+    expect(serviceSource).toContain('"front-back-preview": previewOutput(previews.frontBackPreview)');
+  });
+
+  it("does not let optional 3D provider failure discard valid 2D renders", () => {
+    expect(serviceSource).toContain("[fashion-design] Optional 3D generation failed");
+    expect(serviceSource).toContain("2D fashion previews remain available");
+  });
+
+  it("customer portal requests order detail with matching customer email", () => {
+    expect(portalSource).toContain(
+      '/api/ai/fashion-design/orders/${orderId}?customerEmail=${encodeURIComponent(email)}',
+    );
+  });
+
+  it("customer portal renders generated fashion images", () => {
+    expect(portalSource).toContain("Hasil Desain");
+    expect(portalSource).toContain('OUTPUT_LABELS["flat-design"]');
+    expect(portalSource).toContain('OUTPUT_LABELS["front-back-preview"]');
+    expect(portalSource).toContain("Buka model 3D");
+  });
+});
