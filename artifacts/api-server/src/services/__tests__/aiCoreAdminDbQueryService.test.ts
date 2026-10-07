@@ -55,6 +55,7 @@ import {
   executeAdminCodingTaskStatusQuery,
   sanitizeAdminDbError,
   renderAdminSemanticQueryResult,
+  resetAdminDbMetadataCacheForTest,
   shouldAttemptAdminDbQuery,
   validateAdminMutationSql,
   validateAdminReadOnlySql,
@@ -62,6 +63,7 @@ import {
 
 describe("AI Core admin database query service", () => {
   beforeEach(() => {
+    resetAdminDbMetadataCacheForTest();
     mocks.execute.mockReset();
     mocks.transaction.mockReset();
     mocks.txExecute.mockReset();
@@ -350,6 +352,64 @@ describe("AI Core admin database query service", () => {
     expect(reply).not.toContain("zona waktu");
     expect(reply).not.toContain("Confidence semantic");
     expect(reply).not.toContain("Admin DB Query");
+  });
+
+  it("reuses metadata warmed by schema discovery for semantic planning", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          table_schema: "sport_center",
+          table_name: "sport_payments",
+          column_name: "amount",
+          data_type: "numeric",
+          udt_name: "numeric",
+          ordinal_position: 1,
+        },
+        {
+          table_schema: "sport_center",
+          table_name: "sport_payments",
+          column_name: "status",
+          data_type: "USER-DEFINED",
+          udt_name: "payment_status",
+          ordinal_position: 2,
+        },
+        {
+          table_schema: "sport_center",
+          table_name: "sport_payments",
+          column_name: "paid_at",
+          data_type: "timestamp with time zone",
+          udt_name: "timestamptz",
+          ordinal_position: 3,
+        },
+      ],
+    });
+
+    const metadata = await inspectAdminDbSchemaCatalog();
+    expect(metadata.tables).toEqual([
+      expect.objectContaining({
+        schema: "sport_center",
+        table: "sport_payments",
+        columns: ["amount", "status", "paid_at"],
+      }),
+    ]);
+
+    mocks.txExecute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ value: "confirmed" }] })
+      .mockResolvedValueOnce({ rows: [{ value: "480000", matched_rows: "5" }] });
+
+    const result = await executeAdminSemanticQuery(
+      "cek berapa pendapatan sport center kemarin",
+    );
+
+    expect(result).toMatchObject({
+      sourceTable: "sport_center.sport_payments",
+      matchedRows: 5,
+    });
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
   });
 
   it("renders an empty aggregate as zero instead of saying no rows were found", async () => {
