@@ -182,12 +182,29 @@ describe("Coding Orchestrator watchdog recovery policy", () => {
     );
     const recovery = source.slice(start, end);
 
-    expect(recovery).toContain("status = 'READY_REVIEW'");
+    expect(recovery).toContain("status = 'BLOCKED'");
+    expect(recovery).not.toContain("status = 'READY_REVIEW'");
     expect(recovery).toContain("last_action = 'RECOVERABLE_OPERATIONAL_FAILURE'");
     expect(recovery).toContain('status: "BLOCKED"');
     expect(recovery).toContain(
       'source: "coding-orchestrator-analyzer-recovery"',
     );
+  });
+});
+
+describe("Coding Orchestrator canonical terminal lifecycle", () => {
+  it("never writes READY_REVIEW for completed local analysis", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf("async function completeLocalAnalysis");
+    const end = source.indexOf("async function failOrchestration", start);
+    const completion = source.slice(start, end);
+
+    expect(completion).toContain('executionStatus: "COMPLETED"');
+    expect(completion).toContain('status: "COMPLETED"');
+    expect(completion).not.toContain('status: "READY_REVIEW"');
   });
 });
 
@@ -578,7 +595,8 @@ describe("Coding Orchestrator", () => {
     );
     expect(sqlText).toContain("t.status = 'ANALYZING'");
     expect(sqlText).toContain("RETRY_REPOSITORY_ANALYSIS");
-    expect(sqlText).toContain("SET status = 'READY_REVIEW'");
+    expect(sqlText).toContain("SET status = 'BLOCKED'");
+    expect(sqlText).not.toContain("SET status = 'READY_REVIEW'");
     expect(sqlText).toContain("last_action = 'RECOVERABLE_OPERATIONAL_FAILURE'");
     expect(sqlText).toContain("'status', 'BLOCKED'");
     expect(sqlText).toContain("recoverable");
