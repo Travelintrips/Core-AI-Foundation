@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   typecheck:
-    name: Fast API + UI typecheck
+    name: Fast DEV verification
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,7 +29,7 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build shared TypeScript references
+      - name: Build referenced libraries
         run: pnpm run typecheck:libs
       - name: API typecheck
         run: pnpm --filter @workspace/api-server run typecheck
