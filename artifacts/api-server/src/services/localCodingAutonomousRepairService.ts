@@ -749,7 +749,7 @@ async function processTaskGraph(
           return {
             handled: true,
             blocker:
-              `Workstream ${review.key} requires human review after bounded QC revisions were exhausted: ${manualReviewReason}`,
+              `Workstream ${review.key} exhausted bounded automated QC revisions and is blocked for alternate recovery: ${manualReviewReason}`,
           };
         }
 
