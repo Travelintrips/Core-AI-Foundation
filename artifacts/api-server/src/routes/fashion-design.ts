@@ -67,6 +67,13 @@ function getCallerId(req: import("express").Request): string {
   return `ip:${ip}`;
 }
 
+function isFashionAdminRequest(req: import("express").Request): boolean {
+  const internalUser = (req as unknown as Record<string, unknown>).internalUser;
+  const adminKey = req.headers["x-admin-api-key"] ?? req.headers["x-admin-key"];
+  return Boolean(internalUser) ||
+    (typeof adminKey === "string" && Boolean(process.env["ADMIN_API_KEY"]) && adminKey === process.env["ADMIN_API_KEY"]);
+}
+
 // ── Request schemas ───────────────────────────────────────────────────────────
 
 const createOrderSchema = z.object({
@@ -158,6 +165,22 @@ router.get("/ai/fashion-design/orders/:id", async (req, res) => {
     const [order, blueprint] = await Promise.all([getOrder(id), getBlueprint(id)]);
     if (!order) { res.status(404).json({ error: "Order not found" }); return; }
 
+    if (!isFashionAdminRequest(req)) {
+      const customerEmail =
+        typeof req.query["customerEmail"] === "string"
+          ? req.query["customerEmail"].toLowerCase().trim()
+          : "";
+      if (!customerEmail) {
+        res.status(401).json({ error: "Customer email is required to view this order" });
+        return;
+      }
+      if (order.customerEmail.toLowerCase().trim() !== customerEmail) {
+        res.status(403).json({ error: "Email tidak sesuai dengan data order" });
+        return;
+      }
+    }
+
+    res.setHeader("Cache-Control", "no-store");
     res.json({ ...order, blueprint: blueprint ?? null });
   } catch (err) {
     handleError(res, err);
