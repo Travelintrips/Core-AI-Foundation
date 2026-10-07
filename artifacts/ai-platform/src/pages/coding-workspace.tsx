@@ -588,7 +588,6 @@ type RepositoryAnalyzerUiResult = {
     implementationSteps: string[];
     verificationSteps: string[];
     risks: string[];
-    approvalRequired?: boolean;
   };
   planner?: {
     modelUsed?: string;
@@ -1493,7 +1492,6 @@ function parseRepositoryAnalyzerResult(logs?: string | null): RepositoryAnalyzer
             implementationSteps: stringList(implementationPlanValue.implementationSteps),
             verificationSteps: stringList(implementationPlanValue.verificationSteps),
             risks: stringList(implementationPlanValue.risks),
-            approvalRequired: implementationPlanValue.approvalRequired === true,
           }
         : undefined,
       planner: plannerValue
@@ -1963,7 +1961,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
   const [status, setStatus] = useState<CodingTaskStatus>(CodingTaskStatus.PENDING);
   const [summary, setSummary] = useState("");
   const [commitSha, setCommitSha] = useState("");
-  const [approvePending, setApprovePending] = useState(false);
   const [localPatchPending, setLocalPatchPending] = useState(false);
   const [sandboxPending, setSandboxPending] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(false);
@@ -2035,11 +2032,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
     liveProgress.startedAt ?? activeRun?.startedAt ?? null,
     progressNow,
   );
-  const canApprovePlan =
-    task.status === CodingTaskStatus.READY_REVIEW &&
-    analyzerResult?.orchestration?.nextAction === "APPROVE_PLAN" &&
-    analyzerResult?.implementationPlan?.approvalRequired === true &&
-    !hasActiveRun;
   const canApproveLocalPatch =
     task.status === CodingTaskStatus.READY_REVIEW &&
     analyzerResult?.orchestration?.nextAction === "REVIEW_LOCAL_PATCH" &&
@@ -2198,36 +2190,6 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
         },
       },
     );
-  };
-
-  const approvePlan = async () => {
-    setApprovePending(true);
-    try {
-      const response = await fetch(`/api/ai/coding/tasks/${task.id}/approve-plan`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${response.status}`);
-      }
-      await response.json();
-      void queryClient.invalidateQueries({ queryKey: getGetCodingTaskQueryKey(task.id) });
-      void queryClient.invalidateQueries({ queryKey: getListCodingTasksQueryKey() });
-      toast({
-        title: "Plan approved",
-        description: "Coding Agent started in an isolated workspace. No commit or push will be created automatically.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not approve plan",
-        description: error instanceof Error ? error.message : "Approval failed",
-        variant: "destructive",
-      });
-    } finally {
-      setApprovePending(false);
-    }
   };
 
   const approveLocalPatch = async () => {
@@ -3569,25 +3531,9 @@ function TaskDetailPanel({ detail, isLoading, isError, onRetry, onClose, onAiExe
                 <div className="space-y-3 rounded-lg border border-violet-300/15 bg-violet-300/[0.035] p-3" data-testid="panel-coding-implementation-plan">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-300">Implementation plan</div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {analyzerResult.implementationPlan.approvalRequired && (
-                        <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-amber-300">
-                          Approval required
-                        </span>
-                      )}
-                      {canApprovePlan && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={approvePlan}
-                          disabled={approvePending}
-                          className="h-7 bg-violet-300 px-2.5 text-[10px] font-semibold text-[#1b1230] hover:bg-violet-200"
-                          data-testid="button-approve-coding-plan"
-                        >
-                          {approvePending ? <><Loader2 className="size-3 animate-spin" />Starting Coding Agent</> : <><CheckCircle2 className="size-3" />Approve Plan & Start Coding</>}
-                        </Button>
-                      )}
-                    </div>
+                    <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-emerald-300">
+                      Auto-advance
+                    </span>
                   </div>
                   {analyzerResult.implementationPlan.summary && (
                     <p className="text-xs leading-5 text-slate-300">{analyzerResult.implementationPlan.summary}</p>
