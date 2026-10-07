@@ -19,16 +19,24 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy AI Core to Hostinger Node.js
+    name: Deploy Hostinger Node.js (${{ matrix.site }})
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - site: internal
+            domain: aicore.cstlogistic.co.id
+          - site: customer
+            domain: aifront.cstlogistic.co.id
     env:
       HOSTINGER_API_BASE: https://developers.hostinger.com/api
-      HOSTINGER_DOMAIN: ${{ vars.HOSTINGER_HOSTING_DOMAIN || 'aicore.cstlogistic.co.id' }}
+      HOSTINGER_DOMAIN: ${{ matrix.domain }}
       EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
 
