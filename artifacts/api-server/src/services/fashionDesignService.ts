@@ -583,6 +583,101 @@ function normalize3DAsset(value: unknown): Generated3DAsset | undefined {
   return asset.glbUrl || asset.gltfUrl ? asset : undefined;
 }
 
+type FashionPreviewImage = {
+  imageUrl: string;
+  provider: string;
+  model: string;
+  width: number;
+  height: number;
+  storagePath: string;
+};
+
+function compactPromptValue(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return value.map(compactPromptValue).filter(Boolean).join(", ");
+  if (value && typeof value === "object") {
+    try { return JSON.stringify(value); } catch { return ""; }
+  }
+  return "";
+}
+
+async function generateFashion2DPreviews(
+  order: FashionDesignOrder,
+  blueprint: FashionDesignBlueprint,
+): Promise<{
+  flatDesign?: FashionPreviewImage;
+  frontBackPreview?: FashionPreviewImage;
+  warnings: string[];
+}> {
+  const colors = (order.colorways as string[]).join(", ") || "unspecified";
+  const nameValue = blueprint.nameValue?.trim();
+  const numberValue = blueprint.numberValue?.trim();
+  const placement = compactPromptValue(blueprint.placementSpec);
+  const motif = compactPromptValue(order.motifConfig);
+  const common = [
+    "Original fashion and apparel design. Do not copy any existing brand, club, or trademarked uniform.",
+    `Garment type: ${order.serviceType}.`,
+    `Design brief: ${order.description ?? order.orderName}.`,
+    `Color palette: ${colors}.`,
+    nameValue ? `Garment name text: ${nameValue}.` : "",
+    numberValue ? `Garment number: ${numberValue}.` : "",
+    placement ? `Placement guidance: ${placement.slice(0, 600)}.` : "",
+    motif ? `Motif guidance: ${motif.slice(0, 400)}.` : "",
+  ].filter(Boolean).join(" ");
+
+  const warnings: string[] = [];
+  const negativePrompt =
+    "brand logos, trademarked logos, watermark, copied sports jersey, distorted garment, duplicate garment, illegible layout";
+
+  const flat = await tryGenerateImageViaRouter({
+    prompt: [
+      common,
+      "Create a clean technical flat fashion illustration, front view, no human model, centered garment, neutral light background, crisp seams and panel boundaries, presentation-ready.",
+    ].join(" "),
+    negativePrompt,
+    aspectRatio: "3:4",
+    filenamePrefix: `fashion-${order.id}-flat`,
+    timeoutMs: 420_000,
+  });
+  if (!flat) warnings.push("Flat design render was unavailable; the structural composition is still available.");
+
+  const frontBack = await tryGenerateImageViaRouter({
+    prompt: [
+      common,
+      "Create a professional apparel presentation board showing FRONT and BACK views side by side, no human model, same garment and colors in both views, neutral studio background, realistic fabric texture, clear production visualization.",
+    ].join(" "),
+    negativePrompt,
+    aspectRatio: "4:3",
+    filenamePrefix: `fashion-${order.id}-front-back`,
+    timeoutMs: 420_000,
+  });
+  if (!frontBack) warnings.push("Front/back preview render was unavailable; the structural composition is still available.");
+
+  return {
+    ...(flat ? {
+      flatDesign: {
+        imageUrl: flat.imageUrl,
+        provider: flat.provider,
+        model: flat.model,
+        width: flat.width,
+        height: flat.height,
+        storagePath: flat.storagePath,
+      },
+    } : {}),
+    ...(frontBack ? {
+      frontBackPreview: {
+        imageUrl: frontBack.imageUrl,
+        provider: frontBack.provider,
+        model: frontBack.model,
+        width: frontBack.width,
+        height: frontBack.height,
+        storagePath: frontBack.storagePath,
+      },
+    } : {}),
+    warnings,
+  };
+}
+
 export interface GenerationOptions {
   /** Caller identifier (admin key suffix or IP) for domain rate limiting */
   callerId?: string;
