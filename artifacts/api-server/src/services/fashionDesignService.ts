@@ -27,6 +27,7 @@ import { validateBlueprintUrls } from "../domains/fashion-design/fileSafety.js";
 import { desc, and, like, SQL } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { uploadToSupabase } from "../lib/supabaseStorage.js";
+import { tryGenerateImageViaRouter } from "./imageRouterService.js";
 import { aiProvidersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
