@@ -1,6 +1,17 @@
 name: AI Image Worker GCP
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ai-image-worker-gcp.yml"
+      - "deploy/ai-image-worker/**"
+      - "scripts/install-ai-image-worker.sh"
+      - "scripts/ai-image-worker-idle-shutdown.sh"
+      - "scripts/ai-image-gateway.py"
+      - "scripts/ai-gpu-idle-guard.sh"
+      - "scripts/install-shared-gpu-image-gateway.sh"
   workflow_dispatch:
     inputs:
       action:
@@ -49,7 +60,7 @@ jobs:
           gcloud config set project "$PROJECT"
 
       - name: Start GPU VM
-        if: inputs.action == 'start-deploy'
+        if: github.event_name == 'push' || inputs.action == 'start-deploy'
         env:
           ZONE: ${{ vars.GCP_GPU_ZONE }}
           INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
@@ -64,17 +75,23 @@ jobs:
           exit 1
 
       - name: Copy image-worker deployment
-        if: inputs.action == 'start-deploy'
+        if: github.event_name == 'push' || inputs.action == 'start-deploy'
         env:
           ZONE: ${{ vars.GCP_GPU_ZONE }}
           INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
         run: |
           set -euo pipefail
-          tar -czf /tmp/ai-image-worker.tgz deploy/ai-image-worker scripts/install-ai-image-worker.sh scripts/ai-image-worker-idle-shutdown.sh
+          tar -czf /tmp/ai-image-worker.tgz \
+            deploy/ai-image-worker \
+            scripts/install-ai-image-worker.sh \
+            scripts/ai-image-worker-idle-shutdown.sh \
+            scripts/ai-image-gateway.py \
+            scripts/ai-gpu-idle-guard.sh \
+            scripts/install-shared-gpu-image-gateway.sh
           gcloud compute scp /tmp/ai-image-worker.tgz "$INSTANCE:/tmp/ai-image-worker.tgz" --zone "$ZONE"
 
       - name: Install and verify ComfyUI
-        if: inputs.action == 'start-deploy'
+        if: github.event_name == 'push' || inputs.action == 'start-deploy'
         env:
           ZONE: ${{ vars.GCP_GPU_ZONE }}
           INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
@@ -87,7 +104,10 @@ jobs:
             tar -xzf /tmp/ai-image-worker.tgz -C /tmp/core-ai-image-worker
             cd /tmp/core-ai-image-worker
             sudo AI_IMAGE_WORKER_ENV_FILE=/etc/ai-core/ai-image-worker.env bash scripts/install-ai-image-worker.sh
+            sudo bash scripts/install-shared-gpu-image-gateway.sh
             curl -fsS http://127.0.0.1:8188/system_stats >/dev/null
+            systemctl is-active --quiet ai-image-gateway.service
+            systemctl is-enabled --quiet ai-gpu-idle-guard.timer
             nvidia-smi
           '
 
