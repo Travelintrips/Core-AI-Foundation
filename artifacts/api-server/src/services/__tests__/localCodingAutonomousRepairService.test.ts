@@ -45,6 +45,15 @@ vi.mock("../localCodingMultiWorkerOrchestratorService.js", () => ({
   MAX_CODING_WORKSTREAM_CLAIM_LIFETIME_MS: 15 * 60 * 1000,
   retryFailedCodingWorkstream: vi.fn(),
 }));
+vi.mock("../localCodingMultiWorkerRecoveryService.js", () => ({
+  reconcileStaleMultiWorkerRuns: vi.fn(async () => ({
+    inspected: 0,
+    recoveredRuns: 0,
+    recoveredWorkstreams: 0,
+    recoveredTasks: 0,
+    recoveredJobs: 0,
+  })),
+}));
 vi.mock("../localCodingPatchApprovalService.js", () => ({ approveAndValidateLocalPatch: vi.fn() }));
 vi.mock("../localCodingSandboxGateService.js", () => ({ startSandboxVerification: vi.fn() }));
 vi.mock("../localCodingDeterministicRecoveryService.js", () => ({ startDeterministicLocalRecovery: vi.fn() }));
