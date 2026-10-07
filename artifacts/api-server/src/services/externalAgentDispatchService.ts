@@ -68,6 +68,7 @@ export async function dispatchExternalAgentWork(input: {
   instruction: string;
   taskId?: string | null;
   source?: string;
+  metadata?: Record<string, unknown>;
 }) {
   const rule = getExternalAgentRule(input.clientId);
   if (!rule) {
@@ -108,6 +109,7 @@ export async function dispatchExternalAgentWork(input: {
       permissions: { ...rule.permissions },
     },
     metadata: {
+      ...(input.metadata ?? {}),
       requestedAt: new Date().toISOString(),
       executionBoundary: "role-scoped",
       requiredCapability,
