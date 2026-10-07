@@ -106,7 +106,7 @@ jobs:
 
           jq --arg session "$session_secret" '
             def add($k;$v): if ($v // "") == "" then [] else [{key:$k,value:$v}] end;
-            {env_vars:
+            {env_vars: (
               [
                 {key:"APP_ENV",value:"development"},
                 {key:"NODE_ENV",value:"development"},
@@ -138,7 +138,7 @@ jobs:
               + add("COHERE_API_KEY"; .COHERE_API_KEY)
               + add("REPLICATE_API_TOKEN"; .REPLICATE_API_TOKEN)
               + add("QWEN_API_KEY"; .QWEN_API_KEY)
-            }
+            )}
           ' /tmp/aicore-secrets.json > /tmp/dev-env.json
 
           base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds"
