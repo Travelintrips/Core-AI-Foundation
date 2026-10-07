@@ -154,14 +154,14 @@ export async function reconcileOrphanedParentTaskLifecycle(
 ): Promise<OrphanedParentLifecycleRecoveryResult> {
   const scopedTaskId = options.taskId ?? null;
 
-  const released = await db.execute(sql\`
+  const released = await db.execute(sql`
     WITH orphan_reservations AS (
       SELECT reservation.reservation_id
       FROM ai_platform.ai_coding_active_file_reservations AS reservation
       JOIN ai_platform.ai_coding_tasks AS task
         ON task.id::text = reservation.task_id
       WHERE task.task_number NOT LIKE 'MW-%'
-        AND (\${scopedTaskId}::uuid IS NULL OR task.id = \${scopedTaskId}::uuid)
+        AND (${scopedTaskId}::uuid IS NULL OR task.id = ${scopedTaskId}::uuid)
         AND NOT EXISTS (
           SELECT 1 FROM ai_platform.ai_coding_runs AS run
           WHERE run.task_id = task.id AND run.status = 'RUNNING'
@@ -203,7 +203,7 @@ export async function reconcileOrphanedParentTaskLifecycle(
     SELECT COUNT(*)::int AS released_reservations FROM deleted
   \`);
 
-  const reconciled = await db.execute(sql\`
+  const reconciled = await db.execute(sql`
     WITH latest_run AS (
       SELECT DISTINCT ON (run.task_id)
         run.task_id,
@@ -227,7 +227,7 @@ export async function reconcileOrphanedParentTaskLifecycle(
        AND autonomous.enabled = TRUE
       WHERE task.task_number NOT LIKE 'MW-%'
         AND task.status IN ('ANALYZING', 'READY_REVIEW', 'BLOCKED')
-        AND (\${scopedTaskId}::uuid IS NULL OR task.id = \${scopedTaskId}::uuid)
+        AND (${scopedTaskId}::uuid IS NULL OR task.id = ${scopedTaskId}::uuid)
         AND latest_run.run_status IN ('COMPLETED', 'FAILED')
         AND NOT EXISTS (
           SELECT 1 FROM ai_platform.ai_coding_runs AS run
