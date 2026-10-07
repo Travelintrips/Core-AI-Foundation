@@ -129,11 +129,6 @@ export function detectAiCoreInfrastructureOperation(
     return "HOSTINGER_VPS_STATUS";
   }
 
-  if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
-      /\b(cek|status|health|registry|terdaftar|registered|aktif)\b/i.test(text)) {
-    return "EXTERNAL_AGENT_STATUS";
-  }
-
   // Deploying the AI worker stack is a bounded SSH deployment on an already
   // running VPS. It must outrank generic VPS start/stop heuristics, especially
   // when the prompt contains words like "jalankan installer".
@@ -141,6 +136,11 @@ export function detectAiCoreInfrastructureOperation(
       /\b(deploy|redeploy|install|installer|apply|rollout|perbarui|update)\b/i.test(text) &&
       /\b(hostinger|vps|worker|openclaw|openhands|n8n)\b/i.test(text)) {
     return "HOSTINGER_AI_WORKERS_DEPLOY";
+  }
+
+  if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
+      /\b(cek|status|health|registry|terdaftar|registered|aktif)\b/i.test(text)) {
+    return "EXTERNAL_AGENT_STATUS";
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
