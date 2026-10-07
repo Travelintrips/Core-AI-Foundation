@@ -815,6 +815,7 @@ export const id = {
         ready_review: "Siap ditinjau",
         completed: "Selesai",
         failed: "Gagal",
+        blocked: "Terblokir",
       },
       runStatuses: {
         pending: "Menunggu",
