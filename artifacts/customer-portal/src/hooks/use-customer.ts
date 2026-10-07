@@ -82,10 +82,24 @@ export type PublicQuotation = {
   respondedAt: string | null;
 };
 
+export type CustomerDashboardFashionOrder = {
+  id: number;
+  orderName: string;
+  serviceType: string;
+  status: string;
+  statusLabel: string;
+  outputs?: Record<string, unknown> | null;
+  colorways: string[];
+  portalPath: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CustomerDashboard = {
   clientName: string;
   clientEmail: string;
   projects: CustomerDashboardProject[];
+  fashionOrders?: CustomerDashboardFashionOrder[];
   totalProjects: number;
   pendingReview: number;
   approved: number;
