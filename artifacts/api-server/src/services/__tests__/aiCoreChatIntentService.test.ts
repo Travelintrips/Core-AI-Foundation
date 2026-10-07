@@ -333,14 +333,15 @@ describe("AI Core Chat automatic dispatch", () => {
     }
   });
 
-  it("routes critical actions to the control plane while preserving approval", () => {
-    const decision = classifyAiCoreChatDispatch(
-      "Deploy perubahan ini ke production.",
-    );
+  it.each([
+    "redeploy main",
+    "redeploy production AI Core dari branch main terbaru",
+  ])("routes existing-code production deploy directly without Coding Orchestrator: %s", (message) => {
+    const decision = classifyAiCoreChatDispatch(message);
 
-    expect(decision.kind).toBe("CONTROL_PLANE");
-    expect(decision.workload.workload).toBe("CRITICAL_ACTION");
-    expect(decision.workload.requiresApproval).toBe(true);
+    expect(decision.kind).toBe("GITHUB_OPERATION");
+    expect(decision.githubOperation).toBe("GITHUB_HOSTINGER_NODEJS_DEPLOY");
+    expect(decision.executionLane).toBe("NO_WORKER");
   });
 
   it("never sends mutating language to the read-only worker", () => {
