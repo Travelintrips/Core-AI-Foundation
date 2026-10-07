@@ -178,7 +178,8 @@ export function classifyAiCoreChatDispatch(
   // GitHub Hostinger deploy lane.
   const githubRecoveryOutranksGenericHostingerStatus =
     githubOperation === "GITHUB_HOSTINGER_NODEJS_DEPLOY" &&
-    infrastructureOperation === "HOSTINGER_VPS_STATUS";
+    (infrastructureOperation === "HOSTINGER_VPS_STATUS" ||
+      infrastructureOperation === "HOSTINGER_CODING_STATIC_DEPLOY");
 
   if (
     infrastructureOperation &&
