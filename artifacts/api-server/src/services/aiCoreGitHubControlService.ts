@@ -36,13 +36,21 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
     !/\b(?:docker|compose|container)\b/i.test(text) &&
     /\b(?:node(?:\.?js|\s+js)|aicore|ai\s+core|commit|sha|production|produksi)\b/i.test(text);
 
+  // A deploy/redeploy of the already-merged main branch is an operational
+  // delivery action. Route it straight to the deployment workflow; never create
+  // Repository Analyzer or Coding Orchestrator work just to redeploy existing code.
+  const directMainProductionDeploy =
+    /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
+    /\b(?:main|production|prod|produksi|ai\s*core|aicore|core\s+ai\s+foundation)\b/i.test(text) &&
+    !/\b(?:docker|compose|container|coding\s+orchestrator|ubah\s+kode|edit\s+kode|patch\s+kode|fix\s+kode|perbaiki\s+kode)\b/i.test(text);
+
   const codingDomainRecovery =
     /\b(?:coding\.cstlogistic\.co\.id|aicoding\.travelintrips\.co\.id)\b/i.test(text) &&
     /\b(?:perbaiki|benahi|fix|pulihkan|recovery|tampilkan|tampil|live|deploy|redeploy|publish|rilis)\b/i.test(text) &&
     /\b(?:website|web|domain|subdomain|dashboard|hostinger|halaman|page|default)\b/i.test(text) &&
     !/\b(?:docker|compose|container)\b/i.test(text);
 
-  if (hostingerNodeDeploy || codingDomainRecovery) {
+  if (hostingerNodeDeploy || codingDomainRecovery || directMainProductionDeploy) {
     return "GITHUB_HOSTINGER_NODEJS_DEPLOY";
   }
 
