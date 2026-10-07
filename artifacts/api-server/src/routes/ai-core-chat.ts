@@ -135,6 +135,10 @@ import {
   type ConversationSource,
 } from "../services/aiCoreConversationService.js";
 import { getGcpWorkspaceCostUsage } from "../services/gcpWorkspaceBillingService.js";
+import {
+  executeDirectConversationEvent,
+  parseDirectConversationEventRequest,
+} from "../services/aiCoreConversationEventControlService.js";
 import { bindAiCoreTaskLifecycleReporting } from "../services/aiCoreTaskLifecycleBindingService.js";
 import { reportCodingTaskTerminalTransition } from "../services/codingTaskTerminalReportingService.js";
 import { releaseCodingFileReservations } from "../services/codingConflictRegistryService.js";
@@ -3507,6 +3511,16 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       return;
     }
 
+    const directConversationEvent =
+      !parsed.data.image
+        ? parseDirectConversationEventRequest(safeMessage)
+        : null;
+    if (directConversationEvent) {
+      const result = await executeDirectConversationEvent(directConversationEvent);
+      writeBufferedChatStream(res, result);
+      return;
+    }
+
     if (parsed.data.mode === "auto") {
       const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
       const effectiveInput = {
@@ -3634,8 +3648,14 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
 
     const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
     const rawDispatch = classifyAiCoreChatDispatch(rawInput.message);
+    const directConversationEvent =
+      !parsed.data.image
+        ? parseDirectConversationEventRequest(rawInput.message)
+        : null;
     const result =
-      effectiveInput.mode !== "agent" &&
+      directConversationEvent
+        ? await executeDirectConversationEvent(directConversationEvent)
+        : effectiveInput.mode !== "agent" &&
       !parsed.data.image &&
       isImageRouterConfigured() &&
       isDirectImageGenerationRequest(rawInput.message)
