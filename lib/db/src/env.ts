@@ -19,77 +19,63 @@ export function isProductionDatabaseEnvironment(
   );
 }
 
-function projectRefFromMetadataUrl(
-  value: string | undefined,
-): string | null {
+function projectRefFromUrlValue(value: string | undefined): string | null {
   if (!value) return null;
   try {
     const host = new URL(value).hostname.toLowerCase();
-    const match = /^([a-z0-9-]+)\.supabase\.co$/.exec(host);
-    return match?.[1] ?? null;
+    const direct = /^([a-z0-9-]+)\.supabase\.co$/.exec(host);
+    if (direct?.[1]) return direct[1];
+
+    if (host.endsWith(".pooler.supabase.com")) {
+      const parsed = new URL(value);
+      const username = decodeURIComponent(parsed.username);
+      const pooled = /^postgres\.([a-z0-9-]+)$/.exec(username);
+      if (pooled?.[1]) return pooled[1];
+    }
   } catch {
     return null;
   }
-}
-
-function projectRefFromSupabaseUrl(env: NodeJS.ProcessEnv): string | null {
-  for (const key of ["SUPABASE_URL", "VITE_SUPABASE_URL"]) {
-    const projectRef = projectRefFromMetadataUrl(env[key]);
-    if (projectRef) return projectRef;
-  }
   return null;
 }
 
-function projectRefFromDevSupabaseUrl(env: NodeJS.ProcessEnv): string | null {
-  for (const key of ["SUPABASE_URL_DEV", "VITE_SUPABASE_URL_DEV"]) {
-    const projectRef = projectRefFromMetadataUrl(env[key]);
-    if (projectRef) return projectRef;
-  }
-  return null;
-}
-
-function projectRefFromDatabaseUrl(value: string): string | null {
-  try {
-    const parsed = new URL(value);
-    const directMatch = /^db\.([a-z0-9-]+)\.supabase\.co$/.exec(
-      parsed.hostname.toLowerCase(),
-    );
-    if (directMatch?.[1]) return directMatch[1];
-
-    if (parsed.hostname.toLowerCase().endsWith(".pooler.supabase.com")) {
-      const usernameMatch = /^postgres\.([a-z0-9-]+)$/i.exec(parsed.username);
-      if (usernameMatch?.[1]) return usernameMatch[1].toLowerCase();
-    }
-  } catch {
-    // The caller will pass the original URL to node-postgres, which reports
-    // malformed URLs precisely. Isolation checks only act on parseable refs.
-  }
-  return null;
-}
-
-function assertDevelopmentDatabaseIsolation(
-  value: string,
+function projectRefFromSupabaseUrl(
   env: NodeJS.ProcessEnv,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const projectRef = projectRefFromUrlValue(env[key]);
+    if (projectRef) return projectRef;
+  }
+  return null;
+}
+
+export function assertDevelopmentDatabaseIsolation(
+  databaseUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): void {
-  const expectedDevRef = projectRefFromDevSupabaseUrl(env);
-  const productionRef = projectRefFromSupabaseUrl(env);
-  const actualRef = projectRefFromDatabaseUrl(value);
+  if (isProductionDatabaseEnvironment(env)) return;
 
-  if (expectedDevRef && !actualRef) {
+  const expectedDevRef = projectRefFromSupabaseUrl(env, [
+    "SUPABASE_URL_DEV",
+    "VITE_SUPABASE_URL_DEV",
+  ]);
+  const activeDatabaseRef = projectRefFromUrlValue(databaseUrl);
+
+  if (!expectedDevRef) {
     throw new Error(
-      "Development database isolation check failed: the active database URL does not expose a Supabase project ref.",
+      "SUPABASE_URL_DEV (or VITE_SUPABASE_URL_DEV) must be set in development so the database project can be verified.",
     );
   }
 
-  if (expectedDevRef && actualRef !== expectedDevRef) {
+  if (!activeDatabaseRef) {
     throw new Error(
-      `Development database isolation check failed: expected Supabase DEV project ${expectedDevRef}, got ${actualRef ?? "unknown"}.`,
+      "Development database URL must identify a Supabase project ref; refusing an unverifiable database connection.",
     );
   }
 
-  if (productionRef && actualRef === productionRef) {
+  if (activeDatabaseRef !== expectedDevRef) {
     throw new Error(
-      "Development database isolation check failed: production Supabase is configured as the active DEV database.",
+      `Development database isolation violation: active project ${activeDatabaseRef} does not match configured DEV project ${expectedDevRef}.`,
     );
   }
 }
@@ -102,11 +88,11 @@ export function normalizeProductionPoolerUrl(
     const parsed = new URL(value);
     if (!parsed.hostname.endsWith(".pooler.supabase.com")) return value;
 
-    // Supavisor's shared pooler requires the tenant/project ref in the
-    // username (postgres.<project-ref>). A direct-connection username of plain
-    // "postgres" otherwise reaches the pooler but fails authentication.
     if (parsed.username === "postgres") {
-      const projectRef = projectRefFromSupabaseUrl(env);
+      const projectRef = projectRefFromSupabaseUrl(env, [
+        "SUPABASE_URL",
+        "VITE_SUPABASE_URL",
+      ]);
       if (projectRef) parsed.username = `postgres.${projectRef}`;
     }
 
@@ -118,8 +104,6 @@ export function normalizeProductionPoolerUrl(
 
     return parsed.toString();
   } catch {
-    // Keep the original value; node-postgres will report a precise connection
-    // error if the supplied URL itself is malformed.
     return value;
   }
 }
