@@ -136,7 +136,7 @@ function AdminRouter() {
     return <AiCoreChat />;
   }
 
-  const isAiCodingHost = window.location.hostname.toLowerCase() === "aicoding.travelintrips.co.id";
+  const isAiCodingHost = ["aicoding.travelintrips.co.id", "coding.cstlogistic.co.id"].includes(window.location.hostname.toLowerCase());
   if ((isAiCodingHost && pathname === "/") || pathname === "/aicoding") {
     return <AicodingDashboard />;
   }
