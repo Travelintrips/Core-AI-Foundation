@@ -17,7 +17,14 @@ function execFileWithInput(
       { ...options, encoding: "utf8" },
       (error, stdout, stderr) => {
         if (error) {
-          reject(error);
+          const safeStderr = String(stderr ?? "").trim().slice(-4000);
+          const safeStdout = String(stdout ?? "").trim().slice(-4000);
+          const detail = [
+            error.message,
+            safeStderr ? `stderr: ${safeStderr}` : "",
+            safeStdout ? `stdout: ${safeStdout}` : "",
+          ].filter(Boolean).join("\n");
+          reject(new Error(detail));
           return;
         }
         resolve({
@@ -398,7 +405,7 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
       b64PrivateKey ||
       (env["AI_WORKERS_SSH_PRIVATE_KEY"] ?? "").trim(),
     sshDockerProjectDir: (env["HOSTINGER_DOCKER_PROJECT_DIR"] ?? "").trim(),
-    aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-foundation").trim(),
+    aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-workers").trim(),
     aiWorkersEnvFile: (env["AI_WORKERS_REMOTE_ENV_FILE"] ?? "/etc/ai-core/ai-workers.env").trim(),
   };
 }
@@ -493,9 +500,14 @@ async function callHostinger(
       `ENV_FILE=${envFileQuoted}`,
       `TARGET=${targetQuoted}`,
       'if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi',
+      'command -v git >/dev/null || { echo "AI_WORKERS_DEPLOY_PRECHECK_FAIL missing=git" >&2; exit 70; }',
+      'command -v bash >/dev/null || { echo "AI_WORKERS_DEPLOY_PRECHECK_FAIL missing=bash" >&2; exit 70; }',
+      'command -v docker >/dev/null || { echo "AI_WORKERS_DEPLOY_PRECHECK_FAIL missing=docker" >&2; exit 70; }',
       '$SUDO mkdir -p "$DEPLOY_PATH"',
       '$SUDO chown "$(id -u):$(id -g)" "$DEPLOY_PATH"',
+      'if [ ! -d "$DEPLOY_PATH/.git" ] && [ -n "$(find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then echo "AI_WORKERS_DEPLOY_PRECHECK_FAIL path_not_git_nonempty=$DEPLOY_PATH" >&2; exit 72; fi',
       `if [ ! -d "$DEPLOY_PATH/.git" ]; then git clone ${repoQuoted} "$DEPLOY_PATH"; fi`,
+      '[ -f "$ENV_FILE" ] || { echo "AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=$ENV_FILE" >&2; exit 73; }',
       'git -C "$DEPLOY_PATH" fetch --prune origin',
       'if [ "$TARGET" = "main" ]; then TARGET="$(git -C "$DEPLOY_PATH" rev-parse origin/main)"; fi',
       'git -C "$DEPLOY_PATH" checkout --detach "$TARGET"',
