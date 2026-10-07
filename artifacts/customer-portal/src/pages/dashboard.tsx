@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetCustomerDashboard } from "@/hooks/use-customer";
-import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar, FileText, AlertCircle } from "lucide-react";
+import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar, FileText, AlertCircle, Shirt, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { useTranslation } from "@/lib/i18n";
 
@@ -18,6 +18,43 @@ type ServiceRequestItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+type FashionOrderItem = {
+  id: number;
+  orderName: string;
+  serviceType: string;
+  status: string;
+  statusLabel: string;
+  outputs?: Record<string, unknown> | null;
+  colorways: string[];
+  portalPath: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function fashionOutputImageUrl(outputs: Record<string, unknown> | null | undefined): string | null {
+  if (!outputs) return null;
+  const read = (value: unknown): string | null => {
+    if (typeof value === "string" && /^https?:\/\//i.test(value)) return value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const record = value as Record<string, unknown>;
+    const candidate = record["imageUrl"] ?? record["image_url"] ?? record["url"];
+    return typeof candidate === "string" && /^https?:\/\//i.test(candidate) ? candidate : null;
+  };
+  return read(outputs["front-back-preview"]) ?? read(outputs["flat-design"]);
+}
+
+function fashionStatusColor(status: string) {
+  if (["review", "revision_requested", "revision_in_progress"].includes(status))
+    return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+  if (["approved", "delivered"].includes(status))
+    return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+  if (["trademark_flagged", "cancelled"].includes(status))
+    return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+  if (["blueprint_ready", "generating"].includes(status))
+    return "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300";
+  return "bg-muted text-muted-foreground";
+}
 
 function fmtMoney(amount: string | number, currency = "IDR") {
   const n = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -229,13 +266,101 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
           </div>
         )}
 
+        {/* ── Fashion Design Orders ── */}
+        {data.fashionOrders && data.fashionOrders.length > 0 && (
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-serif font-medium flex items-center gap-2">
+                <Shirt className="w-5 h-5" /> Fashion Design
+              </h2>
+              <Link href="/fashion-design" className="text-sm font-medium text-primary hover:underline">
+                Buka Fashion Design
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {data.fashionOrders.map((order: FashionOrderItem) => {
+                const previewUrl = fashionOutputImageUrl(order.outputs);
+                const needsAction = ["review", "revision_requested", "revision_in_progress"].includes(order.status);
+                return (
+                  <div
+                    key={order.id}
+                    className="bg-card border border-card-border rounded-2xl shadow-sm overflow-hidden flex flex-col"
+                  >
+                    {previewUrl ? (
+                      <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="block group">
+                        <img
+                          src={previewUrl}
+                          alt={order.orderName}
+                          loading="lazy"
+                          className="w-full aspect-[4/3] object-cover bg-white"
+                        />
+                      </a>
+                    ) : (
+                      <div className="aspect-[4/3] bg-muted/30 flex items-center justify-center">
+                        <Shirt className="w-12 h-12 text-muted-foreground/40" />
+                      </div>
+                    )}
+                    <div className="p-5 flex flex-col gap-3 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-serif font-medium">{order.orderName}</h3>
+                          <p className="text-xs text-muted-foreground">
+                            Order #{order.id} · {order.serviceType}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 text-xs font-medium px-2.5 py-1 rounded-full ${fashionStatusColor(order.status)}`}>
+                          {order.statusLabel}
+                        </span>
+                      </div>
+
+                      {needsAction && (
+                        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Hasil desain memerlukan perhatian Anda.</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between mt-auto pt-3 border-t border-border/50">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {format(new Date(order.updatedAt), "MMM d, yyyy")}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          {previewUrl && (
+                            <a
+                              href={previewUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                              Lihat Hasil <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          <Link
+                            href={order.portalPath}
+                            className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            Detail <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── Creative Projects ── */}
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-serif font-medium">{t('dashboard.projects')}</h2>
           </div>
 
-          {data.projects.length === 0 && !(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests?.length ? (
+          {data.projects.length === 0 &&
+          !(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests?.length &&
+          !data.fashionOrders?.length ? (
             <div className="bg-card border border-card-border rounded-2xl p-12 text-center">
               <Folder className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
               <h3 className="text-xl font-medium mb-2">{t('dashboard.noProjects')}</h3>
