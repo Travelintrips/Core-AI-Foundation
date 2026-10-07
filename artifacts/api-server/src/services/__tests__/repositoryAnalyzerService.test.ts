@@ -592,7 +592,7 @@ describe("repository analyzer execution", () => {
       status: "FAILED",
       finishedAt: expect.any(Date),
       errorMessage: message,
-      logs: expect.stringContaining('"recoverable":true'),
+      logs: expect.stringContaining('"recoverable": true'),
     }));
     expect(mockTxUpdateSet).toHaveBeenNthCalledWith(2, {
       status: "READY_REVIEW",
