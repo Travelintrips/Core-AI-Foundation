@@ -9,6 +9,7 @@ export type AiCoreGitHubOperation =
   | "GITHUB_WORKFLOW_RERUN"
   | "GITHUB_WORKFLOW_RERUN_FAILED"
   | "GITHUB_WORKFLOW_CANCEL"
+  | "GITHUB_WORKFLOW_DISPATCH"
   | "GITHUB_HOSTINGER_NODEJS_DEPLOY"
   | "GITHUB_PR_STATUS"
   | "GITHUB_PR_MERGE";
@@ -48,6 +49,12 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
     if (/\b(?:cancel|batalkan|hentikan)\b/i.test(text)) {
       return "GITHUB_WORKFLOW_CANCEL";
     }
+    if (
+      /\b(?:dispatch|trigger|jalankan|run|mulai)\b/i.test(text) &&
+      /\b[A-Za-z0-9_.-]+\.ya?ml\b/i.test(message)
+    ) {
+      return "GITHUB_WORKFLOW_DISPATCH";
+    }
     if (/\b(?:cek|check|status|lihat|inspect|verify|verifikasi)\b/i.test(text)) {
       return "GITHUB_WORKFLOW_STATUS";
     }
@@ -80,6 +87,36 @@ export function requestedCommitSha(message: string): string | null {
   return message.match(
     /\b(?:exact\s+)?(?:commit|sha)\s*[:=#]?\s*([0-9a-f]{7,40})\b/i,
   )?.[1]?.toLowerCase() ?? null;
+}
+
+export function requestedWorkflowDispatch(message: string): {
+  workflow: string;
+  ref: string;
+  inputs: Record<string, string>;
+} | null {
+  const workflow =
+    message.match(/\bworkflow\s*[:=]\s*([A-Za-z0-9_.-]+\.ya?ml)\b/i)?.[1] ??
+    message.match(/\b([A-Za-z0-9_.-]+\.ya?ml)\b/i)?.[1] ??
+    null;
+  if (!workflow) return null;
+
+  const ref =
+    message.match(/\bref\s*[:=]\s*([A-Za-z0-9._/-]+)\b/i)?.[1] ??
+    "main";
+
+  const inputs: Record<string, string> = {};
+  for (const match of message.matchAll(/\binput\.([A-Za-z_][A-Za-z0-9_-]{0,63})\s*=\s*([^\s,;]+)/gi)) {
+    const key = match[1];
+    const value = match[2];
+    if (key && value) inputs[key] = value;
+  }
+
+  for (const key of ["conversation_id", "delay_seconds"]) {
+    const match = message.match(new RegExp(`\\b${key}\\s*=\\s*([^\\s,;]+)`, "i"));
+    if (match?.[1]) inputs[key] = match[1];
+  }
+
+  return { workflow, ref, inputs };
 }
 
 function prNumber(message: string): number | null {
@@ -221,6 +258,30 @@ export async function executeAiCoreGitHubOperation(input: {
       ref: "main",
       expectedSha: headSha,
       requestedSha,
+      noWorker: true,
+    };
+  } else if (input.operation === "GITHUB_WORKFLOW_DISPATCH") {
+    mutating = true;
+    const dispatch = requestedWorkflowDispatch(input.message);
+    if (!dispatch) {
+      throw new Error(
+        "GitHub workflow dispatch requires a workflow file, for example workflow=chatgpt-event-wake-canary.yml.",
+      );
+    }
+
+    await client.request(
+      "POST",
+      `${base}/actions/workflows/${encodeURIComponent(dispatch.workflow)}/dispatches`,
+      {
+        ref: dispatch.ref,
+        ...(Object.keys(dispatch.inputs).length > 0 ? { inputs: dispatch.inputs } : {}),
+      },
+    );
+    data = {
+      accepted: true,
+      workflow: dispatch.workflow,
+      ref: dispatch.ref,
+      inputNames: Object.keys(dispatch.inputs).sort(),
       noWorker: true,
     };
   } else if (input.operation.startsWith("GITHUB_WORKFLOW_")) {
