@@ -33,6 +33,14 @@ export function isHumanCriticalApprovalActionType(
   return (HUMAN_CRITICAL_APPROVAL_ACTIONS as readonly string[]).includes(value);
 }
 
+export function criticalApprovalExecutionMode(
+  actionType: CriticalApprovalActionType,
+): "AUTHORIZATION_ONLY" | "IMMEDIATE_LEGACY_ADAPTER" {
+  return isHumanCriticalApprovalActionType(actionType)
+    ? "AUTHORIZATION_ONLY"
+    : "IMMEDIATE_LEGACY_ADAPTER";
+}
+
 export type CriticalApprovalStatus =
   | "PENDING"
   | "APPROVED"
@@ -356,6 +364,23 @@ async function decideLoadedCriticalApproval(
       status: "REJECTED",
       actionType: approval.actionType,
       message: "Aksi dibatalkan. AI Core tidak mengeksekusi perubahan krusial tersebut.",
+    });
+    return approval;
+  }
+
+  // Destructive DB/security approvals are authorization tokens for the
+  // requesting operation. Keep them APPROVED so that caller can revalidate
+  // context and execute the exact critical action, then finalize the record.
+  // Historical WORKSTREAM_AI_HANDOFF/MERGE_PR rows retain their old immediate
+  // adapters only for backward compatibility; new requests cannot create them.
+  if (criticalApprovalExecutionMode(approval.actionType) === "AUTHORIZATION_ONLY") {
+    await sendCodingApprovalResult({
+      approvalId: approval.id,
+      taskId: approval.taskId,
+      status: "APPROVED",
+      actionType: approval.actionType,
+      message:
+        "Persetujuan kritis diterima. AI Core dapat melanjutkan aksi yang sama setelah memvalidasi ulang konteks.",
     });
     return approval;
   }
