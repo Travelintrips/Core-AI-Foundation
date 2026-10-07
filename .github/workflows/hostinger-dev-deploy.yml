@@ -35,8 +35,7 @@ jobs:
       - name: Authenticate to GCP without static credentials
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: projects/96593896464/locations/global/workloadIdentityPools/github-aicore-dev/providers/github-core-ai
-          service_account: aicore-dev-github@aicore-505614.iam.gserviceaccount.com
+          workload_identity_provider: projects/96593896464/locations/global/workloadIdentityPools/github-aicore-dev/providers/github
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -109,7 +108,7 @@ jobs:
             {env_vars: (
               [
                 {key:"APP_ENV",value:"development"},
-                {key:"NODE_ENV",value:"production"},
+                {key:"NODE_ENV",value:"development"},
                 {key:"SERVE_FRONTEND",value:"true"},
                 {key:"PORT",value:"3000"},
                 {key:"BASE_PATH",value:"/"},
