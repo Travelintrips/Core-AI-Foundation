@@ -63,6 +63,18 @@ describe("AI Core capability registry", () => {
       expect.objectContaining({ id: "agent.gcp-openhands-coder", state: "available" }),
     ]));
 
+    const repository = snapshot.resources.find((resource) => resource.id === "repository.coding");
+    const temporal = snapshot.resources.find((resource) => resource.id === "orchestrator.temporal");
+    const agent = snapshot.resources.find((resource) => resource.id === "agent.gcp-openhands-coder");
+    const database = snapshot.resources.find((resource) => resource.id === "database.admin");
+
+    expect(repository?.approvalRequiredActions).toEqual([]);
+    expect(temporal?.approvalRequiredActions).toEqual([]);
+    expect(agent?.approvalRequiredActions).toEqual([]);
+    expect(database?.approvalRequiredActions).toEqual(
+      expect.arrayContaining(["ddl", "drop", "truncate", "security-change"]),
+    );
+
     const encoded = JSON.stringify(snapshot);
     expect(encoded).not.toContain("secret-token");
     expect(encoded).not.toContain("postgresql://secret");
