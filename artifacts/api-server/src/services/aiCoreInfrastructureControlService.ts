@@ -357,7 +357,22 @@ async function callGcp(
   };
 }
 
+function decodeAiWorkersPrivateKeyB64(env: NodeJS.ProcessEnv): string {
+  const encoded = (env["AI_WORKERS_SSH_PRIVATE_KEY_B64"] ?? "").trim();
+  if (!encoded) return "";
+  try {
+    const decoded = Buffer.from(encoded, "base64").toString("utf8").trim();
+    if (!/^-----BEGIN (?:OPENSSH |RSA )?PRIVATE KEY-----[\s\S]+-----END (?:OPENSSH |RSA )?PRIVATE KEY-----$/.test(decoded)) {
+      throw new Error("decoded value is not a supported private key");
+    }
+    return decoded;
+  } catch {
+    throw new Error("AI_WORKERS_SSH_PRIVATE_KEY_B64 is not a valid base64-encoded private key.");
+  }
+}
+
 function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
+  const b64PrivateKey = decodeAiWorkersPrivateKeyB64(env);
   return {
     token: (env["HOSTINGER_API_TOKEN"] ?? "").trim(),
     vmId: (env["HOSTINGER_VPS_ID"] ?? "").trim(),
@@ -371,7 +386,10 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     sshHost: (env["HOSTINGER_SSH_HOST"] ?? env["AI_WORKERS_SSH_HOST"] ?? "").trim(),
     sshUser: (env["HOSTINGER_SSH_USER"] ?? env["AI_WORKERS_SSH_USER"] ?? "root").trim(),
     sshPort: (env["HOSTINGER_SSH_PORT"] ?? env["AI_WORKERS_SSH_PORT"] ?? "22").trim(),
-    sshPrivateKey: (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? env["AI_WORKERS_SSH_PRIVATE_KEY"] ?? "").trim(),
+    sshPrivateKey:
+      (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim() ||
+      b64PrivateKey ||
+      (env["AI_WORKERS_SSH_PRIVATE_KEY"] ?? "").trim(),
     sshDockerProjectDir: (env["HOSTINGER_DOCKER_PROJECT_DIR"] ?? "").trim(),
     aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-foundation").trim(),
     aiWorkersEnvFile: (env["AI_WORKERS_REMOTE_ENV_FILE"] ?? "/etc/ai-core/ai-workers.env").trim(),

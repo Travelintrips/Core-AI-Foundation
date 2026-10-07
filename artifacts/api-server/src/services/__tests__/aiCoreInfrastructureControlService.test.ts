@@ -187,6 +187,51 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
+  it("prefers base64 AI Workers private key over a malformed direct AI Workers key", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "AI_WORKERS_DEPLOY_OK commit=100a7f0b8957628441589aae004a7be0049fd91a", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const validKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST-B64\n-----END OPENSSH PRIVATE KEY-----";
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS commit 100a7f0b8957628441589aae004a7be0049fd91a",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PORT: "22",
+        AI_WORKERS_SSH_PRIVATE_KEY: "broken-single-line-value",
+        AI_WORKERS_SSH_PRIVATE_KEY_B64: Buffer.from(validKey, "utf8").toString("base64"),
+      },
+    });
+
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      host: "198.51.100.20",
+      deployed: true,
+    });
+    expect(JSON.stringify(result)).not.toContain("TEST-B64");
+    expect(JSON.stringify(result)).not.toContain("broken-single-line-value");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
+  });
+
+  it("rejects malformed base64 AI Workers private key without exposing the value", async () => {
+    await expect(executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS commit 100a7f0b8957628441589aae004a7be0049fd91a",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PRIVATE_KEY_B64: Buffer.from("not-a-private-key", "utf8").toString("base64"),
+      },
+    })).rejects.toThrow("AI_WORKERS_SSH_PRIVATE_KEY_B64 is not a valid base64-encoded private key.");
+  });
+
   it("lists attached Hostinger SSH keys without returning key material", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
       data: [{ id: 594837, name: "chatgpt-ai-task-20261006", key: "ssh-ed25519 SECRET" }],
