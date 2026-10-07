@@ -104,7 +104,7 @@ jobs:
           admin_key=$(jq -r '.ADMIN_API_KEY // empty' /tmp/aicore-secrets.json)
           session_secret=$(printf 'aicore-dev-session:%s' "$admin_key" | sha256sum | awk '{print $1}')
 
-          jq --arg session "$session_secret" '
+          jq --arg session "$session_secret" --arg expected_sha "$EXPECTED_SHA" '
             def add($k;$v): if ($v // "") == "" then [] else [{key:$k,value:$v}] end;
             {env_vars: (
               [
@@ -112,6 +112,9 @@ jobs:
                 {key:"NODE_ENV",value:"development"},
                 {key:"SERVE_FRONTEND",value:"true"},
                 {key:"PORT",value:"3000"},
+                {key:"BASE_PATH",value:"/"},
+                {key:"HOSTINGER_FRONTEND",value:"ai-platform"},
+                {key:"CST_BUILD_COMMIT_SHA",value:$expected_sha},
                 {key:"PUBLIC_APP_URL",value:"https://dev-aicore.cstlogistic.co.id"},
                 {key:"ALLOWED_ORIGINS",value:"https://dev-aicore.cstlogistic.co.id"},
                 {key:"SUPABASE_URL_DEV",value:.SUPABASE_URL_DEV},
