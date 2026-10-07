@@ -67,6 +67,49 @@ describe("AI Core MCP event webhook helpers", () => {
     expect(oauthPrincipalUserId("legacy:abcdef")).toBeNull();
   });
 
+
+  it("dual-signs during the bounded webhook secret rotation window", () => {
+    const current = `whsec_${Buffer.alloc(24, 3).toString("base64")}`;
+    const previous = `whsec_${Buffer.alloc(24, 4).toString("base64")}`;
+    const body = JSON.stringify({ eventId: "evt_rotation" });
+    const timestamp = 1791158400;
+    const now = Date.parse("2026-10-07T06:00:00.000Z");
+
+    const header = buildStandardWebhookSignatureHeader({
+      currentSecret: current,
+      previousSecret: previous,
+      previousSecretValidUntil: new Date(now + 60_000),
+      messageId: "evt_rotation",
+      timestampSeconds: timestamp,
+      body,
+      nowMs: now,
+    });
+
+    expect(header).toBe(
+      [
+        signStandardWebhook(current, "evt_rotation", timestamp, body),
+        signStandardWebhook(previous, "evt_rotation", timestamp, body),
+      ].join(" "),
+    );
+
+    expect(buildStandardWebhookSignatureHeader({
+      currentSecret: current,
+      previousSecret: previous,
+      previousSecretValidUntil: new Date(now - 1),
+      messageId: "evt_rotation",
+      timestampSeconds: timestamp,
+      body,
+      nowMs: now,
+    })).toBe(signStandardWebhook(current, "evt_rotation", timestamp, body));
+  });
+
+  it("parses only OAuth user principals for delivery-time access revalidation", () => {
+    expect(oauthPrincipalUserId("oauth:42")).toBe(42);
+    expect(oauthPrincipalUserId("oauth:0")).toBeNull();
+    expect(oauthPrincipalUserId("oauth:not-a-number")).toBeNull();
+    expect(oauthPrincipalUserId("legacy:abc")).toBeNull();
+  });
+
   it("prefers IPv4 for callback verification when both address families are available", () => {
     expect(choosePreferredCallbackAddress([
       { address: "2001:4860:4860::8888", family: 6 },
