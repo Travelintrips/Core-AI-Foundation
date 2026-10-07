@@ -29,17 +29,23 @@ function requestedEventType(message: string): "COMPLETED" | "FAILED" | "BLOCKED"
 }
 
 function requestedMessage(message: string): string | null {
-  const patterns = [
+  const quoted = message.match(
+    /(?:isi\s+pesan\s+persis|message\s+persis|dengan\s+pesan|message)\s*[:=]?\s*["'`]([^"'\`]+)["'\`]/i,
+  )?.[1]?.trim();
+  if (quoted) return quoted.slice(0, 4_000);
+
+  const raw = message.match(
     /(?:isi\s+pesan\s+persis|message\s+persis|dengan\s+pesan|message)\s*[:=]\s*([^\n\r]+)/i,
-    /\bmessage\s+persis\s+["']([^"']+)["']/i,
-  ];
-  for (const pattern of patterns) {
-    const value = message.match(pattern)?.[1]?.trim();
-    if (value) {
-      return value.replace(/^["'`]+|["'`.,;]+$/g, "").trim().slice(0, 4_000);
-    }
-  }
-  return null;
+  )?.[1]?.trim();
+  if (!raw) return null;
+
+  const value = raw
+    .split(/\.(?=\s+(?:gunakan|jangan|do\s+not|don't|without|via|melalui|dengan\s+checkpoint|checkpoint|kind|eventType)\b)/i)[0]
+    ?.trim();
+
+  return value
+    ? value.replace(/^["'`]+|["'`.,;]+$/g, "").trim().slice(0, 4_000)
+    : null;
 }
 
 export function parseDirectConversationEventRequest(
