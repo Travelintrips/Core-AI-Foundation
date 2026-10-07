@@ -168,12 +168,12 @@ export function detectAiCoreInfrastructureOperation(
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(dns|zone|record)\b/i.test(text)) {
     if (/\b(delete|hapus|remove)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_DELETE";
     if (/\b(update|ubah|ganti|replace|overwrite)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_UPDATE";
-    if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomain\b/i.test(text)) {
+    if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomains?\b/i.test(text)) {
       return "HOSTINGER_DNS_RECORD_CREATE";
     }
   }
 
-  if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(parked domain|domain alias|alias domain|parkir domain)\b/i.test(text)) {
+  if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(parked domains?|domain aliases?|alias domains?|parkir domain)\b/i.test(text)) {
     if (/\b(buat|create|add|tambah|pasang)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_CREATE";
     if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_LIST";
   }
