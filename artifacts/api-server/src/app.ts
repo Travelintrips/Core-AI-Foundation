@@ -52,6 +52,10 @@ app.use(
 // to the Replit dev domain and localhost for development.
 const rawAllowedOrigins = process.env["ALLOWED_ORIGINS"] ?? "";
 const publicAppUrl = process.env["PUBLIC_APP_URL"] ?? "";
+const shouldServeFrontend =
+  process.env["NODE_ENV"] === "production" ||
+  process.env["SERVE_FRONTEND"] === "true";
+
 const productionDefaultOrigins =
   process.env["NODE_ENV"] === "production"
     ? [
