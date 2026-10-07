@@ -18,6 +18,21 @@ export type CriticalApprovalActionType =
   | "SECURITY_CHANGE"
   | "PRODUCTION_SERVICE_RESTART";
 
+export const HUMAN_CRITICAL_APPROVAL_ACTIONS = [
+  "PRODUCTION_DB_MIGRATION",
+  "DESTRUCTIVE_DB_CHANGE",
+  "SECURITY_CHANGE",
+] as const;
+
+export type HumanCriticalApprovalActionType =
+  (typeof HUMAN_CRITICAL_APPROVAL_ACTIONS)[number];
+
+export function isHumanCriticalApprovalActionType(
+  value: CriticalApprovalActionType,
+): value is HumanCriticalApprovalActionType {
+  return (HUMAN_CRITICAL_APPROVAL_ACTIONS as readonly string[]).includes(value);
+}
+
 export type CriticalApprovalStatus =
   | "PENDING"
   | "APPROVED"
@@ -135,6 +150,9 @@ export async function requestCodingCriticalApproval(input: {
   metadata?: Record<string, unknown>;
   ttlMinutes?: number;
 }): Promise<{ approval: CriticalApprovalRow; token?: string; reused: boolean }> {
+  if (!isHumanCriticalApprovalActionType(input.actionType)) {
+    throw new Error("CRITICAL_APPROVAL_NOT_REQUIRED");
+  }
   await ensureCodingControlBridgeTables();
   await expireStaleApprovals();
 
