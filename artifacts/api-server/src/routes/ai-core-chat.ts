@@ -45,6 +45,8 @@ import {
 import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
+  hasExplicitSourceChange,
+  isExplicitCodingOrchestratorRequest,
   detectRemoteWorkerPreset,
   isAiCoreCapabilityQuery,
   type RemoteWorkerPreset,
@@ -2203,7 +2205,30 @@ async function runExistingCodingTaskLifecycleCommand(
   };
 }
 
+function githubDirectRequiredResponse(message: string): Record<string, unknown> {
+  return {
+    kind: "routing_guard",
+    route: "GITHUB_DIRECT_REQUIRED",
+    executionLane: "NO_WORKER",
+    provider: "github",
+    model: null,
+    usage: null,
+    estimatedCostUsd: 0,
+    blocked: true,
+    reason: "implicit_coding_orchestrator_blocked",
+    reply:
+      "Perintah mengubah source code dan tidak akan dikirim ke Coding Orchestrator. Jalankan perubahan langsung melalui GitHub. Jika memang ingin memakai Coding Orchestrator, sebutkan 'Coding Orchestrator' secara eksplisit.",
+    originalIntent: message.slice(0, 500),
+  };
+}
+
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
+  if (
+    hasExplicitSourceChange(input.message) &&
+    !isExplicitCodingOrchestratorRequest(input.message)
+  ) {
+    return githubDirectRequiredResponse(input.message);
+  }
   if (!input.projectName || !input.repository || !input.branch) {
     return {
       kind: "validation",
@@ -2592,6 +2617,14 @@ async function runAutoMode(
         continue;
       }
 
+      if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
+        results.push({
+          ...githubDirectRequiredResponse(command),
+          executionLane: "NO_WORKER",
+        });
+        continue;
+      }
+
       if (decision.kind === "CONTROL_PLANE") {
         if (!input.projectName || !input.repository || !input.branch) {
           results.push({
@@ -2670,6 +2703,10 @@ async function runAutoMode(
   if (decision.kind === "GITHUB_OPERATION") {
     const result = await runGitHubOperation(input.message, input.repository);
     if (result) return { ...result, ...routingMeta };
+  }
+
+  if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
+    return { ...githubDirectRequiredResponse(contextualCommand), ...routingMeta };
   }
 
   if (decision.kind === "CONTROL_PLANE") {
@@ -2819,7 +2856,8 @@ router.get("/ai/core-chat/config", async (_req, res): Promise<void> => {
       remoteReadonly: ["REVIEW"],
       infrastructure: ["GCP", "HOSTINGER", "EXTERNAL_AGENT_STATUS"],
       externalAgent: ["EXPLICIT_OPENCLAW_DELEGATION"],
-      controlPlane: ["CODING", "CRITICAL_ACTION"],
+      controlPlane: ["CRITICAL_ACTION", "EXPLICIT_CODING_ORCHESTRATOR_ONLY"],
+      githubDirectDefault: ["CODING", "SOURCE_CHANGE"],
       criticalApprovalPreserved: true,
     },
     defaultModelPolicy: "smart",
@@ -3668,6 +3706,9 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             : null) ??
           (rawDispatch.kind === "GITHUB_OPERATION"
             ? await runGitHubOperation(rawInput.message, rawInput.repository)
+            : null) ??
+          (rawDispatch.kind === "GITHUB_DIRECT_REQUIRED"
+            ? githubDirectRequiredResponse(rawInput.message)
             : null) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(

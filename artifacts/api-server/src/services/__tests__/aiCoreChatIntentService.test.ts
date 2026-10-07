@@ -113,6 +113,19 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.executionLane).toBe("NO_WORKER");
   });
 
+  it("routes coding website repair to GitHub deploy instead of Hostinger VPS status", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Perbaiki website coding.cstlogistic.co.id karena masih tampil halaman default Hostinger dan buat dashboard live.",
+    );
+
+    expect(decision).toMatchObject({
+      kind: "GITHUB_OPERATION",
+      githubOperation: "GITHUB_HOSTINGER_NODEJS_DEPLOY",
+      executionLane: "NO_WORKER",
+    });
+    expect(decision.infrastructureOperation).toBeNull();
+  });
+
   it("routes an existing-commit Hostinger deploy to the no-worker GitHub lane", () => {
     const decision = classifyAiCoreChatDispatch(
       "Lakukan hanya recovery/deploy operasional Core AI Foundation ke Hostinger untuk exact commit 34e9b7ab317458894555c82205f5fe155189babe. Jangan scan/index repo dan jangan ubah kode.",
@@ -141,7 +154,7 @@ describe("AI Core Chat automatic dispatch", () => {
       "Perbaiki kode login lalu deploy hasilnya ke Hostinger production.",
     );
 
-    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.kind).toBe("GITHUB_DIRECT_REQUIRED");
     expect(decision.workload.workload).toBe("CRITICAL_ACTION");
     expect(decision.githubOperation).toBeNull();
   });
@@ -151,7 +164,7 @@ describe("AI Core Chat automatic dispatch", () => {
       "Perbaiki routing intent AI Core. Tambahkan regression test seperti 'check GCP VM status' dan 'cek Ollama GPU aktif di production'.",
     );
 
-    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.kind).toBe("GITHUB_DIRECT_REQUIRED");
     expect(decision.workload.workload).toBe("CODING");
     expect(decision.infrastructureOperation).toBeNull();
   });
@@ -196,21 +209,21 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.externalAgentClientId).toBe("gcp-n8n-automation");
   });
 
-  it("keeps mutating OpenHands coding work inside the Coding Orchestrator", () => {
+  it("keeps mutating OpenHands coding work on the GitHub-direct default path", () => {
     const decision = classifyAiCoreChatDispatch(
       "Gunakan OpenHands untuk perbaiki kode login lalu commit.",
     );
 
-    expect(decision.kind).toBe("CONTROL_PLANE");
-    expect(decision.externalAgentClientId).toBe("gcp-openhands-coder");
+    expect(decision.kind).toBe("GITHUB_DIRECT_REQUIRED");
+    expect(decision.externalAgentClientId).toBeNull();
   });
 
-  it("does not let OpenClaw bypass coding control-plane policy", () => {
+  it("does not let OpenClaw bypass GitHub-direct coding policy", () => {
     const decision = classifyAiCoreChatDispatch(
       "Gunakan OpenClaw untuk perbaiki kode login dan commit.",
     );
 
-    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.kind).toBe("GITHUB_DIRECT_REQUIRED");
     expect(decision.workload.workload).toBe("CODING");
   });
 
@@ -224,12 +237,12 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.workload.requiresApproval).toBe(true);
   });
 
-  it("routes coding changes directly to the control plane", () => {
+  it("routes coding changes to GitHub-direct instead of Coding Orchestrator", () => {
     const decision = classifyAiCoreChatDispatch(
       "Perbaiki kode login dan test sampai hijau.",
     );
 
-    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.kind).toBe("GITHUB_DIRECT_REQUIRED");
     expect(decision.workload.workload).toBe("CODING");
   });
 
@@ -238,7 +251,7 @@ describe("AI Core Chat automatic dispatch", () => {
       "Buat unit test untuk service auth lalu commit perubahannya.",
     );
 
-    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.kind).toBe("GITHUB_DIRECT_REQUIRED");
     expect(decision.workload.workload).toBe("CODING");
   });
 
@@ -247,10 +260,31 @@ describe("AI Core Chat automatic dispatch", () => {
     "setelah selesai merge PR, deploy ke staging, commit langsung ke repository",
   ])("does not stop verified autonomous delivery policy at the generic critical approval gate: %s", (message) => {
     const decision = classifyAiCoreChatDispatch(message);
-    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.kind).toBe("GITHUB_DIRECT_REQUIRED");
     expect(decision.workload.workload).toBe("CODING");
     expect(decision.workload.requiresApproval).toBe(false);
     expect(decision.reason).not.toContain("explicit approval gate");
+  });
+
+  it("allows Coding Orchestrator only when explicitly requested by name", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "Gunakan Coding Orchestrator untuk perbaiki kode login dan test sampai hijau.",
+    );
+
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.workload.workload).toBe("CODING");
+    expect(decision.executionLane).toBe("CODING");
+  });
+
+  it("never silently sends ordinary source changes to Coding Orchestrator", () => {
+    for (const message of [
+      "Perbaiki kode login",
+      "patch routing intent",
+      "buat unit test lalu commit",
+      "refactor service API",
+    ]) {
+      expect(classifyAiCoreChatDispatch(message).kind).toBe("GITHUB_DIRECT_REQUIRED");
+    }
   });
 
   it("routes critical actions to the control plane while preserving approval", () => {

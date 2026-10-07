@@ -23,6 +23,7 @@ export type AiCoreChatDispatchKind =
   | "INFRA_OPERATION"
   | "GITHUB_OPERATION"
   | "EXTERNAL_AGENT"
+  | "GITHUB_DIRECT_REQUIRED"
   | "CONTROL_PLANE";
 export type RemoteWorkerPreset = "check" | "build" | "test" | "review";
 
@@ -51,6 +52,12 @@ const NEGATED_SOURCE_CHANGE_CLAUSE =
 
 const CONDITIONAL_SOURCE_CHANGE_CLAUSE =
   /\b(?:hanya|only)\s+(?:jika|kalau|apabila|if)\b[^.!?;\n]{0,220}\b(?:ubah|edit|patch|fix|perbaiki|implement(?:asikan)?|refactor|tambah(?:kan)?|hapus)\b[^.!?;\n]{0,160}\b(?:kode|code|source|repository|repo|file|function|fungsi|class|module|modul|routing|intent|logic|alur|behavior|behaviour|bug|fitur|feature|api|endpoint|service|test|tests|regression)\b/gi;
+
+export function isExplicitCodingOrchestratorRequest(message: string): boolean {
+  const value = message.trim().toLowerCase();
+  if (!value) return false;
+  return /\b(?:coding\s+orchestrator|orchestrator\s+coding|gunakan\s+(?:coding\s+)?orchestrator|pakai\s+(?:coding\s+)?orchestrator|route\s+ke\s+coding\s+orchestrator|masuk(?:kan)?\s+ke\s+coding\s+orchestrator)\b/i.test(value);
+}
 
 export function hasExplicitSourceChange(message: string): boolean {
   // A conditional fallback such as "inspect runtime; only if logs prove a code
@@ -99,10 +106,47 @@ export function classifyAiCoreChatDispatch(
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
   const sourceChange = hasExplicitSourceChange(message);
 
+  const explicitCodingOrchestrator = isExplicitCodingOrchestratorRequest(message);
+
+  // Source-code mutation is GitHub-direct by default. This is intentionally
+  // fail-closed: no repository-changing request may silently create a Coding
+  // Orchestrator task. The orchestrator is reachable only when explicitly
+  // requested by name.
+  if (sourceChange && !explicitCodingOrchestrator) {
+    return {
+      kind: "GITHUB_DIRECT_REQUIRED",
+      workload,
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: null,
+      executionLane: "NO_WORKER",
+      reason:
+        "Repository-changing coding from ChatGPT/operator defaults to direct GitHub delivery. Coding Orchestrator requires an explicit request by name.",
+    };
+  }
+
   // Explicit, structured operational actions outrank generic CRITICAL_ACTION
   // classification. They execute in the deterministic control plane and must
   // not create repository-analysis/coding jobs. Source-code mutation still
   // outranks incidental infrastructure/GitHub examples.
+  // A specific GitHub delivery/recovery action outranks a generic Hostinger
+  // status interpretation. This prevents domain repair requests from being
+  // reduced to HOSTINGER_VPS_STATUS.
+  if (githubOperation && !sourceChange) {
+    return {
+      kind: "GITHUB_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation,
+      externalAgentClientId: null,
+      executionLane: "NO_WORKER",
+      reason:
+        "Explicit GitHub status/rerun/cancel/verified-merge/Hostinger-deploy action executes directly without Repository Analyzer or coding workers.",
+    };
+  }
+
   if (infrastructureOperation && !sourceChange) {
     return {
       kind: "INFRA_OPERATION",
@@ -117,17 +161,17 @@ export function classifyAiCoreChatDispatch(
     };
   }
 
-  if (githubOperation && !sourceChange) {
+  if (workload.workload === "CODING" && !explicitCodingOrchestrator) {
     return {
-      kind: "GITHUB_OPERATION",
+      kind: "GITHUB_DIRECT_REQUIRED",
       workload,
       preset: null,
       infrastructureOperation: null,
-      githubOperation,
+      githubOperation: null,
       externalAgentClientId: null,
       executionLane: "NO_WORKER",
       reason:
-        "Explicit GitHub status/rerun/cancel/verified-merge/Hostinger-deploy action executes directly without Repository Analyzer or coding workers.",
+        "Coding work defaults to direct GitHub delivery. Coding Orchestrator requires an explicit request by name.",
     };
   }
 
