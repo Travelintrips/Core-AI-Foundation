@@ -52,6 +52,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DOCKER_STOP"
   | "HOSTINGER_DOCKER_RESTART"
   | "HOSTINGER_DOCKER_UPDATE"
+  | "HOSTINGER_AI_WORKERS_DEPLOY"
   | "HOSTINGER_SUBDOMAIN_LIST"
   | "HOSTINGER_SUBDOMAIN_CREATE"
   | "HOSTINGER_SUBDOMAIN_DELETE"
@@ -131,6 +132,15 @@ export function detectAiCoreInfrastructureOperation(
   if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
       /\b(cek|status|health|registry|terdaftar|registered|aktif)\b/i.test(text)) {
     return "EXTERNAL_AGENT_STATUS";
+  }
+
+  // Deploying the AI worker stack is a bounded SSH deployment on an already
+  // running VPS. It must outrank generic VPS start/stop heuristics, especially
+  // when the prompt contains words like "jalankan installer".
+  if (/\b(ai[ -]?workers?|worker stack|openclaw stack|external agent stack)\b/i.test(text) &&
+      /\b(deploy|redeploy|install|installer|apply|rollout|perbarui|update)\b/i.test(text) &&
+      /\b(hostinger|vps|worker|openclaw|openhands|n8n)\b/i.test(text)) {
+    return "HOSTINGER_AI_WORKERS_DEPLOY";
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) &&
@@ -354,6 +364,8 @@ function hostingerConfig(env: NodeJS.ProcessEnv = process.env) {
     sshPort: (env["HOSTINGER_SSH_PORT"] ?? "22").trim(),
     sshPrivateKey: (env["HOSTINGER_SSH_PRIVATE_KEY"] ?? "").trim(),
     sshDockerProjectDir: (env["HOSTINGER_DOCKER_PROJECT_DIR"] ?? "").trim(),
+    aiWorkersDeployPath: (env["AI_WORKERS_DEPLOY_PATH"] ?? "/opt/core-ai-foundation").trim(),
+    aiWorkersEnvFile: (env["AI_WORKERS_REMOTE_ENV_FILE"] ?? "/etc/ai-core/ai-workers.env").trim(),
   };
 }
 
@@ -405,6 +417,98 @@ async function callHostinger(
 
   const isDockerManagerUnsupported = (error: unknown): boolean =>
     error instanceof Error && /\[VPS:2044\]|does not support Docker Manager/i.test(error.message);
+
+  const runAiWorkersDeployOverSsh = async (): Promise<unknown> => {
+    const host = config.sshHost;
+    const user = config.sshUser;
+    const port = config.sshPort;
+    const privateKey = config.sshPrivateKey;
+    const deployPath = valueOf("directory") || config.aiWorkersDeployPath;
+    const envFile = valueOf("envfile") || config.aiWorkersEnvFile;
+    const explicitSha =
+      valueOf("commit") ||
+      valueOf("sha") ||
+      (message.match(/\b[a-f0-9]{40}\b/i)?.[0] ?? "main");
+
+    if (!host || !user || !privateKey) {
+      throw new Error(
+        "AI Workers deploy requires HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, and HOSTINGER_SSH_PRIVATE_KEY.",
+      );
+    }
+    if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+      throw new Error("HOSTINGER_SSH_PORT must be a valid TCP port.");
+    }
+    if (!deployPath.startsWith("/") || deployPath.includes("\0")) {
+      throw new Error("AI Workers deploy path must be an absolute path.");
+    }
+    if (!envFile.startsWith("/") || envFile.includes("\0")) {
+      throw new Error("AI Workers env file must be an absolute path.");
+    }
+    if (!(explicitSha === "main" || /^[a-f0-9]{40}$/i.test(explicitSha))) {
+      throw new Error("AI Workers deploy commit must be a 40-character Git SHA or main.");
+    }
+
+    const deployPathQuoted = shellQuote(deployPath);
+    const envFileQuoted = shellQuote(envFile);
+    const targetQuoted = shellQuote(explicitSha);
+    const repoQuoted = shellQuote("https://github.com/Travelintrips/Core-AI-Foundation.git");
+
+    const command = [
+      "set -euo pipefail",
+      `DEPLOY_PATH=${deployPathQuoted}`,
+      `ENV_FILE=${envFileQuoted}`,
+      `TARGET=${targetQuoted}`,
+      'if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi',
+      '$SUDO mkdir -p "$DEPLOY_PATH"',
+      '$SUDO chown "$(id -u):$(id -g)" "$DEPLOY_PATH"',
+      `if [ ! -d "$DEPLOY_PATH/.git" ]; then git clone ${repoQuoted} "$DEPLOY_PATH"; fi`,
+      'git -C "$DEPLOY_PATH" fetch --prune origin',
+      'if [ "$TARGET" = "main" ]; then TARGET="$(git -C "$DEPLOY_PATH" rev-parse origin/main)"; fi',
+      'git -C "$DEPLOY_PATH" checkout --detach "$TARGET"',
+      'cd "$DEPLOY_PATH"',
+      '$SUDO env AI_WORKERS_ENV_FILE="$ENV_FILE" bash scripts/install-ai-workers.sh',
+      '$SUDO env AI_WORKERS_ENV_FILE="$ENV_FILE" bash scripts/ai-workers-healthcheck.sh',
+      'printf "AI_WORKERS_DEPLOY_OK commit=%s\\n" "$TARGET"',
+    ].join(" && ");
+
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-core-ai-workers-ssh-"));
+    const keyPath = join(tempDir, "id_hostinger");
+    try {
+      await writeFile(keyPath, privateKey.endsWith("\n") ? privateKey : privateKey + "\n", {
+        mode: 0o600,
+      });
+      const { stdout, stderr } = await execFileWithInput("ssh", [
+        "-i", keyPath,
+        "-p", port,
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=12",
+        "-o", "StrictHostKeyChecking=accept-new",
+        `${user}@${host}`,
+        command,
+      ], {
+        timeout: 15 * 60_000,
+        maxBuffer: 2 * 1024 * 1024,
+      });
+
+      return {
+        transport: "ssh",
+        host,
+        user,
+        port: Number(port),
+        directory: deployPath,
+        envFile,
+        target: explicitSha,
+        deployed: true,
+        stdout: stdout.trim().slice(-6000),
+        stderr: stderr.trim().slice(-2000),
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`AI Workers SSH deploy failed: ${detail.slice(0, 1200)}`);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  };
 
   const runDockerOverSsh = async (
     sshOperation: AiCoreInfrastructureOperation,
@@ -730,7 +834,9 @@ async function callHostinger(
 
   let data: unknown = null;
 
-  if (operation === "HOSTINGER_SSH_PUBLIC_KEY_LIST") {
+  if (operation === "HOSTINGER_AI_WORKERS_DEPLOY") {
+    data = await runAiWorkersDeployOverSsh();
+  } else if (operation === "HOSTINGER_SSH_PUBLIC_KEY_LIST") {
     if (!config.vmId) throw new Error("Hostinger SSH key list requires HOSTINGER_VPS_ID.");
     const listed = await firstSuccessful(
       `/vps/v1/virtual-machines/${encodeURIComponent(config.vmId)}/public-keys`,
