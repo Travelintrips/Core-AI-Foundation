@@ -2332,6 +2332,13 @@ async function startExternalAgentWork(
         ? (parseDirectOpenClawPcCommand(input.message) ?? input.message)
         : input.message,
     source: "ai-core-chat",
+    metadata: {
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+      ...(input.projectName ? { projectName: input.projectName } : {}),
+      ...(input.repository ? { repository: input.repository } : {}),
+      ...(input.branch ? { branch: input.branch } : {}),
+      source: input.source,
+    },
   });
 
   const provider =
