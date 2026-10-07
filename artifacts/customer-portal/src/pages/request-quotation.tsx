@@ -2,7 +2,7 @@
  * Service-catalog quotation page — accessible via token.
  * Route: /request-service/:requestId/quotation?token=<reviewToken>
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
@@ -44,7 +44,21 @@ export default function RequestQuotationPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const token = new URLSearchParams(window.location.search).get("token") ?? "";
+  const query = new URLSearchParams(window.location.search);
+  const token = query.get("token") ?? "";
+  const fromDashboard = query.get("fromDashboard") === "1";
+
+  // Backward compatibility: old quotation emails linked directly to this
+  // public page. Route those links through the dashboard handoff too. The
+  // dashboard CTA adds fromDashboard=1 so the actual quotation page can render
+  // without bouncing back and creating a redirect loop.
+  useEffect(() => {
+    if (token && !fromDashboard) {
+      window.location.replace(
+        `/api/public/customer/quotation-access/${encodeURIComponent(token)}`,
+      );
+    }
+  }, [token, fromDashboard]);
 
   const { data, isLoading, error } = useServiceQuotation(token);
   const approve = useApproveServiceQuotation();
