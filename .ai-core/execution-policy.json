@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "defaultExecutionPolicy": {
+    "coding": {
+      "executor": "chatgpt-github-direct",
+      "repositoryChanges": "github-branch-pr-ci-merge",
+      "aiCoreCodingOrchestrator": "disabled-by-default-for-chatgpt-originated-coding",
+      "ollama": "forbidden"
+    },
+    "mediaRendering": {
+      "image": ["ollama", "gcp-image-router", "comfyui"],
+      "video": ["ollama", "gcp-media-worker"],
+      "ollamaAllowed": true
+    }
+  },
+  "notes": [
+    "ChatGPT-originated coding changes must be performed directly through GitHub.",
+    "Ollama must not be used for coding, code review, repository analysis, or coding fallback by default.",
+    "Ollama is reserved for requested image or video rendering workloads."
+  ]
+}
