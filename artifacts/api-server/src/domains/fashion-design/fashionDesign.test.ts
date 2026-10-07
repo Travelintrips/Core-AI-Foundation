@@ -599,4 +599,19 @@ describe("fashion render E2E contract", () => {
     expect(portalSource).toContain('OUTPUT_LABELS["front-back-preview"]');
     expect(portalSource).toContain("Buka model 3D");
   });
+
+  it("main customer dashboard includes fashion orders and their preview output", () => {
+    const customerRouteSource = fs.readFileSync(
+      path.resolve(process.cwd(), "artifacts/api-server/src/routes/customer-portal.ts"),
+      "utf-8",
+    );
+    const dashboardSource = fs.readFileSync(
+      path.resolve(process.cwd(), "artifacts/customer-portal/src/pages/dashboard.tsx"),
+      "utf-8",
+    );
+    expect(customerRouteSource).toContain("fashionDesignOrdersTable");
+    expect(customerRouteSource).toContain("fashionOrders");
+    expect(dashboardSource).toContain("Fashion Design");
+    expect(dashboardSource).toContain("fashionOutputImageUrl");
+  });
 });
