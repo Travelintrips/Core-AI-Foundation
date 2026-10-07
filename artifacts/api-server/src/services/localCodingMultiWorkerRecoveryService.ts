@@ -405,12 +405,41 @@ export async function reconcileStaleMultiWorkerRuns(
   for (const candidate of approvedCandidates) {
     if (options.taskId && candidate.childTaskId !== options.taskId) continue;
     if (!shouldContinueApprovedWorkstreamAiCandidate(candidate)) continue;
-    const materialized = await materializeApprovedWorkstreamAiCandidate(candidate.id);
-    await completeReviewedCodingWorkstream(materialized.id, {
-      completeChildTask: true,
-      childTaskResultSummary:
-        "Approved constrained AI candidate was materialized, statically verified, committed, pushed, and auto-finished.",
-    });
+    try {
+      const materialized = await materializeApprovedWorkstreamAiCandidate(candidate.id);
+      await completeReviewedCodingWorkstream(materialized.id, {
+        completeChildTask: true,
+        childTaskResultSummary:
+          "Approved constrained AI candidate was materialized, statically verified, committed, pushed, and auto-finished.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const currentResult = record(candidate.resultJson) ?? {};
+      const execution = record(currentResult.workstreamAiExecution) ?? {};
+      await db
+        .update(aiCodingWorkstreamsTable)
+        .set({
+          resultJson: {
+            ...currentResult,
+            workstreamAiExecution: {
+              ...execution,
+              materializationStatus: "FAILED",
+              materializationError: message.slice(0, 2000),
+              materializationFailedAt: now.toISOString(),
+            },
+          },
+          errorMessage: message.slice(0, 2000),
+        })
+        .where(
+          and(
+            eq(aiCodingWorkstreamsTable.id, candidate.id),
+            eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"),
+          ),
+        );
+      // One stale/invalid approved candidate must not prevent recovery of
+      // unrelated workstreams in the same periodic sweep.
+      continue;
+    }
   }
 
   const baseConditions = [isNotNull(aiCodingWorkstreamsTable.childRunId)];
