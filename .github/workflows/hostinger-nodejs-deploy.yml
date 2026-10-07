@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Reject stale release trigger
         id: freshness
@@ -78,18 +78,36 @@ jobs:
             exit 0
           fi
 
-          base_sha=""
-          if git rev-parse "${EXPECTED_SHA}^1" >/dev/null 2>&1; then
-            base_sha=$(git rev-parse "${EXPECTED_SHA}^1")
-          fi
+          # Compare against the release that is actually live, not merely
+          # EXPECTED_SHA^1. Empty trigger commits can otherwise hide runtime
+          # changes that have never reached production.
+          health="https://$HOSTINGER_DOMAIN/api/healthz"
+          rm -f /tmp/deploy-scope.headers /tmp/deploy-scope.body
+          curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
+            -D /tmp/deploy-scope.headers -o /tmp/deploy-scope.body \
+            -H "Accept: application/json" \
+            -H "User-Agent: CST-AI-Core-Deploy-Scope/1.0" \
+            "$health" || true
+          base_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\\r","",$2); print $2}' /tmp/deploy-scope.headers | tail -n1)
 
           if [ -z "$base_sha" ]; then
             echo "deploy_required=true" >> "$GITHUB_OUTPUT"
-            echo "reason=parent_unavailable_fail_safe" >> "$GITHUB_OUTPUT"
-            echo "runtime_deploy=RUN reason=parent_unavailable_fail_safe"
+            echo "reason=live_release_unknown_fail_safe" >> "$GITHUB_OUTPUT"
+            echo "runtime_deploy=RUN reason=live_release_unknown_fail_safe"
             exit 0
           fi
 
+          if ! git cat-file -e "$base_sha^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$base_sha" || true
+          fi
+          if ! git cat-file -e "$base_sha^{commit}" 2>/dev/null; then
+            echo "deploy_required=true" >> "$GITHUB_OUTPUT"
+            echo "reason=live_release_not_in_git_fail_safe" >> "$GITHUB_OUTPUT"
+            echo "runtime_deploy=RUN reason=live_release_not_in_git_fail_safe live_sha=$base_sha"
+            exit 0
+          fi
+
+          echo "runtime_deploy_live_sha=$base_sha expected_sha=$EXPECTED_SHA"
           changed_files=$(git diff --name-only "$base_sha" "$EXPECTED_SHA")
           printf 'runtime_deploy_changed_files=\n%s\n' "$changed_files"
 
