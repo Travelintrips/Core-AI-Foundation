@@ -206,6 +206,8 @@ services:
     image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-2026.9.6}
     restart: unless-stopped
     init: true
+    mem_limit: ${OPENCLAW_MEMORY_LIMIT:-1g}
+    memswap_limit: ${OPENCLAW_MEMORY_SWAP_LIMIT:-2g}
     environment:
       HOME: /home/node
       OPENCLAW_HOME: /home/node
