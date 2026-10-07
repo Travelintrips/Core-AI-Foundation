@@ -1303,6 +1303,25 @@ async function answerAskMode(
     };
   }
 
+  // Read-only infrastructure checks must execute before data tools or cloud
+  // fallback in Ask/MCP mode. This keeps query_ai_core deterministic and
+  // prevents operational status requests from consuming model tokens.
+  const askDispatch = classifyAiCoreChatDispatch(routingMessage);
+  if (askDispatch.kind === "INFRA_OPERATION") {
+    const infrastructure = await runInfrastructureOperation(routingMessage);
+    if (infrastructure) {
+      return {
+        ...infrastructure,
+        workload: askDispatch.workload.workload,
+        costClass: askDispatch.workload.costClass,
+        autoRouted: true,
+        dispatch: askDispatch.kind,
+        dispatchReason: askDispatch.reason,
+        executionLane: askDispatch.executionLane,
+      };
+    }
+  }
+
   // Reuse the same deterministic billing handler used by Agent/MCP mode so
   // Ask/Auto/Agent cannot drift to different response schemas.
   const billingStatus = await runGcpBillingStatusOperation(routingMessage);
@@ -1678,6 +1697,23 @@ async function streamAskMode(
   if (deterministic) {
     writeBufferedChatStream(res, deterministic);
     return;
+  }
+
+  const streamDispatch = classifyAiCoreChatDispatch(routingMessage);
+  if (streamDispatch.kind === "INFRA_OPERATION") {
+    const infrastructure = await runInfrastructureOperation(routingMessage);
+    if (infrastructure) {
+      writeBufferedChatStream(res, {
+        ...infrastructure,
+        workload: streamDispatch.workload.workload,
+        costClass: streamDispatch.workload.costClass,
+        autoRouted: true,
+        dispatch: streamDispatch.kind,
+        dispatchReason: streamDispatch.reason,
+        executionLane: streamDispatch.executionLane,
+      });
+      return;
+    }
   }
 
   const dataTool = await tryRunAiCoreDataTool(routingMessage);
