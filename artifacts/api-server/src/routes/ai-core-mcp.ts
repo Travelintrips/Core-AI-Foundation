@@ -1013,12 +1013,16 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         }
       }
 
+      // "confirmed" is an MCP-only execution-gate field. The downstream
+      // /ai/core-chat/messages request uses ChatRequest.strict(), so forwarding
+      // confirmed would make every confirmed MCP command fail with HTTP 400.
+      const { confirmed: _confirmed, ...forwardedCommand } = parsed;
       payload = await callAiCore(
         "/ai/core-chat/messages",
         {
           method: "POST",
           body: JSON.stringify({
-            ...parsed,
+            ...forwardedCommand,
             message: command.gatedMessage,
             mode: "auto",
             source: "text",

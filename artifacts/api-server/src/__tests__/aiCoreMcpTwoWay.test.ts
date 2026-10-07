@@ -122,11 +122,13 @@ describe("MCP command two-way routing", () => {
     );
 
     const init = vi.mocked(fetch).mock.calls[0][1];
-    expect(JSON.parse(String(init?.body))).toMatchObject({
+    const forwardedBody = JSON.parse(String(init?.body));
+    expect(forwardedBody).toMatchObject({
       mode: "auto",
       message: "@ Uji koneksi MCP",
       conversationId: "conversation-a",
     });
+    expect(forwardedBody).not.toHaveProperty("confirmed");
 
     expect(response.body.result.structuredContent).toMatchObject({
       kind: "answer",
