@@ -8,6 +8,7 @@ import {
 } from "./aiCoreInfrastructureControlService.js";
 import {
   detectExplicitExternalAgentClientId,
+  OPENCLAW_AGENT_CLIENT_ID,
 } from "./externalAgentDispatchService.js";
 import {
   detectAiCoreGitHubOperation,
@@ -40,6 +41,27 @@ export interface AiCoreChatDispatchDecision {
 
 const MUTATING =
   /\b(fix|perbaiki|ubah|edit|patch|deploy|merge|commit|push|hapus|delete|create|buat|tambah|add|implement(?:asikan)?|refactor)\b/i;
+
+const DIRECT_OPENCLAW_PC_PREFIX = /^#\s*/;
+
+const SAFE_DIRECT_PC_ACTION =
+  /^(?:buka|open|fokus(?:kan)?|focus|klik|click|ketik|type|tulis|write|scroll|gulir|screenshot|ambil\s+screenshot|capture\s+(?:the\s+)?screen|tekan\s+(?:enter|tab|escape|esc)|press\s+(?:enter|tab|escape|esc))\b/i;
+
+const SENSITIVE_DIRECT_PC_ACTION =
+  /\b(?:hapus|delete|remove|uninstall|install|download|unggah|upload|kirim|send|submit|bayar|payment|purchase|beli|transfer|password|kata\s+sandi|credential|secret|token|api\s*key|security|keamanan|powershell|cmd|terminal|shell|registry|regedit|format|shutdown|restart|reboot|kill|terminate|deploy|merge|commit|push|database|sql|ssh|rdp)\b/i;
+
+export function parseDirectOpenClawPcCommand(message: string): string | null {
+  const value = message.trim().replace(/^@\s*/, "");
+  if (!DIRECT_OPENCLAW_PC_PREFIX.test(value)) return null;
+  const instruction = value.replace(DIRECT_OPENCLAW_PC_PREFIX, "").trim();
+  return instruction.length > 0 ? instruction : null;
+}
+
+export function isSafeDirectOpenClawPcCommand(message: string): boolean {
+  const instruction = parseDirectOpenClawPcCommand(message);
+  if (!instruction) return false;
+  return SAFE_DIRECT_PC_ACTION.test(instruction) && !SENSITIVE_DIRECT_PC_ACTION.test(instruction);
+}
 
 const REPOSITORY_READONLY_CONTEXT =
   /\b(diff|pull\s*request|pr|kode|code|source|repository|repo|build|compile|test|testing|uji|ci|log|konfigurasi|config|arsitektur|architecture|typescript|javascript|python|file|module|modul)\b/i;
@@ -100,7 +122,25 @@ export function detectRemoteWorkerPreset(
 export function classifyAiCoreChatDispatch(
   message: string,
 ): AiCoreChatDispatchDecision {
-  const workload = classifyAiCoreWorkload(message);
+  const directOpenClawPcCommand = parseDirectOpenClawPcCommand(message);
+  const workload = classifyAiCoreWorkload(directOpenClawPcCommand ?? message);
+
+  // A leading # is an explicit operator route to the paired PC through
+  // OpenClaw. It outranks coding/infra heuristics so desktop actions cannot
+  // accidentally create Coding Orchestrator work.
+  if (directOpenClawPcCommand) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload,
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: OPENCLAW_AGENT_CLIENT_ID,
+      executionLane: "TARGETED",
+      reason:
+        "Leading # explicitly routes this command to the paired PC through OpenClaw without Coding Orchestrator.",
+    };
+  }
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
   const githubOperation = detectAiCoreGitHubOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
