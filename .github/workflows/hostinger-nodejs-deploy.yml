@@ -34,8 +34,8 @@ jobs:
             domain: aicore.cstlogistic.co.id
           - site: customer
             domain: aifront.cstlogistic.co.id
-            # coding.cstlogistic.co.id is a parked-domain alias of aifront and
-            # therefore follows this deployment instead of deploying separately.
+        # coding.cstlogistic.co.id is a parked-domain alias of the internal
+        # aicore website and therefore follows the internal deployment.
     env:
       HOSTINGER_API_BASE: https://developers.hostinger.com/api
       HOSTINGER_DOMAIN: ${{ matrix.domain }}
