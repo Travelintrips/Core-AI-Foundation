@@ -12,7 +12,6 @@ import {
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
-import { approvePlanAndStartCoding } from "./codingAgentService.js";
 import {
   approveCodingTaskGraph,
   getLatestCodingTaskGraph,
@@ -1383,10 +1382,20 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       }
 
       case "APPROVE_PLAN":
+        // Legacy plan-approval checkpoints are migrated onto the current
+        // autonomous pipeline. Re-analyzing from HEAD is safer than executing
+        // the removed manual Coding Agent path.
         await reserveCycle();
-        await approvePlanAndStartCoding(taskId);
-        await setState(taskId, "WAITING", "AUTO_APPROVE_PLAN");
-        return { taskId, status: "WAITING", action: "AUTO_APPROVE_PLAN" };
+        await restartRepositoryAnalysisAfterTransientFailure(
+          taskId,
+          "Legacy plan approval checkpoint migrated. Re-running Repository Analyzer for autonomous continuation.",
+        );
+        await setState(taskId, "WAITING", "MIGRATE_LEGACY_PLAN_GATE", null);
+        return {
+          taskId,
+          status: "WAITING",
+          action: "MIGRATE_LEGACY_PLAN_GATE",
+        };
 
       case "REVIEW_LOCAL_PATCH":
         await reserveCycle();
