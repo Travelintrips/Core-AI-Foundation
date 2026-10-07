@@ -1,0 +1,117 @@
+name: ChatGPT Event Wake Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      conversation_id:
+        description: "ChatGPT conversation ID to bind the lifecycle event to"
+        required: true
+        type: string
+      delay_seconds:
+        description: "Delay before emitting COMPLETED"
+        required: false
+        default: "120"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  emit-delayed-event:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate inputs
+        shell: bash
+        env:
+          CONVERSATION_ID: ${{ inputs.conversation_id }}
+          DELAY_SECONDS: ${{ inputs.delay_seconds }}
+        run: |
+          set -euo pipefail
+          test -n "$CONVERSATION_ID"
+          case "$DELAY_SECONDS" in
+            ''|*[!0-9]*) echo "::error::delay_seconds must be numeric"; exit 1 ;;
+          esac
+          if [ "$DELAY_SECONDS" -lt 30 ] || [ "$DELAY_SECONDS" -gt 300 ]; then
+            echo "::error::delay_seconds must be between 30 and 300"
+            exit 1
+          fi
+
+      - name: Wait until the initiating ChatGPT turn is over
+        shell: bash
+        env:
+          DELAY_SECONDS: ${{ inputs.delay_seconds }}
+        run: sleep "$DELAY_SECONDS"
+
+      - name: Create conversation-bound event command
+        id: command
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: https://aicore.cstlogistic.co.id/api
+          CONVERSATION_ID: ${{ inputs.conversation_id }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+
+          payload="$(jq -cn             --arg externalCommandId "github-event-canary:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"             --arg conversationId "$CONVERSATION_ID"             --arg runId "$GITHUB_RUN_ID"             '{
+              externalCommandId:$externalCommandId,
+              instruction:"Passive ChatGPT event wake canary.",
+              source:"github-event-canary",
+              commandType:"EVENT_BINDING",
+              metadata:{
+                conversationId:$conversationId,
+                passiveEventBinding:true,
+                wakeCanary:true,
+                githubRunId:$runId
+              }
+            }')"
+
+          response="$(curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "Content-Type: application/json"             --data "$payload"             "$API_BASE_URL/ai/coding/bridge/commands")"
+
+          command_id="$(jq -r '.command.id // empty' <<<"$response")"
+          test -n "$command_id"
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+
+      - name: Emit COMPLETED lifecycle event
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: https://aicore.cstlogistic.co.id/api
+          COMMAND_ID: ${{ steps.command.outputs.command_id }}
+          CONVERSATION_ID: ${{ inputs.conversation_id }}
+        run: |
+          set -euo pipefail
+
+          payload="$(jq -cn             --arg commandId "$COMMAND_ID"             --arg conversationId "$CONVERSATION_ID"             --arg runId "$GITHUB_RUN_ID"             '{
+              commandId:$commandId,
+              kind:"COMPLETED",
+              message:"WAKE_UP_E2E_TEST_COMPLETED",
+              checkpoint:{
+                status:"COMPLETED",
+                eventType:"COMPLETED",
+                wakeCanary:true,
+                githubRunId:$runId
+              },
+              metadata:{
+                eventType:"COMPLETED",
+                wakeCanary:true,
+                conversationId:$conversationId,
+                githubRunId:$runId
+              }
+            }')"
+
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "x-admin-api-key: $ADMIN_API_KEY"             -H "Content-Type: application/json"             --data "$payload"             "$API_BASE_URL/ai/coding/bridge/responses"
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## ChatGPT Event Wake Canary"
+            echo
+            echo "- Conversation: `${{ inputs.conversation_id }}`"
+            echo "- Delay: `${{ inputs.delay_seconds }}s`"
+            echo "- Expected event: `WAKE_UP_E2E_TEST_COMPLETED`"
+            echo "- GitHub run: `$GITHUB_RUN_ID`"
+          } >> "$GITHUB_STEP_SUMMARY"
