@@ -88,6 +88,11 @@ function parseAgentResult(raw) {
   return text.slice(-MAX_RESULT_CHARS);
 }
 
+function tailText(value, maxChars) {
+  const text = String(value || "").trim();
+  return text.length <= maxChars ? text : text.slice(-maxChars);
+}
+
 async function runOpenClawAgent(work) {
   const sessionId = "ai-core-work-" + String(work.commandId).replace(/[^a-zA-Z0-9_-]/g, "");
   const args = [
@@ -110,6 +115,8 @@ async function runOpenClawAgent(work) {
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timedOut = false;
+    const startedAt = Date.now();
 
     activeAgent = spawn("node", args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -118,6 +125,7 @@ async function runOpenClawAgent(work) {
 
     const timer = setTimeout(() => {
       if (!settled && activeAgent) {
+        timedOut = true;
         activeAgent.kill("SIGTERM");
         setTimeout(() => activeAgent?.kill("SIGKILL"), 5000).unref();
       }
@@ -135,27 +143,76 @@ async function runOpenClawAgent(work) {
       if (stderr.length > 8000) stderr = stderr.slice(-8000);
     });
 
-    activeAgent.on("close", (code, signal) => {
+    activeAgent.on("error", (error) => {
+      if (settled) return;
       settled = true;
       clearTimeout(timer);
       activeAgent = null;
+      const stderrTail = tailText(stderr, 8000);
+      const stdoutTail = tailText(stdout, 8000);
+      resolve({
+        ok: false,
+        message: ("OpenClaw process could not start: " + (error instanceof Error ? error.message : String(error))).slice(0, 4000),
+        details: {
+          exitCode: null,
+          signal: null,
+          runtime: "openclaw-cli",
+          timedOut: false,
+          durationMs: Date.now() - startedAt,
+          failureStage: "spawn",
+          errorType: error instanceof Error ? error.name : "Error",
+          errorMessage: error instanceof Error ? error.message.slice(0, 4000) : String(error).slice(0, 4000),
+          stdoutTail,
+          stderrTail,
+        },
+      });
+    });
+
+    activeAgent.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      activeAgent = null;
+      const durationMs = Date.now() - startedAt;
+      const stdoutTail = tailText(stdout, 8000);
+      const stderrTail = tailText(stderr, 8000);
       if (code === 0) {
         resolve({
           ok: true,
           message: parseAgentResult(stdout),
-          details: { exitCode: 0, signal: signal || null, runtime: "openclaw-cli" },
+          details: {
+            exitCode: 0,
+            signal: signal || null,
+            runtime: "openclaw-cli",
+            timedOut: false,
+            durationMs,
+            stdoutTail,
+            stderrTail,
+          },
         });
         return;
       }
+      const failureReason = timedOut
+        ? "OpenClaw bounded execution timed out"
+        : "OpenClaw bounded execution failed";
       const safeFailure =
-        "OpenClaw bounded execution failed" +
+        failureReason +
         (typeof code === "number" ? " (exit " + code + ")" : "") +
         (signal ? " signal=" + signal : "") +
-        (stderr.trim() ? ": " + stderr.trim().slice(-1500) : ".");
+        (stderrTail ? ": " + stderrTail.slice(-1500) : stdoutTail ? ": " + stdoutTail.slice(-1500) : ".");
       resolve({
         ok: false,
         message: safeFailure.slice(0, 4000),
-        details: { exitCode: code, signal: signal || null, runtime: "openclaw-cli" },
+        details: {
+          exitCode: code,
+          signal: signal || null,
+          runtime: "openclaw-cli",
+          timedOut,
+          durationMs,
+          failureStage: timedOut ? "agent-timeout" : "agent-process",
+          stdoutTail,
+          stderrTail,
+        },
       });
     });
   });
