@@ -266,12 +266,36 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
         const presentationRows = await db.execute(sql`
     SELECT t.id AS task_id,
            a.status AS autonomous_status,
+           (
+             SELECT latest_run.status
+             FROM ai_platform.ai_coding_runs AS latest_run
+             WHERE latest_run.task_id = t.id
+             ORDER BY latest_run.created_at DESC
+             LIMIT 1
+           ) AS latest_run_status,
            EXISTS (
              SELECT 1
              FROM ai_platform.ai_coding_runs AS r
              WHERE r.task_id = t.id
                AND r.status = 'RUNNING'
            ) AS has_active_run,
+           EXISTS (
+             SELECT 1
+             FROM ai_platform.ai_jobs AS j
+             WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+               AND (
+                 j.payload_json->>'codingTaskId' = t.id::text
+                 OR j.payload_json->>'childTaskId' = t.id::text
+                 OR EXISTS (
+                   SELECT 1
+                   FROM ai_platform.ai_coding_workstreams AS w
+                   JOIN ai_platform.ai_coding_task_graphs AS g
+                     ON g.id = w.graph_id
+                   WHERE g.task_id = t.id
+                     AND w.id::text = j.payload_json->>'workstreamId'
+                 )
+               )
+           ) AS has_active_job,
            EXISTS (
              SELECT 1
              FROM ai_platform.ai_coding_critical_approvals AS approval
@@ -310,14 +334,18 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
       const item = row as {
         task_id?: string;
         autonomous_status?: string;
+        latest_run_status?: string | null;
         has_active_run?: boolean;
+        has_active_job?: boolean;
         has_pending_critical_approval?: boolean;
       };
       return [
         item.task_id ?? "",
         {
           autonomousStatus: item.autonomous_status ?? null,
+          latestRunStatus: item.latest_run_status ?? null,
           hasActiveRun: item.has_active_run === true,
+          hasActiveJob: item.has_active_job === true,
           hasPendingCriticalApproval: item.has_pending_critical_approval === true,
         },
       ] as const;
@@ -329,7 +357,9 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
     const status = codingTaskPresentationStatus({
       taskStatus: task.status,
       autonomousStatus: presentation?.autonomousStatus,
+      latestRunStatus: presentation?.latestRunStatus ?? null,
       hasActiveRun: presentation?.hasActiveRun ?? false,
+      hasActiveJob: presentation?.hasActiveJob ?? false,
       hasPendingCriticalApproval:
         presentation?.hasPendingCriticalApproval ?? false,
     });
