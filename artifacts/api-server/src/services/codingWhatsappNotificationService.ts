@@ -509,7 +509,7 @@ export async function sendCodingApprovalResult(input: {
   approvalId: string;
   taskId: string | null;
   actionType: string;
-  status: "REJECTED" | "EXECUTING" | "COMPLETED" | "FAILED";
+  status: "APPROVED" | "REJECTED" | "EXECUTING" | "COMPLETED" | "FAILED";
   message: string;
 }): Promise<CodingWhatsappNotifyResult> {
   void input;
