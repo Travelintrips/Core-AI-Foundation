@@ -27,7 +27,9 @@ import { validateBlueprintUrls } from "../domains/fashion-design/fileSafety.js";
 import { desc, and, like, SQL } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { uploadToSupabase } from "../lib/supabaseStorage.js";
-import { tryGenerateImageViaRouter } from "./imageRouterService.js";
+import { getImageRouterStatus, tryGenerateImageViaRouter } from "./imageRouterService.js";
+import { getProviderApiKey } from "./aiSecretService.js";
+import { generateReplicateImageDirect } from "./imageDesignerService.js";
 import { aiProvidersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -601,6 +603,124 @@ function compactPromptValue(value: unknown): string {
   return "";
 }
 
+const FASHION_2D_REPLICATE_MODEL = "black-forest-labs/flux-schnell";
+
+function fashionPreviewDimensions(aspectRatio: "3:4" | "4:3"): { width: number; height: number } {
+  return aspectRatio === "3:4"
+    ? { width: 768, height: 1024 }
+    : { width: 1024, height: 768 };
+}
+
+function fashionImageExtension(contentType: string): string {
+  const mime = contentType.split(";")[0]?.trim().toLowerCase();
+  if (mime === "image/png") return "png";
+  if (mime === "image/jpeg") return "jpg";
+  return "webp";
+}
+
+async function persistReplicateFashionPreview(input: {
+  orderId: number;
+  sourceUrl: string;
+  filenamePrefix: string;
+  model: string;
+  aspectRatio: "3:4" | "4:3";
+}): Promise<FashionPreviewImage> {
+  const response = await fetch(input.sourceUrl, {
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) {
+    throw new Error(`FASHION_REPLICATE_DOWNLOAD_FAILED_${response.status}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.byteLength === 0 || buffer.byteLength > 25 * 1024 * 1024) {
+    throw new Error("FASHION_REPLICATE_IMAGE_SIZE_INVALID");
+  }
+
+  const contentType = response.headers.get("content-type") || "image/webp";
+  const extension = fashionImageExtension(contentType);
+  const storagePath =
+    `fashion-design/2d/${input.orderId}/${input.filenamePrefix}-${Date.now()}.${extension}`;
+  const imageUrl = await uploadToSupabase(storagePath, buffer, contentType);
+  const dimensions = fashionPreviewDimensions(input.aspectRatio);
+
+  return {
+    imageUrl,
+    provider: "replicate",
+    model: input.model,
+    width: dimensions.width,
+    height: dimensions.height,
+    storagePath,
+  };
+}
+
+async function generateFashionPreview(input: {
+  orderId: number;
+  prompt: string;
+  negativePrompt: string;
+  aspectRatio: "3:4" | "4:3";
+  filenamePrefix: string;
+}): Promise<FashionPreviewImage | undefined> {
+  // Do not spend minutes waiting for an offline/stopped GPU VM. If the router
+  // is already healthy, prefer it; otherwise immediately use Replicate.
+  const routerStatus = await getImageRouterStatus().catch(() => ({ status: "offline" }));
+  if (routerStatus["status"] === "ok") {
+    const local = await tryGenerateImageViaRouter({
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt,
+      aspectRatio: input.aspectRatio,
+      filenamePrefix: input.filenamePrefix,
+      timeoutMs: 420_000,
+    });
+    if (local) {
+      return {
+        imageUrl: local.imageUrl,
+        provider: local.provider,
+        model: local.model,
+        width: local.width,
+        height: local.height,
+        storagePath: local.storagePath,
+      };
+    }
+  }
+
+  const apiKey = getProviderApiKey("replicate");
+  if (!apiKey) {
+    logger.warn(
+      { orderId: input.orderId },
+      "[fashion-design] Replicate fallback is not configured",
+    );
+    return undefined;
+  }
+
+  try {
+    const external = await generateReplicateImageDirect(
+      FASHION_2D_REPLICATE_MODEL,
+      {
+        prompt: input.prompt,
+        negativePrompt: input.negativePrompt,
+        aspectRatio: input.aspectRatio,
+      },
+      apiKey,
+      180_000,
+    );
+
+    return await persistReplicateFashionPreview({
+      orderId: input.orderId,
+      sourceUrl: external.imageUrl,
+      filenamePrefix: input.filenamePrefix,
+      model: external.model,
+      aspectRatio: input.aspectRatio,
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, orderId: input.orderId, filenamePrefix: input.filenamePrefix },
+      "[fashion-design] Replicate 2D fallback failed",
+    );
+    return undefined;
+  }
+}
+
 async function generateFashion2DPreviews(
   order: FashionDesignOrder,
   blueprint: FashionDesignBlueprint,
@@ -629,7 +749,8 @@ async function generateFashion2DPreviews(
   const negativePrompt =
     "brand logos, trademarked logos, watermark, copied sports jersey, distorted garment, duplicate garment, illegible layout";
 
-  const flat = await tryGenerateImageViaRouter({
+  const flat = await generateFashionPreview({
+    orderId: order.id,
     prompt: [
       common,
       "Create a clean technical flat fashion illustration, front view, no human model, centered garment, neutral light background, crisp seams and panel boundaries, presentation-ready.",
@@ -637,11 +758,13 @@ async function generateFashion2DPreviews(
     negativePrompt,
     aspectRatio: "3:4",
     filenamePrefix: `fashion-${order.id}-flat`,
-    timeoutMs: 420_000,
   });
-  if (!flat) warnings.push("Flat design render was unavailable; the structural composition is still available.");
+  if (!flat) {
+    warnings.push("Flat design render was unavailable; the structural composition is still available.");
+  }
 
-  const frontBack = await tryGenerateImageViaRouter({
+  const frontBack = await generateFashionPreview({
+    orderId: order.id,
     prompt: [
       common,
       "Create a professional apparel presentation board showing FRONT and BACK views side by side, no human model, same garment and colors in both views, neutral studio background, realistic fabric texture, clear production visualization.",
@@ -649,31 +772,14 @@ async function generateFashion2DPreviews(
     negativePrompt,
     aspectRatio: "4:3",
     filenamePrefix: `fashion-${order.id}-front-back`,
-    timeoutMs: 420_000,
   });
-  if (!frontBack) warnings.push("Front/back preview render was unavailable; the structural composition is still available.");
+  if (!frontBack) {
+    warnings.push("Front/back preview render was unavailable; the structural composition is still available.");
+  }
 
   return {
-    ...(flat ? {
-      flatDesign: {
-        imageUrl: flat.imageUrl,
-        provider: flat.provider,
-        model: flat.model,
-        width: flat.width,
-        height: flat.height,
-        storagePath: flat.storagePath,
-      },
-    } : {}),
-    ...(frontBack ? {
-      frontBackPreview: {
-        imageUrl: frontBack.imageUrl,
-        provider: frontBack.provider,
-        model: frontBack.model,
-        width: frontBack.width,
-        height: frontBack.height,
-        storagePath: frontBack.storagePath,
-      },
-    } : {}),
+    ...(flat ? { flatDesign: flat } : {}),
+    ...(frontBack ? { frontBackPreview: frontBack } : {}),
     warnings,
   };
 }

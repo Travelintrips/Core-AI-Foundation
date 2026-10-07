@@ -574,12 +574,27 @@ describe("fashion render E2E contract", () => {
     "utf-8",
   );
 
-  it("generates and persists flat plus front/back previews through the shared image router", () => {
+  it("generates and persists flat plus front/back previews with GPU-first and Replicate fallback", () => {
+    expect(serviceSource).toContain("getImageRouterStatus");
     expect(serviceSource).toContain("tryGenerateImageViaRouter");
+    expect(serviceSource).toContain("generateReplicateImageDirect");
+    expect(serviceSource).toContain('getProviderApiKey("replicate")');
+    expect(serviceSource).toContain('FASHION_2D_REPLICATE_MODEL = "black-forest-labs/flux-schnell"');
+    expect(serviceSource).toContain("persistReplicateFashionPreview");
     expect(serviceSource).toContain('filenamePrefix: `fashion-${order.id}-flat`');
     expect(serviceSource).toContain('filenamePrefix: `fashion-${order.id}-front-back`');
     expect(serviceSource).toContain('"flat-design": previewOutput(previews.flatDesign)');
     expect(serviceSource).toContain('"front-back-preview": previewOutput(previews.frontBackPreview)');
+  });
+
+  it("does not wait for a stopped GPU router before using Replicate", () => {
+    expect(serviceSource).toContain('routerStatus["status"] === "ok"');
+    expect(serviceSource).toContain(
+      "[fashion-design] Replicate fallback is not configured",
+    );
+    expect(serviceSource).toContain(
+      "[fashion-design] Replicate 2D fallback failed",
+    );
   });
 
   it("does not let optional 3D provider failure discard valid 2D renders", () => {
