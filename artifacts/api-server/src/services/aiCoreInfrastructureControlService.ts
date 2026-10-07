@@ -178,7 +178,7 @@ export function detectAiCoreInfrastructureOperation(
     if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_LIST";
   }
 
-  if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomain\b/i.test(text)) {
+  if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomains?\b/i.test(text)) {
     if (/\b(delete|hapus|remove)\b/i.test(text) && !/\b(dns|zone|record)\b/i.test(text)) {
       return "HOSTINGER_SUBDOMAIN_DELETE";
     }
