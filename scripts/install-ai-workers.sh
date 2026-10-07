@@ -257,14 +257,14 @@ fi
 log "Applying OpenClaw gateway policy"
 openclaw_port="$(env_value OPENCLAW_PORT)"
 openclaw_port="${openclaw_port:-18789}"
-openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:%s","http://127.0.0.1:%s"]}]' "$openclaw_port" "$openclaw_port")"
+openclaw_policy="$(printf '[{"path":"gateway.mode","value":"local"},{"path":"gateway.bind","value":"lan"},{"path":"gateway.controlUi.allowedOrigins","value":["http://localhost:%s","http://127.0.0.1:%s","http://localhost:28789","http://127.0.0.1:28789"]},{"path":"gateway.http.endpoints.responses.enabled","value":true}]' "$openclaw_port" "$openclaw_port")"
 compose run -T --rm --no-deps --entrypoint node openclaw \
   dist/index.js config set --batch-json "$openclaw_policy"
 
 log "Starting OpenClaw and scoped external-agent workers"
 compose up -d openclaw agent-registrar
 if [ -n "$scoped_agent_token" ]; then
-  compose up -d openhands-work-supervisor n8n-work-supervisor
+  compose up -d openclaw-work-supervisor openhands-work-supervisor n8n-work-supervisor
 fi
 
 log "Running bounded health checks"
