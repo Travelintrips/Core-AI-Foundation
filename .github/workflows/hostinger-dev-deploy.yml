@@ -111,6 +111,7 @@ jobs:
                 {key:"APP_ENV",value:"development"},
                 {key:"NODE_ENV",value:"development"},
                 {key:"SERVE_FRONTEND",value:"true"},
+                {key:"PORT",value:"3000"},
                 {key:"PUBLIC_APP_URL",value:"https://dev-aicore.cstlogistic.co.id"},
                 {key:"ALLOWED_ORIGINS",value:"https://dev-aicore.cstlogistic.co.id"},
                 {key:"SUPABASE_URL_DEV",value:.SUPABASE_URL_DEV},
