@@ -43,6 +43,8 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
     ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
     ["Hostinger pasang SSH public key key=ssh-ed25519-AAAA", "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"],
+    ["Deploy AI Workers VPS commit a1939541ae36e1b1702172a62e85a84361f55473 dan jalankan installer", "HOSTINGER_AI_WORKERS_DEPLOY"],
+    ["Hostinger redeploy worker stack OpenClaw ke commit a1939541ae36e1b1702172a62e85a84361f55473", "HOSTINGER_AI_WORKERS_DEPLOY"],
   ])("detects %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
@@ -104,6 +106,47 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["GCP stop VM sekarang", "GCP_VM_STOP"],
   ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it("deploys the AI Workers stack over SSH without trying to start an already-running VPS", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "AI_WORKERS_DEPLOY_OK commit=a1939541ae36e1b1702172a62e85a84361f55473", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS commit a1939541ae36e1b1702172a62e85a84361f55473 dan jalankan installer",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_SSH_HOST: "203.0.113.10",
+        HOSTINGER_SSH_USER: "root",
+        HOSTINGER_SSH_PORT: "22",
+        HOSTINGER_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
+        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-foundation",
+        AI_WORKERS_REMOTE_ENV_FILE: "/etc/ai-core/ai-workers.env",
+      },
+    });
+
+    expect(result.operation).toBe("HOSTINGER_AI_WORKERS_DEPLOY");
+    expect(result.mutating).toBe(true);
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      host: "203.0.113.10",
+      target: "a1939541ae36e1b1702172a62e85a84361f55473",
+      deployed: true,
+    });
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    const args = execFileMock.mock.calls[0] as unknown[];
+    const sshArgs = args[1] as string[];
+    const command = sshArgs.at(-1) ?? "";
+    expect(command).toContain("scripts/install-ai-workers.sh");
+    expect(command).toContain("scripts/ai-workers-healthcheck.sh");
+    expect(command).toContain("git -C");
+    expect(command).not.toContain("/start");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
   it("lists attached Hostinger SSH keys without returning key material", async () => {
