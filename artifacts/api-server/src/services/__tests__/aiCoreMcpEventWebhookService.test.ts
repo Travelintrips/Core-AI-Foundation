@@ -1,10 +1,12 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  buildStandardWebhookSignatureHeader,
   canonicalJson,
   choosePreferredCallbackAddress,
   decodeStandardWebhookSecret,
   matchesTerminalEventArguments,
+  oauthPrincipalUserId,
   signStandardWebhook,
 } from "../aiCoreMcpEventWebhookService.js";
 
@@ -21,6 +23,48 @@ describe("AI Core MCP event webhook helpers", () => {
     expect(decodeStandardWebhookSecret(secret)).toEqual(rawSecret);
     expect(signStandardWebhook(secret, "evt_1", timestamp, body))
       .toBe(`v1,${expected}`);
+  });
+
+
+  it("dual-signs during the bounded webhook secret rotation window", () => {
+    const current = `whsec_${Buffer.alloc(24, 3).toString("base64")}`;
+    const previous = `whsec_${Buffer.alloc(24, 4).toString("base64")}`;
+    const body = JSON.stringify({ eventId: "evt_rotate" });
+    const timestamp = 1791158400;
+    const nowMs = 1791158400 * 1000;
+
+    expect(
+      buildStandardWebhookSignatureHeader({
+        currentSecret: current,
+        previousSecret: previous,
+        previousSecretValidUntil: new Date(nowMs + 60_000),
+        messageId: "evt_rotate",
+        timestampSeconds: timestamp,
+        body,
+        nowMs,
+      }),
+    ).toBe(
+      `${signStandardWebhook(current, "evt_rotate", timestamp, body)} ${signStandardWebhook(previous, "evt_rotate", timestamp, body)}`,
+    );
+
+    expect(
+      buildStandardWebhookSignatureHeader({
+        currentSecret: current,
+        previousSecret: previous,
+        previousSecretValidUntil: new Date(nowMs - 1),
+        messageId: "evt_rotate",
+        timestampSeconds: timestamp,
+        body,
+        nowMs,
+      }),
+    ).toBe(signStandardWebhook(current, "evt_rotate", timestamp, body));
+  });
+
+  it("parses only valid OAuth principal user ids for access revalidation", () => {
+    expect(oauthPrincipalUserId("oauth:123")).toBe(123);
+    expect(oauthPrincipalUserId("oauth:0")).toBeNull();
+    expect(oauthPrincipalUserId("oauth:not-a-number")).toBeNull();
+    expect(oauthPrincipalUserId("legacy:abcdef")).toBeNull();
   });
 
   it("prefers IPv4 for callback verification when both address families are available", () => {

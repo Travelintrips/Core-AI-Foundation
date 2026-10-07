@@ -14,6 +14,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
+import { getInternalUserById } from "./internalAuthService.js";
 
 export const AI_CORE_TERMINAL_EVENT_NAME = "ai_core.task.terminal";
 const DEFAULT_SUBSCRIPTION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -23,6 +24,8 @@ const MAX_DELIVERY_ATTEMPTS = 5;
 const DELIVERY_POLL_MS = 5_000;
 const DELIVERY_BODY_LIMIT_BYTES = 256 * 1024;
 const CALLBACK_RESPONSE_LIMIT_BYTES = 64 * 1024;
+const CALLBACK_VERIFICATION_CACHE_TTL_MS = 10 * 60 * 1000;
+const SECRET_ROTATION_WINDOW_MS = 10 * 60 * 1000;
 
 type TerminalEventType = "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED";
 
@@ -54,6 +57,7 @@ export class McpCallbackEndpointError extends Error {
 let ensurePromise: Promise<void> | null = null;
 let deliveryTimer: NodeJS.Timeout | null = null;
 let deliveryRunning = false;
+const callbackVerificationCache = new Map<string, number>();
 
 function sessionSecret(): string {
   const value = process.env["SESSION_SECRET"]?.trim();
@@ -135,6 +139,101 @@ export function signStandardWebhook(
     .update(`${messageId}.${timestampSeconds}.${body}`)
     .digest("base64");
   return `v1,${signature}`;
+}
+
+export function buildStandardWebhookSignatureHeader(input: {
+  currentSecret: string;
+  previousSecret?: string | null;
+  previousSecretValidUntil?: Date | string | null;
+  messageId: string;
+  timestampSeconds: number;
+  body: string;
+  nowMs?: number;
+}): string {
+  const signatures = [
+    signStandardWebhook(
+      input.currentSecret,
+      input.messageId,
+      input.timestampSeconds,
+      input.body,
+    ),
+  ];
+  const validUntil = input.previousSecretValidUntil
+    ? new Date(input.previousSecretValidUntil).getTime()
+    : 0;
+  if (
+    input.previousSecret &&
+    Number.isFinite(validUntil) &&
+    validUntil > (input.nowMs ?? Date.now())
+  ) {
+    signatures.push(
+      signStandardWebhook(
+        input.previousSecret,
+        input.messageId,
+        input.timestampSeconds,
+        input.body,
+      ),
+    );
+  }
+  return signatures.join(" ");
+}
+
+function callbackVerificationCacheKey(
+  principalId: string,
+  callbackUrl: string,
+): string {
+  return createHash("sha256")
+    .update(principalId)
+    .update("\n")
+    .update(callbackUrl)
+    .digest("hex");
+}
+
+function hasCachedCallbackVerification(
+  principalId: string,
+  callbackUrl: string,
+  now = Date.now(),
+): boolean {
+  const key = callbackVerificationCacheKey(principalId, callbackUrl);
+  const expiresAt = callbackVerificationCache.get(key) ?? 0;
+  if (expiresAt <= now) {
+    callbackVerificationCache.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function rememberCallbackVerification(
+  principalId: string,
+  callbackUrl: string,
+  now = Date.now(),
+): void {
+  callbackVerificationCache.set(
+    callbackVerificationCacheKey(principalId, callbackUrl),
+    now + CALLBACK_VERIFICATION_CACHE_TTL_MS,
+  );
+}
+
+export function oauthPrincipalUserId(principalId: string): number | null {
+  const match = /^oauth:(\d+)$/.exec(principalId);
+  if (!match?.[1]) return null;
+  const id = Number.parseInt(match[1], 10);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+async function principalStillAuthorized(principalId: string): Promise<boolean> {
+  const userId = oauthPrincipalUserId(principalId);
+  if (userId === null) {
+    // Legacy/service-token subscriptions have no user row to revalidate.
+    // Their revocation boundary remains token/key rotation plus subscription expiry.
+    return principalId.startsWith("legacy:");
+  }
+  const user = await getInternalUserById(userId);
+  return Boolean(
+    user &&
+    user.status === "active" &&
+    user.accountType === "internal",
+  );
 }
 
 function canonicalize(value: unknown): string {
@@ -428,6 +527,8 @@ async function ensureTablesInternal(): Promise<void> {
       arguments_digest TEXT NOT NULL,
       callback_url TEXT NOT NULL,
       secret_ciphertext TEXT NOT NULL,
+      previous_secret_ciphertext TEXT,
+      previous_secret_valid_until TIMESTAMPTZ,
       verified_at TIMESTAMPTZ NOT NULL,
       expires_at TIMESTAMPTZ NOT NULL,
       active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -435,6 +536,15 @@ async function ensureTablesInternal(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await db.execute(sql`
+    ALTER TABLE ai_platform.ai_core_mcp_event_subscriptions
+      ADD COLUMN IF NOT EXISTS previous_secret_ciphertext TEXT
+  `);
+  await db.execute(sql`
+    ALTER TABLE ai_platform.ai_core_mcp_event_subscriptions
+      ADD COLUMN IF NOT EXISTS previous_secret_valid_until TIMESTAMPTZ
+  `);
+
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS ai_core_mcp_event_subscriptions_active_idx
       ON ai_platform.ai_core_mcp_event_subscriptions(event_name, active, expires_at)
@@ -508,11 +618,14 @@ export async function subscribeAiCoreMcpEvent(input: {
 
   try {
     decodeStandardWebhookSecret(input.secret);
-    await verifyCallback({
-      subscriptionId,
-      callbackUrl: input.callbackUrl,
-      secret: input.secret,
-    });
+    if (!hasCachedCallbackVerification(input.principalId, input.callbackUrl)) {
+      await verifyCallback({
+        subscriptionId,
+        callbackUrl: input.callbackUrl,
+        secret: input.secret,
+      });
+      rememberCallbackVerification(input.principalId, input.callbackUrl);
+    }
   } catch (error) {
     const reason =
       error instanceof McpCallbackEndpointError
@@ -537,6 +650,40 @@ export async function subscribeAiCoreMcpEvent(input: {
     throw error;
   }
 
+  const existingResult = await db.execute(sql`
+    SELECT
+      secret_ciphertext,
+      previous_secret_ciphertext,
+      previous_secret_valid_until
+    FROM ai_platform.ai_core_mcp_event_subscriptions
+    WHERE id = ${subscriptionId}
+    LIMIT 1
+  `);
+  const existing = existingResult.rows?.[0];
+  const encryptedSecret = encryptSecret(input.secret);
+  let previousSecretCiphertext =
+    existing?.["previous_secret_ciphertext"] == null
+      ? null
+      : String(existing["previous_secret_ciphertext"]);
+  let previousSecretValidUntil =
+    existing?.["previous_secret_valid_until"] == null
+      ? null
+      : new Date(String(existing["previous_secret_valid_until"]));
+
+  if (existing?.["secret_ciphertext"]) {
+    const existingSecret = decryptSecret(String(existing["secret_ciphertext"]));
+    if (existingSecret !== input.secret) {
+      previousSecretCiphertext = String(existing["secret_ciphertext"]);
+      previousSecretValidUntil = new Date(Date.now() + SECRET_ROTATION_WINDOW_MS);
+    } else if (
+      previousSecretValidUntil &&
+      previousSecretValidUntil.getTime() <= Date.now()
+    ) {
+      previousSecretCiphertext = null;
+      previousSecretValidUntil = null;
+    }
+  }
+
   const canonicalArguments = canonicalJson(input.arguments);
   const argumentsDigest = createHash("sha256")
     .update(canonicalArguments)
@@ -552,6 +699,8 @@ export async function subscribeAiCoreMcpEvent(input: {
       arguments_digest,
       callback_url,
       secret_ciphertext,
+      previous_secret_ciphertext,
+      previous_secret_valid_until,
       verified_at,
       expires_at,
       active,
@@ -564,7 +713,9 @@ export async function subscribeAiCoreMcpEvent(input: {
       ${JSON.stringify(input.arguments)}::jsonb,
       ${argumentsDigest},
       ${input.callbackUrl},
-      ${encryptSecret(input.secret)},
+      ${encryptedSecret},
+      ${previousSecretCiphertext},
+      ${previousSecretValidUntil},
       NOW(),
       ${expiresAt},
       TRUE,
@@ -576,6 +727,8 @@ export async function subscribeAiCoreMcpEvent(input: {
       arguments_json = EXCLUDED.arguments_json,
       arguments_digest = EXCLUDED.arguments_digest,
       callback_url = EXCLUDED.callback_url,
+      previous_secret_ciphertext = EXCLUDED.previous_secret_ciphertext,
+      previous_secret_valid_until = EXCLUDED.previous_secret_valid_until,
       secret_ciphertext = EXCLUDED.secret_ciphertext,
       verified_at = NOW(),
       expires_at = EXCLUDED.expires_at,
@@ -899,7 +1052,14 @@ async function deliverClaimed(row: Record<string, unknown>): Promise<void> {
   }
 
   const subscriptionResult = await db.execute(sql`
-    SELECT callback_url, secret_ciphertext, active, expires_at
+    SELECT
+      callback_url,
+      secret_ciphertext,
+      previous_secret_ciphertext,
+      previous_secret_valid_until,
+      principal_id,
+      active,
+      expires_at
     FROM ai_platform.ai_core_mcp_event_subscriptions
     WHERE id = ${subscriptionId}
     LIMIT 1
@@ -918,8 +1078,41 @@ async function deliverClaimed(row: Record<string, unknown>): Promise<void> {
     return;
   }
 
+  const principalId = String(subscription["principal_id"] ?? "");
+  if (!(await principalStillAuthorized(principalId))) {
+    await markDelivery({
+      id,
+      status: "TERMINATED",
+      error: "Subscription owner no longer has access.",
+    });
+    await db.execute(sql`
+      UPDATE ai_platform.ai_core_mcp_event_subscriptions
+      SET active = FALSE, expires_at = NOW(), updated_at = NOW()
+      WHERE id = ${subscriptionId}
+    `);
+    await logAudit({
+      module: "mcp-events",
+      action: "native_subscription_access_revoked",
+      resourceId: subscriptionId,
+      resourceType: "mcp_event_subscription",
+      status: "warning",
+      details: { principalKind: principalId.startsWith("oauth:") ? "oauth" : "legacy" },
+    }).catch(() => undefined);
+    return;
+  }
+
   const callbackUrl = String(subscription["callback_url"] ?? "");
   const secret = decryptSecret(String(subscription["secret_ciphertext"] ?? ""));
+  const previousSecretCiphertext =
+    subscription["previous_secret_ciphertext"] == null
+      ? null
+      : String(subscription["previous_secret_ciphertext"]);
+  const previousSecret =
+    previousSecretCiphertext ? decryptSecret(previousSecretCiphertext) : null;
+  const previousSecretValidUntil =
+    subscription["previous_secret_valid_until"] == null
+      ? null
+      : String(subscription["previous_secret_valid_until"]);
   const body = JSON.stringify(payload);
   const timestamp = Math.floor(Date.now() / 1000);
 
@@ -931,12 +1124,14 @@ async function deliverClaimed(row: Record<string, unknown>): Promise<void> {
         "Content-Type": "application/json",
         "webhook-id": eventId,
         "webhook-timestamp": String(timestamp),
-        "webhook-signature": signStandardWebhook(
-          secret,
-          eventId,
-          timestamp,
+        "webhook-signature": buildStandardWebhookSignatureHeader({
+          currentSecret: secret,
+          previousSecret,
+          previousSecretValidUntil,
+          messageId: eventId,
+          timestampSeconds: timestamp,
           body,
-        ),
+        }),
         "X-MCP-Subscription-Id": subscriptionId,
       },
     );
