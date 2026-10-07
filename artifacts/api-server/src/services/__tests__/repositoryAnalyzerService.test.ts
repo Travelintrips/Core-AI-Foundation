@@ -15,6 +15,7 @@ const mockTxUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTxUpdateReturning = vi.hoisted(() => vi.fn());
 const mockWithTransientDatabaseRetry = vi.hoisted(() => vi.fn());
 const mockReserveCodingFileSet = vi.hoisted(() => vi.fn());
+const mockReportCodingTaskTerminalTransition = vi.hoisted(() => vi.fn());
 
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
@@ -66,10 +67,15 @@ vi.mock("../codingConflictRegistryService.js", () => ({
   reserveCodingFileSet: mockReserveCodingFileSet,
 }));
 
+vi.mock("../codingTaskTerminalReportingService.js", () => ({
+  reportCodingTaskTerminalTransition: mockReportCodingTaskTerminalTransition,
+}));
+
 const {
   buildRepositoryCloneArgs,
   buildRepositoryCloneEnvironment,
   isRetryableRepositoryCloneResourceError,
+  isRecoverableRepositoryAnalyzerOperationalFailure,
   completeRepositoryAnalyzerRun,
   configureIsolatedRepositoryWorkspace,
   executeRepositoryAnalyzerJob,
@@ -369,6 +375,24 @@ describe("repository analyzer GitHub clone authentication", () => {
 });
 
 describe("repository analyzer queue claim timeout", () => {
+  it.each([
+    "Repository Analyzer job 5129 was not claimed within 60000ms and was recovered.",
+    "Repository Analyzer job 5122 exceeded its bounded lifetime and was recovered.",
+    "Repository Analyzer run was abandoned before completion and has been recovered.",
+    "Repository clone failed: spawn git EAGAIN",
+    "fatal: unable to access repository: Connection reset by peer",
+  ])("classifies operational analyzer recovery as nonterminal: %s", (message) => {
+    expect(isRecoverableRepositoryAnalyzerOperationalFailure(message)).toBe(true);
+  });
+
+  it.each([
+    "branch was not found",
+    "fatal: authentication failed for repository",
+    "remote branch missing does not exist",
+  ])("keeps deterministic analyzer failures terminal: %s", (message) => {
+    expect(isRecoverableRepositoryAnalyzerOperationalFailure(message)).toBe(false);
+  });
+
   it("defaults to one minute and bounds configured values", () => {
     expect(getRepositoryAnalyzerQueueClaimTimeoutMs({})).toBe(60_000);
     expect(getRepositoryAnalyzerQueueClaimTimeoutMs({
@@ -435,6 +459,10 @@ describe("repository analyzer execution", () => {
       status: "RESERVED",
       files: [],
       conflicts: [],
+    });
+    mockReportCodingTaskTerminalTransition.mockResolvedValue({
+      reported: true,
+      responseId: "response-1",
     });
   });
 
@@ -548,6 +576,34 @@ describe("repository analyzer execution", () => {
     expect(mockTxUpdateSet).toHaveBeenNthCalledWith(2, {
       status: "READY_REVIEW",
       resultSummary: "Repository analysis completed.",
+    });
+  });
+
+  it("keeps analyzer queue-claim timeout recoverable and emits BLOCKED callback", async () => {
+    const message =
+      "Repository Analyzer job 5129 was not claimed within 60000ms and was recovered.";
+
+    await failRepositoryAnalyzerRun(
+      { codingTaskId: taskId, codingRunId: runId },
+      message,
+    );
+
+    expect(mockTxUpdateSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      status: "FAILED",
+      finishedAt: expect.any(Date),
+      errorMessage: message,
+      logs: expect.stringContaining('"recoverable": true'),
+    }));
+    expect(mockTxUpdateSet).toHaveBeenNthCalledWith(2, {
+      status: "READY_REVIEW",
+      resultSummary: `Repository Analyzer recovery pending: ${message}`,
+    });
+    expect(mockTxExecute).toHaveBeenCalledOnce();
+    expect(mockReportCodingTaskTerminalTransition).toHaveBeenCalledWith({
+      taskId,
+      status: "BLOCKED",
+      message: `Repository Analyzer hit a recoverable operational failure: ${message}`,
+      source: "repository-analyzer-recovery",
     });
   });
 
