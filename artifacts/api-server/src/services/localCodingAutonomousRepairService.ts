@@ -1105,10 +1105,10 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
     if (state.nextAction === "DONE" && !completionVerified) {
       const message =
         "Completion ditolak karena belum ada bukti terminal: merge/commit terverifikasi atau verification-only run yang eksplisit.";
-      if (state.task.status === "COMPLETED") {
+      if (state.task.status === "COMPLETED" || state.task.status === "READY_REVIEW") {
         await db
           .update(aiCodingTasksTable)
-          .set({ status: "READY_REVIEW", resultSummary: message })
+          .set({ status: "BLOCKED", resultSummary: message })
           .where(eq(aiCodingTasksTable.id, taskId));
       }
       await setState(taskId, "BLOCKED", "COMPLETION_EVIDENCE_MISSING", message);
