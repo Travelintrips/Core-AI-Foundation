@@ -32,6 +32,8 @@ jobs:
         include:
           - site: internal
             domain: aicore.cstlogistic.co.id
+          - site: coding
+            domain: coding.cstlogistic.co.id
           - site: customer
             domain: aifront.cstlogistic.co.id
     env:
