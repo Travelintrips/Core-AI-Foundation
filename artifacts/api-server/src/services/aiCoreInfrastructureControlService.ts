@@ -57,6 +57,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_SUBDOMAIN_DELETE"
   | "HOSTINGER_PARKED_DOMAIN_LIST"
   | "HOSTINGER_PARKED_DOMAIN_CREATE"
+  | "HOSTINGER_PARKED_DOMAIN_DELETE"
   | "HOSTINGER_DNS_LIST"
   | "HOSTINGER_DNS_SUBDOMAIN_CREATE"
   | "HOSTINGER_DNS_RECORD_CREATE"
@@ -174,6 +175,7 @@ export function detectAiCoreInfrastructureOperation(
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(parked domains?|domain aliases?|alias domains?|parkir domain)\b/i.test(text)) {
+    if (/\b(delete|hapus|remove)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_DELETE";
     if (/\b(buat|create|add|tambah|pasang)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_CREATE";
     if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_LIST";
   }
@@ -978,7 +980,11 @@ async function callHostinger(
       throw new Error(`Hostinger domain availability failed with HTTP ${result.status}.`);
     }
     data = result.data;
-  } else if (operation === "HOSTINGER_PARKED_DOMAIN_LIST" || operation === "HOSTINGER_PARKED_DOMAIN_CREATE") {
+  } else if ([
+    "HOSTINGER_PARKED_DOMAIN_LIST",
+    "HOSTINGER_PARKED_DOMAIN_CREATE",
+    "HOSTINGER_PARKED_DOMAIN_DELETE",
+  ].includes(operation)) {
     const target = await resolveHostingTarget();
     const path =
       `/hosting/v1/accounts/${encodeURIComponent(target.username)}/websites/${encodeURIComponent(target.domain)}/parked-domains`;
@@ -991,13 +997,28 @@ async function callHostinger(
     } else {
       const parkedDomain = valueOf("parked_domain") || valueOf("alias") || valueOf("name");
       if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(parkedDomain)) {
-        throw new Error("Parked-domain create requires parked_domain=<fully-qualified-domain>.");
+        throw new Error(
+          operation === "HOSTINGER_PARKED_DOMAIN_DELETE"
+            ? "Parked-domain delete requires parked_domain=<fully-qualified-domain>."
+            : "Parked-domain create requires parked_domain=<fully-qualified-domain>.",
+        );
       }
-      const result = await firstSuccessful(path, "POST", { parked_domain: parkedDomain });
-      if (result.status < 200 || result.status >= 300) {
-        throw new Error(`Hostinger parked-domain create failed with HTTP ${result.status}.`);
+      if (operation === "HOSTINGER_PARKED_DOMAIN_DELETE") {
+        const result = await firstSuccessful(
+          `${path}/${encodeURIComponent(parkedDomain)}`,
+          "DELETE",
+        );
+        if (result.status < 200 || result.status >= 300) {
+          throw new Error(`Hostinger parked-domain delete failed with HTTP ${result.status}.`);
+        }
+        data = { target, parkedDomain, deleted: true, result: result.data };
+      } else {
+        const result = await firstSuccessful(path, "POST", { parked_domain: parkedDomain });
+        if (result.status < 200 || result.status >= 300) {
+          throw new Error(`Hostinger parked-domain create failed with HTTP ${result.status}.`);
+        }
+        data = { target, parkedDomain, result: result.data };
       }
-      data = { target, parkedDomain, result: result.data };
     }
   } else if ([
     "HOSTINGER_SUBDOMAIN_LIST",

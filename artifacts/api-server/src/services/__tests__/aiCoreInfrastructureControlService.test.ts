@@ -39,6 +39,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger list subdomains domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger list parked domains domain=example.com", "HOSTINGER_PARKED_DOMAIN_LIST"],
+    ["Hostinger hapus parked domain domain=example.com parked_domain=alias.example.com", "HOSTINGER_PARKED_DOMAIN_DELETE"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
     ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
     ["Hostinger pasang SSH public key key=ssh-ed25519-AAAA", "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"],
@@ -671,6 +672,31 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(result.data).toMatchObject({
       target: { username: "user123", domain: "example.com" },
       subdomain: "api",
+      deleted: true,
+    });
+  });
+
+  it("deletes a parked-domain alias through the official endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_PARKED_DOMAIN_DELETE",
+      message: "Hostinger hapus parked domain username=user123 domain=example.com parked_domain=alias.example.com",
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(result.mutating).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://developers.hostinger.com/api/hosting/v1/accounts/user123/websites/example.com/parked-domains/alias.example.com",
+    );
+    expect(init.method).toBe("DELETE");
+    expect(result.data).toMatchObject({
+      target: { username: "user123", domain: "example.com" },
+      parkedDomain: "alias.example.com",
       deleted: true,
     });
   });

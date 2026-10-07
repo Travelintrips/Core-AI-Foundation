@@ -16,7 +16,9 @@ const pathname = window.location.pathname.toLowerCase();
 const hostname = window.location.hostname.toLowerCase();
 const isAiCoreChatSurface = pathname.startsWith("/ai-core-chat");
 const isAiCodingSurface =
-  hostname === "aicoding.travelintrips.co.id" || pathname === "/aicoding";
+  hostname === "aicoding.travelintrips.co.id" ||
+  hostname === "coding.cstlogistic.co.id" ||
+  pathname === "/aicoding";
 
 const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
 if (manifestLink && isAiCodingSurface) {
