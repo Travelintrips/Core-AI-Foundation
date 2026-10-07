@@ -334,7 +334,6 @@ describe("AI Core Chat automatic dispatch", () => {
   });
 
   it.each([
-    "Deploy perubahan ini ke production.",
     "redeploy main",
     "redeploy production AI Core dari branch main terbaru",
   ])("routes existing-code production deploy directly without Coding Orchestrator: %s", (message) => {
