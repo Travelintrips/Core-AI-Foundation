@@ -115,13 +115,23 @@ describe("coding task presentation status", () => {
     }
   });
 
-  it("shows READY_REVIEW only for explicit approval-required state", () => {
+  it("shows READY_REVIEW only when a live critical approval exists", () => {
     for (const taskStatus of ["READY_REVIEW", "FAILED", "ANALYZING"]) {
       expect(
         codingTaskPresentationStatus({
           taskStatus,
           autonomousStatus: "APPROVAL_REQUIRED",
           hasActiveRun: false,
+          hasPendingCriticalApproval: false,
+        }),
+      ).toBe("BLOCKED");
+
+      expect(
+        codingTaskPresentationStatus({
+          taskStatus,
+          autonomousStatus: "APPROVAL_REQUIRED",
+          hasActiveRun: false,
+          hasPendingCriticalApproval: true,
         }),
       ).toBe("READY_REVIEW");
     }
