@@ -20,16 +20,20 @@ jobs:
       HOSTINGER_API_BASE: https://developers.hostinger.com/api
       HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
     steps:
-      - name: Validate API token
+      - name: Detect Hostinger API availability
+        id: token
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "${HOSTINGER_API_TOKEN:-}" ]; then
-            echo "::error::HOSTINGER_API_TOKEN is not configured."
-            exit 1
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::HOSTINGER_API_TOKEN is not exposed to the develop branch; skipping optional Hostinger metadata discovery."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: List CST websites and Node.js settings
+        if: steps.token.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
