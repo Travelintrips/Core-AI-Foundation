@@ -257,7 +257,7 @@ export function isRecoverableRepositoryAnalyzerOperationalFailure(
 ): boolean {
   return (
     isRetryableRepositoryCloneResourceError(detail) ||
-    /Repository Analyzer run was abandoned before completion and has been recovered|Repository Analyzer job \\d+ was not claimed within \\d+ms and was recovered|Repository Analyzer job \\d+ exceeded its bounded lifetime and was recovered|Repository Analyzer queue claim timeout|Stale Repository Analyzer job recovered/i.test(
+    /Repository Analyzer run was abandoned before completion and has been recovered|Repository Analyzer job \d+ was not claimed within \d+ms and was recovered|Repository Analyzer job \d+ exceeded its bounded lifetime and was recovered|Repository Analyzer queue claim timeout|Stale Repository Analyzer job recovered/i.test(
       detail,
     )
   );
