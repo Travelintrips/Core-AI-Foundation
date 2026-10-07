@@ -84,19 +84,19 @@ describe("multi-worker child lifecycle recovery", () => {
       }),
     ).toEqual({
       runStatus: "COMPLETED",
-      taskStatus: "READY_REVIEW",
+      taskStatus: "TESTING",
       aiFailure: false,
     });
   });
 
-  it("keeps ordinary review handoffs reviewable", () => {
+  it("keeps ordinary review handoffs in automated testing", () => {
     expect(
       workstreamChildLifecycleDisposition("REVIEW_REQUIRED", {
         localExecutionPlan: { status: "EXECUTABLE" },
       }),
     ).toEqual({
       runStatus: "COMPLETED",
-      taskStatus: "READY_REVIEW",
+      taskStatus: "TESTING",
       aiFailure: false,
     });
   });
