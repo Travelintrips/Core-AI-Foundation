@@ -7,7 +7,8 @@ ENV GITHUB_SHA=$GITHUB_SHA \
     APP_ENV=development \
     NODE_ENV=development \
     PORT=3000 \
-    BASE_PATH=/
+    BASE_PATH=/ \
+    HOSTINGER_FRONTEND=ai-platform
 
 RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
