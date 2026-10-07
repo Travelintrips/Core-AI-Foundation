@@ -3776,12 +3776,29 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
   const [autonomous, approvalSnapshot] = await Promise.all([
     getAutonomousCodingTaskStatus(task.id).catch(() => null),
     db.execute(sql`
-      SELECT EXISTS (
-        SELECT 1
-        FROM ai_platform.ai_coding_critical_approvals approval
-        WHERE approval.task_id = ${task.id}::uuid
-          AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
-      ) AS has_pending_critical_approval
+      SELECT
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_critical_approvals approval
+          WHERE approval.task_id = ${task.id}::uuid
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        ) AS has_pending_critical_approval,
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_jobs j
+          WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+            AND (
+              j.payload_json->>'codingTaskId' = ${task.id}::text
+              OR j.payload_json->>'childTaskId' = ${task.id}::text
+              OR EXISTS (
+                SELECT 1
+                FROM ai_platform.ai_coding_workstreams w
+                JOIN ai_platform.ai_coding_task_graphs g ON g.id = w.graph_id
+                WHERE g.task_id = ${task.id}::uuid
+                  AND w.id::text = j.payload_json->>'workstreamId'
+              )
+            )
+        ) AS has_active_job
     `),
   ]);
   const presentedStatus = codingTaskPresentationStatus({
@@ -3790,7 +3807,11 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
       autonomous && typeof (autonomous as { status?: unknown }).status === "string"
         ? String((autonomous as { status?: unknown }).status)
         : null,
+    latestRunStatus: latestRun?.status ?? null,
     hasActiveRun: latestRun?.status === "RUNNING",
+    hasActiveJob:
+      (approvalSnapshot.rows?.[0] as { has_active_job?: boolean } | undefined)
+        ?.has_active_job === true,
     hasPendingCriticalApproval:
       (approvalSnapshot.rows?.[0] as { has_pending_critical_approval?: boolean } | undefined)
         ?.has_pending_critical_approval === true,

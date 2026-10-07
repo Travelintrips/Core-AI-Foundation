@@ -266,12 +266,36 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
         const presentationRows = await db.execute(sql`
     SELECT t.id AS task_id,
            a.status AS autonomous_status,
+           (
+             SELECT latest_run.status
+             FROM ai_platform.ai_coding_runs AS latest_run
+             WHERE latest_run.task_id = t.id
+             ORDER BY latest_run.created_at DESC
+             LIMIT 1
+           ) AS latest_run_status,
            EXISTS (
              SELECT 1
              FROM ai_platform.ai_coding_runs AS r
              WHERE r.task_id = t.id
                AND r.status = 'RUNNING'
            ) AS has_active_run,
+           EXISTS (
+             SELECT 1
+             FROM ai_platform.ai_jobs AS j
+             WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+               AND (
+                 j.payload_json->>'codingTaskId' = t.id::text
+                 OR j.payload_json->>'childTaskId' = t.id::text
+                 OR EXISTS (
+                   SELECT 1
+                   FROM ai_platform.ai_coding_workstreams AS w
+                   JOIN ai_platform.ai_coding_task_graphs AS g
+                     ON g.id = w.graph_id
+                   WHERE g.task_id = t.id
+                     AND w.id::text = j.payload_json->>'workstreamId'
+                 )
+               )
+           ) AS has_active_job,
            EXISTS (
              SELECT 1
              FROM ai_platform.ai_coding_critical_approvals AS approval
@@ -310,14 +334,18 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
       const item = row as {
         task_id?: string;
         autonomous_status?: string;
+        latest_run_status?: string | null;
         has_active_run?: boolean;
+        has_active_job?: boolean;
         has_pending_critical_approval?: boolean;
       };
       return [
         item.task_id ?? "",
         {
           autonomousStatus: item.autonomous_status ?? null,
+          latestRunStatus: item.latest_run_status ?? null,
           hasActiveRun: item.has_active_run === true,
+          hasActiveJob: item.has_active_job === true,
           hasPendingCriticalApproval: item.has_pending_critical_approval === true,
         },
       ] as const;
@@ -329,7 +357,9 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
     const status = codingTaskPresentationStatus({
       taskStatus: task.status,
       autonomousStatus: presentation?.autonomousStatus,
+      latestRunStatus: presentation?.latestRunStatus ?? null,
       hasActiveRun: presentation?.hasActiveRun ?? false,
+      hasActiveJob: presentation?.hasActiveJob ?? false,
       hasPendingCriticalApproval:
         presentation?.hasPendingCriticalApproval ?? false,
     });
@@ -390,12 +420,35 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
           t.id,
           t.status,
           a.status AS autonomous_status,
+          (
+            SELECT latest_run.status
+            FROM ai_platform.ai_coding_runs latest_run
+            WHERE latest_run.task_id = t.id
+            ORDER BY latest_run.created_at DESC
+            LIMIT 1
+          ) AS latest_run_status,
           EXISTS (
             SELECT 1
             FROM ai_platform.ai_coding_runs r
             WHERE r.task_id = t.id
               AND r.status = 'RUNNING'
           ) AS has_active_run,
+          EXISTS (
+            SELECT 1
+            FROM ai_platform.ai_jobs j
+            WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+              AND (
+                j.payload_json->>'codingTaskId' = t.id::text
+                OR j.payload_json->>'childTaskId' = t.id::text
+                OR EXISTS (
+                  SELECT 1
+                  FROM ai_platform.ai_coding_workstreams w
+                  JOIN ai_platform.ai_coding_task_graphs g ON g.id = w.graph_id
+                  WHERE g.task_id = t.id
+                    AND w.id::text = j.payload_json->>'workstreamId'
+                )
+              )
+          ) AS has_active_job,
           EXISTS (
             SELECT 1
             FROM ai_platform.ai_coding_critical_approvals approval
@@ -409,12 +462,12 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
       )
       SELECT
         COUNT(*) FILTER (
-          WHERE status IN ('PENDING', 'ANALYZING', 'CODING', 'TESTING', 'COMMITTING')
-             OR has_active_run
-             OR autonomous_status IN ('ACTIVE', 'WAITING')
+          WHERE has_active_run = TRUE
+             OR has_active_job = TRUE
         )::int AS jobs_active,
         COUNT(*) FILTER (
           WHERE has_active_run = FALSE
+            AND has_active_job = FALSE
             AND (
               autonomous_status IN ('FAILED', 'BLOCKED')
               OR (
@@ -428,6 +481,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
         )::int AS failed_blocked,
         COUNT(*) FILTER (
           WHERE has_active_run = FALSE
+            AND has_active_job = FALSE
             AND has_pending_critical_approval = TRUE
         )::int AS true_ready_review
       FROM task_state
@@ -504,6 +558,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
         p.task_id,
         p.task_status,
         p.autonomous_status,
+        p.latest_run_status,
         p.has_active_run,
         p.has_pending_critical_approval,
         l.job_status,
@@ -561,10 +616,22 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
         ? row["autonomous_status"]
         : null;
     const hasActiveRun = row["has_active_run"] === true;
+    const jobStatus =
+      typeof row["job_status"] === "string" ? row["job_status"] : null;
+    const hasActiveJob =
+      jobStatus === "queued" ||
+      jobStatus === "waiting" ||
+      jobStatus === "retrying" ||
+      jobStatus === "running";
     const presentationStatus = codingTaskPresentationStatus({
       taskStatus: String(row["task_status"] ?? ""),
       autonomousStatus,
+      latestRunStatus:
+        typeof row["latest_run_status"] === "string"
+          ? row["latest_run_status"]
+          : null,
       hasActiveRun,
+      hasActiveJob,
       hasPendingCriticalApproval: row["has_pending_critical_approval"] === true,
     });
     const requiredCapability =
@@ -588,8 +655,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
       presentationStatus,
       autonomousStatus,
       hasActiveRun,
-      jobStatus:
-        typeof row["job_status"] === "string" ? row["job_status"] : null,
+      jobStatus,
       requiredCapability,
       healthyCapableWorkers,
       availableCapableWorkers,
@@ -739,12 +805,29 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
     ),
     getAutonomousCodingTaskStatus(task.id).catch(() => null),
     db.execute(sql`
-      SELECT EXISTS (
-        SELECT 1
-        FROM ai_platform.ai_coding_critical_approvals approval
-        WHERE approval.task_id = ${task.id}::uuid
-          AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
-      ) AS has_pending_critical_approval
+      SELECT
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_coding_critical_approvals approval
+          WHERE approval.task_id = ${task.id}::uuid
+            AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
+        ) AS has_pending_critical_approval,
+        EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_jobs j
+          WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+            AND (
+              j.payload_json->>'codingTaskId' = ${task.id}::text
+              OR j.payload_json->>'childTaskId' = ${task.id}::text
+              OR EXISTS (
+                SELECT 1
+                FROM ai_platform.ai_coding_workstreams w
+                JOIN ai_platform.ai_coding_task_graphs g ON g.id = w.graph_id
+                WHERE g.task_id = ${task.id}::uuid
+                  AND w.id::text = j.payload_json->>'workstreamId'
+              )
+            )
+        ) AS has_active_job
     `),
   ]);
 
@@ -754,7 +837,11 @@ router.get("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
       autonomous && typeof (autonomous as { status?: unknown }).status === "string"
         ? String((autonomous as { status?: unknown }).status)
         : null,
+    latestRunStatus: runs[0]?.status ?? null,
     hasActiveRun: runs.some((run) => run.status === "RUNNING"),
+    hasActiveJob:
+      (approvalSnapshot.rows?.[0] as { has_active_job?: boolean } | undefined)
+        ?.has_active_job === true,
     hasPendingCriticalApproval:
       (approvalSnapshot.rows?.[0] as { has_pending_critical_approval?: boolean } | undefined)
         ?.has_pending_critical_approval === true,

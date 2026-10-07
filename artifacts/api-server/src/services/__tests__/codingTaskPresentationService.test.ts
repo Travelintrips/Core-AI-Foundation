@@ -185,12 +185,24 @@ describe("coding task presentation status", () => {
     ).toBe("READY_REVIEW");
   });
 
-  it("shows active autonomous work as ANALYZING instead of READY_REVIEW", () => {
+  it("requires live run or job evidence before showing ANALYZING", () => {
+    for (const autonomousStatus of ["WAITING", "ACTIVE"]) {
+      expect(
+        codingTaskPresentationStatus({
+          taskStatus: "READY_REVIEW",
+          autonomousStatus,
+          hasActiveRun: false,
+          hasActiveJob: false,
+        }),
+      ).toBe("BLOCKED");
+    }
+
     expect(
       codingTaskPresentationStatus({
         taskStatus: "READY_REVIEW",
         autonomousStatus: "WAITING",
-        hasActiveRun: false,
+        hasActiveRun: true,
+        hasActiveJob: false,
       }),
     ).toBe("ANALYZING");
 
@@ -199,8 +211,41 @@ describe("coding task presentation status", () => {
         taskStatus: "READY_REVIEW",
         autonomousStatus: "ACTIVE",
         hasActiveRun: false,
+        hasActiveJob: true,
       }),
     ).toBe("ANALYZING");
+  });
+
+  it("uses latest terminal run truth for stale persisted ANALYZING", () => {
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "ANALYZING",
+        autonomousStatus: "WAITING",
+        latestRunStatus: "FAILED",
+        hasActiveRun: false,
+        hasActiveJob: false,
+      }),
+    ).toBe("FAILED");
+
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "ANALYZING",
+        autonomousStatus: "WAITING",
+        latestRunStatus: "COMPLETED",
+        hasActiveRun: false,
+        hasActiveJob: false,
+      }),
+    ).toBe("BLOCKED");
+
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "ANALYZING",
+        autonomousStatus: "COMPLETED",
+        latestRunStatus: "COMPLETED",
+        hasActiveRun: false,
+        hasActiveJob: false,
+      }),
+    ).toBe("COMPLETED");
   });
 
   it("does not mask an active recovery run as READY_REVIEW", () => {
@@ -225,12 +270,21 @@ describe("coding task presentation status", () => {
     }
   });
 
-  it("shows a retry in progress over stale FAILED", () => {
+  it("shows a retry in progress only when live execution exists", () => {
     expect(
       codingTaskPresentationStatus({
         taskStatus: "FAILED",
         autonomousStatus: "ACTIVE",
         hasActiveRun: false,
+        hasActiveJob: false,
+      }),
+    ).toBe("BLOCKED");
+    expect(
+      codingTaskPresentationStatus({
+        taskStatus: "FAILED",
+        autonomousStatus: "ACTIVE",
+        hasActiveRun: false,
+        hasActiveJob: true,
       }),
     ).toBe("ANALYZING");
     expect(
@@ -287,6 +341,11 @@ describe("coding task presentation status", () => {
     expect(source).toContain("LEFT JOIN ai_platform.ai_coding_autonomous_tasks AS a");
     expect(source).toContain("AND a.enabled = TRUE");
     expect(source).toContain("FROM ai_platform.ai_coding_runs AS r");
+    expect(source).toContain("AS latest_run_status");
+    expect(source).toContain("AS has_active_job");
+    expect(source).toContain("WHERE has_active_run = TRUE");
+    expect(source).toContain("OR has_active_job = TRUE");
+    expect(source).not.toContain("OR autonomous_status IN ('ACTIVE', 'WAITING')");
   });
 
 });

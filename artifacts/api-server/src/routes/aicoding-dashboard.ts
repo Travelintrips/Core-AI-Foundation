@@ -203,6 +203,23 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
         ) AS has_active_run,
         EXISTS (
           SELECT 1
+          FROM ai_platform.ai_jobs AS j
+          WHERE j.status IN ('queued', 'waiting', 'retrying', 'running')
+            AND (
+              j.payload_json->>'codingTaskId' = t.id::text
+              OR j.payload_json->>'childTaskId' = t.id::text
+              OR EXISTS (
+                SELECT 1
+                FROM ai_platform.ai_coding_workstreams AS linked_workstream
+                JOIN ai_platform.ai_coding_task_graphs AS linked_graph
+                  ON linked_graph.id = linked_workstream.graph_id
+                WHERE linked_graph.task_id = t.id
+                  AND linked_workstream.id::text = j.payload_json->>'workstreamId'
+              )
+            )
+        ) AS has_active_job,
+        EXISTS (
+          SELECT 1
           FROM ai_platform.ai_coding_critical_approvals AS approval
           WHERE approval.task_id = t.id
             AND approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')
@@ -232,6 +249,7 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
         autonomous_enabled?: boolean | null;
         autonomous_last_action?: string | null;
         has_active_run?: boolean;
+        has_active_job?: boolean;
         has_pending_critical_approval?: boolean;
         workstream_status?: string | null;
       };
@@ -245,6 +263,7 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
               : null,
           autonomousLastAction: item.autonomous_last_action ?? null,
           hasActiveRun: item.has_active_run === true,
+          hasActiveJob: item.has_active_job === true,
           hasPendingCriticalApproval: item.has_pending_critical_approval === true,
           workstreamStatus: item.workstream_status ?? null,
         },
@@ -263,6 +282,7 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
       autonomousEnabled: presentation?.autonomousEnabled ?? null,
       autonomousLastAction: presentation?.autonomousLastAction ?? null,
       hasActiveRun: presentation?.hasActiveRun ?? run?.status === "RUNNING",
+      hasActiveJob: presentation?.hasActiveJob ?? false,
       hasPendingCriticalApproval:
         presentation?.hasPendingCriticalApproval ?? false,
       workstreamStatus: presentation?.workstreamStatus ?? null,

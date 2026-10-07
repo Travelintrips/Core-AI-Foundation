@@ -4,7 +4,10 @@ export function codingTaskPresentationStatus(input: {
   autonomousEnabled?: boolean | null;
   autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
+  hasActiveJob?: boolean;
   hasPendingCriticalApproval?: boolean;
+  latestRunStatus?: string | null;
+  hasVerifiedCompletionEvidence?: boolean;
   workstreamStatus?: string | null;
 }): string {
   const workstreamStatus = input.workstreamStatus?.toUpperCase() ?? null;
@@ -25,24 +28,21 @@ export function codingTaskPresentationStatus(input: {
     return "QUEUED";
   }
 
-  // A live run/recovery always wins over stale persisted terminal state.
-  if (input.hasActiveRun) {
+  // Only live execution evidence may present a task as actively analyzing.
+  // Autonomous ACTIVE/WAITING alone can be stale after its run/job disappears.
+  if (input.hasActiveRun || input.hasActiveJob) {
     return "ANALYZING";
   }
 
-  if (
-    input.autonomousStatus === "ACTIVE" ||
-    input.autonomousStatus === "WAITING"
-  ) {
-    return "ANALYZING";
-  }
+  const latestRunStatus = input.latestRunStatus?.toUpperCase() ?? null;
+  const verifiedCompletion =
+    input.hasVerifiedCompletionEvidence === true ||
+    input.autonomousStatus === "COMPLETED";
 
-  // Verified autonomous completion is authoritative for stale FAILED or
-  // READY_REVIEW rows. The autonomous runtime only reaches COMPLETED after
-  // hasVerifiedCompletionEvidence() succeeds.
+  // Verified completion is authoritative for stale persisted lifecycle states.
   if (
-    input.autonomousStatus === "COMPLETED" &&
-    (input.taskStatus === "FAILED" || input.taskStatus === "READY_REVIEW")
+    verifiedCompletion &&
+    ["FAILED", "READY_REVIEW", "ANALYZING"].includes(input.taskStatus)
   ) {
     return "COMPLETED";
   }
@@ -54,6 +54,24 @@ export function codingTaskPresentationStatus(input: {
   }
 
   if (input.autonomousStatus === "APPROVAL_REQUIRED") {
+    return "BLOCKED";
+  }
+
+  // Persisted ANALYZING without live run/job evidence is stale. Preserve the
+  // latest terminal run truth when available; otherwise surface BLOCKED so the
+  // recovery coordinator can act without lying about active work.
+  if (input.taskStatus === "ANALYZING") {
+    if (latestRunStatus === "FAILED") return "FAILED";
+    if (latestRunStatus === "COMPLETED") return "BLOCKED";
+    return "BLOCKED";
+  }
+
+  // ACTIVE/WAITING without live execution evidence is an orphaned autonomous
+  // checkpoint, not active analysis.
+  if (
+    input.autonomousStatus === "ACTIVE" ||
+    input.autonomousStatus === "WAITING"
+  ) {
     return "BLOCKED";
   }
 
@@ -100,7 +118,9 @@ export function codingDashboardTaskPresentationStatus(input: {
   autonomousEnabled?: boolean | null;
   autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
+  hasActiveJob?: boolean;
   hasPendingCriticalApproval?: boolean;
+  hasVerifiedCompletionEvidence?: boolean;
   workstreamStatus?: string | null;
 }): string {
   const taskNumber = input.taskNumber?.trim() ?? "";
@@ -110,6 +130,7 @@ export function codingDashboardTaskPresentationStatus(input: {
   // human-review gate. Keep it visible as a neutral terminal display state.
   if (
     !input.hasActiveRun &&
+    !input.hasActiveJob &&
     input.autonomousEnabled === false &&
     input.autonomousStatus === "DISABLED" &&
     input.autonomousLastAction === "MANUAL_STOP"
@@ -131,6 +152,7 @@ export function codingDashboardTaskPresentationStatus(input: {
     ["READY_REVIEW", "ANALYZING"].includes(input.taskStatus) &&
     latestRunStatus === "COMPLETED" &&
     !input.hasActiveRun &&
+    !input.hasActiveJob &&
     !input.hasPendingCriticalApproval &&
     (
       input.autonomousStatus == null ||
