@@ -58,6 +58,20 @@ describe("coding task presentation status", () => {
     ).toBe("BLOCKED");
   });
 
+  it("uses live workstream status before detached child-run heuristics", () => {
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "MW-CWS-12345678-V1-WS-001-A1",
+        taskStatus: "READY_REVIEW",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+        workstreamStatus: "REVIEW_REQUIRED",
+      }),
+    ).toBe("TESTING");
+  });
+
   it("shows completed Multi-Worker child shards as COMPLETED when no critical gate remains", () => {
     expect(
       codingDashboardTaskPresentationStatus({
