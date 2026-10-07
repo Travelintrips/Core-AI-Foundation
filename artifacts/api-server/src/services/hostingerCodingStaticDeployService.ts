@@ -187,15 +187,15 @@ async function ensureCodingWebsite(
     );
   }
 
-  existing = await waitForWebsite(token, CODING_DOMAIN, true);
-  if (!existing) {
+  const provisioned = await waitForWebsite(token, CODING_DOMAIN, true);
+  if (!provisioned) {
     throw new Error("Hostinger accepted coding website creation but it did not appear before timeout.");
   }
 
   websites = await listWebsites(token);
   existing =
     websites.find((item) => item.domain?.toLowerCase() === CODING_DOMAIN) ??
-    existing;
+    provisioned;
 
   return {
     website: existing,
