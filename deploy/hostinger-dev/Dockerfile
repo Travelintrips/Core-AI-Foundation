@@ -6,7 +6,8 @@ ARG GITHUB_SHA=unknown
 ENV GITHUB_SHA=$GITHUB_SHA \
     APP_ENV=development \
     NODE_ENV=development \
-    PORT=3000
+    PORT=3000 \
+    BASE_PATH=/
 
 RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
