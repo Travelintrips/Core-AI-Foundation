@@ -45,7 +45,9 @@ export function isProductionStorageEnvironment(
 ): boolean {
   const nodeEnv = normalizedEnvironmentValue(env["NODE_ENV"]);
   const appEnv = normalizedEnvironmentValue(env["APP_ENV"]);
-  if (nodeEnv === "production" || appEnv === "production") return true;
+  if (appEnv === "development" || appEnv === "dev") return false;
+  if (appEnv === "production" || appEnv === "prod") return true;
+  if (nodeEnv === "production") return true;
 
   // Hostinger can occasionally start a process without NODE_ENV while still
   // injecting only production Supabase variables. In that case fail toward the
