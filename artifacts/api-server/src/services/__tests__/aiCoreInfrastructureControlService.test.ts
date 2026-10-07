@@ -150,6 +150,43 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
+  it("reuses existing AI Workers deployment SSH configuration when HOSTINGER_SSH_* is absent", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "AI_WORKERS_DEPLOY_OK commit=100a7f0b8957628441589aae004a7be0049fd91a", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS commit 100a7f0b8957628441589aae004a7be0049fd91a",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "deployer",
+        AI_WORKERS_SSH_PORT: "2222",
+        AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST-FALLBACK\n-----END PRIVATE KEY-----",
+        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-foundation",
+        AI_WORKERS_REMOTE_ENV_FILE: "/etc/ai-core/ai-workers.env",
+      },
+    });
+
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      host: "198.51.100.20",
+      user: "deployer",
+      port: 2222,
+      deployed: true,
+    });
+    const args = execFileMock.mock.calls[0] as unknown[];
+    const sshArgs = args[1] as string[];
+    expect(sshArgs).toContain("2222");
+    expect(sshArgs).toContain("deployer@198.51.100.20");
+    expect(JSON.stringify(result)).not.toContain("TEST-FALLBACK");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
+  });
+
   it("lists attached Hostinger SSH keys without returning key material", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
       data: [{ id: 594837, name: "chatgpt-ai-task-20261006", key: "ssh-ed25519 SECRET" }],
