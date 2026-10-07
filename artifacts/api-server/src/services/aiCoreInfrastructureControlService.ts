@@ -54,6 +54,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DOCKER_UPDATE"
   | "HOSTINGER_SUBDOMAIN_LIST"
   | "HOSTINGER_SUBDOMAIN_CREATE"
+  | "HOSTINGER_SUBDOMAIN_DELETE"
   | "HOSTINGER_PARKED_DOMAIN_LIST"
   | "HOSTINGER_PARKED_DOMAIN_CREATE"
   | "HOSTINGER_DNS_LIST"
@@ -167,17 +168,20 @@ export function detectAiCoreInfrastructureOperation(
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(dns|zone|record)\b/i.test(text)) {
     if (/\b(delete|hapus|remove)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_DELETE";
     if (/\b(update|ubah|ganti|replace|overwrite)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_UPDATE";
-    if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomain\b/i.test(text)) {
+    if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomains?\b/i.test(text)) {
       return "HOSTINGER_DNS_RECORD_CREATE";
     }
   }
 
-  if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(parked domain|domain alias|alias domain|parkir domain)\b/i.test(text)) {
+  if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(parked domains?|domain aliases?|alias domains?|parkir domain)\b/i.test(text)) {
     if (/\b(buat|create|add|tambah|pasang)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_CREATE";
     if (/\b(list|daftar|cek|check|status|lihat)\b/i.test(text)) return "HOSTINGER_PARKED_DOMAIN_LIST";
   }
 
-  if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomain\b/i.test(text)) {
+  if (/\b(hostinger|hpanel)\b/i.test(text) && /\bsubdomains?\b/i.test(text)) {
+    if (/\b(delete|hapus|remove)\b/i.test(text) && !/\b(dns|zone|record)\b/i.test(text)) {
+      return "HOSTINGER_SUBDOMAIN_DELETE";
+    }
     if (/\b(buat|create|add|tambah)\b/i.test(text)) {
       if (/\b(hosting|website)\b/i.test(text) || /(?:^|\s)username\s*=/i.test(text)) {
         return "HOSTINGER_SUBDOMAIN_CREATE";
@@ -995,7 +999,11 @@ async function callHostinger(
       }
       data = { target, parkedDomain, result: result.data };
     }
-  } else if (operation === "HOSTINGER_SUBDOMAIN_LIST" || operation === "HOSTINGER_SUBDOMAIN_CREATE") {
+  } else if ([
+    "HOSTINGER_SUBDOMAIN_LIST",
+    "HOSTINGER_SUBDOMAIN_CREATE",
+    "HOSTINGER_SUBDOMAIN_DELETE",
+  ].includes(operation)) {
     const target = await resolveHostingTarget();
     const path =
       `/hosting/v1/accounts/${encodeURIComponent(target.username)}/websites/${encodeURIComponent(target.domain)}/subdomains`;
@@ -1008,18 +1016,33 @@ async function callHostinger(
     } else {
       const subdomain = valueOf("subdomain");
       if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(subdomain)) {
-        throw new Error("Subdomain create requires a valid subdomain=<prefix>.");
+        throw new Error(
+          operation === "HOSTINGER_SUBDOMAIN_DELETE"
+            ? "Subdomain delete requires a valid subdomain=<prefix>."
+            : "Subdomain create requires a valid subdomain=<prefix>.",
+        );
       }
-      const directory = valueOf("directory");
-      const usePublic = boolOf("public");
-      const body: Record<string, unknown> = { subdomain };
-      if (directory) body.directory = directory;
-      if (usePublic !== undefined) body.is_using_public_directory = usePublic;
-      const result = await firstSuccessful(path, "POST", body);
-      if (result.status < 200 || result.status >= 300) {
-        throw new Error(`Hostinger subdomain create failed with HTTP ${result.status}.`);
+      if (operation === "HOSTINGER_SUBDOMAIN_DELETE") {
+        const result = await firstSuccessful(
+          `${path}/${encodeURIComponent(subdomain)}`,
+          "DELETE",
+        );
+        if (result.status < 200 || result.status >= 300) {
+          throw new Error(`Hostinger subdomain delete failed with HTTP ${result.status}.`);
+        }
+        data = { target, subdomain, deleted: true, result: result.data };
+      } else {
+        const directory = valueOf("directory");
+        const usePublic = boolOf("public");
+        const body: Record<string, unknown> = { subdomain };
+        if (directory) body.directory = directory;
+        if (usePublic !== undefined) body.is_using_public_directory = usePublic;
+        const result = await firstSuccessful(path, "POST", body);
+        if (result.status < 200 || result.status >= 300) {
+          throw new Error(`Hostinger subdomain create failed with HTTP ${result.status}.`);
+        }
+        data = { target, subdomain, result: result.data };
       }
-      data = { target, result: result.data };
     }
   } else {
     if (!config.vmId) {

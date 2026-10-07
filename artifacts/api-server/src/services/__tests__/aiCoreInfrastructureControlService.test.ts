@@ -34,8 +34,11 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger stop docker project=myapp", "HOSTINGER_DOCKER_STOP"],
     ["Hostinger buat subdomain domain=example.com subdomain=api target=203.0.113.10", "HOSTINGER_DNS_SUBDOMAIN_CREATE"],
     ["Hostinger buat hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_CREATE"],
+    ["Hostinger hapus hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_DELETE"],
     ["Hostinger cek dns subdomain domain=example.com", "HOSTINGER_DNS_LIST"],
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
+    ["Hostinger list subdomains domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
+    ["Hostinger list parked domains domain=example.com", "HOSTINGER_PARKED_DOMAIN_LIST"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
     ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
     ["Hostinger pasang SSH public key key=ssh-ed25519-AAAA", "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"],
@@ -644,6 +647,31 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       subdomain: "api",
       is_using_public_directory: true,
+    });
+  });
+
+  it("deletes a hosting subdomain through the official endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: "Request accepted" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_SUBDOMAIN_DELETE",
+      message: "Hostinger hapus hosting subdomain username=user123 domain=example.com subdomain=api",
+      env: { HOSTINGER_API_TOKEN: "token" },
+    });
+
+    expect(result.mutating).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://developers.hostinger.com/api/hosting/v1/accounts/user123/websites/example.com/subdomains/api",
+    );
+    expect(init.method).toBe("DELETE");
+    expect(result.data).toMatchObject({
+      target: { username: "user123", domain: "example.com" },
+      subdomain: "api",
+      deleted: true,
     });
   });
 
