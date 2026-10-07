@@ -176,6 +176,10 @@ const productionPublicDir = path.resolve(
   "public",
 );
 
+const serveStaticFrontend =
+  process.env["NODE_ENV"] === "production" ||
+  process.env["SERVE_STATIC_FRONTEND"] === "true";
+
 // Serve sitemap with an explicit XML content type. Search Console must receive
 // a real XML response rather than relying on the hosting layer to infer MIME
 // from a staged static file. Keep the retired aicore sitemap URL as a permanent
@@ -200,7 +204,7 @@ app.get("/sitemap.xml", (req, res, next) => {
 });
 
 // Serve the production frontend from the same Hostinger Node deployment.
-if (process.env["NODE_ENV"] === "production") {
+if (serveStaticFrontend) {
   const publicDir = productionPublicDir;
   app.use(express.static(publicDir));
   app.use((req, res, next) => {
