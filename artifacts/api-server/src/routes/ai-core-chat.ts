@@ -45,6 +45,7 @@ import {
 import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
+  parseDirectOpenClawPcCommand,
   hasExplicitSourceChange,
   isExplicitCodingOrchestratorRequest,
   detectRemoteWorkerPreset,
@@ -2326,7 +2327,10 @@ async function startExternalAgentWork(
 ): Promise<Record<string, unknown>> {
   const dispatched = await dispatchExternalAgentWork({
     clientId,
-    instruction: input.message,
+    instruction:
+      clientId === OPENCLAW_AGENT_CLIENT_ID
+        ? (parseDirectOpenClawPcCommand(input.message) ?? input.message)
+        : input.message,
     source: "ai-core-chat",
   });
 
