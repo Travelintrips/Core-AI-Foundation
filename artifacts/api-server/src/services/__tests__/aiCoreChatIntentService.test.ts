@@ -128,6 +128,20 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.infrastructureOperation).toBeNull();
   });
 
+  it.each([
+    ["Hostinger parked domain delete domain=aifront.cstlogistic.co.id parked_domain=coding.cstlogistic.co.id", "HOSTINGER_PARKED_DOMAIN_DELETE"],
+    ["Hostinger parked domain create domain=aicore.cstlogistic.co.id parked_domain=coding.cstlogistic.co.id", "HOSTINGER_PARKED_DOMAIN_CREATE"],
+  ])("prefers specific Hostinger infrastructure controls over generic coding-domain recovery: %s", (message, operation) => {
+    const decision = classifyAiCoreChatDispatch(message);
+
+    expect(decision).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: operation,
+      executionLane: "NO_WORKER",
+    });
+    expect(decision.githubOperation).toBeNull();
+  });
+
   it("routes an existing-commit Hostinger deploy to the no-worker GitHub lane", () => {
     const decision = classifyAiCoreChatDispatch(
       "Lakukan hanya recovery/deploy operasional Core AI Foundation ke Hostinger untuk exact commit 34e9b7ab317458894555c82205f5fe155189babe. Jangan scan/index repo dan jangan ubah kode.",
