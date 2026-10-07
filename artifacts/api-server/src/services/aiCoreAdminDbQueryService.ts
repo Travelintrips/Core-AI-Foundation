@@ -1275,13 +1275,16 @@ export function shouldAttemptAdminDbQuery(message: string): boolean {
   const value = message.trim();
   if (!value || MUTATION.test(value)) return false;
   if (extractExplicitReadOnlySql(value)) return true;
+
+  // Fail closed: generic operational words such as "cek" and "status" are not
+  // database intent. Specialized detectors (coding task, worker, MCP event)
+  // run before this fallback. The generic DB planner is allowed only when the
+  // user explicitly names a data/database surface.
+  const explicitDataScope =
+    /\b(data|database|db|record|rekam|riwayat|history|tabel|table|row|baris|kolom|column|query|sql)\b/i;
+  if (!explicitDataScope.test(value)) return false;
   if (!READ_INTENT.test(value)) return false;
-  if (
-    EXPLANATION_ONLY.test(value) &&
-    !/\b(data|database|db|record|tabel|table)\b/i.test(value)
-  ) {
-    return false;
-  }
+  if (EXPLANATION_ONLY.test(value)) return false;
   return true;
 }
 
