@@ -108,6 +108,22 @@ async function runStartupStep(
 }
 
 async function initializeRuntimeServices(): Promise<void> {
+  const devBackgroundRuntimeDisabled =
+    !isProductionRuntime() &&
+    process.env["AI_DEV_BACKGROUND_RUNTIME_ENABLED"] === "false";
+
+  if (devBackgroundRuntimeDisabled) {
+    try {
+      await pool.query("SELECT 1");
+      logger.info(
+        "[startup] DEV background runtime disabled; HTTP/API remains available without autonomous workers or schedulers",
+      );
+    } catch (err) {
+      logger.error({ err }, "[startup] DEV database connectivity check failed");
+    }
+    return;
+  }
+
   // A bad production database credential is not transient. Starting every
   // database-backed poller in that state creates a retry storm that can keep
   // Supavisor's authentication circuit breaker open. Keep HTTP liveness and
