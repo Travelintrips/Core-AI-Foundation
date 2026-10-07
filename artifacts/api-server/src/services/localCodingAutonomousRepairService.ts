@@ -1457,6 +1457,35 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
           action: "AUTO_MERGE_VERIFIED_PR",
         };
 
+      case "AI_EXECUTION_RUNNING": {
+        // A live run/job is handled before the switch. Reaching this branch
+        // means a legacy/stale orchestration checkpoint survived after its
+        // execution disappeared. Re-analyze from current HEAD instead of
+        // converting the stale machine checkpoint into human review.
+        await reserveCycle();
+        await restartRepositoryAnalysisAfterTransientFailure(
+          taskId,
+          "Stale AI execution checkpoint recovered. Re-running Repository Analyzer from the current repository state.",
+        );
+        await setState(taskId, "WAITING", "RECOVER_STALE_AI_EXECUTION", null);
+        await report(
+          taskId,
+          "CHECKPOINT",
+          "AI execution checkpoint lama ditemukan tanpa run/job aktif. AI Core otomatis menjalankan ulang analisis dari HEAD terbaru.",
+          {
+            source: "autonomous-repair-loop",
+            previousNextAction: "AI_EXECUTION_RUNNING",
+            recoverable: true,
+            humanReviewRequired: false,
+          },
+        ).catch(() => undefined);
+        return {
+          taskId,
+          status: "WAITING",
+          action: "RECOVER_STALE_AI_EXECUTION",
+        };
+      }
+
       default: {
         const message =
           `Autonomous loop tidak memiliki action aman untuk nextAction=${state.nextAction ?? "null"}.`;
@@ -1986,7 +2015,7 @@ export function readyReviewAutonomousRecoveryDecision(input: {
   const recoverableTechnicalBlocker =
     lastAction === "WAIT_RESERVATION_CONFLICT" ||
     (lastAction === "UNSUPPORTED_NEXT_ACTION" &&
-      /nextAction=REVIEW_CONFLICT/i.test(lastError)) ||
+      /nextAction=(?:REVIEW_CONFLICT|AI_EXECUTION_RUNNING)/i.test(lastError)) ||
     (lastAction === "TASK_GRAPH_BLOCKER" &&
       /EXPIRED_HANDOFF|Failed query:|timeout exceeded when trying to connect|connection terminated|ECONNRESET|ETIMEDOUT|Exact replacement expected|STALE_CONTEXT|stale claim|repository clone failed/i.test(
         lastError,
@@ -2077,6 +2106,7 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
     "REVIEW_PR",
     "APPROVE_MERGE",
     "REVIEW_CONFLICT",
+    "AI_EXECUTION_RUNNING",
   ]);
 
   for (const candidate of candidates) {
