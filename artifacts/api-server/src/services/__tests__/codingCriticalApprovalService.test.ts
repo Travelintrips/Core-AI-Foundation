@@ -17,6 +17,7 @@ vi.mock("../codingControlBridgeSchemaService.js", () => ({
 }));
 
 import {
+  criticalApprovalExecutionMode,
   isHumanCriticalApprovalActionType,
   parseCriticalApprovalCommand,
 } from "../codingCriticalApprovalService.js";
@@ -56,5 +57,12 @@ describe("critical coding approval policy", () => {
     expect(isHumanCriticalApprovalActionType("PRODUCTION_DEPLOY")).toBe(false);
     expect(isHumanCriticalApprovalActionType("PRODUCTION_SERVICE_RESTART")).toBe(false);
     expect(isHumanCriticalApprovalActionType("WORKSTREAM_AI_HANDOFF")).toBe(false);
+  });
+
+  it("keeps true critical approvals authorization-only", () => {
+    expect(criticalApprovalExecutionMode("PRODUCTION_DB_MIGRATION")).toBe("AUTHORIZATION_ONLY");
+    expect(criticalApprovalExecutionMode("DESTRUCTIVE_DB_CHANGE")).toBe("AUTHORIZATION_ONLY");
+    expect(criticalApprovalExecutionMode("SECURITY_CHANGE")).toBe("AUTHORIZATION_ONLY");
+    expect(criticalApprovalExecutionMode("MERGE_PR")).toBe("IMMEDIATE_LEGACY_ADAPTER");
   });
 });
