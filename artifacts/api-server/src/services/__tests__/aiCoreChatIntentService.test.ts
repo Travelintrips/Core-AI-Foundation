@@ -370,6 +370,29 @@ describe("WhatsApp runtime status route precedence", () => {
   });
 });
 
+describe("Ask/MCP infrastructure route precedence", () => {
+  it("executes infrastructure routing before cloud fallback in ask and streaming paths", () => {
+    const source = readFileSync(
+      new URL("../../routes/ai-core-chat.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('const askDispatch = classifyAiCoreChatDispatch(routingMessage)');
+    expect(source).toContain('if (askDispatch.kind === "INFRA_OPERATION")');
+    expect(source).toContain('const streamDispatch = classifyAiCoreChatDispatch(routingMessage)');
+    expect(source).toContain('if (streamDispatch.kind === "INFRA_OPERATION")');
+
+    const decision = classifyAiCoreChatDispatch(
+      "cek live koneksi AI Task ke WA Admin. Verifikasi read-only WhatsApp Gateway health dan device WA admin.",
+    );
+    expect(decision).toMatchObject({
+      kind: "INFRA_OPERATION",
+      infrastructureOperation: "WHATSAPP_GATEWAY_STATUS",
+      executionLane: "NO_WORKER",
+    });
+  });
+});
+
 describe("direct OpenClaw PC hard routing", () => {
   it("routes # commands before Ask/Auto branching in both chat endpoints", () => {
     const source = readFileSync(
