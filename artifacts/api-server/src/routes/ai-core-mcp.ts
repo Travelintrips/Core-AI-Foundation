@@ -4,6 +4,8 @@ import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
+import { classifyAiCoreChatDispatch } from "../services/aiCoreChatIntentService.js";
+import { recordChatLearningEvent } from "../services/aiCoreChatLearningService.js";
 import {
   AI_CORE_TERMINAL_EVENT_NAME,
   McpCallbackEndpointError,
@@ -57,6 +59,7 @@ const SendCommandArgs = z.object({
   branch: z.string().trim().min(1).max(200).default("main"),
   priority: z.number().int().min(0).max(100).default(50),
   conversationId: z.string().trim().min(1).max(200).optional(),
+  confirmed: z.boolean().default(false),
 }).strict();
 
 function readOnlyQueryMessage(message: string): string | null {
@@ -85,6 +88,17 @@ function executionCommandMessage(
   };
 }
 
+function buildIntentConfirmation(instruction: string) {
+  const decision = classifyAiCoreChatDispatch(instruction);
+  return {
+    kind: "intent_confirmation", route: "INTENT_CONFIRMATION", requiresConfirmation: true,
+    understoodIntent: instruction, finalGoal: instruction,
+    scope: { projectOrRepositoryChange: decision.kind === "CONTROL_PLANE", infrastructureChange: decision.kind === "INFRA_OPERATION", githubChange: decision.kind === "GITHUB_OPERATION", executionLane: decision.executionLane },
+    willNotDo: ["Tidak membuat task atau menjalankan mutasi sebelum dikonfirmasi.", "Tidak memperluas scope di luar instruksi.", "Tidak membuat task duplikat untuk resume/retry task yang sama."],
+    selectedRoute: decision.kind, selectedWorkload: decision.workload.workload,
+    reply: `Pemahaman saya: ${instruction}\nTujuan akhir: menjalankan instruksi tersebut sesuai scope tanpa memperluas pekerjaan.\nRute yang dipilih: ${decision.kind} / ${decision.executionLane}.\nBelum ada eksekusi. Konfirmasi dengan perintah yang sama dan confirmed=true bila sudah sesuai.`,
+  };
+}
 const TaskProgressArgs = z.object({
   taskId: z.string().uuid(),
 }).strict();
@@ -379,6 +393,7 @@ const tools = [
         branch: { type: "string", default: "main" },
         priority: { type: "integer", minimum: 0, maximum: 100, default: 50 },
         conversationId: { type: "string" },
+        confirmed: { type: "boolean", default: false, description: "Set true only after explicit user confirmation of the intent summary." },
       },
     },
     securitySchemes: [{ type: "oauth2", scopes: ["ai_core.command"] }],
@@ -928,6 +943,13 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
+      if (!parsed.confirmed) {
+        payload = buildIntentConfirmation(command.instruction);
+        await recordChatLearningEvent({ role: "assistant", content: JSON.stringify(payload), scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "awaiting_confirmation", originalInstruction: command.instruction } }).catch(() => undefined);
+        res.status(200).json(rpcResult(body.id ?? null, { content: [{ type: "text", text: JSON.stringify(payload) }], structuredContent: payload, isError: false }));
+        return;
+      }
+      await recordChatLearningEvent({ role: "user", content: command.instruction, scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "confirmed", confirmed: true } }).catch(() => undefined);
       let eventSubscription:
         | {
             subscribed: true;

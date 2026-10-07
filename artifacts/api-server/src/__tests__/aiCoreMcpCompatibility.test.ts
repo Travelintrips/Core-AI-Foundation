@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
@@ -155,6 +156,8 @@ describe("AI Core MCP discovery compatibility", () => {
       const tool = response.body.result.tools.find((item: { name: string }) => item.name === name);
       expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.events"] }]);
     }
+    const commandTool = response.body.result.tools.find((item: { name: string }) => item.name === "send_ai_core_command");
+    expect(commandTool.inputSchema.properties.confirmed).toMatchObject({ type: "boolean", default: false });
     const queryTool = response.body.result.tools.find((item: { name: string }) => item.name === "query_ai_core");
     expect(queryTool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["ai_core.progress"] }]);
     expect(queryTool.annotations).toMatchObject({
@@ -194,4 +197,16 @@ it("exposes the same live tool registry on the fresh v2 endpoint", async () => {
       "get_profile",
     ]),
   );
+});
+
+
+describe("AI Core MCP intent confirmation contract", () => {
+  it("keeps operational commands gated by default in the source contract", () => {
+    const source = readFileSync(new URL("../routes/ai-core-mcp.ts", import.meta.url), "utf8");
+    expect(source).toContain("confirmed: z.boolean().default(false)");
+    expect(source).toContain("if (!parsed.confirmed)");
+    expect(source).toContain("kind: \"intent_confirmation\"");
+    expect(source).toContain("status: \"awaiting_confirmation\"");
+    expect(source).toContain("status: \"confirmed\"");
+  });
 });
