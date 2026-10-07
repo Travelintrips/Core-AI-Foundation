@@ -1113,28 +1113,34 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       }
       await setState(taskId, "BLOCKED", "COMPLETION_EVIDENCE_MISSING", message);
       await report(taskId, "BLOCKER", message, {
-        status: "READY_REVIEW",
+        status: "BLOCKED",
         nextAction: state.nextAction,
+        humanReviewRequired: false,
       });
       return { taskId, status: "BLOCKED", action: "COMPLETION_EVIDENCE_MISSING" };
     }
 
     if (state.task.status === "COMPLETED" && state.nextAction !== "DONE") {
+      const message =
+        state.task.resultSummary ||
+        "Task reopened because downstream implementation gates are still pending.";
       await db
         .update(aiCodingTasksTable)
         .set({
-          status: "READY_REVIEW",
-          resultSummary:
-            state.task.resultSummary ||
-            "Task reopened because downstream implementation gates are still pending.",
+          status: "BLOCKED",
+          resultSummary: message,
         })
         .where(eq(aiCodingTasksTable.id, taskId));
       await setState(taskId, "ACTIVE", "RECOVER_FALSE_COMPLETION", null);
       await report(
         taskId,
         "CHECKPOINT",
-        "Task sebelumnya ditandai COMPLETED sebelum gate implementasi selesai. Status dibuka kembali untuk melanjutkan pipeline.",
-        { nextAction: state.nextAction },
+        "Task sebelumnya ditandai COMPLETED sebelum gate implementasi selesai. Pipeline dilanjutkan tanpa membuka human review.",
+        {
+          status: "BLOCKED",
+          nextAction: state.nextAction,
+          humanReviewRequired: false,
+        },
       );
       return { taskId, status: "ACTIVE", action: "RECOVER_FALSE_COMPLETION" };
     }
