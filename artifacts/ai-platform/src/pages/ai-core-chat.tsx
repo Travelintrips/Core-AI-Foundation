@@ -31,6 +31,7 @@ import {
   Zap,
 } from "lucide-react";
 import { apiEventStream, apiFetch } from "@/lib/apiFetch";
+import { formatAiCoreInboxForChat } from "@/lib/aiCoreChatResultSummary";
 import { useToast } from "@/hooks/use-toast";
 import {
   PWA_APP_INSTALLED_EVENT,
@@ -572,15 +573,11 @@ export default function AiCoreChat() {
 
         if (inboxInitializedRef.current) {
           for (const item of [...fresh].reverse()) {
-            const taskLabel = item.taskNumber ?? item.title ?? "AI Core";
-            const summary = item.resultSummary?.trim() || item.message.trim();
+            const formatted = formatAiCoreInboxForChat(item);
             append({
               id: `inbox-${item.id}`,
               role: "assistant",
-              text: [
-                `${taskLabel} · ${item.eventType}`,
-                summary,
-              ].filter(Boolean).join("\n\n"),
+              text: [formatted.title, formatted.summary].join("\n\n"),
               createdAt: item.createdAt,
               error: item.eventType === "FAILED" || item.eventType === "BLOCKED",
               meta: {
@@ -589,8 +586,8 @@ export default function AiCoreChat() {
               },
             });
             toast({
-              title: `${taskLabel} · ${item.eventType}`,
-              description: summary.slice(0, 180),
+              title: formatted.title,
+              description: formatted.summary.slice(0, 180),
               variant:
                 item.eventType === "FAILED" || item.eventType === "BLOCKED"
                   ? "destructive"
