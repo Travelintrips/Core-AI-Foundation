@@ -23,6 +23,19 @@ import {
   workstreamChildLifecycleDisposition,
 } from "../localCodingMultiWorkerRecoveryService.js";
 
+describe("approved candidate recovery continuation", () => {
+  it("materializes and auto-finishes approved constrained AI candidates before lifecycle reconciliation", () => {
+    const source = readFileSync(
+      new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("shouldContinueApprovedWorkstreamAiCandidate(candidate)");
+    expect(source).toContain("materializeApprovedWorkstreamAiCandidate(candidate.id)");
+    expect(source).toContain("completeReviewedCodingWorkstream(materialized.id");
+    expect(source).toContain("completeChildTask: true");
+  });
+});
+
 describe("multi-worker child lifecycle recovery", () => {
   it("reconciles only stale detached READY_REVIEW Multi-Worker children without active work", () => {
     const source = readFileSync(

@@ -8,6 +8,7 @@ import {
   normalizeWorkstreamGitHeadOutput,
   parseWorkstreamAiJobPayload,
   selectWorkstreamAiAllowedFiles,
+  shouldContinueApprovedWorkstreamAiCandidate,
 } from "../localCodingWorkstreamAiExecutionService.js";
 
 const GRAPH_ID = "11111111-1111-4111-8111-111111111111";
@@ -15,6 +16,46 @@ const WORKSTREAM_ID = "22222222-2222-4222-8222-222222222222";
 const CHILD_TASK_ID = "33333333-3333-4333-8333-333333333333";
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
+
+describe("approved workstream continuation guard", () => {
+  it("resumes only approved candidates that have not already been pushed", () => {
+    const base = {
+      status: "REVIEW_REQUIRED",
+      resultJson: {
+        workstreamAiExecution: {
+          status: "CANDIDATE_READY",
+          reviewStatus: "APPROVED",
+          commitCreated: false,
+          pushed: false,
+        },
+      },
+    } as any;
+    expect(shouldContinueApprovedWorkstreamAiCandidate(base)).toBe(true);
+    expect(
+      shouldContinueApprovedWorkstreamAiCandidate({
+        ...base,
+        resultJson: {
+          workstreamAiExecution: {
+            ...base.resultJson.workstreamAiExecution,
+            reviewStatus: "PENDING",
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      shouldContinueApprovedWorkstreamAiCandidate({
+        ...base,
+        resultJson: {
+          workstreamAiExecution: {
+            ...base.resultJson.workstreamAiExecution,
+            commitCreated: true,
+            pushed: true,
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("per-workstream constrained AI execution contract", () => {
   it("fails closed instead of trimming undefined git HEAD output", () => {

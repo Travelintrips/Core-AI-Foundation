@@ -2284,6 +2284,24 @@ export async function recoverFailedCodingWorkstreamAiJob(
   );
 }
 
+export function shouldContinueApprovedWorkstreamAiCandidate(
+  workstream: Pick<AiCodingWorkstream, "status" | "resultJson">,
+): boolean {
+  if (workstream.status !== "REVIEW_REQUIRED" || !isRecord(workstream.resultJson)) {
+    return false;
+  }
+  const execution = isRecord(workstream.resultJson.workstreamAiExecution)
+    ? workstream.resultJson.workstreamAiExecution
+    : null;
+  return Boolean(
+    execution &&
+      execution.status === "CANDIDATE_READY" &&
+      execution.reviewStatus === "APPROVED" &&
+      execution.commitCreated !== true &&
+      execution.pushed !== true,
+  );
+}
+
 export async function approveWorkstreamAiCandidatePatch(
   workstreamId: string,
 ): Promise<AiCodingWorkstream> {

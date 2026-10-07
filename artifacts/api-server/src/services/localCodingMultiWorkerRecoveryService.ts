@@ -7,6 +7,11 @@ import {
   aiJobsTable,
   db,
 } from "@workspace/db";
+import {
+  materializeApprovedWorkstreamAiCandidate,
+  shouldContinueApprovedWorkstreamAiCandidate,
+} from "./localCodingWorkstreamAiExecutionService.js";
+import { completeReviewedCodingWorkstream } from "./localCodingMultiWorkerOrchestratorService.js";
 
 const ACTIVE_WORKSTREAM_STATUSES = ["CLAIMED", "RUNNING"] as const;
 const TERMINAL_WORKSTREAM_STATUSES = [
@@ -387,6 +392,26 @@ export async function reconcileStaleMultiWorkerRuns(
   options: { taskId?: string; now?: Date } = {},
 ): Promise<MultiWorkerRecoveryResult> {
   const now = options.now ?? new Date();
+
+  // REVIEW_REQUIRED is an intermediate automated QC state, not a human terminal
+  // state. If QC already approved a bounded AI candidate, resume the idempotent
+  // materialization path before generic lifecycle reconciliation. The
+  // materializer revalidates patch hashes, ownership, base SHA, static checks,
+  // and remote branch state before committing/pushing.
+  const approvedCandidates = await db
+    .select()
+    .from(aiCodingWorkstreamsTable)
+    .where(eq(aiCodingWorkstreamsTable.status, "REVIEW_REQUIRED"));
+  for (const candidate of approvedCandidates) {
+    if (options.taskId && candidate.childTaskId !== options.taskId) continue;
+    if (!shouldContinueApprovedWorkstreamAiCandidate(candidate)) continue;
+    const materialized = await materializeApprovedWorkstreamAiCandidate(candidate.id);
+    await completeReviewedCodingWorkstream(materialized.id, {
+      completeChildTask: true,
+      childTaskResultSummary:
+        "Approved constrained AI candidate was materialized, statically verified, committed, pushed, and auto-finished.",
+    });
+  }
 
   const baseConditions = [isNotNull(aiCodingWorkstreamsTable.childRunId)];
   if (options.taskId) {
