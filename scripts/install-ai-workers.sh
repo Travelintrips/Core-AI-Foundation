@@ -229,9 +229,19 @@ if [ -n "$scoped_agent_token" ]; then
   ai_core_provider_json="$(printf '{"baseUrl":"%s","apiKey":"${CUSTOM_API_KEY}","api":"openai-completions","models":[{"id":"ai-core-agent","name":"AI Core Agent Runtime","input":["text"],"contextWindow":128000,"maxTokens":16384}]}' "$ai_core_agent_base_url")"
   compose run -T --rm --no-deps --entrypoint node openclaw \
     dist/index.js config set models.providers.ai-core "$ai_core_provider_json" --strict-json --replace
+
+  # Persist the scoped AI Core credential as a real OpenClaw auth profile.
+  # The provider config still keeps an env reference as a compatibility fallback,
+  # but normal agent turns use the profile so a transient provider failure cannot
+  # quarantine the only available inline key.
+  log "Persisting OpenClaw AI Core auth profile"
+  compose run -T --rm --no-deps --entrypoint sh openclaw -lc \
+    'printf "%s\\n" "$CUSTOM_API_KEY" | node dist/index.js models auth paste-api-key --provider ai-core --profile-id ai-core:scoped --agent main'
+  compose run -T --rm --no-deps --entrypoint node openclaw \
+    dist/index.js models auth activate ai-core:scoped --agent main
   compose run -T --rm --no-deps --entrypoint node openclaw \
     dist/index.js models set ai-core/ai-core-agent
-  openclaw_provider_mode=ai-core-scoped
+  openclaw_provider_mode=ai-core-scoped-profile
 elif [ "$openclaw_initialized" != "true" ]; then
   openai_key="$(env_value OPENAI_API_KEY)"
   if [ -n "$openai_key" ]; then
