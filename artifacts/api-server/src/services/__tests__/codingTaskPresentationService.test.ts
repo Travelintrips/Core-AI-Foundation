@@ -72,6 +72,19 @@ describe("coding task presentation status", () => {
     ).toBe("TESTING");
   });
 
+  it("shows detached completed Multi-Worker shards as COMPLETED even when persistence is stuck ANALYZING", () => {
+    expect(
+      codingDashboardTaskPresentationStatus({
+        taskNumber: "MW-CWS-12345678-V1-WS-001-A1",
+        taskStatus: "ANALYZING",
+        latestRunStatus: "COMPLETED",
+        autonomousStatus: null,
+        hasActiveRun: false,
+        hasPendingCriticalApproval: false,
+      }),
+    ).toBe("COMPLETED");
+  });
+
   it("shows completed Multi-Worker child shards as COMPLETED when no critical gate remains", () => {
     expect(
       codingDashboardTaskPresentationStatus({
