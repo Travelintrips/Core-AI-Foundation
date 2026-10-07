@@ -106,9 +106,10 @@ describe("local coding run recovery policy", () => {
     expect(block).toContain("graph.status IN ('PREPARED', 'APPROVED', 'RUNNING')");
     expect(block).toContain("workstream.status IN ('PENDING', 'READY', 'CLAIMED', 'RUNNING', 'REVIEW_REQUIRED')");
     expect(block).toContain("approval.status IN ('PENDING', 'REQUESTED', 'AWAITING_APPROVAL')");
-    expect(block).toContain("task.status IN ('ANALYZING', 'READY_REVIEW', 'BLOCKED')");
+    expect(block).toContain("task.status IN ('ANALYZING', 'READY_REVIEW')");
     expect(block).toContain("THEN 'COMPLETED'");
-    expect(block).toContain("ELSE 'FAILED'");
+    expect(block).toContain("ELSE 'BLOCKED'");
+    expect(block).not.toContain("ELSE 'FAILED'");
     expect(block).toContain("last_action = 'STALE_LIFECYCLE_RECONCILED'");
   });
 
