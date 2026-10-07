@@ -6,6 +6,30 @@ import {
 } from "../codingTaskPresentationService.js";
 
 describe("coding task presentation status", () => {
+  it("maps workstream lifecycle to operational states without fake human review", () => {
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "REVIEW_REQUIRED",
+      hasPendingCriticalApproval: false,
+    })).toBe("TESTING");
+
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "REVIEW_REQUIRED",
+      hasPendingCriticalApproval: true,
+    })).toBe("READY_REVIEW");
+
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "RUNNING",
+    })).toBe("CODING");
+
+    expect(codingTaskPresentationStatus({
+      taskStatus: "READY_REVIEW",
+      workstreamStatus: "COMPLETED",
+    })).toBe("COMPLETED");
+  });
+
   it("shows explicit manual stops as CANCELLED on the operations dashboard", () => {
     expect(
       codingDashboardTaskPresentationStatus({
