@@ -130,20 +130,9 @@ export function classifyAiCoreChatDispatch(
   // classification. They execute in the deterministic control plane and must
   // not create repository-analysis/coding jobs. Source-code mutation still
   // outranks incidental infrastructure/GitHub examples.
-  if (infrastructureOperation && !sourceChange) {
-    return {
-      kind: "INFRA_OPERATION",
-      workload,
-      preset: null,
-      infrastructureOperation,
-      githubOperation: null,
-      externalAgentClientId: null,
-      executionLane: "NO_WORKER",
-      reason:
-        "Explicit infrastructure action is bounded to its target system and executes directly without Repository Analyzer or coding workers.",
-    };
-  }
-
+  // A specific GitHub delivery/recovery action outranks a generic Hostinger
+  // status interpretation. This prevents domain repair requests from being
+  // reduced to HOSTINGER_VPS_STATUS.
   if (githubOperation && !sourceChange) {
     return {
       kind: "GITHUB_OPERATION",
@@ -155,6 +144,20 @@ export function classifyAiCoreChatDispatch(
       executionLane: "NO_WORKER",
       reason:
         "Explicit GitHub status/rerun/cancel/verified-merge/Hostinger-deploy action executes directly without Repository Analyzer or coding workers.",
+    };
+  }
+
+  if (infrastructureOperation && !sourceChange) {
+    return {
+      kind: "INFRA_OPERATION",
+      workload,
+      preset: null,
+      infrastructureOperation,
+      githubOperation: null,
+      externalAgentClientId: null,
+      executionLane: "NO_WORKER",
+      reason:
+        "Explicit infrastructure action is bounded to its target system and executes directly without Repository Analyzer or coding workers.",
     };
   }
 
