@@ -173,72 +173,78 @@ jobs:
           ARCHIVE_PATH: ${{ steps.archive.outputs.path }}
         run: |
           set -euo pipefail
-          jq -n --arg username "$HOSTINGER_USERNAME" --arg domain "$DEV_DOMAIN"             '{username:$username,domain:$domain}' > /tmp/upload-url-request.json
-
-          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/upload-url-request.json             "$HOSTINGER_API_BASE/hosting/v1/files/upload-urls"             -o /tmp/upload-url.json
-
-          upload_base=$(jq -r '.url' /tmp/upload-url.json)
-          auth_key=$(jq -r '.auth_key' /tmp/upload-url.json)
-          rest_auth_key=$(jq -r '.rest_auth_key' /tmp/upload-url.json)
-          echo "::add-mask::$auth_key"
-          echo "::add-mask::$rest_auth_key"
-
           size=$(stat -c%s "$ARCHIVE_PATH")
-          target="${upload_base%/}/$ARCHIVE_NAME?override=true"
+          uploaded_ok=false
 
-          create_code=$(curl --retry 3 --retry-delay 2 --retry-all-errors --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0" -H "Upload-Length: $size" -H "Upload-Offset: 0" "$target")
-          if [ "$create_code" != "201" ]; then
-            echo "::error::Hostinger TUS create returned HTTP $create_code"
-            cat /tmp/tus-create.body || true
-            exit 1
-          fi
+          for upload_attempt in 1 2 3; do
+            jq -n --arg username "$HOSTINGER_USERNAME" --arg domain "$DEV_DOMAIN" \
+              '{username:$username,domain:$domain}' > /tmp/upload-url-request.json
 
-          offset=0
-          chunk_size=$((8 * 1024 * 1024))
-          while [ "$offset" -lt "$size" ]; do
-            remaining=$((size - offset))
-            count=$chunk_size
-            if [ "$remaining" -lt "$chunk_size" ]; then
-              count=$remaining
+            curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data-binary @/tmp/upload-url-request.json \
+              "$HOSTINGER_API_BASE/hosting/v1/files/upload-urls" \
+              -o /tmp/upload-url.json
+
+            upload_base=$(jq -r '.url // empty' /tmp/upload-url.json)
+            auth_key=$(jq -r '.auth_key // empty' /tmp/upload-url.json)
+            rest_auth_key=$(jq -r '.rest_auth_key // empty' /tmp/upload-url.json)
+            test -n "$upload_base"
+            test -n "$auth_key"
+            test -n "$rest_auth_key"
+            echo "::add-mask::$auth_key"
+            echo "::add-mask::$rest_auth_key"
+
+            target="${upload_base%/}/$ARCHIVE_NAME?override=true"
+
+            create_code=$(curl --http1.1 --silent --show-error \
+              -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}" \
+              -X POST \
+              -H "X-Auth: $auth_key" \
+              -H "X-Auth-Rest: $rest_auth_key" \
+              -H "Tus-Resumable: 1.0.0" \
+              -H "Upload-Length: $size" \
+              -H "Upload-Offset: 0" \
+              -H "Expect:" \
+              "$target")
+
+            if [ "$create_code" != "201" ]; then
+              echo "Hostinger upload create retry=$upload_attempt http=$create_code"
+              sleep 3
+              continue
             fi
 
-            dd if="$ARCHIVE_PATH" of=/tmp/tus-chunk.bin \
-              iflag=skip_bytes,count_bytes skip="$offset" count="$count" status=none
-
-            patch_code=$(curl --silent --show-error \
+            patch_code=$(curl --http1.1 --silent --show-error \
               -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}" \
               -X PATCH \
               -H "X-Auth: $auth_key" \
               -H "X-Auth-Rest: $rest_auth_key" \
               -H "Tus-Resumable: 1.0.0" \
               -H "Content-Type: application/offset+octet-stream" \
-              -H "Upload-Offset: $offset" \
-              --data-binary @/tmp/tus-chunk.bin \
+              -H "Upload-Offset: 0" \
+              -H "Expect:" \
+              --data-binary "@$ARCHIVE_PATH" \
               "$target")
-
-            if [ "$patch_code" != "204" ]; then
-              echo "::error::Hostinger TUS upload returned HTTP $patch_code at offset=$offset"
-              cat /tmp/tus-patch.body || true
-              exit 1
-            fi
 
             uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\\r","",$2); print $2}' \
               /tmp/tus-patch.headers | tail -n1)
-            if ! [[ "$uploaded" =~ ^[0-9]+$ ]] || [ "$uploaded" -le "$offset" ]; then
-              echo "::error::Invalid Hostinger upload offset: uploaded=${uploaded:-missing} previous=$offset"
-              exit 1
+
+            if [ "$patch_code" = "204" ] && [ "$uploaded" = "$size" ]; then
+              uploaded_ok=true
+              echo "archive_upload=PASS bytes=$size attempt=$upload_attempt"
+              break
             fi
 
-            offset=$uploaded
-            echo "archive_upload_progress=$offset/$size"
+            echo "Hostinger upload retry=$upload_attempt http=$patch_code uploaded=${uploaded:-missing} expected=$size"
+            sleep 3
           done
 
-          rm -f /tmp/tus-chunk.bin
-          if [ "$offset" != "$size" ]; then
-            echo "::error::Hostinger upload offset mismatch: uploaded=$offset expected=$size"
+          if [ "$uploaded_ok" != "true" ]; then
+            echo "::error::Hostinger archive upload failed after fresh signed-URL retries."
             exit 1
           fi
-          echo "archive_upload=PASS bytes=$size"
 
       - name: Copy production build settings as DEV template
         shell: bash
