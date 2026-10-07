@@ -68,6 +68,7 @@ interface OrderResult {
   trademarkNotes?: string;
   designerName?: string | null;
   designerEmail?: string | null;
+  outputs?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -122,6 +123,29 @@ const OUTPUT_LABELS: Record<string, string> = {
   "placement-spec":     "Spesifikasi Penempatan",
   "composition-json":   "Komposisi JSON",
 };
+
+function safeHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function outputImageUrl(value: unknown): string | null {
+  if (typeof value === "string") return safeHttpUrl(value);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return safeHttpUrl(record["imageUrl"] ?? record["image_url"] ?? record["url"]);
+}
+
+function output3dUrl(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return safeHttpUrl(record["glbUrl"] ?? record["gltfUrl"] ?? record["glb_url"] ?? record["gltf_url"]);
+}
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
 
@@ -247,7 +271,7 @@ export default function FashionDesignPage() {
     setTrackLoading(true);
     try {
       const [orderRes, revisionsRes] = await Promise.all([
-        apiFetch<OrderResult & { outputs?: Record<string, unknown> }>(`/api/ai/fashion-design/orders/${orderId}`).catch(() => null),
+        apiFetch<OrderResult>(`/api/ai/fashion-design/orders/${orderId}?customerEmail=${encodeURIComponent(email)}`).catch(() => null),
         apiFetch<{ revisions: FashionRevision[] }>(`/api/ai/fashion-design/orders/${orderId}/revisions?customerEmail=${encodeURIComponent(email)}`).catch(() => ({ revisions: [] })),
       ]);
       if (!orderRes) {
@@ -268,6 +292,14 @@ export default function FashionDesignPage() {
 
   const activeOrder = trackedOrder ?? submittedOrder;
   const activeEmail = form.customerEmail || trackEmail;
+  const activeOutputs = activeOrder?.outputs ?? null;
+  const flatDesignUrl = activeOutputs ? outputImageUrl(activeOutputs["flat-design"]) : null;
+  const frontBackUrl = activeOutputs ? outputImageUrl(activeOutputs["front-back-preview"]) : null;
+  const model3dUrl = activeOutputs ? output3dUrl(activeOutputs["asset"]) : null;
+  const outputColorways =
+    activeOutputs && Array.isArray(activeOutputs["colorways"])
+      ? (activeOutputs["colorways"] as unknown[]).filter((value): value is string => typeof value === "string")
+      : [];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -549,6 +581,95 @@ export default function FashionDesignPage() {
                   <div className="bg-muted/30 rounded-lg p-3 text-sm text-muted-foreground">
                     {(STATUS_INFO[activeOrder.status] ?? { desc: "Status tidak diketahui." }).desc}
                   </div>
+
+                  {activeOutputs && (flatDesignUrl || frontBackUrl || model3dUrl || outputColorways.length > 0) && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-purple-400" />
+                          Hasil Desain
+                        </p>
+                        <Badge variant="outline" className="text-[10px]">
+                          {activeOrder.status === "review" ? "Siap direview" : "Tersedia"}
+                        </Badge>
+                      </div>
+
+                      {(flatDesignUrl || frontBackUrl) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {flatDesignUrl && (
+                            <a
+                              href={flatDesignUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group overflow-hidden rounded-xl border border-border bg-muted/20"
+                            >
+                              <img
+                                src={flatDesignUrl}
+                                alt={OUTPUT_LABELS["flat-design"]}
+                                loading="lazy"
+                                className="w-full aspect-[3/4] object-cover bg-white"
+                              />
+                              <div className="p-3 flex items-center justify-between text-xs">
+                                <span className="font-medium">{OUTPUT_LABELS["flat-design"]}</span>
+                                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
+                              </div>
+                            </a>
+                          )}
+                          {frontBackUrl && (
+                            <a
+                              href={frontBackUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group overflow-hidden rounded-xl border border-border bg-muted/20"
+                            >
+                              <img
+                                src={frontBackUrl}
+                                alt={OUTPUT_LABELS["front-back-preview"]}
+                                loading="lazy"
+                                className="w-full aspect-[4/3] object-cover bg-white"
+                              />
+                              <div className="p-3 flex items-center justify-between text-xs">
+                                <span className="font-medium">{OUTPUT_LABELS["front-back-preview"]}</span>
+                                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
+                              </div>
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {outputColorways.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Variasi warna:</span>
+                          {outputColorways.map((color) => (
+                            <span
+                              key={color}
+                              title={color}
+                              className="w-6 h-6 rounded-full border border-border shadow-sm"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {model3dUrl && (
+                        <a
+                          href={model3dUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-xs font-medium text-cyan-400 hover:underline"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Buka model 3D
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {activeOrder.status === "review" && !flatDesignUrl && !frontBackUrl && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300">
+                      Hasil visual belum tersedia. Silakan refresh beberapa saat lagi atau hubungi admin jika status tetap seperti ini.
+                    </div>
+                  )}
 
                   {/* Designer info */}
                   {activeOrder.designerName && (
