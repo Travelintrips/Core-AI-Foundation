@@ -380,6 +380,34 @@ describe("AI coding workspace GitHub discovery endpoints", () => {
   });
 });
 
+describe("AI coding workspace monitor source", () => {
+  it("selects latest_run_status for operational presentation", () => {
+    const source = readFileSync(
+      new URL("../coding-workspace.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(") AS latest_run_status,");
+    expect(source).toContain("p.latest_run_status");
+  });
+
+  it("does not count disabled historical terminal failures as live failed/blocked", () => {
+    const source = readFileSync(
+      new URL("../coding-workspace.ts", import.meta.url),
+      "utf8",
+    );
+
+    const failedBlockedSql = source.slice(
+      source.indexOf("AS jobs_active,"),
+      source.indexOf("AS true_ready_review"),
+    );
+    expect(failedBlockedSql).toContain(
+      "autonomous_status IN ('FAILED', 'BLOCKED')",
+    );
+    expect(failedBlockedSql).not.toContain("status = 'FAILED'");
+  });
+});
+
 describe("AI coding workspace task list", () => {
   it("accepts recoverable BLOCKED task presentation in the API contract", () => {
     expect(() =>

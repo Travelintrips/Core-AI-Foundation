@@ -468,16 +468,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
         COUNT(*) FILTER (
           WHERE has_active_run = FALSE
             AND has_active_job = FALSE
-            AND (
-              autonomous_status IN ('FAILED', 'BLOCKED')
-              OR (
-                status = 'FAILED'
-                AND (
-                  autonomous_status IS NULL
-                  OR autonomous_status = 'DISABLED'
-                )
-              )
-            )
+            AND autonomous_status IN ('FAILED', 'BLOCKED')
         )::int AS failed_blocked,
         COUNT(*) FILTER (
           WHERE has_active_run = FALSE
@@ -492,6 +483,13 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
           t.id AS task_id,
           t.status AS task_status,
           a.status AS autonomous_status,
+          (
+            SELECT latest_run.status
+            FROM ai_platform.ai_coding_runs latest_run
+            WHERE latest_run.task_id = t.id
+            ORDER BY latest_run.created_at DESC
+            LIMIT 1
+          ) AS latest_run_status,
           EXISTS (
             SELECT 1
             FROM ai_platform.ai_coding_runs r
