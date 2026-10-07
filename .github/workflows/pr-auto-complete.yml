@@ -1,0 +1,200 @@
+name: PR Auto Complete
+
+on:
+  workflow_run:
+    workflows:
+      - CI Verify
+      - PR Fast Verify
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: pr-auto-complete-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  auto-complete:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge verified non-critical owner PRs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const fullRepo = `${owner}/${repo}`;
+            const headSha = context.payload.workflow_run.head_sha;
+
+            const associated = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              {
+                owner,
+                repo,
+                commit_sha: headSha,
+                per_page: 100,
+              },
+            );
+
+            const candidates = associated.filter((pr) =>
+              pr.state === "open" &&
+              pr.base?.ref === "main" &&
+              pr.head?.sha === headSha &&
+              pr.draft !== true &&
+              pr.user?.login === owner
+            );
+
+            if (candidates.length === 0) {
+              core.info(`No eligible owner PR is open for ${headSha}.`);
+              return;
+            }
+
+            const runsResponse = await github.rest.actions.listWorkflowRunsForRepo({
+              owner,
+              repo,
+              head_sha: headSha,
+              per_page: 100,
+            });
+            const runs = runsResponse.data.workflow_runs.filter(
+              (run) => run.event === "pull_request",
+            );
+
+            const latestRun = (name) =>
+              runs
+                .filter((run) => run.name === name)
+                .sort((a, b) => Number(b.run_number) - Number(a.run_number))[0];
+
+            const ci = latestRun("CI Verify");
+            const fast = latestRun("PR Fast Verify");
+            const isGreen = (run) =>
+              run?.status === "completed" && run?.conclusion === "success";
+
+            if (!isGreen(ci) || !isGreen(fast)) {
+              core.info(
+                `Waiting for both required checks: CI=${ci?.status}/${ci?.conclusion}, Fast=${fast?.status}/${fast?.conclusion}`,
+              );
+              return;
+            }
+
+            const criticalLabels = new Set([
+              "critical-approval",
+              "manual-review",
+              "security",
+              "destructive-db",
+              "production-db",
+            ]);
+
+            const isCriticalPath = (path) =>
+              /^\.github\/workflows\//i.test(path) ||
+              /(^|\/)(migrations?|security|auth|oauth|iam|secrets?)(\/|$)/i.test(path) ||
+              /(^|\/)(rls|policies)(\/|$)/i.test(path);
+
+            for (const candidate of candidates) {
+              const pullNumber = candidate.number;
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner,
+                repo,
+                pull_number: pullNumber,
+                per_page: 100,
+              });
+
+              const current = (await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              })).data;
+
+              if (
+                current.state !== "open" ||
+                current.draft ||
+                current.head.sha !== headSha ||
+                current.user?.login !== owner
+              ) {
+                core.info(`PR #${pullNumber} changed while checks ran; skipping.`);
+                continue;
+              }
+
+              const labels = new Set(
+                (current.labels ?? [])
+                  .map((label) => typeof label === "string" ? label : label.name)
+                  .filter(Boolean),
+              );
+              const criticalByLabel = [...labels].some((label) =>
+                criticalLabels.has(String(label).toLowerCase()),
+              );
+              const criticalFiles = files
+                .map((file) => file.filename)
+                .filter(isCriticalPath);
+
+              if (criticalByLabel || criticalFiles.length > 0) {
+                core.notice(
+                  `PR #${pullNumber} requires human approval; critical labels/files detected: ${criticalFiles.join(", ") || "label"}`,
+                );
+                continue;
+              }
+
+              let fresh = current;
+              for (let attempt = 0; attempt < 5 && fresh.mergeable == null; attempt += 1) {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                fresh = (await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                })).data;
+              }
+
+              if (fresh.mergeable_state === "behind" && fresh.head.repo?.full_name === fullRepo) {
+                core.info(`PR #${pullNumber} is behind main; updating branch and waiting for fresh checks.`);
+                await github.rest.pulls.updateBranch({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                  expected_head_sha: fresh.head.sha,
+                });
+                continue;
+              }
+
+              if (fresh.mergeable !== true) {
+                core.warning(
+                  `PR #${pullNumber} is not cleanly mergeable (state=${fresh.mergeable_state}); leaving it open for reconciliation.`,
+                );
+                continue;
+              }
+
+              const merged = await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: pullNumber,
+                merge_method: "squash",
+                sha: fresh.head.sha,
+              });
+
+              if (!merged.data.merged) {
+                core.setFailed(`GitHub refused to merge PR #${pullNumber}: ${merged.data.message}`);
+                continue;
+              }
+
+              core.info(`Merged PR #${pullNumber} at ${merged.data.sha}.`);
+
+              if (
+                fresh.head.repo?.full_name === fullRepo &&
+                fresh.head.ref &&
+                fresh.head.ref !== fresh.base.ref
+              ) {
+                try {
+                  await github.rest.git.deleteRef({
+                    owner,
+                    repo,
+                    ref: `heads/${fresh.head.ref}`,
+                  });
+                  core.info(`Deleted merged branch ${fresh.head.ref}.`);
+                } catch (error) {
+                  core.warning(`Merged PR #${pullNumber}, but branch cleanup failed: ${error.message}`);
+                }
+              }
+            }
