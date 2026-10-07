@@ -57,6 +57,12 @@ export function codingTaskPresentationStatus(input: {
     return "BLOCKED";
   }
 
+  // A persisted BLOCKED row with no live run/job/workstream/approval evidence
+  // is a terminal orphan, not work that should stay in the live queue forever.
+  if (input.taskStatus === "BLOCKED") {
+    return "FAILED";
+  }
+
   // Persisted ANALYZING without live run/job evidence is stale. Preserve the
   // latest terminal run truth when available; otherwise surface BLOCKED so the
   // recovery coordinator can act without lying about active work.
