@@ -5,7 +5,26 @@ export function codingTaskPresentationStatus(input: {
   autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
   hasPendingCriticalApproval?: boolean;
+  workstreamStatus?: string | null;
 }): string {
+  const workstreamStatus = input.workstreamStatus?.toUpperCase() ?? null;
+
+  // Multi-worker child rows are execution shards. REVIEW_REQUIRED means
+  // automated QC/reconciliation is pending; it is not a human-review gate.
+  if (workstreamStatus === "COMPLETED") return "COMPLETED";
+  if (workstreamStatus === "FAILED") return "FAILED";
+  if (workstreamStatus === "CANCELLED") return "CANCELLED";
+  if (workstreamStatus === "BLOCKED") return "BLOCKED";
+  if (workstreamStatus === "REVIEW_REQUIRED") {
+    return input.hasPendingCriticalApproval ? "READY_REVIEW" : "TESTING";
+  }
+  if (workstreamStatus === "CLAIMED" || workstreamStatus === "RUNNING") {
+    return "CODING";
+  }
+  if (workstreamStatus === "PENDING" || workstreamStatus === "READY") {
+    return "QUEUED";
+  }
+
   // A live run/recovery always wins over stale persisted terminal state.
   if (input.hasActiveRun) {
     return "ANALYZING";
@@ -81,6 +100,7 @@ export function codingDashboardTaskPresentationStatus(input: {
   autonomousLastAction?: string | null;
   hasActiveRun?: boolean;
   hasPendingCriticalApproval?: boolean;
+  workstreamStatus?: string | null;
 }): string {
   const taskNumber = input.taskNumber?.trim() ?? "";
   const latestRunStatus = input.latestRunStatus?.toUpperCase() ?? null;
