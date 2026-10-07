@@ -196,6 +196,11 @@ jobs:
           patch_target=$(awk -F': ' 'tolower($1)=="location" {gsub("\\r","",$2); print $2}' /tmp/tus-create.headers | tail -n1)
           if [ -z "$patch_target" ]; then
             patch_target="$target"
+          elif [[ "$patch_target" == /* ]]; then
+            upload_origin=$(printf '%s' "$upload_base" | cut -d/ -f1-3)
+            patch_target="${upload_origin}${patch_target}"
+          elif [[ "$patch_target" != http://* && "$patch_target" != https://* ]]; then
+            patch_target="${upload_base%/}/${patch_target}"
           fi
           echo "::add-mask::$patch_target"
 
