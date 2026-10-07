@@ -225,10 +225,9 @@ export async function reconcileStaleCodingRuns(
         const [updatedTask] = await tx
           .update(aiCodingTasksTable)
           .set({
-            // Stale child execution is recoverable. READY_REVIEW is the
-            // persisted technical-intervention state; presentation maps it to
-            // BLOCKED when no critical approval exists.
-            status: "READY_REVIEW",
+            // A stale execution is a technical blocker, never a human-review
+            // request. Persist BLOCKED so storage and presentation agree.
+            status: "BLOCKED",
             resultSummary: task.resultSummary ?? recoveryMessage,
           })
           .where(eq(aiCodingTasksTable.id, task.id))
