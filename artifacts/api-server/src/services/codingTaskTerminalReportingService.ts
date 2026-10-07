@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import {
   aiCodingBridgeCommandsTable,
   aiCodingBridgeResponsesTable,
+  aiCodingTasksTable,
   db,
 } from "@workspace/db";
 import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js";
@@ -15,12 +16,30 @@ type TerminalReportResult =
   | { reported: true; responseId: string }
   | { reported: false; reason: "NO_BINDING" | "ALREADY_REPORTED"; responseId?: string };
 
+export function canonicalTerminalEventStatus(
+  requestedStatus: CodingTaskTerminalStatus,
+  persistedStatus: unknown,
+): CodingTaskTerminalStatus {
+  return persistedStatus === "COMPLETED" ||
+    persistedStatus === "FAILED" ||
+    persistedStatus === "BLOCKED"
+    ? persistedStatus
+    : requestedStatus;
+}
+
 async function reportCodingTaskTerminalTransitionOnce(input: {
   taskId: string;
   status: CodingTaskTerminalStatus;
   message: string;
   source?: string;
 }): Promise<TerminalReportResult> {
+  const [task] = await db
+    .select({ status: aiCodingTasksTable.status })
+    .from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, input.taskId))
+    .limit(1);
+  const status = canonicalTerminalEventStatus(input.status, task?.status);
+
   const [command] = await db
     .select({ id: aiCodingBridgeCommandsTable.id })
     .from(aiCodingBridgeCommandsTable)
@@ -43,7 +62,7 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
     return { reported: false, reason: "NO_BINDING" };
   }
 
-  const bridgeKind = input.status === "BLOCKED" ? "BLOCKER" : input.status;
+  const bridgeKind = status === "BLOCKED" ? "BLOCKER" : status;
 
   const [existing] = await db
     .select({ id: aiCodingBridgeResponsesTable.id })
@@ -72,8 +91,8 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
     kind: bridgeKind,
     message: input.message.trim(),
     checkpoint: {
-      eventType: input.status,
-      status: input.status,
+      eventType: status,
+      status,
       source: input.source ?? "coding-task-status-transition",
     },
   });
