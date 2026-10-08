@@ -229,7 +229,7 @@ if [ -n "$scoped_agent_token" ]; then
   fi
 
   log "Configuring OpenClaw AI Core provider"
-  ai_core_provider_json="$(printf '{"baseUrl":"%s","apiKey":"${CUSTOM_API_KEY}","api":"openai-completions","models":[{"id":"ai-core-agent","name":"AI Core Agent Runtime","input":["text"],"contextWindow":128000,"maxTokens":16384}]}' "$ai_core_agent_base_url")"
+  ai_core_provider_json="$(printf '{"baseUrl":"%s","apiKey":"${CUSTOM_API_KEY}","api":"openai-completions","models":[{"id":"ai-core-agent","name":"AI Core Agent Runtime","input":["text"],"contextWindow":128000,"maxTokens":16384},{"id":"ai-core-agent-chat","name":"AI Core Agent Runtime Chat","input":["text"],"contextWindow":128000,"maxTokens":16384,"compat":{"supportsTools":false}}]}' "$ai_core_agent_base_url")"
   compose run -T --rm --no-deps --entrypoint node openclaw \
     dist/index.js config set models.providers.ai-core "$ai_core_provider_json" --strict-json --replace
 
