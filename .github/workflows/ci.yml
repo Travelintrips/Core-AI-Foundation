@@ -2,7 +2,8 @@ name: CI Verify
 
 on:
   push:
-    branches: [main]
+    # Full CI on DEV is required as release evidence; main keeps normal CI.
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
 
@@ -37,6 +38,8 @@ jobs:
         run: |
           pnpm run zerollm:verify
           python3 -m py_compile services/zerollm/server.py
+      - name: Verify DEV-first release policy (offline unit tests)
+        run: node --test scripts/verify-dev-first-release.test.mjs
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -129,6 +132,7 @@ jobs:
 
       - name: Report CI failure to incident inbox
         if: >-
+          github.ref == 'refs/heads/main' &&
           github.event_name != 'pull_request' &&
           (needs.static.result != 'success' ||
            needs.test.result != 'success' ||
