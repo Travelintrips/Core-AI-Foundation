@@ -91,8 +91,31 @@ describe("agent runtime provider fallback", () => {
         model: "ai-core-agent",
         messages: [
           {
+            role: "system",
+            content: [
+              {
+                type: "text",
+                text: "You are OpenClaw.",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+            providerOptions: { openai: { cache: true } },
+          },
+          {
+            role: "tool",
+            content: "stale tool result",
+            tool_call_id: "call_123",
+          },
+          {
             role: "user",
-            content: "[AI_CORE_CHAT_NO_TOOLS]\nReply exactly OPENCLAW_OPENAI_API_E2E_OK",
+            content: [
+              {
+                type: "text",
+                text: "[AI_CORE_CHAT_NO_TOOLS]\nReply exactly OPENCLAW_OPENAI_API_E2E_OK",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+            name: "operator",
           },
         ],
         tools: [
@@ -119,15 +142,22 @@ describe("agent runtime provider fallback", () => {
     const [, init] = fetchMock.mock.calls[0]!;
     const body = JSON.parse(String(init?.body)) as {
       model: string;
-      messages: Array<{ content: string }>;
+      messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }>;
       tools?: unknown;
       tool_choice?: unknown;
       parallel_tool_calls?: unknown;
     };
     expect(body.model).toBe("gpt-4o");
-    expect(body.messages[0]?.content).toBe(
-      "Reply exactly OPENCLAW_OPENAI_API_E2E_OK",
-    );
+    expect(body.messages).toEqual([
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are OpenClaw." }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Reply exactly OPENCLAW_OPENAI_API_E2E_OK" }],
+      },
+    ]);
     expect(body).not.toHaveProperty("tools");
     expect(body).not.toHaveProperty("tool_choice");
     expect(body).not.toHaveProperty("parallel_tool_calls");
