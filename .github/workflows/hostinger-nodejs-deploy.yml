@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: hostinger-nodejs-deploy
@@ -63,6 +64,18 @@ jobs:
           else
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # CI green on main alone is not sufficient. Require full DEV CI, an
+      # exact successful DEV deployment, a matching live DEV SHA, and promotion
+      # ancestry + shared source parity BEFORE any Hostinger build/restart.
+      - name: Block production release without verified DEV promotion
+        if: steps.freshness.outputs.stale != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-dev-first-release.mjs "$EXPECTED_SHA"
 
       - name: Detect whether runtime deployment is required
         id: deploy_scope
