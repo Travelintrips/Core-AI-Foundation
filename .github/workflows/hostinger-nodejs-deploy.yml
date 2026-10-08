@@ -13,9 +13,11 @@ on:
 permissions:
   contents: read
 
+# Serialize releases but do not terminate an active Hostinger deploy mid-restart.
+# Stale SHA checks inside the job safely skip superseded queued releases.
 concurrency:
   group: hostinger-nodejs-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
