@@ -51,6 +51,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_VPS_START"
   | "HOSTINGER_VPS_STOP"
   | "HOSTINGER_VPS_RESTART"
+  | "HOSTINGER_VPS_BOOTSTRAP_GIT"
   | "HOSTINGER_DOCKER_LIST"
   | "HOSTINGER_DOCKER_STATUS"
   | "HOSTINGER_DOCKER_CONTAINERS"
@@ -147,6 +148,18 @@ export function detectAiCoreInfrastructureOperation(
       /\b(kapasitas|capacity|resource|resources|cpu|vcpu|ram|memory|memori|swap|disk|storage|load|utilization|utilisation|penggunaan|headroom)\b/i.test(text) &&
       /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|kapasitas|capacity|resource|resources)\b/i.test(text)) {
     return "HOSTINGER_VPS_STATUS";
+  }
+
+  // Installing git is a narrow bootstrap action used only to unblock the
+  // existing AI Workers deploy path. Keep this ahead of the broader worker
+  // deployment detector so "install git for AI Workers" does not recurse back
+  // into the deploy preflight that requires git.
+  if (
+    /\b(hostinger|hpanel|vps)\b/i.test(text) &&
+    /\b(git)\b/i.test(text) &&
+    /\b(install|pasang|bootstrap|siapkan|setup|prepare|benahi|perbaiki)\b/i.test(text)
+  ) {
+    return "HOSTINGER_VPS_BOOTSTRAP_GIT";
   }
 
   // Deploying the AI worker stack is a bounded SSH deployment on an already
@@ -503,6 +516,78 @@ async function callHostinger(
 
   const isDockerManagerUnsupported = (error: unknown): boolean =>
     error instanceof Error && /\[VPS:2044\]|does not support Docker Manager/i.test(error.message);
+
+  const runHostingerGitBootstrapOverSsh = async (): Promise<unknown> => {
+    const host = config.sshHost;
+    const user = config.sshUser;
+    const port = config.sshPort;
+    const privateKey = config.sshPrivateKey;
+
+    if (!host || !user || !privateKey) {
+      throw new Error(
+        "Hostinger git bootstrap requires SSH configuration from HOSTINGER_SSH_* or AI_WORKERS_SSH_*.",
+      );
+    }
+    if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+      throw new Error("HOSTINGER_SSH_PORT must be a valid TCP port.");
+    }
+
+    const command = [
+      "set -euo pipefail",
+      'if [ "$(id -u)" -eq 0 ]; then SUDO=""; else command -v sudo >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=sudo" >&2; exit 70; }; SUDO="sudo"; fi',
+      'if command -v git >/dev/null 2>&1; then echo "HOSTINGER_GIT_BOOTSTRAP git=already-present"; ' +
+        'elif command -v apt-get >/dev/null 2>&1; then $SUDO apt-get update && $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y git; ' +
+        'elif command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y git; ' +
+        'elif command -v yum >/dev/null 2>&1; then $SUDO yum install -y git; ' +
+        'elif command -v apk >/dev/null 2>&1; then $SUDO apk add --no-cache git; ' +
+        'else echo "HOSTINGER_GIT_BOOTSTRAP_FAIL package_manager=unsupported" >&2; exit 71; fi',
+      'command -v git >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=git-after-install" >&2; exit 72; }',
+      'command -v bash >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=bash" >&2; exit 73; }',
+      'command -v docker >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=docker" >&2; exit 74; }',
+      'printf "HOSTINGER_GIT_BOOTSTRAP_OK\\n"',
+      'git --version',
+      'bash --version | head -n 1',
+      'docker --version',
+    ].join(" && ");
+
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-core-hostinger-git-"));
+    const keyPath = join(tempDir, "id_hostinger");
+    try {
+      await writeFile(keyPath, privateKey.endsWith("\n") ? privateKey : privateKey + "\n", {
+        mode: 0o600,
+      });
+      const { stdout, stderr } = await execFileWithInput("ssh", [
+        "-i", keyPath,
+        "-p", port,
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=12",
+        "-o", "StrictHostKeyChecking=accept-new",
+        `${user}@${host}`,
+        command,
+      ], {
+        timeout: 5 * 60_000,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        transport: "ssh",
+        host,
+        user,
+        port: Number(port),
+        installed: true,
+        stdout: stdout.trim().slice(-4000),
+        stderr: stderr.trim().slice(-1000),
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        "Hostinger git bootstrap failed: " +
+        sanitizeAiWorkersDeployDiagnostic(detail).slice(0, 1200),
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  };
 
   const runAiWorkersDeployOverSsh = async (): Promise<unknown> => {
     const host = config.sshHost;
@@ -925,7 +1010,9 @@ async function callHostinger(
 
   let data: unknown = null;
 
-  if (operation === "HOSTINGER_AI_WORKERS_DEPLOY") {
+  if (operation === "HOSTINGER_VPS_BOOTSTRAP_GIT") {
+    data = await runHostingerGitBootstrapOverSsh();
+  } else if (operation === "HOSTINGER_AI_WORKERS_DEPLOY") {
     try {
       data = await runAiWorkersDeployOverSsh();
     } catch (error) {
