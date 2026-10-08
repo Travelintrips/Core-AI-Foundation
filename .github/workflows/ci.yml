@@ -55,9 +55,18 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # DEV requires a verifiable Supabase project identity. Use a synthetic
+      # CI-only identity, with the synthetic pooler hostname pinned to loopback
+      # so tests cannot reach any Supabase project (DEV or PROD).
+      - name: Pin synthetic CI database host to loopback
+        shell: bash
+        run: echo '127.0.0.1 ci-test-only.pooler.supabase.com ci-test-only.supabase.co' | sudo tee -a /etc/hosts
       - name: Test
         env:
-          SUPABASE_DEV_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ci_test
+          # Leave APP_ENV unset: production-mode unit tests must be able to
+          # stub NODE_ENV=production without a global DEV override.
+          SUPABASE_URL_DEV: https://ci-test-only.supabase.co
+          SUPABASE_DEV_DATABASE_URL: postgresql://postgres.ci-test-only:postgres@ci-test-only.pooler.supabase.com:5432/ci_test
         run: pnpm run ci:test
 
   build:
