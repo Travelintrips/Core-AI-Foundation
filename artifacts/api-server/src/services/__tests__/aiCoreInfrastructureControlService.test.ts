@@ -232,6 +232,38 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
+  it("preserves stdout failure details when Docker warnings are on stderr", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(
+        new Error("Command failed: ssh"),
+        "[ai-workers-health] openclaw=PASS\n[ai-workers-health] ai-core-agent-runtime=FAIL url=https://example.test/health\n",
+        "time=warning volume already exists but was not created by Docker Compose\n",
+      );
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
+      },
+    });
+
+    expect(result.data).toMatchObject({
+      deployed: false,
+      failed: true,
+    });
+    expect(JSON.stringify(result)).toContain("volume already exists");
+    expect(JSON.stringify(result)).toContain("ai-core-agent-runtime=FAIL");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
+  });
+
   it("returns structured SSH diagnostics when AI Workers deploy fails", async () => {
     const stdinEnd = vi.fn();
     execFileMock.mockImplementation((...args: unknown[]) => {
