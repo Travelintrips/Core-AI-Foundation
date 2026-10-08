@@ -151,11 +151,11 @@ describe("agent runtime provider fallback", () => {
     expect(body.messages).toEqual([
       {
         role: "system",
-        content: [{ type: "text", text: "You are OpenClaw." }],
+        content: "You are OpenClaw.",
       },
       {
         role: "user",
-        content: [{ type: "text", text: "Reply exactly OPENCLAW_OPENAI_API_E2E_OK" }],
+        content: "Reply exactly OPENCLAW_OPENAI_API_E2E_OK",
       },
     ]);
     expect(body).not.toHaveProperty("tools");
