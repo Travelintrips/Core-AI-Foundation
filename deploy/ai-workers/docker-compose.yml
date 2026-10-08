@@ -254,6 +254,9 @@ services:
 
 
   openclaw-work-supervisor:
+    # Legacy worker uses the same work claim identity as the built-in OpenClaw
+    # supervisor and must not compete for a single-claim queue by default.
+    profiles: ["legacy-openclaw-supervisor"]
     image: python:3.13-slim
     restart: unless-stopped
     depends_on:

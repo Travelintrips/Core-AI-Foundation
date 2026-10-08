@@ -92,7 +92,15 @@ export async function dispatchExternalAgentWork(input: {
   const registry = await getExternalAgentRegistrySnapshot();
   let resolvedClientId = input.clientId;
   if (input.clientId === OPENCLAW_AGENT_CLIENT_ID) {
-    const preferred = selectOpenClawExecutor(registry);
+    const serverMonitor = input.metadata?.openClawExecutionProfile === "monitor-direct";
+    const preferred = selectOpenClawExecutor(registry, { preferServer: serverMonitor });
+    // Do not route server-only monitoring to a PC that cannot execute it.
+    if (serverMonitor && !preferred) {
+      throw new ExternalAgentDispatchError(
+        "AGENT_UNAVAILABLE",
+        "No eligible VPS OpenClaw worker for direct API monitoring.",
+      );
+    }
     if (preferred) resolvedClientId = preferred;
   }
   const rule = getExternalAgentRule(resolvedClientId);

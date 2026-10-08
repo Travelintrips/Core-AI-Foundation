@@ -5,8 +5,15 @@ export const OPENCLAW_LEGACY_CLIENT_ID = "gcp-openclaw-main" as const;
 type ExecutorPresence = { clientId: string; eligible: boolean };
 
 /** Resolve new jobs only. Expired in-flight claims need an independent, idempotent recovery protocol. */
-export function selectOpenClawExecutor(presences: readonly ExecutorPresence[]): string | null {
+export function selectOpenClawExecutor(
+  presences: readonly ExecutorPresence[],
+  options: { preferServer?: boolean } = {},
+): string | null {
   const healthy = new Set(presences.filter((p) => p.eligible).map((p) => p.clientId));
-  return [OPENCLAW_PC_CLIENT_ID, OPENCLAW_VPS_CLIENT_ID, OPENCLAW_LEGACY_CLIENT_ID]
-    .find((id) => healthy.has(id)) ?? null;
+  // Server-only API monitoring must never land on a desktop-only worker.
+  // The legacy worker is the current server-side agent on the VPS stack.
+  const preference = options.preferServer
+    ? [OPENCLAW_LEGACY_CLIENT_ID, OPENCLAW_VPS_CLIENT_ID]
+    : [OPENCLAW_PC_CLIENT_ID, OPENCLAW_VPS_CLIENT_ID, OPENCLAW_LEGACY_CLIENT_ID];
+  return preference.find((id) => healthy.has(id)) ?? null;
 }
