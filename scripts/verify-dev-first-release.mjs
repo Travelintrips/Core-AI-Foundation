@@ -11,6 +11,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 const repoPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const shaPattern = /^[a-f0-9]{40}$/i;
@@ -127,7 +128,7 @@ async function checkPromotion() {
   console.log("DEV_FIRST_PROMOTION=PASS " + JSON.stringify(result));
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL("file://" + process.argv[1]))) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   checkPromotion().catch((error) => {
     console.error("DEV_FIRST_PROMOTION=BLOCKED " + String(error.message || error));
     process.exitCode = 1;
