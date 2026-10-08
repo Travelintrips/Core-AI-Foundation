@@ -2364,6 +2364,9 @@ async function startExternalAgentWork(
       ...(input.branch ? { branch: input.branch } : {}),
       ...(openClawExecutionProfile ? { openClawExecutionProfile } : {}),
       source: input.source,
+      ...(clientId === OPENCLAW_AGENT_CLIENT_ID && /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.test(input.message)
+        ? { openClawExecutionProfile: "monitor-direct", directOperation: /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.exec(input.message)![1]!.toLowerCase() }
+        : {}),
     },
   });
 
