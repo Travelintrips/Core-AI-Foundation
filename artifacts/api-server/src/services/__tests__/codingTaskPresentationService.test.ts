@@ -347,11 +347,20 @@ describe("coding task presentation status", () => {
     expect(dashboardRoute).toContain("a.last_action AS autonomous_last_action");
   });
 
+  it("does not claim retry success without persisted autonomous confirmation", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toContain("const persistedAutonomous = await getAutonomousCodingTaskStatus(task.id)");
+    expect(source).toContain('const accepted = persistedState === "ACTIVE" && persistedMax >= boundedMax');
+    expect(source).toContain("requestedMaxCycles: boundedMax");
+    expect(source).toContain("maxCycles: persistedMax");
+  });
+
   it("routes retry/requeue commands to the existing task without a new coding job", () => {
     const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
     expect(source).toMatch(/const EXISTING_CWS_RESUME = [^;]*retry[^;]*requeue/);
     expect(source).toContain('operation: "TASK_RETRY"');
-    expect(source).toContain('accepted: true');
+    expect(source).toContain('operation: "TASK_RETRY"');
+    expect(source).toContain('    accepted,');
     expect(source).toContain('const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(contextualCommand)');
     expect(source).toContain('if (existingTaskLifecycle) return existingTaskLifecycle');
   });

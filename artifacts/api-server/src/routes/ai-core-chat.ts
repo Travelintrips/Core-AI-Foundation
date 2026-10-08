@@ -2198,21 +2198,31 @@ async function runExistingCodingTaskLifecycleCommand(
   const currentMax = Number((current as { max_cycles?: unknown } | null)?.max_cycles ?? 40);
   const boundedMax = Math.min(100, Math.max(40, Number.isFinite(currentMax) ? currentMax + 40 : 80));
   await enableAutonomousCodingTask(task.id, boundedMax, { forceDisabled: true });
+  // The scheduler can reconcile autonomous state concurrently. Always report
+  // the persisted budget and status, never the requested values as success.
+  const persistedAutonomous = await getAutonomousCodingTaskStatus(task.id);
+  const persistedMax = Number((persistedAutonomous as { max_cycles?: unknown } | null)?.max_cycles ?? 0);
+  const persistedState = String((persistedAutonomous as { status?: unknown } | null)?.status ?? "UNKNOWN");
+  const accepted = persistedState === "ACTIVE" && persistedMax >= boundedMax;
 
   return {
     kind: "execution",
     operation: "TASK_RETRY",
-    accepted: true,
+    accepted,
     executionLane: "NO_WORKER",
     route: "CONTROL_PLANE",
     reply:
-      `Task ${task.taskNumber} dilanjutkan pada task yang sama dengan autonomous budget bounded sampai ${boundedMax} cycle. Tidak ada task duplikat yang dibuat.`,
+      accepted
+        ? `Task ${task.taskNumber} dilanjutkan pada task yang sama; budget ${persistedMax} cycle terverifikasi. Tidak ada task duplikat yang dibuat.`
+        : `Task ${task.taskNumber} belum terverifikasi ACTIVE dengan budget ${boundedMax}; status ${persistedState}, budget tersimpan ${persistedMax}. Tidak ada task baru dibuat.`,
     taskId: task.id,
     taskNumber: task.taskNumber,
     status: task.status,
     workspaceUrl: `/coding-workspace/${task.id}`,
     autonomous: true,
-    maxCycles: boundedMax,
+    maxCycles: persistedMax,
+    requestedMaxCycles: boundedMax,
+    autonomousStatus: persistedState,
   };
 }
 
