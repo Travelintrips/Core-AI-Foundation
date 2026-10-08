@@ -90,6 +90,20 @@ describe("AI Core workload router", () => {
     });
   });
 
+  it.each([
+    "retry task CWS-10F05E80 setelah cek status worker",
+    "requeue workstream WS-001 di worker tanpa mengubah repository",
+    "pulihkan task blocked lalu verifikasi status setelahnya",
+    "jalankan ulang task autonomous sesudah memeriksa GitHub",
+    "recover task dan cek status runtime worker",
+  ])("does not downgrade actionable recovery to read-only: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "CRITICAL_ACTION",
+      requiresAgent: true,
+      useLlm: false,
+    });
+  });
+
   it("still routes explicit source-code changes to coding even when runtime context is mentioned", () => {
     expect(
       classifyAiCoreWorkload("perbaiki kode service Docker Hostinger di repository"),
