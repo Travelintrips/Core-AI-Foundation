@@ -8,11 +8,7 @@ on:
         required: true
         default: main
         type: string
-  workflow_run:
-    workflows:
-      - AI Workers Stack Verify
-    types:
-      - completed
+  # VPS releases are manual after DEV worker E2E; verify-only does not deploy.
 
 permissions:
   contents: read
