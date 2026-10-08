@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -38,6 +39,23 @@ jobs:
     environment: ai-image-worker-gcp
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require tested DEV promotion for image-worker deploy
+        if: github.event_name == 'push' || inputs.action == 'start-deploy'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected_sha=$(git rev-parse HEAD)
+          current_main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          test "$expected_sha" = "$current_main_sha" || {
+            echo "::error::Stale image-worker release SHA"
+            exit 1
+          }
+          node scripts/verify-dev-first-release.mjs "$expected_sha"
+
 
       - id: auth
         uses: google-github-actions/auth@v3
