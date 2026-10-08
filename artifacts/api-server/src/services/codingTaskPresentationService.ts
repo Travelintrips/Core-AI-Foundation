@@ -66,6 +66,16 @@ export function codingTaskPresentationStatus(input: {
     return "BLOCKED";
   }
 
+  // A parent task cannot be complete while its autonomous controller is still
+  // waiting for implementation. A finished analysis run is not delivery evidence.
+  if (
+    input.taskStatus === "COMPLETED" &&
+    (input.autonomousStatus === "ACTIVE" || input.autonomousStatus === "WAITING") &&
+    !verifiedCompletion
+  ) {
+    return "BLOCKED";
+  }
+
   // ACTIVE/WAITING without live execution evidence is an orphaned autonomous
   // checkpoint, not active analysis.
   if (
