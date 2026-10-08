@@ -1,11 +1,12 @@
 """Bounded Windows OpenClaw external-agent work consumer.
 
 Requires AI_CORE_BASE_URL and AI_CORE_SCOPED_AGENT_TOKEN in the process environment.
-Never logs bearer tokens or claim tokens. Only accepts allowlisted diagnostic tasks.
+Never logs bearer tokens or claim tokens. Runs agent instructions through OpenClaw CLI with bounded timeouts and existing approvals.
 """
 import json
 import os
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -36,17 +37,37 @@ def api(path, body):
 
 def execute(work):
     instruction = str(work.get("instruction", "")).strip()
-    # This is intentionally not a general shell or arbitrary model-command executor.
-    # Explicitly allow only safe, read-only diagnostic instructions.
-    if instruction not in ("PING", "ping", "STATUS", "status"):
-        return False, "Unsupported PC worker instruction", {"reason": "not_allowlisted"}
+    if not instruction or len(instruction) > 12000:
+        return False, "Invalid instruction length", {"reason": "invalid_instruction"}
     if instruction.lower() == "ping":
         return True, "pong from Travelintrips-PC", {"runtime": "openclaw-pc"}
-    result = subprocess.run(
-        ["openclaw", "node", "status"],
-        capture_output=True, text=True, timeout=20, shell=False,
-    )
-    return result.returncode == 0, (result.stdout or result.stderr)[-3000:], {"runtime": "openclaw-pc"}
+    if instruction.lower() == "status":
+        args = ["openclaw", "nodes", "status", "--json"]
+        result = subprocess.run(args, capture_output=True, text=True, timeout=30, shell=False)
+        return result.returncode == 0, (result.stdout or result.stderr)[-3000:], {"runtime": "openclaw-pc", "mode": "status"}
+
+    # Send arbitrary natural-language instructions only through the existing
+    # OpenClaw agent and its configured tool/approval boundaries; never shell.
+    # A private temporary message file prevents command-line argument exposure.
+    fd, path = tempfile.mkstemp(prefix="ai-core-openclaw-", suffix=".txt")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(instruction)
+        result = subprocess.run(
+            ["openclaw", "agent", "--message-file", path,
+             "--session-id", "ai-core-pc-worker", "--timeout", "90", "--json"],
+            capture_output=True, text=True, timeout=105, shell=False,
+        )
+        response = (result.stdout or result.stderr)[-10000:]
+        return result.returncode == 0, response[-3000:], {
+            "runtime": "openclaw-pc", "mode": "agent",
+            "exitCode": result.returncode,
+        }
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 def main():
