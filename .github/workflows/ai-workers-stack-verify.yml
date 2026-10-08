@@ -57,6 +57,7 @@ jobs:
           sh -n deploy/ai-workers/temporal/scripts/create-namespace.sh
           python3 -m py_compile deploy/ai-workers/temporal/coding-worker.py
           python3 -m py_compile deploy/ai-workers/agent-registrar.py
+          python3 -m py_compile deploy/ai-workers/external-agent-supervisor.py
           node --check deploy/ai-workers/openclaw-supervisor.mjs
 
       - name: Worker verification regression tests (offline)
@@ -105,6 +106,9 @@ jobs:
           grep -q 'ai-core-agent-chat' scripts/install-ai-workers.sh
           grep -q 'supportsTools.*false' scripts/install-ai-workers.sh
           grep -q 'chat-no-tools' deploy/ai-workers/openclaw-supervisor.mjs
+          grep -q '"httpStatus": status' deploy/ai-workers/external-agent-supervisor.py
+          grep -q '"upstreamError": upstream_error' deploy/ai-workers/external-agent-supervisor.py
+          grep -q '"errorMessage": str(exc)' deploy/ai-workers/external-agent-supervisor.py
 
           grep -A3 '^  temporal-data:' "$file" | grep -q 'internal: true'
           grep -A3 '^  n8n-data:' "$file" | grep -q 'internal: true'

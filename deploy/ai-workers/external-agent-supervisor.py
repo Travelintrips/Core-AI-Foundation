@@ -74,6 +74,12 @@ def claim_work():
         raise
 
 
+class ExternalAgentExecutionError(RuntimeError):
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details or {}
+
+
 def report_result(work, ok, message, details):
     _ai_core(
         "POST",
@@ -235,10 +241,28 @@ def run_openclaw(work):
         error_obj = result.get("error") if isinstance(result, dict) else None
         if isinstance(error_obj, dict):
             detail = str(error_obj.get("message") or error_obj.get("type") or "").strip()
+            upstream_error = {
+                "message": error_obj.get("message"),
+                "type": error_obj.get("type"),
+                "code": error_obj.get("code"),
+                "param": error_obj.get("param"),
+            }
         else:
             detail = str(error_obj or result or "").strip()
-        raise RuntimeError(
-            ("OpenClaw returned HTTP " + str(status) + (": " + detail if detail else ""))[:3000]
+            upstream_error = {
+                "message": detail or None,
+                "type": None,
+                "code": None,
+                "param": None,
+            }
+        raise ExternalAgentExecutionError(
+            ("OpenClaw returned HTTP " + str(status) + (": " + detail if detail else ""))[:3000],
+            {
+                "runtime": "openclaw-responses",
+                "agentId": "main",
+                "httpStatus": status,
+                "upstreamError": upstream_error,
+            },
         )
     message = _openclaw_output_text(result)
     if not message:
@@ -286,11 +310,18 @@ def main():
             )
             if work:
                 try:
+                    details = {
+                        "runtime": RUNTIME,
+                        "errorType": exc.__class__.__name__,
+                        "errorMessage": str(exc)[:3000],
+                    }
+                    if isinstance(exc, ExternalAgentExecutionError):
+                        details.update(exc.details)
                     report_result(
                         work,
                         False,
                         "External agent execution failed: " + str(exc)[:3000],
-                        {"runtime": RUNTIME, "errorType": exc.__class__.__name__},
+                        details,
                     )
                 except Exception:
                     pass
