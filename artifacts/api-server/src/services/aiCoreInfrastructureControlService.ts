@@ -682,13 +682,19 @@ async function callHostinger(
       const rawDetail = error instanceof Error ? error.message : String(error);
       const stderrMatch = rawDetail.match(/(?:^|\n)stderr:\s*([\s\S]*?)(?:\nstdout:|$)/i);
       const stdoutMatch = rawDetail.match(/(?:^|\n)stdout:\s*([\s\S]*)$/i);
-      const remoteDetail =
-        stderrMatch?.[1]?.trim() ||
-        stdoutMatch?.[1]?.trim() ||
-        rawDetail;
+      const stderrTail = sanitizeAiWorkersDeployDiagnostic(
+        stderrMatch?.[1]?.trim() || "",
+      ).slice(-1200);
+      const stdoutTail = sanitizeAiWorkersDeployDiagnostic(
+        stdoutMatch?.[1]?.trim() || "",
+      ).slice(-2400);
+      const remoteDetail = [
+        stderrTail ? "stderr:\n" + stderrTail : "",
+        stdoutTail ? "stdout:\n" + stdoutTail : "",
+      ].filter(Boolean).join("\n");
       throw new Error(
         "AI Workers SSH deploy failed: " +
-        sanitizeAiWorkersDeployDiagnostic(remoteDetail).slice(-1200),
+        (remoteDetail || sanitizeAiWorkersDeployDiagnostic(rawDetail).slice(-2400)),
       );
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
