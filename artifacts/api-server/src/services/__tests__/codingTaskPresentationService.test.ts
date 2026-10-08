@@ -347,6 +347,13 @@ describe("coding task presentation status", () => {
     expect(dashboardRoute).toContain("a.last_action AS autonomous_last_action");
   });
 
+  it("keeps readonly CWS audits with negated retry language non-mutating", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toContain("const readOnlyAudit = ");
+    expect(source).toContain('operation: "TASK_STATUS", mutating: false');
+    expect(source.indexOf("if (readOnlyAudit)")).toBeLessThan(source.indexOf("const wantsStop = EXISTING_CWS_STOP.test(message)"));
+  });
+
   it("does not claim retry success without persisted autonomous confirmation", () => {
     const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
     expect(source).toContain("const persistedAutonomous = await getAutonomousCodingTaskStatus(task.id)");
