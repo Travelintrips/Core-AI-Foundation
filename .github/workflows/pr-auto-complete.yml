@@ -205,20 +205,9 @@ jobs:
                 `Dispatched CI Verify on main after auto-merge #${pullNumber}; merged=${merged.data.sha} current_main=${currentMainSha}.`,
               );
 
-              // workflow_run chains originating from GITHUB_TOKEN-created
-              // workflow_dispatch runs are not guaranteed to emit another
-              // Actions run. Dispatch the deploy explicitly as well. The
-              // deploy workflow's freshness guard rejects stale main SHAs,
-              // while its own production verification remains fail-closed.
-              await github.rest.actions.createWorkflowDispatch({
-                owner,
-                repo,
-                workflow_id: "hostinger-nodejs-deploy.yml",
-                ref: "main",
-              });
-              core.info(
-                `Dispatched Hostinger Node.js Deploy on current main after auto-merge #${pullNumber}; current_main=${currentMainSha}.`,
-              );
+              // The CI Verify workflow dispatches deployment only AFTER its
+              // final static/test/build gate succeeds for the exact current main.
+              // Never deploy here: this PR merge is not itself CI evidence.
 
               if (
                 fresh.head.repo?.full_name === fullRepo &&
