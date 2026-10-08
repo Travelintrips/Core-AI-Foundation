@@ -59,6 +59,14 @@ export function detectExplicitExternalAgentClientId(
   const text = message.trim();
   if (!text || !DELEGATION_VERB.test(text)) return null;
 
+  // Merely mentioning OpenClaw while asking for repository changes must not
+  // hijack the coding route. Explicit delegation to OpenClaw is still allowed.
+  if (/\b(?:perbaiki|implementasikan|buat|patch|ubah|fix|coding)\b/i.test(text) &&
+      /\b(?:github|repo(?:sitory)?|pull request|\bpr\b)\b/i.test(text) &&
+      !/\b(?:suruh|delegasikan|delegate|gunakan|pakai)\s+(?:agent\s+)?open\s*claw\b/i.test(text)) {
+    return null;
+  }
+
   for (const candidate of EXPLICIT_AGENT_PATTERNS) {
     if (candidate.agent.test(text)) return candidate.clientId;
   }
