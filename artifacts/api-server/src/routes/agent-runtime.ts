@@ -43,18 +43,26 @@ function normalizeToolFreeMessages(messages: unknown[]): Array<Record<string, un
     let content: unknown = rawContent;
 
     if (Array.isArray(rawContent)) {
-      const parts = rawContent.flatMap((part) => {
-        if (!isRecord(part)) return [];
+      const parts: Array<Record<string, unknown>> = [];
+      for (const part of rawContent) {
+        if (!isRecord(part)) continue;
         const text = typeof part["text"] === "string" ? part["text"] : null;
         if (text !== null) {
-          return [{ type: "text", text }];
+          parts.push({ type: "text", text });
+          continue;
         }
         const imageUrl = isRecord(part["image_url"]) ? part["image_url"] : null;
-        if (part["type"] === "image_url" && imageUrl && typeof imageUrl["url"] === "string") {
-          return [{ type: "image_url", image_url: { url: imageUrl["url"] } }];
+        if (
+          part["type"] === "image_url" &&
+          imageUrl &&
+          typeof imageUrl["url"] === "string"
+        ) {
+          parts.push({
+            type: "image_url",
+            image_url: { url: imageUrl["url"] },
+          });
         }
-        return [];
-      });
+      }
       content = parts.length > 0 ? parts : "";
     }
 
