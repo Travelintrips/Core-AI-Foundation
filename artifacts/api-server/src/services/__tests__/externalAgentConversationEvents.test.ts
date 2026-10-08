@@ -74,5 +74,6 @@ describe("external agent conversation lifecycle binding", () => {
     );
     expect(source).toContain('"chat-no-tools"');
     expect(source).toContain('"pc-tools"');
+    expect(source).toContain("[AI_CORE_CHAT_NO_TOOLS]");
   });
 });
