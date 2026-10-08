@@ -80,6 +80,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
   | "HOSTINGER_CODING_STATIC_DEPLOY"
+  | "EXTERNAL_AGENT_DIAGNOSTIC"
   | "EXTERNAL_AGENT_STATUS"
   | "WHATSAPP_GATEWAY_STATUS";
 
@@ -186,6 +187,17 @@ export function detectAiCoreInfrastructureOperation(
   if (/\b(whatsapp|wa gateway|wa admin|device wa|whatsapp admin)\b/i.test(text) &&
       /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|koneksi|connection|connectivity|online|terhubung)\b/i.test(text)) {
     return "WHATSAPP_GATEWAY_STATUS";
+  }
+
+  // Failure/runtime diagnosis must outrank the broad external-agent status
+  // matcher. Prompts such as "cek error OpenClaw HTTP 400" are asking for the
+  // failed command/runtime detail, not a registry snapshot.
+  if (
+    /\b(openclaw|openhands|external agent|agent eksternal)\b/i.test(text) &&
+    /\b(diagnos(?:e|is|tic)?|diagnostik|error|failed|failure|gagal|http\s*4\d\d|provider|payload|schema|tool[_ -]?choice|parallel[_ -]?tool[_ -]?calls|runtime|application logs?|upstream|error\.message|error\.type|error\.code|error\.param)\b/i.test(text) &&
+    /\b(cek|check|audit|inspect|telusuri|trace|cari|find|lihat|read|baca|diagnos(?:e|is|tic)?|diagnostik)\b/i.test(text)
+  ) {
+    return "EXTERNAL_AGENT_DIAGNOSTIC";
   }
 
   if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
@@ -1738,6 +1750,36 @@ export async function executeAiCoreInfrastructureOperation(input: {
 
   if (input.operation === "WHATSAPP_GATEWAY_STATUS") {
     result = await callWhatsappGatewayStatus(env);
+  } else if (input.operation === "EXTERNAL_AGENT_DIAGNOSTIC") {
+    const { getExternalAgentDiagnostic } = await import("./localCodingControlBridgeService.js");
+    const commandId =
+      input.message?.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0] ??
+      null;
+    const diagnostic = await getExternalAgentDiagnostic({
+      commandId,
+      clientIdContains: /openhands/i.test(input.message ?? "") ? "openhands" : "openclaw",
+    });
+    result = {
+      operation: input.operation,
+      provider: "ai-core",
+      mutating: false,
+      reply: diagnostic
+        ? "Diagnosis kegagalan external agent berhasil dibaca."
+        : "Tidak ditemukan kegagalan external agent yang cocok untuk diagnosis.",
+      data: {
+        diagnostic,
+        detailCaptured: Boolean(
+          diagnostic?.latestResponse &&
+          (
+            Object.keys(diagnostic.latestResponse.metadata ?? {}).length > 0 ||
+            Object.keys(diagnostic.latestResponse.checkpoint ?? {}).length > 0
+          )
+        ),
+        note: diagnostic?.latestResponse
+          ? "Jika error.message/type/code/param tidak ada pada metadata/checkpoint, detail upstream belum dipersist oleh supervisor/runtime."
+          : "Tidak ada response terminal yang dapat dianalisis.",
+      },
+    };
   } else if (input.operation === "EXTERNAL_AGENT_STATUS") {
     const { getExternalAgentRegistrySnapshot } = await import("./externalAgentRegistryService.js");
     const agents = await getExternalAgentRegistrySnapshot();
