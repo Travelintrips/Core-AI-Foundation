@@ -25,6 +25,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger cek SSH public key VPS", "HOSTINGER_SSH_PUBLIC_KEY_LIST"],
     ["Hostinger diagnostik fingerprint SSH private key runtime", "HOSTINGER_SSH_AUTH_DIAGNOSTIC"],
     ["Hostinger cek logs docker project=myapp", "HOSTINGER_DOCKER_LOGS"],
+    ["Hostinger logs docker project=ai-core-workers directory=/opt/core-ai-workers/deploy/ai-workers", "HOSTINGER_DOCKER_LOGS"],
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger masukkan secret project=myapp key=OPENAI_API_KEY value=secret-value", "HOSTINGER_DOCKER_ENV_SET"],

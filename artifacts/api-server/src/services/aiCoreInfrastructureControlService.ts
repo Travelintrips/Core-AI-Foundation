@@ -162,6 +162,18 @@ export function detectAiCoreInfrastructureOperation(
     return "HOSTINGER_VPS_BOOTSTRAP_GIT";
   }
 
+  // Explicit Docker log inspection is read-only and must win before the
+  // AI Workers deployment heuristic. Paths such as
+  // /opt/core-ai-workers/deploy/ai-workers contain both "ai-workers" and
+  // "deploy" even when the user only asks to read logs.
+  if (
+    /\b(hostinger|hpanel|vps)\b/i.test(text) &&
+    /\b(docker|compose|container|project)\b/i.test(text) &&
+    /\b(log|logs)\b/i.test(text)
+  ) {
+    return "HOSTINGER_DOCKER_LOGS";
+  }
+
   // Deploying the AI worker stack is a bounded SSH deployment on an already
   // running VPS. It must outrank generic VPS start/stop heuristics, especially
   // when the prompt contains words like "jalankan installer".
