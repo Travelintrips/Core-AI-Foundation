@@ -13,9 +13,10 @@ on:
 permissions:
   contents: read
 
+# Preserve active deployments to avoid leaving production unavailable.
 concurrency:
   group: hostinger-nodejs-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
