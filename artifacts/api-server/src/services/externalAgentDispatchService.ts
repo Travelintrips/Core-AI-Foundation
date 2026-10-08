@@ -29,6 +29,9 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   clientId: ExternalAgentClientId;
   agent: RegExp;
 }> = [
+  // Host-specific requests must take precedence over the generic OpenClaw alias.
+  { clientId: OPENCLAW_PC_CLIENT_ID, agent: /\bopen\s*claw[\s-]*(?:pc|windows)\b|\b(?:pc|windows)[\s-]*open\s*claw\b/i },
+  { clientId: OPENCLAW_VPS_CLIENT_ID, agent: /\bopen\s*claw[\s-]*vps\b|\bvps[\s-]*open\s*claw\b/i },
   { clientId: OPENCLAW_AGENT_CLIENT_ID, agent: /\bopen\s*claw\b|\bopenclaw\b/i },
   { clientId: OPENHANDS_AGENT_CLIENT_ID, agent: /\bopen\s*hands\b|\bopenhands\b/i },
   { clientId: N8N_AGENT_CLIENT_ID, agent: /\bn8n\b/i },
