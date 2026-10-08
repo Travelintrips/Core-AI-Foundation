@@ -5,6 +5,8 @@ import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logger } from "../lib/logger.js";
 import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
 import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim } from "../services/localCodingControlBridgeService.js";
+import { verifyGitHubActionsDeployToken } from "../services/githubActionsOidcService.js";
+import { executeAiCoreInfrastructureOperation } from "../services/aiCoreInfrastructureControlService.js";
 
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
@@ -110,6 +112,10 @@ const ChatCompletionRequest = z.object({
   stream: z.boolean().optional(),
 }).passthrough();
 
+const AiWorkersOidcDeployRequest = z.object({
+  sha: z.string().regex(/^[a-f0-9]{40}$/i),
+}).strict();
+
 interface AgentUpstream {
   provider: "openai" | "gemini" | "mistral" | "anthropic";
   model: string;
@@ -211,6 +217,58 @@ async function proxyUpstream(
     signal: AbortSignal.timeout(180_000),
   });
 }
+
+router.post(
+  "/ai/agent-runtime/deploy/ai-workers",
+  async (req, res): Promise<void> => {
+    const rawAuth = String(req.headers.authorization ?? "").trim();
+    const token = rawAuth.replace(/^Bearer\s+/i, "");
+    if (!token || token === rawAuth) {
+      res.status(401).json({ error: "OIDC token required." });
+      return;
+    }
+
+    const parsed = AiWorkersOidcDeployRequest.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "Valid deployment SHA required." });
+      return;
+    }
+
+    try {
+      const claims = await verifyGitHubActionsDeployToken(token);
+      const result = await executeAiCoreInfrastructureOperation({
+        operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+        requestedBy: "github-actions-oidc:" + (claims.run_id ?? "unknown"),
+        message: "Deploy AI workers stack commit=" + parsed.data.sha,
+      });
+      const data =
+        result.data && typeof result.data === "object" && !Array.isArray(result.data)
+          ? result.data as Record<string, unknown>
+          : {};
+
+      if (data["failed"] === true || data["deployed"] === false) {
+        res.status(503).json({
+          ok: false,
+          targetSha: parsed.data.sha,
+          stage: data["stage"] ?? "deployment",
+          retryable: data["retryable"] ?? null,
+        });
+        return;
+      }
+
+      res.json({
+        ok: true,
+        targetSha: parsed.data.sha,
+        runId: claims.run_id ?? null,
+        transport: data["transport"] ?? null,
+        deployed: data["deployed"] ?? true,
+      });
+    } catch (error) {
+      logger.warn({ err: error }, "[agent-runtime] GitHub OIDC deploy rejected");
+      res.status(401).json({ error: "OIDC deployment authorization failed." });
+    }
+  },
+);
 
 router.post(
   "/ai/agent-runtime/presence/:clientId/heartbeat",
