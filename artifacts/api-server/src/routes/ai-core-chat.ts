@@ -2064,7 +2064,7 @@ async function maybeRunRemoteWorkerPreset(
 
 const EXISTING_CWS_TASK = /\b(CWS-[0-9A-F]{8})\b/i;
 const EXISTING_CWS_STOP = /\b(?:stop|hentikan|berhentikan|disable|nonaktifkan)\b/i;
-const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete)\b/i;
+const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete|retry|rerun|requeue|redispatch|recover|unblock|pulihkan|jalankan\s+ulang|coba\s+ulang|antrekan\s+ulang)\b/i;
 
 async function runExistingCodingTaskLifecycleCommand(
   message: string,
@@ -2201,6 +2201,9 @@ async function runExistingCodingTaskLifecycleCommand(
 
   return {
     kind: "execution",
+    operation: "TASK_RETRY",
+    accepted: true,
+    executionLane: "NO_WORKER",
     route: "CONTROL_PLANE",
     reply:
       `Task ${task.taskNumber} dilanjutkan pada task yang sama dengan autonomous budget bounded sampai ${boundedMax} cycle. Tidak ada task duplikat yang dibuat.`,

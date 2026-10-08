@@ -347,6 +347,15 @@ describe("coding task presentation status", () => {
     expect(dashboardRoute).toContain("a.last_action AS autonomous_last_action");
   });
 
+  it("routes retry/requeue commands to the existing task without a new coding job", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/const EXISTING_CWS_RESUME = [^;]*retry[^;]*requeue/);
+    expect(source).toContain('operation: "TASK_RETRY"');
+    expect(source).toContain('accepted: true');
+    expect(source).toContain('const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(contextualCommand)');
+    expect(source).toContain('if (existingTaskLifecycle) return existingTaskLifecycle');
+  });
+
   it("workspace list query includes active autonomous states for presentation mapping", () => {
     const source = readFileSync(
       new URL("../../routes/coding-workspace.ts", import.meta.url),
