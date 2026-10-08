@@ -688,7 +688,7 @@ async function callHostinger(
         rawDetail;
       throw new Error(
         "AI Workers SSH deploy failed: " +
-        sanitizeAiWorkersDeployDiagnostic(remoteDetail).slice(0, 1200),
+        sanitizeAiWorkersDeployDiagnostic(remoteDetail).slice(-1200),
       );
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
