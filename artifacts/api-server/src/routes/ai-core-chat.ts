@@ -2348,9 +2348,11 @@ async function startExternalAgentWork(
   const dispatched = await dispatchExternalAgentWork({
     clientId,
     instruction:
-      clientId === OPENCLAW_AGENT_CLIENT_ID
-        ? (directOpenClawPcCommand ?? input.message)
-        : input.message,
+      clientId !== OPENCLAW_AGENT_CLIENT_ID
+        ? input.message
+        : openClawExecutionProfile === "chat-no-tools"
+          ? "[AI_CORE_CHAT_NO_TOOLS]\n" + input.message
+          : (directOpenClawPcCommand ?? input.message),
     source: "ai-core-chat",
     metadata: {
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),

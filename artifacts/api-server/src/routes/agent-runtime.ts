@@ -9,6 +9,73 @@ import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridg
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
 const AGENT_CHAT_MODEL_ID = "ai-core-agent-chat";
+const CHAT_NO_TOOLS_MARKER = "[AI_CORE_CHAT_NO_TOOLS]";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stripChatNoToolsMarkerFromContent(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replace(CHAT_NO_TOOLS_MARKER, "").replace(/^\s+/, "");
+  }
+  if (!Array.isArray(value)) return value;
+  return value.map((item) => {
+    if (!isRecord(item) || typeof item["text"] !== "string") return item;
+    return {
+      ...item,
+      text: item["text"]
+        .replace(CHAT_NO_TOOLS_MARKER, "")
+        .replace(/^\s+/, ""),
+    };
+  });
+}
+
+function normalizeAgentRuntimeRequest(
+  body: Record<string, unknown>,
+): { body: Record<string, unknown>; toolFree: boolean } {
+  const messages = Array.isArray(body["messages"])
+    ? body["messages"]
+    : [];
+  const markerPresent = messages.some((message) => {
+    if (!isRecord(message)) return false;
+    const content = message["content"];
+    if (typeof content === "string") return content.includes(CHAT_NO_TOOLS_MARKER);
+    if (!Array.isArray(content)) return false;
+    return content.some(
+      (part) =>
+        isRecord(part) &&
+        typeof part["text"] === "string" &&
+        part["text"].includes(CHAT_NO_TOOLS_MARKER),
+    );
+  });
+  const requestedModel = String(body["model"] ?? "").trim().toLowerCase();
+  const toolFree =
+    markerPresent ||
+    requestedModel === AGENT_CHAT_MODEL_ID ||
+    requestedModel.endsWith("/" + AGENT_CHAT_MODEL_ID);
+
+  const normalized: Record<string, unknown> = {
+    ...body,
+    messages: messages.map((message) => {
+      if (!isRecord(message)) return message;
+      return {
+        ...message,
+        content: stripChatNoToolsMarkerFromContent(message["content"]),
+      };
+    }),
+  };
+
+  if (toolFree) {
+    delete normalized["tools"];
+    delete normalized["tool_choice"];
+    delete normalized["parallel_tool_calls"];
+    delete normalized["functions"];
+    delete normalized["function_call"];
+  }
+
+  return { body: normalized, toolFree };
+}
 const ExternalAgentHeartbeatRequest = z.object({
   health: z.enum(["healthy", "degraded"]),
   version: z.string().trim().min(1).max(100).nullable().optional(),
@@ -341,31 +408,55 @@ router.post(
     }
 
     let lastStatus = 503;
+    const normalizedRequest = normalizeAgentRuntimeRequest(
+      req.body as Record<string, unknown>,
+    );
 
     try {
       for (let index = 0; index < upstreams.length; index += 1) {
         const upstreamConfig = upstreams[index]!;
         const upstream = await proxyUpstream(
           upstreamConfig,
-          req.body as Record<string, unknown>,
+          normalizedRequest.body,
         );
 
         lastStatus = upstream.status;
 
         if (!upstream.ok) {
+          const errorText = await upstream.text().catch(() => "");
+          let upstreamError: Record<string, unknown> = {};
+          try {
+            const parsedError = errorText ? JSON.parse(errorText) : {};
+            const candidate =
+              isRecord(parsedError) && isRecord(parsedError["error"])
+                ? parsedError["error"]
+                : parsedError;
+            upstreamError = isRecord(candidate) ? candidate : {};
+          } catch {
+            upstreamError = {};
+          }
           logger.warn(
             {
               status: upstream.status,
               provider: upstreamConfig.provider,
               model: upstreamConfig.model,
               service: res.locals["aiAgentService"]?.name,
+              toolFree: normalizedRequest.toolFree,
+              upstreamError: {
+                type: upstreamError["type"] ?? null,
+                code: upstreamError["code"] ?? null,
+                param: upstreamError["param"] ?? null,
+                message:
+                  typeof upstreamError["message"] === "string"
+                    ? upstreamError["message"].slice(0, 500)
+                    : null,
+              },
             },
             "[agent-runtime] upstream provider request failed",
           );
 
           const hasFallback = index < upstreams.length - 1;
           if (hasFallback && shouldFallback(upstream.status)) {
-            await upstream.body?.cancel().catch(() => undefined);
             continue;
           }
 
