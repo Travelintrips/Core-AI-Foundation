@@ -60,7 +60,7 @@ jobs:
       # so tests cannot reach any Supabase project (DEV or PROD).
       - name: Pin synthetic CI database host to loopback
         shell: bash
-        run: echo '127.0.0.1 ci-test-only.pooler.supabase.com' | sudo tee -a /etc/hosts
+        run: echo '127.0.0.1 ci-test-only.pooler.supabase.com ci-test-only.supabase.co' | sudo tee -a /etc/hosts
       - name: Test
         env:
           APP_ENV: development
