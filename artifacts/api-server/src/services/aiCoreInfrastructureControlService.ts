@@ -245,6 +245,12 @@ export function detectAiCoreInfrastructureOperation(
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(dns|zone|record)\b/i.test(text)) {
+    // Inspection requests can mention mutating verbs inside negative constraints.
+    // Never interpret "jangan update/delete DNS" as an instruction to mutate.
+    if (isExplicitReadOnlyRequest(text) || (
+      /\b(?:audit|cek|check|inspect|read-only|list|lihat|periksa)\b/i.test(text) &&
+      /\b(?:do not|don't|jangan|tanpa)\s+(?:update|delete|remove|hapus|ubah|ganti)\b/i.test(text)
+    )) return "HOSTINGER_DNS_LIST";
     if (/\b(delete|hapus|remove)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_DELETE";
     if (/\b(update|ubah|ganti|replace|overwrite)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_UPDATE";
     if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomains?\b/i.test(text)) {
