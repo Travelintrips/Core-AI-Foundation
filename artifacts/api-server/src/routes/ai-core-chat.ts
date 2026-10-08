@@ -2074,8 +2074,8 @@ async function runExistingCodingTaskLifecycleCommand(
 
   // A task ID mentioned in an audit must not make quoted/negated lifecycle
   // words ("jangan dispatch/retry") perform a state-changing action.
-  const readOnlyAudit = /\\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\\b/i.test(message)
-    && /\\b(?:jangan|tanpa|tidak|no)\\b/i.test(message);
+  const readOnlyAudit = /\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i.test(message)
+    && /\b(?:jangan|tanpa|tidak|no)\b/i.test(message);
   if (readOnlyAudit) {
     const taskNumber = match[1]!.toUpperCase();
     const [task] = await db.select().from(aiCodingTasksTable)
