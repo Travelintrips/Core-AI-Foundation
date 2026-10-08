@@ -42,7 +42,7 @@ def execute(work):
     if instruction.lower() == "ping":
         return True, "pong from Travelintrips-PC", {"runtime": "openclaw-pc"}
     if instruction.lower() == "status":
-        args = ["openclaw", "nodes", "status", "--json"]
+        args = ["openclaw.cmd" if os.name == "nt" else "openclaw", "nodes", "status", "--json"]
         result = subprocess.run(args, capture_output=True, text=True, timeout=30, shell=False)
         return result.returncode == 0, (result.stdout or result.stderr)[-3000:], {"runtime": "openclaw-pc", "mode": "status"}
 
@@ -54,7 +54,7 @@ def execute(work):
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(instruction)
         result = subprocess.run(
-            ["openclaw", "agent", "--message-file", path,
+            ["openclaw.cmd" if os.name == "nt" else "openclaw", "agent", "--message-file", path,
              "--session-id", "ai-core-pc-worker", "--timeout", "90", "--json"],
             capture_output=True, text=True, timeout=105, shell=False,
         )
