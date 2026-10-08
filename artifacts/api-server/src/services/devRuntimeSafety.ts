@@ -26,8 +26,8 @@ export function isDevSmokeJob(jobType: unknown, payload: unknown): boolean {
 
 export function isDevSmokeSchedule(schedule: {
   targetType: unknown;
-  targetConfigJson: unknown;
-  payloadJson: unknown;
+  targetConfigJson?: unknown;
+  payloadJson?: unknown;
 }): boolean {
   if (schedule.targetType !== "create_job" || !schedule.targetConfigJson ||
       typeof schedule.targetConfigJson !== "object" ||
