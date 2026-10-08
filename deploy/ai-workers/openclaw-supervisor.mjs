@@ -6,7 +6,7 @@ import process from "node:process";
 
 const API_BASE = (process.env.AI_CORE_BASE_URL || "https://aicore.cstlogistic.co.id/api").replace(/\/$/, "");
 const TOKEN = (process.env.AI_CORE_SCOPED_AGENT_TOKEN || "").trim();
-const CLIENT_ID = "gcp-openclaw-main";
+const CLIENT_ID = (process.env.AI_CORE_OPENCLAW_CLIENT_ID || "gcp-openclaw-main").trim();
 const POLL_MS = Math.max(2000, Math.min(60000, Number(process.env.AI_CORE_AGENT_WORK_POLL_MS || 5000)));
 const EXEC_TIMEOUT_SECONDS = Math.max(30, Math.min(900, Number(process.env.OPENCLAW_WORK_TIMEOUT_SECONDS || 180)));
 const MAX_RESULT_CHARS = 20000;

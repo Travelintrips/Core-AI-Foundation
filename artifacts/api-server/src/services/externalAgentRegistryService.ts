@@ -18,6 +18,28 @@ export const EXTERNAL_AGENT_RULES = {
       productionDeploy: false,
     },
   },
+  "openclaw-vps-main": {
+    source: "openclaw",
+    role: "bounded_orchestration_agent",
+    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
+  "openclaw-pc-worker": {
+    source: "openclaw",
+    role: "bounded_orchestration_agent",
+    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
   "gcp-openhands-coder": {
     source: "openhands",
     role: "coding_executor",
