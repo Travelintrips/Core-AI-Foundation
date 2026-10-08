@@ -199,6 +199,14 @@ if [ "$temporal_coding_enabled" = "true" ]; then
   compose up -d temporal-coding-worker
 fi
 
+log "Preparing exclusive OpenClaw state handoff"
+# Any previous Gateway/supervisor may still own the durable SQLite state.
+# Stop work intake and registry heartbeat first, then let the Gateway use its
+# configured grace period to release state ownership before any one-shot CLI
+# container touches the shared volume.
+compose stop openclaw-work-supervisor agent-registrar >/dev/null 2>&1 || true
+compose stop openclaw >/dev/null 2>&1 || true
+
 openclaw_initialized=false
 openclaw_provider_mode=unconfigured
 if compose run -T --rm --no-deps --entrypoint sh openclaw -lc \
