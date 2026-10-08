@@ -296,6 +296,24 @@ describe("coding task presentation status", () => {
     ).toBe("ANALYZING");
   });
 
+  it("does not present a false-completed parent as complete when autonomy is waiting", () => {
+    for (const autonomousStatus of ["ACTIVE", "WAITING"]) {
+      expect(codingTaskPresentationStatus({
+        taskStatus: "COMPLETED",
+        autonomousStatus,
+        latestRunStatus: "COMPLETED",
+        hasActiveRun: false,
+        hasActiveJob: false,
+        hasVerifiedCompletionEvidence: false,
+      })).toBe("BLOCKED");
+    }
+    expect(codingTaskPresentationStatus({
+      taskStatus: "COMPLETED",
+      autonomousStatus: "COMPLETED",
+      hasVerifiedCompletionEvidence: true,
+    })).toBe("COMPLETED");
+  });
+
   it("keeps persisted terminal task states unchanged", () => {
     expect(
       codingTaskPresentationStatus({
