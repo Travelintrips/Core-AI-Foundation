@@ -347,6 +347,14 @@ describe("coding task presentation status", () => {
     expect(dashboardRoute).toContain("a.last_action AS autonomous_last_action");
   });
 
+  it("matches read-only audit and negated retry with actual word boundaries", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toContain(String.raw`/\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i`);
+    expect(source).toContain(String.raw`/\b(?:jangan|tanpa|tidak|no)\b/i`);
+    expect(/\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i.test("Audit READ-ONLY status task CWS-10F05E80")).toBe(true);
+    expect(/\b(?:jangan|tanpa|tidak|no)\b/i.test("Jangan retry, jangan resume")).toBe(true);
+  });
+
   it("keeps readonly CWS audits with negated retry language non-mutating", () => {
     const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
     expect(source).toContain("const readOnlyAudit = ");
