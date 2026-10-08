@@ -8,6 +8,109 @@ import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridg
 
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
+const AGENT_CHAT_MODEL_ID = "ai-core-agent-chat";
+const CHAT_NO_TOOLS_MARKER = "[AI_CORE_CHAT_NO_TOOLS]";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stripChatNoToolsMarkerFromContent(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replace(CHAT_NO_TOOLS_MARKER, "").replace(/^\s+/, "");
+  }
+  if (!Array.isArray(value)) return value;
+  return value.map((item) => {
+    if (!isRecord(item) || typeof item["text"] !== "string") return item;
+    return {
+      ...item,
+      text: item["text"]
+        .replace(CHAT_NO_TOOLS_MARKER, "")
+        .replace(/^\s+/, ""),
+    };
+  });
+}
+
+function textContent(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+
+  return value
+    .map((part) => {
+      if (!isRecord(part)) return "";
+      return typeof part["text"] === "string" ? part["text"] : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function normalizeToolFreeMessages(messages: unknown[]): Array<Record<string, unknown>> {
+  const normalized: Array<Record<string, unknown>> = [];
+
+  for (const message of messages) {
+    if (!isRecord(message)) continue;
+    const rawRole = String(message["role"] ?? "").trim();
+    if (!["system", "developer", "user", "assistant"].includes(rawRole)) continue;
+
+    const rawContent = stripChatNoToolsMarkerFromContent(message["content"]);
+    const content = textContent(rawContent).trim();
+    if (!content) continue;
+
+    normalized.push({
+      role: rawRole === "developer" ? "system" : rawRole,
+      content,
+    });
+  }
+
+  return normalized;
+}
+
+function normalizeAgentRuntimeRequest(
+  body: Record<string, unknown>,
+): { body: Record<string, unknown>; toolFree: boolean } {
+  const messages = Array.isArray(body["messages"])
+    ? body["messages"]
+    : [];
+  const markerPresent = messages.some((message) => {
+    if (!isRecord(message)) return false;
+    const content = message["content"];
+    if (typeof content === "string") return content.includes(CHAT_NO_TOOLS_MARKER);
+    if (!Array.isArray(content)) return false;
+    return content.some(
+      (part) =>
+        isRecord(part) &&
+        typeof part["text"] === "string" &&
+        part["text"].includes(CHAT_NO_TOOLS_MARKER),
+    );
+  });
+  const requestedModel = String(body["model"] ?? "").trim().toLowerCase();
+  const toolFree =
+    markerPresent ||
+    requestedModel === AGENT_CHAT_MODEL_ID ||
+    requestedModel.endsWith("/" + AGENT_CHAT_MODEL_ID);
+
+  const normalized: Record<string, unknown> = {
+    ...body,
+    messages: messages.map((message) => {
+      if (!isRecord(message)) return message;
+      return {
+        ...message,
+        content: stripChatNoToolsMarkerFromContent(message["content"]),
+      };
+    }),
+  };
+
+  if (toolFree) {
+    const minimal: Record<string, unknown> = {
+      model: body["model"],
+      messages: normalizeToolFreeMessages(messages),
+      stream: false,
+    };
+    return { body: minimal, toolFree };
+  }
+
+  return { body: normalized, toolFree };
+}
 const ExternalAgentHeartbeatRequest = z.object({
   health: z.enum(["healthy", "degraded"]),
   version: z.string().trim().min(1).max(100).nullable().optional(),
@@ -76,7 +179,7 @@ function configuredUpstreams(): AgentUpstream[] {
   if (mistralKey) {
     result.push({
       provider: "mistral",
-      model: (process.env["AI_AGENT_RUNTIME_MISTRAL_MODEL"] ?? "mistral-small-latest").trim() || "mistral-small-latest",
+      model: (process.env["AI_AGENT_RUNTIME_MISTRAL_MODEL"] ?? "codestral-latest").trim() || "codestral-latest",
       url: "https://api.mistral.ai/v1/chat/completions",
       apiKey: mistralKey,
     });
@@ -99,7 +202,18 @@ function configuredUpstreams(): AgentUpstream[] {
   return result;
 }
 
-function safeUpstreamFailure(status: number): Record<string, unknown> {
+function safeUpstreamFailure(
+  status: number,
+  diagnostic?: {
+    provider: AgentUpstream["provider"];
+    model: string;
+    error: Record<string, unknown>;
+  },
+): Record<string, unknown> {
+  const safeMessage =
+    typeof diagnostic?.error["message"] === "string"
+      ? diagnostic.error["message"].slice(0, 500)
+      : null;
   return {
     error: {
       message: status === 429
@@ -107,6 +221,18 @@ function safeUpstreamFailure(status: number): Record<string, unknown> {
         : "AI Core agent runtime provider request failed.",
       type: "ai_core_agent_runtime_error",
       status,
+      ...(diagnostic
+        ? {
+            upstream: {
+              provider: diagnostic.provider,
+              model: diagnostic.model,
+              type: diagnostic.error["type"] ?? null,
+              code: diagnostic.error["code"] ?? null,
+              param: diagnostic.error["param"] ?? null,
+              message: safeMessage,
+            },
+          }
+        : {}),
     },
   };
 }
@@ -284,12 +410,12 @@ router.get(
   (_req, res) => {
     res.json({
       object: "list",
-      data: [{
-        id: AGENT_MODEL_ID,
+      data: [AGENT_MODEL_ID, AGENT_CHAT_MODEL_ID].map((id) => ({
+        id,
         object: "model",
         created: 0,
         owned_by: "ai-core",
-      }],
+      })),
     });
   },
 );
@@ -312,8 +438,11 @@ router.post(
     const requestedModel = parsed.data.model.trim().toLowerCase();
     const allowedModelRefs = new Set([
       AGENT_MODEL_ID,
+      AGENT_CHAT_MODEL_ID,
       "openai/" + AGENT_MODEL_ID,
+      "openai/" + AGENT_CHAT_MODEL_ID,
       "ai-core/" + AGENT_MODEL_ID,
+      "ai-core/" + AGENT_CHAT_MODEL_ID,
     ]);
     if (!allowedModelRefs.has(requestedModel)) {
       res.status(400).json({
@@ -337,35 +466,63 @@ router.post(
     }
 
     let lastStatus = 503;
+    const normalizedRequest = normalizeAgentRuntimeRequest(
+      req.body as Record<string, unknown>,
+    );
 
     try {
       for (let index = 0; index < upstreams.length; index += 1) {
         const upstreamConfig = upstreams[index]!;
         const upstream = await proxyUpstream(
           upstreamConfig,
-          req.body as Record<string, unknown>,
+          normalizedRequest.body,
         );
 
         lastStatus = upstream.status;
 
         if (!upstream.ok) {
+          const errorText = await upstream.text().catch(() => "");
+          let upstreamError: Record<string, unknown> = {};
+          try {
+            const parsedError = errorText ? JSON.parse(errorText) : {};
+            const candidate =
+              isRecord(parsedError) && isRecord(parsedError["error"])
+                ? parsedError["error"]
+                : parsedError;
+            upstreamError = isRecord(candidate) ? candidate : {};
+          } catch {
+            upstreamError = {};
+          }
           logger.warn(
             {
               status: upstream.status,
               provider: upstreamConfig.provider,
               model: upstreamConfig.model,
               service: res.locals["aiAgentService"]?.name,
+              toolFree: normalizedRequest.toolFree,
+              upstreamError: {
+                type: upstreamError["type"] ?? null,
+                code: upstreamError["code"] ?? null,
+                param: upstreamError["param"] ?? null,
+                message:
+                  typeof upstreamError["message"] === "string"
+                    ? upstreamError["message"].slice(0, 500)
+                    : null,
+              },
             },
             "[agent-runtime] upstream provider request failed",
           );
 
           const hasFallback = index < upstreams.length - 1;
           if (hasFallback && shouldFallback(upstream.status)) {
-            await upstream.body?.cancel().catch(() => undefined);
             continue;
           }
 
-          res.status(upstream.status).json(safeUpstreamFailure(upstream.status));
+          res.status(upstream.status).json(safeUpstreamFailure(upstream.status, {
+            provider: upstreamConfig.provider,
+            model: upstreamConfig.model,
+            error: upstreamError,
+          }));
           return;
         }
 

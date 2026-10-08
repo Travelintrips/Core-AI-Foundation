@@ -36,10 +36,18 @@ def _request(method, url, body=None, headers=None, timeout=None):
             **(headers or {}),
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout or TIMEOUT_SECONDS) as response:
-        raw = response.read().decode("utf-8", errors="replace")
-        payload = json.loads(raw) if raw else {}
-        return int(response.status), payload
+    try:
+        with urllib.request.urlopen(request, timeout=timeout or TIMEOUT_SECONDS) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+            payload = json.loads(raw) if raw else {}
+            return int(response.status), payload
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            payload = {"error": {"message": raw[:4000]}}
+        return int(exc.code), payload
 
 
 def _ai_core(method, path, body=None):
@@ -64,6 +72,12 @@ def claim_work():
         if int(exc.code) == 204:
             return None
         raise
+
+
+class ExternalAgentExecutionError(RuntimeError):
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details or {}
 
 
 def report_result(work, ok, message, details):
@@ -224,7 +238,32 @@ def run_openclaw(work):
         timeout=TIMEOUT_SECONDS,
     )
     if status < 200 or status >= 300:
-        raise RuntimeError("OpenClaw returned HTTP " + str(status))
+        error_obj = result.get("error") if isinstance(result, dict) else None
+        if isinstance(error_obj, dict):
+            detail = str(error_obj.get("message") or error_obj.get("type") or "").strip()
+            upstream_error = {
+                "message": error_obj.get("message"),
+                "type": error_obj.get("type"),
+                "code": error_obj.get("code"),
+                "param": error_obj.get("param"),
+            }
+        else:
+            detail = str(error_obj or result or "").strip()
+            upstream_error = {
+                "message": detail or None,
+                "type": None,
+                "code": None,
+                "param": None,
+            }
+        raise ExternalAgentExecutionError(
+            ("OpenClaw returned HTTP " + str(status) + (": " + detail if detail else ""))[:3000],
+            {
+                "runtime": "openclaw-responses",
+                "agentId": "main",
+                "httpStatus": status,
+                "upstreamError": upstream_error,
+            },
+        )
     message = _openclaw_output_text(result)
     if not message:
         message = json.dumps(result, ensure_ascii=False)[:20000]
@@ -271,11 +310,18 @@ def main():
             )
             if work:
                 try:
+                    details = {
+                        "runtime": RUNTIME,
+                        "errorType": exc.__class__.__name__,
+                        "errorMessage": str(exc)[:3000],
+                    }
+                    if isinstance(exc, ExternalAgentExecutionError):
+                        details.update(exc.details)
                     report_result(
                         work,
                         False,
                         "External agent execution failed: " + str(exc)[:3000],
-                        {"runtime": RUNTIME, "errorType": exc.__class__.__name__},
+                        details,
                     )
                 except Exception:
                     pass

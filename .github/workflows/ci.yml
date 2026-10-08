@@ -177,3 +177,40 @@ jobs:
         run: |
           echo "::error::CI Verify parallel jobs did not all succeed."
           exit 1
+
+  dispatch-verified-deploy:
+    name: Dispatch deploy after verified main CI
+    needs: finalize
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.finalize.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Dispatch only the CI-verified current main
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const expectedSha = context.sha;
+            const latestMain = await github.rest.git.getRef({
+              owner, repo, ref: "heads/main",
+            });
+            if (latestMain.data.object.sha !== expectedSha) {
+              core.notice(
+                `Verified commit ${expectedSha} is stale; main is ${latestMain.data.object.sha}. Deployment skipped.`,
+              );
+              return;
+            }
+
+            // workflow_dispatch is an allowed GITHUB_TOKEN chaining event.
+            // Unlike eager post-merge dispatch, all CI gates passed before
+            // this dispatch. The deploy workflow also rechecks main freshness.
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: "hostinger-nodejs-deploy.yml",
+              ref: "main",
+            });
+            core.info(`Dispatched deploy for CI-verified main ${expectedSha}.`);

@@ -1,4 +1,5 @@
 ﻿import { randomUUID } from "node:crypto";
+import { selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
 import {
   EXTERNAL_AGENT_POLICY_VERSION,
   getExternalAgentRegistrySnapshot,
@@ -11,11 +12,15 @@ import {
 } from "./localCodingControlBridgeService.js";
 
 export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
+export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
+export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
 export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
 export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
 
 const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_VPS_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
   [N8N_AGENT_CLIENT_ID]: "workflow:automation",
 };
@@ -70,7 +75,16 @@ export async function dispatchExternalAgentWork(input: {
   source?: string;
   metadata?: Record<string, unknown>;
 }) {
-  const rule = getExternalAgentRule(input.clientId);
+  // Preserve the public legacy OpenClaw alias while routing new work to a
+  // healthy, host-specific executor. Only new jobs are redirected here;
+  // already claimed jobs require separate lease/idempotency handling.
+  const registry = await getExternalAgentRegistrySnapshot();
+  let resolvedClientId = input.clientId;
+  if (input.clientId === OPENCLAW_AGENT_CLIENT_ID) {
+    const preferred = selectOpenClawExecutor(registry);
+    if (preferred) resolvedClientId = preferred;
+  }
+  const rule = getExternalAgentRule(resolvedClientId);
   if (!rule) {
     throw new ExternalAgentDispatchError(
       "UNKNOWN_AGENT",
@@ -79,7 +93,7 @@ export async function dispatchExternalAgentWork(input: {
   }
 
   const requiredCapability = requiredCapabilityForExternalAgent(
-    input.clientId as ExternalAgentClientId,
+    resolvedClientId as ExternalAgentClientId,
   );
   if (!rule.capabilities.some((capability) => capability === requiredCapability)) {
     throw new ExternalAgentDispatchError(
@@ -88,8 +102,7 @@ export async function dispatchExternalAgentWork(input: {
     );
   }
 
-  const registry = await getExternalAgentRegistrySnapshot();
-  const agent = registry.find((item) => item.clientId === input.clientId);
+  const agent = registry.find((item) => item.clientId === resolvedClientId);
   const coldStart = !agent?.eligible;
 
   const externalCommandId = `ai-core-agent-${randomUUID()}`;
@@ -99,11 +112,11 @@ export async function dispatchExternalAgentWork(input: {
     taskId: input.taskId ?? null,
     source: input.source ?? "ai-core",
     commandType: "EXTERNAL_AGENT_WORK",
-    assignedClientId: input.clientId,
+    assignedClientId: resolvedClientId,
     authority: {
       authority: "ai-core",
       policyVersion: EXTERNAL_AGENT_POLICY_VERSION,
-      clientId: input.clientId,
+      clientId: resolvedClientId,
       role: rule.role,
       capabilities: [...rule.capabilities],
       permissions: { ...rule.permissions },
@@ -119,7 +132,7 @@ export async function dispatchExternalAgentWork(input: {
   });
 
   return {
-    clientId: input.clientId,
+    clientId: resolvedClientId,
     command: submitted.command,
     created: submitted.created,
   };
