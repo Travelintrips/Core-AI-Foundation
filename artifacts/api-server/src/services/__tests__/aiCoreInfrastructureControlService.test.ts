@@ -103,12 +103,58 @@ describe("AI Core Hostinger infrastructure control", () => {
   });
 
   it.each([
+    ["Hostinger install git di VPS untuk AI Workers", "HOSTINGER_VPS_BOOTSTRAP_GIT"],
     ["Hostinger nyalakan VPS sekarang", "HOSTINGER_VPS_START"],
     ["Hostinger matikan VPS sekarang", "HOSTINGER_VPS_STOP"],
     ["GCP start VM sekarang", "GCP_VM_START"],
     ["GCP stop VM sekarang", "GCP_VM_STOP"],
   ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it("bootstraps git over the existing Hostinger SSH profile without exposing credentials", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(
+        null,
+        "HOSTINGER_GIT_BOOTSTRAP_OK\ngit version 2.43.0\nGNU bash, version 5.2.21\nDocker version 27.0.0",
+        "",
+      );
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_VPS_BOOTSTRAP_GIT",
+      message: "Hostinger install git di VPS untuk AI Workers",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PORT: "22",
+        AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST-BOOTSTRAP\n-----END PRIVATE KEY-----",
+      },
+    });
+
+    expect(result.operation).toBe("HOSTINGER_VPS_BOOTSTRAP_GIT");
+    expect(result.mutating).toBe(true);
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      host: "198.51.100.20",
+      user: "root",
+      port: 22,
+      installed: true,
+    });
+    const args = execFileMock.mock.calls[0] as unknown[];
+    const sshArgs = args[1] as string[];
+    const command = sshArgs.at(-1) ?? "";
+    expect(command).toContain("apt-get install -y git");
+    expect(command).toContain("dnf install -y git");
+    expect(command).toContain("yum install -y git");
+    expect(command).toContain("apk add --no-cache git");
+    expect(command).toContain("docker --version");
+    expect(JSON.stringify(result)).not.toContain("TEST-BOOTSTRAP");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
   it("deploys the AI Workers stack over SSH without trying to start an already-running VPS", async () => {
