@@ -72,5 +72,7 @@ describe("external agent conversation lifecycle binding", () => {
     expect(source).toContain(
       'metadata: {\n      ...(input.conversationId ? { conversationId: input.conversationId } : {})',
     );
+    expect(source).toContain('"chat-no-tools"');
+    expect(source).toContain('"pc-tools"');
   });
 });
