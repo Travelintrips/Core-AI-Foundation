@@ -331,6 +331,7 @@ describe("repository analyzer GitHub clone authentication", () => {
         "fatal: unable to create thread: Resource temporarily unavailable",
       ),
     ).toBe(true);
+    expect(isRetryableRepositoryCloneResourceError("getaddrinfo() thread failed to start")).toBe(true);
     expect(
       isRetryableRepositoryCloneResourceError(
         "fetch-pack: invalid index-pack output",
