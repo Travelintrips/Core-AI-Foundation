@@ -755,7 +755,11 @@ async function callHostinger(
     if (sshOperation === "HOSTINGER_DOCKER_STATUS" || sshOperation === "HOSTINGER_DOCKER_CONTAINERS") {
       command = `${prefix} ps --format json`;
     } else if (sshOperation === "HOSTINGER_DOCKER_LOGS") {
-      command = `${prefix} logs --tail 200 --no-color`;
+      const service = valueOf("service");
+      if (service && !/^[A-Za-z0-9_.-]+$/.test(service)) {
+        throw new Error("Docker service name may contain only letters, numbers, dots, dashes, and underscores.");
+      }
+      command = `${prefix} logs --tail 200 --no-color${service ? " " + shellQuote(service) : ""}`;
     } else if (sshOperation === "HOSTINGER_DOCKER_START") {
       command = `${prefix} up -d`;
     } else if (sshOperation === "HOSTINGER_DOCKER_STOP") {
