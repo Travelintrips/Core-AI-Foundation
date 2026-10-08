@@ -24,6 +24,13 @@ WORKDIR /app
 # application files.
 RUN ln -s /app /workspace
 
+# The repository analyzer uses spawn("git") to clone coding tasks. Without
+# git the DEV Coding Orchestrator fails with spawn git ENOENT before analysis.
+# This belongs in runtime, not just build; no production image is modified.
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 ENV APP_ENV=development \
     NODE_ENV=development \
     PORT=3000 \
