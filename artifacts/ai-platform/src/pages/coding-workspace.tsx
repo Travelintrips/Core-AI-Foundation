@@ -1730,7 +1730,9 @@ function GitHubBranchPicker({
       const response = await apiFetch<{ branches: CodingGitHubBranch[] }>(
         `/api/ai/coding/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/branches`,
       );
-      setBranches(response.branches);
+      setBranches(repository === "Travelintrips/Core-AI-Foundation"
+        ? response.branches.filter((candidate) => candidate.name === "develop")
+        : response.branches);
       setLoadedRepository(repository);
     } catch (loadError) {
       setError(
@@ -1857,11 +1859,11 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   const createTask = useCreateCodingTask();
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
-    defaultValues: { projectName: "", repository: "", branch: "main", instruction: "", priority: 50 },
+    defaultValues: { projectName: "", repository: "", branch: "develop", instruction: "", priority: 50 },
   });
 
   useEffect(() => {
-    if (!open) form.reset({ projectName: "", repository: "", branch: "main", instruction: "", priority: 50 });
+    if (!open) form.reset({ projectName: "", repository: "", branch: "develop", instruction: "", priority: 50 });
   }, [open, form]);
 
   const onSubmit = (values: TaskFormValues) => {
@@ -1900,7 +1902,7 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
                         field.onChange(nextRepository);
                       }}
                       onDefaultBranch={(defaultBranch) => {
-                        form.setValue("branch", defaultBranch, {
+                        form.setValue("branch", form.getValues("repository") === "Travelintrips/Core-AI-Foundation" ? "develop" : defaultBranch, {
                           shouldDirty: true,
                           shouldValidate: true,
                         });
@@ -1931,6 +1933,9 @@ function CreateTaskDialog({ open, onOpenChange, onCreated }: { open: boolean; on
                       disabled={createTask.isPending}
                     />
                   </FormControl>
+                  {form.watch("repository") === "Travelintrips/Core-AI-Foundation" && (
+                    <p className="text-xs text-cyan-200/75">AI Core wajib diuji di develop sebelum promosi ke PROD.</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )} />

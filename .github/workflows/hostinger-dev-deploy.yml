@@ -177,17 +177,21 @@ jobs:
           size=$(stat -c%s "$ARCHIVE_PATH")
           uploaded_ok=false
 
-          for upload_attempt in 1 2 3; do
+          for upload_attempt in 1 2 3 4 5; do
             jq -n --arg username "$HOSTINGER_USERNAME" --arg domain "$DEV_DOMAIN" \
               '{username:$username,domain:$domain}' > /tmp/upload-url-request.json
 
-            curl --fail-with-body --silent --show-error \
+            if ! curl --fail-with-body --silent --show-error --connect-timeout 15 --max-time 35 \
               -X POST \
               -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
               -H "Content-Type: application/json" \
               --data-binary @/tmp/upload-url-request.json \
               "$HOSTINGER_API_BASE/hosting/v1/files/upload-urls" \
-              -o /tmp/upload-url.json
+              -o /tmp/upload-url.json; then
+              echo "::warning::Hostinger upload URL request failed; retry=$upload_attempt"
+              sleep 3
+              continue
+            fi
 
             upload_base=$(jq -r '.url // empty' /tmp/upload-url.json)
             auth_key=$(jq -r '.auth_key // empty' /tmp/upload-url.json)
@@ -200,7 +204,7 @@ jobs:
 
             target="${upload_base%/}/$ARCHIVE_NAME?override=true"
 
-            create_code=$(curl --http1.1 --silent --show-error \
+            create_code=$(curl --http1.1 --silent --show-error --connect-timeout 15 --max-time 35 \
               -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}" \
               -X POST \
               -H "X-Auth: $auth_key" \
@@ -209,7 +213,7 @@ jobs:
               -H "Upload-Length: $size" \
               -H "Upload-Offset: 0" \
               -H "Expect:" \
-              "$target")
+              "$target" || true)
 
             if [ "$create_code" != "201" ]; then
               echo "Hostinger upload create retry=$upload_attempt http=$create_code"
@@ -217,7 +221,7 @@ jobs:
               continue
             fi
 
-            patch_code=$(curl --http1.1 --silent --show-error \
+            patch_code=$(curl --http1.1 --silent --show-error --connect-timeout 15 --max-time 180 \
               -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}" \
               -X PATCH \
               -H "X-Auth: $auth_key" \
@@ -227,10 +231,10 @@ jobs:
               -H "Upload-Offset: 0" \
               -H "Expect:" \
               --data-binary "@$ARCHIVE_PATH" \
-              "$target")
+              "$target" || true)
 
             uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\\r","",$2); print $2}' \
-              /tmp/tus-patch.headers | tail -n1)
+              /tmp/tus-patch.headers 2>/dev/null | tail -n1 || true)
 
             if [ "$patch_code" = "204" ] && [ "$uploaded" = "$size" ]; then
               uploaded_ok=true
