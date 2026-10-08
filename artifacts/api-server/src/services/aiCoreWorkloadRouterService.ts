@@ -207,8 +207,11 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
   }
 
   if (CRITICAL_ACTION.test(actionableText)) return route("CRITICAL_ACTION");
-  if (TASK_LIFECYCLE_MUTATION.test(actionableText)) return route("CRITICAL_ACTION");
+  // Existing workspace implementation workflows retain the coding lane.
+  // Explicit retry/requeue/recover commands that do not match that workflow
+  // remain control-plane actions instead of read-only lookups.
   if (WORKSPACE_TASK_MUTATION.test(actionableText)) return route("CODING");
+  if (TASK_LIFECYCLE_MUTATION.test(actionableText)) return route("CRITICAL_ACTION");
   if (VERIFIED_DELIVERY_WORKFLOW.test(actionableText)) return route("CODING");
   if (CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText)) return route("CODING");
   if (REASONING.test(text)) return route("REASONING");
