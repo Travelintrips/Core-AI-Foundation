@@ -9,8 +9,8 @@ export const ALLOWED_TARGET_REPOSITORIES = new Set([
 const OWNER = 'Travelintrips';
 const API = 'https://aicore.cstlogistic.co.id/api';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const POLICY = '\n\nExecution policy: This is an owner-authorized autonomous coding task. Use an isolated working branch. Do not bypass tests, access secrets, force-push, weaken security controls, or directly modify production. Complete the implementation end-to-end: create the patch, run required verification/CI, commit, push, open a pull request, and merge it automatically only after all required checks pass. After merge, allow the normal production deployment workflow to run. Do not stop for ordinary human review; only fail closed for an actual critical security/destructive-operation safeguard.';
-const AUTONOMOUS_E2E_POLICY = '\n\nExecution policy: This is an explicit owner-authorized autonomous E2E validation. Use an isolated working branch. Do not bypass tests, access secrets, force-push, or weaken security controls. Keep the change strictly within the requested canary scope. If verification is green, you may commit, push, open a pull request, merge that verified pull request, and allow the normal production deployment workflow to run. Critical security controls remain mandatory.';
+const POLICY = "\n\nExecution policy: This is an owner-authorized autonomous coding task. DEV-FIRST is mandatory: implement on an isolated branch targeting develop, run regression tests and full CI, verify exact DEV deployment and smoke tests, then request a separate reviewed promotion to main. Never deploy to production from this task or bypass approvals, secrets, branch rules, or destructive-operation safeguards.";
+const AUTONOMOUS_E2E_POLICY = "\n\nExecution policy: This is an explicit owner-authorized autonomous E2E validation. Use develop and a reviewable DEV-only branch, with bounded smoke tests and CI. Do not merge or deploy to main; production promotion requires a separate reviewed release with verified live DEV evidence. Critical security controls remain mandatory.";
 const DEFAULT_ISSUE_WAIT_MS = 2 * 60 * 1000;
 const DEFAULT_POLL_MS = 10_000;
 
@@ -404,7 +404,8 @@ export async function execute(command, api, options = {}) {
   if (task && task.instruction !== instruction) throw new Error('request_id already belongs to a different instruction.');
   if (!task) {
     const created = await api('/ai/coding/tasks', { method: 'POST', body: {
-      projectName, repository: command.targetRepository, branch: 'main', instruction, priority: 50,
+      projectName, repository: command.targetRepository,
+      branch: command.targetRepository === REPOSITORY ? 'develop' : 'main', instruction, priority: 50,
     } });
     task = created.value;
   }
@@ -416,7 +417,7 @@ export async function execute(command, api, options = {}) {
       allowCommit: true,
       allowPush: true,
       allowMerge: true,
-      allowProductionDeploy: true,
+      allowProductionDeploy: false,
     },
     metadata: {
       repository: command.targetRepository,
