@@ -10,6 +10,14 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("delegates explicit OpenClaw monitoring instead of reading agent registry", () => {
+    expect(classifyAiCoreChatDispatch("Delegasikan ke OpenClaw monitor-direct ai-core-health, cek status dan laporkan")).toMatchObject({
+      kind: "EXTERNAL_AGENT", externalAgentClientId: "gcp-openclaw-main",
+    });
+    expect(classifyAiCoreChatDispatch("cek status OpenClaw")).toMatchObject({
+      kind: "INFRA_OPERATION", infrastructureOperation: "EXTERNAL_AGENT_STATUS",
+    });
+  });
   it.each([
     "Uji koneksi dua arah saja. Balas dengan AI_CORE_TWO_WAY_OK. Jangan mengubah file, konfigurasi, repository, atau melakukan deployment.",
     "Test two-way connection and echo OK",
