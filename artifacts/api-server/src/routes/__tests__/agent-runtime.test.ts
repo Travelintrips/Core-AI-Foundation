@@ -63,6 +63,47 @@ describe("agent runtime provider fallback", () => {
     );
   });
 
+  it("accepts the tool-free OpenClaw chat model alias", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-chat-alias",
+          object: "chat.completion",
+          choices: [
+            {
+              index: 0,
+              finish_reason: "stop",
+              message: { role: "assistant", content: "OPENCLAW_OPENAI_API_E2E_OK" },
+            },
+          ],
+          usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const app = await buildApp();
+    const res = await request(app)
+      .post("/ai/agent-runtime/v1/chat/completions")
+      .send({
+        model: "ai-core-agent-chat",
+        messages: [{ role: "user", content: "Reply exactly OPENCLAW_OPENAI_API_E2E_OK" }],
+        stream: false,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-ai-core-provider"]).toBe("openai");
+    expect(res.body.choices[0].message.content).toBe("OPENCLAW_OPENAI_API_E2E_OK");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(String(init?.body)) as { model: string };
+    expect(body.model).toBe("gpt-4o");
+  });
+
   it("falls back to Anthropic when earlier providers are rate limited", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
