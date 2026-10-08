@@ -107,7 +107,10 @@ describe("agent runtime provider fallback", () => {
         ],
         tool_choice: "auto",
         parallel_tool_calls: true,
-        stream: false,
+        reasoning_effort: "high",
+        metadata: { source: "openclaw" },
+        store: true,
+        stream: true,
       });
 
     expect(res.status).toBe(200);
@@ -128,6 +131,10 @@ describe("agent runtime provider fallback", () => {
     expect(body).not.toHaveProperty("tools");
     expect(body).not.toHaveProperty("tool_choice");
     expect(body).not.toHaveProperty("parallel_tool_calls");
+    expect(body).not.toHaveProperty("reasoning_effort");
+    expect(body).not.toHaveProperty("metadata");
+    expect(body).not.toHaveProperty("store");
+    expect(body.stream).toBe(false);
   });
 
   it("accepts the tool-free OpenClaw chat model alias", async () => {
