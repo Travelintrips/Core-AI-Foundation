@@ -67,11 +67,12 @@ function normalizeAgentRuntimeRequest(
   };
 
   if (toolFree) {
-    delete normalized["tools"];
-    delete normalized["tool_choice"];
-    delete normalized["parallel_tool_calls"];
-    delete normalized["functions"];
-    delete normalized["function_call"];
+    const minimal: Record<string, unknown> = {
+      model: body["model"],
+      messages: normalized["messages"],
+      stream: false,
+    };
+    return { body: minimal, toolFree };
   }
 
   return { body: normalized, toolFree };
