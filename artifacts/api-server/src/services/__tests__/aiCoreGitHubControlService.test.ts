@@ -59,6 +59,24 @@ describe("AI Core no-worker GitHub control", () => {
     });
   });
 
+  it("routes an explicit deploy workflow file to generic workflow dispatch", () => {
+    expect(
+      detectAiCoreGitHubOperation(
+        "trigger workflow=ai-workers-deploy.yml ref=main input.ref=abc1234",
+      ),
+    ).toBe("GITHUB_WORKFLOW_DISPATCH");
+
+    expect(
+      requestedWorkflowDispatch(
+        "trigger workflow=ai-workers-deploy.yml ref=main input.ref=abc1234",
+      ),
+    ).toEqual({
+      workflow: "ai-workers-deploy.yml",
+      ref: "main",
+      inputs: { ref: "abc1234" },
+    });
+  });
+
   it("sanitizes punctuation from workflow dispatch input values", () => {
     expect(
       requestedWorkflowDispatch(
