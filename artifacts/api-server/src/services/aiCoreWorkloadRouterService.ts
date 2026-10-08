@@ -140,6 +140,11 @@ const RUNTIME_CONTEXT =
 const RUNTIME_MUTATION =
   /\b(fix|perbaiki|benahi|pulihkan|recover|restart|reconnect|start|stop|reload|redeploy|repair|bersihkan|clear|flush|ubah|edit|modify|change)\b/i;
 
+// Task lifecycle recovery must never be treated as a status lookup merely
+// because the instruction includes words such as "status", "check", or "verify".
+const TASK_LIFECYCLE_MUTATION =
+  /\b(?:retry|rerun|requeue|redispatch|resume|recover|reactivate|unblock|pulihkan|lanjutkan|aktifkan kembali|jalankan ulang|coba ulang|antrekan ulang)\b.{0,160}\b(?:task|workstream|job|queue|worker|autonomous|coding workspace|cws-[a-z0-9-]+)\b|\b(?:task|workstream|job|queue|worker|autonomous|coding workspace|cws-[a-z0-9-]+)\b.{0,160}\b(?:retry|rerun|requeue|redispatch|resume|recover|reactivate|unblock|pulihkan|lanjutkan|jalankan ulang|coba ulang)\b/i;
+
 const EXPLICIT_RUNTIME_ONLY =
   /\b(runtime[ -]?only|runtime saja|langsung (?:di|ke) runtime|jangan (?:route|arahkan|masuk)(?:kan)? ke (?:coding|coding orchestrator)|tanpa (?:repo|repository) (?:index|indexing|analysis|analisis)|jangan (?:analisis|analyze|index) (?:repo|repository))\b/i;
 
@@ -165,6 +170,9 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
     READ_ONLY_RUNTIME_INTENT.test(text) &&
     RUNTIME_CONTEXT.test(text) &&
     !CRITICAL_ACTION.test(actionableText) &&
+    !RUNTIME_MUTATION.test(actionableText) &&
+    !WORKSPACE_TASK_MUTATION.test(actionableText) &&
+    !TASK_LIFECYCLE_MUTATION.test(actionableText) &&
     !(CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText))
   ) {
     return route("DETERMINISTIC");
@@ -199,6 +207,7 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
   }
 
   if (CRITICAL_ACTION.test(actionableText)) return route("CRITICAL_ACTION");
+  if (TASK_LIFECYCLE_MUTATION.test(actionableText)) return route("CRITICAL_ACTION");
   if (WORKSPACE_TASK_MUTATION.test(actionableText)) return route("CODING");
   if (VERIFIED_DELIVERY_WORKFLOW.test(actionableText)) return route("CODING");
   if (CODING_ACTION.test(actionableText) && CODE_CONTEXT.test(actionableText)) return route("CODING");
