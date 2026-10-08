@@ -1,4 +1,5 @@
 ﻿import { randomUUID } from "node:crypto";
+import { selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
 import {
   EXTERNAL_AGENT_POLICY_VERSION,
   getExternalAgentRegistrySnapshot,
@@ -80,8 +81,7 @@ export async function dispatchExternalAgentWork(input: {
   const registry = await getExternalAgentRegistrySnapshot();
   let resolvedClientId = input.clientId;
   if (input.clientId === OPENCLAW_AGENT_CLIENT_ID) {
-    const preferred = [OPENCLAW_VPS_CLIENT_ID, OPENCLAW_PC_CLIENT_ID]
-      .find((id) => registry.some((agent) => agent.clientId === id && agent.eligible));
+    const preferred = selectOpenClawExecutor(registry);
     if (preferred) resolvedClientId = preferred;
   }
   const rule = getExternalAgentRule(resolvedClientId);
