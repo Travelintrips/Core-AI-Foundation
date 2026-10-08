@@ -146,6 +146,18 @@ export function classifyAiCoreChatDispatch(
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
   const sourceChange = hasExplicitSourceChange(message);
 
+  // Safe explicit delegation wins over generic registry status queries.
+  // Source changes and sensitive actions continue through their gated routes.
+  if (externalAgentClientId && !sourceChange &&
+      /\b(delegasikan|delegate|suruh|minta|route|rutekan)\b/i.test(message) &&
+      !/\b(deploy|merge|restart|reboot|hapus|delete|uninstall|install|push|commit)\b/i.test(message)) {
+    return {
+      kind: "EXTERNAL_AGENT", workload, preset: null,
+      infrastructureOperation: null, githubOperation: null,
+      externalAgentClientId, executionLane: "TARGETED",
+      reason: "Explicit safe delegation takes precedence over agent status inspection.",
+    };
+  }
   const explicitCodingOrchestrator = isExplicitCodingOrchestratorRequest(message);
 
   // Source-code mutation is GitHub-direct by default. This is intentionally
