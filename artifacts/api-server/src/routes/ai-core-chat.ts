@@ -2072,6 +2072,26 @@ async function runExistingCodingTaskLifecycleCommand(
   const match = message.match(EXISTING_CWS_TASK);
   if (!match) return null;
 
+  // A task ID mentioned in an audit must not make quoted/negated lifecycle
+  // words ("jangan dispatch/retry") perform a state-changing action.
+  const readOnlyAudit = /\\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\\b/i.test(message)
+    && /\\b(?:jangan|tanpa|tidak|no)\\b/i.test(message);
+  if (readOnlyAudit) {
+    const taskNumber = match[1]!.toUpperCase();
+    const [task] = await db.select().from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.taskNumber, taskNumber)).limit(1);
+    if (!task) return { kind: "validation", route: "CONTROL_PLANE", taskNumber, reply: `Task ${taskNumber} tidak ditemukan.` };
+    const autonomous = await getAutonomousCodingTaskStatus(task.id);
+    return {
+      kind: "query", route: "CONTROL_PLANE", executionLane: "NO_WORKER",
+      operation: "TASK_STATUS", mutating: false,
+      taskId: task.id, taskNumber, status: task.status,
+      autonomousStatus: (autonomous as { status?: unknown } | null)?.status ?? null,
+      autonomousEnabled: (autonomous as { enabled?: unknown } | null)?.enabled ?? null,
+      reply: `Status ${taskNumber}: ${task.status}; autonomous: ${String((autonomous as { status?: unknown } | null)?.status ?? "UNKNOWN")}.`,
+    };
+  }
+
   const wantsStop = EXISTING_CWS_STOP.test(message);
   const wantsResume = EXISTING_CWS_RESUME.test(message);
   if (!wantsStop && !wantsResume) return null;
