@@ -11,11 +11,11 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: read
+  actions: write
 
 concurrency:
   group: pr-auto-complete-${{ github.event.workflow_run.head_sha }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   auto-complete:
@@ -180,6 +180,34 @@ jobs:
               }
 
               core.info(`Merged PR #${pullNumber} at ${merged.data.sha}.`);
+
+              // Merges created by GITHUB_TOKEN do not emit a new push-triggered
+              // Actions chain. Explicitly dispatch CI on main so the merged
+              // commit continues through CI -> deploy -> production verify.
+              const mainRef = await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: "heads/main",
+              });
+              const currentMainSha = mainRef.data.object.sha;
+              if (currentMainSha !== merged.data.sha) {
+                core.notice(
+                  `Main advanced after PR #${pullNumber} merge: merged=${merged.data.sha} current=${currentMainSha}. Dispatching CI for latest main.`,
+                );
+              }
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: "ci.yml",
+                ref: "main",
+              });
+              core.info(
+                `Dispatched CI Verify on main after auto-merge #${pullNumber}; merged=${merged.data.sha} current_main=${currentMainSha}.`,
+              );
+
+              // The CI Verify workflow dispatches deployment only AFTER its
+              // final static/test/build gate succeeds for the exact current main.
+              // Never deploy here: this PR merge is not itself CI evidence.
 
               if (
                 fresh.head.repo?.full_name === fullRepo &&

@@ -645,6 +645,98 @@ export async function completeCodingBridgeCommand(input: {
   return { commandId: input.commandId, status: input.status, response };
 }
 
+export async function getExternalAgentDiagnostic(input: {
+  commandId?: string | null;
+  clientIdContains?: string | null;
+} = {}) {
+  await ensureCodingControlBridgeTables();
+
+  const commandId = input.commandId?.trim() || null;
+  const clientIdContains = (input.clientIdContains?.trim() || "openclaw").toLowerCase();
+
+  const result = commandId
+    ? await db.execute(sql`
+        SELECT
+          command.id,
+          command.external_command_id,
+          command.status,
+          command.metadata_json,
+          command.updated_at,
+          response.id AS response_id,
+          response.kind AS response_kind,
+          response.message AS response_message,
+          response.checkpoint_json AS response_checkpoint_json,
+          response.metadata_json AS response_metadata_json,
+          response.created_at AS response_created_at
+        FROM ai_platform.ai_coding_bridge_commands AS command
+        LEFT JOIN LATERAL (
+          SELECT *
+          FROM ai_platform.ai_coding_bridge_responses AS response
+          WHERE response.command_id = command.id
+          ORDER BY response.created_at DESC
+          LIMIT 1
+        ) AS response ON TRUE
+        WHERE command.id = ${commandId}::uuid
+        LIMIT 1
+      `)
+    : await db.execute(sql`
+        SELECT
+          command.id,
+          command.external_command_id,
+          command.status,
+          command.metadata_json,
+          command.updated_at,
+          response.id AS response_id,
+          response.kind AS response_kind,
+          response.message AS response_message,
+          response.checkpoint_json AS response_checkpoint_json,
+          response.metadata_json AS response_metadata_json,
+          response.created_at AS response_created_at
+        FROM ai_platform.ai_coding_bridge_commands AS command
+        LEFT JOIN LATERAL (
+          SELECT *
+          FROM ai_platform.ai_coding_bridge_responses AS response
+          WHERE response.command_id = command.id
+          ORDER BY response.created_at DESC
+          LIMIT 1
+        ) AS response ON TRUE
+        WHERE command.status = 'FAILED'
+          AND LOWER(COALESCE(command.metadata_json ->> 'assignedClientId', ''))
+              LIKE '%' || ${clientIdContains}::text || '%'
+        ORDER BY command.updated_at DESC
+        LIMIT 1
+      `);
+
+  const row = result.rows?.[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+
+  return {
+    commandId: String(row["id"]),
+    externalCommandId: String(row["external_command_id"] ?? ""),
+    status: String(row["status"] ?? ""),
+    assignedClientId:
+      isRecord(row["metadata_json"]) &&
+      typeof row["metadata_json"]["assignedClientId"] === "string"
+        ? row["metadata_json"]["assignedClientId"]
+        : null,
+    updatedAt: row["updated_at"] ?? null,
+    latestResponse: row["response_id"]
+      ? {
+          id: String(row["response_id"]),
+          kind: String(row["response_kind"] ?? ""),
+          message: String(row["response_message"] ?? ""),
+          checkpoint: isRecord(row["response_checkpoint_json"])
+            ? row["response_checkpoint_json"]
+            : {},
+          metadata: isRecord(row["response_metadata_json"])
+            ? row["response_metadata_json"]
+            : {},
+          createdAt: row["response_created_at"] ?? null,
+        }
+      : null,
+  };
+}
+
 export async function getCodingBridgeCommandExecutionState(commandId: string) {
   await ensureCodingControlBridgeTables();
   const [command] = await db

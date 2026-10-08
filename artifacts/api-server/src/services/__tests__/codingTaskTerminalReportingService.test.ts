@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   limit: vi.fn(),
   appendCodingBridgeResponse: vi.fn(),
+  dispatchExternalAgentWork: vi.fn(),
 }));
 
 const builder = {
@@ -33,6 +34,7 @@ vi.mock("@workspace/db", () => ({
     taskId: "commands.taskId",
     source: "commands.source",
     commandType: "commands.commandType",
+    metadataJson: "commands.metadataJson",
     createdAt: "commands.createdAt",
   },
   aiCodingBridgeResponsesTable: {
@@ -42,6 +44,11 @@ vi.mock("@workspace/db", () => ({
     kind: "responses.kind",
     createdAt: "responses.createdAt",
   },
+}));
+
+vi.mock("../externalAgentDispatchService.js", () => ({
+  OPENCLAW_AGENT_CLIENT_ID: "gcp-openclaw-main",
+  dispatchExternalAgentWork: mocks.dispatchExternalAgentWork,
 }));
 
 vi.mock("../localCodingControlBridgeService.js", () => ({
@@ -128,6 +135,51 @@ describe("coding task terminal reporting", () => {
       }),
       "commands.createdAt",
     );
+  });
+
+  it("queues one OpenClaw wake for a conversation-bound terminal event", async () => {
+    mocks.limit
+      .mockResolvedValueOnce([{ status: "COMPLETED" }])
+      .mockResolvedValueOnce([{
+        id: "command-1",
+        metadataJson: { conversationId: "conversation-a" },
+      }])
+      .mockResolvedValueOnce([]);
+    mocks.appendCodingBridgeResponse.mockResolvedValue({
+      id: "22222222-2222-4222-8222-222222222222",
+    });
+    mocks.dispatchExternalAgentWork.mockResolvedValue({
+      created: true,
+      command: { id: "external-1" },
+    });
+
+    const result = await reportCodingTaskTerminalTransition({
+      taskId: "11111111-1111-4111-8111-111111111111",
+      status: "COMPLETED",
+      message: "Task selesai.",
+      source: "test-wake",
+    });
+
+    expect(result).toEqual({
+      reported: true,
+      responseId: "22222222-2222-4222-8222-222222222222",
+    });
+    expect(mocks.dispatchExternalAgentWork).toHaveBeenCalledTimes(1);
+    expect(mocks.dispatchExternalAgentWork).toHaveBeenCalledWith({
+      clientId: "gcp-openclaw-main",
+      instruction: expect.stringContaining(
+        "AI_CORE_WAKE:22222222-2222-4222-8222-222222222222",
+      ),
+      taskId: "11111111-1111-4111-8111-111111111111",
+      source: "ai-core-chatgpt-wake",
+      metadata: {
+        conversationId: "conversation-a",
+        sourceResponseId: "22222222-2222-4222-8222-222222222222",
+        eventType: "COMPLETED",
+        openClawChatgptWake: true,
+        source: "test-wake",
+      },
+    });
   });
 
   it("emits a BLOCKED bridge response for a recoverable conflict exactly once", async () => {

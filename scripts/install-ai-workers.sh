@@ -92,6 +92,8 @@ ensure_env_secret AI_CORE_SCOPED_AGENT_TOKEN 32
 
 scoped_agent_token="$(env_value AI_CORE_SCOPED_AGENT_TOKEN)"
 temporal_coding_token="$(env_value AI_CORE_TEMPORAL_CODING_TOKEN)"
+temporal_coding_enabled="$(env_value AI_WORKERS_ENABLE_TEMPORAL_CODING)"
+temporal_coding_enabled="${temporal_coding_enabled:-false}"
 ai_core_base_url="$(env_value AI_CORE_BASE_URL)"
 ai_core_base_url="${ai_core_base_url:-https://aicore.cstlogistic.co.id/api}"
 ai_core_agent_base_url="${ai_core_base_url%/}/ai/agent-runtime/v1"
@@ -118,11 +120,12 @@ compose config --quiet
 log "Pulling pinned worker images"
 compose pull --ignore-buildable
 
-if [ -n "$temporal_coding_token" ]; then
+if [ "$temporal_coding_enabled" = "true" ]; then
+  [ -n "$temporal_coding_token" ] || fail "AI_WORKERS_ENABLE_TEMPORAL_CODING=true requires AI_CORE_TEMPORAL_CODING_TOKEN"
   log "Building Temporal coding orchestrator image"
   compose build temporal-coding-worker
 else
-  log "AI_CORE_TEMPORAL_CODING_TOKEN not present; Temporal coding orchestrator will remain disabled"
+  log "Temporal coding orchestrator disabled; coding route defaults to GitHub"
 fi
 
 projects_path="$(env_value OPENHANDS_PROJECTS_PATH)"
@@ -191,10 +194,18 @@ fi
 compose exec -T n8n n8n import:workflow --input=/opt/ai-core-n8n/ai-core-external-work.json >/dev/null
 compose exec -T n8n n8n update:workflow --id=AIcoreExternalWork001 --active=true >/dev/null
 
-if [ -n "$temporal_coding_token" ]; then
+if [ "$temporal_coding_enabled" = "true" ]; then
   log "Starting Temporal coding orchestrator"
   compose up -d temporal-coding-worker
 fi
+
+log "Preparing exclusive OpenClaw state handoff"
+# Any previous Gateway/supervisor may still own the durable SQLite state.
+# Stop work intake and registry heartbeat first, then let the Gateway use its
+# configured grace period to release state ownership before any one-shot CLI
+# container touches the shared volume.
+compose stop openclaw-work-supervisor agent-registrar >/dev/null 2>&1 || true
+compose stop openclaw >/dev/null 2>&1 || true
 
 openclaw_initialized=false
 openclaw_provider_mode=unconfigured
@@ -226,7 +237,7 @@ if [ -n "$scoped_agent_token" ]; then
   fi
 
   log "Configuring OpenClaw AI Core provider"
-  ai_core_provider_json="$(printf '{"baseUrl":"%s","apiKey":"${CUSTOM_API_KEY}","api":"openai-completions","models":[{"id":"ai-core-agent","name":"AI Core Agent Runtime","input":["text"],"contextWindow":128000,"maxTokens":16384}]}' "$ai_core_agent_base_url")"
+  ai_core_provider_json="$(printf '{"baseUrl":"%s","apiKey":"${CUSTOM_API_KEY}","api":"openai-completions","models":[{"id":"ai-core-agent","name":"AI Core Agent Runtime","input":["text"],"contextWindow":128000,"maxTokens":16384},{"id":"ai-core-agent-chat","name":"AI Core Agent Runtime Chat","input":["text"],"contextWindow":128000,"maxTokens":16384,"compat":{"supportsTools":false}}]}' "$ai_core_agent_base_url")"
   compose run -T --rm --no-deps --entrypoint node openclaw \
     dist/index.js config set models.providers.ai-core "$ai_core_provider_json" --strict-json --replace
 
@@ -237,8 +248,12 @@ if [ -n "$scoped_agent_token" ]; then
   log "Persisting OpenClaw AI Core auth profile"
   compose run -T --rm --no-deps --entrypoint sh openclaw -lc \
     'printf "%s\\n" "$CUSTOM_API_KEY" | node dist/index.js models auth paste-api-key --provider ai-core --profile-id ai-core:scoped --agent main'
+  # paste-api-key creates a durable static profile, but custom provider profiles
+  # do not carry setup metadata that auth activate needs to rediscover the
+  # endpoint/model. Pin the stored profile explicitly, then select the configured
+  # model separately.
   compose run -T --rm --no-deps --entrypoint node openclaw \
-    dist/index.js models auth activate ai-core:scoped --agent main
+    dist/index.js models auth order set --agent main --provider ai-core ai-core:scoped
   compose run -T --rm --no-deps --entrypoint node openclaw \
     dist/index.js models set ai-core/ai-core-agent
   openclaw_provider_mode=ai-core-scoped-profile

@@ -3,6 +3,7 @@ import App from "./App";
 import "./index.css";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { initializePwaInstallCapture } from "@/lib/pwaInstall";
+import { installCodingApiBridge } from "@/lib/codingApiBridge";
 
 // Attach the admin API key to every outgoing API request.
 // VITE_ADMIN_API_KEY is baked into the bundle at build time — set it as a
@@ -11,6 +12,8 @@ const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
 if (adminKey && adminKey.trim()) {
   setAuthTokenGetter(() => adminKey.trim());
 }
+
+installCodingApiBridge();
 
 const pathname = window.location.pathname.toLowerCase();
 const hostname = window.location.hostname.toLowerCase();

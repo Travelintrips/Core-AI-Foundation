@@ -755,6 +755,14 @@ describe("AI Core admin database query service", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
+  it("does not treat generic operational status checks as database intent", () => {
+    expect(shouldAttemptAdminDbQuery("cek status MCP AI Core secara read-only")).toBe(false);
+    expect(shouldAttemptAdminDbQuery("cek status deployment")).toBe(false);
+    expect(shouldAttemptAdminDbQuery("cek status worker")).toBe(false);
+    expect(shouldAttemptAdminDbQuery("cek data task di database")).toBe(true);
+    expect(shouldAttemptAdminDbQuery("SELECT 1")).toBe(true);
+  });
+
   it("keeps unresolved business questions and contextual follow-ups on the database route", () => {
     const discovery = { tableCount: 1, databases: [{ id: "primary", label: "AI Core", status: "ok" as const, tableCount: 1 }] };
     expect(buildAdminDbUnresolvedAnswer("cek berapa pendapatan sport center kemarin", [], discovery)).toMatchObject({ route: "ADMIN_DB_QUERY", databaseQuery: { executed: false, discovery } });

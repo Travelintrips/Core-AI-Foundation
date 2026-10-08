@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
+import { deployCodingStaticSite } from "./hostingerCodingStaticDeployService.js";
 
 function execFileWithInput(
   file: string,
@@ -50,6 +51,7 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_VPS_START"
   | "HOSTINGER_VPS_STOP"
   | "HOSTINGER_VPS_RESTART"
+  | "HOSTINGER_VPS_BOOTSTRAP_GIT"
   | "HOSTINGER_DOCKER_LIST"
   | "HOSTINGER_DOCKER_STATUS"
   | "HOSTINGER_DOCKER_CONTAINERS"
@@ -77,6 +79,8 @@ export type AiCoreInfrastructureOperation =
   | "HOSTINGER_SSH_AUTH_DIAGNOSTIC"
   | "HOSTINGER_DOMAIN_AVAILABILITY"
   | "HOSTINGER_HOSTING_DISCOVERY"
+  | "HOSTINGER_CODING_STATIC_DEPLOY"
+  | "EXTERNAL_AGENT_DIAGNOSTIC"
   | "EXTERNAL_AGENT_STATUS"
   | "WHATSAPP_GATEWAY_STATUS";
 
@@ -130,12 +134,45 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  if (
+    /\b(hostinger|hpanel)\b/i.test(text) &&
+    /\bcoding\.cstlogistic\.co\.id\b/i.test(text) &&
+    /\b(static|dashboard|website|site|frontend)\b/i.test(text) &&
+    /\b(deploy|publish|buat|create|benahi|fix|repair|pulihkan)\b/i.test(text)
+  ) {
+    return "HOSTINGER_CODING_STATIC_DEPLOY";
+  }
+
   // Hostinger capacity/resource inspection must outrank incidental external-agent
   // names (for example when evaluating whether OpenClaw can be moved there).
   if (/\b(hostinger|hpanel|vps)\b/i.test(text) &&
       /\b(kapasitas|capacity|resource|resources|cpu|vcpu|ram|memory|memori|swap|disk|storage|load|utilization|utilisation|penggunaan|headroom)\b/i.test(text) &&
       /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|kapasitas|capacity|resource|resources)\b/i.test(text)) {
     return "HOSTINGER_VPS_STATUS";
+  }
+
+  // Installing git is a narrow bootstrap action used only to unblock the
+  // existing AI Workers deploy path. Keep this ahead of the broader worker
+  // deployment detector so "install git for AI Workers" does not recurse back
+  // into the deploy preflight that requires git.
+  if (
+    /\b(hostinger|hpanel|vps)\b/i.test(text) &&
+    /\b(git)\b/i.test(text) &&
+    /\b(install|pasang|bootstrap|siapkan|setup|prepare|benahi|perbaiki)\b/i.test(text)
+  ) {
+    return "HOSTINGER_VPS_BOOTSTRAP_GIT";
+  }
+
+  // Explicit Docker log inspection is read-only and must win before the
+  // AI Workers deployment heuristic. Paths such as
+  // /opt/core-ai-workers/deploy/ai-workers contain both "ai-workers" and
+  // "deploy" even when the user only asks to read logs.
+  if (
+    /\b(hostinger|hpanel|vps)\b/i.test(text) &&
+    /\b(docker|compose|container|project)\b/i.test(text) &&
+    /\b(log|logs)\b/i.test(text)
+  ) {
+    return "HOSTINGER_DOCKER_LOGS";
   }
 
   // Deploying the AI worker stack is a bounded SSH deployment on an already
@@ -150,6 +187,17 @@ export function detectAiCoreInfrastructureOperation(
   if (/\b(whatsapp|wa gateway|wa admin|device wa|whatsapp admin)\b/i.test(text) &&
       /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|koneksi|connection|connectivity|online|terhubung)\b/i.test(text)) {
     return "WHATSAPP_GATEWAY_STATUS";
+  }
+
+  // Failure/runtime diagnosis must outrank the broad external-agent status
+  // matcher. Prompts such as "cek error OpenClaw HTTP 400" are asking for the
+  // failed command/runtime detail, not a registry snapshot.
+  if (
+    /\b(openclaw|openhands|external agent|agent eksternal)\b/i.test(text) &&
+    /\b(diagnos(?:e|is|tic)?|diagnostik|error|failed|failure|gagal|http\s*4\d\d|provider|payload|schema|tool[_ -]?choice|parallel[_ -]?tool[_ -]?calls|runtime|application logs?|upstream|error\.message|error\.type|error\.code|error\.param)\b/i.test(text) &&
+    /\b(cek|check|audit|inspect|telusuri|trace|cari|find|lihat|read|baca|diagnos(?:e|is|tic)?|diagnostik)\b/i.test(text)
+  ) {
+    return "EXTERNAL_AGENT_DIAGNOSTIC";
   }
 
   if (/\b(openclaw|openhands|n8n|external agent|agent registry|agent eksternal)\b/i.test(text) &&
@@ -420,6 +468,17 @@ async function callHostinger(
     throw new Error("Hostinger control plane requires HOSTINGER_API_TOKEN.");
   }
 
+  if (operation === "HOSTINGER_CODING_STATIC_DEPLOY") {
+    const data = await deployCodingStaticSite({ env });
+    return {
+      operation,
+      provider: "hostinger",
+      mutating: true,
+      reply: "AI Coding static dashboard diterima Hostinger untuk deployment.",
+      data: safeJson(data),
+    };
+  }
+
   const valueOf = (key: string): string => {
     const escaped = key.replace(/[.*+?^$\{\}()|[\]\\]/g, "\\$&");
     const match = message.match(new RegExp(
@@ -456,8 +515,103 @@ async function callHostinger(
   const shellQuote = (value: string): string =>
     `'${value.replace(/'/g, `'"'"'`)}'`;
 
+  const sanitizeAiWorkersDeployDiagnostic = (value: string): string => {
+    return value
+      .replace(/-----BEGIN [^-]+PRIVATE KEY-----[\s\S]*?-----END [^-]+PRIVATE KEY-----/gi, "[REDACTED_PRIVATE_KEY]")
+      .replace(/\b(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]")
+      .replace(/\b([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\s*=\s*)[^\s]+/gi, "$1[REDACTED]")
+      .trim()
+      .slice(-4000);
+  };
+
+  const classifyAiWorkersDeployFailure = (detail: string): string => {
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+missing=git/i.test(detail)) return "preflight_git";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+missing=bash/i.test(detail)) return "preflight_bash";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+missing=docker/i.test(detail)) return "preflight_docker";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+path_not_git_nonempty=/i.test(detail)) return "preflight_target_path";
+    if (/AI_WORKERS_DEPLOY_PRECHECK_FAIL\s+env_file_missing=/i.test(detail)) return "preflight_env_file";
+    if (/permission denied|authentication failed|publickey/i.test(detail)) return "ssh_auth";
+    if (/could not resolve hostname|name or service not known|connection timed out|connection refused/i.test(detail)) return "ssh_connectivity";
+    if (/git clone|git -c|git fetch|git checkout|repository not found/i.test(detail)) return "git_sync";
+    if (/install-ai-workers\.sh/i.test(detail)) return "installer";
+    if (/ai-workers-healthcheck\.sh/i.test(detail)) return "healthcheck";
+    return "remote_command";
+  };
+
   const isDockerManagerUnsupported = (error: unknown): boolean =>
     error instanceof Error && /\[VPS:2044\]|does not support Docker Manager/i.test(error.message);
+
+  const runHostingerGitBootstrapOverSsh = async (): Promise<unknown> => {
+    const host = config.sshHost;
+    const user = config.sshUser;
+    const port = config.sshPort;
+    const privateKey = config.sshPrivateKey;
+
+    if (!host || !user || !privateKey) {
+      throw new Error(
+        "Hostinger git bootstrap requires SSH configuration from HOSTINGER_SSH_* or AI_WORKERS_SSH_*.",
+      );
+    }
+    if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+      throw new Error("HOSTINGER_SSH_PORT must be a valid TCP port.");
+    }
+
+    const command = [
+      "set -euo pipefail",
+      'if [ "$(id -u)" -eq 0 ]; then SUDO=""; else command -v sudo >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=sudo" >&2; exit 70; }; SUDO="sudo"; fi',
+      'if command -v git >/dev/null 2>&1; then echo "HOSTINGER_GIT_BOOTSTRAP git=already-present"; ' +
+        'elif command -v apt-get >/dev/null 2>&1; then $SUDO apt-get update && $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y git; ' +
+        'elif command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y git; ' +
+        'elif command -v yum >/dev/null 2>&1; then $SUDO yum install -y git; ' +
+        'elif command -v apk >/dev/null 2>&1; then $SUDO apk add --no-cache git; ' +
+        'else echo "HOSTINGER_GIT_BOOTSTRAP_FAIL package_manager=unsupported" >&2; exit 71; fi',
+      'command -v git >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=git-after-install" >&2; exit 72; }',
+      'command -v bash >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=bash" >&2; exit 73; }',
+      'command -v docker >/dev/null 2>&1 || { echo "HOSTINGER_GIT_BOOTSTRAP_FAIL missing=docker" >&2; exit 74; }',
+      'printf "HOSTINGER_GIT_BOOTSTRAP_OK\\n"',
+      'git --version',
+      'bash --version | head -n 1',
+      'docker --version',
+    ].join(" && ");
+
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-core-hostinger-git-"));
+    const keyPath = join(tempDir, "id_hostinger");
+    try {
+      await writeFile(keyPath, privateKey.endsWith("\n") ? privateKey : privateKey + "\n", {
+        mode: 0o600,
+      });
+      const { stdout, stderr } = await execFileWithInput("ssh", [
+        "-i", keyPath,
+        "-p", port,
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=12",
+        "-o", "StrictHostKeyChecking=accept-new",
+        `${user}@${host}`,
+        command,
+      ], {
+        timeout: 5 * 60_000,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        transport: "ssh",
+        host,
+        user,
+        port: Number(port),
+        installed: true,
+        stdout: stdout.trim().slice(-4000),
+        stderr: stderr.trim().slice(-1000),
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        "Hostinger git bootstrap failed: " +
+        sanitizeAiWorkersDeployDiagnostic(detail).slice(0, 1200),
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  };
 
   const runAiWorkersDeployOverSsh = async (): Promise<unknown> => {
     const host = config.sshHost;
@@ -549,8 +703,23 @@ async function callHostinger(
         stderr: stderr.trim().slice(-2000),
       };
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`AI Workers SSH deploy failed: ${detail.slice(0, 1200)}`);
+      const rawDetail = error instanceof Error ? error.message : String(error);
+      const stderrMatch = rawDetail.match(/(?:^|\n)stderr:\s*([\s\S]*?)(?:\nstdout:|$)/i);
+      const stdoutMatch = rawDetail.match(/(?:^|\n)stdout:\s*([\s\S]*)$/i);
+      const stderrTail = sanitizeAiWorkersDeployDiagnostic(
+        stderrMatch?.[1]?.trim() || "",
+      ).slice(-1200);
+      const stdoutTail = sanitizeAiWorkersDeployDiagnostic(
+        stdoutMatch?.[1]?.trim() || "",
+      ).slice(-2400);
+      const remoteDetail = [
+        stderrTail ? "stderr:\n" + stderrTail : "",
+        stdoutTail ? "stdout:\n" + stdoutTail : "",
+      ].filter(Boolean).join("\n");
+      throw new Error(
+        "AI Workers SSH deploy failed: " +
+        (remoteDetail || sanitizeAiWorkersDeployDiagnostic(rawDetail).slice(-2400)),
+      );
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -598,7 +767,11 @@ async function callHostinger(
     if (sshOperation === "HOSTINGER_DOCKER_STATUS" || sshOperation === "HOSTINGER_DOCKER_CONTAINERS") {
       command = `${prefix} ps --format json`;
     } else if (sshOperation === "HOSTINGER_DOCKER_LOGS") {
-      command = `${prefix} logs --tail 200 --no-color`;
+      const service = valueOf("service");
+      if (service && !/^[A-Za-z0-9_.-]+$/.test(service)) {
+        throw new Error("Docker service name may contain only letters, numbers, dots, dashes, and underscores.");
+      }
+      command = `${prefix} logs --tail 200 --no-color${service ? " " + shellQuote(service) : ""}`;
     } else if (sshOperation === "HOSTINGER_DOCKER_START") {
       command = `${prefix} up -d`;
     } else if (sshOperation === "HOSTINGER_DOCKER_STOP") {
@@ -880,8 +1053,28 @@ async function callHostinger(
 
   let data: unknown = null;
 
-  if (operation === "HOSTINGER_AI_WORKERS_DEPLOY") {
-    data = await runAiWorkersDeployOverSsh();
+  if (operation === "HOSTINGER_VPS_BOOTSTRAP_GIT") {
+    data = await runHostingerGitBootstrapOverSsh();
+  } else if (operation === "HOSTINGER_AI_WORKERS_DEPLOY") {
+    try {
+      data = await runAiWorkersDeployOverSsh();
+    } catch (error) {
+      const rawDetail = error instanceof Error ? error.message : String(error);
+      const diagnostic = sanitizeAiWorkersDeployDiagnostic(rawDetail);
+      data = {
+        transport: "ssh",
+        host: config.sshHost,
+        user: config.sshUser,
+        port: Number(config.sshPort),
+        directory: valueOf("directory") || config.aiWorkersDeployPath,
+        envFile: valueOf("envfile") || config.aiWorkersEnvFile,
+        deployed: false,
+        failed: true,
+        stage: classifyAiWorkersDeployFailure(diagnostic),
+        diagnostic,
+        retryable: !/preflight_target_path|preflight_env_file/.test(classifyAiWorkersDeployFailure(diagnostic)),
+      };
+    }
   } else if (operation === "HOSTINGER_SSH_AUTH_DIAGNOSTIC") {
     const privateKey = config.sshPrivateKey;
     if (!privateKey) throw new Error("Hostinger SSH diagnostic requires configured SSH private key.");
@@ -1478,13 +1671,18 @@ async function callHostinger(
     "HOSTINGER_HOSTING_DISCOVERY",
   ]);
   const mutating = !readOnly.has(operation);
+  const aiWorkersDeployFailed =
+    operation === "HOSTINGER_AI_WORKERS_DEPLOY" &&
+    Boolean(data && typeof data === "object" && (data as Record<string, unknown>)["failed"] === true);
   return {
     operation,
     provider: "hostinger",
     mutating,
-    reply: mutating
-      ? `Operasi ${operation} diterima Hostinger.`
-      : `Status Hostinger untuk ${operation} berhasil dibaca.`,
+    reply: aiWorkersDeployFailed
+      ? "Deploy AI Workers gagal di remote runtime; detail aman dikembalikan untuk diagnosis dan retry."
+      : mutating
+        ? `Operasi ${operation} diterima Hostinger.`
+        : `Status Hostinger untuk ${operation} berhasil dibaca.`,
     data: safeJson(data),
   };
 }
@@ -1552,6 +1750,36 @@ export async function executeAiCoreInfrastructureOperation(input: {
 
   if (input.operation === "WHATSAPP_GATEWAY_STATUS") {
     result = await callWhatsappGatewayStatus(env);
+  } else if (input.operation === "EXTERNAL_AGENT_DIAGNOSTIC") {
+    const { getExternalAgentDiagnostic } = await import("./localCodingControlBridgeService.js");
+    const commandId =
+      input.message?.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0] ??
+      null;
+    const diagnostic = await getExternalAgentDiagnostic({
+      commandId,
+      clientIdContains: /openhands/i.test(input.message ?? "") ? "openhands" : "openclaw",
+    });
+    result = {
+      operation: input.operation,
+      provider: "ai-core",
+      mutating: false,
+      reply: diagnostic
+        ? "Diagnosis kegagalan external agent berhasil dibaca."
+        : "Tidak ditemukan kegagalan external agent yang cocok untuk diagnosis.",
+      data: {
+        diagnostic,
+        detailCaptured: Boolean(
+          diagnostic?.latestResponse &&
+          (
+            Object.keys(diagnostic.latestResponse.metadata ?? {}).length > 0 ||
+            Object.keys(diagnostic.latestResponse.checkpoint ?? {}).length > 0
+          )
+        ),
+        note: diagnostic?.latestResponse
+          ? "Jika error.message/type/code/param tidak ada pada metadata/checkpoint, detail upstream belum dipersist oleh supervisor/runtime."
+          : "Tidak ada response terminal yang dapat dianalisis.",
+      },
+    };
   } else if (input.operation === "EXTERNAL_AGENT_STATUS") {
     const { getExternalAgentRegistrySnapshot } = await import("./externalAgentRegistryService.js");
     const agents = await getExternalAgentRegistrySnapshot();

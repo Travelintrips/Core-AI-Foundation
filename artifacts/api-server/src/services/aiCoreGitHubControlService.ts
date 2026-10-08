@@ -39,9 +39,13 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
   // A deploy/redeploy of the already-merged main branch is an operational
   // delivery action. Route it straight to the deployment workflow; never create
   // Repository Analyzer or Coding Orchestrator work just to redeploy existing code.
+  const explicitWorkflowFile =
+    /\b[A-Za-z0-9_.-]+\.ya?ml\b/i.test(message);
+
   const directMainProductionDeploy =
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
     /\bmain\b/i.test(text) &&
+    !explicitWorkflowFile &&
     !/\b(?:openclaw|openhands|n8n|external\s+agent|agent\s+eksternal|coding\s+orchestrator|docker|compose|container|ubah\s+kode|edit\s+kode|patch\s+kode|fix\s+kode|perbaiki\s+kode)\b/i.test(text);
 
   const codingDomainRecovery =

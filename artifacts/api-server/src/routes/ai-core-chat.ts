@@ -2332,18 +2332,34 @@ async function startExternalAgentWork(
   input: z.infer<typeof ChatRequest>,
   clientId: string,
 ): Promise<Record<string, unknown>> {
+  const directOpenClawPcCommand =
+    clientId === OPENCLAW_AGENT_CLIENT_ID
+      ? parseDirectOpenClawPcCommand(input.message)
+      : null;
+  const openClawExecutionProfile =
+    clientId !== OPENCLAW_AGENT_CLIENT_ID
+      ? null
+      : directOpenClawPcCommand
+        ? "pc-tools"
+        : classifyAiCoreChatDispatch(input.message).workload.workload === "CHAT"
+          ? "chat-no-tools"
+          : "agent-tools";
+
   const dispatched = await dispatchExternalAgentWork({
     clientId,
     instruction:
-      clientId === OPENCLAW_AGENT_CLIENT_ID
-        ? (parseDirectOpenClawPcCommand(input.message) ?? input.message)
-        : input.message,
+      clientId !== OPENCLAW_AGENT_CLIENT_ID
+        ? input.message
+        : openClawExecutionProfile === "chat-no-tools"
+          ? "[AI_CORE_CHAT_NO_TOOLS]\n" + input.message
+          : (directOpenClawPcCommand ?? input.message),
     source: "ai-core-chat",
     metadata: {
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
       ...(input.projectName ? { projectName: input.projectName } : {}),
       ...(input.repository ? { repository: input.repository } : {}),
       ...(input.branch ? { branch: input.branch } : {}),
+      ...(openClawExecutionProfile ? { openClawExecutionProfile } : {}),
       source: input.source,
     },
   });

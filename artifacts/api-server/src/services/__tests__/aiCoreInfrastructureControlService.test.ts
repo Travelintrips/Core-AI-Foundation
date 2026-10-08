@@ -25,6 +25,7 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger cek SSH public key VPS", "HOSTINGER_SSH_PUBLIC_KEY_LIST"],
     ["Hostinger diagnostik fingerprint SSH private key runtime", "HOSTINGER_SSH_AUTH_DIAGNOSTIC"],
     ["Hostinger cek logs docker project=myapp", "HOSTINGER_DOCKER_LOGS"],
+    ["Hostinger logs docker project=ai-core-workers directory=/opt/core-ai-workers/deploy/ai-workers", "HOSTINGER_DOCKER_LOGS"],
     ["Hostinger deploy docker project=myapp content=https://example.test/docker-compose.yml", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger update environment docker project=myapp content=https://example.test/docker-compose.yml env=A=2", "HOSTINGER_DOCKER_DEPLOY"],
     ["Hostinger masukkan secret project=myapp key=OPENAI_API_KEY value=secret-value", "HOSTINGER_DOCKER_ENV_SET"],
@@ -43,10 +44,14 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger hapus parked domain domain=example.com parked_domain=alias.example.com", "HOSTINGER_PARKED_DOMAIN_DELETE"],
     ["Hostinger cek domain tersedia name=mybrand tlds=com|net", "HOSTINGER_DOMAIN_AVAILABILITY"],
     ["Hostinger cari hosting username dan hosting domain", "HOSTINGER_HOSTING_DISCOVERY"],
+    ["Hostinger deploy coding.cstlogistic.co.id static dashboard", "HOSTINGER_CODING_STATIC_DEPLOY"],
     ["Hostinger pasang SSH public key key=ssh-ed25519-AAAA", "HOSTINGER_SSH_PUBLIC_KEY_ATTACH"],
     ["Deploy AI Workers VPS commit a1939541ae36e1b1702172a62e85a84361f55473 dan jalankan installer", "HOSTINGER_AI_WORKERS_DEPLOY"],
     ["Hostinger redeploy worker stack OpenClaw ke commit a1939541ae36e1b1702172a62e85a84361f55473", "HOSTINGER_AI_WORKERS_DEPLOY"],
     ["Deploy AI Workers VPS commit a1939541ae36e1b1702172a62e85a84361f55473. Setelah selesai verifikasi OpenClaw auth profile aktif.", "HOSTINGER_AI_WORKERS_DEPLOY"],
+    ["Cek error OpenClaw HTTP 400 provider rejected payload schema", "EXTERNAL_AGENT_DIAGNOSTIC"],
+    ["Telusuri OpenClaw error.message error.type error.code error.param", "EXTERNAL_AGENT_DIAGNOSTIC"],
+    ["Cek status OpenClaw registry aktif", "EXTERNAL_AGENT_STATUS"],
   ])("detects %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
@@ -102,12 +107,58 @@ describe("AI Core Hostinger infrastructure control", () => {
   });
 
   it.each([
+    ["Hostinger install git di VPS untuk AI Workers", "HOSTINGER_VPS_BOOTSTRAP_GIT"],
     ["Hostinger nyalakan VPS sekarang", "HOSTINGER_VPS_START"],
     ["Hostinger matikan VPS sekarang", "HOSTINGER_VPS_STOP"],
     ["GCP start VM sekarang", "GCP_VM_START"],
     ["GCP stop VM sekarang", "GCP_VM_STOP"],
   ])("still allows explicit mutating infrastructure commands: %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
+  });
+
+  it("bootstraps git over the existing Hostinger SSH profile without exposing credentials", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(
+        null,
+        "HOSTINGER_GIT_BOOTSTRAP_OK\ngit version 2.43.0\nGNU bash, version 5.2.21\nDocker version 27.0.0",
+        "",
+      );
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_VPS_BOOTSTRAP_GIT",
+      message: "Hostinger install git di VPS untuk AI Workers",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PORT: "22",
+        AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST-BOOTSTRAP\n-----END PRIVATE KEY-----",
+      },
+    });
+
+    expect(result.operation).toBe("HOSTINGER_VPS_BOOTSTRAP_GIT");
+    expect(result.mutating).toBe(true);
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      host: "198.51.100.20",
+      user: "root",
+      port: 22,
+      installed: true,
+    });
+    const args = execFileMock.mock.calls[0] as unknown[];
+    const sshArgs = args[1] as string[];
+    const command = sshArgs.at(-1) ?? "";
+    expect(command).toContain("apt-get install -y git");
+    expect(command).toContain("dnf install -y git");
+    expect(command).toContain("yum install -y git");
+    expect(command).toContain("apk add --no-cache git");
+    expect(command).toContain("docker --version");
+    expect(JSON.stringify(result)).not.toContain("TEST-BOOTSTRAP");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
   it("deploys the AI Workers stack over SSH without trying to start an already-running VPS", async () => {
@@ -127,7 +178,7 @@ describe("AI Core Hostinger infrastructure control", () => {
         HOSTINGER_SSH_USER: "root",
         HOSTINGER_SSH_PORT: "22",
         HOSTINGER_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
-        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-foundation",
+        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-workers",
         AI_WORKERS_REMOTE_ENV_FILE: "/etc/ai-core/ai-workers.env",
       },
     });
@@ -185,15 +236,19 @@ describe("AI Core Hostinger infrastructure control", () => {
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
-  it("includes bounded SSH stderr when AI Workers deploy fails", async () => {
+  it("preserves stdout failure details when Docker warnings are on stderr", async () => {
     const stdinEnd = vi.fn();
     execFileMock.mockImplementation((...args: unknown[]) => {
       const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
-      callback(new Error("Command failed: ssh"), "", "AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=/etc/ai-core/ai-workers.env");
+      callback(
+        new Error("Command failed: ssh"),
+        "[ai-workers-health] openclaw=PASS\n[ai-workers-health] ai-core-agent-runtime=FAIL url=https://example.test/health\n",
+        "time=warning volume already exists but was not created by Docker Compose\n",
+      );
       return { stdin: { end: stdinEnd } };
     });
 
-    await expect(executeAiCoreInfrastructureOperation({
+    const result = await executeAiCoreInfrastructureOperation({
       operation: "HOSTINGER_AI_WORKERS_DEPLOY",
       message: "Deploy AI Workers VPS",
       env: {
@@ -202,7 +257,52 @@ describe("AI Core Hostinger infrastructure control", () => {
         AI_WORKERS_SSH_USER: "root",
         AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
       },
-    })).rejects.toThrow("env_file_missing=/etc/ai-core/ai-workers.env");
+    });
+
+    expect(result.data).toMatchObject({
+      deployed: false,
+      failed: true,
+    });
+    expect(JSON.stringify(result)).toContain("volume already exists");
+    expect(JSON.stringify(result)).toContain("ai-core-agent-runtime=FAIL");
+    expect(stdinEnd).toHaveBeenCalledWith(undefined);
+  });
+
+  it("returns structured SSH diagnostics when AI Workers deploy fails", async () => {
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(
+        new Error("Command failed: ssh"),
+        "",
+        "AI_WORKERS_DEPLOY_PRECHECK_FAIL env_file_missing=/etc/ai-core/ai-workers.env API_KEY=super-secret",
+      );
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_AI_WORKERS_DEPLOY",
+      message: "Deploy AI Workers VPS",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        AI_WORKERS_SSH_HOST: "198.51.100.20",
+        AI_WORKERS_SSH_USER: "root",
+        AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
+      },
+    });
+
+    expect(result.reply).toContain("gagal");
+    expect(result.data).toMatchObject({
+      deployed: false,
+      failed: true,
+      stage: "preflight_env_file",
+      retryable: false,
+      directory: "/opt/core-ai-workers",
+      envFile: "/etc/ai-core/ai-workers.env",
+    });
+    expect(JSON.stringify(result)).toContain("env_file_missing=/etc/ai-core/ai-workers.env");
+    expect(JSON.stringify(result)).not.toContain("super-secret");
+    expect(JSON.stringify(result)).toContain("[REDACTED]");
     expect(stdinEnd).toHaveBeenCalledWith(undefined);
   });
 
@@ -223,7 +323,7 @@ describe("AI Core Hostinger infrastructure control", () => {
         AI_WORKERS_SSH_USER: "deployer",
         AI_WORKERS_SSH_PORT: "2222",
         AI_WORKERS_SSH_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST-FALLBACK\n-----END PRIVATE KEY-----",
-        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-foundation",
+        AI_WORKERS_DEPLOY_PATH: "/opt/core-ai-workers",
         AI_WORKERS_REMOTE_ENV_FILE: "/etc/ai-core/ai-workers.env",
       },
     });
@@ -404,6 +504,44 @@ describe("AI Core Hostinger infrastructure control", () => {
     })).rejects.toThrow(
       "SSH fallback requires HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, and HOSTINGER_SSH_PRIVATE_KEY",
     );
+  });
+
+  it("filters Hostinger SSH Docker logs to one service when requested", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        message: "[VPS:2044] Currently installed operating system does not support Docker Manager.",
+      }), { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "openclaw log line", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_LOGS",
+      message: "Hostinger logs docker project=ai-core-workers directory=/opt/core-ai-workers/deploy/ai-workers service=openclaw",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+        HOSTINGER_SSH_HOST: "203.0.113.20",
+        HOSTINGER_SSH_USER: "root",
+        HOSTINGER_SSH_PRIVATE_KEY: "PRIVATE-KEY",
+      },
+    });
+
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    const sshArgs = execFileMock.mock.calls[0]?.[1] as string[];
+    const remoteCommand = sshArgs.at(-1) ?? "";
+    expect(remoteCommand).toContain("docker compose -p 'ai-core-workers' logs --tail 200 --no-color 'openclaw'");
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      project: "ai-core-workers",
+      directory: "/opt/core-ai-workers/deploy/ai-workers",
+    });
   });
 
   it("falls back to SSH for Docker deploy on generic Ubuntu VPS without exposing env secrets", async () => {

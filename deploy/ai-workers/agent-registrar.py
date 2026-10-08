@@ -12,7 +12,7 @@ OPENHANDS_KEY = os.environ.get("OPENHANDS_LOCAL_BACKEND_API_KEY", "").strip()
 
 AGENTS = (
     {
-        "clientId": "gcp-openclaw-main",
+        "clientId": os.environ.get("AI_CORE_OPENCLAW_CLIENT_ID", "gcp-openclaw-main").strip(),
         "url": "http://openclaw:18789/healthz",
         "version": os.environ.get("OPENCLAW_VERSION", ""),
         "headers": {},
@@ -53,7 +53,7 @@ def heartbeat(agent):
             "details": {
                 "localHealthHttpStatus": http_status,
                 "localHealthError": error_kind,
-                "runtimeHost": "ai-coding-worker-01",
+                "runtimeHost": os.environ.get("AI_CORE_WORKER_HOST_LABEL", "ai-coding-worker-01"),
             },
         }
     ).encode("utf-8")
