@@ -40,6 +40,8 @@ if (process.env["NODE_ENV"] === "production") {
 // ── Step 3: Dynamic imports — all env-dependent modules load here ─────────────
 const { default: app }              = await import("./app.js");
 const { logger }                    = await import("./lib/logger.js");
+const { assertDevSafeRuntimeConfiguration } = await import("./services/devRuntimeSafety.js");
+assertDevSafeRuntimeConfiguration();
 const jobDispatcher                 = await import("./services/jobDispatcherService.js");
 const scheduler                     = await import("./services/aiSchedulerService.js");
 const sseManager                    = await import("./services/sseManager.js");
