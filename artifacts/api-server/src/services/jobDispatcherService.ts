@@ -40,6 +40,7 @@ import {
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { logger } from "../lib/logger.js";
+import { isDevSafeRuntimeEnabled } from "./devRuntimeSafety.js";
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -197,6 +198,20 @@ if (process.env["BLENDER_WORKER_RUNTIME_ENABLED"] === "true") {
     maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     providerSlug: "internal",
     modelId: "blender",
+    runtimeKind: "dispatcher",
+  });
+}
+
+// In the isolated Hostinger DEV sandbox, register exactly one harmless worker.
+// Normal production and local development retain their existing worker pool.
+if (isDevSafeRuntimeEnabled()) {
+  DISPATCHER_WORKERS.splice(0, DISPATCHER_WORKERS.length, {
+    suffix: "dev-smoke",
+    workerType: "system_worker",
+    capabilities: ["noop"],
+    maxConcurrentJobs: 1,
+    providerSlug: "internal",
+    modelId: "n/a",
     runtimeKind: "dispatcher",
   });
 }

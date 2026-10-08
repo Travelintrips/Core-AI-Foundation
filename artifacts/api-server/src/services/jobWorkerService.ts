@@ -29,6 +29,7 @@ import { getProviderApiKey } from "./aiSecretService.js";
 import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } from "./portfolioStorageService.js";
 import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.js";
 import { logger } from "../lib/logger.js";
+import { isDevSafeRuntimeEnabled, isDevSmokeJob } from "./devRuntimeSafety.js";
 import { WorkerNotImplementedError } from "./jobCompletionGuard.js";
 import { createSystemContext } from "../security/requestContext.js";
 import { DEFAULT_TENANT_ID } from "../security/tenantResolution.js";
@@ -477,6 +478,11 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
   const capabilities = (worker.capabilities as string[] | null) ?? [];
   // Serialise as a JSON string for the JSONB ? operator in PostgreSQL
   const capJson = JSON.stringify(capabilities);
+  // Capabilities alone are not enough: legacy jobs have NULL required_capability.
+  // Prevent a DEV smoke worker from accidentally claiming any real queued job.
+  const safeDevClaim = isDevSafeRuntimeEnabled()
+    ? sql`AND job_type = 'noop' AND payload_json->>'_devSmoke' = 'true'`
+    : sql``;
 
   return db.transaction(async (tx) => {
     // Multiple dispatch slots may concurrently target the same worker. Serialize
@@ -520,6 +526,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
         required_capability IS NULL
         OR ${capJson}::jsonb ? required_capability
       )
+      ${safeDevClaim}
       ORDER BY priority_score DESC, created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
@@ -587,6 +594,10 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
  * Extend this switch to add new job types as the platform grows.
  */
 export async function executeJob(job: AiJob, workerId: number): Promise<Record<string, unknown>> {
+  // Also block direct executeJob() calls that bypass the claim SQL.
+  if (isDevSafeRuntimeEnabled() && !isDevSmokeJob(job.jobType, job.payloadJson)) {
+    throw new Error("DEV sandbox blocks non-smoke job execution.");
+  }
   // WP-06 — Build a RequestContext for this job so downstream handlers have
   // a structured, tenant-scoped identity without DB round-trips.
   const workerCtx = buildWorkerContext(job);
