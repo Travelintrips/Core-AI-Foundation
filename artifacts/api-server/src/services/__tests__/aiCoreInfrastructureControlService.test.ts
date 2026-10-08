@@ -49,6 +49,9 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Deploy AI Workers VPS commit a1939541ae36e1b1702172a62e85a84361f55473 dan jalankan installer", "HOSTINGER_AI_WORKERS_DEPLOY"],
     ["Hostinger redeploy worker stack OpenClaw ke commit a1939541ae36e1b1702172a62e85a84361f55473", "HOSTINGER_AI_WORKERS_DEPLOY"],
     ["Deploy AI Workers VPS commit a1939541ae36e1b1702172a62e85a84361f55473. Setelah selesai verifikasi OpenClaw auth profile aktif.", "HOSTINGER_AI_WORKERS_DEPLOY"],
+    ["Cek error OpenClaw HTTP 400 provider rejected payload schema", "EXTERNAL_AGENT_DIAGNOSTIC"],
+    ["Telusuri OpenClaw error.message error.type error.code error.param", "EXTERNAL_AGENT_DIAGNOSTIC"],
+    ["Cek status OpenClaw registry aktif", "EXTERNAL_AGENT_STATUS"],
   ])("detects %s", (message, expected) => {
     expect(detectAiCoreInfrastructureOperation(message)).toBe(expected);
   });
