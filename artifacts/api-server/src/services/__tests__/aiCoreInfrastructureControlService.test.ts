@@ -503,6 +503,44 @@ describe("AI Core Hostinger infrastructure control", () => {
     );
   });
 
+  it("filters Hostinger SSH Docker logs to one service when requested", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        message: "[VPS:2044] Currently installed operating system does not support Docker Manager.",
+      }), { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stdinEnd = vi.fn();
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "openclaw log line", "");
+      return { stdin: { end: stdinEnd } };
+    });
+
+    const result = await executeAiCoreInfrastructureOperation({
+      operation: "HOSTINGER_DOCKER_LOGS",
+      message: "Hostinger logs docker project=ai-core-workers directory=/opt/core-ai-workers/deploy/ai-workers service=openclaw",
+      env: {
+        HOSTINGER_API_TOKEN: "token",
+        HOSTINGER_VPS_ID: "1792369",
+        HOSTINGER_SSH_HOST: "203.0.113.20",
+        HOSTINGER_SSH_USER: "root",
+        HOSTINGER_SSH_PRIVATE_KEY: "PRIVATE-KEY",
+      },
+    });
+
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    const sshArgs = execFileMock.mock.calls[0]?.[1] as string[];
+    const remoteCommand = sshArgs.at(-1) ?? "";
+    expect(remoteCommand).toContain("docker compose -p 'ai-core-workers' logs --tail 200 --no-color 'openclaw'");
+    expect(result.data).toMatchObject({
+      transport: "ssh",
+      project: "ai-core-workers",
+      directory: "/opt/core-ai-workers/deploy/ai-workers",
+    });
+  });
+
   it("falls back to SSH for Docker deploy on generic Ubuntu VPS without exposing env secrets", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
