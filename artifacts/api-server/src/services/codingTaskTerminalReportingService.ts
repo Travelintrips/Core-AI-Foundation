@@ -5,6 +5,11 @@ import {
   aiCodingTasksTable,
   db,
 } from "@workspace/db";
+import { logger } from "../lib/logger.js";
+import {
+  dispatchExternalAgentWork,
+  OPENCLAW_AGENT_CLIENT_ID,
+} from "./externalAgentDispatchService.js";
 import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js";
 
 export type CodingTaskTerminalStatus = "COMPLETED" | "FAILED" | "BLOCKED";
@@ -27,6 +32,60 @@ export function canonicalTerminalEventStatus(
     : requestedStatus;
 }
 
+function conversationIdFromMetadata(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const conversationId = (value as Record<string, unknown>)["conversationId"];
+  return typeof conversationId === "string" && conversationId.trim()
+    ? conversationId.trim()
+    : null;
+}
+
+async function dispatchOpenClawConversationWake(input: {
+  taskId: string;
+  conversationId: string;
+  status: CodingTaskTerminalStatus;
+  message: string;
+  responseId: string;
+  source?: string;
+}): Promise<void> {
+  const eventMarker = `AI_CORE_WAKE:${input.responseId}`;
+  const instruction = [
+    "Relay this AI Core lifecycle update to the already-bound ChatGPT conversation through the paired PC.",
+    `Conversation ID: ${input.conversationId}`,
+    `Event marker: ${eventMarker}`,
+    `Event type: ${input.status}`,
+    `Message: ${input.message.trim()}`,
+    "Send the lifecycle update once. If the same event marker is already present, do not send it again.",
+    "After ChatGPT finishes responding, return the newest assistant response as the OpenClaw result.",
+  ].join("\n");
+
+  try {
+    await dispatchExternalAgentWork({
+      clientId: OPENCLAW_AGENT_CLIENT_ID,
+      instruction,
+      taskId: input.taskId,
+      source: "ai-core-chatgpt-wake",
+      metadata: {
+        conversationId: input.conversationId,
+        sourceResponseId: input.responseId,
+        eventType: input.status,
+        openClawChatgptWake: true,
+        source: input.source ?? "coding-task-status-transition",
+      },
+    });
+  } catch (error) {
+    logger.warn(
+      {
+        error,
+        taskId: input.taskId,
+        conversationId: input.conversationId,
+        responseId: input.responseId,
+      },
+      "[ai-core-chatgpt-wake] failed to enqueue OpenClaw conversation wake",
+    );
+  }
+}
+
 async function reportCodingTaskTerminalTransitionOnce(input: {
   taskId: string;
   status: CodingTaskTerminalStatus;
@@ -41,7 +100,10 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
   const status = canonicalTerminalEventStatus(input.status, task?.status);
 
   const [command] = await db
-    .select({ id: aiCodingBridgeCommandsTable.id })
+    .select({
+      id: aiCodingBridgeCommandsTable.id,
+      metadataJson: aiCodingBridgeCommandsTable.metadataJson,
+    })
     .from(aiCodingBridgeCommandsTable)
     .where(eq(aiCodingBridgeCommandsTable.taskId, input.taskId))
     .orderBy(
@@ -96,6 +158,18 @@ async function reportCodingTaskTerminalTransitionOnce(input: {
       source: input.source ?? "coding-task-status-transition",
     },
   });
+
+  const conversationId = conversationIdFromMetadata(command.metadataJson);
+  if (conversationId) {
+    await dispatchOpenClawConversationWake({
+      taskId: input.taskId,
+      conversationId,
+      status,
+      message: input.message,
+      responseId: response.id,
+      source: input.source,
+    });
+  }
 
   return { reported: true, responseId: response.id };
 }
