@@ -36,6 +36,26 @@ describe("coding conflict registry SQL arrays", () => {
     expect(query.params).toEqual([]);
   });
 
+  it("preserves previously owned file reservations when acquiring an overlapping set fails", () => {
+    const source = readFileSync(
+      new URL("../codingConflictRegistryService.ts", import.meta.url),
+      "utf8",
+    );
+
+    const reservation = source.slice(
+      source.indexOf("export async function reserveCodingFileSet"),
+      source.indexOf("export async function releaseCodingFileReservations"),
+    );
+    expect(reservation).toContain("const newlyInsertedFiles: string[] = []");
+    expect(reservation).toContain("RETURNING file_path");
+    expect(reservation).toContain("newlyInsertedFiles.push(file)");
+    expect(reservation).toContain("if (newlyInsertedFiles.length > 0)");
+    expect(reservation).toContain("codingFileTextArraySql(newlyInsertedFiles)");
+    expect(reservation).not.toContain(
+      "AND file_path = ANY(${codingFileTextArraySql(files)})\\n      `);\\n      return { status: \"CONFLICT\"",
+    );
+  });
+
   it("cleans reservations for disabled tasks and failed latest graphs without active execution", () => {
     const source = readFileSync(
       new URL("../codingConflictRegistryService.ts", import.meta.url),
