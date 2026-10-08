@@ -63,6 +63,73 @@ describe("agent runtime provider fallback", () => {
     );
   });
 
+  it("strips OpenClaw tools for marked CHAT work even on the legacy model alias", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-marked-chat",
+          object: "chat.completion",
+          choices: [
+            {
+              index: 0,
+              finish_reason: "stop",
+              message: { role: "assistant", content: "OPENCLAW_OPENAI_API_E2E_OK" },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const app = await buildApp();
+    const res = await request(app)
+      .post("/ai/agent-runtime/v1/chat/completions")
+      .send({
+        model: "ai-core-agent",
+        messages: [
+          {
+            role: "user",
+            content: "[AI_CORE_CHAT_NO_TOOLS]\nReply exactly OPENCLAW_OPENAI_API_E2E_OK",
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "shell",
+              description: "Run a bounded shell command",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+        tool_choice: "auto",
+        parallel_tool_calls: true,
+        stream: false,
+      });
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(String(init?.body)) as {
+      model: string;
+      messages: Array<{ content: string }>;
+      tools?: unknown;
+      tool_choice?: unknown;
+      parallel_tool_calls?: unknown;
+    };
+    expect(body.model).toBe("gpt-4o");
+    expect(body.messages[0]?.content).toBe(
+      "Reply exactly OPENCLAW_OPENAI_API_E2E_OK",
+    );
+    expect(body).not.toHaveProperty("tools");
+    expect(body).not.toHaveProperty("tool_choice");
+    expect(body).not.toHaveProperty("parallel_tool_calls");
+  });
+
   it("accepts the tool-free OpenClaw chat model alias", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
