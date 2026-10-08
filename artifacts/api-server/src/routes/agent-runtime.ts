@@ -31,42 +31,35 @@ function stripChatNoToolsMarkerFromContent(value: unknown): unknown {
   });
 }
 
+function textContent(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+
+  return value
+    .map((part) => {
+      if (!isRecord(part)) return "";
+      return typeof part["text"] === "string" ? part["text"] : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function normalizeToolFreeMessages(messages: unknown[]): Array<Record<string, unknown>> {
   const normalized: Array<Record<string, unknown>> = [];
 
   for (const message of messages) {
     if (!isRecord(message)) continue;
-    const role = String(message["role"] ?? "").trim();
-    if (!["system", "developer", "user", "assistant"].includes(role)) continue;
+    const rawRole = String(message["role"] ?? "").trim();
+    if (!["system", "developer", "user", "assistant"].includes(rawRole)) continue;
 
     const rawContent = stripChatNoToolsMarkerFromContent(message["content"]);
-    let content: unknown = rawContent;
+    const content = textContent(rawContent).trim();
+    if (!content) continue;
 
-    if (Array.isArray(rawContent)) {
-      const parts: Array<Record<string, unknown>> = [];
-      for (const part of rawContent) {
-        if (!isRecord(part)) continue;
-        const text = typeof part["text"] === "string" ? part["text"] : null;
-        if (text !== null) {
-          parts.push({ type: "text", text });
-          continue;
-        }
-        const imageUrl = isRecord(part["image_url"]) ? part["image_url"] : null;
-        if (
-          part["type"] === "image_url" &&
-          imageUrl &&
-          typeof imageUrl["url"] === "string"
-        ) {
-          parts.push({
-            type: "image_url",
-            image_url: { url: imageUrl["url"] },
-          });
-        }
-      }
-      content = parts.length > 0 ? parts : "";
-    }
-
-    normalized.push({ role, content: content ?? "" });
+    normalized.push({
+      role: rawRole === "developer" ? "system" : rawRole,
+      content,
+    });
   }
 
   return normalized;
