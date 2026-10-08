@@ -208,6 +208,56 @@ describe("agent runtime provider fallback", () => {
     expect(body.model).toBe("gpt-4o");
   });
 
+  it("returns bounded sanitized upstream rejection details", async () => {
+    mockGetProviderApiKey.mockImplementation((slug: string) =>
+      slug === "openai" ? "key-openai" : null,
+    );
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            message: "Unsupported value: 'text'. Supported values are: 'input_text'.",
+            type: "invalid_request_error",
+            param: "messages[1].content[0].type",
+            code: "unsupported_value",
+            secret: "must-not-leak",
+          },
+        }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const app = await buildApp();
+    const res = await request(app)
+      .post("/ai/agent-runtime/v1/chat/completions")
+      .send({
+        model: "ai-core-agent-chat",
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Reply exactly OK" }],
+          },
+        ],
+        stream: false,
+      });
+
+    expect(res.status).toBe(400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.body.error.upstream).toEqual({
+      provider: "openai",
+      model: "gpt-4o",
+      type: "invalid_request_error",
+      code: "unsupported_value",
+      param: "messages[1].content[0].type",
+      message: "Unsupported value: 'text'. Supported values are: 'input_text'.",
+    });
+    expect(JSON.stringify(res.body)).not.toContain("must-not-leak");
+  });
+
   it("falls back to Anthropic when earlier providers are rate limited", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
