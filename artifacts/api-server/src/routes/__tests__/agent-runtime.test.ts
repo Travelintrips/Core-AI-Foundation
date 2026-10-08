@@ -48,6 +48,21 @@ describe("agent runtime provider fallback", () => {
     delete process.env["AI_AGENT_RUNTIME_ANTHROPIC_MODEL"];
   });
 
+  it("uses the proven Codestral model as the default Mistral fallback", async () => {
+    const app = await buildApp();
+    const res = await request(app).get("/ai/agent-runtime/health");
+
+    expect(res.status).toBe(200);
+    expect(res.body.providers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "mistral",
+          model: "codestral-latest",
+        }),
+      ]),
+    );
+  });
+
   it("reports Anthropic as a configured fallback", async () => {
     const app = await buildApp();
     const res = await request(app).get("/ai/agent-runtime/health");
