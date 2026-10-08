@@ -49,6 +49,17 @@ jobs:
               pr.user?.login === owner
             );
 
+            // DEV-first release policy: do not auto-merge any main PR.
+            // An authorized release promotion is a separate reviewed operation,
+            // after DEV full CI, DEV deployment, live-SHA and ancestry checks.
+            // Automated DEV PRs remain allowed by their own workflows.
+            if (candidates.length > 0) {
+              core.notice(
+                `Skipped auto-merge for ${candidates.length} main PR(s); DEV-first promotion requires manual approval and verified DEV evidence.`,
+              );
+              return;
+            }
+
             if (candidates.length === 0) {
               core.info(`No eligible owner PR is open for ${headSha}.`);
               return;
