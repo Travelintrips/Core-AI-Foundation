@@ -179,7 +179,7 @@ function configuredUpstreams(): AgentUpstream[] {
   if (mistralKey) {
     result.push({
       provider: "mistral",
-      model: (process.env["AI_AGENT_RUNTIME_MISTRAL_MODEL"] ?? "mistral-small-latest").trim() || "mistral-small-latest",
+      model: (process.env["AI_AGENT_RUNTIME_MISTRAL_MODEL"] ?? "codestral-latest").trim() || "codestral-latest",
       url: "https://api.mistral.ai/v1/chat/completions",
       apiKey: mistralKey,
     });
