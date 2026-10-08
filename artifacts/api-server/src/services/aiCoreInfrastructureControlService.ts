@@ -679,8 +679,17 @@ async function callHostinger(
         stderr: stderr.trim().slice(-2000),
       };
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`AI Workers SSH deploy failed: ${detail.slice(0, 1200)}`);
+      const rawDetail = error instanceof Error ? error.message : String(error);
+      const stderrMatch = rawDetail.match(/(?:^|\n)stderr:\s*([\s\S]*?)(?:\nstdout:|$)/i);
+      const stdoutMatch = rawDetail.match(/(?:^|\n)stdout:\s*([\s\S]*)$/i);
+      const remoteDetail =
+        stderrMatch?.[1]?.trim() ||
+        stdoutMatch?.[1]?.trim() ||
+        rawDetail;
+      throw new Error(
+        "AI Workers SSH deploy failed: " +
+        sanitizeAiWorkersDeployDiagnostic(remoteDetail).slice(0, 1200),
+      );
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
