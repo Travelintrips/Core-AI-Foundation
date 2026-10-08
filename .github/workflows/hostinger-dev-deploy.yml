@@ -147,7 +147,31 @@ jobs:
           ' /tmp/aicore-secrets.json > /tmp/dev-env.json
 
           base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds"
-          curl --fail-with-body --silent --show-error             -X PUT             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/dev-env.json             "$base/settings/env" >/tmp/env-update.json
+          # Hostinger occasionally returns transient 500/502/503 responses even
+          # for idempotent settings PUT. Retry safely; never log response bodies
+          # because environment configuration can contain credentials.
+          env_saved=false
+          for env_attempt in 1 2 3 4 5; do
+            code=$(curl --silent --show-error --connect-timeout 15 --max-time 45 \
+              -o /tmp/env-update.json -w "%{http_code}" -X PUT \
+              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data-binary @/tmp/dev-env.json "$base/settings/env" || true)
+            if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "204" ]; then
+              env_saved=true
+              break
+            fi
+            if [ "$code" = "400" ] || [ "$code" = "401" ] || [ "$code" = "403" ]; then
+              echo "::error::DEV environment settings rejected, HTTP $code."
+              exit 1
+            fi
+            echo "::warning::Hostinger DEV env settings transient HTTP ${code:-000}; retry=$env_attempt"
+            if [ "$env_attempt" -lt 5 ]; then sleep $((env_attempt * 3)); fi
+          done
+          if [ "$env_saved" != "true" ]; then
+            echo "::error::Hostinger DEV env settings did not succeed after bounded retries."
+            exit 1
+          fi
 
           env_count=$(jq '.env_vars | length' /tmp/dev-env.json)
           rm -f /tmp/aicore-secrets.json
