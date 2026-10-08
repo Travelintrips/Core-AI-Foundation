@@ -38,6 +38,8 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger buat hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_CREATE"],
     ["Hostinger hapus hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_DELETE"],
     ["Hostinger cek dns subdomain domain=example.com", "HOSTINGER_DNS_LIST"],
+    ["Hostinger cek DNS domain=example.com read-only, jangan update DNS record", "HOSTINGER_DNS_LIST"],
+    ["Hostinger audit DNS zone domain=example.com, do not delete records", "HOSTINGER_DNS_LIST"],
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger list subdomains domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger list parked domains domain=example.com", "HOSTINGER_PARKED_DOMAIN_LIST"],
