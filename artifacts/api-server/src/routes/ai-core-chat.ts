@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { logger } from "../lib/logger.js";
+import { resolveNewCodingJobBranch } from "../services/devFirstCodingBranchPolicy.js";
 import {
   createConstrainedCodingProviderAdapter,
 } from "../services/localCodingAiExecutionGateService.js";
@@ -2237,14 +2238,25 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
   ) {
     return githubDirectRequiredResponse(input.message);
   }
-  if (!input.projectName || !input.repository || !input.branch) {
+  let taskBranch: string | undefined;
+  try {
+    taskBranch = resolveNewCodingJobBranch(input.repository, input.branch);
+  } catch (error) {
+    return {
+      kind: "validation",
+      reply: error instanceof Error ? error.message : "Invalid coding branch.",
+      missing: ["branch"],
+    };
+  }
+
+  if (!input.projectName || !input.repository || !taskBranch) {
     return {
       kind: "validation",
       reply: "Agent Mode membutuhkan Project, Repository, dan Branch sebelum task dapat dijalankan.",
       missing: [
         ...(!input.projectName ? ["projectName"] : []),
         ...(!input.repository ? ["repository"] : []),
-        ...(!input.branch ? ["branch"] : []),
+        ...(!taskBranch ? ["branch"] : []),
       ],
     };
   }
@@ -2256,7 +2268,7 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
         taskNumber: createTaskNumber(),
         projectName: input.projectName!,
         repository: input.repository!,
-        branch: input.branch!,
+        branch: taskBranch,
         instruction: input.message,
         priority: input.priority ?? 50,
         status: "PENDING",
@@ -2815,7 +2827,7 @@ router.get("/ai/core-chat/connector/openapi.json", (_req, res): void => {
               type: "string",
               default: "Travelintrips/Core-AI-Foundation",
             },
-            branch: { type: "string", default: "main" },
+            branch: { type: "string", default: "develop" },
             priority: { type: "integer", minimum: 0, maximum: 100, default: 50 },
             conversationId: { type: "string" },
             source: { type: "string", const: "text" },
