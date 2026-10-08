@@ -209,7 +209,18 @@ function configuredUpstreams(): AgentUpstream[] {
   return result;
 }
 
-function safeUpstreamFailure(status: number): Record<string, unknown> {
+function safeUpstreamFailure(
+  status: number,
+  diagnostic?: {
+    provider: AgentUpstream["provider"];
+    model: string;
+    error: Record<string, unknown>;
+  },
+): Record<string, unknown> {
+  const safeMessage =
+    typeof diagnostic?.error["message"] === "string"
+      ? diagnostic.error["message"].slice(0, 500)
+      : null;
   return {
     error: {
       message: status === 429
@@ -217,6 +228,18 @@ function safeUpstreamFailure(status: number): Record<string, unknown> {
         : "AI Core agent runtime provider request failed.",
       type: "ai_core_agent_runtime_error",
       status,
+      ...(diagnostic
+        ? {
+            upstream: {
+              provider: diagnostic.provider,
+              model: diagnostic.model,
+              type: diagnostic.error["type"] ?? null,
+              code: diagnostic.error["code"] ?? null,
+              param: diagnostic.error["param"] ?? null,
+              message: safeMessage,
+            },
+          }
+        : {}),
     },
   };
 }
@@ -502,7 +525,11 @@ router.post(
             continue;
           }
 
-          res.status(upstream.status).json(safeUpstreamFailure(upstream.status));
+          res.status(upstream.status).json(safeUpstreamFailure(upstream.status, {
+            provider: upstreamConfig.provider,
+            model: upstreamConfig.model,
+            error: upstreamError,
+          }));
           return;
         }
 
