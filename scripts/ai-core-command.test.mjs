@@ -266,6 +266,7 @@ test('AI Task Hub can be selected as an explicitly allowlisted target repository
   assert.equal(result.result, 'TASK_ACCEPTED_NOT_COMPLETED');
   const create = f.calls.find(call => call.path === '/ai/coding/tasks' && call.method === 'POST');
   assert.equal(create.body.repository, targetRepository);
+  assert.equal(create.body.branch, 'main');
   const bridge = f.calls.find(call => call.path === '/ai/coding/bridge/commands' && call.method === 'POST');
   assert.equal(bridge.body.metadata.repository, targetRepository);
 });
@@ -277,17 +278,18 @@ test('submission is bounded and accepted is not reported as completed', async ()
   assert.equal(result.productionApprovalRequired, false);
   const create = f.calls.find(call => call.path === '/ai/coding/tasks' && call.method === 'POST');
   assert.equal(create.body.repository, REPOSITORY);
+  assert.equal(create.body.branch, 'develop');
   assert.match(create.body.instruction, /owner-authorized autonomous coding task/);
-  assert.match(create.body.instruction, /merge it automatically only after all required checks pass/);
+  assert.match(create.body.instruction, /DEV-FIRST is mandatory/);
   assert.equal(f.calls.find(call => call.path.endsWith('/start')).body.maxCycles, 5);
   assert.ok(!f.calls.some(call => /approve-merge|deploy/.test(call.path)));
   const bridge = f.calls.find(call => call.path === '/ai/coding/bridge/commands' && call.method === 'POST');
   assert.equal(bridge.body.authority.allowMerge, true);
-  assert.equal(bridge.body.authority.allowProductionDeploy, true);
+  assert.equal(bridge.body.authority.allowProductionDeploy, false);
   assert.equal(bridge.body.metadata.autonomousE2E, false);
   assert.equal(bridge.body.metadata.ownerAuthorizedAutonomous, true);
 });
-test('explicit autonomous E2E mode grants merge and production deploy authority only for that task', async () => {
+test('explicit autonomous E2E mode never grants direct production deployment', async () => {
   const f = fakeApi();
   const command = {
     ...resolve({ action: 'submit', instruction: 'Update only docs/ai-core-autonomous-e2e-canary.md', request_id: 'e2e-test' }),
@@ -302,7 +304,7 @@ test('explicit autonomous E2E mode grants merge and production deploy authority 
     allowCommit: true,
     allowPush: true,
     allowMerge: true,
-    allowProductionDeploy: true,
+    allowProductionDeploy: false,
   });
   assert.equal(bridge.body.metadata.autonomousE2E, true);
   assert.match(bridge.body.instruction, /explicit owner-authorized autonomous E2E validation/);
@@ -337,7 +339,7 @@ test('successful production control-plane canary finalizes its verification-only
 test('owner issue reruns surface a completed AI Core task as TASK_COMPLETED', async () => {
   const issueEnv = { ...env, GITHUB_EVENT_NAME: 'issues' };
   const command = resolveCommand({ ...issue, label: { name: 'ai-task' } }, issueEnv);
-  const instruction = command.instruction + '\n\nExecution policy: This is an owner-authorized autonomous coding task. Use an isolated working branch. Do not bypass tests, access secrets, force-push, weaken security controls, or directly modify production. Complete the implementation end-to-end: create the patch, run required verification/CI, commit, push, open a pull request, and merge it automatically only after all required checks pass. After merge, allow the normal production deployment workflow to run. Do not stop for ordinary human review; only fail closed for an actual critical security/destructive-operation safeguard.';
+  const instruction = command.instruction + "\n\nExecution policy: This is an owner-authorized autonomous coding task. DEV-FIRST is mandatory: implement on an isolated branch targeting develop, run regression tests and full CI, verify exact DEV deployment and smoke tests, then request a separate reviewed promotion to main. Never deploy to production from this task or bypass approvals, secrets, branch rules, or destructive-operation safeguards.";
   const f = fakeApi({
     tasks: [{ id, repository: REPOSITORY, projectName: 'GitHub Trigger issue-321-run-1234', instruction }],
     state404: false,
