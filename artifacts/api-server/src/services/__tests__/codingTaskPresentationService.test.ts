@@ -359,7 +359,8 @@ describe("coding task presentation status", () => {
     const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
     expect(source).toMatch(/const EXISTING_CWS_RESUME = [^;]*retry[^;]*requeue/);
     expect(source).toContain('operation: "TASK_RETRY"');
-    expect(source).toContain('accepted: true');
+    expect(source).toContain('operation: "TASK_RETRY"');
+    expect(source).toContain('    accepted,');
     expect(source).toContain('const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(contextualCommand)');
     expect(source).toContain('if (existingTaskLifecycle) return existingTaskLifecycle');
   });
