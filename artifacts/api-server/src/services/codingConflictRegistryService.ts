@@ -158,8 +158,11 @@ export async function reserveCodingFileSet(input: {
         AND file_path = ANY(${codingFileTextArraySql(files)})
     `);
 
+    // Track only rows inserted by this attempt. A conflict must never remove
+    // pre-existing reservations owned by the same task.
+    const newlyInsertedFiles: string[] = [];
     for (const file of files) {
-      await tx.execute(sql`
+      const insertResult = await tx.execute(sql`
         INSERT INTO ai_platform.ai_coding_active_file_reservations (
           reservation_id, repository, branch, file_path, task_id, run_id, expires_at
         )
@@ -173,7 +176,11 @@ export async function reserveCodingFileSet(input: {
           NOW() + (${RESERVATION_TTL_HOURS} || ' hours')::interval
         )
         ON CONFLICT (repository, branch, file_path) DO NOTHING
+        RETURNING file_path
       `);
+      if (Array.isArray(insertResult.rows) && insertResult.rows.length > 0) {
+        newlyInsertedFiles.push(file);
+      }
     }
 
     const conflictRows = await tx.execute(sql`
@@ -190,13 +197,17 @@ export async function reserveCodingFileSet(input: {
       : [];
 
     if (conflicts.length > 0) {
-      await tx.execute(sql`
-        DELETE FROM ai_platform.ai_coding_active_file_reservations
-        WHERE repository = ${input.repository}
-          AND branch = ${input.branch}
-          AND task_id = ${input.taskId}
-          AND file_path = ANY(${codingFileTextArraySql(files)})
-      `);
+      // Roll back this attempt only. Deleting every matching task-owned path
+      // would silently release existing reservations from an active run.
+      if (newlyInsertedFiles.length > 0) {
+        await tx.execute(sql`
+          DELETE FROM ai_platform.ai_coding_active_file_reservations
+          WHERE repository = ${input.repository}
+            AND branch = ${input.branch}
+            AND task_id = ${input.taskId}
+            AND file_path = ANY(${codingFileTextArraySql(newlyInsertedFiles)})
+        `);
+      }
       return { status: "CONFLICT" as const, files, conflicts };
     }
 
