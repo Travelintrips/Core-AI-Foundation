@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ai-workers-vps-deploy
@@ -38,7 +39,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Resolve exact deployment commit
         id: target
@@ -48,6 +49,27 @@ jobs:
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Deploying exact commit: $sha"
+
+      # Manual dispatch cannot target arbitrary refs; the VPS is production.
+      # No credentials or deployment side effects happen until DEV evidence passes.
+      - name: Block worker VPS deployment without tested DEV promotion
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          REQUESTED_REF: ${{ inputs.ref || 'main' }}
+        run: |
+          set -euo pipefail
+          if [ "$REQUESTED_REF" != "main" ]; then
+            echo "::error::Production VPS worker deployment must target main, never a DEV branch."
+            exit 1
+          fi
+          current_main=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          if [ "$TARGET_SHA" != "$current_main" ]; then
+            echo "::error::Worker deployment commit is not current main."
+            exit 1
+          fi
+          node scripts/verify-dev-first-release.mjs "$TARGET_SHA"
 
       - name: Configure SSH
         shell: bash
