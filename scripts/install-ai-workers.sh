@@ -248,8 +248,12 @@ if [ -n "$scoped_agent_token" ]; then
   log "Persisting OpenClaw AI Core auth profile"
   compose run -T --rm --no-deps --entrypoint sh openclaw -lc \
     'printf "%s\\n" "$CUSTOM_API_KEY" | node dist/index.js models auth paste-api-key --provider ai-core --profile-id ai-core:scoped --agent main'
+  # paste-api-key creates a durable static profile, but custom provider profiles
+  # do not carry setup metadata that auth activate needs to rediscover the
+  # endpoint/model. Pin the stored profile explicitly, then select the configured
+  # model separately.
   compose run -T --rm --no-deps --entrypoint node openclaw \
-    dist/index.js models auth activate ai-core:scoped --agent main
+    dist/index.js models auth order set --agent main --provider ai-core ai-core:scoped
   compose run -T --rm --no-deps --entrypoint node openclaw \
     dist/index.js models set ai-core/ai-core-agent
   openclaw_provider_mode=ai-core-scoped-profile
