@@ -51,9 +51,12 @@ describe("coding conflict registry SQL arrays", () => {
     expect(reservation).toContain("newlyInsertedFiles.push(file)");
     expect(reservation).toContain("if (newlyInsertedFiles.length > 0)");
     expect(reservation).toContain("codingFileTextArraySql(newlyInsertedFiles)");
-    expect(reservation).not.toContain(
-      "AND file_path = ANY(${codingFileTextArraySql(files)})\\n      `);\\n      return { status: \"CONFLICT\"",
+    const rollback = reservation.slice(
+      reservation.indexOf("if (conflicts.length > 0)"),
+      reservation.indexOf('return { status: "CONFLICT"'),
     );
+    expect(rollback).toContain("codingFileTextArraySql(newlyInsertedFiles)");
+    expect(rollback).not.toContain("codingFileTextArraySql(files)");
   });
 
   it("cleans reservations for disabled tasks and failed latest graphs without active execution", () => {
