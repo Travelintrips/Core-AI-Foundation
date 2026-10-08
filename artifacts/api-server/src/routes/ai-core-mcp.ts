@@ -971,8 +971,22 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
-      const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(parsed.message);
-      if (!parsed.confirmed) {
+      // Compatibility for MCP clients whose cached tool schema predates the
+      // confirmed boolean. They can echo "confirmed=true" in the message after
+      // the user explicitly confirms. Strip the marker before forwarding so it
+      // never becomes part of the operational instruction.
+      const inlineConfirmation = /^@?\s*confirmed=true\b[\s:,-]*/i.test(parsed.message);
+      const effectiveConfirmed = parsed.confirmed || inlineConfirmation;
+      if (inlineConfirmation) {
+        const cleanMessage = parsed.message.replace(/^(@?\s*)confirmed=true\b[\s:,-]*/i, "$1");
+        const cleanCommand = executionCommandMessage(cleanMessage);
+        if (cleanCommand) {
+          command.instruction = cleanCommand.instruction;
+          command.gatedMessage = cleanCommand.gatedMessage;
+        }
+      }
+      const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(command.instruction);
+      if (!effectiveConfirmed) {
         if (!safeDirectPcCommand) {
           payload = buildIntentConfirmation(command.instruction);
           await recordChatLearningEvent({ role: "assistant", content: JSON.stringify(payload), scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "awaiting_confirmation", originalInstruction: command.instruction } }).catch(() => undefined);
