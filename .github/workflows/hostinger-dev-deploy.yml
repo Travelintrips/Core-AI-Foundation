@@ -354,12 +354,44 @@ jobs:
           HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error \
-            -X POST \
-            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-            "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/server/restart"
-          echo
-          echo "dev_runtime_restart=PASS"
+          restart_url="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/server/restart"
+          health="https://$DEV_DOMAIN/api/healthz"
+          # A completed Hostinger build may already activate the new commit.
+          # Treat a transient restart API HTTP 500 as safe ONLY after the
+          # live application reports the exact expected SHA and 200 health.
+          for restart_attempt in 1 2 3; do
+            code=$(curl --silent --show-error --connect-timeout 15 --max-time 35 \
+              -o /tmp/dev-restart-response.json -w "%{http_code}" \
+              -X POST -H "Authorization: Bearer $HOSTINGER_API_TOKEN" "$restart_url" || true)
+            if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ] || [ "$code" = "204" ]; then
+              echo "dev_runtime_restart=PASS http=$code"
+              break
+            fi
+            if [ "$code" = "400" ] || [ "$code" = "401" ] || [ "$code" = "403" ]; then
+              echo "::error::Hostinger DEV restart was rejected, HTTP $code."
+              exit 1
+            fi
+            # Some Hostinger deployments automatically restart when the build
+            # finishes, while /server/restart returns HTTP 500. Check live SHA
+            # before retrying to prevent unnecessary restart loops.
+            rm -f /tmp/dev-restart-health.headers /tmp/dev-restart-health.body
+            health_code=$(curl --silent --show-error --connect-timeout 8 --max-time 15 \
+              -D /tmp/dev-restart-health.headers -o /tmp/dev-restart-health.body \
+              -w "%{http_code}" "$health" || true)
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' \
+              /tmp/dev-restart-health.headers 2>/dev/null | tail -n1 || true)
+            if [ "$health_code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ] \
+              && grep -q '"status":"ok"' /tmp/dev-restart-health.body; then
+              echo "dev_runtime_restart=ALREADY_ACTIVE exact_sha=$live_sha"
+              break
+            fi
+            echo "::warning::Hostinger restart transient HTTP ${code:-000}, live=$health_code/${live_sha:-missing}, retry=$restart_attempt"
+            if [ "$restart_attempt" -eq 3 ]; then
+              echo "::error::Hostinger restart failed and DEV is not on the expected healthy commit."
+              exit 1
+            fi
+            sleep $((restart_attempt * 5))
+          done
 
       - name: Verify DEV runtime and exact commit
         shell: bash
