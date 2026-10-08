@@ -102,6 +102,9 @@ jobs:
           ! grep -q 'ADMIN_API_KEY' "$file"
           grep -q 'openclaw-supervisor.mjs:/app/openclaw-supervisor.mjs:ro' "$file"
           grep -q 'command: \["node", "/app/openclaw-supervisor.mjs"\]' "$file"
+          grep -q 'ai-core-agent-chat' scripts/install-ai-workers.sh
+          grep -q 'supportsTools.*false' scripts/install-ai-workers.sh
+          grep -q 'chat-no-tools' deploy/ai-workers/openclaw-supervisor.mjs
 
           grep -A3 '^  temporal-data:' "$file" | grep -q 'internal: true'
           grep -A3 '^  n8n-data:' "$file" | grep -q 'internal: true'

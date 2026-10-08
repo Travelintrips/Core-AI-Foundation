@@ -272,6 +272,7 @@ function tailText(value, maxChars) {
 
 async function runOpenClawAgent(work) {
   const sessionId = "ai-core-work-" + String(work.commandId).replace(/[^a-zA-Z0-9_-]/g, "");
+  const executionProfile = String(work?.metadata?.openClawExecutionProfile || "agent-tools");
   const args = [
     "dist/index.js",
     "agent",
@@ -279,6 +280,9 @@ async function runOpenClawAgent(work) {
     "main",
     "--session-id",
     sessionId,
+    ...(executionProfile === "chat-no-tools"
+      ? ["--model", "ai-core/ai-core-agent-chat"]
+      : []),
     "--message",
     String(work.instruction),
     "--thinking",
@@ -365,6 +369,7 @@ async function runOpenClawAgent(work) {
             durationMs,
             stdoutTail,
             stderrTail,
+            executionProfile,
           },
         });
         return;

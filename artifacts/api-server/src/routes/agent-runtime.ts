@@ -8,6 +8,7 @@ import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridg
 
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
+const AGENT_CHAT_MODEL_ID = "ai-core-agent-chat";
 const ExternalAgentHeartbeatRequest = z.object({
   health: z.enum(["healthy", "degraded"]),
   version: z.string().trim().min(1).max(100).nullable().optional(),
@@ -284,12 +285,12 @@ router.get(
   (_req, res) => {
     res.json({
       object: "list",
-      data: [{
-        id: AGENT_MODEL_ID,
+      data: [AGENT_MODEL_ID, AGENT_CHAT_MODEL_ID].map((id) => ({
+        id,
         object: "model",
         created: 0,
         owned_by: "ai-core",
-      }],
+      })),
     });
   },
 );
@@ -312,8 +313,11 @@ router.post(
     const requestedModel = parsed.data.model.trim().toLowerCase();
     const allowedModelRefs = new Set([
       AGENT_MODEL_ID,
+      AGENT_CHAT_MODEL_ID,
       "openai/" + AGENT_MODEL_ID,
+      "openai/" + AGENT_CHAT_MODEL_ID,
       "ai-core/" + AGENT_MODEL_ID,
+      "ai-core/" + AGENT_CHAT_MODEL_ID,
     ]);
     if (!allowedModelRefs.has(requestedModel)) {
       res.status(400).json({
