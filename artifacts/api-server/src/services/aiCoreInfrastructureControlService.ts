@@ -134,6 +134,18 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // Routing-policy audits must reach the conversation/control-plane analyzer.
+  // They may mention OpenClaw, MCP, status, and permissions as subjects,
+  // but are not requests to list the external-agent registry.
+  if (
+    /\b(?:audit|periksa|cek|inspect|review|jelaskan|explain)\b/i.test(text) &&
+    /\b(?:routing|router|perintah|command|persetujuan|approval|permission|izin|policy|kebijakan)\b/i.test(text) &&
+    /\b(?:ai[ -]?core|mcp|openclaw|agent|executor|dispatch)\b/i.test(text) &&
+    !/\b(?:docker|container|vm|vps)\s+(?:status|start|stop|restart|logs?)\b/i.test(text)
+  ) {
+    return null;
+  }
+
   // Mixed inspect-and-repair prompts request execution, not a status snapshot.
   // Do not let the leading "cek" downgrade an explicit router/agent repair.
   // Keep explicit no-change requests read-only and bounded infrastructure
