@@ -88,7 +88,7 @@ export function requiredCapabilityForExternalAgent(
 const PC_LEADER_KEY = "openclaw-pc-active-chat-leader";
 
 /** Durable, sticky leader election with a database advisory lock across API replicas. */
-async function chooseActivePc(registry: Awaited<ReturnType<typeof getExternalAgentRegistrySnapshot>>) {
+export async function chooseActivePc(registry: Awaited<ReturnType<typeof getExternalAgentRegistrySnapshot>>) {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${PC_LEADER_KEY}::text, 0))`);
     const [stored] = await tx.select({ metadataJson: aiCodingBridgePresenceTable.metadataJson })
