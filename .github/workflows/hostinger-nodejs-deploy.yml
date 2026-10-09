@@ -255,7 +255,24 @@ jobs:
             exit 1
           fi
 
-          patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$target")
+          # TUS creation returns the canonical upload resource in Location.
+          # PATCH must target that resource, not the original creation URL.
+          upload_location=$(awk 'BEGIN {IGNORECASE=1} tolower($1)=="location:" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print}' /tmp/tus-create.headers | tail -n1)
+          if [ -z "$upload_location" ]; then
+            echo "::error::Hostinger TUS create response missing Location header."
+            exit 1
+          fi
+          case "$upload_location" in
+            https://*) upload_patch_url="$upload_location" ;;
+            /*) upload_patch_url="${upload_base%%://*}://${upload_base#*://}"; upload_patch_url="${upload_patch_url%%/*}$upload_location" ;;
+            *) echo "::error::Unexpected relative TUS Location."; exit 1 ;;
+          esac
+          case "$upload_patch_url" in
+            https://*) ;;
+            *) echo "::error::Insecure TUS upload location."; exit 1 ;;
+          esac
+
+          patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$upload_patch_url")
           if [ "$patch_code" != "204" ]; then
             cat /tmp/tus-patch.body || true
             echo "::error::Hostinger TUS upload returned HTTP $patch_code."
