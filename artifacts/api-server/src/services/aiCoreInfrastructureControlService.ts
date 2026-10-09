@@ -134,6 +134,18 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // An implementation request may mention Hostinger, OpenClaw, SSH and
+  // status/verification as acceptance criteria. Do not silently downgrade it
+  // to a read-only infrastructure or agent-registry operation.
+  // Return null so the higher-level coding/agent executor can route it.
+  if (
+    !isExplicitReadOnlyRequest(text) &&
+    /\b(implementasikan|implement|perbaiki|fix|repair|benahi|bangun|build|buatkan|develop|kembangkan)\b/i.test(text) &&
+    /\b(router|routing|command|perintah|integrasi|integration|executor|openclaw|ssh|terminal|github|code|kode|service|backend)\b/i.test(text)
+  ) {
+    return null;
+  }
+
   if (
     /\b(hostinger|hpanel)\b/i.test(text) &&
     /\bcoding\.cstlogistic\.co\.id\b/i.test(text) &&
