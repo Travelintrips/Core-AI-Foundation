@@ -33,6 +33,14 @@ describe("AI Core mutation routing guard", () => {
     expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
   });
 
+  it.each([
+    "Audit read-only: jelaskan status routing command, MCP, OpenClaw dan guard persetujuan. Jangan ubah apapun.",
+    "Audit router AI Core: mengapa perintah coding dialihkan ke agent status?",
+    "Cek kebijakan izin dan approval OpenClaw executor",
+  ])("does not downgrade policy and routing audits to agent registry: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+
   it("preserves a genuine read-only agent status request", () => {
     expect(detectAiCoreInfrastructureOperation("cek status OpenClaw Hostinger")).toBe("EXTERNAL_AGENT_STATUS");
   });
