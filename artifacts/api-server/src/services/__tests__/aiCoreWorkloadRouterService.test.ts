@@ -70,6 +70,18 @@ describe("AI Core workload router", () => {
   });
 
   it.each([
+    "Verifikasi deployment production AI Core apakah patch sudah live? Berikan bukti E2E read-only.",
+    "Cek deployment production AI Core terakhir untuk commit a5241bf dan status patch",
+    "Apakah deployment production sudah live?",
+  ])("allows observational deployment verification without approval: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "DETERMINISTIC",
+      requiresApproval: false,
+      requiresAgent: false,
+    });
+  });
+
+  it.each([
     "perbaiki routing AI Core",
     "restart VM",
     "deploy production",
