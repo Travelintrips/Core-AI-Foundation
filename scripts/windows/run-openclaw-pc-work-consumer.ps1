@@ -13,6 +13,9 @@ if (-not $values['AI_CORE_BASE_URL'] -or -not $values['AI_CORE_SCOPED_AGENT_TOKE
 }
 $env:AI_CORE_BASE_URL = $values['AI_CORE_BASE_URL']
 $env:AI_CORE_SCOPED_AGENT_TOKEN = $values['AI_CORE_SCOPED_AGENT_TOKEN']
+if ($values['AI_CORE_OPENCLAW_CLIENT_ID']) {
+    $env:AI_CORE_OPENCLAW_CLIENT_ID = $values['AI_CORE_OPENCLAW_CLIENT_ID']
+}
 $script = Join-Path $env:LOCALAPPDATA 'AI-Core\openclaw-pc-work-consumer.py'
 while ($true) {
     & python $script

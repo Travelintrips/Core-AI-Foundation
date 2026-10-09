@@ -1,28 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { selectOpenClawExecutor } from "../openClawFailoverSelectionService.js";
 
-describe("OpenClaw executor selection", () => {
-  const online = (clientId: string, eligible: boolean) => ({ clientId, eligible });
-  it("prefers PC whenever both are healthy", () => {
-    expect(selectOpenClawExecutor([online("openclaw-vps-main", true), online("openclaw-pc-worker", true)])).toBe("openclaw-pc-worker");
+describe("Issue #1007 OpenClaw PC-first failover", () => {
+  const online = (clientId: string, eligible = true, availableSlots = 1, activeJobs = 0) =>
+    ({ clientId, eligible, availableSlots, activeJobs });
+  it("uses PC before VPS or GCP", () => {
+    expect(selectOpenClawExecutor([online("openclaw-vps-main"), online("gcp-openclaw-main"), online("openclaw-pc-worker")])).toBe("openclaw-pc-worker");
   });
-  it("uses VPS if PC is unavailable", () => {
-    expect(selectOpenClawExecutor([online("openclaw-vps-main", true), online("openclaw-pc-worker", false)])).toBe("openclaw-vps-main");
+  it("distributes successive jobs across three PCs as capacity reports fill", () => {
+    const nodes = [online("openclaw-pc-worker"), online("openclaw-pc-worker-2"), online("openclaw-pc-worker-3"), online("openclaw-vps-main")];
+    expect(selectOpenClawExecutor(nodes)).toBe("openclaw-pc-worker");
+    nodes[0].availableSlots = 0;
+    expect(selectOpenClawExecutor(nodes)).toBe("openclaw-pc-worker-2");
+    nodes[1].availableSlots = 0;
+    expect(selectOpenClawExecutor(nodes)).toBe("openclaw-pc-worker-3");
+    nodes[2].availableSlots = 0;
+    expect(selectOpenClawExecutor(nodes)).toBe("openclaw-vps-main");
   });
-  it("uses legacy worker only if the new hosts are both unavailable", () => {
-    expect(selectOpenClawExecutor([online("gcp-openclaw-main", true), online("openclaw-pc-worker", false)])).toBe("gcp-openclaw-main");
+  it("prefers the least loaded available PC", () => {
+    expect(selectOpenClawExecutor([online("openclaw-pc-worker", true, 2, 2), online("openclaw-pc-worker-2", true, 1, 0)])).toBe("openclaw-pc-worker-2");
   });
-  it("routes direct server monitoring to the VPS/legacy server, not a healthy PC", () => {
-    expect(selectOpenClawExecutor([
-      online("openclaw-pc-worker", true),
-      online("gcp-openclaw-main", true),
-      online("openclaw-vps-main", false),
-    ], { preferServer: true })).toBe("gcp-openclaw-main");
+  it("avoids unhealthy and saturated nodes", () => {
+    expect(selectOpenClawExecutor([online("openclaw-pc-worker", false), online("openclaw-pc-worker-2", true, 0), online("openclaw-pc-worker-3")])).toBe("openclaw-pc-worker-3");
   });
-  it("fails closed when only the PC is available for server monitoring", () => {
-    expect(selectOpenClawExecutor([online("openclaw-pc-worker", true)], { preferServer: true })).toBeNull();
+  it("never sends server-only monitoring to any PC", () => {
+    expect(selectOpenClawExecutor([online("openclaw-pc-worker"), online("gcp-openclaw-main"), online("openclaw-vps-main")], {preferServer:true})).toBe("openclaw-vps-main");
+    expect(selectOpenClawExecutor([online("openclaw-pc-worker")], {preferServer:true})).toBeNull();
   });
-  it("does not pretend that an offline executor is available", () => {
-    expect(selectOpenClawExecutor([online("openclaw-vps-main", false), online("openclaw-pc-worker", false)])).toBeNull();
+  it("fails closed instead of launching a normal job on GCP or an offline executor", () => {
+    expect(selectOpenClawExecutor([online("gcp-openclaw-main"), online("openclaw-vps-main", false)])).toBeNull();
   });
 });

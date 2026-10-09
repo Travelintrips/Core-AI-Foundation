@@ -11,7 +11,8 @@ import time
 import urllib.error
 import urllib.request
 
-CLIENT_ID = "openclaw-pc-worker"
+CLIENT_ID = os.environ.get("AI_CORE_OPENCLAW_CLIENT_ID", "openclaw-pc-worker").strip()
+ALLOWED_CLIENT_IDS = {"openclaw-pc-worker", "openclaw-pc-worker-2", "openclaw-pc-worker-3"}
 BASE = os.environ.get("AI_CORE_BASE_URL", "").rstrip("/")
 TOKEN = os.environ.get("AI_CORE_SCOPED_AGENT_TOKEN", "")
 POLL = 5
@@ -55,7 +56,7 @@ def execute(work):
             handle.write(instruction)
         result = subprocess.run(
             ["openclaw.cmd" if os.name == "nt" else "openclaw", "agent", "--message-file", path,
-             "--session-id", "ai-core-pc-worker", "--timeout", "90", "--json"],
+             "--session-id", "ai-core-" + CLIENT_ID, "--timeout", "90", "--json"],
             capture_output=True, text=True, timeout=105, shell=False,
         )
         response = (result.stdout or result.stderr)[-10000:]
@@ -71,6 +72,8 @@ def execute(work):
 
 
 def main():
+    if CLIENT_ID not in ALLOWED_CLIENT_IDS:
+        raise SystemExit("Invalid AI_CORE_OPENCLAW_CLIENT_ID")
     if not BASE.startswith("https://") or not TOKEN:
         raise SystemExit("HTTPS AI_CORE_BASE_URL and AI_CORE_SCOPED_AGENT_TOKEN required")
     while True:
