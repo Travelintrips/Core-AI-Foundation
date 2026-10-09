@@ -1,3 +1,4 @@
+import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
@@ -135,6 +136,18 @@ export function hasVerifiedCompletionEvidence(input: {
   runs: Array<{ agentName?: string | null; status?: string | null }>;
 }): boolean {
   if (input.nextAction !== "DONE") return false;
+
+  // A read-only analyzer smoke is a terminal deliverable when the complete
+  // Coding Orchestrator run produced an explicit DONE analysis with no writes.
+  // Ordinary coding jobs retain their stricter commit/merge/test gates.
+  if (isRepositoryAnalyzerVerificationOnlyInstruction(input.instruction)) {
+    const orchestration = isRecord(input.payload.orchestration) ? input.payload.orchestration : null;
+    const localExecution = isRecord(input.payload.localExecution) ? input.payload.localExecution : null;
+    return input.payload.executionStatus === "COMPLETED" &&
+      orchestration?.nextAction === "DONE" &&
+      localExecution?.status !== "APPLIED" &&
+      input.runs.some((run) => run.agentName === "Coding Orchestrator" && run.status === "COMPLETED");
+  }
 
   const merge = isRecord(input.payload.localMergeApproval)
     ? input.payload.localMergeApproval
