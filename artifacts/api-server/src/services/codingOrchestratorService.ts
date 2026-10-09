@@ -759,6 +759,14 @@ export async function continueCodingOrchestration(
   }
 }
 
+function repositoryAnalyzerExecutionMode(): "remote" | "local" {
+  const configured = process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase();
+  if (configured === "remote" || configured === "local") return configured;
+  const prod = process.env.NODE_ENV?.trim().toLowerCase() === "production" ||
+    process.env.APP_ENV?.trim().toLowerCase() === "production";
+  return prod ? "remote" : "local";
+}
+
 function scheduleRepositoryAnalyzerClaimFailover(
   input: CodingOrchestrationInput,
   sessionId: string,
@@ -767,7 +775,7 @@ function scheduleRepositoryAnalyzerClaimFailover(
 ): void {
   // Remote mode must never reclaim analyzer jobs inside the constrained API host.
   // The durable queued row remains available for a remote worker or operator recovery.
-  if (process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase() === "remote") {
+  if (repositoryAnalyzerExecutionMode() === "remote") {
     return;
   }
 
@@ -1063,7 +1071,7 @@ export async function startCodingOrchestration(
 
   // In remote mode the API remains enqueue-first. The watchdog above is only a
   // bounded safety net when the separately supervised CPU worker is unavailable.
-  const analyzerMode = process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase();
+  const analyzerMode = repositoryAnalyzerExecutionMode();
   if (analyzerMode === "remote") {
     logger.info(
       { jobId: queuedJob.id, taskId: input.task.id, codingRunId: input.run.id },
