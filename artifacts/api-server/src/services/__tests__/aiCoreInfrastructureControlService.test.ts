@@ -14,6 +14,21 @@ import {
   executeAiCoreInfrastructureOperation,
 } from "../aiCoreInfrastructureControlService.js";
 
+describe("AI Core mutation routing guard", () => {
+  it.each([
+    "Implementasikan SSH OpenClaw di Hostinger dan verifikasi status",
+    "Perbaiki command router AI Core untuk OpenClaw Hostinger",
+    "Buatkan integrasi terminal SSH OpenClaw Hostinger",
+    "Fix OpenClaw executor on VPS and check status",
+  ])("does not downgrade implementation to a status operation: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+
+  it("preserves a genuine read-only agent status request", () => {
+    expect(detectAiCoreInfrastructureOperation("cek status OpenClaw Hostinger")).toBe("EXTERNAL_AGENT_STATUS");
+  });
+});
+
 describe("AI Core Hostinger infrastructure control", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
