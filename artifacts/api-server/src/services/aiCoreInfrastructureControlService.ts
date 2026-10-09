@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
 import { deployCodingStaticSite } from "./hostingerCodingStaticDeployService.js";
+import { recordRoutingMismatchFeedback } from "./aiCoreRoutingMismatchFeedbackService.js";
 
 function execFileWithInput(
   file: string,
@@ -134,6 +135,19 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // Routing-policy audits must reach the conversation/control-plane analyzer.
+  // They may mention OpenClaw, MCP, status, and permissions as subjects,
+  // but are not requests to list the external-agent registry.
+  if (
+    /\b(?:audit|periksa|cek|inspect|review|jelaskan|explain)\b/i.test(text) &&
+    /\b(?:routing|router|perintah|command|persetujuan|approval|permission|izin|policy|kebijakan)\b/i.test(text) &&
+    /\b(?:ai[ -]?core|mcp|openclaw|agent|executor|dispatch)\b/i.test(text) &&
+    !/\b(?:docker|container|vm|vps)\s+(?:status|start|stop|restart|logs?)\b/i.test(text)
+  ) {
+    recordRoutingMismatchFeedback({ message, wrongRoute: "EXTERNAL_AGENT_STATUS", correctedRoute: "POLICY_ANALYZER", ruleId: "routing-policy-audit" });
+    return null;
+  }
+
   // Mixed inspect-and-repair prompts request execution, not a status snapshot.
   // Do not let the leading "cek" downgrade an explicit router/agent repair.
   // Keep explicit no-change requests read-only and bounded infrastructure
@@ -144,6 +158,7 @@ export function detectAiCoreInfrastructureOperation(
     !/\b(?:read[ -]?only|tanpa (?:melakukan )?perubahan|jangan (?:melakukan )?perubahan|do not (?:make|apply) changes?)\b/i.test(text) &&
     !/\b(?:deploy|redeploy|restart|stop|start)\s+(?:docker|container|vps|vm|ai[ -]?workers?)\b/i.test(text)
   ) {
+    recordRoutingMismatchFeedback({ message, wrongRoute: "EXTERNAL_AGENT_STATUS", correctedRoute: "EXECUTION_ROUTER", ruleId: "inspect-repair-intent" });
     return null;
   }
 
