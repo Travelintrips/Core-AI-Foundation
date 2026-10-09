@@ -301,9 +301,6 @@ router.get(
       return;
     }
     const response = state.latestResponse;
-    const details = response?.metadataJson;
-    const declaredDetails = response?.metadataJson &&
-      typeof response.metadataJson === "object" ? response.metadataJson : {};
     // Only an actual PC-side verified browser submission counts as delivered.
     const raw = response && typeof response === "object" ?
       (response as { metadataJson?: Record<string, unknown> }).metadataJson ?? {} : {};
