@@ -26,6 +26,7 @@ import {
 } from "./repositoryAnalyzerService.js";
 import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
 import { reportCodingTaskTerminalTransition } from "./codingTaskTerminalReportingService.js";
+import { isRepositoryAnalyzerVerificationOnlyInstruction, repositoryAnalyzerVerificationAck } from "./repositoryAnalyzerVerificationOnlyService.js";
 
 type CodingStageId =
   | "repository_analyzer"
@@ -250,18 +251,24 @@ async function completeLocalAnalysis(
       ? (analysis.changeReservation as Record<string, unknown>)
       : null;
   const activeConflict = changeReservation?.status === "CONFLICT";
+  const verifiedAnalyzerOnly = isRepositoryAnalyzerVerificationOnlyInstruction(input.task.instruction) &&
+    !activeConflict && localExecution?.status !== "APPLIED";
   const nextAction =
     activeConflict
       ? "REVIEW_CONFLICT"
       : localExecution?.status === "APPLIED"
         ? "REVIEW_LOCAL_PATCH"
+      : verifiedAnalyzerOnly
+        ? "DONE"
       : aiEscalation
         ? "APPROVE_TASK_GRAPH"
         : localPlan?.status === "AI_REQUIRED"
           ? "AI_REQUIRED"
           : "REVIEW_LOCAL_CONTEXT";
   const summary =
-    nextAction === "REVIEW_CONFLICT"
+    nextAction === "DONE"
+      ? `${analysisSummary} Repository Analyzer verification-only completed with no repository changes. ${repositoryAnalyzerVerificationAck(input.task.instruction) ?? ""}`.trim()
+    : nextAction === "REVIEW_CONFLICT"
       ? `${analysisSummary} Coding stopped before worker execution because the predicted change set overlaps an active task. QC can sequence, revise, or rebase the conflicting task; no AI/LLM worker was invoked.`
       : nextAction === "REVIEW_LOCAL_PATCH"
         ? `${analysisSummary} A deterministic local patch is ready for automated QC; repository scripts were not executed. No AI/LLM was invoked.`
@@ -538,6 +545,8 @@ export async function continueCodingOrchestration(
       analysis.changeReservation && typeof analysis.changeReservation === "object"
         ? (analysis.changeReservation as Record<string, unknown>)
         : null;
+    const verifiedAnalyzerOnly = isRepositoryAnalyzerVerificationOnlyInstruction(input.task.instruction) &&
+      changeReservation?.status !== "CONFLICT" && localExecution?.status !== "APPLIED";
 
     if (changeReservation?.status === "CONFLICT") {
       stages = updateStage(
@@ -638,12 +647,12 @@ export async function continueCodingOrchestration(
     // COMPLETED Coding Orchestrator/Repository Analyzer run, so invoking it
     // while this run is still RUNNING creates a circular ANALYSIS_REQUIRED
     // failure even though repository_analyzer has already completed.
-    if (localPlan?.status === "AI_REQUIRED") {
+    if (localPlan?.status === "AI_REQUIRED" && !verifiedAnalyzerOnly) {
       await completeLocalAnalysis(input, sessionId, stages, analysis);
     }
 
     let aiEscalation: Awaited<ReturnType<typeof generateAndPersistCodingMultiTaskPlan>> | undefined;
-    if (localPlan?.status === "AI_REQUIRED") {
+    if (localPlan?.status === "AI_REQUIRED" && !verifiedAnalyzerOnly) {
       try {
         aiEscalation = await generateAndPersistCodingMultiTaskPlan(input.task.id, analysis);
       } catch (plannerError) {
@@ -680,8 +689,10 @@ export async function continueCodingOrchestration(
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
     const shouldAutoAdvance =
-      localExecution?.status === "APPLIED" ||
-      localPlan?.status === "AI_REQUIRED";
+      !verifiedAnalyzerOnly && (
+        localExecution?.status === "APPLIED" ||
+        localPlan?.status === "AI_REQUIRED"
+      );
 
     if (shouldAutoAdvance) {
       let autonomousState:
