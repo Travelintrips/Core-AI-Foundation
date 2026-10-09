@@ -14,6 +14,8 @@ import {
 export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
+export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
+export const OPENCLAW_PC3_CLIENT_ID = "openclaw-pc-worker-3" as const;
 export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
 export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
 
@@ -21,6 +23,8 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_VPS_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
   [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
   [N8N_AGENT_CLIENT_ID]: "workflow:automation",
 };
@@ -101,7 +105,10 @@ export async function dispatchExternalAgentWork(input: {
         "No eligible VPS OpenClaw worker for direct API monitoring.",
       );
     }
-    if (preferred) resolvedClientId = preferred;
+    if (!preferred) {
+      throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "No eligible OpenClaw PC or Hostinger worker; dispatch safely withheld.");
+    }
+    resolvedClientId = preferred;
   }
   const rule = getExternalAgentRule(resolvedClientId);
   if (!rule) {
@@ -122,7 +129,10 @@ export async function dispatchExternalAgentWork(input: {
   }
 
   const agent = registry.find((item) => item.clientId === resolvedClientId);
-  const coldStart = !agent?.eligible;
+  if (!agent?.eligible || (agent.availableSlots !== undefined && agent.availableSlots <= 0)) {
+    throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Selected OpenClaw executor is offline or at capacity.");
+  }
+  const coldStart = false;
 
   const externalCommandId = `ai-core-agent-${randomUUID()}`;
   const submitted = await submitCodingBridgeCommand({
