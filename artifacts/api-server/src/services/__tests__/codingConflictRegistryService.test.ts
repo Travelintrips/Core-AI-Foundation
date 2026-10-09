@@ -36,6 +36,18 @@ describe("coding conflict registry SQL arrays", () => {
     expect(query.params).toEqual([]);
   });
 
+  it("checks existing reservation schema before requesting privileged DDL", () => {
+    const source = readFileSync(
+      new URL("../codingConflictRegistryService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("to_regclass('ai_platform.ai_coding_active_file_reservations')");
+    expect(source).toContain("to_regclass('ai_platform.ai_coding_active_file_reservations_target_uidx')");
+    expect(source).toContain("to_regclass('ai_platform.ai_coding_active_file_reservations_task_idx')");
+    expect(source).toContain('row?.["has_table"] === true');
+    expect(source.indexOf("to_regclass(")).toBeLessThan(source.indexOf("CREATE TABLE IF NOT EXISTS"));
+  });
+
   it("cleans reservations for disabled tasks and failed latest graphs without active execution", () => {
     const source = readFileSync(
       new URL("../codingConflictRegistryService.ts", import.meta.url),
