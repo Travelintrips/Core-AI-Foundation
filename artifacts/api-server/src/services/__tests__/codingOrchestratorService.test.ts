@@ -532,6 +532,29 @@ describe("Coding Orchestrator", () => {
     );
   });
 
+  it("uses the remote worker by default in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "");
+    try {
+      await startCodingOrchestration({ task: task as never, run: run as never });
+      expect(mockSpawn).not.toHaveBeenCalled();
+      expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("preserves an explicit local mode override in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "local");
+    try {
+      await startCodingOrchestration({ task: task as never, run: run as never });
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("keeps remote analyzer jobs queued without in-process fallback", async () => {
     vi.useFakeTimers();
     vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "remote");
