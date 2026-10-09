@@ -24,6 +24,15 @@ describe("AI Core mutation routing guard", () => {
     expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
   });
 
+  it.each([
+    "Cek dan perbaiki router AI Core yang salah arah ke OpenClaw status",
+    "Cek dan benahi integrasi OpenClaw di Hostinger sampai berfungsi",
+    "Periksa lalu perbaiki MCP routing agent yang salah",
+    "Cek dan repair executor OpenClaw VPS, bukan hanya status",
+  ])("keeps inspect-and-repair requests on execution routing: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+
   it("preserves a genuine read-only agent status request", () => {
     expect(detectAiCoreInfrastructureOperation("cek status OpenClaw Hostinger")).toBe("EXTERNAL_AGENT_STATUS");
   });
