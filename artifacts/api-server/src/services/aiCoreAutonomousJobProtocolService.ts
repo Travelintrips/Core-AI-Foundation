@@ -57,3 +57,40 @@ export function canMarkAutonomousJobCompleted(
     !result.requires_boss_approval &&
     requiredEvidenceKinds.every((kind) => result.evidence.some((item) => item.kind === kind));
 }
+
+export const autonomousJobTransitions = {
+  QUEUED: ["RUNNING", "CANCELLED"],
+  RUNNING: ["VERIFYING", "RETRYING", "BLOCKED", "CANCELLED"],
+  VERIFYING: ["COMPLETED", "RETRYING", "BLOCKED", "CANCELLED"],
+  RETRYING: ["RUNNING", "BLOCKED", "CANCELLED"],
+  BLOCKED: [],
+  COMPLETED: [],
+  CANCELLED: [],
+} as const;
+
+export type AutonomousJobStatus = keyof typeof autonomousJobTransitions;
+
+export function validateAutonomousJobTransition(
+  previous: AutonomousJobStatus,
+  next: AutonomousJobStatus,
+  result: AutonomousJobResult,
+  requiredEvidenceKinds: readonly string[],
+): { allowed: boolean; reason: string } {
+  if (result.status !== next) {
+    return { allowed: false, reason: "result_status_mismatch" };
+  }
+  const allowedNext = autonomousJobTransitions[previous] as readonly AutonomousJobStatus[];
+  if (!allowedNext.includes(next)) {
+    return { allowed: false, reason: "invalid_transition" };
+  }
+  if (next === "COMPLETED" && !canMarkAutonomousJobCompleted(result, requiredEvidenceKinds)) {
+    return { allowed: false, reason: "missing_completion_evidence" };
+  }
+  if (next === "RETRYING" && result.next_action !== "JOB_FIX") {
+    return { allowed: false, reason: "retry_requires_fix_action" };
+  }
+  if (next === "BLOCKED" && !result.error) {
+    return { allowed: false, reason: "blocked_requires_error" };
+  }
+  return { allowed: true, reason: "ok" };
+}
