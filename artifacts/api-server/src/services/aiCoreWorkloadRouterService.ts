@@ -164,6 +164,18 @@ export function classifyAiCoreWorkload(message: string): AiCoreWorkloadRoute {
   if (/^(hello|hi|halo|hai|hey)$/.test(text)) return route("DETERMINISTIC");
   if (DETERMINISTIC.test(text)) return route("DETERMINISTIC");
 
+  // A question about whether an existing production deployment is live is
+  // observational, even though it contains "deploy" and "production".
+  // Do not require approval for a read-only status lookup.
+  if (
+    /^(?:@\s*)?(?:cek|check|periksa|verifikasi|verify|lihat|status|apakah)\b/i.test(text) &&
+    /\b(?:deploy(?:ment)?|production|produksi|prod|patch|commit)\b/i.test(text) &&
+    /\b(?:status|sudah|already|live|terdeploy|terpasang|berhasil|bukti|e2e|hasil|read[ -]?only|hanya baca|tanpa perubahan)\b/i.test(text) &&
+    !/\b(?:jalankan|lakukan|execute|trigger|mulai|start|restart|stop|hapus|delete|ubah|edit|merge|push|rollout|redeploy|deploy sekarang|deploy now)\b/i.test(actionableText)
+  ) {
+    return route("DETERMINISTIC");
+  }
+
   // Explicit read-only runtime inspection takes precedence when no affirmative
   // mutation remains after removing negated/exclusion clauses.
   if (
