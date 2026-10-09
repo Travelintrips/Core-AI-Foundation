@@ -45,5 +45,16 @@ jobs:
 
             # GitHub itself enforces branch protection, approvals, and rulesets.
             # --auto requests merge after all native requirements are satisfied.
-            gh pr merge "$pr" --repo "$REPO" --squash --auto
+            # The workflow GITHUB_TOKEN can be denied GraphQL mergePullRequest
+            # by repository rulesets even with pull-requests:write. Treat this
+            # as a permission gate, not as a failed CI verification.
+            if ! merge_output=$(gh pr merge "$pr" --repo "$REPO" --squash --auto 2>&1); then
+              if printf '%s' "$merge_output" | grep -Eq 'Resource not accessible by integration|mergePullRequest'; then
+                echo "::warning::Auto-merge denied by GitHub integration permissions for PR #$pr. A repository-authorized merge is required."
+                continue
+              fi
+              printf '%s\n' "$merge_output" >&2
+              exit 1
+            fi
+            printf '%s\n' "$merge_output"
           done
