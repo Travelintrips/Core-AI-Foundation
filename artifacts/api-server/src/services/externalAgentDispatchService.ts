@@ -129,10 +129,10 @@ export async function dispatchExternalAgentWork(input: {
   }
 
   const agent = registry.find((item) => item.clientId === resolvedClientId);
-  if (!agent?.eligible || (agent.availableSlots !== undefined && agent.availableSlots <= 0)) {
+  if (rule.source === "openclaw" && (!agent?.eligible || (agent.availableSlots !== undefined && agent.availableSlots <= 0))) {
     throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Selected OpenClaw executor is offline or at capacity.");
   }
-  const coldStart = false;
+  const coldStart = !agent?.eligible;
 
   const externalCommandId = `ai-core-agent-${randomUUID()}`;
   const submitted = await submitCodingBridgeCommand({
