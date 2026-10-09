@@ -29,6 +29,17 @@ describe("AI Core mutation routing guard", () => {
   });
 });
 
+describe("OpenClaw mutation routing regression", () => {
+  it.each([
+    "Minta bantuan OpenClaw Hostinger untuk memasang markdown global ChatGPT, lalu cek status",
+    "Implementasikan SSH OpenClaw Hostinger dan verifikasi status",
+    "Perbaiki command router OpenClaw Hostinger",
+    "Siapkan instruksi global ChatGPT melalui OpenClaw VPS",
+  ])("never routes an implementation request to read-only infrastructure: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+});
+
 describe("AI Core Hostinger infrastructure control", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
