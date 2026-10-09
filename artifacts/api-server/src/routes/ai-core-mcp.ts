@@ -591,19 +591,85 @@ function isProductionDeploymentEvidenceQuery(message: string): boolean {
     /\b(?:status|cek|check|verifikasi|verify|apakah|live|bukti|e2e|commit|sha)\b/i.test(value);
 }
 
-function buildUnverifiedDeploymentEvidencePayload() {
+type DeploymentEndpointEvidence = {
+  domain: string;
+  httpStatus: number | null;
+  commitSha: string | null;
+  error?: string;
+};
+
+async function readProductionHealth(domain: string): Promise<DeploymentEndpointEvidence> {
+  try {
+    const response = await fetch(`https://${domain}/api/healthz`, {
+      method: "HEAD",
+      redirect: "error",
+      signal: AbortSignal.timeout(8_000),
+    });
+    const rawSha = response.headers.get("x-cst-commit-sha");
+    const commitSha = rawSha && /^[a-f0-9]{40}$/i.test(rawSha) ? rawSha.toLowerCase() : null;
+    return { domain, httpStatus: response.status, commitSha };
+  } catch {
+    return { domain, httpStatus: null, commitSha: null, error: "Health endpoint unavailable" };
+  }
+}
+
+async function readGitHubMainSha(): Promise<string | null> {
+  try {
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const response = await fetch(
+      "https://api.github.com/repos/Travelintrips/Core-AI-Foundation/git/ref/heads/main",
+      {
+        headers: {
+          accept: "application/vnd.github+json",
+          "user-agent": "ai-core-deployment-evidence",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        redirect: "error",
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { object?: { sha?: unknown } };
+    const sha = payload.object?.sha;
+    return typeof sha === "string" && /^[a-f0-9]{40}$/i.test(sha) ? sha.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildDeploymentEvidencePayload() {
+  const [internal, customer, mainSha] = await Promise.all([
+    readProductionHealth("aicore.cstlogistic.co.id"),
+    readProductionHealth("aifront.cstlogistic.co.id"),
+    readGitHubMainSha(),
+  ]);
+  const endpoints = [internal, customer];
+  const verified = Boolean(
+    mainSha &&
+    endpoints.every((endpoint) => endpoint.httpStatus === 200 && endpoint.commitSha === mainSha),
+  );
+  const summary = verified
+    ? "Kedua domain production sehat dan commit SHA cocok dengan GitHub main."
+    : "Deployment belum dapat diverifikasi sepenuhnya; lihat bukti per domain dan GitHub main.";
   return {
     kind: "answer",
-    route: "DEPLOYMENT_EVIDENCE_REQUIRED",
+    route: "DEPLOYMENT_EVIDENCE_LIVE",
     provider: null,
     model: null,
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     estimatedCostUsd: 0,
     workload: "DETERMINISTIC",
     costClass: "ZERO",
-    verified: false,
+    verified,
     requiresApproval: false,
-    reply: "Status deployment production belum dapat diverifikasi dari tool ini. Periksa commit SHA pada endpoint /api/healthz untuk setiap domain produksi, cocokkan dengan GitHub main, lalu periksa hasil workflow deployment dan E2E. Jangan mengarang tanggal, versi, hasil tes, atau tautan bukti.",
+    evidence: {
+      checkedAt: new Date().toISOString(),
+      mainSha,
+      endpoints,
+      source: "LIVE_HEALTHZ_AND_GITHUB_REF",
+      e2eVerified: false,
+    },
+    reply: `${summary} GitHub main: ${mainSha ?? "tidak tersedia"}. ${endpoints.map((endpoint) => `${endpoint.domain}: HTTP ${endpoint.httpStatus ?? "unavailable"}, SHA ${endpoint.commitSha ?? "tidak tersedia"}`).join("; ")}. Hasil E2E belum diverifikasi oleh pemeriksaan ini.`,
   };
 }
 
@@ -966,7 +1032,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       if (isMcpDiscoveryQuery(message)) {
         payload = buildMcpDiscoveryPayload();
       } else if (isProductionDeploymentEvidenceQuery(message)) {
-        payload = buildUnverifiedDeploymentEvidencePayload();
+        payload = await buildDeploymentEvidencePayload();
       } else {
         payload = await callAiCore(
           "/ai/core-chat/messages",
