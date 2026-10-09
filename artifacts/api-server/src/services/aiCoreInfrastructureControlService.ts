@@ -134,14 +134,14 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
-  // Questions about AI Core's own deploy or routing state are not agent
-  // registry inspections merely because they mention OpenClaw and "status".
-  // Let the conversation/query router answer from deployment evidence.
+  // A question about AI Core's deployment is not an OpenClaw registry query.
+  // Preserve explicit Hostinger, Docker, and worker operations.
   if (
-    /\b(ai[ -]?core|patch|commit|pull request|pr\s*#?\d+|production|produksi|deployment|deploy)\b/i.test(text) &&
-    /\b(deploy(?:ment)?|production|produksi|commit|patch|routing|router|e2e|live)\b/i.test(text) &&
-    /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|sudah|apakah)\b/i.test(text) &&
-    !/\b(start|stop|restart|reboot|shutdown|nyalakan|matikan|jalankan)\s+(?:vm|vps|docker|container)\b/i.test(text)
+    /\bai[ -]?core\b/i.test(text) &&
+    /\b(?:deployment|production|produksi|patch|routing|router|e2e)\b/i.test(text) &&
+    /\b(?:cek|check|status|periksa|verifikasi|verify|apakah)\b/i.test(text) &&
+    !/\b(?:docker|compose|container|ai[ -]?workers?|worker stack|project=|directory=|logs?)\b/i.test(text) &&
+    !/\b(?:deploy|redeploy|install|apply|rollout|restart|start|stop)\s+(?:ai[ -]?workers?|docker|container|vps|vm)\b/i.test(text)
   ) {
     return null;
   }
