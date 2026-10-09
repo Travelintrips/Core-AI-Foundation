@@ -29,6 +29,16 @@ describe("AI Core mutation routing guard", () => {
   });
 });
 
+describe("AI Core deployment verification routing", () => {
+  it.each([
+    "Cek deployment production AI Core terakhir untuk commit a5241bf dan status route OpenClaw mutation serta bukti E2E",
+    "Cek status deployment AI Core ke OpenClaw apakah patch sudah live",
+    "Verifikasi patch routing AI Core OpenClaw di produksi",
+  ])("does not replace deployment verification with agent registry: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+});
+
 describe("AI Core Hostinger infrastructure control", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
