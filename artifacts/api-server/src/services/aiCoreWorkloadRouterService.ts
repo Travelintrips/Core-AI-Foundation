@@ -150,6 +150,9 @@ const EXPLICIT_RUNTIME_ONLY =
 
 function stripNegatedMutations(text: string): string {
   return text
+    // Exclude negative instructions such as 'jangan lakukan perubahan' before
+    // checking for affirmative production mutations.
+    .replace(/\b(?:jangan|tidak boleh|do not|don't|must not|without|tanpa)\s+(?:lakukan|melakukan|jalankan|execute|make|perform)\s+(?:perubahan|changes?|modifikasi|mutation|deploy(?:ment)?|restart|merge|push|hapus|delete|ubah|edit|modify|change)\b/gi, " ")
     .replace(/\b(?:jangan|do not|don't|without|tanpa)\s+(?:\w+\s+){0,3}(?:deploy(?:ment)?|merge|commit|push|restart|start|stop|delete|hapus|ubah|edit|modify|change|implement(?:asikan)?|patch|fix|perbaiki)\b/gi, " ")
     .replace(/\b(?:must not|tidak boleh)\s+(?:\w+\s+){0,3}(?:deploy(?:ment)?|merge|commit|push|restart|start|stop|delete|hapus|ubah|edit|modify|change|implement(?:asikan)?|patch|fix|perbaiki)\b/gi, " ")
     .replace(/\s+/g, " ")

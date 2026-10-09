@@ -73,6 +73,7 @@ describe("AI Core workload router", () => {
     "Verifikasi deployment production AI Core apakah patch sudah live? Berikan bukti E2E read-only.",
     "Cek deployment production AI Core terakhir untuk commit a5241bf dan status patch",
     "Apakah deployment production sudah live?",
+    "Cek status deployment production AI Core terakhir: apakah patch PR #1017 sudah live? Berikan bukti E2E. Hanya baca, jangan lakukan perubahan.",
   ])("allows observational deployment verification without approval: %s", (message) => {
     expect(classifyAiCoreWorkload(message)).toMatchObject({
       workload: "DETERMINISTIC",
