@@ -284,6 +284,8 @@ const InfrastructureMonitorEvent = z.object({
   summary: z.string().trim().min(1).max(900),
   observedAt: z.string().datetime(),
   details: z.string().trim().max(1500).optional(),
+  // Trusted origin binding, set by the monitor from an explicit task-to-chat mapping.
+  conversationId: z.string().regex(/^[a-zA-Z0-9-]{30,64}$/).optional(),
 }).strict();
 
 router.get(
@@ -301,16 +303,26 @@ router.get(
       return;
     }
     const response = state.latestResponse;
-    // Only an actual PC-side verified browser submission counts as delivered.
+    // Only a matching, verified assistant reply from the assigned PC is success.
     const raw = response && typeof response === "object" ?
       (response as { metadataJson?: Record<string, unknown> }).metadataJson ?? {} : {};
+    const bound = state.command.metadataJson && typeof state.command.metadataJson === "object"
+      ? state.command.metadataJson as Record<string, unknown> : {};
+    const browserConfirmed = state.command.status === "COMPLETED"
+      && response?.kind === "COMPLETED"
+      && typeof bound["conversationId"] === "string"
+      && typeof bound["eventId"] === "string"
+      && raw["chatgptSubmitted"] === true
+      && raw["verifiedAssistantReply"] === true
+      && raw["eventId"] === bound["eventId"]
+      && raw["conversationId"] === bound["conversationId"]
+      && typeof raw["evidenceFingerprint"] === "string"
+      && /^[a-f0-9]{64}$/.test(raw["evidenceFingerprint"] as string);
     res.json({
       commandId: commandId.data,
       status: state.command.status,
       responseKind: response?.kind ?? null,
-      browserConfirmed: raw["chatgptSubmitted"] === true ||
-        (typeof raw["details"] === "object" && raw["details"] !== null &&
-          (raw["details"] as Record<string, unknown>)["chatgptSubmitted"] === true),
+      browserConfirmed,
     });
   },
 );
@@ -372,6 +384,8 @@ router.post(
       },
       metadata: {
         monitor: true,
+        eventId: event.eventId,
+        conversationId: event.conversationId ?? null,
         source: event.source,
         resource: event.resource,
         monitorStatus: event.status,
