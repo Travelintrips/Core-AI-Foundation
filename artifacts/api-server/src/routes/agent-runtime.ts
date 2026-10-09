@@ -5,6 +5,8 @@ import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logger } from "../lib/logger.js";
 import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
 import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim } from "../services/localCodingControlBridgeService.js";
+import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionService.js";
+import { chooseActivePc } from "../services/externalAgentDispatchService.js";
 
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
@@ -328,6 +330,15 @@ router.post(
     if (!rule) {
       res.status(404).json({ error: "Unknown external agent client ID" });
       return;
+    }
+    // Standby PCs may heartbeat, but cannot claim or send work while a different
+    // PC holds the persisted active communicator role.
+    if ((OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(parsed.data.clientId)) {
+      const activePcId = await chooseActivePc(await getExternalAgentRegistrySnapshot());
+      if (activePcId !== parsed.data.clientId) {
+        res.status(204).end();
+        return;
+      }
     }
     const work = await claimCodingBridgeCommand(parsed.data);
     if (!work) {
