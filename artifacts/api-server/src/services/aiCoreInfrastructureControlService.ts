@@ -134,6 +134,18 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // A question about AI Core's deployment is not an OpenClaw registry query.
+  // Preserve explicit Hostinger, Docker, and worker operations.
+  if (
+    /\bai[ -]?core\b/i.test(text) &&
+    /\b(?:deployment|production|produksi|patch|routing|router|e2e)\b/i.test(text) &&
+    /\b(?:cek|check|status|periksa|verifikasi|verify|apakah)\b/i.test(text) &&
+    !/\b(?:docker|compose|container|ai[ -]?workers?|worker stack|project=|directory=|logs?)\b/i.test(text) &&
+    !/\b(?:deploy|redeploy|install|apply|rollout|restart|start|stop)\s+(?:ai[ -]?workers?|docker|container|vps|vm)\b/i.test(text)
+  ) {
+    return null;
+  }
+
   // Preserve the explicit bounded SSH public-key attachment operation.
   // A generic "pasang ... SSH" implementation guard must not swallow it.
   if (
