@@ -139,10 +139,10 @@ export function detectAiCoreInfrastructureOperation(
   // Keep explicit no-change requests read-only and bounded infrastructure
   // commands (such as Docker deploy or VM restart) on their own routes.
   if (
-    /\\b(?:perbaiki|benahi|fix|repair|implementasikan|implement|kembangkan)\\b/i.test(text) &&
-    /\\b(?:router|routing|perintah|command|integrasi|integration|executor|openclaw|openhands|agent|mcp)\\b/i.test(text) &&
-    !/\\b(?:read[ -]?only|tanpa (?:melakukan )?perubahan|jangan (?:melakukan )?perubahan|do not (?:make|apply) changes?)\\b/i.test(text) &&
-    !/\\b(?:deploy|redeploy|restart|stop|start)\\s+(?:docker|container|vps|vm|ai[ -]?workers?)\\b/i.test(text)
+    /\b(?:perbaiki|benahi|fix|repair|implementasikan|implement|kembangkan)\b/i.test(text) &&
+    /\b(?:router|routing|perintah|command|integrasi|integration|executor|openclaw|openhands|agent|mcp)\b/i.test(text) &&
+    !/\b(?:read[ -]?only|tanpa (?:melakukan )?perubahan|jangan (?:melakukan )?perubahan|do not (?:make|apply) changes?)\b/i.test(text) &&
+    !/\b(?:deploy|redeploy|restart|stop|start)\s+(?:docker|container|vps|vm|ai[ -]?workers?)\b/i.test(text)
   ) {
     return null;
   }
