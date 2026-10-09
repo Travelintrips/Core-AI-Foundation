@@ -139,9 +139,9 @@ export function detectAiCoreInfrastructureOperation(
   // to a read-only infrastructure or agent-registry operation.
   // Return null so the higher-level coding/agent executor can route it.
   if (
-    !isExplicitReadOnlyRequest(text) &&
-    /\b(implementasikan|implement|perbaiki|fix|repair|benahi|bangun|build|buatkan|develop|kembangkan)\b/i.test(text) &&
-    /\b(router|routing|command|perintah|integrasi|integration|executor|openclaw|ssh|terminal|github|code|kode|service|backend)\b/i.test(text)
+    /\b(implementasikan|implement|perbaiki|fix|repair|benahi|bangun|build|buatkan|develop|kembangkan|minta(?:kan)? bantuan|bantu|siapkan|konfigurasi|pasang|install|terapkan)\b/i.test(text) &&
+    /\b(router|routing|command|perintah|integrasi|integration|executor|openclaw|ssh|terminal|github|code|kode|service|backend|markdown|instruksi|instructions|chatgpt)\b/i.test(text) &&
+    !/^(?:@\s*)?(?:cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify)\b/i.test(text)
   ) {
     return null;
   }
