@@ -387,7 +387,7 @@ const tools = [
   {
     name: "send_ai_core_command",
     description:
-      "Send an explicit operational instruction to AI Core with automatic routing to read-only workers or the coding control plane. No @ prefix is required; the server applies the internal execution gate. This can cause code, configuration, deployment, or other operational changes.",
+      "Send an authenticated operational instruction to AI Core. Routing is intent-dependent: read-only operations, GitHub-direct-required source changes, explicitly requested coding control-plane work, infrastructure operations, or bounded external-agent delegation. No @ prefix is required. A returned command/job ID is not proof of execution or a ChatGPT round-trip ACK. This tool can cause code, configuration, deployment, or other operational changes; critical gates still apply.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
