@@ -134,6 +134,54 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // Mixed inspect-and-repair prompts request execution, not a status snapshot.
+  // Do not let the leading "cek" downgrade an explicit router/agent repair.
+  // Keep explicit no-change requests read-only and bounded infrastructure
+  // commands (such as Docker deploy or VM restart) on their own routes.
+  if (
+    /\b(?:perbaiki|benahi|fix|repair|implementasikan|implement|kembangkan)\b/i.test(text) &&
+    /\b(?:router|routing|perintah|command|integrasi|integration|executor|openclaw|openhands|agent|mcp)\b/i.test(text) &&
+    !/\b(?:read[ -]?only|tanpa (?:melakukan )?perubahan|jangan (?:melakukan )?perubahan|do not (?:make|apply) changes?)\b/i.test(text) &&
+    !/\b(?:deploy|redeploy|restart|stop|start)\s+(?:docker|container|vps|vm|ai[ -]?workers?)\b/i.test(text)
+  ) {
+    return null;
+  }
+
+  // A question about AI Core's deployment is not an OpenClaw registry query.
+  // Preserve explicit Hostinger, Docker, and worker operations.
+  if (
+    /\bai[ -]?core\b/i.test(text) &&
+    /\b(?:deployment|production|produksi|patch|routing|router|e2e)\b/i.test(text) &&
+    /\b(?:cek|check|status|periksa|verifikasi|verify|apakah)\b/i.test(text) &&
+    !/\b(?:docker|compose|container|ai[ -]?workers?|worker stack|project=|directory=|logs?)\b/i.test(text) &&
+    !/\b(?:deploy|redeploy|install|apply|rollout|restart|start|stop)\s+(?:ai[ -]?workers?|docker|container|vps|vm)\b/i.test(text)
+  ) {
+    return null;
+  }
+
+  // Preserve the explicit bounded SSH public-key attachment operation.
+  // A generic "pasang ... SSH" implementation guard must not swallow it.
+  if (
+    /\b(hostinger|hpanel)\b/i.test(text) &&
+    /\b(ssh|public key|public-key|ssh key|kunci ssh)\b/i.test(text) &&
+    /\b(attach|pasang|daftarkan|register|add|tambah)\b/i.test(text) &&
+    /\b(public key|public-key|ssh key|kunci ssh|key=ssh-)\b/i.test(text)
+  ) {
+    return "HOSTINGER_SSH_PUBLIC_KEY_ATTACH";
+  }
+
+  // An implementation request may mention Hostinger, OpenClaw, SSH and
+  // status/verification as acceptance criteria. Do not silently downgrade it
+  // to a read-only infrastructure or agent-registry operation.
+  // Return null so the higher-level coding/agent executor can route it.
+  if (
+    !isExplicitReadOnlyRequest(text) &&
+    /\b(implementasikan|implement|perbaiki|fix|repair|benahi|bangun|build|buatkan|develop|kembangkan)\b/i.test(text) &&
+    /\b(router|routing|command|perintah|integrasi|integration|executor|openclaw|ssh|terminal|github|code|kode|service|backend)\b/i.test(text)
+  ) {
+    return null;
+  }
+
   if (
     /\b(hostinger|hpanel)\b/i.test(text) &&
     /\bcoding\.cstlogistic\.co\.id\b/i.test(text) &&
@@ -245,6 +293,12 @@ export function detectAiCoreInfrastructureOperation(
   }
 
   if (/\b(hostinger|hpanel)\b/i.test(text) && /\b(dns|zone|record)\b/i.test(text)) {
+    // Inspection requests can mention mutating verbs inside negative constraints.
+    // Never interpret "jangan update/delete DNS" as an instruction to mutate.
+    if (isExplicitReadOnlyRequest(text) || (
+      /\b(?:audit|cek|check|inspect|read-only|list|lihat|periksa)\b/i.test(text) &&
+      /\b(?:do not|don't|jangan|tanpa)\s+(?:update|delete|remove|hapus|ubah|ganti)\b/i.test(text)
+    )) return "HOSTINGER_DNS_LIST";
     if (/\b(delete|hapus|remove)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_DELETE";
     if (/\b(update|ubah|ganti|replace|overwrite)\b/i.test(text)) return "HOSTINGER_DNS_RECORD_UPDATE";
     if (/\b(create|buat|add|tambah|pasang)\b/i.test(text) && !/\bsubdomains?\b/i.test(text)) {

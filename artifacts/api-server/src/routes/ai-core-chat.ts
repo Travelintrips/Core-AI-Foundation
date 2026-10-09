@@ -2064,13 +2064,33 @@ async function maybeRunRemoteWorkerPreset(
 
 const EXISTING_CWS_TASK = /\b(CWS-[0-9A-F]{8})\b/i;
 const EXISTING_CWS_STOP = /\b(?:stop|hentikan|berhentikan|disable|nonaktifkan)\b/i;
-const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete)\b/i;
+const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete|retry|rerun|requeue|redispatch|recover|unblock|pulihkan|jalankan\s+ulang|coba\s+ulang|antrekan\s+ulang)\b/i;
 
 async function runExistingCodingTaskLifecycleCommand(
   message: string,
 ): Promise<Record<string, unknown> | null> {
   const match = message.match(EXISTING_CWS_TASK);
   if (!match) return null;
+
+  // A task ID mentioned in an audit must not make quoted/negated lifecycle
+  // words ("jangan dispatch/retry") perform a state-changing action.
+  const readOnlyAudit = /\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i.test(message)
+    && /\b(?:jangan|tanpa|tidak|no)\b/i.test(message);
+  if (readOnlyAudit) {
+    const taskNumber = match[1]!.toUpperCase();
+    const [task] = await db.select().from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.taskNumber, taskNumber)).limit(1);
+    if (!task) return { kind: "validation", route: "CONTROL_PLANE", taskNumber, reply: `Task ${taskNumber} tidak ditemukan.` };
+    const autonomous = await getAutonomousCodingTaskStatus(task.id);
+    return {
+      kind: "query", route: "CONTROL_PLANE", executionLane: "NO_WORKER",
+      operation: "TASK_STATUS", mutating: false,
+      taskId: task.id, taskNumber, status: task.status,
+      autonomousStatus: (autonomous as { status?: unknown } | null)?.status ?? null,
+      autonomousEnabled: (autonomous as { enabled?: unknown } | null)?.enabled ?? null,
+      reply: `Status ${taskNumber}: ${task.status}; autonomous: ${String((autonomous as { status?: unknown } | null)?.status ?? "UNKNOWN")}.`,
+    };
+  }
 
   const wantsStop = EXISTING_CWS_STOP.test(message);
   const wantsResume = EXISTING_CWS_RESUME.test(message);
@@ -2198,18 +2218,31 @@ async function runExistingCodingTaskLifecycleCommand(
   const currentMax = Number((current as { max_cycles?: unknown } | null)?.max_cycles ?? 40);
   const boundedMax = Math.min(100, Math.max(40, Number.isFinite(currentMax) ? currentMax + 40 : 80));
   await enableAutonomousCodingTask(task.id, boundedMax, { forceDisabled: true });
+  // The scheduler can reconcile autonomous state concurrently. Always report
+  // the persisted budget and status, never the requested values as success.
+  const persistedAutonomous = await getAutonomousCodingTaskStatus(task.id);
+  const persistedMax = Number((persistedAutonomous as { max_cycles?: unknown } | null)?.max_cycles ?? 0);
+  const persistedState = String((persistedAutonomous as { status?: unknown } | null)?.status ?? "UNKNOWN");
+  const accepted = persistedState === "ACTIVE" && persistedMax >= boundedMax;
 
   return {
     kind: "execution",
+    operation: "TASK_RETRY",
+    accepted,
+    executionLane: "NO_WORKER",
     route: "CONTROL_PLANE",
     reply:
-      `Task ${task.taskNumber} dilanjutkan pada task yang sama dengan autonomous budget bounded sampai ${boundedMax} cycle. Tidak ada task duplikat yang dibuat.`,
+      accepted
+        ? `Task ${task.taskNumber} dilanjutkan pada task yang sama; budget ${persistedMax} cycle terverifikasi. Tidak ada task duplikat yang dibuat.`
+        : `Task ${task.taskNumber} belum terverifikasi ACTIVE dengan budget ${boundedMax}; status ${persistedState}, budget tersimpan ${persistedMax}. Tidak ada task baru dibuat.`,
     taskId: task.id,
     taskNumber: task.taskNumber,
     status: task.status,
     workspaceUrl: `/coding-workspace/${task.id}`,
     autonomous: true,
-    maxCycles: boundedMax,
+    maxCycles: persistedMax,
+    requestedMaxCycles: boundedMax,
+    autonomousStatus: persistedState,
   };
 }
 
@@ -2361,6 +2394,9 @@ async function startExternalAgentWork(
       ...(input.branch ? { branch: input.branch } : {}),
       ...(openClawExecutionProfile ? { openClawExecutionProfile } : {}),
       source: input.source,
+      ...(clientId === OPENCLAW_AGENT_CLIENT_ID && /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.test(input.message)
+        ? { openClawExecutionProfile: "monitor-direct", directOperation: /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.exec(input.message)![1]!.toLowerCase() }
+        : {}),
     },
   });
 

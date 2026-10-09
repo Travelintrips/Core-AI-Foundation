@@ -1,0 +1,60 @@
+name: Enable native PR auto-merge
+
+on:
+  workflow_run:
+    workflows: ["CI Verify", "PR Fast Verify"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request GitHub-managed auto-merge for verified PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Match by exact head SHA; never act on a stale workflow result.
+          prs=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" --jq '.[] | select(.state == "open" and .base.ref == "main") | .number')
+          if [ -z "$prs" ]; then
+            echo "No open main PR at verified commit $HEAD_SHA"
+            exit 0
+          fi
+          for pr in $prs; do
+            current=$(gh pr view "$pr" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+            [ "$current" = "$HEAD_SHA" ] || continue
+            draft=$(gh pr view "$pr" --repo "$REPO" --json isDraft --jq '.isDraft')
+            [ "$draft" = "false" ] || continue
+
+            # Require BOTH named workflows successful on this exact SHA.
+            runs=$(gh api "repos/$REPO/actions/runs?head_sha=$HEAD_SHA&per_page=100" --jq '.workflow_runs[] | select(.event == "pull_request") | [.name,.conclusion,.status] | @tsv')
+            for name in "CI Verify" "PR Fast Verify"; do
+              if ! printf '%s\n' "$runs" | awk -F '\t' -v n="$name" '$1 == n && $2 == "success" && $3 == "completed" {found=1} END {exit !found}'; then
+                echo "Waiting for successful $name on $HEAD_SHA"
+                exit 0
+              fi
+            done
+
+            # GitHub itself enforces branch protection, approvals, and rulesets.
+            # --auto requests merge after all native requirements are satisfied.
+            # The workflow GITHUB_TOKEN can be denied GraphQL mergePullRequest
+            # by repository rulesets even with pull-requests:write. Treat this
+            # as a permission gate, not as a failed CI verification.
+            if ! merge_output=$(gh pr merge "$pr" --repo "$REPO" --squash --auto 2>&1); then
+              if printf '%s' "$merge_output" | grep -Eq 'Resource not accessible by integration|mergePullRequest'; then
+                echo "::warning::Auto-merge denied by GitHub integration permissions for PR #$pr. A repository-authorized merge is required."
+                continue
+              fi
+              printf '%s\n' "$merge_output" >&2
+              exit 1
+            fi
+            printf '%s\n' "$merge_output"
+          done

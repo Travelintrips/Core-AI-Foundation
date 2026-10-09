@@ -387,7 +387,7 @@ const tools = [
   {
     name: "send_ai_core_command",
     description:
-      "Send an explicit operational instruction to AI Core with automatic routing to read-only workers or the coding control plane. No @ prefix is required; the server applies the internal execution gate. This can cause code, configuration, deployment, or other operational changes.",
+      "Send an authenticated operational instruction to AI Core. Routing is intent-dependent: read-only operations, GitHub-direct-required source changes, explicitly requested coding control-plane work, infrastructure operations, or bounded external-agent delegation. No @ prefix is required. A returned command/job ID is not proof of execution or a ChatGPT round-trip ACK. This tool can cause code, configuration, deployment, or other operational changes; critical gates still apply.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -584,6 +584,94 @@ const tools = [
     _meta: { "openai/profile": true },
   },
 ];
+
+function isProductionDeploymentEvidenceQuery(message: string): boolean {
+  const value = message.toLowerCase();
+  return /\b(?:deploy(?:ment)?|production|produksi|prod)\b/i.test(value) &&
+    /\b(?:status|cek|check|verifikasi|verify|apakah|live|bukti|e2e|commit|sha)\b/i.test(value);
+}
+
+type DeploymentEndpointEvidence = {
+  domain: string;
+  httpStatus: number | null;
+  commitSha: string | null;
+  error?: string;
+};
+
+async function readProductionHealth(domain: string): Promise<DeploymentEndpointEvidence> {
+  try {
+    const response = await fetch(`https://${domain}/api/healthz`, {
+      method: "HEAD",
+      redirect: "error",
+      signal: AbortSignal.timeout(8_000),
+    });
+    const rawSha = response.headers.get("x-cst-commit-sha");
+    const commitSha = rawSha && /^[a-f0-9]{40}$/i.test(rawSha) ? rawSha.toLowerCase() : null;
+    return { domain, httpStatus: response.status, commitSha };
+  } catch {
+    return { domain, httpStatus: null, commitSha: null, error: "Health endpoint unavailable" };
+  }
+}
+
+async function readGitHubMainSha(): Promise<string | null> {
+  try {
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const response = await fetch(
+      "https://api.github.com/repos/Travelintrips/Core-AI-Foundation/git/ref/heads/main",
+      {
+        headers: {
+          accept: "application/vnd.github+json",
+          "user-agent": "ai-core-deployment-evidence",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        redirect: "error",
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { object?: { sha?: unknown } };
+    const sha = payload.object?.sha;
+    return typeof sha === "string" && /^[a-f0-9]{40}$/i.test(sha) ? sha.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildDeploymentEvidencePayload() {
+  const [internal, customer, mainSha] = await Promise.all([
+    readProductionHealth("aicore.cstlogistic.co.id"),
+    readProductionHealth("aifront.cstlogistic.co.id"),
+    readGitHubMainSha(),
+  ]);
+  const endpoints = [internal, customer];
+  const verified = Boolean(
+    mainSha &&
+    endpoints.every((endpoint) => endpoint.httpStatus === 200 && endpoint.commitSha === mainSha),
+  );
+  const summary = verified
+    ? "Kedua domain production sehat dan commit SHA cocok dengan GitHub main."
+    : "Deployment belum dapat diverifikasi sepenuhnya; lihat bukti per domain dan GitHub main.";
+  return {
+    kind: "answer",
+    route: "DEPLOYMENT_EVIDENCE_LIVE",
+    provider: null,
+    model: null,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    estimatedCostUsd: 0,
+    workload: "DETERMINISTIC",
+    costClass: "ZERO",
+    verified,
+    requiresApproval: false,
+    evidence: {
+      checkedAt: new Date().toISOString(),
+      mainSha,
+      endpoints,
+      source: "LIVE_HEALTHZ_AND_GITHUB_REF",
+      e2eVerified: false,
+    },
+    reply: `${summary} GitHub main: ${mainSha ?? "tidak tersedia"}. ${endpoints.map((endpoint) => `${endpoint.domain}: HTTP ${endpoint.httpStatus ?? "unavailable"}, SHA ${endpoint.commitSha ?? "tidak tersedia"}`).join("; ")}. Hasil E2E belum diverifikasi oleh pemeriksaan ini.`,
+  };
+}
 
 function isMcpDiscoveryQuery(message: string): boolean {
   const value = message.toLowerCase().replace(/\s+/g, " ").trim();
@@ -943,6 +1031,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       }
       if (isMcpDiscoveryQuery(message)) {
         payload = buildMcpDiscoveryPayload();
+      } else if (isProductionDeploymentEvidenceQuery(message)) {
+        payload = await buildDeploymentEvidencePayload();
       } else {
         payload = await callAiCore(
           "/ai/core-chat/messages",
@@ -971,8 +1061,22 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
-      const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(parsed.message);
-      if (!parsed.confirmed) {
+      // Compatibility for MCP clients whose cached tool schema predates the
+      // confirmed boolean. They can echo "confirmed=true" in the message after
+      // the user explicitly confirms. Strip the marker before forwarding so it
+      // never becomes part of the operational instruction.
+      const inlineConfirmation = /^@?\s*confirmed=true\b[\s:,-]*/i.test(parsed.message);
+      const effectiveConfirmed = parsed.confirmed || inlineConfirmation;
+      if (inlineConfirmation) {
+        const cleanMessage = parsed.message.replace(/^(@?\s*)confirmed=true\b[\s:,-]*/i, "$1");
+        const cleanCommand = executionCommandMessage(cleanMessage);
+        if (cleanCommand) {
+          command.instruction = cleanCommand.instruction;
+          command.gatedMessage = cleanCommand.gatedMessage;
+        }
+      }
+      const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(command.instruction);
+      if (!effectiveConfirmed) {
         if (!safeDirectPcCommand) {
           payload = buildIntentConfirmation(command.instruction);
           await recordChatLearningEvent({ role: "assistant", content: JSON.stringify(payload), scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "awaiting_confirmation", originalInstruction: command.instruction } }).catch(() => undefined);

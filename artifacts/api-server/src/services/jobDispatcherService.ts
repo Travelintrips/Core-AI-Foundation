@@ -307,6 +307,11 @@ export async function getStatus(): Promise<DispatcherStatus> {
  * Register dispatcher-owned workers via the cluster service (Phase 5.2).
  * Each worker gets cluster identity, capability set, and a fresh lease.
  */
+// Avoid flooding production logs while a healthy rolling-deploy lease owner
+// remains active. Lease acquisition still retries on every ensureWorkers tick.
+const deferredLeaseLogAt = new Map<string, number>();
+const DEFERRED_LEASE_LOG_INTERVAL_MS = 5 * 60 * 1000;
+
 export async function ensureWorkers(): Promise<void> {
   const managedNames = new Set(_workers.map((worker) => worker.workerName));
 
@@ -336,17 +341,23 @@ export async function ensureWorkers(): Promise<void> {
     // this logical worker. In that case registerWorker() deliberately leaves
     // the existing lease untouched; this process simply retries later.
     if (worker.leaseOwner !== LEASE_OWNER) {
-      logger.info(
-        {
-          workerId: worker.id,
-          workerName,
-          leaseOwner: worker.leaseOwner,
-          requestedLeaseOwner: LEASE_OWNER,
-        },
-        "[dispatcher] Worker acquisition deferred to current live lease owner",
-      );
+      const now = Date.now();
+      const lastLoggedAt = deferredLeaseLogAt.get(workerName) ?? 0;
+      if (now - lastLoggedAt >= DEFERRED_LEASE_LOG_INTERVAL_MS) {
+        deferredLeaseLogAt.set(workerName, now);
+        logger.info(
+          {
+            workerId: worker.id,
+            workerName,
+            leaseOwner: worker.leaseOwner,
+            requestedLeaseOwner: LEASE_OWNER,
+          },
+          "[dispatcher] Worker acquisition deferred to current live lease owner",
+        );
+      }
       continue;
     }
+    deferredLeaseLogAt.delete(workerName);
 
     // Preserve occupancy across rolling deploys. A new dispatcher process may
     // legitimately acquire the lease while jobs claimed by the previous process

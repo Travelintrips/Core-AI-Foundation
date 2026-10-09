@@ -296,6 +296,24 @@ describe("coding task presentation status", () => {
     ).toBe("ANALYZING");
   });
 
+  it("does not present a false-completed parent as complete when autonomy is waiting", () => {
+    for (const autonomousStatus of ["ACTIVE", "WAITING"]) {
+      expect(codingTaskPresentationStatus({
+        taskStatus: "COMPLETED",
+        autonomousStatus,
+        latestRunStatus: "COMPLETED",
+        hasActiveRun: false,
+        hasActiveJob: false,
+        hasVerifiedCompletionEvidence: false,
+      })).toBe("BLOCKED");
+    }
+    expect(codingTaskPresentationStatus({
+      taskStatus: "COMPLETED",
+      autonomousStatus: "COMPLETED",
+      hasVerifiedCompletionEvidence: true,
+    })).toBe("COMPLETED");
+  });
+
   it("keeps persisted terminal task states unchanged", () => {
     expect(
       codingTaskPresentationStatus({
@@ -327,6 +345,39 @@ describe("coding task presentation status", () => {
     expect(dashboardRoute).toContain("codingDashboardTaskPresentationStatus");
     expect(dashboardRoute).toContain("a.enabled AS autonomous_enabled");
     expect(dashboardRoute).toContain("a.last_action AS autonomous_last_action");
+  });
+
+  it("matches read-only audit and negated retry with actual word boundaries", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toContain(String.raw`/\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i`);
+    expect(source).toContain(String.raw`/\b(?:jangan|tanpa|tidak|no)\b/i`);
+    expect(/\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i.test("Audit READ-ONLY status task CWS-10F05E80")).toBe(true);
+    expect(/\b(?:jangan|tanpa|tidak|no)\b/i.test("Jangan retry, jangan resume")).toBe(true);
+  });
+
+  it("keeps readonly CWS audits with negated retry language non-mutating", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toContain("const readOnlyAudit = ");
+    expect(source).toContain('operation: "TASK_STATUS", mutating: false');
+    expect(source.indexOf("if (readOnlyAudit)")).toBeLessThan(source.indexOf("const wantsStop = EXISTING_CWS_STOP.test(message)"));
+  });
+
+  it("does not claim retry success without persisted autonomous confirmation", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toContain("const persistedAutonomous = await getAutonomousCodingTaskStatus(task.id)");
+    expect(source).toContain('const accepted = persistedState === "ACTIVE" && persistedMax >= boundedMax');
+    expect(source).toContain("requestedMaxCycles: boundedMax");
+    expect(source).toContain("maxCycles: persistedMax");
+  });
+
+  it("routes retry/requeue commands to the existing task without a new coding job", () => {
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/const EXISTING_CWS_RESUME = [^;]*retry[^;]*requeue/);
+    expect(source).toContain('operation: "TASK_RETRY"');
+    expect(source).toContain('operation: "TASK_RETRY"');
+    expect(source).toContain('    accepted,');
+    expect(source).toContain('const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(contextualCommand)');
+    expect(source).toContain('if (existingTaskLifecycle) return existingTaskLifecycle');
   });
 
   it("workspace list query includes active autonomous states for presentation mapping", () => {

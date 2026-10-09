@@ -1,0 +1,70 @@
+name: Verified Deploy OpenClaw Handoff
+
+on:
+  workflow_run:
+    workflows:
+      - Hostinger Production Verify
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  queue-pc-handoff:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify production commit and enqueue durable PC handoff
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: ${{ vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
+          VERIFY_RUN_ID: ${{ github.event.workflow_run.id }}
+          VERIFY_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ADMIN_API_KEY" ]; then
+            echo "::error::ADMIN_API_KEY missing; cannot enqueue deploy handoff"
+            exit 1
+          fi
+          current_sha="$(gh api "repos/$REPOSITORY/commits/main" --jq .sha)"
+          if [ "$VERIFIED_SHA" != "$current_sha" ]; then
+            echo "::notice::Skipping stale deploy handoff verified=$VERIFIED_SHA current=$current_sha"
+            exit 0
+          fi
+          # A successful verification workflow is the gate; never enqueue on failure.
+          # Stable externalCommandId deduplicates webhook redelivery and job reruns.
+          command_id="verified-deploy:production:$VERIFY_RUN_ID:$VERIFIED_SHA"
+          instruction="$(jq -cn --arg sha "$VERIFIED_SHA" --arg url "$VERIFY_RUN_URL" '
+            "Verified production deploy. Commit: \($sha). Production verification: \($url). " +
+            "On the approved, already authenticated ChatGPT monitoring conversation, report this verified deployment and request a bounded follow-up check. " +
+            "If the browser is not authenticated or an approved conversation is unavailable, do not open a guest chat or claim success; report BLOCKED instead."
+          ')"
+          payload="$(jq -cn \
+            --arg id "$command_id" \
+            --argjson instruction "$instruction" \
+            --arg sha "$VERIFIED_SHA" \
+            --arg url "$VERIFY_RUN_URL" \
+            --arg run "$VERIFY_RUN_ID" \
+            '{externalCommandId:$id,instruction:$instruction,source:"github-verified-deploy",
+              commandType:"EXTERNAL_AGENT_WORK",
+              assignedClientId:"openclaw-pc-worker",
+              metadata:{verifiedDeploy:true,environment:"production",commitSha:$sha,
+                verificationRunId:$run,verificationUrl:$url,
+                openClawExecutionProfile:"agent-tools",requiresAuthenticatedChatGPT:true}}')"
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 10 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$payload" "$API_BASE_URL/ai/coding/bridge/commands" |
+            jq -e '.command.id'

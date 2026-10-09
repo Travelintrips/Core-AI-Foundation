@@ -14,6 +14,40 @@ import {
   executeAiCoreInfrastructureOperation,
 } from "../aiCoreInfrastructureControlService.js";
 
+describe("AI Core mutation routing guard", () => {
+  it.each([
+    "Implementasikan SSH OpenClaw di Hostinger dan verifikasi status",
+    "Perbaiki command router AI Core untuk OpenClaw Hostinger",
+    "Buatkan integrasi terminal SSH OpenClaw Hostinger",
+    "Fix OpenClaw executor on VPS and check status",
+  ])("does not downgrade implementation to a status operation: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+
+  it.each([
+    "Cek dan perbaiki router AI Core yang salah arah ke OpenClaw status",
+    "Cek dan benahi integrasi OpenClaw di Hostinger sampai berfungsi",
+    "Periksa lalu perbaiki MCP routing agent yang salah",
+    "Cek dan repair executor OpenClaw VPS, bukan hanya status",
+  ])("keeps inspect-and-repair requests on execution routing: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+
+  it("preserves a genuine read-only agent status request", () => {
+    expect(detectAiCoreInfrastructureOperation("cek status OpenClaw Hostinger")).toBe("EXTERNAL_AGENT_STATUS");
+  });
+});
+
+describe("AI Core deployment verification routing", () => {
+  it.each([
+    "Cek deployment production AI Core terakhir untuk commit a5241bf dan status route OpenClaw mutation serta bukti E2E",
+    "Cek status deployment AI Core ke OpenClaw apakah patch sudah live",
+    "Verifikasi patch routing AI Core OpenClaw di produksi",
+  ])("does not replace deployment verification with agent registry: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+});
+
 describe("AI Core Hostinger infrastructure control", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -38,6 +72,8 @@ describe("AI Core Hostinger infrastructure control", () => {
     ["Hostinger buat hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_CREATE"],
     ["Hostinger hapus hosting subdomain username=user123 domain=example.com subdomain=api", "HOSTINGER_SUBDOMAIN_DELETE"],
     ["Hostinger cek dns subdomain domain=example.com", "HOSTINGER_DNS_LIST"],
+    ["Hostinger cek DNS domain=example.com read-only, jangan update DNS record", "HOSTINGER_DNS_LIST"],
+    ["Hostinger audit DNS zone domain=example.com, do not delete records", "HOSTINGER_DNS_LIST"],
     ["Hostinger list subdomain domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger list subdomains domain=example.com", "HOSTINGER_SUBDOMAIN_LIST"],
     ["Hostinger list parked domains domain=example.com", "HOSTINGER_PARKED_DOMAIN_LIST"],
