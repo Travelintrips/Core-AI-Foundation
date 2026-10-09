@@ -134,6 +134,18 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // Questions about AI Core's own deploy or routing state are not agent
+  // registry inspections merely because they mention OpenClaw and "status".
+  // Let the conversation/query router answer from deployment evidence.
+  if (
+    /\b(ai[ -]?core|patch|commit|pull request|pr\s*#?\d+|production|produksi|deployment|deploy)\b/i.test(text) &&
+    /\b(deploy(?:ment)?|production|produksi|commit|patch|routing|router|e2e|live)\b/i.test(text) &&
+    /\b(cek|check|status|health|audit|inspect|periksa|lihat|verifikasi|verify|sudah|apakah)\b/i.test(text) &&
+    !/\b(start|stop|restart|reboot|shutdown|nyalakan|matikan|jalankan)\s+(?:vm|vps|docker|container)\b/i.test(text)
+  ) {
+    return null;
+  }
+
   // Preserve the explicit bounded SSH public-key attachment operation.
   // A generic "pasang ... SSH" implementation guard must not swallow it.
   if (
