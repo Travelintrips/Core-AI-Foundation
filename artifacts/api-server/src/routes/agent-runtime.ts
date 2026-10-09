@@ -6,7 +6,7 @@ import { logger } from "../lib/logger.js";
 import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
 import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim } from "../services/localCodingControlBridgeService.js";
 import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionService.js";
-import { chooseActivePc } from "../services/externalAgentDispatchService.js";
+import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 
 const router = Router();
 const AGENT_MODEL_ID = "ai-core-agent";
