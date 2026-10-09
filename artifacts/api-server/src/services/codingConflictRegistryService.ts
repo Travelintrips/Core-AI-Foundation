@@ -47,7 +47,23 @@ export function codingFileTextArraySql(files: string[]) {
   )}]::text[]`;
 }
 
+let reservationSchemaReady = false;
+
 async function ensureTable(): Promise<void> {
+  if (reservationSchemaReady) return;
+  // The database migration owns schema creation. A least-privilege remote
+  // analyzer can use an existing table and indexes without schema CREATE.
+  const existing = await db.execute(sql`
+    SELECT
+      to_regclass('ai_platform.ai_coding_active_file_reservations') IS NOT NULL AS has_table,
+      to_regclass('ai_platform.ai_coding_active_file_reservations_target_uidx') IS NOT NULL AS has_target,
+      to_regclass('ai_platform.ai_coding_active_file_reservations_task_idx') IS NOT NULL AS has_task
+  `);
+  const row = Array.isArray(existing.rows) ? existing.rows[0] as Record<string, unknown> | undefined : undefined;
+  if (row?.["has_table"] === true && row?.["has_target"] === true && row?.["has_task"] === true) {
+    reservationSchemaReady = true;
+    return;
+  }
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ai_platform.ai_coding_active_file_reservations (
       reservation_id uuid PRIMARY KEY,
@@ -68,6 +84,7 @@ async function ensureTable(): Promise<void> {
     CREATE INDEX IF NOT EXISTS ai_coding_active_file_reservations_task_idx
     ON ai_platform.ai_coding_active_file_reservations (task_id)
   `);
+  reservationSchemaReady = true;
 }
 
 async function cleanupExpiredAndTerminal(): Promise<void> {
