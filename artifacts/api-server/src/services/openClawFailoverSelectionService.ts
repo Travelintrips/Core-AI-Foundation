@@ -10,36 +10,26 @@ export const OPENCLAW_PC_CLIENT_IDS = [
 type ExecutorPresence = {
   clientId: string;
   eligible: boolean;
-  /** Heartbeat-reported capacity. Missing values default to one slot. */
   availableSlots?: number;
-  /** Heartbeat-reported running jobs, used for load-aware tie breaking. */
   activeJobs?: number;
 };
 
-/** Choose only a healthy node with spare capacity. Never move in-flight commands here. */
+/** Single-active-PC routing. Busy is not offline: queue new tasks on the elected PC.
+ * Already claimed commands are never replayed here; their recovery requires a separate protocol.
+ */
 export function selectOpenClawExecutor(
   presences: readonly ExecutorPresence[],
-  options: { preferServer?: boolean } = {},
+  options: { preferServer?: boolean; activePcId?: string } = {},
 ): string | null {
-  const eligible = presences.filter((p) =>
-    p.eligible && (p.availableSlots === undefined || p.availableSlots > 0)
-  );
+  const healthy = new Set(presences.filter((p) => p.eligible).map((p) => p.clientId));
   if (options.preferServer) {
-    // Server-only operations cannot be sent to a Windows workstation.
     return [OPENCLAW_VPS_CLIENT_ID, OPENCLAW_LEGACY_CLIENT_ID]
-      .find((id) => eligible.some((p) => p.clientId === id)) ?? null;
+      .find((id) => healthy.has(id)) ?? null;
   }
-  // A healthy PC always outranks the VPS, even when it has higher load.
-  const pc = eligible.filter((p) =>
-    (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(p.clientId)
-  ).sort((a, b) =>
-    (a.activeJobs ?? 0) - (b.activeJobs ?? 0) ||
-    (b.availableSlots ?? 1) - (a.availableSlots ?? 1) ||
-    OPENCLAW_PC_CLIENT_IDS.indexOf(a.clientId as typeof OPENCLAW_PC_CLIENT_IDS[number]) -
-      OPENCLAW_PC_CLIENT_IDS.indexOf(b.clientId as typeof OPENCLAW_PC_CLIENT_IDS[number])
-  );
-  if (pc.length) return pc[0].clientId;
-  // Do not silently fall back to GCP: normal jobs use PC -> Hostinger.
-  return eligible.some((p) => p.clientId === OPENCLAW_VPS_CLIENT_ID)
-    ? OPENCLAW_VPS_CLIENT_ID : null;
+  // Only one PC receives normal work. Capacity exhaustion is not a failover signal.
+  // Retain the previous leader if it is still healthy, even after PC1 reconnects.
+  if (options.activePcId && (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(options.activePcId) && healthy.has(options.activePcId)) {
+    return options.activePcId;
+  }
+  return OPENCLAW_PC_CLIENT_IDS.find((id) => healthy.has(id)) ?? null;
 }
