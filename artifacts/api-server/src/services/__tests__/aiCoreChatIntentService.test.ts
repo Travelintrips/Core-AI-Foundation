@@ -320,6 +320,16 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.reason).not.toContain("explicit approval gate");
   });
 
+  it("routes explicit TEST_ONLY coding jobs into the coding control plane", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "TEST_ROUTING_CODING_20261009 — Buat job coding TEST_ONLY untuk memverifikasi routing AI Core → OpenClaw → ChatGPT → AI Core. Jangan mengubah kode produksi, jangan merge dan jangan deploy. Minta ChatGPT membalas ACK_CODING_20261009.",
+    );
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.executionLane).toBe("CODING");
+    expect(decision.workload.workload).toBe("CODING");
+    expect(classifyAiCoreChatDispatch("cek status OpenClaw").kind).not.toBe("CONTROL_PLANE");
+  });
+
   it("allows Coding Orchestrator only when explicitly requested by name", () => {
     const decision = classifyAiCoreChatDispatch(
       "Gunakan Coding Orchestrator untuk perbaiki kode login dan test sampai hijau.",
