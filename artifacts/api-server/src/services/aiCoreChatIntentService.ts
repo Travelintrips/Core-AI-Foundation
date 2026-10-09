@@ -144,7 +144,7 @@ export function classifyAiCoreChatDispatch(
   // Explicit test-only job creation is an orchestration request, not a chat
   // answer or a source mutation. Never simulate its ACK with a local echo.
   const explicitTestOnlyCodingJob =
-    /\b(?:buat|create|jalankan|run)\s+(?:sebuah\s+)?job\s+coding\b/i.test(message) &&
+    /\b(?:buat|create|jalankan|run|eksekusi|execute)\s+(?:(?:tepat|hanya|satu|sebuah|one|single|1)\s+){0,3}(?:job|task|pekerjaan)\s+(?:(?:uji|test|coding|orchestrator|temporal|worker|vps)\s+){0,7}\b(?:coding|orchestrator|temporal|worker)\b/i.test(message) &&
     /\bTEST_ONLY\b/i.test(message) &&
     /\b(?:routing|orchestrator|chatgpt|openclaw)\b/i.test(message);
   if (explicitTestOnlyCodingJob) {
