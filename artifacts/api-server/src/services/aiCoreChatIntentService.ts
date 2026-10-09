@@ -141,6 +141,24 @@ export function classifyAiCoreChatDispatch(
         "Leading # explicitly routes this command to the paired PC through OpenClaw without Coding Orchestrator.",
     };
   }
+  // Explicit test-only job creation is an orchestration request, not a chat
+  // answer or a source mutation. Never simulate its ACK with a local echo.
+  const explicitTestOnlyCodingJob =
+    /\b(?:buat|create|jalankan|run)\s+(?:sebuah\s+)?job\s+coding\b/i.test(message) &&
+    /\bTEST_ONLY\b/i.test(message) &&
+    /\b(?:routing|orchestrator|chatgpt|openclaw)\b/i.test(message);
+  if (explicitTestOnlyCodingJob) {
+    return {
+      kind: "CONTROL_PLANE",
+      workload: { ...workload, workload: "CODING", requiresAgent: true },
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: null,
+      executionLane: "CODING",
+      reason: "Explicit TEST_ONLY coding job must enter the control plane; an ACK requires a verified external round trip.",
+    };
+  }
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
   const githubOperation = detectAiCoreGitHubOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
