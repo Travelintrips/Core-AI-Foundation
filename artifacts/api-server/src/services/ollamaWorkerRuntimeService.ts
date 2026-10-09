@@ -299,6 +299,11 @@ function markFailure(error: unknown): void {
   state.nextRetryAt = Date.now() + delay;
 }
 
+// Keep reconnect retries unchanged, but avoid a warning every heartbeat
+// when a remote Ollama worker remains unavailable for an extended period.
+let lastDisconnectLogAt = 0;
+const DISCONNECT_LOG_INTERVAL_MS = 5 * 60 * 1000;
+
 async function heartbeatTick(): Promise<void> {
   if (!state || heartbeatInFlight || Date.now() < state.nextRetryAt) return;
 
@@ -328,22 +333,27 @@ async function heartbeatTick(): Promise<void> {
     const registration = await registerRuntime(state.config);
     markConnected(registration);
 
+    lastDisconnectLogAt = 0;
     logger.info(
       { workerId: registration.workerId },
       "[ollama-worker] Runtime connected",
     );
   } catch (error) {
     markFailure(error);
-    logger.warn(
-      {
-        err: error,
-        consecutiveFailures: state?.consecutiveFailures,
-        nextRetryAt: state?.nextRetryAt
-          ? new Date(state.nextRetryAt).toISOString()
-          : null,
-      },
-      "[ollama-worker] Runtime disconnected; automatic reconnect scheduled",
-    );
+    const now = Date.now();
+    if (lastDisconnectLogAt === 0 || now - lastDisconnectLogAt >= DISCONNECT_LOG_INTERVAL_MS) {
+      lastDisconnectLogAt = now;
+      logger.warn(
+        {
+          err: error,
+          consecutiveFailures: state?.consecutiveFailures,
+          nextRetryAt: state?.nextRetryAt
+            ? new Date(state.nextRetryAt).toISOString()
+            : null,
+        },
+        "[ollama-worker] Runtime disconnected; automatic reconnect scheduled",
+      );
+    }
   } finally {
     heartbeatInFlight = false;
   }
