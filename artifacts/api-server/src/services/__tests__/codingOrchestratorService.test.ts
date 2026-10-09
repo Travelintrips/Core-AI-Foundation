@@ -532,7 +532,7 @@ describe("Coding Orchestrator", () => {
     );
   });
 
-  it("fails over in-process when a dedicated analyzer never claims the queued job", async () => {
+  it("keeps remote analyzer jobs queued without in-process fallback", async () => {
     vi.useFakeTimers();
     vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "remote");
     const queuedJob = {
@@ -545,9 +545,6 @@ describe("Coding Orchestrator", () => {
       },
     };
     mockEnqueue.mockResolvedValueOnce(queuedJob);
-    mockSelectLimit
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([queuedJob]);
 
     try {
       await startCodingOrchestration({ task: task as never, run: run as never });
@@ -557,21 +554,14 @@ describe("Coding Orchestrator", () => {
       await vi.advanceTimersByTimeAsync(15_000);
       for (let i = 0; i < 20; i += 1) await Promise.resolve();
 
-      expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 1701, status: "queued" }),
-        { finalizeCodingRun: false },
-      );
-      expect(mockLogAudit).toHaveBeenCalledWith(
+      expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+      expect(mockLogAudit).not.toHaveBeenCalledWith(
         "coding-orchestrator",
         "repository_analyzer_claim_failover",
-        task.id,
-        "coding_task",
-        "success",
-        expect.objectContaining({
-          codingRunId: run.id,
-          jobId: 1701,
-          failoverAfterMs: 15_000,
-        }),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
       );
     } finally {
       vi.clearAllTimers();
