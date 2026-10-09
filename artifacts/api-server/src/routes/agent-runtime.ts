@@ -4,7 +4,7 @@ import { getProviderApiKey } from "../services/aiSecretService.js";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logger } from "../lib/logger.js";
 import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
-import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim } from "../services/localCodingControlBridgeService.js";
+import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim, getCodingBridgeCommandExecutionState } from "../services/localCodingControlBridgeService.js";
 import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionService.js";
 import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
@@ -285,6 +285,38 @@ const InfrastructureMonitorEvent = z.object({
   observedAt: z.string().datetime(),
   details: z.string().trim().max(1500).optional(),
 }).strict();
+
+router.get(
+  "/ai/agent-runtime/monitor/commands/:id",
+  requireAgentServiceScope("agent:presence"),
+  async (req, res): Promise<void> => {
+    const commandId = z.string().uuid().safeParse(req.params["id"]);
+    if (!commandId.success) {
+      res.status(400).json({ error: "Invalid monitor command ID" });
+      return;
+    }
+    const state = await getCodingBridgeCommandExecutionState(commandId.data);
+    if (!state || state.command.source !== "cst-vps-infrastructure-monitor") {
+      res.status(404).json({ error: "Monitor command not found" });
+      return;
+    }
+    const response = state.latestResponse;
+    const details = response?.metadataJson;
+    const declaredDetails = response?.metadataJson &&
+      typeof response.metadataJson === "object" ? response.metadataJson : {};
+    // Only an actual PC-side verified browser submission counts as delivered.
+    const raw = response && typeof response === "object" ?
+      (response as { metadataJson?: Record<string, unknown> }).metadataJson ?? {} : {};
+    res.json({
+      commandId: commandId.data,
+      status: state.command.status,
+      responseKind: response?.kind ?? null,
+      browserConfirmed: raw["chatgptSubmitted"] === true ||
+        (typeof raw["details"] === "object" && raw["details"] !== null &&
+          (raw["details"] as Record<string, unknown>)["chatgptSubmitted"] === true),
+    });
+  },
+);
 
 router.post(
   "/ai/agent-runtime/monitor/events",
