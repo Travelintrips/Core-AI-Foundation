@@ -765,6 +765,12 @@ function scheduleRepositoryAnalyzerClaimFailover(
   queuedJob: AiJob,
   stages: CodingStage[],
 ): void {
+  // Remote mode must never reclaim analyzer jobs inside the constrained API host.
+  // The durable queued row remains available for a remote worker or operator recovery.
+  if (process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase() === "remote") {
+    return;
+  }
+
   const timer = setTimeout(() => {
     void (async () => {
       try {
