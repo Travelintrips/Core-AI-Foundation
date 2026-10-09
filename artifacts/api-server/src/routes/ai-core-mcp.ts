@@ -585,6 +585,28 @@ const tools = [
   },
 ];
 
+function isProductionDeploymentEvidenceQuery(message: string): boolean {
+  const value = message.toLowerCase();
+  return /\b(?:deploy(?:ment)?|production|produksi|prod)\b/i.test(value) &&
+    /\b(?:status|cek|check|verifikasi|verify|apakah|live|bukti|e2e|commit|sha)\b/i.test(value);
+}
+
+function buildUnverifiedDeploymentEvidencePayload() {
+  return {
+    kind: "answer",
+    route: "DEPLOYMENT_EVIDENCE_REQUIRED",
+    provider: null,
+    model: null,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    estimatedCostUsd: 0,
+    workload: "DETERMINISTIC",
+    costClass: "ZERO",
+    verified: false,
+    requiresApproval: false,
+    reply: "Status deployment production belum dapat diverifikasi dari tool ini. Periksa commit SHA pada endpoint /api/healthz untuk setiap domain produksi, cocokkan dengan GitHub main, lalu periksa hasil workflow deployment dan E2E. Jangan mengarang tanggal, versi, hasil tes, atau tautan bukti.",
+  };
+}
+
 function isMcpDiscoveryQuery(message: string): boolean {
   const value = message.toLowerCase().replace(/\s+/g, " ").trim();
   if (!/\bmcp\b/.test(value)) return false;
@@ -943,6 +965,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       }
       if (isMcpDiscoveryQuery(message)) {
         payload = buildMcpDiscoveryPayload();
+      } else if (isProductionDeploymentEvidenceQuery(message)) {
+        payload = buildUnverifiedDeploymentEvidencePayload();
       } else {
         payload = await callAiCore(
           "/ai/core-chat/messages",
