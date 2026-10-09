@@ -208,6 +208,19 @@ describe("Coding Orchestrator canonical terminal lifecycle", () => {
   });
 });
 
+describe("Repository Analyzer test-only terminal route", () => {
+  it("skips semantic AI handoff for a proven read-only analyzer smoke", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('verifiedAnalyzerOnly\n        ? "DONE"');
+    expect(source).toContain('localPlan?.status === "AI_REQUIRED" && !verifiedAnalyzerOnly');
+    expect(source).toContain('const shouldAutoAdvance =\n      !verifiedAnalyzerOnly');
+    expect(source).toContain('repositoryAnalyzerVerificationAck(input.task.instruction)');
+  });
+});
+
 describe("Coding Orchestrator AI gate monotonicity", () => {
   it("preserves handoff gates that already advanced beyond AI_REQUIRED", () => {
     expect(
