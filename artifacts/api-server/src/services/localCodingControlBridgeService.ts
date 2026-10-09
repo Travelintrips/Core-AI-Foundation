@@ -594,6 +594,30 @@ export async function renewCodingBridgeCommandClaim(input: {
   return Boolean(result.rows?.[0]);
 }
 
+/**
+ * A worker process exit is not proof of a successful browser E2E test.
+ * Only the narrow case where the worker itself explicitly reports the
+ * browser/callback test could not run is downgraded, avoiding accidental
+ * failure of unrelated external-agent jobs.
+ */
+export function hasUnverifiedExternalBrowserCompletion(input: {
+  message: string;
+  details?: Record<string, unknown>;
+}): boolean {
+  const details = input.details ?? {};
+  const text = input.message;
+  const terminalReply = isRecord(details["terminalReply"])
+    ? String(details["terminalReply"]["text"] ?? "")
+    : "";
+  const combined = [text, terminalReply].join("\n");
+  const mentionsBrowserTest = /(?:chatgpt|browser)/i.test(combined);
+  const explicitlyUnable = /(?:unable to perform|cannot perform|could not perform|do not support direct interaction|tidak dapat menjalankan|tidak bisa menjalankan)/i.test(combined);
+  const deliveryMissing =
+    details["sourceReplyDeliveryState"] === "missing" ||
+    /["']?sourceReplyDeliveryState["']?\s*:\s*["']missing["']/i.test(text);
+  return mentionsBrowserTest && explicitlyUnable && deliveryMissing;
+}
+
 export async function completeCodingBridgeCommand(input: {
   clientId: string;
   commandId: string;
@@ -604,6 +628,11 @@ export async function completeCodingBridgeCommand(input: {
 }) {
   await ensureCodingControlBridgeTables();
   const details = input.details ?? {};
+  // Prevent a successful process exit from masquerading as a passed E2E.
+  const verifiedStatus = input.status === "COMPLETED" &&
+    hasUnverifiedExternalBrowserCompletion({ message: input.message, details })
+    ? "FAILED"
+    : input.status;
   const encoded = JSON.stringify(details);
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
@@ -611,7 +640,7 @@ export async function completeCodingBridgeCommand(input: {
 
   const result = await db.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_commands
-    SET status = ${input.status},
+    SET status = ${verifiedStatus},
         processed_at = NOW(),
         metadata_json = (
           metadata_json - 'claimToken' - 'claimLeaseExpiresAt'
@@ -633,16 +662,16 @@ export async function completeCodingBridgeCommand(input: {
   const response = await appendCodingBridgeResponse({
     commandId: input.commandId,
     taskId: row["task_id"] ? String(row["task_id"]) : null,
-    kind: input.status,
+    kind: verifiedStatus,
     message: input.message,
     checkpoint: {
-      status: input.status,
+      status: verifiedStatus,
       clientId: input.clientId,
     },
     metadata: details,
   });
 
-  return { commandId: input.commandId, status: input.status, response };
+  return { commandId: input.commandId, status: verifiedStatus, response };
 }
 
 export async function getExternalAgentDiagnostic(input: {

@@ -60,3 +60,27 @@ describe("coding control bridge contract", () => {
     expect(bridge).toHaveProperty("getCodingBridgeAvailability");
   });
 });
+
+describe("external-agent browser E2E terminal validation", () => {
+  it("rejects a false completed browser test with missing callback delivery", async () => {
+    const { hasUnverifiedExternalBrowserCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(hasUnverifiedExternalBrowserCompletion({
+      message: JSON.stringify({
+        sourceReplyDeliveryState: "missing",
+        terminalReply: { text: "Unable to perform the browser ChatGPT test" },
+      }),
+    })).toBe(true);
+  });
+
+  it("does not change unrelated or successfully delivered work", async () => {
+    const { hasUnverifiedExternalBrowserCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(hasUnverifiedExternalBrowserCompletion({
+      message: "Completed ordinary maintenance",
+      details: { sourceReplyDeliveryState: "missing" },
+    })).toBe(false);
+    expect(hasUnverifiedExternalBrowserCompletion({
+      message: "Unable to perform the browser ChatGPT test",
+      details: { sourceReplyDeliveryState: "delivered" },
+    })).toBe(false);
+  });
+});
