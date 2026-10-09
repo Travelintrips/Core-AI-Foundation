@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
 import { deployCodingStaticSite } from "./hostingerCodingStaticDeployService.js";
+import { recordRoutingMismatchFeedback } from "./aiCoreRoutingMismatchFeedbackService.js";
 
 function execFileWithInput(
   file: string,
@@ -143,6 +144,7 @@ export function detectAiCoreInfrastructureOperation(
     /\b(?:ai[ -]?core|mcp|openclaw|agent|executor|dispatch)\b/i.test(text) &&
     !/\b(?:docker|container|vm|vps)\s+(?:status|start|stop|restart|logs?)\b/i.test(text)
   ) {
+    recordRoutingMismatchFeedback({ message, wrongRoute: "EXTERNAL_AGENT_STATUS", correctedRoute: "POLICY_ANALYZER", ruleId: "routing-policy-audit" });
     return null;
   }
 
@@ -156,6 +158,7 @@ export function detectAiCoreInfrastructureOperation(
     !/\b(?:read[ -]?only|tanpa (?:melakukan )?perubahan|jangan (?:melakukan )?perubahan|do not (?:make|apply) changes?)\b/i.test(text) &&
     !/\b(?:deploy|redeploy|restart|stop|start)\s+(?:docker|container|vps|vm|ai[ -]?workers?)\b/i.test(text)
   ) {
+    recordRoutingMismatchFeedback({ message, wrongRoute: "EXTERNAL_AGENT_STATUS", correctedRoute: "EXECUTION_ROUTER", ruleId: "inspect-repair-intent" });
     return null;
   }
 
