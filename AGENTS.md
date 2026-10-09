@@ -1,6 +1,16 @@
 # AI Core repository operating guidance
 
 ## User workflow preference
+## Default job routing (owner directive, 2026-10-09)
+- Address the owner as **Boss** in user-facing reports.
+- ChatGPT is the primary coding executor via authorized GitHub tools for coding, fixes, tests, CI, PRs and deploy changes; do not default routine coding jobs to AI Core or legacy Coding Orchestrator.
+- Provide a non-binding initial estimate where useful; revise it as new blockers become known. Do not promise background work without an actual scheduled task.
+- If access to SSH, VPS, Hostinger, GCP, credentials, or production verification blocks GitHub execution, immediately escalate only that blocked portion to AI Core using an authenticated and available MCP tool, with blocker, exact scope, and verification requirements. Creating a GitHub issue is NOT an AI Core command.
+- If escalation fails, try other authorized routes and clearly report unresolved blockers. Verify results before claiming completion.
+- Auto-merge and deploy only when CI, security, branch protections and required deployment gates pass and the change is pre-authorized. Never skip critical approval/security gates.
+- Reserve Ollama for requested image/video rendering when configured and appropriate, not routine coding tasks.
+- This Markdown governs agents that read the repository; it cannot itself enforce account-wide ChatGPT settings or other chat sessions.
+
 - Execute authorized work directly whenever the available GitHub, AI Core, terminal, or deployment tools permit it.
 - Do not interrupt with routine confirmation or repeated questions. Ask the owner only for an unavoidable missing permission, credential setup, or decision that materially blocks safe execution.
 - Escalate coding or infrastructure work to AI Core through an authenticated, available integration when appropriate. A GitHub issue is a tracking artifact, **not** proof that AI Core received or executed an instruction.
