@@ -392,19 +392,30 @@ jobs:
         run: |
           set -euo pipefail
           health="https://$HOSTINGER_DOMAIN/api/healthz"
-          for attempt in $(seq 1 30); do
+          consecutive_unknown=0
+          for attempt in $(seq 1 12); do
+            rm -f /tmp/live.headers /tmp/live.body
             curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
               -D /tmp/live.headers -o /tmp/live.body \
               -H "Accept: application/json" \
               -H "User-Agent: CST-AI-Core-Direct-Deploy/1.0" \
               "$health" || true
-            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/live.headers | tail -n1)
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/live.headers 2>/dev/null | tail -n1)
             echo "verify_attempt=$attempt live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA"
-            if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/live.body; then
+            if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/live.body 2>/dev/null; then
               echo "exact_release=PASS"
               exit 0
             fi
-            sleep 10
+            if [ "$live_sha" = "unknown" ]; then
+              consecutive_unknown=$((consecutive_unknown + 1))
+              if [ "$consecutive_unknown" -ge 4 ]; then
+                echo "::error::Live release repeatedly reports unknown SHA; check embedded .cst-build-sha."
+                exit 1
+              fi
+            else
+              consecutive_unknown=0
+            fi
+            [ "$attempt" -eq 12 ] || sleep 10
           done
           echo "::error::Production did not expose the exact deployed SHA."
           exit 1
