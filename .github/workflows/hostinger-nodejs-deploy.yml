@@ -260,18 +260,66 @@ jobs:
           # header is not the documented PATCH target for this API.
           upload_patch_url="$target"
 
-          patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$upload_patch_url")
-          if [ "$patch_code" != "204" ]; then
-            cat /tmp/tus-patch.body || true
-            echo "::error::Hostinger TUS upload returned HTTP $patch_code."
-            exit 1
-          fi
-
-          uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)
-          if [ "$uploaded" != "$size" ]; then
-            echo "::error::Hostinger upload offset mismatch: uploaded=${uploaded:-missing} expected=$size"
-            exit 1
-          fi
+          # Upload in bounded TUS chunks to avoid resets on large archives.
+          # On a transport failure, HEAD the server offset before resending;
+          # never blindly repeat a potentially accepted PATCH.
+          offset=0
+          chunk_size=$((4 * 1024 * 1024))
+          retries=0
+          while [ "$offset" -lt "$size" ]; do
+            bytes=$((size - offset))
+            if [ "$bytes" -gt "$chunk_size" ]; then bytes="$chunk_size"; fi
+            python3 - "$ARCHIVE_PATH" "$offset" "$bytes" /tmp/tus-chunk.bin <<'PY'
+import sys
+source, offset, size, target = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+with open(source, "rb") as source_file, open(target, "wb") as target_file:
+    source_file.seek(offset)
+    data = source_file.read(size)
+    if len(data) != size:
+        raise SystemExit("short archive read")
+    target_file.write(data)
+PY
+            patch_code=$(curl --connect-timeout 10 --max-time 90 --silent --show-error \
+              -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}" \
+              -X PATCH -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key" \
+              -H "Tus-Resumable: 1.0.0" \
+              -H "Content-Type: application/offset+octet-stream" \
+              -H "Upload-Offset: $offset" \
+              --data-binary @/tmp/tus-chunk.bin "$upload_patch_url") || patch_code=000
+            if [ "$patch_code" = "204" ]; then
+              next_offset=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)
+              if ! [[ "$next_offset" =~ ^[0-9]+$ ]] || [ "$next_offset" -ne "$((offset + bytes))" ]; then
+                echo "::error::Unexpected TUS PATCH offset: ${next_offset:-missing}."
+                exit 1
+              fi
+              offset="$next_offset"
+              retries=0
+              echo "tus_upload_offset=$offset total=$size"
+              continue
+            fi
+            # A failed PATCH may have been accepted; query its true offset.
+            head_code=$(curl --connect-timeout 10 --max-time 20 --silent --show-error \
+              -o /dev/null -D /tmp/tus-head.headers -w "%{http_code}" \
+              -I -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key" \
+              -H "Tus-Resumable: 1.0.0" "$upload_patch_url") || head_code=000
+            confirmed_offset=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-head.headers | tail -n1)
+            if [ "$head_code" != "200" ] || ! [[ "$confirmed_offset" =~ ^[0-9]+$ ]] || [ "$confirmed_offset" -lt "$offset" ] || [ "$confirmed_offset" -gt "$((offset + bytes))" ]; then
+              echo "::error::TUS PATCH failed (HTTP $patch_code); server offset could not be verified (HTTP $head_code)."
+              exit 1
+            fi
+            if [ "$confirmed_offset" -gt "$offset" ]; then
+              offset="$confirmed_offset"
+              retries=0
+            else
+              retries=$((retries + 1))
+              if [ "$retries" -ge 3 ]; then
+                echo "::error::TUS upload failed after three verified retries (HTTP $patch_code)."
+                exit 1
+              fi
+              sleep "$((retries * 2))"
+            fi
+          done
+          rm -f /tmp/tus-chunk.bin
           echo "archive_uploaded=$ARCHIVE_NAME bytes=$size"
 
       - name: Resolve Node.js build settings
