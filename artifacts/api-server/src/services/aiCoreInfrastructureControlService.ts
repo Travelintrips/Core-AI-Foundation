@@ -134,6 +134,17 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // Preserve the explicit bounded SSH public-key attachment operation.
+  // A generic "pasang ... SSH" implementation guard must not swallow it.
+  if (
+    /\b(hostinger|hpanel)\b/i.test(text) &&
+    /\b(ssh|public key|public-key|ssh key|kunci ssh)\b/i.test(text) &&
+    /\b(attach|pasang|daftarkan|register|add|tambah)\b/i.test(text) &&
+    /\b(public key|public-key|ssh key|kunci ssh|key=ssh-)\b/i.test(text)
+  ) {
+    return "HOSTINGER_SSH_PUBLIC_KEY_ATTACH";
+  }
+
   // An implementation request may mention Hostinger, OpenClaw, SSH and
   // status/verification as acceptance criteria. Do not silently downgrade it
   // to a read-only infrastructure or agent-registry operation.
