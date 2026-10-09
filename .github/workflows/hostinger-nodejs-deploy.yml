@@ -248,7 +248,7 @@ jobs:
           size=$(stat -c%s "$ARCHIVE_PATH")
           target="${upload_base%/}/$ARCHIVE_NAME?override=true"
 
-          create_code=$(curl --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Upload-Length: $size"             -H "Upload-Offset: 0"             "$target")
+          create_code=$(curl --http1.1 --connect-timeout 15 --max-time 120 --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Upload-Length: $size"             -H "Upload-Offset: 0"             "$target")
           if [ "$create_code" != "201" ]; then
             cat /tmp/tus-create.body || true
             echo "::error::Hostinger TUS create returned HTTP $create_code."
@@ -260,7 +260,7 @@ jobs:
           # header is not the documented PATCH target for this API.
           upload_patch_url="$target"
 
-          patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$upload_patch_url")
+          patch_code=$(curl --http1.1 --connect-timeout 15 --max-time 240 --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$upload_patch_url")
           if [ "$patch_code" != "204" ]; then
             cat /tmp/tus-patch.body || true
             echo "::error::Hostinger TUS upload returned HTTP $patch_code."
