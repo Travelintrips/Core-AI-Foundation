@@ -255,31 +255,10 @@ jobs:
             exit 1
           fi
 
-          # TUS creation returns the canonical upload resource in Location.
-          # PATCH must target that resource, not the original creation URL.
-          upload_location=$(awk 'BEGIN {IGNORECASE=1} tolower($1)=="location:" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print}' /tmp/tus-create.headers | tail -n1)
-          if [ -z "$upload_location" ]; then
-            echo "::error::Hostinger TUS create response missing Location header."
-            exit 1
-          fi
-          # Resolve absolute-path TUS Location against the upload service origin.
-          # Extract the hostname before appending the path; do not truncate
-          # the URL at the first slash (which would turn https:// into https:).
-          case "$upload_base" in
-            https://*) upload_host="${upload_base#https://}"; upload_host="${upload_host%%/*}" ;;
-            *) echo "::error::Hostinger upload base must use HTTPS."; exit 1 ;;
-          esac
-          if [ -z "$upload_host" ]; then
-            echo "::error::Hostinger upload base has no host."
-            exit 1
-          fi
-          upload_origin="https://$upload_host"
-          case "$upload_location" in
-            "$upload_origin"/*) upload_patch_url="$upload_location" ;;
-            https://*) echo "::error::TUS Location points to a different HTTPS origin."; exit 1 ;;
-            /*) upload_patch_url="$upload_origin$upload_location" ;;
-            *) echo "::error::Unexpected relative TUS Location."; exit 1 ;;
-          esac
+          # Hostinger's official upload API requires PATCH to the SAME
+          # file URL used for POST (including ?override=true). The Location
+          # header is not the documented PATCH target for this API.
+          upload_patch_url="$target"
 
           patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$upload_patch_url")
           if [ "$patch_code" != "204" ]; then
