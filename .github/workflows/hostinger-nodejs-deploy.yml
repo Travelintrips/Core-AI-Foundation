@@ -270,15 +270,15 @@ jobs:
             bytes=$((size - offset))
             if [ "$bytes" -gt "$chunk_size" ]; then bytes="$chunk_size"; fi
             python3 - "$ARCHIVE_PATH" "$offset" "$bytes" /tmp/tus-chunk.bin <<'PY'
-import sys
-source, offset, size, target = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
-with open(source, "rb") as source_file, open(target, "wb") as target_file:
-    source_file.seek(offset)
-    data = source_file.read(size)
-    if len(data) != size:
-        raise SystemExit("short archive read")
-    target_file.write(data)
-PY
+          import sys
+          source, offset, size, target = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+          with open(source, "rb") as source_file, open(target, "wb") as target_file:
+              source_file.seek(offset)
+              data = source_file.read(size)
+              if len(data) != size:
+                  raise SystemExit("short archive read")
+              target_file.write(data)
+          PY
             patch_code=$(curl --connect-timeout 10 --max-time 90 --silent --show-error \
               -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}" \
               -X PATCH -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key" \
