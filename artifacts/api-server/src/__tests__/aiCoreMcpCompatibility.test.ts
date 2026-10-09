@@ -206,7 +206,8 @@ describe("AI Core MCP intent confirmation contract", () => {
   it("keeps operational commands gated by default in the source contract", () => {
     const source = readFileSync(new URL("../routes/ai-core-mcp.ts", import.meta.url), "utf8");
     expect(source).toContain("confirmed: z.boolean().default(false)");
-    expect(source).toContain("if (!parsed.confirmed)");
+    expect(source).toContain("const effectiveConfirmed = parsed.confirmed || inlineConfirmation");
+    expect(source).toContain("if (!effectiveConfirmed)");
     expect(source).toContain("kind: \"intent_confirmation\"");
     expect(source).toContain("status: \"awaiting_confirmation\"");
     expect(source).toContain("status: \"confirmed\"");
