@@ -10,6 +10,20 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it.each([
+    "Jalankan satu job uji Temporal Coding Worker VPS Hostinger TEST_ONLY tanpa merge atau deploy.",
+    "Buat tepat satu job Coding Orchestrator TEST_ONLY untuk uji worker VPS.",
+    "Execute one task temporal coding worker TEST_ONLY; do not deploy.",
+  ])("routes explicit bounded Temporal coding TEST_ONLY jobs to coding control plane: %s", (message) => {
+    expect(classifyAiCoreChatDispatch(message)).toMatchObject({
+      kind: "CONTROL_PLANE",
+      executionLane: "CODING",
+    });
+  });
+  it("does not treat a read-only Temporal worker status request as a job", () => {
+    expect(classifyAiCoreChatDispatch("Cek status worker Temporal VPS tanpa membuat job").kind).not.toBe("CONTROL_PLANE");
+  });
+
   it("delegates explicit OpenClaw monitoring instead of reading agent registry", () => {
     expect(classifyAiCoreChatDispatch("Delegasikan ke OpenClaw monitor-direct ai-core-health, cek status dan laporkan")).toMatchObject({
       kind: "EXTERNAL_AGENT", externalAgentClientId: "gcp-openclaw-main",
