@@ -1,5 +1,6 @@
 ﻿import { randomUUID } from "node:crypto";
-import { selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
+import { OPENCLAW_PC_CLIENT_IDS, selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
+import { chooseActivePc } from "./openClawPcLeaderService.js";
 import {
   EXTERNAL_AGENT_POLICY_VERSION,
   getExternalAgentRegistrySnapshot,
@@ -95,9 +96,13 @@ export async function dispatchExternalAgentWork(input: {
   // already claimed jobs require separate lease/idempotency handling.
   const registry = await getExternalAgentRegistrySnapshot();
   let resolvedClientId = input.clientId;
-  if (input.clientId === OPENCLAW_AGENT_CLIENT_ID) {
-    const serverMonitor = input.metadata?.openClawExecutionProfile === "monitor-direct";
-    const preferred = selectOpenClawExecutor(registry, { preferServer: serverMonitor });
+  if (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
+      (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)) {
+    const serverMonitor = input.clientId === OPENCLAW_AGENT_CLIENT_ID &&
+      input.metadata?.openClawExecutionProfile === "monitor-direct";
+    const preferred = serverMonitor
+      ? selectOpenClawExecutor(registry, { preferServer: true })
+      : await chooseActivePc(registry);
     // Do not route server-only monitoring to a PC that cannot execute it.
     if (serverMonitor && !preferred) {
       throw new ExternalAgentDispatchError(
@@ -129,7 +134,9 @@ export async function dispatchExternalAgentWork(input: {
   }
 
   const agent = registry.find((item) => item.clientId === resolvedClientId);
-  if (rule.source === "openclaw" && (!agent?.eligible || (agent.availableSlots !== undefined && agent.availableSlots <= 0))) {
+  const selectedIsPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(resolvedClientId);
+  if (rule.source === "openclaw" && (!agent?.eligible ||
+    (!selectedIsPc && agent.availableSlots !== undefined && agent.availableSlots <= 0))) {
     throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Selected OpenClaw executor is offline or at capacity.");
   }
   const coldStart = !agent?.eligible;
