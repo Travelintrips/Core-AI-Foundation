@@ -500,7 +500,7 @@ export async function claimCodingBridgeCommand(input: {
 
   const result = await db.execute(sql`
     WITH candidate AS (
-      SELECT id
+      SELECT id, metadata_json ->> 'assignedClientId' AS assigned_client_id
       FROM ai_platform.ai_coding_bridge_commands
       WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text
         AND (
@@ -523,7 +523,7 @@ export async function claimCodingBridgeCommand(input: {
         metadata_json = command.metadata_json || jsonb_build_object(
           'claimToken', gen_random_uuid()::text,
           'claimLeaseExpiresAt', (NOW() + (${leaseSeconds}::integer * INTERVAL '1 second'))::text,
-          'claimedBy', ${input.clientId}::text,
+          'claimedBy', candidate.assigned_client_id,
           'claimedAt', NOW()::text
         ),
         updated_at = NOW()
