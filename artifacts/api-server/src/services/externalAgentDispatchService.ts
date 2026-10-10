@@ -103,7 +103,8 @@ export async function dispatchExternalAgentWork(input: {
     // A specifically requested, healthy PC must not be silently replaced by
     // the sticky chat leader. Generic OpenClaw requests retain sticky routing.
     const explicitPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)
-      && (input.metadata?.explicitWorkerTarget === true ||\n        /\\b(?:pc\\s+travelintrips|travelintrips[ -]pc|clientid\\s*[:=]\\s*openclaw-pc-worker\\b)/i.test(input.instruction));
+      && (input.metadata?.explicitWorkerTarget === true ||
+        /\b(?:pc\s+travelintrips|travelintrips[ -]pc|clientid\s*[:=]\s*openclaw-pc-worker\b)/i.test(input.instruction));
     const preferred = serverMonitor
       ? selectOpenClawExecutor(registry, { preferServer: true })
       : explicitPc
