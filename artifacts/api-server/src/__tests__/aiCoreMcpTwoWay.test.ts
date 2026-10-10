@@ -91,6 +91,26 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("refuses event ACK without a matching conversation and passes scoped IDs to storage", async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const missing = await callTool("ack_ai_core_event", { responseId: id });
+    expect(missing.body.result.isError).toBe(true);
+    expect(mocks.ack).not.toHaveBeenCalled();
+
+    mocks.ack.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const mismatch = await callTool("ack_ai_core_event", {
+      responseId: id, conversationId: "other-conversation",
+    });
+    expect(mismatch.body.result.structuredContent.acknowledged).toBe(false);
+    const acknowledged = await callTool("ack_ai_core_event", {
+      responseId: id, conversationId: "conversation-a",
+    });
+    expect(acknowledged.body.result.structuredContent.acknowledged).toBe(true);
+    expect(mocks.ack).toHaveBeenLastCalledWith({
+      responseId: id, conversationId: "conversation-a",
+    });
+  });
+
   it("auto-confirms safe # PC actions and forwards them to the OpenClaw route", async () => {
     const response = await send("# ketik cek", false);
     expect(response.body.result.isError).toBeFalsy();
