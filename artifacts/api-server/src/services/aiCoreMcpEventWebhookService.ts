@@ -1054,6 +1054,27 @@ async function markDelivery(input: {
         updated_at = NOW()
     WHERE id = ${input.id}::uuid
   `);
+  // Promote only from a cryptographically verified receiver acknowledgment.
+  // A transport 2xx or worker-reported browser result must never promote delivery.
+  if (input.status === "DELIVERED" && input.receiptVerified === true) {
+    await db.execute(sql`
+      UPDATE ai_platform.ai_coding_bridge_commands AS command
+      SET metadata_json = jsonb_set(
+            COALESCE(command.metadata_json, '{}'::jsonb),
+            '{deliveryCode}',
+            to_jsonb('DELIVERY_CONFIRMED'::text),
+            true
+          ),
+          updated_at = NOW()
+      FROM ai_platform.ai_coding_bridge_responses AS response
+      JOIN ai_platform.ai_core_mcp_event_deliveries AS delivery
+        ON delivery.response_id = response.id
+      WHERE delivery.id = ${input.id}::uuid
+        AND delivery.receipt_verified_at IS NOT NULL
+        AND response.command_id = command.id
+        AND command.status = 'COMPLETED'
+    `);
+  }
 }
 
 async function deliverClaimed(row: Record<string, unknown>): Promise<void> {
