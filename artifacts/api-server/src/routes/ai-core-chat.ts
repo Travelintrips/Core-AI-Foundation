@@ -1376,6 +1376,25 @@ async function answerAskMode(
     workload: workload.workload,
     costClass: workload.costClass,
   };
+  // Exact, read-only business data intents must take priority over semantic
+  // routing. Otherwise an LLM answer can mask a working Data Tool.
+  const prioritizedDataTool = await tryRunAiCoreDataTool(routingMessage);
+  if (prioritizedDataTool.matched) {
+    return {
+      kind: "answer",
+      route: "DATA_TOOL",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: prioritizedDataTool.reply,
+      dataTool: prioritizedDataTool.tool,
+      data: prioritizedDataTool.data,
+      ...(prioritizedDataTool.warning ? { warning: prioritizedDataTool.warning } : {}),
+    };
+  }
   const semantic = await openAiFirstReadOnlyIntent(routingMessage, policy, workload, conversationalMessage);
   if (semantic) return semantic;
   const deterministic = await deterministicReply(routingMessage, workload);
