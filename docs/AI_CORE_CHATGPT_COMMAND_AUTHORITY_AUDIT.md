@@ -58,3 +58,8 @@ Inspected `aiCoreChatIntentService.ts`, `aiCoreWorkloadRouterService.ts`, `exter
 ## Audit status / outstanding gaps
 - Source routing and critical approval types inspected. E2E callback, real ChatGPT session wake-up, WA delivery, failover and production gate enforcement **not verified** by this audit.
 - Do not mark those items PASS without separate live tests and captured evidence.
+
+## AI Core Chat coding prohibition (owner update, 2026-10-10)
+- Any source-changing coding command sent directly to AI Core Chat must return `Saya tidak diperbolehkan menjalankan perintah coding melalui AI Core...`, with `POLICY_DENIED / coding_not_permitted`, before routing or MCP confirmation.
+- This denial must not be labelled `NO_WORKER` because it is an authorization policy, not a worker-capacity error. Preserve truthful worker outage diagnostics.
+- Apply to HTTP JSON, HTTP SSE and MCP `send_ai_core_command`. This is a source-code rule; deployment, production invocation and other direct coding endpoints require separate verification.
