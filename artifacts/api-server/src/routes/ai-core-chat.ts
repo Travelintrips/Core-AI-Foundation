@@ -1278,10 +1278,15 @@ async function answerAskMode(
   // Ambiguous account entitlement and cross-system readiness questions need semantic
   // interpretation first. Previously broad deterministic/DB regexes answered these
   // requests with unrelated coding-task rows or deployment health checks.
-  const semanticFirst = /\b(?:openai|gpt|chatgpt)\b/i.test(routingMessage) &&
-    /\b(?:token|kuota|quota|free|gratis|credit|kredit|billing|usage|pemakaian|eligib|sharing)\b/i.test(routingMessage) ||
-    /\b(?:ai[ -]?task)\b/i.test(routingMessage) &&
-    /\b(?:audit|kesiapan|readiness|integrasi|hubung|connect)\b/i.test(routingMessage);
+  // Treat account-level OpenAI entitlements as semantic reasoning requests even
+  // when users say "eligible complimentary tokens" rather than "free token".
+  // These must never fall through to an unrelated admin database lookup.
+  const normalizedIntent = routingMessage.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const mentionsOpenAi = /\b(?:openai|gpt|chatgpt)\b/.test(normalizedIntent);
+  const mentionsEntitlement = /\b(?:token|tokens|kuota|quota|free|gratis|credit|credits|kredit|billing|usage|pemakaian|eligible|eligibility|complimentary|entitlement|allowance|sharing|data controls)\b/.test(normalizedIntent);
+  const mentionsAiTask = /\bai task\b/.test(normalizedIntent);
+  const mentionsReadiness = /\b(?:audit|kesiapan|readiness|integrasi|integration|hubung|connect|connection|terhubung)\b/.test(normalizedIntent);
+  const semanticFirst = (mentionsOpenAi && mentionsEntitlement) || (mentionsAiTask && mentionsReadiness);
   if (semanticFirst && workload.workload !== "CRITICAL_ACTION" && workload.workload !== "CODING") {
     const cloud = await resolveCloudSelection(workload.workload);
     if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
