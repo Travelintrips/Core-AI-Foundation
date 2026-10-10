@@ -1308,7 +1308,11 @@ async function openAiFirstReadOnlyIntent(
       /\b(?:CWS|INC)-[A-Z0-9]{8}\b/i.test(trimmed) &&
         /^(?:cek|check|lihat|periksa|status|show|get)\s+(?:status\s+)?(?:task|job)\s+(?:CWS|INC)-[A-Z0-9]{8}(?:\s+saja)?[.!?]?$/i.test(trimmed) ||
       /^(?:cek|check|lihat|periksa|status|show|get)\s+(?:(?:status|kesehatan|health)\s+)?(?:deployment|produksi|production|worker|workers|gcp billing|biaya gcp|gcp cost)(?:\s+saja)?[.!?]?$/i.test(trimmed);
-    if (routeMatch?.[1] === "VERIFIED_TOOL" && explicitStatusTool &&
+    // LIVE deployment evidence must come from the dedicated source-of-truth
+    // handler. Never let the language model invent a production SHA.
+    const liveDeploymentEvidence = /^(?:check|cek|periksa|verify|verifikasi)\s+(?:live\s+)?(?:deployment\s+evidence|bukti\s+deployment)\b/i.test(trimmed) &&
+      !/\b(?:audit|kesiapan|readiness|integrasi|integration|ai\s+task)\b/i.test(trimmed);
+    if ((liveDeploymentEvidence || (routeMatch?.[1] === "VERIFIED_TOOL" && explicitStatusTool)) &&
         workload.workload !== "CODING" && workload.workload !== "CRITICAL_ACTION") return null;
     const answer = await invokeChatModel(cloud.selection,
       conversationalMessage +
