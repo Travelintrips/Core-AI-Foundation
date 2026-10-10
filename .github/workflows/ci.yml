@@ -33,6 +33,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify AI Core command trigger
         run: node --test scripts/ai-core-command.test.mjs
+      - name: Verify GitHub event correlation contract
+        run: node --test scripts/github-event-correlation.test.mjs
       - name: Verify ZeroLLM deployment scripts
         run: |
           pnpm run zerollm:verify
