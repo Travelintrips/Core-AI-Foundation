@@ -35,3 +35,41 @@
 ## Completion criteria
 - CI green, live target host verified, health checks green, PC offline failover tested, result persisted, and no duplicate execution observed.
 - When a step cannot be completed because no authorized server connector exists, record the exact blocking capability; do not imply completion.
+
+## Evidence-qualified status codes and AI learning (owner directive, 2026-10-10)
+Use a stable **stage + evidence** code before every lifecycle status in logs, AI Core/OpenClaw replies, WhatsApp, Workspace, and ChatGPT reports. An unqualified `COMPLETED` is never sufficient proof of delivery or acceptance. Existing DB statuses may remain unchanged for backward compatibility; do not silently redefine them or claim the UI/backend enforces these labels without implementation.
+
+| Code | Meaning | Minimum proof |
+| --- | --- | --- |
+| `CMD_RECEIVED` | Command accepted | Durable command ID |
+| `CMD_ACK` | Queued/acknowledged | Queue receipt; NOT execution |
+| `JOB_CLAIMED` | Worker accepted lease | command ID, assigned worker ID, claim timestamp |
+| `JOB_RUNNING` | Work execution in progress | Worker heartbeat/progress |
+| `JOB_COMPLETED` | Worker process finished | Exit result; NOT output validation, delivery, or deployment |
+| `RESULT_VERIFIED` | Requested outcome validated | Target-specific expected outputs, exit code, independent verification |
+| `DELIVERY_SUBMITTED` | Delivery attempted/submitted | Transport or browser submission receipt; NOT arrival |
+| `DELIVERY_CONFIRMED` | Message arrived at destination | Correlated delivery receipt / destination observation |
+| `CALLBACK_RECEIVED` | Authenticated callback ingested | Correlated inbound callback event |
+| `E2E_VERIFIED` | Full round trip verified | Matching command ID, worker, result, destination receipt, callback and correlation ID |
+| `MERGED_VERIFIED` | Code merged | PR merge commit and branch |
+| `DEPLOYED_VERIFIED` | Production deployed | Successful deployment run and target/build identity |
+| `BLOCKED`, `FAILED`, `TIMED_OUT`, `CANCELLED` | Distinct terminal / waiting outcomes | Concrete stage, cause, and recovery owner |
+| `NEEDS_HUMAN_APPROVAL` | Critical approval genuinely required | Exact critical action and approval scope |
+| `UNKNOWN_UNVERIFIED` | Evidence missing/contradictory | Missing receipt or unresolved discrepancy |
+
+### Ambiguous command vocabulary
+- `cek/periksa` = inspect/read-only; never assume authority to mutate.
+- `uji/test` = test-only, bounded and non-destructive unless scope explicitly authorizes side effects.
+- `perbaiki` = fix the evidenced defect with approved scope and CI/security gates; not blanket authorization for unrelated production actions.
+- `lanjut` = continue the last explicitly authorized task, not a new unrestricted task.
+- `selesai/berhasil/completed` = **ask what stage?** Report the precise code above; a completed worker subprocess is not a completed business workflow.
+- `sudah dikirim` = `DELIVERY_SUBMITTED` unless independently acknowledged at destination.
+- `sudah diterima` = `DELIVERY_CONFIRMED` only with a correlated receipt, never based solely on a model's narrative.
+- `aktif/online` = heartbeat or process liveness only; not proof queue claims or end-to-end success.
+- `siap/review/approval` = differentiate technical readiness from a true human-critical gate.
+- `merge/deploy` = separate actions and proofs; green CI alone does not mean deployed.
+
+### Learning and correction protocol
+For every false positive, ambiguity, or failed E2E, record a safe, redacted structured case: `caseId`, `commandId`, intended task/stage, observed code, expected code, evidence reference, root cause (or unknown), fix PR, CI, production verification and regression-test reference. Mark `LEARNING_CANDIDATE` until an authorized maintainer verifies the correction; only then mark `LEARNING_VERIFIED`. Feed verified cases into deterministic checks, test fixtures and agent reference documents. Do NOT train/fine-tune models automatically from unverified agent outputs, private tokens, or sensitive transcripts. Use idempotency and correlation IDs to suppress duplicates.
+
+**Known case:** A browser agent returned `browserConfirmed: true` and the queue recorded `COMPLETED` while `sourceReplyDeliveryState: missing` and `replayInvalid: true`. Classify it as `JOB_COMPLETED + UNKNOWN_UNVERIFIED`, not `DELIVERY_CONFIRMED` or `E2E_VERIFIED`. Require a real destination receipt and callback before claiming full success.
