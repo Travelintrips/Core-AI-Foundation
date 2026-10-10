@@ -968,7 +968,7 @@ jobs:
             if [ "$code" = "200" ] && node - <<'NODE'
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
-          process.exit(value.data?.failed === true ? 1 : 0);
+          process.exit(value.route === "DATA_TOOL" && value.dataTool === "SPORT_CENTER_BOOKING_LOOKUP" && value.data?.failed !== true && value.data?.found === true && value.usage?.totalTokens === 0 && value.estimatedCostUsd === 0 ? 0 : 1);
           NODE
             then
               data_tool_ok=true
@@ -982,7 +982,7 @@ jobs:
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
           const warning = typeof value.warning === "string"
             ? value.warning.replace(/[\\r\\n\\t]+/g, " ").slice(0, 500)
-            : "no diagnostic returned";
+            : `route=${String(value.route ?? "missing").slice(0,60)} tool=${String(value.dataTool ?? "missing").slice(0,60)} found=${String(value.data?.found ?? "missing")} failed=${String(value.data?.failed ?? "missing")}`;
           console.error("::warning::Sport Center Data Tool attempt failed: " + warning);
           NODE
             fi
