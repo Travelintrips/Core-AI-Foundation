@@ -586,13 +586,13 @@ const tools = [
 ];
 
 function isProductionDeploymentEvidenceQuery(message: string): boolean {
-  // Protocol-level deployment evidence is an explicit diagnostic command,
-  // not a generic natural-language intent router. In particular, requests
-  // about AI Task integration readiness must reach OpenAI rather than
-  // triggering an unrelated production health report.
-  const value = message.trim().toLowerCase().replace(/\\s+/g, " ");
-  return /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\\s+(?:(?:status|bukti|evidence)\\s+)?(?:(?:live|current)\\s+)?(?:deploy(?:ment)?|production|produksi|prod)\\b/.test(value) ||
-    /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\\s+(?:live\\s+)?(?:deployment|production)\\s+(?:evidence|bukti|sha|commit)\\b/.test(value);
+  // Exact diagnostic status checks need authoritative GitHub + production
+  // health data, not an LLM-generated SHA. Conceptual integration-readiness
+  // questions must still go through the OpenAI-first semantic router.
+  const value = message.trim().toLowerCase().replace(/\s+/g, " ");
+  if (/\b(?:audit|kesiapan|readiness|integrasi|integration|ai task)\b/.test(value)) return false;
+  return /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\s+(?:(?:status|bukti|evidence)\s+)?(?:(?:live|current)\s+)?(?:deploy(?:ment)?|production|produksi|prod)\b/.test(value) ||
+    /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\s+(?:live\s+)?(?:deployment|production)\s+(?:evidence|bukti|sha|commit)\b/.test(value);
 }
 
 type DeploymentEndpointEvidence = {
