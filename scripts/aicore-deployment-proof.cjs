@@ -40,7 +40,7 @@ async function main() {
   const health = await response.json();
   if (health?.status !== "ok") throw new Error("Production health is not ok");
   const deployedSha = response.headers.get("x-cst-commit-sha");
-  result.production = { revision_url: url.toString(), deployed_sha: deployedSha, health_status: health.status };
+  result.production = { revision_url: url.toString(), http_status: response.status, deployed_sha: deployedSha, health_status: health.status };
   if (!validSha.test(deployedSha || "")) throw new Error("Production runtime returned no valid x-cst-commit-sha");
   if (deployedSha !== sha) throw new Error("Production SHA does not match expected commit");
   result.status = "VERIFIED";
