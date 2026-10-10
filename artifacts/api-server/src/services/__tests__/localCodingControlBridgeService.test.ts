@@ -147,3 +147,16 @@ describe("browser status code normalization", () => {
     expect(classifyBridgeCompletion({ status: "FAILED", details: valid }).e2eCode).toBe("UNKNOWN_UNVERIFIED");
   });
 });
+
+describe("callback PROCESSING visibility", () => {
+  it("keeps nonterminal dispatched callbacks visible until they complete", async () => {
+    const { classifyCallbackProcessingState } = await import("../localCodingControlBridgeService.js");
+    expect(classifyCallbackProcessingState({ status: "PENDING" })).toBe("QUEUED");
+    expect(classifyCallbackProcessingState({ status: "QUEUED" })).toBe("QUEUED");
+    expect(classifyCallbackProcessingState({ status: "PROCESSING" })).toBe("PROCESSING");
+    expect(classifyCallbackProcessingState({ status: "RUNNING" })).toBe("PROCESSING");
+    expect(classifyCallbackProcessingState({ status: "COMPLETED" })).toBe("COMPLETED");
+    expect(classifyCallbackProcessingState({ status: "FAILED" })).toBe("FAILED");
+    expect(classifyCallbackProcessingState({ status: "CANCELLED" })).toBe("FAILED");
+  });
+});

@@ -831,6 +831,17 @@ export async function getExternalAgentDiagnostic(input: {
   };
 }
 
+/** Nonterminal callbacks remain visible while awaiting a worker or verified reply. */
+export function classifyCallbackProcessingState(input: {
+  status: string;
+  metadata?: Record<string, unknown> | null;
+}): "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" {
+  if (input.status === "COMPLETED") return "COMPLETED";
+  if (input.status === "FAILED" || input.status === "CANCELLED") return "FAILED";
+  if (input.status === "PROCESSING" || input.status === "RUNNING") return "PROCESSING";
+  return "QUEUED";
+}
+
 export async function getCodingBridgeCommandExecutionState(commandId: string) {
   await ensureCodingControlBridgeTables();
   const [command] = await db
@@ -850,6 +861,8 @@ export async function getCodingBridgeCommandExecutionState(commandId: string) {
   return {
     command,
     latestResponse: latestResponse ?? null,
+    // Derived only from durable command state, never assumed from a green CI.
+    callbackProcessingState: classifyCallbackProcessingState({ status: command.status }),
   };
 }
 
