@@ -1303,8 +1303,8 @@ async function openAiFirstReadOnlyIntent(
     // it previously sent AI Task integration-readiness audits to deployment
     // health and sent conceptual questions to unrelated operational handlers.
     const explicitStatusTool =
-      /\\b(?:CWS|INC)-[A-Z0-9]{8}\\b/i.test(trimmed) ||
-      /^(?:cek|check|lihat|periksa|status|show|get)\\s+(?:(?:status|kesehatan|health)\\s+)?(?:deployment|produksi|production|worker|workers|gcp billing|biaya gcp|gcp cost)(?:\\s|$)/i.test(trimmed);
+      /\b(?:CWS|INC)-[A-Z0-9]{8}\b/i.test(trimmed) ||
+      /^(?:cek|check|lihat|periksa|status|show|get)\s+(?:(?:status|kesehatan|health)\s+)?(?:deployment|produksi|production|worker|workers|gcp billing|biaya gcp|gcp cost)(?:\s|$)/i.test(trimmed);
     if (routeMatch?.[1] === "VERIFIED_TOOL" && explicitStatusTool &&
         workload.workload !== "CODING" && workload.workload !== "CRITICAL_ACTION") return null;
     const answer = await invokeChatModel(cloud.selection,
