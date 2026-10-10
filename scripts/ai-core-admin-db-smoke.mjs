@@ -102,13 +102,10 @@ assert.equal(answer.route, "OPENAI_INTENT_FIRST");
 assert.equal(answer.provider, "openai");
 assert.ok(typeof answer.reply === "string" && answer.reply.trim(), "OpenAI-first query returned no answer");
 assert.ok(!answer.databaseQuery, "Legacy admin SQL router should not run for an unverified natural-language request");
-console.log(
-  JSON.stringify({
-    adminDbSmoke: "PASS",
-    metadataTables: metadata.discovery.tableCount,
-    source: answer.databaseQuery.sourceTable,
-    yesterdayAmount: answer.data[0].value,
-    yesterdayRows: answer.data[0].matched_rows,
-    tokens: 0,
-  }),
-);
+console.log(JSON.stringify({
+  adminDbSmoke: "PASS",
+  metadataTables: metadata.discovery.tableCount,
+  semanticRoute: answer.route,
+  provider: answer.provider,
+  noLegacySql: answer.databaseQuery == null,
+}));
