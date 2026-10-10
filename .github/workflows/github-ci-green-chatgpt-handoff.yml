@@ -1,0 +1,82 @@
+name: GitHub CI Green ChatGPT Handoff
+
+on:
+  workflow_run:
+    workflows: ["CI Verify"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      upstream_run_id:
+        description: "Successful CI Verify run ID (manual replay)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: chatgpt-ci-handoff-${{ github.event.workflow_run.id || inputs.upstream_run_id }}
+  cancel-in-progress: false
+
+jobs:
+  notify-ai-core:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate trigger and current main SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id || inputs.upstream_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$UPSTREAM_RUN_ID" -gt 0
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN_ID")"
+          test "$(jq -r '.name' <<<"$run")" = "CI Verify"
+          test "$(jq -r '.conclusion' <<<"$run")" = "success"
+          test "$(jq -r '.head_branch' <<<"$run")" = "main"
+          test "$(jq -r '.event' <<<"$run")" = "push"
+          sha="$(jq -r '.head_sha' <<<"$run")"
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+          if [ "$sha" != "$main_sha" ]; then
+            echo "::notice::CI belongs to stale main SHA; skipping handoff"
+            echo "is_current=false" >> "$GITHUB_ENV"
+          else
+            echo "is_current=true" >> "$GITHUB_ENV"
+          fi
+          echo "upstream_run_id=$UPSTREAM_RUN_ID" >> "$GITHUB_ENV"
+          echo "upstream_sha=$sha" >> "$GITHUB_ENV"
+      - name: Send bounded diagnostic event to AI Core
+        if: env.is_current == 'true'
+        env:
+          AGENT_TOKEN: ${{ secrets.AI_CORE_SCOPED_AGENT_TOKEN }}
+          CONVERSATION_ID: ${{ secrets.CHATGPT_HANDOFF_CONVERSATION_ID }}
+          API_BASE_URL: https://aicore.cstlogistic.co.id/api
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$AGENT_TOKEN" ] || [ -z "$CONVERSATION_ID" ]; then
+            echo "::error::Required handoff secrets are missing; no event submitted"
+            exit 1
+          fi
+          [[ "$CONVERSATION_ID" =~ ^[a-zA-Z0-9-]{30,64}$ ]]
+          event_id="githubci-${upstream_run_id}-1"
+          payload="$(jq -cn \
+            --arg eventId "$event_id" \
+            --arg resource "$GITHUB_REPOSITORY/actions/runs/$upstream_run_id@${upstream_sha}" \
+            --arg observedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg conversationId "$CONVERSATION_ID" \
+            '{eventId:$eventId,source:"github",resource:$resource,status:"COMPLETED",summary:"CI Verify on current main SHA succeeded. TEST_ONLY handoff: ask ChatGPT to assess next steps; do not merge, deploy, or modify infrastructure without existing authorization.",observedAt:$observedAt,conversationId:$conversationId}')"
+          response="$(curl --fail-with-body -sS --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $AGENT_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$payload" \
+            "$API_BASE_URL/ai/agent-runtime/monitor/events")"
+          echo "$response" | jq -e '.accepted == true and (.commandId | type == "string")'
+          echo "Command accepted; lifecycle verified separately through AI Core monitor command status."
