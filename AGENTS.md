@@ -3,18 +3,18 @@
 **Canonical communication SOP:** [AI Core ↔ ChatGPT ↔ OpenClaw SOP](docs/SOP_AI_CORE_CHATGPT_OPENCLAW_COMMUNICATION.md). Read before dispatching jobs, reporting callback receipt, or claiming E2E verification. Specialized authority/protocol documents remain references; this Markdown is not executable enforcement.
 
 
-## Policy: AI Core Chat may not execute coding (owner directive, 2026-10-10)
-- AI Core Chat must reject source-changing coding commands with a clear user-facing reply beginning **"Saya tidak diperbolehkan"**; use route `POLICY_DENIED`, reason `coding_not_permitted`, and `POLICY_BLOCKED` lane.
-- Never show `NO_WORKER` as a user-facing explanation for a **policy-denied coding instruction**. Reserve worker-unavailable diagnostics for real capacity outages.
-- Check at HTTP JSON, streaming, and MCP `send_ai_core_command` boundaries before task creation, agent dispatch, confirmation, or model invocation. Do not rely on AI prompts alone.
-- Read-only code inspection, build/test status and authorized GitHub operations are not automatically forbidden. Direct coding via ChatGPT/GitHub remains subject to CI, security, approval and deployment gates.
-- This restriction does not prove production deployment or extend to other API endpoints until separately enforced and tested.
-
+## Owner policy: dual coding execution by explicit channel (2026-10-11)
+- **ChatGPT channel:** Coding requests made to ChatGPT are planned and executed by ChatGPT using authorized GitHub tools. ChatGPT is the default executor for tasks received here.
+- **AI Core Chat channel:** Coding requests explicitly sent by Boss to authenticated AI Core Chat may be planned and executed by AI Core through its approved coding control plane, **even while ChatGPT is online**. An offline check is NOT required for an independent AI Core Chat coding request.
+- **Shared or resumed task:** When either system is asked to continue the *same* job, require persisted job/command/correlation IDs, an atomic ownership lease and fencing of prior executor. Do not run both executors against the same job or duplicate commits/side effects.
+- **Safety:** Both channels honor permission scope, CI, branch protection, security checks, critical human approvals and deployment verification. No message, callback or worker claim grants extra privileges.
+- **Runtime reality:** Existing AI Core Chat coding-denial gates on HTTP JSON, SSE and MCP may still reject coding. This is a **new owner policy**, not proof of implementation. Implement and test conditional authorized coding on each boundary before claiming AI Core Chat executes such requests. Until verified, report the actual limitation without saying the work ran.
+- See [communication SOP](docs/SOP_AI_CORE_CHATGPT_OPENCLAW_COMMUNICATION.md).
 
 ## User workflow preference
 ## Default job routing (owner directive, 2026-10-09)
 - Address the owner as **Boss** in user-facing reports.
-- ChatGPT is the primary coding executor via authorized GitHub tools for coding, fixes, tests, CI, PRs and deploy changes; do not default routine coding jobs to AI Core or legacy Coding Orchestrator.
+- Route coding by explicit entry channel: ChatGPT handles ChatGPT requests; authenticated AI Core Chat may handle coding requests submitted there independently. Shared-job continuation requires exclusive handoff under the canonical SOP.
 - Provide a non-binding initial estimate where useful; revise it as new blockers become known. Do not promise background work without an actual scheduled task.
 - If access to SSH, VPS, Hostinger, GCP, credentials, or production verification blocks GitHub execution, immediately escalate only that blocked portion to AI Core using an authenticated and available MCP tool, with blocker, exact scope, and verification requirements. Creating a GitHub issue is NOT an AI Core command.
 - If escalation fails, try other authorized routes and clearly report unresolved blockers. Verify results before claiming completion.
