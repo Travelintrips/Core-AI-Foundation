@@ -461,11 +461,12 @@ router.post(
       res.status(404).json({ error: "Unknown external agent client ID" });
       return;
     }
-    // Standby PCs may heartbeat, but cannot claim or send work while a different
-    // PC holds the persisted active communicator role.
+    // Dispatch already assigns each work item to a specific eligible client.
+    // A sticky conversation leader must not block a directly addressed PC's
+    // queue; claimCodingBridgeCommand still enforces exact client ownership.
     if ((OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(parsed.data.clientId)) {
-      const activePcId = await chooseActivePc(await getExternalAgentRegistrySnapshot());
-      if (activePcId !== parsed.data.clientId) {
+      const registry = await getExternalAgentRegistrySnapshot();
+      if (!registry.some((agent) => agent.clientId === parsed.data.clientId && agent.eligible)) {
         res.status(204).end();
         return;
       }
