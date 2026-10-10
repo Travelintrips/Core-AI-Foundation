@@ -43,13 +43,13 @@ const MUTATING =
   /\b(fix|perbaiki|ubah|edit|patch|deploy|merge|commit|push|hapus|delete|create|buat|tambah|add|implement(?:asikan)?|refactor)\b/i;
 
 const DIRECT_OPENCLAW_PC_PREFIX = /^#\s*/;
-const OPENCLAW_PC_CODING_PREFIX = /^\|\s*/;
+const OPENCLAW_PC_MESSAGE_PREFIX = /^\|\s*/;
 
-/** Explicit PC coding delegation; never interprets a pipe in the middle of text. */
+/** Explicit OpenClaw PC message route; never interprets a pipe in the middle of text. */
 export function parseOpenClawPcCodingRequest(message: string): string | null {
   const value = message.trim().replace(/^@\s*/, "");
-  if (!OPENCLAW_PC_CODING_PREFIX.test(value)) return null;
-  const instruction = value.replace(OPENCLAW_PC_CODING_PREFIX, "").trim();
+  if (!OPENCLAW_PC_MESSAGE_PREFIX.test(value)) return null;
+  const instruction = value.replace(OPENCLAW_PC_MESSAGE_PREFIX, "").trim();
   return instruction || null;
 }
 
@@ -131,17 +131,17 @@ export function detectRemoteWorkerPreset(
 export function classifyAiCoreChatDispatch(
   message: string,
 ): AiCoreChatDispatchDecision {
-  const pcCodingRequest = parseOpenClawPcCodingRequest(message);
-  if (pcCodingRequest) {
+  const pcMessageRequest = parseOpenClawPcCodingRequest(message);
+  if (pcMessageRequest) {
     return {
       kind: "EXTERNAL_AGENT",
-      workload: { ...classifyAiCoreWorkload(pcCodingRequest), workload: "CODING", requiresAgent: true },
+      workload: { ...classifyAiCoreWorkload(pcMessageRequest), workload: "REVIEW", requiresAgent: true },
       preset: null,
       infrastructureOperation: null,
       githubOperation: null,
       externalAgentClientId: OPENCLAW_AGENT_CLIENT_ID,
       executionLane: "TARGETED",
-      reason: "Leading | explicitly delegates coding to an eligible OpenClaw PC; worker approvals still apply.",
+      reason: "Leading | routes a message to an eligible OpenClaw PC; it does not authorize coding or source changes.",
     };
   }
   const directOpenClawPcCommand = parseDirectOpenClawPcCommand(message);
