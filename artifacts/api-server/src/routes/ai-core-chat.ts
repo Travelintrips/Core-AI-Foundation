@@ -2767,7 +2767,11 @@ async function runAutoMode(
   // Let OpenAI interpret single natural-language requests before keyword SQL
   // shortcuts. Actual coding and critical actions continue through existing
   // deterministic permission gates; this preflight never authorizes mutation.
-  if (parsedConversation.commands.length <= 1) {
+  // Deterministic authenticated actions must not be swallowed by a
+  // read-only LLM intent response. In particular, OpenClaw desktop wake
+  // requests have to reach the external-agent queue after confirmation.
+  const preflightDispatch = classifyAiCoreChatDispatch(contextualCommand);
+  if (parsedConversation.commands.length <= 1 && preflightDispatch.kind === "ANSWER") {
     const intentWorkload = classifyAiCoreWorkload(contextualCommand);
     const semantic = await openAiFirstReadOnlyIntent(
       contextualCommand,
