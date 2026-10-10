@@ -33,10 +33,14 @@ jobs:
           set -euo pipefail
           test "$UPSTREAM_RUN_ID" -gt 0
           run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN_ID")"
-          test "$(jq -r '.name' <<<"$run")" = "CI Verify"
-          test "$(jq -r '.conclusion' <<<"$run")" = "success"
-          test "$(jq -r '.head_branch' <<<"$run")" = "main"
-          test "$(jq -r '.event' <<<"$run")" = "push"
+          if [ "$(jq -r '.name' <<<"$run")" != "CI Verify" ] ||
+             [ "$(jq -r '.conclusion' <<<"$run")" != "success" ] ||
+             [ "$(jq -r '.head_branch' <<<"$run")" != "main" ] ||
+             [ "$(jq -r '.event' <<<"$run")" != "push" ]; then
+            echo "::notice::Upstream run not an eligible successful main push; no handoff"
+            echo "is_current=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
           sha="$(jq -r '.head_sha' <<<"$run")"
           main_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
           if [ "$sha" != "$main_sha" ]; then
