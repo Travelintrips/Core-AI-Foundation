@@ -1273,6 +1273,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
               state.command.status === "FAILED" ? "FAILED" : "UNKNOWN_UNVERIFIED"),
           deliveryCode: (state.command.metadataJson as Record<string, unknown> | null)?.["deliveryCode"] ?? "UNKNOWN_UNVERIFIED",
           e2eCode: (state.command.metadataJson as Record<string, unknown> | null)?.["e2eCode"] ?? "UNKNOWN_UNVERIFIED",
+          callbackProcessingState: state.callbackProcessingState,
           progressSource: "bridge_database",
           externalCommandId: state.command.externalCommandId,
           commandType: state.command.commandType,
