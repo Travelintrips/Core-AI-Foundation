@@ -11,7 +11,7 @@ export function parseGithubRunIdentity(input) {
     throw new TypeError("GitHub event must be an object");
   }
   const { repository, runId, headSha, workflow, conclusion } = input;
-  if (typeof repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+  if (typeof repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) || repository.split("/").some(part => part === "." || part === "..")) {
     throw new TypeError("Invalid repository");
   }
   if (!/^[1-9][0-9]*$/.test(String(runId))) {
