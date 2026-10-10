@@ -95,22 +95,13 @@ console.log(JSON.stringify({ phase: "metadata", tables: metadata.discovery.table
 // Ask/Auto/stream/follow-up parity belongs in route tests, while Data Tool
 // readiness/execution is already verified by dedicated production steps.
 const answer = await (await request("/ai/core-chat/messages", payload)).json();
-assert.equal(answer.route, "ADMIN_DB_QUERY");
-assert.ok(
-  answer.databaseQuery?.sourceDatabaseId,
-  answer.warning || answer.reply || "Semantic query did not execute",
-);
-assert.equal(answer.databaseQuery?.sourceDatabaseId, "primary");
-assert.equal(answer.databaseQuery?.sourceTable, "sport_center.sport_payments");
-assert.equal(answer.databaseQuery?.valueColumn, "amount");
-assert.equal(answer.databaseQuery?.timeColumn, "paid_at");
-assert.equal(answer.databaseQuery?.statusFilterApplied, true);
-assert.match(answer.databaseQuery.sql, /IN \('confirmed'\)/);
-assert.equal(answer.usage?.totalTokens, 0);
-assert.equal(answer.estimatedCostUsd, 0);
-assert.equal(answer.workload, "DATA_LOOKUP");
-assert.equal(answer.costClass, "ZERO");
-assert.ok(Array.isArray(answer.data) && answer.data.length === 1);
+// Natural-language Ask routes through OpenAI first. Do not require the
+// retired heuristic SQL planner to run or assert database results invented
+// by a language model. Structured data-tools are exercised separately.
+assert.equal(answer.route, "OPENAI_INTENT_FIRST");
+assert.equal(answer.provider, "openai");
+assert.ok(typeof answer.reply === "string" && answer.reply.trim(), "OpenAI-first query returned no answer");
+assert.ok(!answer.databaseQuery, "Legacy admin SQL router should not run for an unverified natural-language request");
 console.log(
   JSON.stringify({
     adminDbSmoke: "PASS",
