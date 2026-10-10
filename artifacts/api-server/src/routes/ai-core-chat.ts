@@ -1298,7 +1298,14 @@ async function openAiFirstReadOnlyIntent(
     // failed or accidentally falling through to an unrelated database query.
     // Legacy routes execute only after explicit OpenAI tool selection, and
     // never as a workaround for a misclassified coding/critical request.
-    if (routeMatch?.[1] === "VERIFIED_TOOL" &&
+    // Tool execution is admitted only for an explicit, narrowly scoped status
+    // query. A generic model VERIFIED_TOOL classification is not sufficient:
+    // it previously sent AI Task integration-readiness audits to deployment
+    // health and sent conceptual questions to unrelated operational handlers.
+    const explicitStatusTool =
+      /\\b(?:CWS|INC)-[A-Z0-9]{8}\\b/i.test(trimmed) ||
+      /^(?:cek|check|lihat|periksa|status|show|get)\\s+(?:(?:status|kesehatan|health)\\s+)?(?:deployment|produksi|production|worker|workers|gcp billing|biaya gcp|gcp cost)(?:\\s|$)/i.test(trimmed);
+    if (routeMatch?.[1] === "VERIFIED_TOOL" && explicitStatusTool &&
         workload.workload !== "CODING" && workload.workload !== "CRITICAL_ACTION") return null;
     const answer = await invokeChatModel(cloud.selection,
       conversationalMessage +
