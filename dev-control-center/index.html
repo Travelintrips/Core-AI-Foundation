@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DEV Control Center | Preview</title>
+<style>
+:root{color-scheme:dark;font:14px system-ui,Segoe UI,sans-serif;background:#0b1020;color:#eff4ff}
+*{box-sizing:border-box}body{margin:0}header{padding:25px max(20px,calc((100vw - 1200px)/2));border-bottom:1px solid #25314d;background:#111a2e}
+h1{margin:0;font-size:27px}p{color:#adbdd8}.warn{color:#ffe0a1}main{max-width:1200px;margin:auto;padding:25px 20px}
+.bar{display:flex;gap:12px;flex-wrap:wrap;margin:22px 0}input,select,button,textarea{background:#16233a;color:#eff4ff;border:1px solid #3a4c69;border-radius:9px;padding:11px;font:inherit}
+input{flex:1;min-width:210px}button{cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+article,.panel{background:#111b30;border:1px solid #283956;border-radius:14px;padding:18px}
+article h2{font-size:19px;margin:0 0 8px}.meta{color:#abbad3;font-size:12px}
+.status{display:inline-block;border-radius:30px;background:#273d56;padding:4px 10px;margin:12px 0}
+section{margin:32px 0}a{color:#8fc2ff}textarea{width:100%;min-height:80px}
+small{color:#a8b7d1}.empty{padding:25px;text-align:center;color:#afbed6}
+</style></head><body>
+<header><h1>AI Software Factory <span style="color:#88c5ff">/ DEV Control Center</span></h1>
+<p>Daftar aplikasi, pencarian lintas proyek, dan rancangan pusat kendali coding.</p>
+<p class="warn"><strong>PREVIEW TERISOLASI:</strong> data simulasi. Tidak terhubung ke job, worker, database, atau production. Semua tindakan operasional dinonaktifkan.</p>
+</header><main>
+<div class="bar"><input id="search" type="search" aria-label="Cari aplikasi" placeholder="Cari aplikasi atau repository...">
+<select id="filter" aria-label="Filter kategori"><option value="all">Semua kategori</option><option value="business">Business</option><option value="platform">Platform</option><option value="operations">Operations</option></select></div>
+<div id="count" aria-live="polite"></div><div class="grid" id="apps"></div>
+<section class="panel"><h2>Live Coding & Job Control</h2><p>Integrasi job belum tersedia. Tombol Stop, Retry, Restart, dan Approve Production baru akan diaktifkan setelah autentikasi, RBAC, idempotency, dan API backend diverifikasi.</p>
+<div class="bar"><button disabled>Stop</button><button disabled>Retry</button><button disabled>Restart</button><button disabled>Approve Production</button></div>
+<small>Tidak ada job yang diambil dari sistem live.</small></section>
+<section class="panel"><h2>Chat Request Coding</h2><label for="request">Instruksi coding (contoh; tidak dikirim)</label><textarea id="request" placeholder="Contoh: perbaiki tabel Fleet di DEV, jalankan QA, tampilkan diff..."></textarea>
+<div class="bar"><button disabled>Kirim ke AI Task</button></div><small>Instruksi tidak akan diproses sampai koneksi backend dengan autentikasi dan audit tersedia.</small></section>
+</main><script>
+"use strict";
+const apps=[
+["Bizportal","business"],["Customer Portal","business"],["AI Task","platform"],["HRD","operations"],["Sport Center","business"],["Fleet","operations"],["Tenant","business"],["AI Core","platform"],["AI Front","platform"]];
+const search=document.getElementById("search"),filter=document.getElementById("filter"),container=document.getElementById("apps"),count=document.getElementById("count");
+function render(){
+ const q=search.value.trim().toLocaleLowerCase("id-ID"),f=filter.value;
+ const filtered=apps.filter(([name,group])=>(f==="all"||f===group)&&name.toLocaleLowerCase("id-ID").includes(q));
+ container.replaceChildren();
+ for(const [name,group] of filtered){
+  const card=document.createElement("article"),title=document.createElement("h2"),meta=document.createElement("div"),badge=document.createElement("span");
+  title.textContent=name;meta.className="meta";meta.textContent="Kategori: "+group;
+  badge.className="status";badge.textContent="Integrasi belum aktif";
+  card.append(title,meta,badge);container.append(card);
+ }
+ count.textContent=filtered.length+" dari "+apps.length+" aplikasi";
+ if(!filtered.length){const empty=document.createElement("div");empty.className="empty";empty.textContent="Tidak ada aplikasi yang cocok.";container.append(empty);}
+}
+search.addEventListener("input",render);filter.addEventListener("change",render);render();
+</script></body></html>
