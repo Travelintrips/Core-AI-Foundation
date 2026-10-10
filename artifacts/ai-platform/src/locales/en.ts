@@ -67,7 +67,7 @@ export const en = {
       settings:             "Settings",
       aiCoreChat:          "AI Core Chat",
       aiCoreActivity:      "ChatGPT ↔ AI Core Activity",
-      codingWorkspace:     "AI Coding Workspace",
+      codingWorkspace:     "AI Engine",
     },
   },
   status: {
@@ -746,7 +746,7 @@ export const en = {
     },
     codingWorkspace: {
       eyebrow: "Engineering control room",
-      title: "AI Coding Workspace",
+      title: "AI Engine",
       subtitle: "Turn precise instructions into visible, reviewable engineering work.",
       newTask: "New coding task",
       taskQueue: "Task queue",
