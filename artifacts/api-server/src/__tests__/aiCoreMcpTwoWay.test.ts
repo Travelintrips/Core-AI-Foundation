@@ -17,7 +17,7 @@ vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
 }));
 vi.mock("../services/aiCoreWhatsappChatService.js", () => ({ resolveAiCoreInternalBaseUrl: () => "http://localhost:8080/api" }));
 vi.mock("../services/localCodingControlBridgeService.js", () => ({
-  acknowledgeCodingBridgeResponse: mocks.ack,
+  acknowledgeCodingBridgeResponseForConversation: mocks.ack,
   listPendingCodingBridgeResponsesForConversation: mocks.list,
   subscribeCodingBridgeConversation: mocks.subscribe,
   unsubscribeCodingBridgeConversation: mocks.unsubscribe,
