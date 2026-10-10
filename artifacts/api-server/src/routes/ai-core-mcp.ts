@@ -1,3 +1,7 @@
+import {
+  aiCoreCodingDeniedResponse,
+  isAiCoreCodingCommandBlocked,
+} from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
@@ -1078,6 +1082,17 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           command.instruction = cleanCommand.instruction;
           command.gatedMessage = cleanCommand.gatedMessage;
         }
+      }
+      // Deny prohibited coding immediately, even before MCP intent confirmation:
+      // a policy prohibition must never be described as missing workers.
+      if (isAiCoreCodingCommandBlocked(command.instruction)) {
+        const denial = aiCoreCodingDeniedResponse();
+        res.status(200).json(rpcResult(body.id ?? null, {
+          content: [{ type: "text", text: String(denial["reply"]) }],
+          structuredContent: denial,
+          isError: false,
+        }));
+        return;
       }
       const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(command.instruction);
       if (!effectiveConfirmed) {
