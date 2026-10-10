@@ -1274,7 +1274,7 @@ async function openAiFirstReadOnlyIntent(
   if (workload.workload === "CODING" || workload.workload === "CRITICAL_ACTION") return null;
   if (policy === "economy") return null;
   const trimmed = message.trim();
-  if (!trimmed || /^\\/(?:status|model|routing|help)\\b/i.test(trimmed)) return null;
+  if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
   const cloud = await resolveCloudSelection(workload.workload);
   const meta = { workload: workload.workload, costClass: workload.costClass };
   if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
@@ -1283,17 +1283,17 @@ async function openAiFirstReadOnlyIntent(
   }
   const routingPrompt = [
     "Classify the user's request for safe, read-only AI Core Chat routing.",
-    "Respond with exactly one JSON object: {\\\"route\\\":\\\"ANSWER\\\"} or {\\\"route\\\":\\\"VERIFIED_TOOL\\\"}.",
+    "Respond with exactly one JSON object: {\\"route\\":\\"ANSWER\\"} or {\\"route\\":\\"VERIFIED_TOOL\\"}.",
     "VERIFIED_TOOL is allowed ONLY if the request directly asks for observable AI Core jobs, worker status, deployment health, or GCP cost from integrated sources.",
     "Requests about OpenAI complimentary tokens/eligibility, architecture, integrations readiness, explanations, or TEST_ONLY event simulations are ANSWER unless an exact supporting tool exists.",
     "Never interpret a request for one subject as permission to query unrelated coding-task records.",
     "If uncertain choose ANSWER. This classification does not grant permission to modify anything.",
     "Request: " + trimmed,
-  ].join("\\n");
+  ].join("\n");
   try {
     const decision = await invokeChatModel(cloud.selection, routingPrompt);
     const reply = typeof decision.reply === "string" ? decision.reply : "";
-    const routeMatch = reply.match(/"route"\\s*:\\s*"(ANSWER|VERIFIED_TOOL)"/i);
+    const routeMatch = reply.match(/"route"\s*:\s*"(ANSWER|VERIFIED_TOOL)"/i);
     if (!routeMatch) {
       return unavailableAskReply("OpenAI intent classification returned no valid route. No database query attempted.",
         "Invalid or empty intent classifier response.", meta);
@@ -1301,7 +1301,7 @@ async function openAiFirstReadOnlyIntent(
     if (routeMatch[1] === "VERIFIED_TOOL") return null;
     const answer = await invokeChatModel(cloud.selection,
       conversationalMessage +
-      "\\n\\nAnswer the user's actual request. Never invent account-specific billing, permissions, status, token allocations or integration readiness. If you cannot inspect authoritative account/project data, say so explicitly.");
+      "\n\nAnswer the user's actual request. Never invent account-specific billing, permissions, status, token allocations or integration readiness. If you cannot inspect authoritative account/project data, say so explicitly.");
     if (typeof answer.reply !== "string" || !answer.reply.trim()) {
       return unavailableAskReply("OpenAI returned an empty reply. No irrelevant tool fallback was executed.",
         "Empty model response.", meta);
