@@ -1,3 +1,7 @@
+import {
+  aiCoreCodingDeniedResponse,
+  isAiCoreCodingCommandBlocked,
+} from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -3664,6 +3668,12 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   res.once("close", abort);
 
   try {
+    // Authorization denial is independent of worker availability.
+    // Check before memory, model calls, task creation or agent dispatch.
+    if (isAiCoreCodingCommandBlocked(parsed.data.message)) {
+      writeBufferedChatStream(res, aiCoreCodingDeniedResponse());
+      return;
+    }
     const scope = {
       sessionId: parsed.data.conversationId ?? null,
       projectName: parsed.data.projectName ?? null,
@@ -3783,6 +3793,13 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   const parsed = ChatRequest.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  // Refuse source-changing coding at the chat boundary in every mode,
+  // rather than returning the ambiguous internal NO_WORKER routing lane.
+  if (isAiCoreCodingCommandBlocked(parsed.data.message)) {
+    res.status(200).json(aiCoreCodingDeniedResponse());
     return;
   }
 
