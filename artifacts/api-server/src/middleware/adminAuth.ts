@@ -39,6 +39,7 @@ function isAiCoreConnectorRoute(req: Request): boolean {
 const AI_TASK_BRIDGE_ROUTES = [
   { method: "POST", pattern: /^\/ai\/coding\/bridge\/commands$/ },
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/runtime-status$/ },
+  { method: "GET", pattern: /^\/ai\/coding\/bridge\/ai-task-timeline$/ },
 ] as const;
 
 function hasValidAiTaskBridgeKey(req: Request): boolean {
