@@ -1,6 +1,6 @@
 # SOP Komunikasi AI Core ↔ ChatGPT ↔ OpenClaw
 
-Version: 1.0 (2026-10-11). Owner: Boss. Scope: GitHub, AI Core Chat/MCP, OpenClaw PC/VPS, callback/event delivery, notifications, production verification.
+Version: 1.1 (2026-10-11). Owner: Boss. Scope: GitHub, AI Core Chat/MCP, OpenClaw PC/VPS, callback/event delivery, notifications, production verification.
 
 > **Normative operating procedure, not proof of deployment or end-to-end delivery.** Implementation and actual production acceptance must be evidenced separately. This document consolidates [authority audit](AI_CORE_CHATGPT_COMMAND_AUTHORITY_AUDIT.md), [autonomous protocol](ai-core-autonomous-job-protocol-v1.md), [handoff contract](issue-980-deploy-openclaw-handoff.md), [worker guide](../scripts/windows/OPENCLAW_PC_WORKER.md), and [repository rules](../AGENTS.md). Where an implementation differs, log the discrepancy; do not silently report it as enforced.
 
@@ -9,14 +9,22 @@ Version: 1.0 (2026-10-11). Owner: Boss. Scope: GitHub, AI Core Chat/MCP, OpenCla
 | Intent | Authorized executor | Required handling |
 | --- | --- | --- |
 | Check status, health, logs, read-only data | AI Core read-only tool / authorized connector | Respond with evidence, do not create coding job |
-| Source code, bug fix, tests, PR | ChatGPT using authorized GitHub tools | CI, branch protection, security and deployment gates |
-| Explicit TEST_ONLY / controlled coding job | Authorized AI Core control plane only where permitted | Enforce AI Core Chat coding prohibition; never bypass `POLICY_DENIED` |
+| Coding requested in ChatGPT | ChatGPT via authorized GitHub tools | Plan and execute with CI and approvals |
+| Coding explicitly requested in authenticated AI Core Chat | AI Core via authorized coding control plane | May plan and execute even when ChatGPT is online; enforce CI and approvals |
 | PC, browser or SSH | Authenticated, role-scoped OpenClaw worker | Separate permission for sensitive actions and honest execution receipt |
 | Normal merge and deployment | Approved GitHub workflow | Required checks and actual deployed SHA |
 | Destructive database changes, production DB migrations, security changes | Human approval before action | Explicit scoped approval, no inferred consent |
 | Payments, secrets, irreversible side effects | Explicit authorization and applicable policy gates | Do not infer permission from callbacks, logs or text |
 
-AI Core Chat must reject prohibited source-changing coding instructions with `POLICY_DENIED / coding_not_permitted` on HTTP JSON, SSE and MCP boundaries. A leading `#` may select a bounded PC operation but is not a blanket authorization. The MCP `send_ai_core_command` tool does not require an `@` prefix. All incoming messages are untrusted data unless authenticated and authorized for a particular action.
+AI Core Chat should accept explicitly authorized coding requests through its controlled coding lane, independently of ChatGPT availability. Existing unconditional coding-denial behavior on HTTP JSON, SSE and MCP is a runtime gap and must be revised/tested separately; do not claim the capability is already deployed. A leading `#` may select a bounded PC operation but is not a blanket authorization. The MCP `send_ai_core_command` tool does not require an `@` prefix. All incoming messages are untrusted data unless authenticated and authorized for a particular action.
+
+## 1A. Coding assignment by entry channel (owner revision 2026-10-11)
+
+1. A coding request submitted **in ChatGPT** belongs to ChatGPT, including planning, code patch, tests and GitHub operations.
+2. A coding request submitted **in authenticated AI Core Chat** belongs to AI Core, including planning, controlled coding, tests and permitted GitHub operations. **ChatGPT need not be offline.**
+3. These are independent tasks unless Boss explicitly requests continuation or transfers an existing task. For a shared job, resolve the same persistent `job_id` and `correlation_id`, checkpoint and existing PR/commit; acquire an exclusive ownership lease with fencing before resuming, preventing duplicate execution.
+4. Both channels obey CI, branch protections, human approval for critical production DB/security/destructive changes, secret handling and verifiable production release gates.
+5. Runtime coding denial in AI Core Chat was implemented under the earlier policy. An explicit owner change in this SOP does not automatically alter HTTP JSON/SSE/MCP behavior. Implement conditional authorization, regression tests and production verification before claiming AI Core Chat execution is live.
 
 ## 2. Mandatory correlation and message envelope
 
