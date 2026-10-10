@@ -1262,6 +1262,57 @@ async function promoteTeacherFromResult(
   }).catch(() => false);
 }
 
+// OpenAI reviews the user's meaning before broad keyword/SQL routing. Only
+// narrowly scoped, read-only status requests can continue to deterministic tools.
+// This gate cannot authorize mutations: agent/control-plane approval remains separate.
+async function openAiFirstReadOnlyIntent(
+  message: string,
+  policy: ChatPolicy,
+  workload: ReturnType<typeof classifyAiCoreWorkload>,
+  conversationalMessage: string,
+): Promise<Record<string, unknown> | null> {
+  if (workload.workload === "CODING" || workload.workload === "CRITICAL_ACTION") return null;
+  if (policy === "economy") return null;
+  const trimmed = message.trim();
+  if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
+  const cloud = await resolveCloudSelection(workload.workload);
+  const meta = { workload: workload.workload, costClass: workload.costClass };
+  if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
+    return unavailableAskReply("OpenAI intent gate unavailable; unrelated database routes are disabled.",
+      cloud.ok ? "Selected provider is not OpenAI." : cloud.message, meta);
+  }
+  const routingPrompt = [
+    "Classify the user's request for safe, read-only AI Core Chat routing.",
+    'Respond with exactly one JSON object: {"route":"ANSWER"} or {"route":"VERIFIED_TOOL"}.',
+    "VERIFIED_TOOL is allowed ONLY if the request directly asks for observable AI Core jobs, worker status, deployment health, or GCP cost from integrated sources.",
+    "Requests about OpenAI complimentary tokens/eligibility, architecture, integrations readiness, explanations, or TEST_ONLY event simulations are ANSWER unless an exact supporting tool exists.",
+    "Never interpret a request for one subject as permission to query unrelated coding-task records.",
+    "If uncertain choose ANSWER. This classification does not grant permission to modify anything.",
+    "Request: " + trimmed,
+  ].join("\n");
+  try {
+    const decision = await invokeChatModel(cloud.selection, routingPrompt);
+    const reply = typeof decision.reply === "string" ? decision.reply : "";
+    const routeMatch = reply.match(/"route"\s*:\s*"(ANSWER|VERIFIED_TOOL)"/i);
+    if (!routeMatch) {
+      return unavailableAskReply("OpenAI intent classification returned no valid route. No database query attempted.",
+        "Invalid or empty intent classifier response.", meta);
+    }
+    if (routeMatch[1] === "VERIFIED_TOOL") return null;
+    const answer = await invokeChatModel(cloud.selection,
+      conversationalMessage +
+      "\n\nAnswer the user's actual request. Never invent account-specific billing, permissions, status, token allocations or integration readiness. If you cannot inspect authoritative account/project data, say so explicitly.");
+    if (typeof answer.reply !== "string" || !answer.reply.trim()) {
+      return unavailableAskReply("OpenAI returned an empty reply. No irrelevant tool fallback was executed.",
+        "Empty model response.", meta);
+    }
+    return { kind: "answer", route: "OPENAI_INTENT_FIRST", ...meta, ...answer };
+  } catch (error) {
+    return unavailableAskReply("OpenAI intent gate failed; no unrelated database query executed.",
+      safeProviderFailure(error) || "Intent gate failure.", meta);
+  }
+}
+
 async function answerAskMode(
   message: string,
   policy: ChatPolicy,
@@ -1275,40 +1326,8 @@ async function answerAskMode(
     workload: workload.workload,
     costClass: workload.costClass,
   };
-  // Ambiguous account entitlement and cross-system readiness questions need semantic
-  // interpretation first. Previously broad deterministic/DB regexes answered these
-  // requests with unrelated coding-task rows or deployment health checks.
-  // Treat account-level OpenAI entitlements as semantic reasoning requests even
-  // when users say "eligible complimentary tokens" rather than "free token".
-  // These must never fall through to an unrelated admin database lookup.
-  const normalizedIntent = routingMessage.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const mentionsOpenAi = /\b(?:openai|gpt|chatgpt)\b/.test(normalizedIntent);
-  const mentionsEntitlement = /\b(?:token|tokens|kuota|quota|free|gratis|credit|credits|kredit|billing|usage|pemakaian|eligible|eligibility|complimentary|entitlement|allowance|sharing|data controls)\b/.test(normalizedIntent);
-  const mentionsAiTask = /\bai task\b/.test(normalizedIntent);
-  const mentionsReadiness = /\b(?:audit|kesiapan|readiness|integrasi|integration|hubung|connect|connection|terhubung)\b/.test(normalizedIntent);
-  const semanticFirst = (mentionsOpenAi && mentionsEntitlement) || (mentionsAiTask && mentionsReadiness);
-  if (semanticFirst && workload.workload !== "CRITICAL_ACTION" && workload.workload !== "CODING") {
-    const cloud = await resolveCloudSelection(workload.workload);
-    if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
-      return unavailableAskReply(
-        "OpenAI reasoning diperlukan untuk pertanyaan ini; hasil database atau pemeriksaan deployment yang tidak relevan tidak digunakan.",
-        cloud.ok ? "Selected cloud provider is not OpenAI." : cloud.message,
-        routingMeta,
-      );
-    }
-    try {
-      const prompt = conversationalMessage +
-        "\n\nImportant: Do not invent account-specific eligibility, token balance, or integration readiness. Explicitly say when source-of-truth access is unavailable.";
-      const result = await invokeChatModel(cloud.selection, prompt);
-      return { kind: "answer", route: "OPENAI_SEMANTIC_FIRST", ...routingMeta, ...result };
-    } catch (error) {
-      return unavailableAskReply(
-        "OpenAI reasoning gagal; tidak mengalihkan ke hasil database yang tidak relevan.",
-        safeProviderFailure(error) || "OpenAI invocation failed.",
-        routingMeta,
-      );
-    }
-  }
+  const semantic = await openAiFirstReadOnlyIntent(routingMessage, policy, workload, conversationalMessage);
+  if (semantic) return semantic;
   const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) return deterministic;
 
@@ -1726,6 +1745,12 @@ async function streamAskMode(
     workload: workload.workload,
     costClass: workload.costClass,
   };
+
+  const semantic = await openAiFirstReadOnlyIntent(routingMessage, policy, workload, conversationalMessage);
+  if (semantic) {
+    writeBufferedChatStream(res, semantic);
+    return;
+  }
 
   const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) {
