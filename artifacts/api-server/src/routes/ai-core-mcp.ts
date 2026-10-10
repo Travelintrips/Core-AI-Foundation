@@ -1164,6 +1164,34 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         },
         identity.connectorKey,
       );
+      // A model-generated claim of external-agent dispatch is not execution evidence.
+      // Fail closed when there is no persisted bridge command to track.
+      if (payload && typeof payload === "object") {
+        const response = payload as Record<string, unknown>;
+        const reply = typeof response.reply === "string" ? response.reply : "";
+        const lane = typeof response.executionLane === "string" ? response.executionLane : "";
+        const claimsDispatch = /(?:command\s*id|commandid|perintah.{0,30}dikirim|dispatch.{0,30}(?:succeeded|berhasil))/i.test(reply);
+        const mentionsExternalWorker = /(?:openclaw|open\s*claw|external.agent|worker)/i.test(command.instruction);
+        if (claimsDispatch && mentionsExternalWorker) {
+          const ids = [...reply.matchAll(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi)].map((match) => match[0]);
+          let verified = false;
+          if (lane !== "NO_WORKER") {
+            for (const id of ids) {
+              const persisted = await getExternalAgentWorkState(id);
+              if (persisted) { verified = true; break; }
+            }
+          }
+          if (!verified) {
+            payload = {
+              kind: "dispatch_unverified",
+              status: "BLOCKED",
+              reason: lane === "NO_WORKER" ? "NO_WORKER" : "EXTERNAL_COMMAND_NOT_PERSISTED",
+              reply: "AI Core did not produce a verifiable external-agent command. No successful dispatch or browser callback can be claimed.",
+              isError: true,
+            };
+          }
+        }
+      }
       if (
         payload &&
         typeof payload === "object" &&
