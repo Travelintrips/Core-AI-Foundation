@@ -7,9 +7,19 @@ import {
   isAiCoreCapabilityQuery,
   isSafeDirectOpenClawPcCommand,
   parseDirectOpenClawPcCommand,
+  parseOpenClawPcCodingRequest,
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("routes leading pipe coding to the PC external agent, not NO_WORKER", () => {
+    expect(parseOpenClawPcCodingRequest("| perbaiki bug login")).toBe("perbaiki bug login");
+    expect(parseOpenClawPcCodingRequest("tolong | perbaiki bug")).toBeNull();
+    expect(parseOpenClawPcCodingRequest("|")).toBeNull();
+    expect(classifyAiCoreChatDispatch("| perbaiki bug login")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED", externalAgentClientId: "gcp-openclaw-main",
+    });
+    expect(classifyAiCoreChatDispatch("perbaiki bug login").kind).not.toBe("EXTERNAL_AGENT");
+  });
   it.each([
     "Jalankan satu job uji Temporal Coding Worker VPS Hostinger TEST_ONLY tanpa merge atau deploy.",
     "Buat tepat satu job Coding Orchestrator TEST_ONLY untuk uji worker VPS.",
