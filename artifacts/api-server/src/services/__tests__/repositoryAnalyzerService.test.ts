@@ -556,6 +556,25 @@ describe("repository analyzer execution", () => {
     );
   });
 
+  it("completes only explicit safe read-only TEST_ONLY E2E analysis", async () => {
+    selectBuilder.where.mockResolvedValueOnce([{
+      id: taskId,
+      instruction: "TEST_ONLY E2E verification Repository Analyzer, no code modifications, no merge or deploy.",
+    }]);
+    await completeRepositoryAnalyzerRun({
+      codingTaskId: taskId,
+      codingRunId: runId,
+      executionStatus: "COMPLETED",
+      summary: "Repository Analyzer indexed files",
+      changeReservation: { status: "RESERVED" },
+      localExecution: null,
+    });
+    expect(mockTxUpdateSet).toHaveBeenNthCalledWith(2, {
+      status: "COMPLETED",
+      resultSummary: "Repository Analyzer indexed files",
+    });
+  });
+
   it("persists successful analysis and moves the task to READY_REVIEW", async () => {
     const result = {
       codingTaskId: taskId,

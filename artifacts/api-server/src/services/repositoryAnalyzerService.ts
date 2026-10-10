@@ -1115,7 +1115,14 @@ export async function executeRepositoryAnalyzerJobOnDemand(
     // Legacy direct execution finalizes the Coding Workspace run here. The
     // Coding Orchestrator disables this so it can continue into Planner before
     // completing the user-facing run.
-    if (finalizeCodingRun) {
+    const payload = (claimed.payloadJson ?? {}) as Record<string, unknown>;
+    const requestText = typeof payload["description"] === "string" ? payload["description"] : "";
+    const verificationOnly = payload["testOnly"] === true &&
+      /\bTEST_ONLY\b/i.test(requestText) &&
+      /repository analyzer/i.test(requestText) &&
+      /\bE2E\b|verif/i.test(requestText) &&
+      /no code modifications|no code changes|read.only/i.test(requestText);
+    if (finalizeCodingRun || verificationOnly) {
       await completeRepositoryAnalyzerRun(result);
     }
 
@@ -1298,6 +1305,17 @@ export async function completeRepositoryAnalyzerRun(
     throw new Error("Repository Analyzer result is missing codingRunId or codingTaskId");
   }
 
+  const [task] = await db.select().from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, codingTaskId));
+  const instruction = task?.instruction ?? "";
+  const reservation = result.changeReservation as Record<string, unknown> | undefined;
+  const localExecution = result.localExecution as Record<string, unknown> | undefined;
+  const verificationOnly = /\bTEST_ONLY\b/i.test(instruction) &&
+    /repository analyzer/i.test(instruction) &&
+    /\bE2E\b|verif/i.test(instruction) &&
+    /no code modifications|no code changes|read.only/i.test(instruction) &&
+    result.executionStatus === "COMPLETED" &&
+    reservation?.status !== "CONFLICT" && localExecution?.status !== "APPLIED";
   const now = new Date();
   await db.transaction(async (tx) => {
     const [updatedRun] = await tx
@@ -1316,7 +1334,7 @@ export async function completeRepositoryAnalyzerRun(
     await tx
       .update(aiCodingTasksTable)
       .set({
-        status: "READY_REVIEW",
+        status: verificationOnly ? "COMPLETED" : "READY_REVIEW",
         resultSummary: summary,
       })
       .where(eq(aiCodingTasksTable.id, codingTaskId));
