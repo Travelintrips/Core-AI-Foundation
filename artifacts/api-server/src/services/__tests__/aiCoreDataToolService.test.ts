@@ -170,3 +170,19 @@ describe("AI Core read-only data tools", () => {
   });
 
 });
+
+
+describe("production Ask data tool gate", () => {
+  it("matches the exact smoke booking request before semantic routing", async () => {
+    const { detectAiCoreDataTool } = await import("../aiCoreDataToolService.js");
+    expect(detectAiCoreDataTool("cek booking SC-0992")).toEqual({
+      tool: "SPORT_CENTER_BOOKING_LOOKUP", bookingNumber: "SC-0992",
+    });
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    const early = source.indexOf("const earlyDataTool = await tryRunAiCoreDataTool(routingMessage)");
+    const semantic = source.indexOf("const semantic = await openAiFirstReadOnlyIntent");
+    expect(early).toBeGreaterThan(0);
+    expect(early).toBeLessThan(semantic);
+  });
+});
