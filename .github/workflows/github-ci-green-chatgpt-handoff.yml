@@ -56,7 +56,7 @@ jobs:
         if: env.is_current == 'true'
         env:
           AGENT_TOKEN: ${{ secrets.AI_CORE_SCOPED_AGENT_TOKEN }}
-          CONVERSATION_ID: ${{ vars.CHATGPT_HANDOFF_CONVERSATION_ID }}
+          CONVERSATION_ID: ${{ vars.CHATGPT_HANDOFF_CONVERSATION_ID || '6ac8d2eb-db50-83ec-b53e-3c4a0f87ba2b' }}
           API_BASE_URL: https://aicore.cstlogistic.co.id/api
         shell: bash
         run: |
