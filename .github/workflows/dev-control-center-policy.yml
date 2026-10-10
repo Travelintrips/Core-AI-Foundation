@@ -23,5 +23,7 @@ jobs:
           node --check dev-control-center/policy.mjs
           node --check dev-control-center/control-plane.mjs
           node --check dev-control-center/control-plane.test.mjs
+          node --check dev-control-center/monitor-client.mjs
+          node --check dev-control-center/monitor-client.test.mjs
       - name: Run security policy tests without external services
-        run: node --test dev-control-center/control-plane.test.mjs
+        run: node --test dev-control-center/control-plane.test.mjs dev-control-center/monitor-client.test.mjs
