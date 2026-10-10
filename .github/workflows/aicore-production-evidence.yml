@@ -1,0 +1,34 @@
+name: AI Core Production Evidence
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Full commit SHA expected to be deployed in production"
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Collect independent deployment evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          PRODUCTION_REVISION_URL: ${{ vars.AICORE_PRODUCTION_REVISION_URL }}
+          EVIDENCE_OUTPUT: deployment-evidence.json
+        run: node scripts/aicore-deployment-proof.cjs
+      - name: Publish auditable proof (including failures)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aicore-deployment-evidence
+          path: deployment-evidence.json
+          if-no-files-found: warn
