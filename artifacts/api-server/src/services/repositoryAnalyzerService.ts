@@ -1115,7 +1115,14 @@ export async function executeRepositoryAnalyzerJobOnDemand(
     // Legacy direct execution finalizes the Coding Workspace run here. The
     // Coding Orchestrator disables this so it can continue into Planner before
     // completing the user-facing run.
-    if (finalizeCodingRun) {
+    const payload = (claimed.payloadJson ?? {}) as Record<string, unknown>;
+    const requestText = typeof payload["description"] === "string" ? payload["description"] : "";
+    const verificationOnly = payload["testOnly"] === true &&
+      /\\bTEST_ONLY\\b/i.test(requestText) &&
+      /repository analyzer/i.test(requestText) &&
+      /\\bE2E\\b|verif/i.test(requestText) &&
+      /no code modifications|no code changes|read.only/i.test(requestText);
+    if (finalizeCodingRun || verificationOnly) {
       await completeRepositoryAnalyzerRun(result);
     }
 
