@@ -21,6 +21,7 @@ describe("AI Core Chat coding policy refusal", () => {
     "Apa perbedaan Temporal dan n8n?",
     "@restart GCP ollama VM",
     "Jalankan test repository read-only",
+    "# hapus file Downloads/data.csv",
   ])("does not mislabel non-coding operations as permission failures: %s", message => {
     expect(isAiCoreCodingCommandBlocked(message)).toBe(false);
   });
