@@ -2009,7 +2009,7 @@ export default function AiCoreChat() {
                     </div>
                     <Link href={progress.workspaceUrl}>
                       <div className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg cursor-pointer" style={{ color: "#B8AEFF", background: "#171D3C", border: "1px solid #313C78" }}>
-                        Coding Workspace <ExternalLink className="size-3" />
+                        AI Engine Workspace <ExternalLink className="size-3" />
                       </div>
                     </Link>
                   </div>
