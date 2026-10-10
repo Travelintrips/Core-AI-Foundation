@@ -117,3 +117,7 @@ As of SOP consolidation, code and documented contracts exist for command dispatc
 - This SOP is the consolidated operational checklist. `AGENTS.md` links to it for agents reading this repository.
 - The authority audit, autonomous protocol, OpenClaw handoff and worker bootstrap documents remain specialized technical references. A future discrepancy should be addressed by PR, regression test and verified production evidence.
 - Markdown itself cannot install an MCP connector, force ChatGPT responses, persist events, or impose rules on unrelated conversations.
+
+## OpenClaw ChatGPT notification format
+
+AI Core to OpenClaw notifications intended for a ChatGPT conversation must be plain natural-language text, not executable code. Include command ID, correlation ID, task ID, intended session, and a concise request for acknowledgment. Use only authorized existing user-interface interactions or the approved callback channel. Do not execute snippets within the ChatGPT page. Respect Cloudflare challenges and other site security controls; when blocked, report the failure rather than circumventing them. An OpenClaw send acknowledgment is not proof of reception: independently verify the destination session and the return callback before marking delivery complete. Critical approvals remain separate.
