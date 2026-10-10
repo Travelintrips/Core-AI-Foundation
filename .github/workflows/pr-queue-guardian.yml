@@ -1,0 +1,126 @@
+name: PR Queue Guardian
+
+# Runs only trusted default-branch code. Never checks out a PR head.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+
+concurrency:
+  group: pr-queue-guardian
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    name: Diagnose and maintain opted-in PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Audit PR queue without bypassing CI or approvals
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const day = 86400000;
+            const limit = 80;
+            const approvedLabel = 'safe-automerge';
+            const syncLabel = 'safe-sync';
+            const successConclusions = new Set(['success', 'neutral', 'skipped']);
+            const protectedPath = /(^|\/)(migrations?|schema|secrets?|auth|payments?|invoices?|finance|tax|reconcil|security|deploy|production|\.github)(\/|\.|$)|(^|\/)(AGENTS\.md|Dockerfile)$/i;
+            const summary = [['PR', 'CI', 'Merge state', 'Guardian action']];
+            let errors = 0;
+            const prs = (await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100
+            })).slice(0, limit);
+
+            for (const pr of prs) {
+              const labels = new Set(pr.labels.map(label => label.name));
+              let ci = 'unverified';
+              let mergeState = 'unknown';
+              let action = 'audit only';
+              try {
+                if (pr.draft) {
+                  summary.push(['#' + pr.number, 'draft', 'draft', 'none']);
+                  continue;
+                }
+                const detail = (await github.rest.pulls.get({
+                  owner, repo, pull_number: pr.number
+                })).data;
+                mergeState = detail.mergeable === false ? 'conflict' :
+                  (detail.mergeable_state || 'calculating');
+
+                const checkResponse = await github.rest.checks.listForRef({
+                  owner, repo, ref: detail.head.sha, per_page: 100
+                });
+                const checks = checkResponse.data.check_runs;
+                const bad = checks.filter(check =>
+                  check.status !== 'completed' ||
+                  !successConclusions.has(check.conclusion));
+                ci = checks.length === 0 ? 'NO_CHECKS' :
+                  bad.length ? 'NOT_GREEN: ' + bad.map(x => x.name).slice(0, 3).join(', ') :
+                  'GREEN';
+
+                // No silent auto-retry of deterministic failures. Keep failed CI visible.
+                if (detail.mergeable === false) {
+                  action = 'manual conflict resolution required';
+                } else if (
+                  detail.mergeable_state === 'behind' &&
+                  labels.has(syncLabel) &&
+                  detail.head.repo.full_name === detail.base.repo.full_name
+                ) {
+                  await github.rest.pulls.updateBranch({
+                    owner, repo, pull_number: pr.number,
+                    expected_head_sha: detail.head.sha
+                  });
+                  action = 'requested non-force branch update; CI must rerun';
+                } else if (
+                  labels.has(approvedLabel) &&
+                  !detail.auto_merge &&
+                  detail.mergeable === true &&
+                  detail.mergeable_state === 'clean' &&
+                  ci === 'GREEN' &&
+                  checks.some(check => check.conclusion === 'success') &&
+                  detail.head.repo.full_name === detail.base.repo.full_name &&
+                  ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(detail.author_association)
+                ) {
+                  const files = (await github.rest.pulls.listFiles({
+                    owner, repo, pull_number: pr.number, per_page: 100
+                  })).data;
+                  if (files.length === 100 || files.some(f => protectedPath.test(f.filename))) {
+                    action = 'sensitive or oversized diff: human merge required';
+                  } else {
+                    const mutation = 'mutation($id: ID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) { clientMutationId } }';
+                    await github.graphql(mutation, {id: detail.node_id});
+                    action = 'native GitHub auto-merge armed';
+                  }
+                } else if (ci !== 'GREEN') {
+                  action = 'CI fix required; no merge';
+                } else if (detail.mergeable_state === 'behind') {
+                  action = 'outdated branch; add safe-sync label to allow update';
+                } else if (!labels.has(approvedLabel)) {
+                  action = 'no auto-merge authorization label';
+                } else {
+                  action = 'GitHub rules, reviews, or mergeability still apply';
+                }
+              } catch (error) {
+                errors++;
+                action = 'API ERROR: ' + String(error.message || error).slice(0, 160);
+                core.warning('#' + pr.number + ' ' + action);
+              }
+              summary.push(['#' + pr.number, ci, mergeState, action]);
+            }
+
+            await core.summary.addHeading('PR Queue Guardian').addRaw(
+              'Read-only by default. Branch update requires safe-sync. ' +
+              'Auto-merge requires safe-automerge, successful checks, a nonsensitive ' +
+              'same-repository diff, and GitHub enforcement of reviews and required CI.\n\n'
+            ).addTable(summary).write();
+
+            core.info('Audited ' + prs.length + ' pull requests. API errors: ' + errors);
+            if (errors) core.setFailed('PR Queue Guardian encountered API errors; see step log.');

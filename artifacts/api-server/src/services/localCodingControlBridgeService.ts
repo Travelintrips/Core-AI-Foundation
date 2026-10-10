@@ -618,6 +618,30 @@ export function hasUnverifiedExternalBrowserCompletion(input: {
   return mentionsBrowserTest && explicitlyUnable && deliveryMissing;
 }
 
+export type EvidenceStatusCode =
+  | "JOB_COMPLETED" | "RESULT_VERIFIED" | "DELIVERY_SUBMITTED"
+  | "DELIVERY_CONFIRMED" | "CALLBACK_RECEIVED" | "E2E_VERIFIED"
+  | "FAILED" | "UNKNOWN_UNVERIFIED";
+
+/** A worker's own narrative is never a destination receipt. */
+export function classifyBridgeCompletion(input: {
+  status: "COMPLETED" | "FAILED";
+  details?: Record<string, unknown>;
+}): { statusCode: EvidenceStatusCode; deliveryCode: EvidenceStatusCode; e2eCode: EvidenceStatusCode } {
+  if (input.status === "FAILED") {
+    return { statusCode: "FAILED", deliveryCode: "UNKNOWN_UNVERIFIED", e2eCode: "UNKNOWN_UNVERIFIED" };
+  }
+  const details = input.details ?? {};
+  // A direct, bounded read-only check can prove the result, but not callback delivery.
+  const verifiedResult = details["sshVerified"] === true &&
+    details["mode"] === "ssh-readonly-hostinger" && details["exitCode"] === 0;
+  return {
+    statusCode: verifiedResult ? "RESULT_VERIFIED" : "JOB_COMPLETED",
+    deliveryCode: "UNKNOWN_UNVERIFIED",
+    e2eCode: "UNKNOWN_UNVERIFIED",
+  };
+}
+
 export async function completeCodingBridgeCommand(input: {
   clientId: string;
   commandId: string;
@@ -633,6 +657,7 @@ export async function completeCodingBridgeCommand(input: {
     hasUnverifiedExternalBrowserCompletion({ message: input.message, details })
     ? "FAILED"
     : input.status;
+  const evidence = classifyBridgeCompletion({ status: verifiedStatus, details });
   const encoded = JSON.stringify(details);
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
@@ -646,7 +671,10 @@ export async function completeCodingBridgeCommand(input: {
           metadata_json - 'claimToken' - 'claimLeaseExpiresAt'
         ) || jsonb_build_object(
           'completedBy', ${input.clientId}::text,
-          'completedAt', NOW()::text
+          'completedAt', NOW()::text,
+          'statusCode', ${evidence.statusCode}::text,
+          'deliveryCode', ${evidence.deliveryCode}::text,
+          'e2eCode', ${evidence.e2eCode}::text
         ),
         updated_at = NOW()
     WHERE id = ${input.commandId}::uuid
@@ -666,12 +694,15 @@ export async function completeCodingBridgeCommand(input: {
     message: input.message,
     checkpoint: {
       status: verifiedStatus,
+      statusCode: evidence.statusCode,
+      deliveryCode: evidence.deliveryCode,
+      e2eCode: evidence.e2eCode,
       clientId: input.clientId,
     },
-    metadata: details,
+    metadata: { ...details, ...evidence },
   });
 
-  return { commandId: input.commandId, status: verifiedStatus, response };
+  return { commandId: input.commandId, status: verifiedStatus, ...evidence, response };
 }
 
 export async function getExternalAgentDiagnostic(input: {

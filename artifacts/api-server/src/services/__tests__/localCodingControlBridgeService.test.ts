@@ -84,3 +84,34 @@ describe("external-agent browser E2E terminal validation", () => {
     })).toBe(false);
   });
 });
+
+describe("evidence-qualified runtime status", () => {
+  it("keeps a successful browser subprocess separate from verified delivery", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({
+      status: "COMPLETED",
+      details: { browserConfirmed: true, sourceReplyDeliveryState: "missing", replayInvalid: true },
+    })).toEqual({
+      statusCode: "JOB_COMPLETED",
+      deliveryCode: "UNKNOWN_UNVERIFIED",
+      e2eCode: "UNKNOWN_UNVERIFIED",
+    });
+  });
+
+  it("allows independently checked SSH output without inferring callback success", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({
+      status: "COMPLETED",
+      details: { mode: "ssh-readonly-hostinger", sshVerified: true, exitCode: 0 },
+    })).toEqual({
+      statusCode: "RESULT_VERIFIED",
+      deliveryCode: "UNKNOWN_UNVERIFIED",
+      e2eCode: "UNKNOWN_UNVERIFIED",
+    });
+  });
+
+  it("does not classify a failed worker as completed", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({ status: "FAILED" }).statusCode).toBe("FAILED");
+  });
+});
