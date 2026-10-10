@@ -1283,7 +1283,7 @@ async function openAiFirstReadOnlyIntent(
   }
   const routingPrompt = [
     "Classify the user's request for safe, read-only AI Core Chat routing.",
-    "Respond with exactly one JSON object: {\\"route\\":\\"ANSWER\\"} or {\\"route\\":\\"VERIFIED_TOOL\\"}.",
+    'Respond with exactly one JSON object: {"route":"ANSWER"} or {"route":"VERIFIED_TOOL"}.',
     "VERIFIED_TOOL is allowed ONLY if the request directly asks for observable AI Core jobs, worker status, deployment health, or GCP cost from integrated sources.",
     "Requests about OpenAI complimentary tokens/eligibility, architecture, integrations readiness, explanations, or TEST_ONLY event simulations are ANSWER unless an exact supporting tool exists.",
     "Never interpret a request for one subject as permission to query unrelated coding-task records.",
