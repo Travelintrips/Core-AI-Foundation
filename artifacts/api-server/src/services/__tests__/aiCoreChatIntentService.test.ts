@@ -11,6 +11,14 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("does not allow semantic read-only intent to intercept explicit external-agent commands", () => {
+    const routeSource = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(routeSource).toContain('preflightDispatch.kind === "ANSWER"');
+    expect(classifyAiCoreChatDispatch("OpenClaw kirim pesan teks ke sesi ChatGPT via UI")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
+    });
+  });
+
   it.each([
     "Minta OpenClaw membangunkan ChatGPT melalui pesan teks di sesi browser; TEST_ONLY tanpa mengubah kode atau deploy.",
     "UJI E2E TERBATAS OpenClaw ke ChatGPT: kirim satu pesan TEKS BIASA melalui UI composer, bukan script; task TEST_ONLY tanpa merge atau deploy.",
