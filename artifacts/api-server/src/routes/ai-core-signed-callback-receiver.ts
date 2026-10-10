@@ -12,7 +12,7 @@ export function checkInboundSignature(input: {
   secret: string; eventId: string; timestamp: string; signature: string; body: Buffer; now?: number;
 }): boolean {
   if (!/^evt_[a-f0-9]{40}$/.test(input.eventId)) return false;
-  if (!/^\\d{10}$/.test(input.timestamp)) return false;
+  if (!/^\d{10}$/.test(input.timestamp)) return false;
   if (Math.abs((input.now ?? Date.now()) / 1000 - Number(input.timestamp)) > 300) return false;
   const signature = input.signature.split(" ").find(v => v.startsWith("v1,"));
   if (!signature) return false;
