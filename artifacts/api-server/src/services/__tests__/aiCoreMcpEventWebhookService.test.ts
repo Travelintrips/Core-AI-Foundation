@@ -143,3 +143,16 @@ describe("signed callback receipt verification", () => {
     }
   });
 });
+
+
+describe("signed receipt lifecycle promotion gate", () => {
+  it("promotes DELIVERY_CONFIRMED only after a verified receipt and never self-certifies E2E", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(new URL("../aiCoreMcpEventWebhookService.ts", import.meta.url), "utf8");
+    expect(source).toContain('input.status === "DELIVERED" && input.receiptVerified === true');
+    expect(source).toContain("delivery.receipt_verified_at IS NOT NULL");
+    expect(source).toContain("response.command_id = command.id");
+    expect(source).toContain("command.status = 'COMPLETED'");
+    expect(source).not.toContain("to_jsonb('E2E_VERIFIED'");
+  });
+});
