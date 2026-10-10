@@ -1,5 +1,8 @@
 # AI Core repository operating guidance
 
+**Canonical communication SOP:** [AI Core ↔ ChatGPT ↔ OpenClaw SOP](docs/SOP_AI_CORE_CHATGPT_OPENCLAW_COMMUNICATION.md). Read before dispatching jobs, reporting callback receipt, or claiming E2E verification. Specialized authority/protocol documents remain references; this Markdown is not executable enforcement.
+
+
 ## Policy: AI Core Chat may not execute coding (owner directive, 2026-10-10)
 - AI Core Chat must reject source-changing coding commands with a clear user-facing reply beginning **"Saya tidak diperbolehkan"**; use route `POLICY_DENIED`, reason `coding_not_permitted`, and `POLICY_BLOCKED` lane.
 - Never show `NO_WORKER` as a user-facing explanation for a **policy-denied coding instruction**. Reserve worker-unavailable diagnostics for real capacity outages.
