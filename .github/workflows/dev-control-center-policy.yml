@@ -1,0 +1,27 @@
+name: DEV Control Center Policy Tests
+on:
+  pull_request:
+    paths:
+      - "dev-control-center/**"
+      - ".github/workflows/dev-control-center-policy.yml"
+  push:
+    branches:
+      - "feat/dev-control-center-foundation-20261010"
+    paths:
+      - "dev-control-center/**"
+      - ".github/workflows/dev-control-center-policy.yml"
+permissions:
+  contents: read
+jobs:
+  policy-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Node syntax
+        run: |
+          node --check dev-control-center/policy.mjs
+          node --check dev-control-center/control-plane.mjs
+          node --check dev-control-center/control-plane.test.mjs
+      - name: Run security policy tests without external services
+        run: node --test dev-control-center/control-plane.test.mjs
