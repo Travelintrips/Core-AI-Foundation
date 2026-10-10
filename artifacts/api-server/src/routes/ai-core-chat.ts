@@ -3691,8 +3691,14 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   res.once("close", abort);
 
   try {
-    // Authorization denial is independent of worker availability.
-    // Check before memory, model calls, task creation or agent dispatch.
+    // Explicit coding in AI Core Chat streams is delegated to the authenticated
+    // controlled task lane; never streamed as an unverified LLM coding answer.
+    const streamCoding = classifyAiCoreChatDispatch(parsed.data.message);
+    if (streamCoding.kind === "GITHUB_DIRECT_REQUIRED" ||
+        (streamCoding.kind === "CONTROL_PLANE" && streamCoding.workload.workload === "CODING")) {
+      writeBufferedChatStream(res, await startAgentTask(parsed.data));
+      return;
+    }
     const scope = {
       sessionId: parsed.data.conversationId ?? null,
       projectName: parsed.data.projectName ?? null,
@@ -3926,6 +3932,8 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             ? await maybeRunRemoteWorkerPreset(rawInput)
             : null) ??
           await startAgentTask(effectiveInput)
+        : (rawDispatch.kind === "GITHUB_DIRECT_REQUIRED" || (rawDispatch.kind === "CONTROL_PLANE" && rawDispatch.workload.workload === "CODING"))
+          ? await startAgentTask(effectiveInput)
         : effectiveInput.mode === "ask"
           ? await answerAskMode(
               effectiveInput.message,
