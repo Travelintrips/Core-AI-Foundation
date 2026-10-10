@@ -415,6 +415,26 @@ export async function acknowledgeCodingBridgeResponse(id: string) {
   return row ?? null;
 }
 
+/** Only ACK events belonging to the explicitly addressed ChatGPT conversation.
+ * A browser-visible message or a worker completion alone is not a bridge event. */
+export async function acknowledgeCodingBridgeResponseForConversation(input: {
+  responseId: string;
+  conversationId: string;
+}) {
+  await ensureCodingControlBridgeTables();
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_bridge_responses AS response
+    SET acknowledged_at = NOW()
+    FROM ai_platform.ai_coding_bridge_commands AS command
+    WHERE response.command_id = command.id
+      AND response.id = ${input.responseId}::uuid
+      AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
+      AND response.acknowledged_at IS NULL
+    RETURNING response.id
+  `);
+  return (result.rows ?? []).length > 0;
+}
+
 export async function listPendingCodingBridgeResponsesForConversation(input: {
   conversationId: string;
   limit?: number;

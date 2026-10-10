@@ -27,7 +27,7 @@ import {
 import { logAudit } from "../services/aiAuditService.js";
 import { getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
 import {
-  acknowledgeCodingBridgeResponse,
+  acknowledgeCodingBridgeResponseForConversation,
   listPendingCodingBridgeResponsesForConversation,
   subscribeCodingBridgeConversation,
   unsubscribeCodingBridgeConversation,
@@ -127,6 +127,7 @@ const ReadEventsArgs = z.object({
 }).strict();
 const AckEventArgs = z.object({
   responseId: z.string().uuid(),
+  conversationId: z.string().trim().min(1).max(200),
 }).strict();
 const UnsubscribeEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
@@ -521,9 +522,10 @@ const tools = [
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["responseId"],
+      required: ["responseId", "conversationId"],
       properties: {
         responseId: { type: "string", format: "uuid" },
+        conversationId: { type: "string", description: "Exact conversation ID used for event subscription." },
       },
     },
     securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
@@ -1329,7 +1331,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       };
     } else if (params.name === "ack_ai_core_event") {
       const parsed = AckEventArgs.parse(params.arguments ?? {});
-      const acknowledged = await acknowledgeCodingBridgeResponse(parsed.responseId);
+      const acknowledged = await acknowledgeCodingBridgeResponseForConversation(parsed);
       payload = { acknowledged: Boolean(acknowledged), responseId: parsed.responseId };
     } else if (params.name === "unsubscribe_ai_core_events") {
       const parsed = UnsubscribeEventsArgs.parse(params.arguments ?? {});
