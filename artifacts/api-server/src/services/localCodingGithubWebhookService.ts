@@ -16,6 +16,9 @@ export async function ingestGithubCodingEvent(input:{deliveryId:string;eventName
  if(!inserted&&(row.status==="PUBLISHED"||row.status==="IGNORED"))return{delivery:row,duplicate:true};
  if(!supported)return{delivery:row,duplicate:false,ignored:true};
  const event=await publish({eventType:"coding.github."+input.eventName,sourceModule:"github-webhook",sourceId:row.id,correlationId:input.deliveryId,payload:{deliveryId:input.deliveryId,repository:n.repository,headSha:n.headSha,conclusion:n.conclusion,status:n.status,action:input.payload?.action??null,pullRequestNumber:input.payload?.pull_request?.number??input.payload?.workflow_run?.pull_requests?.[0]?.number??input.payload?.check_run?.pull_requests?.[0]?.number??null,headBranch:n.headBranch,checkName:n.checkName,failureSummary:n.failureSummary}});
+ // Persist the publish acknowledgment before optional incident reporting. An incident
+ // reporting failure must never cause the same GitHub delivery to be republished.
+  const [updated]=await db.update(aiCodingGithubDeliveriesTable).set({status:"PUBLISHED",processedAt:new Date()}).where(eq(aiCodingGithubDeliveriesTable.id,row.id)).returning();
  if(n.conclusion&&n.conclusion!=="success"&&["failure","timed_out","cancelled","action_required","startup_failure"].includes(String(n.conclusion))){
    await upsertIncident({
      source:"github",
@@ -31,6 +34,5 @@ export async function ingestGithubCodingEvent(input:{deliveryId:string;eventName
      metadata:{deliveryId:input.deliveryId,eventName:input.eventName,conclusion:n.conclusion,status:n.status},
    });
  }
- const [updated]=await db.update(aiCodingGithubDeliveriesTable).set({status:"PUBLISHED",processedAt:new Date()}).where(eq(aiCodingGithubDeliveriesTable.id,row.id)).returning();
  return{delivery:updated??row,event,duplicate:false};
 }
