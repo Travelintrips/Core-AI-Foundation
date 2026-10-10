@@ -168,9 +168,14 @@ export function classifyAiCoreChatDispatch(
 
   // Safe explicit delegation wins over generic registry status queries.
   // Source changes and sensitive actions continue through their gated routes.
+  // Explicit read-only delegation should not be blocked by forbidden-action
+  // words inside negative instructions ("jangan deploy", "dilarang restart").
+  // Never grant mutation authority based on a negative clause.
+  const delegationAffirmativeText = message
+    .replace(/\b(?:jangan|dilarang|tanpa|never|do not|don't|without)\b[^.!?;\n]{0,180}/gi, " ");
   if (externalAgentClientId && !sourceChange &&
-      /\b(delegasikan|delegate|suruh|minta|route|rutekan)\b/i.test(message) &&
-      !/\b(deploy|merge|restart|reboot|hapus|delete|uninstall|install|push|commit)\b/i.test(message)) {
+      /\b(delegasikan|delegate|suruh|minta|route|rutekan)\b/i.test(delegationAffirmativeText) &&
+      !/\b(deploy|merge|restart|reboot|hapus|delete|uninstall|install|push|commit|password|secret|credential|token)\b/i.test(delegationAffirmativeText)) {
     return {
       kind: "EXTERNAL_AGENT", workload, preset: null,
       infrastructureOperation: null, githubOperation: null,
