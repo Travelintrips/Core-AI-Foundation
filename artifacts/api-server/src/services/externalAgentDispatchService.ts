@@ -58,6 +58,30 @@ export class ExternalAgentDispatchError extends Error {
   }
 }
 
+export function explainExternalAgentAvailability(
+  registry: Awaited<ReturnType<typeof getExternalAgentRegistrySnapshot>>,
+  candidateIds: readonly string[],
+): string {
+  const details = candidateIds.map((clientId) => {
+    const worker = registry.find((item) => item.clientId === clientId);
+    if (!worker) return `${clientId}: NOT_REGISTERED (worker tidak terdaftar dalam snapshot registry)`;
+    if (worker.presenceState !== "ACTIVE") {
+      return `${clientId}: OFFLINE_OR_LEASE_EXPIRED (heartbeat tidak aktif atau lease kedaluwarsa)`;
+    }
+    if (worker.reportedHealth !== "healthy") {
+      return `${clientId}: UNHEALTHY (health=${worker.reportedHealth})`;
+    }
+    if (!worker.eligible) {
+      return `${clientId}: INELIGIBLE (registry menolak kelayakan worker)`;
+    }
+    if (worker.availableSlots !== undefined && worker.availableSlots <= 0) {
+      return `${clientId}: AT_CAPACITY (slot eksekusi habis)`;
+    }
+    return `${clientId}: ELIGIBLE (worker tersedia; periksa pemilihan routing atau izin tugas)`;
+  });
+  return details.join("; ");
+}
+
 export function detectExplicitExternalAgentClientId(
   message: string,
 ): ExternalAgentClientId | null {
@@ -124,7 +148,7 @@ export async function dispatchExternalAgentWork(input: {
       );
     }
     if (!preferred) {
-      throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "No eligible OpenClaw PC or Hostinger worker; dispatch safely withheld.");
+      throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Tidak ada worker OpenClaw yang dapat dipilih. " + explainExternalAgentAvailability(registry, OPENCLAW_PC_CLIENT_IDS) + ". Perintah tidak dieksekusi.");
     }
     resolvedClientId = preferred;
   }
@@ -142,7 +166,7 @@ export async function dispatchExternalAgentWork(input: {
   if (!rule.capabilities.some((capability) => capability === requiredCapability)) {
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
-      `External agent is not authorized for required capability ${requiredCapability}.`,
+      `SOP/CAPABILITY_DENIED: worker ${resolvedClientId} tidak diizinkan menggunakan capability ${requiredCapability}. Perintah tidak dieksekusi.`,
     );
   }
 
@@ -150,7 +174,7 @@ export async function dispatchExternalAgentWork(input: {
   const selectedIsPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(resolvedClientId);
   if (rule.source === "openclaw" && (!agent?.eligible ||
     (!selectedIsPc && agent.availableSlots !== undefined && agent.availableSlots <= 0))) {
-    throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Selected OpenClaw executor is offline or at capacity.");
+    throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Worker yang dipilih tidak dapat menjalankan tugas. " + explainExternalAgentAvailability(registry, [resolvedClientId]) + ". Perintah tidak dieksekusi.");
   }
   const coldStart = !agent?.eligible;
 
