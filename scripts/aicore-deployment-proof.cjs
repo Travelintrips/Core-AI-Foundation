@@ -30,11 +30,18 @@ async function main() {
   const url = new URL(endpoint);
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash)
     throw new Error("PRODUCTION_REVISION_URL must be a clean HTTPS URL");
-  // Revision endpoint must return authoritative runtime data: {commit_sha: "<40 hex>"}.
-  const production = await getJson(url.toString(), { "Cache-Control": "no-cache" });
-  const deployedSha = production.commit_sha;
-  result.production = { revision_url: url.toString(), deployed_sha: typeof deployedSha === "string" ? deployedSha : null };
-  if (!validSha.test(deployedSha || "")) throw new Error("Runtime revision endpoint returned no valid commit_sha");
+  // The live health endpoint exposes the runtime SHA in x-cst-commit-sha.
+  // Do not trust a GitHub manifest or a local checkout as proof of deployed code.
+  const response = await fetch(url.toString(), {
+    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+    signal: AbortSignal.timeout(12000), redirect: "error"
+  });
+  if (!response.ok) throw new Error(`Production health HTTP ${response.status}`);
+  const health = await response.json();
+  if (health?.status !== "ok") throw new Error("Production health is not ok");
+  const deployedSha = response.headers.get("x-cst-commit-sha");
+  result.production = { revision_url: url.toString(), http_status: response.status, deployed_sha: deployedSha, health_status: health.status };
+  if (!validSha.test(deployedSha || "")) throw new Error("Production runtime returned no valid x-cst-commit-sha");
   if (deployedSha !== sha) throw new Error("Production SHA does not match expected commit");
   result.status = "VERIFIED";
 }
