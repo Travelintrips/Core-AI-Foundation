@@ -1,17 +1,7 @@
 name: AI Image Worker GCP
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/ai-image-worker-gcp.yml"
-      - "deploy/ai-image-worker/**"
-      - "scripts/install-ai-image-worker.sh"
-      - "scripts/ai-image-worker-idle-shutdown.sh"
-      - "scripts/ai-image-gateway.py"
-      - "scripts/ai-gpu-idle-guard.sh"
-      - "scripts/install-shared-gpu-image-gateway.sh"
+  # GPU deployment is manual/approved after verified DEV; never auto-start on push.
   workflow_dispatch:
     inputs:
       action:
@@ -26,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -38,6 +29,23 @@ jobs:
     environment: ai-image-worker-gcp
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require tested DEV promotion for image-worker deploy
+        if: github.event_name == 'push' || inputs.action == 'start-deploy'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected_sha=$(git rev-parse HEAD)
+          current_main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          test "$expected_sha" = "$current_main_sha" || {
+            echo "::error::Stale image-worker release SHA"
+            exit 1
+          }
+          node scripts/verify-dev-first-release.mjs "$expected_sha"
+
 
       - id: auth
         uses: google-github-actions/auth@v3
