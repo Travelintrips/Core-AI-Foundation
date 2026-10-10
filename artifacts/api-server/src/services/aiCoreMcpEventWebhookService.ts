@@ -569,12 +569,14 @@ async function ensureTablesInternal(): Promise<void> {
       last_http_status INTEGER,
       last_error TEXT,
       delivered_at TIMESTAMPTZ,
+      receipt_verified_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT ai_core_mcp_event_deliveries_status_check
         CHECK (status IN ('PENDING','DELIVERING','DELIVERED','FAILED','TERMINATED'))
     )
   `);
+  await db.execute(sql`ALTER TABLE ai_platform.ai_core_mcp_event_deliveries ADD COLUMN IF NOT EXISTS receipt_verified_at TIMESTAMPTZ`);
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS ai_core_mcp_event_deliveries_pending_idx
       ON ai_platform.ai_core_mcp_event_deliveries(status, next_attempt_at, created_at)
@@ -1014,12 +1016,32 @@ function retryDelayMs(attempt: number): number {
   return delays[Math.max(0, Math.min(delays.length - 1, attempt - 1))]!;
 }
 
+/** An HTTP 2xx confirms transport only; a receiver proof is distinct. */
+export function verifySignedMcpDeliveryReceipt(input: {
+  responseBody: string;
+  eventId: string;
+  subscriptionId: string;
+  secret: string;
+}): boolean {
+  let receipt: unknown;
+  try { receipt = JSON.parse(input.responseBody); } catch { return false; }
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return false;
+  const data = receipt as Record<string, unknown>;
+  if (data["eventId"] !== input.eventId || data["subscriptionId"] !== input.subscriptionId ||
+      typeof data["signature"] !== "string" || !/^[a-f0-9]{64}$/.test(data["signature"])) return false;
+  const expected = createHmac("sha256", decodeStandardWebhookSecret(input.secret))
+    .update(`receipt:${input.eventId}:${input.subscriptionId}`).digest();
+  const supplied = Buffer.from(data["signature"], "hex");
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
 async function markDelivery(input: {
   id: string;
   status: "PENDING" | "DELIVERED" | "FAILED" | "TERMINATED";
   httpStatus?: number | null;
   error?: string | null;
   nextAttemptAt?: Date | null;
+  receiptVerified?: boolean;
 }): Promise<void> {
   await db.execute(sql`
     UPDATE ai_platform.ai_core_mcp_event_deliveries
@@ -1028,6 +1050,7 @@ async function markDelivery(input: {
         last_error = ${input.error?.slice(0, 2_000) ?? null},
         next_attempt_at = COALESCE(${input.nextAttemptAt ?? null}, next_attempt_at),
         delivered_at = CASE WHEN ${input.status} = 'DELIVERED' THEN NOW() ELSE delivered_at END,
+        receipt_verified_at = CASE WHEN ${input.receiptVerified === true} THEN NOW() ELSE receipt_verified_at END,
         updated_at = NOW()
     WHERE id = ${input.id}::uuid
   `);
@@ -1141,6 +1164,12 @@ async function deliverClaimed(row: Record<string, unknown>): Promise<void> {
         id,
         status: "DELIVERED",
         httpStatus: response.status,
+        receiptVerified: verifySignedMcpDeliveryReceipt({
+          responseBody: response.body,
+          eventId,
+          subscriptionId,
+          secret,
+        }),
       });
       return;
     }
