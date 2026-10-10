@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+import random
+import time
 import sys
 import urllib.error
 import urllib.request
@@ -21,6 +23,8 @@ TASK_QUEUE = os.environ.get("TEMPORAL_CODING_TASK_QUEUE", "ai-core-coding-orches
 DISCOVERY_SECONDS = max(2, min(60, int(os.environ.get("TEMPORAL_CODING_DISCOVERY_SECONDS", "5"))))
 CYCLE_SECONDS = max(2, min(60, int(os.environ.get("TEMPORAL_CODING_CYCLE_SECONDS", "8"))))
 LEASE_SECONDS = max(30, min(300, int(os.environ.get("TEMPORAL_CODING_LEASE_SECONDS", "90"))))
+HTTP_TIMEOUT_SECONDS = max(5, min(90, int(os.environ.get("TEMPORAL_CODING_HTTP_TIMEOUT_SECONDS", "15"))))
+DISCOVERY_RETRIES = max(1, min(5, int(os.environ.get("TEMPORAL_CODING_DISCOVERY_RETRIES", "3"))))
 TERMINAL = {"APPROVAL_REQUIRED", "COMPLETED", "BLOCKED", "FAILED", "DISABLED"}
 
 
@@ -38,12 +42,25 @@ def _request_json(method: str, path: str, body: dict[str, Any] | None = None) ->
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=35) as response:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"AI Core HTTP {exc.code}: {raw[:500]}") from exc
+
+
+def _discovery_json() -> dict[str, Any]:
+    """Retry only the idempotent discovery GET; never replay run-once POST."""
+    for attempt in range(DISCOVERY_RETRIES):
+        try:
+            return _request_json("GET", "/ai/temporal-coding/tasks?limit=20")
+        except (TimeoutError, OSError, urllib.error.URLError) as exc:
+            if attempt + 1 == DISCOVERY_RETRIES:
+                raise
+            delay = min(8.0, 1.0 * (2 ** attempt)) + random.uniform(0, 0.5)
+            print(f"discovery transient failure attempt={attempt + 1}/{DISCOVERY_RETRIES} type={type(exc).__name__}; retry_in={delay:.2f}s", file=sys.stderr, flush=True)
+            time.sleep(delay)
 
 
 def _heartbeat() -> dict[str, Any]:
@@ -100,12 +117,7 @@ class CodingTaskWorkflow:
 
 
 async def _discover_and_start(client: Client) -> None:
-    payload = await asyncio.to_thread(
-        _request_json,
-        "GET",
-        "/ai/temporal-coding/tasks?limit=20",
-        None,
-    )
+    payload = await asyncio.to_thread(_discovery_json)
     tasks = payload.get("tasks")
     if not isinstance(tasks, list):
         return
@@ -143,9 +155,12 @@ async def main() -> None:
         while True:
             try:
                 await asyncio.to_thread(_heartbeat)
+            except Exception as exc:
+                print(f"temporal coding heartbeat error type={type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            try:
                 await _discover_and_start(client)
             except Exception as exc:
-                print(f"temporal coding discovery error: {exc}", file=sys.stderr, flush=True)
+                print(f"temporal coding discovery error type={type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
             await asyncio.sleep(DISCOVERY_SECONDS)
 
 
