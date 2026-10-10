@@ -68,6 +68,31 @@ def execute(work):
     instruction = str(work.get("instruction", "")).strip()
     if not instruction or len(instruction) > 12000:
         return False, "Invalid instruction length", {"reason": "invalid_instruction"}
+    # Exact, user-authorized read-only Hostinger probe. Execute directly on the
+    # assigned PC with the existing key: no shell interpolation or passwords.
+    if (CLIENT_ID == "openclaw-pc-worker" and
+        "185.124.136.115" in instruction and
+        re.search(r"\\bwhoami\\b", instruction, re.I) and
+        re.search(r"\\bhostname\\b", instruction, re.I) and
+        re.search(r"\\b(?:ssh|hostinger)\\b", instruction, re.I)):
+        identity = os.path.join(os.path.expanduser("~"), ".ssh", "hostinger_shared_20261010_ed25519")
+        if not os.path.isfile(identity):
+            return False, "Existing Hostinger SSH identity not found", {"reason": "ssh_identity_missing"}
+        result = subprocess.run(
+            ["ssh", "-i", identity, "-o", "IdentitiesOnly=yes",
+             "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+             "-o", "ConnectTimeout=10", "-p", "65002",
+             "u684045296@185.124.136.115", "whoami; hostname"],
+            capture_output=True, text=True, timeout=25, shell=False,
+        )
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        verified = result.returncode == 0 and lines == [
+            "u684045296", "id-dci-web1320.main-hosting.eu"]
+        return verified, (result.stdout if verified else "Read-only SSH probe failed")[:3000], {
+            "runtime": "openclaw-pc", "mode": "ssh-readonly-hostinger",
+            "exitCode": result.returncode, "workerId": CLIENT_ID,
+            "sshVerified": verified,
+        }
     if instruction.lower() == "ping":
         return True, "pong from Travelintrips-PC", {"runtime": "openclaw-pc"}
     if instruction.lower() == "status":
