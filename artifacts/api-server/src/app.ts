@@ -17,6 +17,7 @@ import {
 import { requestCounterMiddleware } from "./routes/metrics.js";
 import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
 import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
+import aiCoreSignedCallbackReceiver from "./routes/ai-core-signed-callback-receiver.js";
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
@@ -142,6 +143,7 @@ app.use(
 // Webhooks that verify signatures must see exact raw bytes before the global JSON parser.
 app.use("/api", codingGithubWebhookRouter);
 app.use("/api", codingWhatsappWebhookRouter);
+app.use("/api", aiCoreSignedCallbackReceiver);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
