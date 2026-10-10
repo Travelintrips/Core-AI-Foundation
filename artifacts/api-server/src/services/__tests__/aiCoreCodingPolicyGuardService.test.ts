@@ -11,6 +11,7 @@ describe("AI Core Chat coding policy refusal", () => {
     "Gunakan Coding Orchestrator untuk perbaiki kode login dan test sampai hijau.",
     "Jalankan satu job uji Temporal Coding Worker VPS Hostinger TEST_ONLY tanpa merge atau deploy.",
     "# ubah kode backend untuk memperbaiki login",
+    "# edit file src/server.ts untuk memperbaiki bug",
   ])("rejects a coding instruction without worker dispatch: %s", message => {
     expect(isAiCoreCodingCommandBlocked(message)).toBe(true);
   });
