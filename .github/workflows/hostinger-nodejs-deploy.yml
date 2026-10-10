@@ -440,6 +440,7 @@ jobs:
           curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/server/restart"
 
       - name: Verify exact live release
+        id: verify_release
         if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true' && steps.fallback_freshness.outputs.stale != 'true'
         shell: bash
         run: |
@@ -475,8 +476,42 @@ jobs:
 
 
       - name: Skip runtime deployment for deploy-neutral change
+        id: neutral
         if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required != 'true'
         shell: bash
         run: |
           echo "::notice::Skipping Hostinger application redeploy because this commit changes deploy-neutral files only."
           echo "runtime_deploy=SKIPPED reason=${{ steps.deploy_scope.outputs.reason }}"
+
+      - name: Assert verified deployment outcome
+        if: always()
+        shell: bash
+        env:
+          STALE: ${{ steps.freshness.outputs.stale }}
+          DEPLOY_REQUIRED: ${{ steps.deploy_scope.outputs.deploy_required }}
+          NATIVE_READY: ${{ steps.native.outputs.ready }}
+          FALLBACK_STALE: ${{ steps.fallback_freshness.outputs.stale }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          VERIFY_RESULT: ${{ steps.verify_release.outcome }}
+          NEUTRAL_RESULT: ${{ steps.neutral.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$STALE" = "true" ] || [ "$FALLBACK_STALE" = "true" ]; then
+            echo "DEPLOY_SUPERSEDED: newer main commit exists; no deployment claimed." >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::DEPLOY_SUPERSEDED — this run must not be reported as DEPLOYED."
+            exit 0
+          fi
+          if [ "$DEPLOY_REQUIRED" = "true" ]; then
+            if [ "$NATIVE_READY" = "true" ] || [ "$VERIFY_RESULT" = "success" ]; then
+              echo "DEPLOYED: exact SHA and healthy production verified." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::error::DEPLOY_NOT_VERIFIED: runtime deployment required but exact live SHA was not verified."
+            exit 1
+          fi
+          if [ "$DEPLOY_REQUIRED" = "false" ] && [ "$NEUTRAL_RESULT" = "success" ]; then
+            echo "DEPLOY_SKIPPED_NEUTRAL: runtime unchanged; no new deployment claimed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::DEPLOY_UNCLASSIFIED: no valid deployment or skip result."
+          exit 1
