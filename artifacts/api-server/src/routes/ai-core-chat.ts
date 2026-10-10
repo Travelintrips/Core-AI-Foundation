@@ -1267,7 +1267,7 @@ async function promoteTeacherFromResult(
 // This gate cannot authorize mutations: agent/control-plane approval remains separate.
 async function openAiFirstReadOnlyIntent(
   message: string,
-  policy: ChatPolicy,
+  _policy: ChatPolicy,
   workload: ReturnType<typeof classifyAiCoreWorkload>,
   conversationalMessage: string,
 ): Promise<Record<string, unknown> | null> {
