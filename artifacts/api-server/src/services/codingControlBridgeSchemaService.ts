@@ -5,6 +5,37 @@ import { logger } from "../lib/logger.js";
 let ensurePromise: Promise<void> | null = null;
 
 async function ensureTablesInternal(): Promise<void> {
+  // All bridge schema objects are provisioned by migrations in production.
+  // A restricted worker can use an existing schema without DDL privileges.
+  const schemaState = await db.execute(sql<{ ready: boolean; can_create: boolean }>`
+    SELECT (
+      to_regclass('ai_platform.ai_coding_bridge_commands') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_commands_external_uidx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_commands_task_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_commands_status_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_responses') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_responses_command_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_responses_task_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_responses_ack_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_presence') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_bridge_presence_expiry_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_critical_approvals') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_critical_approvals_task_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_critical_approvals_status_idx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_critical_approvals_pending_digest_uidx') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_autonomous_tasks') IS NOT NULL
+      AND       to_regclass('ai_platform.ai_coding_autonomous_tasks_active_idx') IS NOT NULL
+    ) AS ready,
+    has_schema_privilege(current_user, 'ai_platform', 'CREATE') AS can_create
+  `);
+  if (schemaState.rows[0]?.ready === true) {
+    logger.debug("[coding-bridge] Existing bridge schema verified; skipping runtime DDL");
+    return;
+  }
+  if (schemaState.rows[0]?.can_create !== true) {
+    throw new Error("Coding control bridge schema is incomplete; apply the managed database migrations instead of granting CREATE privileges to a coding worker.");
+  }
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ai_platform.ai_coding_bridge_commands (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
