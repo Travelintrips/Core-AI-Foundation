@@ -147,7 +147,7 @@ function renderPairingApprovalPage(code: string, email: string): string {
   </body></html>`;
 }
 
-router.get("/.well-known/oauth-protected-resource", (_req, res): void => {
+router.get(["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/ai/core-chat/mcp"], (_req, res): void => {
   res.json({
     resource: oauthResource(),
     authorization_servers: [oauthIssuer()],
