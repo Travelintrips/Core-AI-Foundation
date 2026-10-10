@@ -1320,7 +1320,7 @@ function scopeTaskStatusReply(
   result: Record<string, unknown> | null,
 ): Record<string, unknown> | null {
   if (!result) return null;
-  const taskNumber = request.match(/\\b(?:CWS|INC)-[A-Z0-9]{8}\\b/i)?.[0]?.toUpperCase();
+  const taskNumber = request.match(/\b(?:CWS|INC)-[A-Z0-9]{8}\b/i)?.[0]?.toUpperCase();
   if (!taskNumber || result["route"] !== "ADMIN_DB_QUERY") return result;
   const rows = result["data"];
   if (!Array.isArray(rows)) {
