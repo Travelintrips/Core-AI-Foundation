@@ -827,7 +827,7 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
     phase = "reserve_change_set";
     const changeReservation = await reserveCodingFileSet({
       repository: input.repository,
-      branch: input.branch,
+      branch: input.isolatedBranchName ?? input.branch,
       taskId: input.codingTaskId,
       runId: input.codingRunId,
       files: predictedChangeFiles,
