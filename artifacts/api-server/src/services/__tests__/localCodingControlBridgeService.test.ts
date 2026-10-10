@@ -115,3 +115,35 @@ describe("evidence-qualified runtime status", () => {
     expect(classifyBridgeCompletion({ status: "FAILED" }).statusCode).toBe("FAILED");
   });
 });
+
+describe("browser status code normalization", () => {
+  const valid = {
+    chatgptSubmitted: true,
+    verifiedAssistantReply: true,
+    exitCode: 0,
+    eventId: "githubci-38053595144-1",
+    conversationId: "6ac8d2eb-db50-83ec-b53e-3c4a0f87ba2b",
+    evidenceFingerprint: "a".repeat(64),
+    verifiedAt: "2026-10-10T12:56:19.738Z",
+  };
+  it("confirms delivery and E2E only with bounded browser receipt", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({ status: "COMPLETED", details: valid })).toEqual({
+      statusCode: "JOB_COMPLETED", deliveryCode: "DELIVERY_CONFIRMED", e2eCode: "E2E_VERIFIED",
+    });
+  });
+  it("does not infer delivery from a worker exit or partial claimed receipt", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    for (const details of [
+      { exitCode: 0 },
+      { ...valid, verifiedAssistantReply: false },
+      { ...valid, evidenceFingerprint: "" },
+      { ...valid, conversationId: "" },
+      { ...valid, exitCode: 1 },
+    ]) {
+      expect(classifyBridgeCompletion({ status: "COMPLETED", details }).deliveryCode).toBe("UNKNOWN_UNVERIFIED");
+      expect(classifyBridgeCompletion({ status: "COMPLETED", details }).e2eCode).toBe("UNKNOWN_UNVERIFIED");
+    }
+    expect(classifyBridgeCompletion({ status: "FAILED", details: valid }).e2eCode).toBe("UNKNOWN_UNVERIFIED");
+  });
+});

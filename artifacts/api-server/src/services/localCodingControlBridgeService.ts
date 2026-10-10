@@ -635,10 +635,24 @@ export function classifyBridgeCompletion(input: {
   // A direct, bounded read-only check can prove the result, but not callback delivery.
   const verifiedResult = details["sshVerified"] === true &&
     details["mode"] === "ssh-readonly-hostinger" && details["exitCode"] === 0;
+  // The PC browser worker supplies a bounded proof of the ChatGPT reply,
+  // not just a narrative or successful process exit. Keep unrelated jobs unverified.
+  const verifiedBrowserReply =
+    details["chatgptSubmitted"] === true &&
+    details["verifiedAssistantReply"] === true &&
+    details["exitCode"] === 0 &&
+    typeof details["eventId"] === "string" &&
+    /^[a-zA-Z0-9:_-]{8,160}$/.test(details["eventId"]) &&
+    typeof details["conversationId"] === "string" &&
+    /^[a-zA-Z0-9-]{30,64}$/.test(details["conversationId"]) &&
+    typeof details["evidenceFingerprint"] === "string" &&
+    /^[a-f0-9]{64}$/.test(details["evidenceFingerprint"]) &&
+    typeof details["verifiedAt"] === "string" &&
+    !Number.isNaN(Date.parse(details["verifiedAt"]));
   return {
     statusCode: verifiedResult ? "RESULT_VERIFIED" : "JOB_COMPLETED",
-    deliveryCode: "UNKNOWN_UNVERIFIED",
-    e2eCode: "UNKNOWN_UNVERIFIED",
+    deliveryCode: verifiedBrowserReply ? "DELIVERY_CONFIRMED" : "UNKNOWN_UNVERIFIED",
+    e2eCode: verifiedBrowserReply ? "E2E_VERIFIED" : "UNKNOWN_UNVERIFIED",
   };
 }
 
@@ -887,4 +901,22 @@ export async function getCodingBridgeAvailability(clientId: string) {
     leaseExpiresAt: row.leaseExpiresAt,
     lastSeenAt: row.lastSeenAt,
   };
+}
+
+/** Read-only correlated timeline; never exposes other bridge sources or tenants. */
+export async function getAiTaskBridgeTimeline(externalCommandId: string) {
+  await ensureCodingControlBridgeTables();
+  const [command] = await db.select().from(aiCodingBridgeCommandsTable).where(
+    and(eq(aiCodingBridgeCommandsTable.source, "ai-task-hub"), eq(aiCodingBridgeCommandsTable.externalCommandId, externalCommandId))
+  ).limit(1);
+  if (!command) return null;
+  const responses = await db.select({
+    id: aiCodingBridgeResponsesTable.id,
+    kind: aiCodingBridgeResponsesTable.kind,
+    message: aiCodingBridgeResponsesTable.message,
+    createdAt: aiCodingBridgeResponsesTable.createdAt,
+  }).from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
+    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
+  return { commandId: command.id, status: command.status, responses };
 }
