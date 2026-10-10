@@ -590,9 +590,9 @@ function isProductionDeploymentEvidenceQuery(message: string): boolean {
   // not a generic natural-language intent router. In particular, requests
   // about AI Task integration readiness must reach OpenAI rather than
   // triggering an unrelated production health report.
-  const value = message.trim().toLowerCase().replace(/\\s+/g, " ");
-  return /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\\s+(?:(?:status|bukti|evidence)\\s+)?(?:(?:live|current)\\s+)?(?:deploy(?:ment)?|production|produksi|prod)\\b/.test(value) ||
-    /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\\s+(?:live\\s+)?(?:deployment|production)\\s+(?:evidence|bukti|sha|commit)\\b/.test(value);
+  const value = message.trim().toLowerCase().replace(/\s+/g, " ");
+  return /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\s+(?:(?:status|bukti|evidence)\s+)?(?:(?:live|current)\s+)?(?:deploy(?:ment)?|production|produksi|prod)\b/.test(value) ||
+    /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\s+(?:live\s+)?(?:deployment|production)\s+(?:evidence|bukti|sha|commit)\b/.test(value);
 }
 
 type DeploymentEndpointEvidence = {
