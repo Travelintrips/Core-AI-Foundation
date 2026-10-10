@@ -180,7 +180,7 @@ jobs:
   dispatch-verified-deploy:
     name: Dispatch deploy after verified main CI
     needs: finalize
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.finalize.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.finalize.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -203,7 +203,7 @@ jobs:
               return;
             }
 
-            // workflow_dispatch is an allowed GITHUB_TOKEN chaining event.
+            // Dispatch after successful main CI on push or manual CI rerun.
             // Unlike eager post-merge dispatch, all CI gates passed before
             // this dispatch. The deploy workflow also rechecks main freshness.
             await github.rest.actions.createWorkflowDispatch({

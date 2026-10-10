@@ -43,12 +43,16 @@ jobs:
           fi
           sha="$(jq -r '.head_sha' <<<"$run")"
           main_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+          # Successful historical main pushes still need a diagnostic receipt.
+          # Staleness must never authorize coding/merge/deploy, but must not
+          # silently discard the delivery needed for correlation and recovery.
           if [ "$sha" != "$main_sha" ]; then
-            echo "::notice::CI belongs to stale main SHA; skipping handoff"
-            echo "is_current=false" >> "$GITHUB_ENV"
+            echo "::notice::Eligible successful main push is stale; send diagnostic-only handoff"
+            echo "upstream_stale=true" >> "$GITHUB_ENV"
           else
-            echo "is_current=true" >> "$GITHUB_ENV"
+            echo "upstream_stale=false" >> "$GITHUB_ENV"
           fi
+          echo "is_current=true" >> "$GITHUB_ENV"
           echo "upstream_run_id=$UPSTREAM_RUN_ID" >> "$GITHUB_ENV"
           echo "upstream_sha=$sha" >> "$GITHUB_ENV"
       - name: Send bounded diagnostic event to AI Core
@@ -71,7 +75,8 @@ jobs:
             --arg resource "$GITHUB_REPOSITORY/actions/runs/$upstream_run_id@${upstream_sha}" \
             --arg observedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg conversationId "$CONVERSATION_ID" \
-            '{eventId:$eventId,source:"github",resource:$resource,status:"COMPLETED",summary:"CI Verify on current main SHA succeeded. TEST_ONLY handoff: ask ChatGPT to assess next steps; do not merge, deploy, or modify infrastructure without existing authorization.",observedAt:$observedAt,conversationId:$conversationId}')"
+            --arg stale "${upstream_stale}" \
+            '{eventId:$eventId,source:"github",resource:$resource,status:"COMPLETED",details:("stale_main_sha="+$stale),summary:"CI Verify for a main push succeeded. Diagnostic-only handoff, possibly stale; verify current required checks before any action. Never authorize changes based on this event.",observedAt:$observedAt,conversationId:$conversationId}')"
           response="$(curl --fail-with-body -sS --connect-timeout 10 --max-time 30 \
             -H "Authorization: Bearer $AGENT_TOKEN" \
             -H "Content-Type: application/json" \
