@@ -15,6 +15,7 @@ describe("AI Core Chat automatic dispatch", () => {
     "Minta OpenClaw membangunkan ChatGPT melalui pesan teks di sesi browser; TEST_ONLY tanpa mengubah kode atau deploy.",
     "UJI E2E TERBATAS OpenClaw ke ChatGPT: kirim satu pesan TEKS BIASA melalui UI composer, bukan script; task TEST_ONLY tanpa merge atau deploy.",
     "Suruh OpenClaw ketik pesan ke sesi ChatGPT dan tunggu callback.",
+    "UJI E2E TERBATAS OpenClaw ke ChatGPT: kirim satu pesan TEKS BIASA melalui UI composer dengan command_id dan correlation_id; ini TEST_ONLY tanpa merge, tanpa deploy, tanpa perubahan DB.",
   ])("routes browser text wake to OpenClaw, never Coding Orchestrator: %s", (message) => {
     expect(classifyAiCoreChatDispatch(message)).toMatchObject({
       kind: "EXTERNAL_AGENT",
