@@ -163,6 +163,26 @@ export function classifyAiCoreChatDispatch(
         "Leading # explicitly routes this command to the paired PC through OpenClaw without Coding Orchestrator.",
     };
   }
+  // Browser wake/notification is desktop delivery, even if the request mentions
+  // TEST_ONLY, callbacks or Coding Orchestrator as context. Do not create a
+  // repository coding task for a ChatGPT message-delivery probe.
+  const browserWake =
+    /\bopenclaw\b/i.test(message) &&
+    /\bchatgpt\b/i.test(message) &&
+    /\b(?:bangunkan|membangunkan|wake|wakeup|wake-up|kirim|mengirim|ketik|mengetik|pesan|message|notifikasi|notify)\b/i.test(message) &&
+    /\b(?:sesi|session|browser|desktop|chat|teks|text|composer|keyboard|ui)\b/i.test(message);
+  if (browserWake && !hasExplicitSourceChange(message)) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload: { ...workload, requiresAgent: false },
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: OPENCLAW_AGENT_CLIENT_ID,
+      executionLane: "TARGETED",
+      reason: "Explicit OpenClaw-to-ChatGPT text delivery uses the desktop agent, never a coding task.",
+    };
+  }
   // Explicit test-only job creation is an orchestration request, not a chat
   // answer or a source mutation. Never simulate its ACK with a local echo.
   const explicitTestOnlyCodingJob =
