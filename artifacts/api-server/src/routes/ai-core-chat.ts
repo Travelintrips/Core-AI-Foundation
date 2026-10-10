@@ -2688,6 +2688,21 @@ async function runAutoMode(
     input.context ?? [],
   );
 
+  // The @ prefix authorizes entering the agent gateway, not choosing a tool.
+  // Let OpenAI interpret single natural-language requests before keyword SQL
+  // shortcuts. Actual coding and critical actions continue through existing
+  // deterministic permission gates; this preflight never authorizes mutation.
+  if (parsedConversation.commands.length <= 1) {
+    const intentWorkload = classifyAiCoreWorkload(contextualCommand);
+    const semantic = await openAiFirstReadOnlyIntent(
+      contextualCommand,
+      input.modelPolicy,
+      intentWorkload,
+      buildConversationPrompt(contextualCommand, input.context ?? []),
+    );
+    if (semantic) return { ...semantic, executionLane: "NO_WORKER" };
+  }
+
   const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(contextualCommand);
   if (existingTaskLifecycle) return existingTaskLifecycle;
   if (parsedConversation.ambiguous) {
