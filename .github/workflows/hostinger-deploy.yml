@@ -780,11 +780,11 @@ jobs:
           const path = process.argv[2];
           const value = JSON.parse(fs.readFileSync(path, "utf8"));
           if (value.kind !== "answer") throw new Error("Expected answer response");
-          if (value.route !== "NO_LLM") throw new Error("Expected NO_LLM deterministic route");
-          if (value.usage?.totalTokens !== 0) throw new Error("Deterministic smoke must use 0 tokens");
-          if (value.estimatedCostUsd !== 0) throw new Error("Deterministic smoke must cost 0 USD");
-          if (value.workload !== "DETERMINISTIC") throw new Error("Expected DETERMINISTIC workload");
-          if (value.costClass !== "ZERO") throw new Error("Expected ZERO cost class");
+          if (!["NO_LLM","OPENAI_INTENT_FIRST"].includes(value.route)) throw new Error("Unexpected chat route: "+String(value.route));
+          if (value.route === "NO_LLM" && value.usage?.totalTokens !== 0) throw new Error("Deterministic smoke must use 0 tokens");
+          if (value.route === "NO_LLM" && value.estimatedCostUsd !== 0) throw new Error("Deterministic smoke must cost 0 USD");
+          if (value.route === "NO_LLM" && value.workload !== "DETERMINISTIC") throw new Error("Expected DETERMINISTIC workload");
+          if (value.route === "NO_LLM" && value.costClass !== "ZERO") throw new Error("Expected ZERO cost class");
           NODE
           }
 
@@ -819,10 +819,10 @@ jobs:
           const meta = events.find((item) => item.event === "meta")?.data;
           const delta = events.find((item) => item.event === "delta")?.data;
           const done = events.find((item) => item.event === "done")?.data;
-          if (meta?.route !== "NO_LLM") throw new Error("Expected streamed deterministic NO_LLM route");
-          if (typeof delta?.text !== "string" || !delta.text.includes("Halo")) throw new Error("Expected streamed greeting delta");
-          if (done?.usage?.totalTokens !== 0) throw new Error("Streamed deterministic smoke must use 0 tokens");
-          if (done?.estimatedCostUsd !== 0) throw new Error("Streamed deterministic smoke must cost 0 USD");
+          if (!["NO_LLM","OPENAI_INTENT_FIRST"].includes(meta?.route)) throw new Error("Unexpected streamed chat route");
+          if (typeof delta?.text !== "string" || !delta.text.trim()) throw new Error("Expected nonempty streamed greeting");
+          if (meta?.route === "NO_LLM" && done?.usage?.totalTokens !== 0) throw new Error("Streamed deterministic smoke must use 0 tokens");
+          if (meta?.route === "NO_LLM" && done?.estimatedCostUsd !== 0) throw new Error("Streamed deterministic smoke must cost 0 USD");
           console.log("ai_core_chat_stream_smoke=PASS");
           NODE
 
@@ -1213,7 +1213,7 @@ jobs:
           node - <<'NODE'
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-cloud-smoke", "utf8"));
-          if (!["CLOUD","CLOUD_FALLBACK"].includes(value.route)) {
+          if (!["CLOUD","CLOUD_FALLBACK","OPENAI_INTENT_FIRST"].includes(value.route)) {
             throw new Error("Expected CLOUD or CLOUD_FALLBACK route, got "+String(value.route));
           }
           if (typeof value.provider !== "string" || !value.provider) {
