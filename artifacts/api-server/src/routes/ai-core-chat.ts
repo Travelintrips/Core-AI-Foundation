@@ -1395,6 +1395,18 @@ async function answerAskMode(
       ...(prioritizedDataTool.warning ? { warning: prioritizedDataTool.warning } : {}),
     };
   }
+  // Recognized read-only business lookups should never be hijacked by the LLM intent gate.
+  const earlyDataTool = await tryRunAiCoreDataTool(routingMessage);
+  if (earlyDataTool.matched) {
+    return {
+      kind: "answer", route: "DATA_TOOL", provider: null, model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0, workload: "DATA_LOOKUP", costClass: "ZERO",
+      reply: earlyDataTool.reply, dataTool: earlyDataTool.tool,
+      data: earlyDataTool.data,
+      ...(earlyDataTool.warning ? { warning: earlyDataTool.warning } : {}),
+    };
+  }
   const semantic = await openAiFirstReadOnlyIntent(routingMessage, policy, workload, conversationalMessage);
   if (semantic) return semantic;
   const deterministic = await deterministicReply(routingMessage, workload);
