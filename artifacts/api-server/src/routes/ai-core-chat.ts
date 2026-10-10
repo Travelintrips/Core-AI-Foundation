@@ -1275,6 +1275,35 @@ async function answerAskMode(
     workload: workload.workload,
     costClass: workload.costClass,
   };
+  // Ambiguous account entitlement and cross-system readiness questions need semantic
+  // interpretation first. Previously broad deterministic/DB regexes answered these
+  // requests with unrelated coding-task rows or deployment health checks.
+  const semanticFirst = /\\b(?:openai|gpt|chatgpt)\\b/i.test(routingMessage) &&
+    /\\b(?:token|kuota|quota|free|gratis|credit|kredit|billing|usage|pemakaian|eligib|sharing)\\b/i.test(routingMessage) ||
+    /\\b(?:ai[ -]?task)\\b/i.test(routingMessage) &&
+    /\\b(?:audit|kesiapan|readiness|integrasi|hubung|connect)\\b/i.test(routingMessage);
+  if (semanticFirst && workload.workload !== "CRITICAL_ACTION" && workload.workload !== "CODING") {
+    const cloud = await resolveCloudSelection(workload.workload);
+    if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
+      return unavailableAskReply(
+        "OpenAI reasoning diperlukan untuk pertanyaan ini; hasil database atau pemeriksaan deployment yang tidak relevan tidak digunakan.",
+        cloud.ok ? "Selected cloud provider is not OpenAI." : cloud.message,
+        routingMeta,
+      );
+    }
+    try {
+      const prompt = conversationalMessage +
+        "\\n\\nImportant: Do not invent account-specific eligibility, token balance, or integration readiness. Explicitly say when source-of-truth access is unavailable.";
+      const result = await invokeChatModel(cloud.selection, prompt);
+      return { kind: "answer", route: "OPENAI_SEMANTIC_FIRST", ...routingMeta, ...result };
+    } catch (error) {
+      return unavailableAskReply(
+        "OpenAI reasoning gagal; tidak mengalihkan ke hasil database yang tidak relevan.",
+        safeProviderFailure(error) || "OpenAI invocation failed.",
+        routingMeta,
+      );
+    }
+  }
   const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) return deterministic;
 
