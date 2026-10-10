@@ -1267,15 +1267,14 @@ async function promoteTeacherFromResult(
 // This gate cannot authorize mutations: agent/control-plane approval remains separate.
 async function openAiFirstReadOnlyIntent(
   message: string,
-  policy: ChatPolicy,
+  _policy: ChatPolicy,
   workload: ReturnType<typeof classifyAiCoreWorkload>,
   conversationalMessage: string,
 ): Promise<Record<string, unknown> | null> {
-  if (workload.workload === "CODING" || workload.workload === "CRITICAL_ACTION") return null;
-  if (policy === "economy") return null;
   const trimmed = message.trim();
   if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
-  const cloud = await resolveCloudSelection(workload.workload);
+  // Classifier-derived workload must not choose or bypass the semantic brain.
+  const cloud = await resolveCloudSelection("REASONING");
   const meta = { workload: workload.workload, costClass: workload.costClass };
   if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
     return unavailableAskReply("OpenAI intent gate unavailable; unrelated database routes are disabled.",
@@ -1297,7 +1296,10 @@ async function openAiFirstReadOnlyIntent(
     // A reasoning-model response can be empty when its output budget is spent.
     // Default to a safe conversational answer instead of declaring the request
     // failed or accidentally falling through to an unrelated database query.
-    if (routeMatch?.[1] === "VERIFIED_TOOL") return null;
+    // Legacy routes execute only after explicit OpenAI tool selection, and
+    // never as a workaround for a misclassified coding/critical request.
+    if (routeMatch?.[1] === "VERIFIED_TOOL" &&
+        workload.workload !== "CODING" && workload.workload !== "CRITICAL_ACTION") return null;
     const answer = await invokeChatModel(cloud.selection,
       conversationalMessage +
       "\n\nAnswer the user's actual request. Never invent account-specific billing, permissions, status, token allocations or integration readiness. If you cannot inspect authoritative account/project data, say so explicitly.");
