@@ -1313,6 +1313,37 @@ async function openAiFirstReadOnlyIntent(
   }
 }
 
+// An exact task-status question must never return an unfiltered task list,
+// even if the legacy SQL planner accidentally issued a broad read-only query.
+function scopeTaskStatusReply(
+  request: string,
+  result: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!result) return null;
+  const taskNumber = request.match(/\b(?:CWS|INC)-[A-Z0-9]{8}\b/i)?.[0]?.toUpperCase();
+  if (!taskNumber || result["route"] !== "ADMIN_DB_QUERY") return result;
+  const rows = result["data"];
+  if (!Array.isArray(rows)) {
+    return { kind: "answer", route: "TASK_STATUS_UNVERIFIED", reply: "Status task " + taskNumber + " belum dapat diverifikasi dari hasil query ini.", verified: false };
+  }
+  const matching = rows.filter((row): row is Record<string, unknown> =>
+    row !== null && typeof row === "object" &&
+    String((row as Record<string, unknown>)["task_number"] ?? "").toUpperCase() === taskNumber);
+  if (matching.length !== 1) {
+    return { kind: "answer", route: "TASK_STATUS_UNVERIFIED", reply: "Status task " + taskNumber + " tidak dapat dipastikan dari hasil query.", verified: false, data: [] };
+  }
+  const task = matching[0]!;
+  const state = String(task["persisted_status"] ?? "UNKNOWN");
+  const run = String(task["run_status"] ?? "UNKNOWN");
+  const autonomous = String(task["autonomous_status"] ?? "UNKNOWN");
+  return {
+    kind: "answer", route: "TASK_STATUS_SCOPED", verified: true,
+    reply: "Task " + taskNumber + ": status " + state + ", run " + run + ", autonomous " + autonomous + ".",
+    data: matching, workload: "DATA_LOOKUP", costClass: "ZERO",
+    provider: null, model: null,
+  };
+}
+
 async function answerAskMode(
   message: string,
   policy: ChatPolicy,
@@ -1442,7 +1473,7 @@ async function answerAskMode(
       warning: sanitizeAdminDbError(error),
     }),
   );
-  if (adminDbQuery) return adminDbQuery;
+  if (adminDbQuery) return scopeTaskStatusReply(routingMessage, adminDbQuery) ?? adminDbQuery;
 
   if (workload.workload === "CRITICAL_ACTION") {
     return {
@@ -1838,7 +1869,7 @@ async function streamAskMode(
     }),
   );
   if (adminDbQuery) {
-    writeBufferedChatStream(res, adminDbQuery);
+    writeBufferedChatStream(res, scopeTaskStatusReply(routingMessage, adminDbQuery) ?? adminDbQuery);
     return;
   }
 
