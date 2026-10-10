@@ -48,6 +48,7 @@ import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
   parseDirectOpenClawPcCommand,
+  parseOpenClawPcCodingRequest,
   hasExplicitSourceChange,
   isExplicitCodingOrchestratorRequest,
   detectRemoteWorkerPreset,
@@ -2499,7 +2500,7 @@ async function startExternalAgentWork(
 ): Promise<Record<string, unknown>> {
   const directOpenClawPcCommand =
     clientId === OPENCLAW_AGENT_CLIENT_ID
-      ? parseDirectOpenClawPcCommand(input.message)
+      ? (parseOpenClawPcCodingRequest(input.message) ?? parseDirectOpenClawPcCommand(input.message))
       : null;
   const openClawExecutionProfile =
     clientId !== OPENCLAW_AGENT_CLIENT_ID
@@ -3751,7 +3752,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
 
     const directOpenClawPcCommand =
       !parsed.data.image
-        ? parseDirectOpenClawPcCommand(safeMessage)
+        ? (parseOpenClawPcCodingRequest(safeMessage) ?? parseDirectOpenClawPcCommand(safeMessage))
         : null;
     if (directOpenClawPcCommand) {
       const result = await startExternalAgentWork(
@@ -3898,7 +3899,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         : null;
     const directOpenClawPcCommand =
       !parsed.data.image
-        ? parseDirectOpenClawPcCommand(rawInput.message)
+        ? (parseOpenClawPcCodingRequest(rawInput.message) ?? parseDirectOpenClawPcCommand(rawInput.message))
         : null;
     const result =
       directOpenClawPcCommand
