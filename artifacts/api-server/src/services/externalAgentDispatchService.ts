@@ -100,9 +100,17 @@ export async function dispatchExternalAgentWork(input: {
       (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)) {
     const serverMonitor = input.clientId === OPENCLAW_AGENT_CLIENT_ID &&
       input.metadata?.openClawExecutionProfile === "monitor-direct";
+    // A specifically requested, healthy PC must not be silently replaced by
+    // the sticky chat leader. Generic OpenClaw requests retain sticky routing.
+    const explicitPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)
+      && (input.metadata?.explicitWorkerTarget === true ||
+        /\b(?:pc\s+travelintrips|travelintrips[ -]pc|clientid\s*[:=]\s*openclaw-pc-worker\b)/i.test(input.instruction));
     const preferred = serverMonitor
       ? selectOpenClawExecutor(registry, { preferServer: true })
-      : await chooseActivePc(registry);
+      : explicitPc
+        ? (registry.some((worker) => worker.clientId === input.clientId && worker.eligible)
+            ? input.clientId : null)
+        : await chooseActivePc(registry);
     // Do not route server-only monitoring to a PC that cannot execute it.
     if (serverMonitor && !preferred) {
       throw new ExternalAgentDispatchError(

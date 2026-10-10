@@ -4,6 +4,7 @@ Requires AI_CORE_BASE_URL and AI_CORE_SCOPED_AGENT_TOKEN in the process environm
 Never logs bearer tokens or claim tokens. Runs agent instructions through OpenClaw CLI with bounded timeouts and existing approvals.
 """
 import json
+import re
 import os
 import subprocess
 import tempfile
@@ -36,10 +37,62 @@ def api(path, body):
         raise RuntimeError("AI Core HTTP " + str(exc.code)) from None
 
 
+def verify_execution_result(instruction, output, process_exit_code):
+    """Agent process success is not proof a requested remote command succeeded."""
+    if process_exit_code != 0:
+        return False
+    requested_hostinger_probe = (
+        "185.124.136.115" in instruction and
+        re.search(r"\\bwhoami\\b", instruction, re.I) and
+        re.search(r"\\bhostname\\b", instruction, re.I)
+    )
+    if not requested_hostinger_probe:
+        return True
+    # Do not accept a model's explanatory success message as SSH stdout.
+    # The worker must supply machine-readable stdout + remote exit code.
+    try:
+        data = json.loads(output)
+    except (ValueError, TypeError):
+        return False
+    result = data.get("sshResult") if isinstance(data, dict) else None
+    return (
+        isinstance(result, dict)
+        and result.get("exitCode") == 0
+        and result.get("whoami", "").strip() == "u684045296"
+        and result.get("hostname", "").strip() == "id-dci-web1320.main-hosting.eu"
+        and result.get("verified", False) is True
+    )
+
+
 def execute(work):
     instruction = str(work.get("instruction", "")).strip()
     if not instruction or len(instruction) > 12000:
         return False, "Invalid instruction length", {"reason": "invalid_instruction"}
+    # Exact, user-authorized read-only Hostinger probe. Execute directly on the
+    # assigned PC with the existing key: no shell interpolation or passwords.
+    if (CLIENT_ID == "openclaw-pc-worker" and
+        "185.124.136.115" in instruction and
+        re.search(r"\\bwhoami\\b", instruction, re.I) and
+        re.search(r"\\bhostname\\b", instruction, re.I) and
+        re.search(r"\\b(?:ssh|hostinger)\\b", instruction, re.I)):
+        identity = os.path.join(os.path.expanduser("~"), ".ssh", "hostinger_shared_20261010_ed25519")
+        if not os.path.isfile(identity):
+            return False, "Existing Hostinger SSH identity not found", {"reason": "ssh_identity_missing"}
+        result = subprocess.run(
+            ["ssh", "-i", identity, "-o", "IdentitiesOnly=yes",
+             "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+             "-o", "ConnectTimeout=10", "-p", "65002",
+             "u684045296@185.124.136.115", "whoami; hostname"],
+            capture_output=True, text=True, timeout=25, shell=False,
+        )
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        verified = result.returncode == 0 and lines == [
+            "u684045296", "id-dci-web1320.main-hosting.eu"]
+        return verified, (result.stdout if verified else "Read-only SSH probe failed")[:3000], {
+            "runtime": "openclaw-pc", "mode": "ssh-readonly-hostinger",
+            "exitCode": result.returncode, "workerId": CLIENT_ID,
+            "sshVerified": verified,
+        }
     if instruction.lower() == "ping":
         return True, "pong from Travelintrips-PC", {"runtime": "openclaw-pc"}
     if instruction.lower() == "status":
@@ -60,9 +113,10 @@ def execute(work):
             capture_output=True, text=True, timeout=105, shell=False,
         )
         response = (result.stdout or result.stderr)[-10000:]
-        return result.returncode == 0, response[-3000:], {
+        verified = verify_execution_result(instruction, response, result.returncode)
+        return verified, response[-3000:] if verified else "SSH execution evidence missing or failed", {
             "runtime": "openclaw-pc", "mode": "agent",
-            "exitCode": result.returncode,
+            "exitCode": result.returncode, "verified": verified,
         }
     finally:
         try:
