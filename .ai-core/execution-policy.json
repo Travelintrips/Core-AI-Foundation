@@ -14,7 +14,8 @@
         "reply": "Saya tidak diperbolehkan menjalankan perintah coding melalui AI Core. Perubahan kode harus dilakukan melalui ChatGPT menggunakan GitHub sesuai izin yang berlaku.",
         "appliesTo": [
           "/ai/core-chat/messages",
-          "/ai/core-chat/messages/stream"
+          "/ai/core-chat/messages/stream",
+          "send_ai_core_command (MCP)"
         ],
         "distinguishFrom": "worker_unavailable"
       }
