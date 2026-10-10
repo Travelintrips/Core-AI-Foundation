@@ -1588,11 +1588,29 @@ jobs:
             successfulHeadSha:process.env.EXPECTED_SHA,
             successfulRunId:process.env.GITHUB_RUN_ID
           }))')
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -sS             -o /tmp/incident-resolve -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             -d "$payload"             "$API_BASE_URL/ai/incidents/resolve-superseded")
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -sS \
+            -o /tmp/incident-resolve -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/incidents/resolve-superseded")
           echo "incident_resolve_http=$code"
-          cat /tmp/incident-resolve
-          echo
-          test "$code" = "200"
+          if [ "$code" != "200" ]; then
+            if [ "$code" = "403" ] && grep -Eiq 'Checking your browser|/hcdn-cgi/jschallenge' /tmp/incident-resolve; then
+              echo "::error title=Hostinger WAF challenge::Incident cleanup blocked by Hostinger browser challenge (HTTP 403). Configure an authorized server-to-server WAF exception restricted to this endpoint and authenticated CI traffic. No incidents were marked resolved."
+              echo "incident_auto_resolve=BLOCKED reason=WAF_CHALLENGE http=403"
+            else
+              echo "::error title=Incident cleanup HTTP failure::Incident resolution returned HTTP $code; no successful resolution confirmed."
+              echo "incident_auto_resolve=FAILED reason=HTTP_ERROR http=$code"
+            fi
+            exit 1
+          fi
+          if ! node -e 'JSON.parse(require("fs").readFileSync("/tmp/incident-resolve", "utf8"))' >/dev/null 2>&1; then
+            echo "::error title=Incident cleanup invalid response::Expected JSON from incident endpoint, received a non-JSON response."
+            exit 1
+          fi
           node - <<'NODE'
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/incident-resolve", "utf8"));
