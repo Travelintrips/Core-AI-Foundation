@@ -34,6 +34,22 @@ function isAiCoreConnectorRoute(req: Request): boolean {
   );
 }
 
+// Dedicated AI Task credential, scoped only to the coding bridge transport.
+// Do not allow this token to authorize any other admin API route.
+const AI_TASK_BRIDGE_ROUTES = [
+  { method: "POST", pattern: /^\/ai\/coding\/bridge\/commands$/ },
+  { method: "GET", pattern: /^\/ai\/coding\/bridge\/runtime-status$/ },
+  { method: "GET", pattern: /^\/ai\/coding\/bridge\/ai-task-timeline$/ },
+] as const;
+
+function hasValidAiTaskBridgeKey(req: Request): boolean {
+  if (!AI_TASK_BRIDGE_ROUTES.some((rule) => rule.method === req.method && rule.pattern.test(req.path))) return false;
+  const configured = process.env["AI_TASK_ENGINE_SERVICE_KEY"]?.trim();
+  const supplied = req.headers["x-ai-task-engine-key"];
+  if (!configured || typeof supplied !== "string" || !supplied.trim()) return false;
+  return safeEqualSecret(supplied.trim(), configured);
+}
+
 function hasValidAiCoreConnectorKey(req: Request): boolean {
   if (!isAiCoreConnectorRoute(req)) return false;
   const configured = process.env["AI_CORE_CHAT_CONNECTOR_KEY"]?.trim();
@@ -67,6 +83,12 @@ export async function adminAuth(req: Request, res: Response, next: NextFunction)
   // ── Path 2: dedicated AI Core Chat connector key ──────────────────────────
   // Scoped to direct command submission + task progress only.
   if (hasValidAiCoreConnectorKey(req)) {
+    next();
+    return;
+  }
+
+  // ── Dedicated machine-to-machine bridge identity (method + path scoped) ──
+  if (hasValidAiTaskBridgeKey(req)) {
     next();
     return;
   }

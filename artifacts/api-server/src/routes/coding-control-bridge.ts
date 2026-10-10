@@ -17,7 +17,15 @@ import {
   recoverAutonomousCodingRuntimeIfDatabaseReady,
   runAutonomousCodingCycle,
 } from "../services/localCodingAutonomousRepairService.js";
+import { getAiTaskBridgeTimeline } from "../services/localCodingControlBridgeService.js";
 const router=Router(); const Uuid=z.string().uuid();
+router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
+ const externalCommandId=String(req.query["externalCommandId"]??"");
+ if(!/^ai-task:[a-zA-Z0-9_-]{1,100}:[1-9][0-9]*$/.test(externalCommandId)){res.status(400).json({error:"INVALID_EXTERNAL_COMMAND_ID"});return;}
+ const timeline=await getAiTaskBridgeTimeline(externalCommandId);
+ if(!timeline){res.status(404).json({error:"COMMAND_NOT_FOUND"});return;}
+ res.json(timeline);
+});
 router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{const p=z.object({externalCommandId:z.string().min(1).max(200),instruction:z.string().min(1).max(50000),taskId:Uuid.nullish(),source:z.string().min(1).max(50).optional(),commandType:z.string().min(1).max(50).optional(),authority:z.record(z.string(),z.unknown()).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await submitCodingBridgeCommand(p.data);res.status(x.created?201:200).json(x);});
 router.get("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.coerce.number().int().min(1).max(100).optional().safeParse(req.query["limit"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const responses=await listPendingCodingBridgeResponses(p.data??50);res.json({responses,total:responses.length});});
 router.post("/ai/coding/bridge/responses/:id/ack",async(req,res):Promise<void>=>{const p=Uuid.safeParse(req.params["id"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await acknowledgeCodingBridgeResponse(p.data);if(!x){res.status(404).json({error:"Bridge response not found"});return;}res.json(x);});
