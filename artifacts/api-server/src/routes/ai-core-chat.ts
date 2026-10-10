@@ -77,6 +77,7 @@ import {
 } from "../services/aiCoreCapabilityRegistryService.js";
 import {
   dispatchExternalAgentWork,
+  ExternalAgentDispatchError,
   getExternalAgentWorkState,
   N8N_AGENT_CLIENT_ID,
   OPENCLAW_AGENT_CLIENT_ID,
@@ -3974,8 +3975,15 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       )
       .json(result);
   } catch (error) {
+    const workerError = error instanceof ExternalAgentDispatchError ? error : null;
     res.status(503).json({
-      error: safeProviderFailure(error) || "AI Core Chat request failed.",
+      error: workerError?.message ?? safeProviderFailure(error) ?? "AI Core Chat request failed.",
+      ...(workerError ? {
+        code: workerError.code,
+        reasonCategory: workerError.code === "CAPABILITY_DENIED" ? "SOP_POLICY" : workerError.code === "AGENT_UNAVAILABLE" ? "WORKER_AVAILABILITY" : "REGISTRATION",
+        executionLane: "NO_WORKER",
+        executed: false,
+      } : {}),
     });
   }
 });
