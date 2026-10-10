@@ -6,6 +6,7 @@
  */
 import { Router } from "express";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { validateSeparation, canApproveRelease } from "./policy.mjs";
 
 const STATES = new Set(["QUEUED", "RUNNING", "BLOCKED", "FAILED", "COMPLETED", "CANCELLED"]);
 const ACTIONS = new Set(["stop", "restart", "retry"]);
@@ -13,17 +14,6 @@ const SAFE_ID = /^[a-zA-Z0-9_-]{1,100}$/;
 const SAFE_SHA = /^[0-9a-f]{40}$/;
 const KEY = /^[a-zA-Z0-9_-]{16,128}$/;
 
-export function validateSeparation(dev, prod) {
-  const fields = ["databaseId", "credentialId", "namespace", "storageBucket"];
-  const issues = [];
-  for (const field of fields) {
-    if (!dev?.[field] || !prod?.[field]) issues.push("missing_" + field);
-    else if (dev[field] === prod[field]) issues.push("shared_" + field);
-  }
-  if (!dev?.environment || dev.environment !== "dev") issues.push("invalid_dev_environment");
-  if (!prod?.environment || prod.environment !== "prod") issues.push("invalid_prod_environment");
-  return { safe: issues.length === 0, issues };
-}
 
 function safeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string") return false;
@@ -100,7 +90,7 @@ export function createDevCenterRouter({ getPrincipal, adapter, config, audit }) 
     if (typeof adapter.checkReleaseGates !== "function" || typeof adapter.recordApproval !== "function") return res.sendStatus(503);
     try {
       const gates = await adapter.checkReleaseGates({ id, commitSha, principal:req.devPrincipal });
-      if (!gates || !gates.allRequiredPassed || !gates.securityPassed || !gates.productionTargetVerified)
+      if (!canApproveRelease({ isolation, verifiedAt:config?.verifiedAt, gates, commitSha, environment, confirmation }))
         return res.status(409).json({error:"RELEASE_GATES_NOT_PASSED"});
       // An approval record is NOT an instruction to deploy.
       const approved = await adapter.recordApproval({ id, commitSha, key, principal:req.devPrincipal });
