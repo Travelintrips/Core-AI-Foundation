@@ -140,19 +140,24 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])("rejects source-changing coding regardless of confirmation (%s)", async confirmed => {
-    const response = await send("Perbaiki kode login dan update repository", confirmed);
+  it("requires explicit confirmation before coding via MCP", async () => {
+    const response = await send("Perbaiki kode login dan update repository", false);
     expect(response.body.result.isError).toBeFalsy();
     expect(response.body.result.structuredContent).toMatchObject({
-      kind: "routing_guard",
-      route: "POLICY_DENIED",
-      reason: "coding_not_permitted",
-      executionLane: "POLICY_BLOCKED",
-      blocked: true,
+      kind: "intent_confirmation",
+      route: "INTENT_CONFIRMATION",
+      requiresConfirmation: true,
     });
-    expect(response.body.result.structuredContent.reply).toMatch(/^Saya tidak diperbolehkan/);
     expect(fetch).not.toHaveBeenCalled();
-    expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
+  it("accepts a confirmed coding instruction into the authenticated command lane", async () => {
+    const response = await send("Perbaiki kode login dan update repository", true);
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).not.toMatchObject({
+      route: "POLICY_DENIED",
+    });
+    expect(response.body.result.structuredContent).toMatchObject({kind: "answer"});
   });
 
   it("returns an intent summary without executing until explicitly confirmed", async () => {

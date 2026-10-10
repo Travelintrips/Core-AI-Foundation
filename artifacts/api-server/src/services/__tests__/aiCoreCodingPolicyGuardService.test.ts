@@ -1,39 +1,24 @@
 import { describe, expect, it } from "vitest";
-import {
-  aiCoreCodingDeniedResponse,
-  isAiCoreCodingCommandBlocked,
-} from "../aiCoreCodingPolicyGuardService.js";
+import { readFileSync } from "node:fs";
+import { classifyAiCoreChatDispatch } from "../aiCoreChatIntentService.js";
 
-describe("AI Core Chat coding policy refusal", () => {
-  it.each([
-    "@Perbaiki kode login dan update repository",
-    "Buat kode untuk endpoint baru",
-    "Gunakan Coding Orchestrator untuk perbaiki kode login dan test sampai hijau.",
-    "Jalankan satu job uji Temporal Coding Worker VPS Hostinger TEST_ONLY tanpa merge atau deploy.",
-    "# ubah kode backend untuk memperbaiki login",
-    "# edit file src/server.ts untuk memperbaiki bug",
-  ])("rejects a coding instruction without worker dispatch: %s", message => {
-    expect(isAiCoreCodingCommandBlocked(message)).toBe(true);
+const chat = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+const mcp = readFileSync(new URL("../../routes/ai-core-mcp.ts", import.meta.url), "utf8");
+
+describe("owner-authorized AI Core Chat coding lane", () => {
+  it("recognizes coding intent without imposing an unconditional ban", () => {
+    const decision = classifyAiCoreChatDispatch("Perbaiki kode login dan update repository");
+    expect(["GITHUB_DIRECT_REQUIRED", "CONTROL_PLANE"]).toContain(decision.kind);
+    expect(chat).not.toContain("isAiCoreCodingCommandBlocked(parsed.data.message)");
+    expect(mcp).not.toContain("isAiCoreCodingCommandBlocked(command.instruction)");
   });
-
-  it.each([
-    "Cek status worker Temporal VPS tanpa membuat job",
-    "Cek repository dan validasi test sebelum saya lanjut.",
-    "Apa perbedaan Temporal dan n8n?",
-    "Apa itu Coding Orchestrator?",
-    "@restart GCP ollama VM",
-    "Jalankan test repository read-only",
-    "# hapus file Downloads/data.csv",
-  ])("does not mislabel non-coding operations as permission failures: %s", message => {
-    expect(isAiCoreCodingCommandBlocked(message)).toBe(false);
+  it("routes direct coding to tracked control-plane tasks", () => {
+    expect(chat).toContain('if (decision.kind === "GITHUB_DIRECT_REQUIRED") {\n    return { ...(await startAgentTask(');
+    expect(chat).toContain('rawDispatch.kind === "GITHUB_DIRECT_REQUIRED"\n            ? await startAgentTask(effectiveInput)');
+    expect(chat).toContain("if (!input.projectName || !input.repository || !input.branch)");
   });
-
-  it("returns the requested human-readable refusal, not NO_WORKER", () => {
-    const response = aiCoreCodingDeniedResponse();
-    expect(response["blocked"]).toBe(true);
-    expect(response["reason"]).toBe("coding_not_permitted");
-    expect(response["executionLane"]).toBe("POLICY_BLOCKED");
-    expect(response["reply"]).toMatch(/^Saya tidak diperbolehkan/);
-    expect(String(response["reply"])).not.toMatch(/no[ _-]?worker/i);
+  it("preserves agent and MCP confirmation gates", () => {
+    expect(chat).toContain('reason: "missing_execution_prefix"');
+    expect(mcp).toContain("if (!effectiveConfirmed)");
   });
 });

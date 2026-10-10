@@ -1,6 +1,4 @@
 import {
-  aiCoreCodingDeniedResponse,
-  isAiCoreCodingCommandBlocked,
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
@@ -2404,12 +2402,6 @@ function githubDirectRequiredResponse(message: string): Record<string, unknown> 
 }
 
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
-  if (
-    hasExplicitSourceChange(input.message) &&
-    !isExplicitCodingOrchestratorRequest(input.message)
-  ) {
-    return githubDirectRequiredResponse(input.message);
-  }
   if (!input.projectName || !input.repository || !input.branch) {
     return {
       kind: "validation",
@@ -2844,8 +2836,8 @@ async function runAutoMode(
 
       if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
         results.push({
-          ...githubDirectRequiredResponse(command),
-          executionLane: "NO_WORKER",
+          ...(await startAgentTask(childInput)),
+          executionLane: "CODING",
         });
         continue;
       }
@@ -2931,7 +2923,7 @@ async function runAutoMode(
   }
 
   if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
-    return { ...githubDirectRequiredResponse(contextualCommand), ...routingMeta };
+    return { ...(await startAgentTask({ ...executionInput, message: contextualCommand })), ...routingMeta };
   }
 
   if (decision.kind === "CONTROL_PLANE") {
@@ -3699,10 +3691,12 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   res.once("close", abort);
 
   try {
-    // Authorization denial is independent of worker availability.
-    // Check before memory, model calls, task creation or agent dispatch.
-    if (isAiCoreCodingCommandBlocked(parsed.data.message)) {
-      writeBufferedChatStream(res, aiCoreCodingDeniedResponse());
+    // Explicit coding in AI Core Chat streams is delegated to the authenticated
+    // controlled task lane; never streamed as an unverified LLM coding answer.
+    const streamCoding = classifyAiCoreChatDispatch(parsed.data.message);
+    if (streamCoding.kind === "GITHUB_DIRECT_REQUIRED" ||
+        (streamCoding.kind === "CONTROL_PLANE" && streamCoding.workload.workload === "CODING")) {
+      writeBufferedChatStream(res, await startAgentTask(parsed.data));
       return;
     }
     const scope = {
@@ -3829,10 +3823,6 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
 
   // Refuse source-changing coding at the chat boundary in every mode,
   // rather than returning the ambiguous internal NO_WORKER routing lane.
-  if (isAiCoreCodingCommandBlocked(parsed.data.message)) {
-    res.status(200).json(aiCoreCodingDeniedResponse());
-    return;
-  }
 
   if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
     res.status(403).json({
@@ -3930,7 +3920,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             ? await runGitHubOperation(rawInput.message, rawInput.repository)
             : null) ??
           (rawDispatch.kind === "GITHUB_DIRECT_REQUIRED"
-            ? githubDirectRequiredResponse(rawInput.message)
+            ? await startAgentTask(effectiveInput)
             : null) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
@@ -3942,6 +3932,8 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             ? await maybeRunRemoteWorkerPreset(rawInput)
             : null) ??
           await startAgentTask(effectiveInput)
+        : (rawDispatch.kind === "GITHUB_DIRECT_REQUIRED" || (rawDispatch.kind === "CONTROL_PLANE" && rawDispatch.workload.workload === "CODING"))
+          ? await startAgentTask(effectiveInput)
         : effectiveInput.mode === "ask"
           ? await answerAskMode(
               effectiveInput.message,
