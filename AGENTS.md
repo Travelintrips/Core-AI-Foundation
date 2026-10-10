@@ -3,18 +3,20 @@
 **Canonical communication SOP:** [AI Core ↔ ChatGPT ↔ OpenClaw SOP](docs/SOP_AI_CORE_CHATGPT_OPENCLAW_COMMUNICATION.md). Read before dispatching jobs, reporting callback receipt, or claiming E2E verification. Specialized authority/protocol documents remain references; this Markdown is not executable enforcement.
 
 
-## Policy: AI Core Chat may not execute coding (owner directive, 2026-10-10)
-- AI Core Chat must reject source-changing coding commands with a clear user-facing reply beginning **"Saya tidak diperbolehkan"**; use route `POLICY_DENIED`, reason `coding_not_permitted`, and `POLICY_BLOCKED` lane.
-- Never show `NO_WORKER` as a user-facing explanation for a **policy-denied coding instruction**. Reserve worker-unavailable diagnostics for real capacity outages.
-- Check at HTTP JSON, streaming, and MCP `send_ai_core_command` boundaries before task creation, agent dispatch, confirmation, or model invocation. Do not rely on AI prompts alone.
-- Read-only code inspection, build/test status and authorized GitHub operations are not automatically forbidden. Direct coding via ChatGPT/GitHub remains subject to CI, security, approval and deployment gates.
-- This restriction does not prove production deployment or extend to other API endpoints until separately enforced and tested.
-
+## Owner policy: ChatGPT primary coding, AI Core Chat authorized offline fallback (2026-10-11)
+- **Primary:** ChatGPT performs task planning, code changes, tests, PRs, CI and authorized deployments through GitHub.
+- **Fallback:** when ChatGPT is independently confirmed unavailable and Boss submits or explicitly continues the coding task in authenticated AI Core Chat, AI Core may plan and execute coding through its *approved controlled coding lane*, not unrestricted shell/agent privileges. The fallback request must identify the existing job/correlation ID where available.
+- **Do not infer ChatGPT offline from silence, a delayed response, or an absent browser tab.** Require an explicit owner-requested takeover or authenticated availability failure/lease expiry with a durable fenced handoff. If evidence is insufficient, offer takeover confirmation rather than starting duplicate work.
+- **Handoff requires exclusive ownership:** persist one durable job ID, owner, generation/fencing token, checkpoint, last verified commit and known side effects; revoke/expire the previous lease before taking work. Reject old writers, duplicate callbacks, and side-effect replays.
+- **Return:** when ChatGPT reconnects, read the persisted checkpoint and accept ownership only through the same atomic handoff. Never automatically run two coders in parallel on the same job.
+- Keep CI, branch protection, security checks, deployment authorization, and human critical approvals. No automatic bypass of production DB migration, destructive DB change, security change, payment or irreversible actions.
+- **Implementation distinction:** existing AI Core Chat HTTP JSON, SSE and MCP coding-denial gates may still reject source-changing requests. This owner policy supersedes the prior blanket prohibition **as a desired policy**, but is *not runtime enablement*. The code must be changed and validated on all three boundaries before claiming fallback works; until then return an accurate policy/capability limitation rather than falsely reporting coding execution. Only allow fallback when authenticated authorization and exclusive job ownership are implemented.
+- See [canonical SOP](docs/SOP_AI_CORE_CHATGPT_OPENCLAW_COMMUNICATION.md) for exact handoff, evidence and test gates.
 
 ## User workflow preference
 ## Default job routing (owner directive, 2026-10-09)
 - Address the owner as **Boss** in user-facing reports.
-- ChatGPT is the primary coding executor via authorized GitHub tools for coding, fixes, tests, CI, PRs and deploy changes; do not default routine coding jobs to AI Core or legacy Coding Orchestrator.
+- ChatGPT is the primary coding executor via authorized GitHub tools; AI Core Chat is the bounded fallback only for verified ChatGPT unavailability and explicit authorized takeover under the canonical SOP.
 - Provide a non-binding initial estimate where useful; revise it as new blockers become known. Do not promise background work without an actual scheduled task.
 - If access to SSH, VPS, Hostinger, GCP, credentials, or production verification blocks GitHub execution, immediately escalate only that blocked portion to AI Core using an authenticated and available MCP tool, with blocker, exact scope, and verification requirements. Creating a GitHub issue is NOT an AI Core command.
 - If escalation fails, try other authorized routes and clearly report unresolved blockers. Verify results before claiming completion.
