@@ -5,17 +5,38 @@
       "executor": "chatgpt-github-direct",
       "repositoryChanges": "github-branch-pr-ci-merge",
       "aiCoreCodingOrchestrator": "disabled-by-default-for-chatgpt-originated-coding",
-      "ollama": "forbidden"
+      "ollama": "forbidden",
+      "aiCoreChatPolicy": "deny-source-changing-coding-commands",
+      "aiCoreChatDenial": {
+        "enabled": true,
+        "route": "POLICY_DENIED",
+        "reason": "coding_not_permitted",
+        "reply": "Saya tidak diperbolehkan menjalankan perintah coding melalui AI Core. Perubahan kode harus dilakukan melalui ChatGPT menggunakan GitHub sesuai izin yang berlaku.",
+        "appliesTo": [
+          "/ai/core-chat/messages",
+          "/ai/core-chat/messages/stream"
+        ],
+        "distinguishFrom": "worker_unavailable"
+      }
     },
     "mediaRendering": {
-      "image": ["ollama", "gcp-image-router", "comfyui"],
-      "video": ["ollama", "gcp-media-worker"],
+      "image": [
+        "ollama",
+        "gcp-image-router",
+        "comfyui"
+      ],
+      "video": [
+        "ollama",
+        "gcp-media-worker"
+      ],
       "ollamaAllowed": true
     }
   },
   "notes": [
     "ChatGPT-originated coding changes must be performed directly through GitHub.",
     "Ollama must not be used for coding, code review, repository analysis, or coding fallback by default.",
-    "Ollama is reserved for requested image or video rendering workloads."
+    "Ollama is reserved for requested image or video rendering workloads.",
+    "AI Core Chat coding prohibition is an authorization refusal, never a NO_WORKER availability error.",
+    "Read-only code review, status/build/test inspections and authorized GitHub operational controls are not source-changing coding; do not mislabel real worker outages as policy refusal."
   ]
 }
