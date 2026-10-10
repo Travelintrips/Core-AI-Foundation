@@ -102,14 +102,19 @@ export async function dispatchExternalAgentWork(input: {
       input.metadata?.openClawExecutionProfile === "monitor-direct";
     // A specifically requested, healthy PC must not be silently replaced by
     // the sticky chat leader. Generic OpenClaw requests retain sticky routing.
+    const explicitlyNamesPrimary =
+      /\b(?:pc\s+travelintrips|travelintrips[ -]pc|clientid\s*[:=]\s*openclaw-pc-worker\b)/i.test(input.instruction);
     const explicitPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)
-      && (input.metadata?.explicitWorkerTarget === true ||
-        /\b(?:pc\s+travelintrips|travelintrips[ -]pc|clientid\s*[:=]\s*openclaw-pc-worker\b)/i.test(input.instruction));
+      && input.metadata?.explicitWorkerTarget === true;
+    // The public generic OpenClaw alias is used by MCP even for a named PC.
+    // Do not let the sticky leader silently override a requested physical PC.
+    const targetPc = explicitlyNamesPrimary ? OPENCLAW_PC_CLIENT_ID
+      : explicitPc ? input.clientId : null;
     const preferred = serverMonitor
       ? selectOpenClawExecutor(registry, { preferServer: true })
-      : explicitPc
-        ? (registry.some((worker) => worker.clientId === input.clientId && worker.eligible)
-            ? input.clientId : null)
+      : targetPc
+        ? (registry.some((worker) => worker.clientId === targetPc && worker.eligible)
+            ? targetPc : null)
         : await chooseActivePc(registry);
     // Do not route server-only monitoring to a PC that cannot execute it.
     if (serverMonitor && !preferred) {
