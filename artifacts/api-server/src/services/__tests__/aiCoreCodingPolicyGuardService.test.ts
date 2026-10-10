@@ -20,6 +20,7 @@ describe("AI Core Chat coding policy refusal", () => {
     "Cek status worker Temporal VPS tanpa membuat job",
     "Cek repository dan validasi test sebelum saya lanjut.",
     "Apa perbedaan Temporal dan n8n?",
+    "Apa itu Coding Orchestrator?",
     "@restart GCP ollama VM",
     "Jalankan test repository read-only",
     "# hapus file Downloads/data.csv",
