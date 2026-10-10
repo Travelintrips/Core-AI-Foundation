@@ -11,7 +11,7 @@ const router = Router();
 export function checkInboundSignature(input: {
   secret: string; eventId: string; timestamp: string; signature: string; body: Buffer; now?: number;
 }): boolean {
-  if (!/^evt_[a-f0-9]{40}$/.test(input.eventId)) return false;
+  if (!/^evt_[a-f0-9]{40}$/.test(input.eventId) && !/^msg_verification_[0-9a-f-]{36}$/.test(input.eventId)) return false;
   if (!/^\d{10}$/.test(input.timestamp)) return false;
   if (Math.abs((input.now ?? Date.now()) / 1000 - Number(input.timestamp)) > 300) return false;
   const signature = input.signature.split(" ").find(v => v.startsWith("v1,"));
@@ -37,6 +37,10 @@ router.post("/ai/core-chat/callback-receiver", express.raw({ type: "application/
       res.status(401).json({ error: "invalid_signature" }); return;
     }
     const payload = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+    if (payload.type === "verification" && typeof payload.challenge === "string" &&
+        /^[0-9a-f-]{36}$/.test(payload.challenge) && eventId.startsWith("msg_verification_")) {
+      res.status(200).json({ challenge: payload.challenge }); return;
+    }
     if (payload.eventId !== eventId || payload.name !== "ai_core.task.terminal") {
       res.status(400).json({ error: "invalid_event" }); return;
     }
