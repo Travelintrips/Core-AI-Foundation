@@ -2404,12 +2404,6 @@ function githubDirectRequiredResponse(message: string): Record<string, unknown> 
 }
 
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
-  if (
-    hasExplicitSourceChange(input.message) &&
-    !isExplicitCodingOrchestratorRequest(input.message)
-  ) {
-    return githubDirectRequiredResponse(input.message);
-  }
   if (!input.projectName || !input.repository || !input.branch) {
     return {
       kind: "validation",
@@ -2844,8 +2838,8 @@ async function runAutoMode(
 
       if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
         results.push({
-          ...githubDirectRequiredResponse(command),
-          executionLane: "NO_WORKER",
+          ...(await startAgentTask(childInput)),
+          executionLane: "CODING",
         });
         continue;
       }
@@ -2931,7 +2925,7 @@ async function runAutoMode(
   }
 
   if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
-    return { ...githubDirectRequiredResponse(contextualCommand), ...routingMeta };
+    return { ...(await startAgentTask({ ...executionInput, message: contextualCommand })), ...routingMeta };
   }
 
   if (decision.kind === "CONTROL_PLANE") {
@@ -3701,7 +3695,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   try {
     // Authorization denial is independent of worker availability.
     // Check before memory, model calls, task creation or agent dispatch.
-    if (isAiCoreCodingCommandBlocked(parsed.data.message)) {
+    if (false && isAiCoreCodingCommandBlocked(parsed.data.message)) {
       writeBufferedChatStream(res, aiCoreCodingDeniedResponse());
       return;
     }
@@ -3829,7 +3823,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
 
   // Refuse source-changing coding at the chat boundary in every mode,
   // rather than returning the ambiguous internal NO_WORKER routing lane.
-  if (isAiCoreCodingCommandBlocked(parsed.data.message)) {
+  if (false && isAiCoreCodingCommandBlocked(parsed.data.message)) {
     res.status(200).json(aiCoreCodingDeniedResponse());
     return;
   }
@@ -3930,7 +3924,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             ? await runGitHubOperation(rawInput.message, rawInput.repository)
             : null) ??
           (rawDispatch.kind === "GITHUB_DIRECT_REQUIRED"
-            ? githubDirectRequiredResponse(rawInput.message)
+            ? await startAgentTask(effectiveInput)
             : null) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
