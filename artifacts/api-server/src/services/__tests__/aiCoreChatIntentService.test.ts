@@ -11,12 +11,12 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
-  it("routes leading pipe coding to the PC external agent, not NO_WORKER", () => {
+  it("routes leading pipe as OpenClaw messaging without coding classification", () => {
     expect(parseOpenClawPcCodingRequest("| perbaiki bug login")).toBe("perbaiki bug login");
     expect(parseOpenClawPcCodingRequest("tolong | perbaiki bug")).toBeNull();
     expect(parseOpenClawPcCodingRequest("|")).toBeNull();
-    expect(classifyAiCoreChatDispatch("| perbaiki bug login")).toMatchObject({
-      kind: "EXTERNAL_AGENT", executionLane: "TARGETED", externalAgentClientId: "gcp-openclaw-main",
+    expect(classifyAiCoreChatDispatch("| ping OpenClaw PC")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED", externalAgentClientId: "gcp-openclaw-main", workload: { workload: "REVIEW" },
     });
     expect(classifyAiCoreChatDispatch("perbaiki bug login").kind).not.toBe("EXTERNAL_AGENT");
   });
