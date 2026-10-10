@@ -1473,7 +1473,7 @@ async function answerAskMode(
       warning: sanitizeAdminDbError(error),
     }),
   );
-  if (adminDbQuery) return scopeTaskStatusReply(routingMessage, adminDbQuery);
+  if (adminDbQuery) return scopeTaskStatusReply(routingMessage, adminDbQuery) ?? adminDbQuery;
 
   if (workload.workload === "CRITICAL_ACTION") {
     return {
