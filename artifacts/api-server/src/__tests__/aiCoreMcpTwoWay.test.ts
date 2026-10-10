@@ -120,6 +120,21 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])("rejects source-changing coding regardless of confirmation (%s)", async confirmed => {
+    const response = await send("Perbaiki kode login dan update repository", confirmed);
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      kind: "routing_guard",
+      route: "POLICY_DENIED",
+      reason: "coding_not_permitted",
+      executionLane: "POLICY_BLOCKED",
+      blocked: true,
+    });
+    expect(response.body.result.structuredContent.reply).toMatch(/^Saya tidak diperbolehkan/);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
   it("returns an intent summary without executing until explicitly confirmed", async () => {
     const response = await send("Deploy aplikasi", false);
     expect(response.body.result.isError).toBeFalsy();

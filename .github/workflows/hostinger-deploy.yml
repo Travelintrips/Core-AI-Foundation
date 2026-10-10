@@ -495,15 +495,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
-            --connect-timeout 15 --max-time 30 -L --silent --show-error \
-            -D /tmp/deploy-neutral.headers -o /tmp/deploy-neutral.body -w "%{http_code}" \
-            "$API_BASE_URL/healthz")
-          live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/deploy-neutral.headers | tail -n1)
-          echo "deploy_neutral_health_http=$code live_sha=${live_sha:-missing} source_sha=$EXPECTED_SHA"
-          test "$code" = "200"
-          grep -q '"status":"ok"' /tmp/deploy-neutral.body
-          echo "runtime_deploy=SKIPPED reason=${{ needs.plan.outputs.runtime_deploy_reason }}"
+          # A deploy-neutral change does not require the live SHA to match
+          # EXPECTED_SHA, but production must be healthy and identify a real
+          # release. Transient startup/network failures receive bounded retries.
+          max_attempts=18
+          for attempt in $(seq 1 "$max_attempts"); do
+            rm -f /tmp/deploy-neutral.headers /tmp/deploy-neutral.body
+            code=$(curl --http1.1 --connect-timeout 5 --max-time 10 \
+              -L --silent --show-error \
+              -D /tmp/deploy-neutral.headers -o /tmp/deploy-neutral.body \
+              -w "%{http_code}" "$API_BASE_URL/healthz") || code=000
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\\r","",$2); print $2}' /tmp/deploy-neutral.headers 2>/dev/null | tail -n1)
+            echo "deploy_neutral_attempt=$attempt/$max_attempts http=$code live_sha=${live_sha:-missing} source_sha=$EXPECTED_SHA"
+            if [ "$code" = "200" ] && \
+               grep -q '"status":"ok"' /tmp/deploy-neutral.body 2>/dev/null && \
+               [[ "$live_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "PRODUCTION_VERIFIED: healthy existing release $live_sha" >> "$GITHUB_STEP_SUMMARY"
+              echo "DEPLOY_SKIPPED_NEUTRAL: reason=${{ needs.plan.outputs.runtime_deploy_reason }}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$attempt" -lt "$max_attempts" ]; then sleep 10; fi
+          done
+          echo "::error::PRODUCTION_VERIFY_FAILED: healthz did not return HTTP 200, status ok and a valid live SHA within bounded retries."
+          exit 1
 
       - name: Verify readiness
         shell: bash

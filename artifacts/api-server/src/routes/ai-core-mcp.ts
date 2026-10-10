@@ -1,3 +1,7 @@
+import {
+  aiCoreCodingDeniedResponse,
+  isAiCoreCodingCommandBlocked,
+} from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
@@ -1079,6 +1083,17 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           command.gatedMessage = cleanCommand.gatedMessage;
         }
       }
+      // Deny prohibited coding immediately, even before MCP intent confirmation:
+      // a policy prohibition must never be described as missing workers.
+      if (isAiCoreCodingCommandBlocked(command.instruction)) {
+        const denial = aiCoreCodingDeniedResponse();
+        res.status(200).json(rpcResult(body.id ?? null, {
+          content: [{ type: "text", text: String(denial["reply"]) }],
+          structuredContent: denial,
+          isError: false,
+        }));
+        return;
+      }
       const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(command.instruction);
       if (!effectiveConfirmed) {
         if (!safeDirectPcCommand) {
@@ -1251,6 +1266,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           found: true,
           commandId: parsed.commandId,
           status: state.command.status,
+          statusCode: (state.command.metadataJson as Record<string, unknown> | null)?.["statusCode"] ??
+            (state.command.status === "COMPLETED" ? "JOB_COMPLETED" :
+              state.command.status === "FAILED" ? "FAILED" : "UNKNOWN_UNVERIFIED"),
+          deliveryCode: (state.command.metadataJson as Record<string, unknown> | null)?.["deliveryCode"] ?? "UNKNOWN_UNVERIFIED",
+          e2eCode: (state.command.metadataJson as Record<string, unknown> | null)?.["e2eCode"] ?? "UNKNOWN_UNVERIFIED",
+          progressSource: "bridge_database",
           externalCommandId: state.command.externalCommandId,
           commandType: state.command.commandType,
           taskId: state.command.taskId ?? null,

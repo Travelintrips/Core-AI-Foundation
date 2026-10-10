@@ -1,5 +1,13 @@
 # AI Core repository operating guidance
 
+## Policy: AI Core Chat may not execute coding (owner directive, 2026-10-10)
+- AI Core Chat must reject source-changing coding commands with a clear user-facing reply beginning **"Saya tidak diperbolehkan"**; use route `POLICY_DENIED`, reason `coding_not_permitted`, and `POLICY_BLOCKED` lane.
+- Never show `NO_WORKER` as a user-facing explanation for a **policy-denied coding instruction**. Reserve worker-unavailable diagnostics for real capacity outages.
+- Check at HTTP JSON, streaming, and MCP `send_ai_core_command` boundaries before task creation, agent dispatch, confirmation, or model invocation. Do not rely on AI prompts alone.
+- Read-only code inspection, build/test status and authorized GitHub operations are not automatically forbidden. Direct coding via ChatGPT/GitHub remains subject to CI, security, approval and deployment gates.
+- This restriction does not prove production deployment or extend to other API endpoints until separately enforced and tested.
+
+
 ## User workflow preference
 ## Default job routing (owner directive, 2026-10-09)
 - Address the owner as **Boss** in user-facing reports.
