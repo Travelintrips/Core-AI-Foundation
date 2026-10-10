@@ -6,6 +6,10 @@ describe("Issue #980: explicit external-agent routing", () => {
     expect(detectExplicitExternalAgentClientId("suruh OpenClaw PC cek deployment")).toBe("openclaw-pc-worker");
   });
 
+  it("recognizes an explicit Travelintrips PC delegation as primary PC", () => {
+    expect(detectExplicitExternalAgentClientId("suruh OpenClaw PC Travelintrips uji SSH read-only")).toBe("openclaw-pc-worker");
+  });
+
   it("routes a deliberate OpenClaw VPS delegation to the VPS worker", () => {
     expect(detectExplicitExternalAgentClientId("gunakan OpenClaw VPS untuk cek")).toBe("openclaw-vps-main");
   });
