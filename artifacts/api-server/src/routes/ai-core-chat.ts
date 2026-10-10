@@ -1376,6 +1376,19 @@ async function answerAskMode(
     workload: workload.workload,
     costClass: workload.costClass,
   };
+  // Bounded read-only tools are deterministic contracts; an LLM intent gate
+  // must not intercept an exact recognized business lookup.
+  const earlyDataTool = await tryRunAiCoreDataTool(routingMessage);
+  if (earlyDataTool.matched) {
+    return {
+      kind: "answer", route: "DATA_TOOL", provider: null, model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0, workload: "DATA_LOOKUP", costClass: "ZERO",
+      reply: earlyDataTool.reply, dataTool: earlyDataTool.tool,
+      data: earlyDataTool.data,
+      ...(earlyDataTool.warning ? { warning: earlyDataTool.warning } : {}),
+    };
+  }
   const semantic = await openAiFirstReadOnlyIntent(routingMessage, policy, workload, conversationalMessage);
   if (semantic) return semantic;
   const deterministic = await deterministicReply(routingMessage, workload);
