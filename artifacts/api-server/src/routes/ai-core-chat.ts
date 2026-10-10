@@ -1,6 +1,4 @@
 import {
-  aiCoreCodingDeniedResponse,
-  isAiCoreCodingCommandBlocked,
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
@@ -3695,10 +3693,6 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   try {
     // Authorization denial is independent of worker availability.
     // Check before memory, model calls, task creation or agent dispatch.
-    if (false && isAiCoreCodingCommandBlocked(parsed.data.message)) {
-      writeBufferedChatStream(res, aiCoreCodingDeniedResponse());
-      return;
-    }
     const scope = {
       sessionId: parsed.data.conversationId ?? null,
       projectName: parsed.data.projectName ?? null,
@@ -3823,10 +3817,6 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
 
   // Refuse source-changing coding at the chat boundary in every mode,
   // rather than returning the ambiguous internal NO_WORKER routing lane.
-  if (false && isAiCoreCodingCommandBlocked(parsed.data.message)) {
-    res.status(200).json(aiCoreCodingDeniedResponse());
-    return;
-  }
 
   if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
     res.status(403).json({
