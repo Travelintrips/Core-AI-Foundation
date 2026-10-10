@@ -12,6 +12,10 @@ describe("read-only Repository Analyzer E2E intent", () => {
     expect(repositoryAnalyzerVerificationAck(smoke)).toBe("ACK_ANALYZER_REMOTE_VPS_RETEST_20261010");
   });
 
+  it("recognizes explicit English verification without any code modification", () => {
+    expect(isRepositoryAnalyzerVerificationOnlyInstruction("TEST_ONLY: Repository Analyzer queue, persistence and atomic-claim verification. Analysis only. No code modifications, no branch changes, no merge, no deployment.")).toBe(true);
+  });
+
   it("does not bypass real coding tasks or ambiguous test requests", () => {
     expect(isRepositoryAnalyzerVerificationOnlyInstruction("TEST_ONLY E2E implement feature with Repository Analyzer")).toBe(false);
     expect(isRepositoryAnalyzerVerificationOnlyInstruction("Repository Analyzer E2E tanpa perubahan file")).toBe(false);
