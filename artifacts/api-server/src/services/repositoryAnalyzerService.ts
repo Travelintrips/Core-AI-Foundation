@@ -1299,7 +1299,7 @@ export async function completeRepositoryAnalyzerRun(
   }
 
   const [task] = await db.select().from(aiCodingTasksTable)
-    .where(eq(aiCodingTasksTable.id, codingTaskId)).limit(1);
+    .where(eq(aiCodingTasksTable.id, codingTaskId));
   const instruction = task?.instruction ?? "";
   const reservation = result.changeReservation as Record<string, unknown> | undefined;
   const localExecution = result.localExecution as Record<string, unknown> | undefined;
