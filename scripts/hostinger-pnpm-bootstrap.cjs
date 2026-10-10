@@ -5,10 +5,16 @@ const fs = require("node:fs");
 const ua = process.env.npm_config_user_agent || "";
 if (ua.startsWith("pnpm/")) process.exit(0);
 
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+const packageManager = packageJson.packageManager || "";
+const match = /^pnpm@(\d+\.\d+\.\d+)$/.exec(packageManager);
+if (!match) throw new Error(`Unsupported or unpinned packageManager: ${packageManager}`);
+const pinnedPnpm = `pnpm@${match[1]}`;
+
 const prefix = path.join(process.env.HOME || process.cwd(), ".local");
-console.log("[hostinger] npm bootstrap detected; installing pinned pnpm 10.28.1 to user prefix...");
+console.log(`[hostinger] npm bootstrap detected; installing pinned ${pinnedPnpm} to user prefix...`);
 execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", [
-  "install", "--global", "--prefix", prefix, "pnpm@10.28.1", "--no-audit", "--no-fund"
+  "install", "--global", "--prefix", prefix, pinnedPnpm, "--no-audit", "--no-fund"
 ], { stdio: "inherit" });
 
 const pnpm = path.join(prefix, "bin", process.platform === "win32" ? "pnpm.cmd" : "pnpm");
