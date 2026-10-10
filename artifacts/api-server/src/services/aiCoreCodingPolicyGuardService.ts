@@ -10,8 +10,18 @@ import {
  * are not re-labelled as source-changing coding.
  */
 export function isAiCoreCodingCommandBlocked(message: string): boolean {
-  const normalized = message.trim().replace(/^@\s*/, "").replace(/^#\s*/, "");
+  const withoutAt = message.trim().replace(/^@\s*/, "");
+  const directPcCommand = /^#\s*/.test(withoutAt);
+  const normalized = withoutAt.replace(/^#\s*/, "");
   if (!normalized) return false;
+  // OpenClaw PC file commands can edit/delete ordinary user documents.
+  // A file name alone (e.g. Downloads/data.csv) is not source-code coding.
+  if (
+    directPcCommand &&
+    !/\b(?:kode|code|coding|source|repository|repo|typescript|javascript|python|backend|frontend|endpoint|function|fungsi|module|modul|api|bug|refactor)\b|\.(?:tsx?|jsx?|py|go|rs|java|cs|cpp|c|h|php)\b|(?:src|services|artifacts|lib|routes)\//i.test(normalized)
+  ) {
+    return false;
+  }
   const decision = classifyAiCoreChatDispatch(normalized);
   return (
     hasExplicitSourceChange(normalized) ||
