@@ -1294,11 +1294,10 @@ async function openAiFirstReadOnlyIntent(
     const decision = await invokeChatModel(cloud.selection, routingPrompt);
     const reply = typeof decision.reply === "string" ? decision.reply : "";
     const routeMatch = reply.match(/"route"\s*:\s*"(ANSWER|VERIFIED_TOOL)"/i);
-    if (!routeMatch) {
-      return unavailableAskReply("OpenAI intent classification returned no valid route. No database query attempted.",
-        "Invalid or empty intent classifier response.", meta);
-    }
-    if (routeMatch[1] === "VERIFIED_TOOL") return null;
+    // A reasoning-model response can be empty when its output budget is spent.
+    // Default to a safe conversational answer instead of declaring the request
+    // failed or accidentally falling through to an unrelated database query.
+    if (routeMatch?.[1] === "VERIFIED_TOOL") return null;
     const answer = await invokeChatModel(cloud.selection,
       conversationalMessage +
       "\n\nAnswer the user's actual request. Never invent account-specific billing, permissions, status, token allocations or integration readiness. If you cannot inspect authoritative account/project data, say so explicitly.");
