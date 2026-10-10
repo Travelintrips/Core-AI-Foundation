@@ -888,3 +888,21 @@ export async function getCodingBridgeAvailability(clientId: string) {
     lastSeenAt: row.lastSeenAt,
   };
 }
+
+/** Read-only correlated timeline; never exposes other bridge sources or tenants. */
+export async function getAiTaskBridgeTimeline(externalCommandId: string) {
+  await ensureCodingControlBridgeTables();
+  const [command] = await db.select().from(aiCodingBridgeCommandsTable).where(
+    and(eq(aiCodingBridgeCommandsTable.source, "ai-task-hub"), eq(aiCodingBridgeCommandsTable.externalCommandId, externalCommandId))
+  ).limit(1);
+  if (!command) return null;
+  const responses = await db.select({
+    id: aiCodingBridgeResponsesTable.id,
+    kind: aiCodingBridgeResponsesTable.kind,
+    message: aiCodingBridgeResponsesTable.message,
+    createdAt: aiCodingBridgeResponsesTable.createdAt,
+  }).from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
+    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
+  return { commandId: command.id, status: command.status, responses };
+}
