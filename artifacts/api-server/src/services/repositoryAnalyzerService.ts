@@ -1118,9 +1118,9 @@ export async function executeRepositoryAnalyzerJobOnDemand(
     const payload = (claimed.payloadJson ?? {}) as Record<string, unknown>;
     const requestText = typeof payload["description"] === "string" ? payload["description"] : "";
     const verificationOnly = payload["testOnly"] === true &&
-      /\\bTEST_ONLY\\b/i.test(requestText) &&
+      /\bTEST_ONLY\b/i.test(requestText) &&
       /repository analyzer/i.test(requestText) &&
-      /\\bE2E\\b|verif/i.test(requestText) &&
+      /\bE2E\b|verif/i.test(requestText) &&
       /no code modifications|no code changes|read.only/i.test(requestText);
     if (finalizeCodingRun || verificationOnly) {
       await completeRepositoryAnalyzerRun(result);
@@ -1310,9 +1310,9 @@ export async function completeRepositoryAnalyzerRun(
   const instruction = task?.instruction ?? "";
   const reservation = result.changeReservation as Record<string, unknown> | undefined;
   const localExecution = result.localExecution as Record<string, unknown> | undefined;
-  const verificationOnly = /\\bTEST_ONLY\\b/i.test(instruction) &&
+  const verificationOnly = /\bTEST_ONLY\b/i.test(instruction) &&
     /repository analyzer/i.test(instruction) &&
-    /\\bE2E\\b|verif/i.test(instruction) &&
+    /\bE2E\b|verif/i.test(instruction) &&
     /no code modifications|no code changes|read.only/i.test(instruction) &&
     result.executionStatus === "COMPLETED" &&
     reservation?.status !== "CONFLICT" && localExecution?.status !== "APPLIED";
