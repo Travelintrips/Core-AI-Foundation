@@ -1274,7 +1274,7 @@ async function openAiFirstReadOnlyIntent(
   const trimmed = message.trim();
   if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
   // Classifier-derived workload must not choose or bypass the semantic brain.
-  const cloud = await resolveCloudSelection("DATA_LOOKUP");
+  const cloud = await resolveCloudSelection("REASONING");
   const meta = { workload: workload.workload, costClass: workload.costClass };
   if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
     return unavailableAskReply("OpenAI intent gate unavailable; unrelated database routes are disabled.",
