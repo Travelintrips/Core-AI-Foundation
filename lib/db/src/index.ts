@@ -23,13 +23,13 @@ const isProduction = process.env["NODE_ENV"] === "production";
 // Repository Analyzer worker after the DEV capacity and role checks pass.
 const configuredPoolMax = Number(process.env["PG_POOL_MAX"]);
 const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax >= 1
-  ? Math.max(1, Math.min(isProduction ? 10 : 10, Math.floor(configuredPoolMax)))
+  ? Math.max(1, Math.min(10, Math.floor(configuredPoolMax)))
   : isProduction ? 10 : 5;
 
 const poolConfig = {
   connectionString: resolveDatabaseUrl(),
-  // Production is intentionally fixed at 10 application connections per
-  // process. Development/test may still override PG_POOL_MAX, bounded to 10.
+  // Production stays at 10 application connections by default, and can opt
+  // into a smaller per-process maximum (1..10). No environment may exceed 10.
   max: poolMax,
   idleTimeoutMillis: isProduction ? 10_000 : 30_000,
   connectionTimeoutMillis: isProduction ? 3_000 : 8_000,
