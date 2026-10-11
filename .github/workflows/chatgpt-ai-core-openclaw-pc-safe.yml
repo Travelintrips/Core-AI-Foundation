@@ -45,6 +45,10 @@ jobs:
               action='OPEN_NOTEPAD'
               instruction='This is an owner-authorized safe PC test. Use the real local exec tool to run: powershell.exe -NoProfile -Command Start-Process -FilePath notepad.exe . Do not write or delete files. Report the actual execution result. Do not claim success without a tool call.'
               ;;
+            '[PC-SAFE] CLOSE_NOTEPAD')
+              action='CLOSE_NOTEPAD'
+              instruction='Owner-authorized safe close for the exact Notepad test window opened earlier. Use the real Windows local exec tool to run exactly: powershell.exe -NoProfile -File C:\Users\user\AppData\Local\Temp\oc-close-notepad-12124-safe-20261011.ps1 . The script targets only the known Notepad PID 12124, validates its start time/title, and requests graceful CloseMainWindow without force-kill. If unsaved changes prevent closure, leave the dialog open and report a blocker. Report actual verified outcome; never claim success without executing.'
+              ;;
             '[PC-SAFE] MOVE_MOUSE_TOP')
               action='MOVE_MOUSE_TOP'
               instruction='This is an owner-authorized safe PC test. Use the real local exec tool to run: powershell.exe -NoProfile -File C:\Users\user\AppData\Local\Temp\oc-mouse-up-20261011.ps1 . Leave the cursor near the top of the desktop; do not restore its prior position. Report the actual execution result.'
