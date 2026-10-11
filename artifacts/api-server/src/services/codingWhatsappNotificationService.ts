@@ -10,14 +10,9 @@ type CodingBridgeKind =
   | "COMPLETED"
   | "FAILED";
 
-// WhatsApp admin is reserved for critical human-review requests only.
-const LIFECYCLE_NOTIFICATIONS_ENABLED = false;
-const NOTIFIABLE_KINDS = new Set<CodingBridgeKind>([
-  "CHECKPOINT",
-  "BLOCKER",
-  "COMPLETED",
-  "FAILED",
-]);
+// Terminal WhatsApp messages require an explicit rollout flag and independently verified gates.
+// Critical human approval messages remain available regardless of this flag.
+const NOTIFIABLE_KINDS = new Set<CodingBridgeKind>(["COMPLETED"]);
 
 type CodingLifecycleStatus =
   | "CHECKPOINT"
@@ -182,6 +177,7 @@ export type CodingWhatsappNotifyResult =
       reason:
         | "kind_not_notifiable"
         | "human_review_only_policy"
+        | "completion_not_verified"
         | "approval_result_notifications_disabled"
         | "missing_config"
         | "duplicate_lifecycle_notification";
@@ -378,7 +374,7 @@ export async function notifyCodingBridgeResponse(input: {
   eventTimestamp?: string | Date | null;
 }): Promise<CodingWhatsappNotifyResult> {
   const configured = getCodingWhatsappConfigStatus();
-  if (!LIFECYCLE_NOTIFICATIONS_ENABLED) {
+  if (process.env.AI_CODING_WA_VERIFIED_COMPLETED_ENABLED !== "true") {
     return {
       status: "skipped",
       reason: "human_review_only_policy",
@@ -390,6 +386,20 @@ export async function notifyCodingBridgeResponse(input: {
   }
 
   const status = lifecycleStatus(input);
+  // A status string or a green GitHub event alone cannot establish production success.
+  // The orchestrator must persist an explicit verified completion attestation.
+  const attestation = isRecord(input.metadata?.["verifiedCompletion"])
+    ? input.metadata["verifiedCompletion"] as Record<string, unknown>
+    : null;
+  if (
+    status !== "COMPLETED" ||
+    attestation?.["requiredChecksPassed"] !== true ||
+    attestation?.["merged"] !== true ||
+    attestation?.["deployed"] !== true ||
+    attestation?.["productionE2ePassed"] !== true
+  ) {
+    return { status: "skipped", reason: "completion_not_verified", configured };
+  }
   const duplicate = await findDeliveredLifecycleDuplicate({
     responseId: input.responseId,
     taskId: input.taskId,
