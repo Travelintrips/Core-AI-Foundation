@@ -24,6 +24,28 @@ let stopping = false;
 let gateway = null;
 let activeAgent = null;
 
+// Optional DEV-only browser routing pin. Never hard-code a workstation identity.
+// The configured node must already be paired and approved on this gateway.
+const BROWSER_NODE_ID = (process.env.OPENCLAW_BROWSER_NODE_ID || "").trim();
+
+function ensureBrowserNodeRouting() {
+  if (!BROWSER_NODE_ID) return;
+  if (!/^[a-f0-9]{64}$/i.test(BROWSER_NODE_ID)) {
+    throw new Error("OPENCLAW_BROWSER_NODE_ID must be a 64-character device ID");
+  }
+  const config = JSON.parse(readFileSync(OPENCLAW_CONFIG_PATH, "utf8"));
+  config.gateway ||= {};
+  config.gateway.nodes ||= {};
+  config.gateway.nodes.browser ||= {};
+  if (config.gateway.nodes.browser.node === BROWSER_NODE_ID && config.gateway.nodes.browser.mode === "manual") return;
+  config.gateway.nodes.browser.mode = "manual";
+  config.gateway.nodes.browser.node = BROWSER_NODE_ID;
+  const tmpPath = OPENCLAW_CONFIG_PATH + ".tmp-browser-node";
+  writeFileSync(tmpPath, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  renameSync(tmpPath, OPENCLAW_CONFIG_PATH);
+  log("browser routing pinned to approved node " + BROWSER_NODE_ID.slice(0, 12) + "...");
+}
+
 function ensureGatewayControlUiOrigins() {
   let config = {};
   try {
@@ -482,6 +504,7 @@ process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("SIGINT", () => stop("SIGINT"));
 
 ensureGatewayControlUiOrigins();
+ensureBrowserNodeRouting();
 ensureExternalStateOwnership();
 await reconcileStaleGatewayLease();
 
