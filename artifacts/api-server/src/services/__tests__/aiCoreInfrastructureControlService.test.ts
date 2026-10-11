@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+// TODO: Extended tests for validate_proposal replacement, fallback scenario, and incidentAutoRepairService deterministic recovery
+
 
 const execFileMock = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({
