@@ -423,7 +423,7 @@ export async function notifyCodingBridgeResponse(input: {
       ? `${publicBaseUrl}/coding-workspace/${encodeURIComponent(input.taskId)}`
       : null;
   const text = [
-    status === "CHECKPOINT" ? "AI Core Coding Update" : "AI Core Task Report",
+    "AI Core Task Report",
     `Status: ${status}`,
     task?.taskNumber
       ? `Task: ${task.taskNumber}`
@@ -445,7 +445,7 @@ export async function notifyCodingBridgeResponse(input: {
     .join("\n");
 
   const stableLifecycleKey =
-    input.taskId && status !== "CHECKPOINT"
+    input.taskId
       ? `ai-core-coding-${input.taskId}-${status.toLowerCase()}`
       : `ai-core-coding-${input.responseId}`;
 
