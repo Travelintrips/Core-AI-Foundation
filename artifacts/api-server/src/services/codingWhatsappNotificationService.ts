@@ -393,7 +393,7 @@ export async function notifyCodingBridgeResponse(input: {
   // Fail closed until a server-side verifier checks persisted CI, merge,
   // deployment and production E2E records. No environment override is safe.
   return { status: "skipped", reason: "trusted_completion_verifier_unavailable", configured };
-  /*   const attestation = isRecord(input.metadata?.["verifiedCompletion"])
+  const attestation = isRecord(input.metadata?.["verifiedCompletion"])
     ? input.metadata["verifiedCompletion"] as Record<string, unknown>
     : null;
   if (
@@ -405,7 +405,6 @@ export async function notifyCodingBridgeResponse(input: {
   ) {
     return { status: "skipped", reason: "completion_not_verified", configured };
   }
-  */
   const duplicate = await findDeliveredLifecycleDuplicate({
     responseId: input.responseId,
     taskId: input.taskId,
