@@ -40,6 +40,8 @@ jobs:
           python3 -m py_compile services/zerollm/server.py
       - name: Verify DEV-first release policy (offline unit tests)
         run: node --test scripts/verify-dev-first-release.test.mjs
+      - name: Verify bounded Hostinger DEV restart acceptance
+        run: node --test scripts/dev-hostinger-restart-fallback.test.mjs
       - name: Typecheck
         run: pnpm run typecheck
 
