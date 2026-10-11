@@ -1,6 +1,22 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
+// Validate model request payload
+interface ModelRequestPayload {
+  model: string;
+  prompt: string;
+  parameters?: Record<string, unknown>;
+}
+function validateModelRequestPayload(payload: any): asserts payload is ModelRequestPayload {
+  const missing: string[] = [];
+  if (typeof payload.model !== "string") missing.push("model");
+  if (typeof payload.prompt !== "string") missing.push("prompt");
+  if (missing.length > 0) {
+    console.error("Invalid model request payload:", payload);
+    throw new Error(`Invalid model request payload, missing or invalid fields: ${missing.join(", ")}`);
+  }
+}
+
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
