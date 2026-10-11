@@ -14,7 +14,7 @@ describe("GitHub issue terminal evidence guard", () => {
     const callback = source.slice(start, end);
     // Callback comments are informative, not authoritative final evidence.
     expect(callback).toContain("/comments");
-    expect(callback).not.toMatch(/method:\\s*["']PATCH["']/);
-    expect(callback).not.toMatch(/state_reason:\\s*["']completed["']/);
+    expect(callback).not.toMatch(/method:\s*["']PATCH["']/);
+    expect(callback).not.toMatch(/state_reason:\s*["']completed["']/);
   });
 });
