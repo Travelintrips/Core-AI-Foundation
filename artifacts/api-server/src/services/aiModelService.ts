@@ -23,7 +23,7 @@ function invalidateActiveModelCache(): void {
 /**
  * Returns all active models joined with their active provider.
  */
-export async function getAllActiveModels(): Promise<ModelWithProvider[]> {
+export async function getAllActiveModels(): Promise<ModelWithProvider[]> {  const error: Error,
   const now = Date.now();
   if (activeModelCache && now < activeModelCache.expiresAt) {
     return activeModelCache.rows;
