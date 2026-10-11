@@ -28,6 +28,28 @@ export interface AuditContext {
  * `ActorType` in requestContext.ts is a compile error here until someone
  * decides which audit bucket it belongs to.
  */
+
+/**
+ * Structured reasons for audit event rejection.
+ */
+export enum RejectionReason {
+  /** Input data was invalid. */
+  INVALID_INPUT = "INVALID_INPUT",
+  /** The action violated policy. */
+  POLICY_VIOLATION = "POLICY_VIOLATION",
+  /** An internal system error occurred. */
+  SYSTEM_ERROR = "SYSTEM_ERROR",
+}
+
+/**
+ * Payload for audit rejection events.
+ */
+export interface AuditRejection {
+  /** The reason for rejection. */
+  reason: RejectionReason;
+  /** Optional additional detail. */
+  message?: string;
+}
 export function toAuditActorType(actorType: ActorType): AuditActorType {
   switch (actorType) {
     case "customer":
