@@ -70,6 +70,7 @@ export interface ProductionCodingModelFailure {
   message: string;
 }
 
+// TODO: Wrap provider invocation with try/catch to handle 'PROVIDER_BAD_REQUEST', log payload (excluding secrets), retry once without constraints, and propagate other errors unchanged.
 function normalizeSlug(value: string): string {
   return value.trim().toLowerCase();
 }
