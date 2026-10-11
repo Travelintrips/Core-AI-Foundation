@@ -1,3 +1,16 @@
+// Validate AI request payload
+function validateAiPayload(payload: any) {
+  if (!payload.prompt || payload.prompt.trim() === '') {
+    throw new Error('Invalid AI request: prompt is required');
+  }
+  if (!payload.modelId) {
+    throw new Error('Invalid AI request: modelId is required');
+  }
+  if (!Array.isArray(payload.messages) || payload.messages.length === 0) {
+    throw new Error('Invalid AI request: messages array is required');
+  }
+}
+
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
