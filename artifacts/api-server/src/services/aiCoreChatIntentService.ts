@@ -163,6 +163,26 @@ export function classifyAiCoreChatDispatch(
         "Leading # explicitly routes this command to the paired PC through OpenClaw without Coding Orchestrator.",
     };
   }
+  // Explicit benign pointer movement delegated to OpenClaw is a device action,
+  // not an OpenAI answer or a repository coding task.
+  const explicitMouseMove =
+    /\bopenclaw\b/i.test(message) &&
+    /\b(?:mouse|kursor|cursor|pointer)\b/i.test(message) &&
+    /\b(?:gerak(?:kan)?|menggerakkan|pindah(?:kan)?|move|geser|shift)\b/i.test(message) &&
+    !hasExplicitSourceChange(message) &&
+    !/\b(?:powershell|cmd|terminal|shell|script|hapus|delete|install|download|password|credential|token)\b/i.test(message);
+  if (explicitMouseMove) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload: { ...workload, requiresAgent: false },
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: OPENCLAW_AGENT_CLIENT_ID,
+      executionLane: "TARGETED",
+      reason: "Explicit benign OpenClaw mouse movement routes to the desktop agent.",
+    };
+  }
   // Browser wake/notification is desktop delivery, even if the request mentions
   // TEST_ONLY, callbacks or Coding Orchestrator as context. Do not create a
   // repository coding task for a ChatGPT message-delivery probe.
