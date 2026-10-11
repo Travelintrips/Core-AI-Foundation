@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+console.debug("localCodingDeterministicRecoveryService loaded: validate_proposal matching diagnostics enabled");
 import { createHash, randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
