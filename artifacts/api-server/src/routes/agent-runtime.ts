@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { and, eq, desc } from "drizzle-orm";
 import { aiAgentServiceTokensTable, db } from "@workspace/db";
-import { adminAuth } from "../middleware/adminAuth.js";
+import { requireAuth, requireInternalRole } from "../middleware/internalAuth.js";
 import { hashAgentServiceToken } from "../middleware/agentServiceAuth.js";
 import { Router } from "express";
 import { z } from "zod";
@@ -18,12 +18,23 @@ import { getExternalAgentRule } from "../services/externalAgentRegistryService.j
 const router = Router();
 
 // Agent credentials management. Secrets are returned once, never persisted in plaintext.
+function requireSameOrigin(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): void {
+  const origin = req.headers.origin;
+  const host = req.headers.host;
+  if (!origin || !host) { res.status(403).json({ error: "Same-origin request required" }); return; }
+  try {
+    const parsed = new URL(origin);
+    if (parsed.host !== host || parsed.protocol !== "https:") { res.status(403).json({ error: "Cross-origin request denied" }); return; }
+  } catch { res.status(403).json({ error: "Invalid request origin" }); return; }
+  next();
+}
+const credentialAdmin = [requireAuth, requireInternalRole("owner", "admin")];
 const CredentialCreate = z.object({
   name: z.string().regex(/^openclaw-pc-worker-[1-9][0-9]*$/).max(100),
   scopes: z.array(z.enum(["agent:presence", "agent:work", "model:chat"])).min(1).max(3),
 }).strict();
 
-router.get("/ai/agent-runtime/credentials", adminAuth, async (_req, res): Promise<void> => {
+router.get("/ai/agent-runtime/credentials", ...credentialAdmin, async (_req, res): Promise<void> => {
   const rows = await db.select({
     id: aiAgentServiceTokensTable.id,
     name: aiAgentServiceTokensTable.name,
@@ -36,7 +47,7 @@ router.get("/ai/agent-runtime/credentials", adminAuth, async (_req, res): Promis
   res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-")) });
 });
 
-router.post("/ai/agent-runtime/credentials", adminAuth, async (req, res): Promise<void> => {
+router.post("/ai/agent-runtime/credentials", ...credentialAdmin, requireSameOrigin, async (req, res): Promise<void> => {
   const parsed = CredentialCreate.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid worker name or scopes" }); return; }
   const existing = await db.select({ id: aiAgentServiceTokensTable.id })
@@ -53,7 +64,7 @@ router.post("/ai/agent-runtime/credentials", adminAuth, async (req, res): Promis
   res.status(201).json({ ...row, token });
 });
 
-router.post("/ai/agent-runtime/credentials/:id/revoke", adminAuth, async (req, res): Promise<void> => {
+router.post("/ai/agent-runtime/credentials/:id/revoke", ...credentialAdmin, requireSameOrigin, async (req, res): Promise<void> => {
   const id = z.string().uuid().safeParse(req.params["id"]);
   if (!id.success) { res.status(400).json({ error: "Invalid credential ID" }); return; }
   const [candidate] = await db.select({ name: aiAgentServiceTokensTable.name }).from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.id, id.data)).limit(1);
