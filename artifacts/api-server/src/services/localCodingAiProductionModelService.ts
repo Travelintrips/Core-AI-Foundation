@@ -57,7 +57,8 @@ export type ProductionCodingModelUnavailableReason =
   | "EXPLICIT_MODEL_NOT_AVAILABLE"
   | "NO_CODING_CAPABLE_MODEL"
   | "PROVIDER_UNHEALTHY"
-  | "LOCAL_PROVIDER_UNAVAILABLE";
+    | "PROVIDER_BAD_REQUEST"
+| "LOCAL_PROVIDER_UNAVAILABLE";
 
 export interface ProductionCodingModelResolution {
   ok: true;
