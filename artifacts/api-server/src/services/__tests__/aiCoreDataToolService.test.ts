@@ -185,7 +185,7 @@ describe("production data tool routing regression", () => {
     const preSemantic = source.slice(askStart, askEnd);
     // Exactly one supported read-only lookup before the semantic intent gate:
     // duplicated calls make an otherwise read-only query run twice on misses.
-    expect(preSemantic.match(/await tryRunAiCoreDataTool\\(routingMessage\\)/g)).toHaveLength(1);
+    expect(preSemantic.match(/await tryRunAiCoreDataTool\(routingMessage\)/g)).toHaveLength(1);
     expect(preSemantic).toContain("const prioritizedDataTool = await tryRunAiCoreDataTool");
   });
 
