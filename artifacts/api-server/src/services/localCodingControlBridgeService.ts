@@ -80,6 +80,8 @@ async function syncTerminalBridgeResponseToGitHub(input: {
   //
   // Correlate by issue AND task, not just command: the same task can be
   // resubmitted under several bridge command IDs.
+  // Historical rows may have NULL response.task_id even when callbacks carry
+  // the task UUID (#658): use this-command fallback to avoid dropping alerts.
   const earliest = input.taskId
     ? await db.execute(sql`
         SELECT response.id
@@ -88,8 +90,17 @@ async function syncTerminalBridgeResponseToGitHub(input: {
           ON command.id = response.command_id
         WHERE command.source = 'github-trigger'
           AND command.metadata_json ->> 'issueNumber' = ${String(issueNumber)}::text
-          AND response.task_id = ${input.taskId}::uuid
           AND response.kind = ${input.kind}
+          AND (
+            response.task_id = ${input.taskId}::uuid
+            OR (
+              -- Legacy github-trigger responses often stored NULL task_id
+              -- despite the callback carrying a valid task UUID. Correlate
+              -- those only to this command, never unrelated issue callbacks.
+              response.task_id IS NULL
+              AND response.command_id = ${input.commandId}::uuid
+            )
+          )
         ORDER BY response.created_at ASC, response.id ASC
         LIMIT 1
       `)
