@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   enable-auto-merge:
-    if: github.event.workflow_run.conclusion == 'success'
+    # DEV-first release safety: do not arm main auto-merges until reviewed
+    # promotion is implemented and live DEV/CI/E2E evidence is enforced.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Request GitHub-managed auto-merge for verified PR
