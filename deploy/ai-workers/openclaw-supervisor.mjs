@@ -472,9 +472,10 @@ async function workLoop() {
 
       log("claimed bounded work " + String(work.commandId));
       const result = await runOpenClawAgent(work);
-      await reportResult(work, result);
+      queueResult(work, result);
+      const delivered = await flushResults();
       log(
-        "reported " +
+        (delivered ? "reported " : "queued result ") +
           (result.ok ? "COMPLETED" : "FAILED") +
           " for " +
           String(work.commandId),
