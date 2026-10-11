@@ -371,6 +371,20 @@ jobs:
               echo "::error::DEV restart rejected with HTTP $code (non-retryable)."
               exit 1
             fi
+            # A build may already have activated the release even when the
+            # optional restart endpoint returned a transient Hostinger 5xx.
+            # Accept only an independently live, healthy exact DEV commit.
+            rm -f /tmp/dev-restart-health.headers /tmp/dev-restart-health.body
+            health_code=$(curl --http1.1 --silent --show-error --connect-timeout 8 --max-time 15 \
+              -D /tmp/dev-restart-health.headers -o /tmp/dev-restart-health.body \
+              -w "%{http_code}" "https://$DEV_DOMAIN/api/healthz" || true)
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
+              /tmp/dev-restart-health.headers 2>/dev/null | tail -n1 || true)
+            if [ "$health_code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ] \
+              && jq -e '.status == "ok"' /tmp/dev-restart-health.body >/dev/null 2>&1; then
+              echo "dev_runtime_restart=PASS mode=already_live_verified sha=$live_sha"
+              break
+            fi
             echo "::warning::DEV restart transient HTTP $code on attempt $attempt"
             if [ "$attempt" -eq 5 ]; then
               echo "::error::DEV restart did not succeed after bounded retries."
