@@ -72,6 +72,51 @@ async function syncTerminalBridgeResponseToGitHub(input: {
   const issueNumber = githubIssueNumberFromCommand(command);
   if (!issueNumber) return;
 
+  // A task may generate hundreds of terminal bridge rows as its checkpoint
+  // changes. Publishing every BLOCKER as a fresh GitHub comment caused >1,000
+  // comments on issue #658. A single issue/task/kind gets one summary; full
+  // details remain in the durable bridge timeline. Preserve distinct kinds so
+  // a later BLOCKER can contradict an earlier COMPLETED (#942).
+  //
+  // Correlate by issue AND task, not just command: the same task can be
+  // resubmitted under several bridge command IDs.
+  // Historical rows may have NULL response.task_id even when callbacks carry
+  // the task UUID (#658): use this-command fallback to avoid dropping alerts.
+  const earliest = input.taskId
+    ? await db.execute(sql`
+        SELECT response.id
+        FROM ai_platform.ai_coding_bridge_responses AS response
+        JOIN ai_platform.ai_coding_bridge_commands AS command
+          ON command.id = response.command_id
+        WHERE command.source = 'github-trigger'
+          AND command.metadata_json ->> 'issueNumber' = ${String(issueNumber)}::text
+          AND response.kind = ${input.kind}
+          AND (
+            response.task_id = ${input.taskId}::uuid
+            OR (
+              -- Legacy github-trigger responses often stored NULL task_id
+              -- despite the callback carrying a valid task UUID. Correlate
+              -- those only to this command, never unrelated issue callbacks.
+              response.task_id IS NULL
+              AND response.command_id = ${input.commandId}::uuid
+            )
+          )
+        ORDER BY response.created_at ASC, response.id ASC
+        LIMIT 1
+      `)
+    : await db.execute(sql`
+        SELECT response.id
+        FROM ai_platform.ai_coding_bridge_responses AS response
+        WHERE response.command_id = ${input.commandId}::uuid
+          AND response.task_id IS NULL
+          AND response.kind = ${input.kind}
+        ORDER BY response.created_at ASC, response.id ASC
+        LIMIT 1
+      `);
+  if (String(earliest.rows?.[0]?.["id"] ?? "") !== input.responseId) {
+    return;
+  }
+
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -109,22 +154,11 @@ async function syncTerminalBridgeResponseToGitHub(input: {
     );
   }
 
-  if (input.kind !== "COMPLETED") return;
-
-  const closeResponse = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${issueNumber}`,
-    {
-      method: "PATCH",
-      headers,
-      signal: AbortSignal.timeout(20_000),
-      body: JSON.stringify({ state: "closed", state_reason: "completed" }),
-    },
-  );
-  if (!closeResponse.ok) {
-    throw new Error(
-      `GitHub terminal callback close failed with HTTP ${closeResponse.status}`,
-    );
-  }
+  // A bridge COMPLETED response is not evidence that the originating work
+  // is fully finished. Later BLOCKER/FAILED callbacks are possible (#942).
+  // Record the callback above, but leave the issue open until an independent
+  // reconciler checks authoritative task state and required PR/CI/deploy proof.
+  // Never close GitHub issues from an unverified bridge callback alone.
 }
 
 export async function submitCodingBridgeCommand(input: {
