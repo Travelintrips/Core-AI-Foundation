@@ -799,4 +799,95 @@ router.post(
   },
 );
 
+const hostExecutorRequestSchema = z.object({
+  operation: z.enum(["docker-ps", "openclaw-health", "disk-usage"]),
+  environment: z.enum(["dev", "prod"]).default("dev"),
+}).strict();
+
+router.get(
+  "/ai/agent-runtime/host-executor/capabilities",
+  requireAgentServiceScope("host:read"),
+  (_req, res): void => {
+    res.json({
+      authority: "ai-core",
+      mode: "read-only",
+      executionEnabled: Boolean(process.env.AI_CORE_HOST_EXECUTOR_SOCKET),
+      operations: ["docker-ps", "openclaw-health", "disk-usage"],
+    });
+  },
+);
+
+router.post(
+  "/ai/agent-runtime/host-executor/execute",
+  requireAgentServiceScope("host:read"),
+  async (req, res): Promise<void> => {
+    const parsed = hostExecutorRequestSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request" });
+      return;
+    }
+
+    const socketPath = process.env.AI_CORE_HOST_EXECUTOR_SOCKET;
+
+    if (!socketPath) {
+      res.status(503).json({ error: "host_executor_not_configured" });
+      return;
+    }
+
+    try {
+      const { createConnection } = await import("node:net");
+
+      const result = await new Promise<unknown>((resolve, reject) => {
+        const socket = createConnection({ path: socketPath });
+        let buffer = "";
+        let settled = false;
+
+        const fail = (error: Error) => {
+          if (settled) return;
+          settled = true;
+          socket.destroy();
+          reject(error);
+        };
+
+        socket.setTimeout(20000, () => fail(new Error("timeout")));
+
+        socket.on("connect", () => {
+          socket.write(JSON.stringify(parsed.data) + "\n");
+        });
+
+        socket.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString("utf8");
+
+          if (buffer.length > 16384) {
+            fail(new Error("response_too_large"));
+            return;
+          }
+
+          const end = buffer.indexOf("\n");
+          if (end < 0 || settled) return;
+
+          settled = true;
+          socket.end();
+
+          try {
+            resolve(JSON.parse(buffer.slice(0, end)));
+          } catch {
+            reject(new Error("invalid_executor_response"));
+          }
+        });
+
+        socket.on("error", fail);
+        socket.on("close", () => {
+          if (!settled) fail(new Error("disconnected"));
+        });
+      });
+
+      res.json(result);
+    } catch {
+      res.status(503).json({ error: "host_executor_unavailable" });
+    }
+  },
+);
+
 export default router;
