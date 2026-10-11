@@ -168,7 +168,7 @@ export function classifyAiCoreChatDispatch(
   const explicitMouseMove =
     /\bopenclaw\b/i.test(message) &&
     /\b(?:mouse|kursor|cursor|pointer)\b/i.test(message) &&
-    /\b(?:gerak(?:kan)?|menggerakkan|pindah(?:kan)?|move|geser|shift)\b/i.test(message) &&
+    /\b(?:gerak(?:kan)?|menggerakkan|pindah(?:kan)?|memindah(?:kan)?|move|geser|shift)\b/i.test(message) &&
     !hasExplicitSourceChange(message) &&
     !/\b(?:powershell|cmd|terminal|shell|script|hapus|delete|install|download|password|credential|token)\b/i.test(message);
   if (explicitMouseMove) {
