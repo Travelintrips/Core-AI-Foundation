@@ -1,3 +1,4 @@
+// TODO: Implement idempotent TASK_RETRY guard for existing task IDs
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
