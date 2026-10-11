@@ -135,6 +135,18 @@ export function detectAiCoreInfrastructureOperation(
   const text = normalizedMessage(message);
   if (!text) return null;
 
+  // Explicit read-only runtime failure investigations are diagnostics, even when
+  // the request also contains negative coding/deployment constraints or policy terms.
+  // Resolve this before the generic routing-policy audit matcher.
+  if (
+    isExplicitReadOnlyRequest(text) &&
+    /\b(?:openclaw|openhands|external agent|agent eksternal)\b/i.test(text) &&
+    /\b(?:diagnos(?:e|is|tic)?|diagnostik|error|failed|failure|gagal|http\s*4\d\d|runtime|sessions_yield|incomplete_turn)\b/i.test(text) &&
+    /\b(?:cek|check|audit|inspect|telusuri|trace|cari|find|lihat|read|baca|diagnos(?:e|is|tic)?|diagnostik)\b/i.test(text)
+  ) {
+    return "EXTERNAL_AGENT_DIAGNOSTIC";
+  }
+
   // Routing-policy audits must reach the conversation/control-plane analyzer.
   // They may mention OpenClaw, MCP, status, and permissions as subjects,
   // but are not requests to list the external-agent registry.
