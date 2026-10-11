@@ -5,6 +5,8 @@ import { startCodingOrchestration } from "./codingOrchestratorService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { logger } from "../lib/logger.js";
 import { codingTaskPresentationStatus } from "./codingTaskPresentationService.js";
+import { deterministicRecovery } from "./localCodingDeterministicRecoveryService.js"; // enhanced deterministic recovery for validate_proposal failures
+
 
 export type IncidentSource = "github" | "supabase" | "hostinger" | "system";
 export type IncidentRisk = "SAFE" | "GUARDED" | "OWNER_APPROVAL";
