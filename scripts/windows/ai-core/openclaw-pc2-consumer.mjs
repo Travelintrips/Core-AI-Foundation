@@ -126,5 +126,3 @@ while (true) {
  } catch(err) { console.log('worker cycle error '+err.name+' '+String(err.message).slice(0,100)); }
  await new Promise(resolve=>setTimeout(resolve,5000));
 }
-
-[executed on device: DESKTOP-CPS76BH (99eaf032-53f5-49fb-813e-c0e20373bfae)]
