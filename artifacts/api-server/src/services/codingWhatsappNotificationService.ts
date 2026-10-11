@@ -46,6 +46,7 @@ function lifecycleStatus(input: {
   if (input.kind === "BLOCKER") return "BLOCKED";
   if (input.kind === "FAILED") return "FAILED";
   if (input.kind === "CHECKPOINT") return "CHECKPOINT";
+  if (input.kind === "COMPLETED") return "COMPLETED";
 
   const haystack = `${input.message} ${JSON.stringify(checkpoint)} ${JSON.stringify(metadata)}`.toLowerCase();
   if (/\bdeploy(?:ed|ment)?\b/.test(haystack) && /(success|succeed|completed|selesai|deployed)/.test(haystack)) {
