@@ -179,6 +179,7 @@ export type CodingWhatsappNotifyResult =
         | "kind_not_notifiable"
         | "human_review_only_policy"
         | "completion_not_verified"
+        | "trusted_completion_verifier_unavailable"
         | "approval_result_notifications_disabled"
         | "missing_config"
         | "duplicate_lifecycle_notification";
@@ -389,6 +390,12 @@ export async function notifyCodingBridgeResponse(input: {
   const status = lifecycleStatus(input);
   // A status string or a green GitHub event alone cannot establish production success.
   // The orchestrator must persist an explicit verified completion attestation.
+  // Bridge metadata is caller-controlled, not independently verified evidence.
+  // Fail closed until a server-side verifier checks persisted CI, merge,
+  // deployment and production E2E records. No environment override is safe.
+  if (input.kind === "COMPLETED") {
+    return { status: "skipped", reason: "trusted_completion_verifier_unavailable", configured };
+  }
   const attestation = isRecord(input.metadata?.["verifiedCompletion"])
     ? input.metadata["verifiedCompletion"] as Record<string, unknown>
     : null;
