@@ -58,24 +58,22 @@ describe("verified COMPLETED WhatsApp rollout", () => {
       ...base,
       metadata: { verifiedCompletion: { requiredChecksPassed: true, merged: true, deployed: false, productionE2ePassed: false } },
     });
-    expect(result).toMatchObject({ status: "skipped", reason: "completion_not_verified" });
+    expect(result).toMatchObject({ status: "skipped", reason: "trusted_completion_verifier_unavailable" });
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects a status string without an attestation", async () => {
     const result = await notifyCodingBridgeResponse(base);
-    expect(result).toMatchObject({ status: "skipped", reason: "completion_not_verified" });
+    expect(result).toMatchObject({ status: "skipped", reason: "trusted_completion_verifier_unavailable" });
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
-  it("allows explicitly verified completion with a stable idempotency key", async () => {
+  it("rejects forged fully green completion metadata without trusted evidence", async () => {
     const result = await notifyCodingBridgeResponse({
       ...base,
       metadata: { verifiedCompletion: { requiredChecksPassed: true, merged: true, deployed: true, productionE2ePassed: true } },
     });
-    expect(result.status).toBe("queued");
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
-    const [, options] = mocks.fetch.mock.calls[0] as [string, RequestInit];
-    expect(options.headers).toMatchObject({ "idempotency-key": "ai-core-coding-33333333-3333-4333-8333-333333333333-completed" });
+    expect(result).toMatchObject({ status: "skipped", reason: "trusted_completion_verifier_unavailable" });
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });
