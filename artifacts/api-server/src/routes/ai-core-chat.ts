@@ -3830,16 +3830,6 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   // Refuse source-changing coding at the chat boundary in every mode,
   // rather than returning the ambiguous internal NO_WORKER routing lane.
 
-  if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
-    res.status(403).json({
-      error: "Execution blocked: commands must begin with @.",
-      blocked: true,
-      reason: "missing_execution_prefix",
-      requiredPrefix: "@",
-    });
-    return;
-  }
-
   if (parsed.data.mode === "agent" && (parsed.data.source === "voice" || parsed.data.source === "whatsapp_voice")) {
     const normalizedVoice = normalizeVoiceAgentCommand(parsed.data.message);
     if (!normalizedVoice.wakeWordMatched) {
@@ -3853,10 +3843,21 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       return;
     }
     parsed.data.message = normalizedVoice.command;
+    // Preserve the explicit execution authorization after wake-word normalization.
     if (!parsed.data.message) {
       res.status(400).json({ error: "Voice command is empty after Hi prefix." });
       return;
     }
+  }
+
+  if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
+    res.status(403).json({
+      error: "Execution blocked: commands must begin with @.",
+      blocked: true,
+      reason: "missing_execution_prefix",
+      requiredPrefix: "@",
+    });
+    return;
   }
 
   try {
