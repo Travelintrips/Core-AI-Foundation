@@ -32,7 +32,7 @@ describe("Local Coding GitHub publisher", () => {
   it("normalizes GitHub repository coordinates and deterministic task branches", () => {
     expect(parseGitHubRepository("Travelintrips/Core-AI-Foundation")).toEqual({
       owner: "Travelintrips",
-      repo: "Core-AI-Foundation",
+      repo: "core-ai-foundation",
     });
     expect(parseGitHubRepository("https://github.com/Travelintrips/Core-AI-Foundation.git")).toEqual({
       owner: "Travelintrips",
