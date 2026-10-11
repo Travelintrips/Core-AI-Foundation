@@ -422,15 +422,35 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
   conversationId: string;
 }) {
   await ensureCodingControlBridgeTables();
+  // A receiver-side MCP ACK is durable evidence of delivery to the subscribed
+  // conversation. It is not proof of browser automation or other external E2E paths.
   const result = await db.execute(sql`
-    UPDATE ai_platform.ai_coding_bridge_responses AS response
-    SET acknowledged_at = NOW()
-    FROM ai_platform.ai_coding_bridge_commands AS command
-    WHERE response.command_id = command.id
-      AND response.id = ${input.responseId}::uuid
-      AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-      AND response.acknowledged_at IS NULL
-    RETURNING response.id
+    WITH acknowledged AS (
+      UPDATE ai_platform.ai_coding_bridge_responses AS response
+      SET acknowledged_at = NOW()
+      FROM ai_platform.ai_coding_bridge_commands AS command
+      WHERE response.command_id = command.id
+        AND response.id = ${input.responseId}::uuid
+        AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
+        AND response.acknowledged_at IS NULL
+      RETURNING response.id, response.command_id, response.acknowledged_at
+    ),
+    marked AS (
+      UPDATE ai_platform.ai_coding_bridge_commands AS command
+      SET metadata_json = COALESCE(command.metadata_json, '{}'::jsonb) ||
+        jsonb_build_object(
+          'deliveryCode', 'DELIVERY_CONFIRMED',
+          'e2eCode', 'MCP_ACK_VERIFIED',
+          'mcpAckResponseId', acknowledged.id::text,
+          'mcpAckConversationId', ${input.conversationId}::text,
+          'mcpAcknowledgedAt', acknowledged.acknowledged_at::text
+        ),
+        updated_at = NOW()
+      FROM acknowledged
+      WHERE command.id = acknowledged.command_id
+      RETURNING command.id
+    )
+    SELECT id FROM marked
   `);
   return (result.rows ?? []).length > 0;
 }
