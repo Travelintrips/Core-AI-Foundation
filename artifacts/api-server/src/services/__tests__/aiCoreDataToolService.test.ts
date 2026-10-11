@@ -17,6 +17,9 @@ import {
 } from "../aiCoreDataToolService.js";
 
 describe("AI Core read-only data tools", () => {
+  it("handles timeout scenario", async () => {
+    // TODO: implement timeout test logic
+  });
   beforeEach(() => {
     mocks.execute.mockReset();
   });
