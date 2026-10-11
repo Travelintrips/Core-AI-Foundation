@@ -1,0 +1,113 @@
+name: ChatGPT AI Core OpenClaw PC Safe Bridge
+run-name: PC safe control #${{ github.event.issue.number }} by ${{ github.actor }}
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pc-safe-control-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: >-
+      github.repository == 'Travelintrips/Core-AI-Foundation' &&
+      github.actor == 'Travelintrips' &&
+      github.event.issue.user.login == 'Travelintrips' &&
+      startsWith(github.event.issue.title, '[PC-SAFE] ')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 7
+    steps:
+      - name: Validate exact allowlisted action and enqueue for PC2
+        id: enqueue
+        shell: bash
+        env:
+          TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY: ${{ github.repository }}
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: ${{ vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_API_KEY"
+          case "$TITLE" in
+            '[PC-SAFE] PING')
+              action='PING'
+              instruction='ping'
+              ;;
+            '[PC-SAFE] OPEN_NOTEPAD')
+              action='OPEN_NOTEPAD'
+              instruction='This is an owner-authorized safe PC test. Use the real local exec tool to run: powershell.exe -NoProfile -Command Start-Process -FilePath notepad.exe . Do not write or delete files. Report the actual execution result. Do not claim success without a tool call.'
+              ;;
+            '[PC-SAFE] CLOSE_NOTEPAD')
+              action='CLOSE_NOTEPAD'
+              instruction='Owner-authorized safe close for the exact Notepad test window opened earlier. Use the real Windows local exec tool to run exactly: powershell.exe -NoProfile -File C:\Users\user\AppData\Local\Temp\oc-close-notepad-12124-safe-20261011.ps1 . The script targets only the known Notepad PID 12124, validates its start time/title, and requests graceful CloseMainWindow without force-kill. If unsaved changes prevent closure, leave the dialog open and report a blocker. Report actual verified outcome; never claim success without executing.'
+              ;;
+            '[PC-SAFE] MOVE_MOUSE_TOP')
+              action='MOVE_MOUSE_TOP'
+              instruction='This is an owner-authorized safe PC test. Use the real local exec tool to run: powershell.exe -NoProfile -File C:\Users\user\AppData\Local\Temp\oc-mouse-up-20261011.ps1 . Leave the cursor near the top of the desktop; do not restore its prior position. Report the actual execution result.'
+              ;;
+            *)
+              echo 'Not an allowlisted safe PC action; nothing dispatched.'
+              exit 1
+              ;;
+          esac
+          external_id="pc-safe:issue:${REPOSITORY}:${ISSUE_NUMBER}"
+          payload="$(jq -nc \
+            --arg externalId "$external_id" \
+            --arg instruction "$instruction" \
+            --arg action "$action" \
+            --arg issue "$ISSUE_NUMBER" \
+            --arg repo "$REPOSITORY" \
+            '{externalCommandId:$externalId,instruction:$instruction,source:"chatgpt-github-pc-safe",commandType:"EXTERNAL_AGENT_WORK",metadata:{assignedClientId:"openclaw-pc-worker-2",safePcAction:$action,issueNumber:$issue,repository:$repo,conversationId:("pc-safe-issue-" + $issue)}}')"
+          response="$(curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-all-errors --retry-delay 2 \
+            --connect-timeout 10 --max-time 30 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$payload" \
+            "$API_BASE_URL/ai/coding/bridge/commands")"
+          command_id="$(jq -r '.command.id // empty' <<< "$response")"
+          test "$command_id" != ''
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          echo "AI Core accepted bounded $action for OpenClaw PC2 (command $command_id)."
+
+      - name: Observe verified agent result and report to issue
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: ${{ vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMAND_ID: ${{ steps.enqueue.outputs.command_id }}
+          ACTION: ${{ steps.enqueue.outputs.action }}
+        run: |
+          set -euo pipefail
+          status='PENDING_UNVERIFIED'
+          for i in $(seq 1 24); do
+            response="$(curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 15 \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              "$API_BASE_URL/ai/coding/bridge/subscriptions/pc-safe-issue-$ISSUE_NUMBER/events?limit=100")"
+            event="$(jq -c --arg id "$COMMAND_ID" \
+              '[.events[] | select(.commandId == $id and (.kind == "COMPLETED" or .kind == "FAILED"))] | last // empty' \
+              <<< "$response")"
+            if [ -n "$event" ] && [ "$event" != 'null' ]; then
+              kind="$(jq -r '.kind' <<< "$event")"
+              if [ "$kind" = 'COMPLETED' ]; then status='VERIFIED_COMPLETED'; else status='VERIFIED_FAILED'; fi
+              break
+            fi
+            sleep 5
+          done
+          message="ChatGPT → GitHub Actions → AI Core → OpenClaw PC2 check: **${status}**. Action: ${ACTION}. AI Core command: \`${COMMAND_ID}\`. No Desktop Commander was used to enqueue or execute this command. Terminal result is only confirmed if status is VERIFIED_COMPLETED or VERIFIED_FAILED."
+          gh api -X POST "repos/$REPOSITORY/issues/$ISSUE_NUMBER/comments" -f body="$message" >/dev/null
+          printf '### OpenClaw PC safe bridge\n\nAction: %s\nAI Core command: %s\nStatus: %s\n' "$ACTION" "$COMMAND_ID" "$status" >> "$GITHUB_STEP_SUMMARY"
+          [ "$status" = 'VERIFIED_COMPLETED' ]
