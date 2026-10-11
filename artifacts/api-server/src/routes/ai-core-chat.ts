@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { logger } from "../lib/logger.js";
+import { ErrorResponse, errorResponses } from "../models/errorResponses.js";
 import {
   createConstrainedCodingProviderAdapter,
 } from "../services/localCodingAiExecutionGateService.js";
