@@ -11,6 +11,15 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
+    expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
+    });
+    expect(classifyAiCoreChatDispatch("Instruksikan OpenClaw untuk memindahkan kursor mouse ke bagian atas layar")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
+    });
+  });
+
   it("does not allow semantic read-only intent to intercept explicit external-agent commands", () => {
     const routeSource = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
     expect(routeSource).toContain('preflightDispatch.kind === "ANSWER"');
