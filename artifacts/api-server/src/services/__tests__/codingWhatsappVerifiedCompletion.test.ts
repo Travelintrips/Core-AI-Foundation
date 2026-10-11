@@ -69,6 +69,7 @@ describe("verified COMPLETED WhatsApp rollout", () => {
   });
 
   it("rejects forged fully green completion metadata without trusted evidence", async () => {
+    // All four caller-supplied green flags must never authorize an outbound send.
     const result = await notifyCodingBridgeResponse({
       ...base,
       metadata: { verifiedCompletion: { requiredChecksPassed: true, merged: true, deployed: true, productionE2ePassed: true } },
