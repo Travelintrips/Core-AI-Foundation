@@ -56,11 +56,13 @@ router.post("/ai/agent-runtime/credentials", adminAuth, async (req, res): Promis
 router.post("/ai/agent-runtime/credentials/:id/revoke", adminAuth, async (req, res): Promise<void> => {
   const id = z.string().uuid().safeParse(req.params["id"]);
   if (!id.success) { res.status(400).json({ error: "Invalid credential ID" }); return; }
+  const [candidate] = await db.select({ name: aiAgentServiceTokensTable.name }).from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.id, id.data)).limit(1);
+  if (!candidate?.name.startsWith("openclaw-pc-worker-")) { res.status(404).json({ error: "Worker credential not found" }); return; }
   const [row] = await db.update(aiAgentServiceTokensTable)
     .set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(aiAgentServiceTokensTable.id, id.data)))
+    .where(and(eq(aiAgentServiceTokensTable.id, id.data), eq(aiAgentServiceTokensTable.isActive, true)))
     .returning({ id: aiAgentServiceTokensTable.id, name: aiAgentServiceTokensTable.name });
-  if (!row || !row.name.startsWith("openclaw-pc-worker-")) {
+  if (!row) {
     res.status(404).json({ error: "Worker credential not found" }); return;
   }
   res.json({ revoked: true, id: row.id });
