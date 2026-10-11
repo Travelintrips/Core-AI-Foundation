@@ -53,6 +53,7 @@ import {
 } from "./localCodingAiPatchApplierService.js";
 import {
   buildLocalCodingAiPrompt,
+  LOCAL_CODING_AI_PROMPT_LIMITS,
   type LocalCodingAiPrompt,
 } from "./localCodingAiPromptBuilderService.js";
 import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
@@ -208,7 +209,10 @@ export function buildAiProposalBinding(
     packageHash: lease.packageHash,
     baseHeadSha: lease.package.repository.baseHeadSha,
     currentPatchSha256: lease.package.currentPatch.sha256,
-    allowedFiles: [...lease.package.allowedFiles],
+    // Bind the validator to the exact authorized prefix shown to the model.
+    // The larger handoff candidate set stays available as context, but must
+    // never broaden Proposal Contract V1 beyond its 12-file model prompt.
+    allowedFiles: lease.package.allowedFiles.slice(0, LOCAL_CODING_AI_PROMPT_LIMITS.maxAllowedFiles),
   };
 }
 
