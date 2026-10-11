@@ -1,3 +1,4 @@
+// TODO: Add error handling for missing input validation in LocalCodingAutonomousRepairService to prevent null reference and unhandled promise errors.
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
