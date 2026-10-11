@@ -16,12 +16,15 @@ const { Pool } = pg;
 // keeps the schema setup race-free while working with both direct Postgres and
 // Supabase pooler connections.
 const isProduction = process.env["NODE_ENV"] === "production";
+// The Supabase direct database is limited to 60 sessions. Multiple deployed
+// services each defaulting to 10 connections can exhaust that quota and cause
+// misleading worker failures. Allow a per-process *reduction*, never an
+// increase over the previous hard limit. Set PG_POOL_MAX=2 for an isolated
+// Repository Analyzer worker after the DEV capacity and role checks pass.
 const configuredPoolMax = Number(process.env["PG_POOL_MAX"]);
-const poolMax = isProduction
-  ? 10
-  : Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
-    ? Math.max(1, Math.min(10, Math.floor(configuredPoolMax)))
-    : 5;
+const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax >= 1
+  ? Math.max(1, Math.min(isProduction ? 10 : 10, Math.floor(configuredPoolMax)))
+  : isProduction ? 10 : 5;
 
 const poolConfig = {
   connectionString: resolveDatabaseUrl(),
