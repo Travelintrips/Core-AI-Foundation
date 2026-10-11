@@ -255,6 +255,8 @@ services:
 
 
   openclaw-work-supervisor:
+    # Legacy duplicate poller: enable explicitly only during migration.
+    profiles: ["legacy-openclaw-supervisor"]
     image: python:3.13-slim
     restart: unless-stopped
     depends_on:
