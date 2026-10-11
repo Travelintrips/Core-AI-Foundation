@@ -132,14 +132,17 @@ export async function dispatchExternalAgentWork(input: {
       && input.metadata?.explicitWorkerTarget === true;
     // The public generic OpenClaw alias is used by MCP even for a named PC.
     // Do not let the sticky leader silently override a requested physical PC.
-    const targetPc = explicitlyNamesPrimary ? OPENCLAW_PC_CLIENT_ID
-      : explicitPc ? input.clientId : null;
+    // A physical PC name identifies the destination machine, not a requirement
+    // to use worker-1. When worker-1 is offline, an eligible sibling PC worker
+    // must be allowed to execute the command on the same PC.
+    const targetPc = explicitPc ? input.clientId : null;
     const preferred = serverMonitor
       ? selectOpenClawExecutor(registry, { preferServer: true })
-      : targetPc
-        ? (registry.some((worker) => worker.clientId === targetPc && worker.eligible)
-            ? targetPc : null)
-        : await chooseActivePc(registry);
+      : targetPc && registry.some((worker) => worker.clientId === targetPc && worker.eligible)
+        ? targetPc
+        : explicitlyNamesPrimary || !targetPc
+          ? await chooseActivePc(registry)
+          : null;
     // Do not route server-only monitoring to a PC that cannot execute it.
     if (serverMonitor && !preferred) {
       throw new ExternalAgentDispatchError(

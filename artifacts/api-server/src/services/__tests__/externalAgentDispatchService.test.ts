@@ -25,4 +25,10 @@ describe("Issue #980: explicit external-agent routing", () => {
   it("does not delegate a plain mention without an explicit delegation verb", () => {
     expect(detectExplicitExternalAgentClientId("OpenClaw PC belum aktif")).toBeNull();
   });
+
+  it("documents that a named Travelintrips PC can fail over to another eligible PC worker", () => {
+    // A named physical PC is not a hard pin to the worker-1 process.
+    // Worker selection is performed by chooseActivePc when worker-1 is offline.
+    expect(detectExplicitExternalAgentClientId("suruh OpenClaw PC Travelintrips gerakkan mouse")).toBe("openclaw-pc-worker");
+  });
 });
