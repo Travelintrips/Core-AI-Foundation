@@ -109,22 +109,9 @@ async function syncTerminalBridgeResponseToGitHub(input: {
     );
   }
 
-  if (input.kind !== "COMPLETED") return;
-
-  const closeResponse = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${issueNumber}`,
-    {
-      method: "PATCH",
-      headers,
-      signal: AbortSignal.timeout(20_000),
-      body: JSON.stringify({ state: "closed", state_reason: "completed" }),
-    },
-  );
-  if (!closeResponse.ok) {
-    throw new Error(
-      `GitHub terminal callback close failed with HTTP ${closeResponse.status}`,
-    );
-  }
+  // A bridge callback is not verified final work: a later BLOCKER may supersede
+  // a prior COMPLETED response. Keep the issue open for evidence reconciliation.
+  // Never PATCH GitHub issue state from this notification path alone.
 }
 
 export async function submitCodingBridgeCommand(input: {
