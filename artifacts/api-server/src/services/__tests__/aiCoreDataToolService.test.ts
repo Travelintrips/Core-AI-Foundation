@@ -173,6 +173,7 @@ describe("AI Core read-only data tools", () => {
 
 
 describe("production data tool routing regression", () => {
+  beforeEach(() => mocks.execute.mockReset());
   it("keeps the smoke booking query ahead of the semantic gate", async () => {
     const { detectAiCoreDataTool } = await import("../aiCoreDataToolService.js");
     expect(detectAiCoreDataTool("cek booking SC-0992")).toEqual({ tool: "SPORT_CENTER_BOOKING_LOOKUP", bookingNumber: "SC-0992" });
