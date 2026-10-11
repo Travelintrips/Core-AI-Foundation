@@ -1101,7 +1101,40 @@ export async function startCodingOrchestration(
     detached: false,
   });
   child.unref();
+  // A child can spawn successfully and then exit before claiming its durable
+  // queued row. Recover on close rather than leaving the global single-flight
+  // slot occupied until the 60-second stale queue recovery.
+  let childSpawnErrored = false;
+  child.once("close", (exitCode, signal) => {
+    if (childSpawnErrored) return; // The error handler already owns recovery.
+    void (async () => {
+      const [currentJob] = await withTransientDatabaseRetry(
+        () => db
+          .select()
+          .from(aiJobsTable)
+          .where(eq(aiJobsTable.id, queuedJob!.id))
+          .limit(1),
+        { attempts: 3, baseDelayMs: 150 },
+      );
+      // CAS inside continueCodingOrchestration preserves single-flight:
+      // never rerun an analyzer that another worker already claimed.
+      if (!currentJob || currentJob.status !== "queued") return;
+      logger.warn(
+        { jobId: currentJob.id, exitCode, signal, taskId: input.task.id },
+        "[coding-orchestrator] Analyzer child exited before claim; reclaiming queued job",
+      );
+      await continueCodingOrchestration(
+        input, sessionId, currentJob, stages,
+      );
+    })().catch((error) => {
+      logger.error(
+        { err: error, jobId: queuedJob?.id, taskId: input.task.id },
+        "[coding-orchestrator] Analyzer early-exit reclaim failed",
+      );
+    });
+  });
   child.once("error", (error) => {
+    childSpawnErrored = true;
     const spawnCode =
       typeof (error as NodeJS.ErrnoException).code === "string"
         ? (error as NodeJS.ErrnoException).code
