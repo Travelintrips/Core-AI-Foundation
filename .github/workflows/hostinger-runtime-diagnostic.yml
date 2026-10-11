@@ -26,6 +26,12 @@ jobs:
             echo "domain=$domain found=$([ -n "$username" ] && echo yes || echo no) enabled=${enabled:-unknown}"
             if [ -z "$username" ]; then continue; fi
             root="$base/hosting/v1/accounts/$username/websites/$domain/nodejs"
+            # Read runtime logs without printing raw messages that may contain secrets.
+            log_code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o /tmp/runtime-logs.json -w "%{http_code}" "$root/runtime-logs?period=1h&limit=150") || log_code=000
+            echo "domain=$domain endpoint=runtime-logs http=$log_code"
+            if [ "$log_code" = "200" ]; then
+              jq -c '{started_at,last_deployed_at,total_lines, recent_events:[.logs[-30:][]? | {timestamp,level,category:(if (.message|test("EADDRINUSE|listen|port";"i")) then "port_or_listener" elif (.message|test("ECONNREFUSED|ETIMEDOUT|database|postgres|supabase|redis";"i")) then "dependency_connection" elif (.message|test("MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|Cannot find module";"i")) then "missing_module" elif (.message|test("uncaught|unhandled|fatal|exception|error";"i")) then "runtime_error" else "other" end)}]}' /tmp/runtime-logs.json
+            fi
             for path in builds/settings server/status builds; do
               code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o /tmp/diag.json -w "%{http_code}" "$root/$path") || code=000
               echo "domain=$domain endpoint=$path http=$code"
