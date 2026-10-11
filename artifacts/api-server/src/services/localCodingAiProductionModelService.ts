@@ -1,3 +1,4 @@
+// TODO: Wrap provider calls in try-catch to handle PROVIDER_BAD_REQUEST and rethrow sanitized ModelRequestError
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
