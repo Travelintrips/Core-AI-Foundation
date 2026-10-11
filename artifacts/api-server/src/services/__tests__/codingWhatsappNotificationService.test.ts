@@ -50,6 +50,7 @@ import {
 describe("coding WhatsApp human-review-only policy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.AI_CODING_WA_VERIFIED_COMPLETED_ENABLED;
     process.env.CST_WA_GATEWAY_URL = "https://wa.example.test";
     process.env.CST_WA_GATEWAY_API_KEY = "secret";
     process.env.AI_CODING_WA_NOTIFY_TO = "628123456789";
