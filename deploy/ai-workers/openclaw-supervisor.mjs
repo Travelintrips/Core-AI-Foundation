@@ -434,9 +434,36 @@ async function reportResult(work, result) {
   }
 }
 
+// Keep completed executions on disk until AI Core confirms receipt. Never re-run a
+// claimed operation merely because result delivery failed.
+const resultOutbox = new DatabaseSync(OPENCLAW_STATE_DIR + "/result-outbox.sqlite");
+resultOutbox.exec("CREATE TABLE IF NOT EXISTS pending_results (command_id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+function queueResult(work, result) {
+  resultOutbox.prepare("INSERT OR REPLACE INTO pending_results(command_id, payload) VALUES (?, ?)").run(String(work.commandId), JSON.stringify({ work, result }));
+}
+async function flushResults() {
+  const rows = resultOutbox.prepare("SELECT command_id, payload FROM pending_results ORDER BY created_at LIMIT 20").all();
+  for (const row of rows) {
+    const { work, result } = JSON.parse(row.payload);
+    try {
+      await reportResult(work, result);
+      resultOutbox.prepare("DELETE FROM pending_results WHERE command_id = ?").run(row.command_id);
+      log("result delivery acknowledged for " + row.command_id);
+    } catch (error) {
+      log("result delivery pending for " + row.command_id + ": " + String(error.message || error).slice(0, 180));
+      return false;
+    }
+  }
+  return true;
+}
+
 async function workLoop() {
   while (!stopping) {
     try {
+      if (!(await flushResults())) {
+        await sleep(POLL_MS);
+        continue;
+      }
       const work = await claimWork();
       if (!work) {
         await sleep(POLL_MS);
@@ -445,9 +472,10 @@ async function workLoop() {
 
       log("claimed bounded work " + String(work.commandId));
       const result = await runOpenClawAgent(work);
-      await reportResult(work, result);
+      queueResult(work, result);
+      const delivered = await flushResults();
       log(
-        "reported " +
+        (delivered ? "reported " : "queued result ") +
           (result.ok ? "COMPLETED" : "FAILED") +
           " for " +
           String(work.commandId),
