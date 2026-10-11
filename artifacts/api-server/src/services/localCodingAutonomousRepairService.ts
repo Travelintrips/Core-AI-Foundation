@@ -9,6 +9,12 @@ import {
   db,
   withTransientDatabaseRetry,
 } from "@workspace/db";
+
+// Guard against missing database instance
+if (typeof db === "undefined" || db === null) {
+  throw new Error("LocalCodingAutonomousRepairService: missing db instance");
+}
+
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
