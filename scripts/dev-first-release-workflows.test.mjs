@@ -29,6 +29,9 @@ test("GPU deployment is manual and checks DEV before cloud authentication", () =
 test("main-branch auto-merges cannot bypass DEV-first promotion", () => {
   const native = workflow("native-auto-merge.yml");
   const direct = workflow("pr-auto-complete.yml");
+  const guardian = workflow("pr-queue-guardian.yml");
   assert.match(native, /if: \$\{\{ false \}\}/);
   assert.match(direct, /Main auto-merge disabled until verified DEV-first promotion/);
+  assert.doesNotMatch(guardian, /await github\.graphql\(mutation,/);
+  assert.match(guardian, /DEV-first promotion requires reviewed merge commit/);
 });
