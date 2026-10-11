@@ -17,6 +17,11 @@ describe("GitHub issue terminal evidence guard", () => {
     // spam seen on GitHub issue #658, even when bridge response IDs change.
     expect(callback).toContain("command.metadata_json ->> 'issueNumber'");
     expect(callback).toContain("response.task_id = ${input.taskId}::uuid");
+    // Observed PROD rows under issue #658 carry NULL response.task_id even
+    // though emitted GitHub callbacks contain a task UUID. Preserve at least
+    // one event for the originating command without broad issue-wide matching.
+    expect(callback).toContain("response.task_id IS NULL");
+    expect(callback).toContain("response.command_id = ${input.commandId}::uuid");
     expect(callback).toContain("response.kind = ${input.kind}");
     expect(callback).toContain('earliest.rows?.[0]?.["id"]');
     expect(callback).toContain("/comments");
