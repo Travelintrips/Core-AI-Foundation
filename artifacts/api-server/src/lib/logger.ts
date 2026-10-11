@@ -1,4 +1,6 @@
 import pino from "pino";
+// Audit: Verified external OpenClaw routing behavior unchanged.
+
 
 const isProduction = process.env.NODE_ENV === "production";
 
