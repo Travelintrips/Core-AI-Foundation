@@ -41,6 +41,9 @@ function stableFingerprint(input: IncidentInput): string {
 
 export function classifyIncidentRisk(source: IncidentSource, kind: string): IncidentRisk {
   const normalized = kind.toLowerCase();
+  if (normalized === "provider_bad_request") {
+    return "OWNER_APPROVAL";
+  }
   if (source === "supabase" && /(ddl|schema|migration|constraint|rls|data|trigger|function)/.test(normalized)) {
     return "OWNER_APPROVAL";
   }
