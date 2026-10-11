@@ -2316,8 +2316,13 @@ async function autonomousTick(): Promise<void> {
       }
     }
 
-    if (await temporalOrchestratorActive()) {
-      logger.debug("[coding-autonomous] Temporal orchestrator lease active; local tick skipped");
+    const temporalActive = await temporalOrchestratorActive();
+    // Temporal's presence heartbeat proves the process is alive, not that it is
+    // scheduling cycles. Recover only capacity-waiting tasks with no progress
+    // for at least three minutes; all other work remains owned by Temporal.
+    // Workstream dispatch retains its atomic claim/deduplication safeguards.
+    if (temporalActive && (await getAvailableOllamaCodingSlots()) <= 0) {
+      logger.debug("[coding-autonomous] Temporal active; no Ollama capacity for recovery");
       return;
     }
 
@@ -2326,6 +2331,14 @@ async function autonomousTick(): Promise<void> {
       FROM ai_platform.ai_coding_autonomous_tasks
       WHERE enabled = TRUE
         AND status IN ('ACTIVE','WAITING')
+        AND (
+          ${!temporalActive}
+          OR (
+            status = 'WAITING'
+            AND last_action LIKE 'WAIT_OLLAMA_CAPACITY%'
+            AND last_cycle_at < NOW() - INTERVAL '3 minutes'
+          )
+        )
       ORDER BY updated_at ASC
       LIMIT ${MAX_TASKS_PER_TICK}
     `), { attempts: 3, baseDelayMs: 250 });
