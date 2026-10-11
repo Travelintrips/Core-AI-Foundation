@@ -1072,7 +1072,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // A callback to the originating ChatGPT session cannot be verified without
       // an explicit conversation binding. Do not enqueue a job that promises an
       // ACK or delivery to an unknown session.
-      const requestsChatCallback = /(?:callback|balasan|reply|kirim hasil|send result)[\\s\\S]{0,180}(?:chatgpt|sesi|session|conversation)|(?:chatgpt|sesi|session|conversation)[\\s\\S]{0,180}(?:callback|balasan|reply|ack)/i.test(command.instruction);
+      const requestsChatCallback = /(?:callback|balasan|reply|kirim hasil|send result)[\s\S]{0,180}(?:chatgpt|sesi|session|conversation)|(?:chatgpt|sesi|session|conversation)[\s\S]{0,180}(?:callback|balasan|reply|ack)/i.test(command.instruction);
       if (requestsChatCallback && !parsed.conversationId) {
         res.status(200).json(rpcResult(body.id ?? null, {
           content: [{ type: "text", text: "CHATGPT_CONVERSATION_ID_REQUIRED: Provide the actual originating conversationId before requesting an E2E ChatGPT callback. No command was dispatched." }],
