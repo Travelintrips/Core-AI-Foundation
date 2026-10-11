@@ -94,6 +94,67 @@ router.post("/ai/agent-runtime/credentials/:id/revoke", ...credentialAdmin, requ
 });
 
 
+
+// DEV-only, administrator-issued host inspection credentials.
+const DevHostCredentialCreate = z.object({
+  name: z.string().regex(/^openclaw-host-read-dev-[a-z0-9-]{1,40}$/),
+  expiresInMinutes: z.number().int().min(5).max(60).default(30),
+}).strict();
+
+function requireDevHostCredentials(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): void {
+  if (process.env["NODE_ENV"] === "production" || process.env["APP_ENV"] === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  next();
+}
+
+router.get("/ai/agent-runtime/dev-host-credentials", requireDevHostCredentials, ...credentialAdmin, async (_req, res): Promise<void> => {
+  const rows = await db.select({
+    id: aiAgentServiceTokensTable.id,
+    name: aiAgentServiceTokensTable.name,
+    scopes: aiAgentServiceTokensTable.scopes,
+    isActive: aiAgentServiceTokensTable.isActive,
+    expiresAt: aiAgentServiceTokensTable.expiresAt,
+    createdAt: aiAgentServiceTokensTable.createdAt,
+    lastUsedAt: aiAgentServiceTokensTable.lastUsedAt,
+  }).from(aiAgentServiceTokensTable).orderBy(desc(aiAgentServiceTokensTable.createdAt));
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-host-read-dev-")) });
+});
+
+router.post("/ai/agent-runtime/dev-host-credentials", requireDevHostCredentials, ...credentialAdmin, requireSameOrigin, async (req, res): Promise<void> => {
+  const parsed = DevHostCredentialCreate.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid DEV host credential request" }); return; }
+  const existing = await db.select({ id: aiAgentServiceTokensTable.id })
+    .from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.name, parsed.data.name)).limit(1);
+  if (existing.length) { res.status(409).json({ error: "Credential name already exists; choose a new name." }); return; }
+  const token = randomBytes(48).toString("base64url");
+  const [row] = await db.insert(aiAgentServiceTokensTable).values({
+    name: parsed.data.name,
+    tokenHash: hashAgentServiceToken(token),
+    scopes: ["host:read"],
+    expiresAt: new Date(Date.now() + parsed.data.expiresInMinutes * 60_000),
+    metadata: { source: "workspace-admin", environment: "dev", purpose: "host-inspection" },
+  }).returning({ id: aiAgentServiceTokensTable.id, name: aiAgentServiceTokensTable.name, expiresAt: aiAgentServiceTokensTable.expiresAt });
+  res.setHeader("Cache-Control", "no-store");
+  res.status(201).json({ ...row, token });
+});
+
+router.post("/ai/agent-runtime/dev-host-credentials/:id/revoke", requireDevHostCredentials, ...credentialAdmin, requireSameOrigin, async (req, res): Promise<void> => {
+  const id = z.string().uuid().safeParse(req.params["id"]);
+  if (!id.success) { res.status(400).json({ error: "Invalid credential ID" }); return; }
+  const [candidate] = await db.select({ name: aiAgentServiceTokensTable.name })
+    .from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.id, id.data)).limit(1);
+  if (!candidate?.name.startsWith("openclaw-host-read-dev-")) { res.status(404).json({ error: "DEV host credential not found" }); return; }
+  const [row] = await db.update(aiAgentServiceTokensTable).set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(aiAgentServiceTokensTable.id, id.data), eq(aiAgentServiceTokensTable.isActive, true)))
+    .returning({ id: aiAgentServiceTokensTable.id });
+  if (!row) { res.status(404).json({ error: "Active credential not found" }); return; }
+  res.json({ revoked: true, id: row.id });
+});
+
+
 const AGENT_MODEL_ID = "ai-core-agent";
 const AGENT_CHAT_MODEL_ID = "ai-core-agent-chat";
 const CHAT_NO_TOOLS_MARKER = "[AI_CORE_CHAT_NO_TOOLS]";
