@@ -52,7 +52,21 @@ router.post("/ai/agent-runtime/credentials", ...credentialAdmin, requireSameOrig
   if (!parsed.success) { res.status(400).json({ error: "Invalid worker name or scopes" }); return; }
   const existing = await db.select({ id: aiAgentServiceTokensTable.id })
     .from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.name, parsed.data.name)).limit(1);
-  if (existing.length) { res.status(409).json({ error: "Worker credential already exists; revoke it before creating a replacement." }); return; }
+  if (existing.length) {
+    const [active] = await db.select({ id: aiAgentServiceTokensTable.id })
+      .from(aiAgentServiceTokensTable)
+      .where(and(eq(aiAgentServiceTokensTable.name, parsed.data.name), eq(aiAgentServiceTokensTable.isActive, true))).limit(1);
+    if (active) { res.status(409).json({ error: "Revoke the active worker credential before reissuing." }); return; }
+    const token = randomBytes(48).toString("base64url");
+    const [row] = await db.update(aiAgentServiceTokensTable)
+      .set({ tokenHash: hashAgentServiceToken(token), scopes: [...new Set(parsed.data.scopes)], isActive: true, updatedAt: new Date(), lastUsedAt: null })
+      .where(and(eq(aiAgentServiceTokensTable.id, existing[0].id), eq(aiAgentServiceTokensTable.isActive, false)))
+      .returning({ id: aiAgentServiceTokensTable.id, name: aiAgentServiceTokensTable.name });
+    if (!row) { res.status(409).json({ error: "Credential changed; refresh and retry." }); return; }
+    res.setHeader("Cache-Control", "no-store");
+    res.status(201).json({ ...row, token });
+    return;
+  }
   const token = randomBytes(48).toString("base64url");
   const [row] = await db.insert(aiAgentServiceTokensTable).values({
     name: parsed.data.name,
