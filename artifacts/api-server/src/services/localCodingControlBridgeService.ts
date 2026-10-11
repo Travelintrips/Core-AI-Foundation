@@ -72,6 +72,40 @@ async function syncTerminalBridgeResponseToGitHub(input: {
   const issueNumber = githubIssueNumberFromCommand(command);
   if (!issueNumber) return;
 
+  // A task may generate hundreds of terminal bridge rows as its checkpoint
+  // changes. Publishing every BLOCKER as a fresh GitHub comment caused >1,000
+  // comments on issue #658. A single issue/task/kind gets one summary; full
+  // details remain in the durable bridge timeline. Preserve distinct kinds so
+  // a later BLOCKER can contradict an earlier COMPLETED (#942).
+  //
+  // Correlate by issue AND task, not just command: the same task can be
+  // resubmitted under several bridge command IDs.
+  const earliest = input.taskId
+    ? await db.execute(sql`
+        SELECT response.id
+        FROM ai_platform.ai_coding_bridge_responses AS response
+        JOIN ai_platform.ai_coding_bridge_commands AS command
+          ON command.id = response.command_id
+        WHERE command.source = 'github-trigger'
+          AND command.metadata_json ->> 'issueNumber' = ${String(issueNumber)}::text
+          AND response.task_id = ${input.taskId}::uuid
+          AND response.kind = ${input.kind}
+        ORDER BY response.created_at ASC, response.id ASC
+        LIMIT 1
+      `)
+    : await db.execute(sql`
+        SELECT response.id
+        FROM ai_platform.ai_coding_bridge_responses AS response
+        WHERE response.command_id = ${input.commandId}::uuid
+          AND response.task_id IS NULL
+          AND response.kind = ${input.kind}
+        ORDER BY response.created_at ASC, response.id ASC
+        LIMIT 1
+      `);
+  if (String(earliest.rows?.[0]?.["id"] ?? "") !== input.responseId) {
+    return;
+  }
+
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
