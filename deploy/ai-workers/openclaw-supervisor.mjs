@@ -4,7 +4,7 @@ import { hostname } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import process from "node:process";
 
-const API_BASE = (process.env.AI_CORE_BASE_URL || "https://aicore.cstlogistic.co.id/api").replace(/\/$/, "");
+const API_BASE = (process.env.AI_CORE_INTERNAL_BASE_URL || process.env.AI_CORE_BASE_URL || "https://aicore.cstlogistic.co.id/api").replace(/\/$/, "");
 const TOKEN = (process.env.AI_CORE_SCOPED_AGENT_TOKEN || "").trim();
 const CLIENT_ID = (process.env.AI_CORE_OPENCLAW_CLIENT_ID || "gcp-openclaw-main").trim();
 const POLL_MS = Math.max(2000, Math.min(60000, Number(process.env.AI_CORE_AGENT_WORK_POLL_MS || 5000)));
@@ -270,6 +270,41 @@ function tailText(value, maxChars) {
   return text.length <= maxChars ? text : text.slice(-maxChars);
 }
 
+async function runDirectMonitoring(work) {
+  const operation = String(work?.metadata?.directOperation || "").trim();
+  const destinations = {
+    "ai-core-health": "http://ai-core-backend:3000/api/health",
+    "github-repository": "https://api.github.com/repos/Travelintrips/Core-AI-Foundation/actions/runs?per_page=1",
+    "hostinger-deployment": "https://aicore.cstlogistic.co.id/api/health",
+  };
+  if (!Object.hasOwn(destinations, operation)) {
+    return { ok: false, message: "Unsupported direct monitoring operation", details: { runtime: "direct-api", operation } };
+  }
+  try {
+    const response = await fetch(destinations[operation], {
+      method: "GET",
+      headers: { accept: "application/json", "user-agent": "ai-core-openclaw-monitor/1" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (operation === "github-repository" && response.ok) {
+      const payload = await response.json();
+      const run = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs[0] : null;
+      const failed = run?.status === "completed" && !["success", "skipped", "neutral"].includes(run?.conclusion);
+      return { ok: !failed, message: `GitHub Actions latest: ${run?.status || "none"}/${run?.conclusion || "none"}`,
+        details: { runtime: "direct-api", operation, httpStatus: response.status, llmUsed: false,
+          workflowRunId: run?.id || null, status: run?.status || null, conclusion: run?.conclusion || null } };
+    }
+    return {
+      ok: response.ok,
+      message: `${operation}: HTTP ${response.status}`,
+      details: { runtime: "direct-api", operation, httpStatus: response.status, llmUsed: false },
+    };
+  } catch (error) {
+    return { ok: false, message: `${operation}: ${String(error?.message || error).slice(0,200)}`,
+      details: { runtime: "direct-api", operation, llmUsed: false } };
+  }
+}
+
 async function runOpenClawAgent(work) {
   const sessionId = "ai-core-work-" + String(work.commandId).replace(/[^a-zA-Z0-9_-]/g, "");
   const executionProfile = String(work?.metadata?.openClawExecutionProfile || "agent-tools");
@@ -471,7 +506,9 @@ async function workLoop() {
       }
 
       log("claimed bounded work " + String(work.commandId));
-      const result = await runOpenClawAgent(work);
+      const result = work?.metadata?.openClawExecutionProfile === "monitor-direct"
+        ? await runDirectMonitoring(work)
+        : await runOpenClawAgent(work);
       queueResult(work, result);
       const delivered = await flushResults();
       log(
