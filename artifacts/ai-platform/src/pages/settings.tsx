@@ -277,7 +277,7 @@ function AgentCredentialsPanel() {
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">Issue a dedicated scoped credential for OpenClaw PC Worker 3. The secret is shown only once.</p>
         <div className="flex gap-2">
-          <Button onClick={issue} disabled={loading || items.some(item => item.name === "openclaw-pc-worker-3")}>Issue Worker 3 credential</Button>
+          <Button onClick={issue} disabled={loading || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
           <Button variant="outline" onClick={() => { setError(""); void refresh().catch(err => setError(String(err))); }}>Refresh credentials</Button>
         </div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
