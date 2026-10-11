@@ -1,4 +1,4 @@
-import { logAudit } from "./aiAuditService.js";
+import { logAudit } from "./aiAuditService";
 import {
   createGitHubApiClient,
   parseGitHubRepository,
