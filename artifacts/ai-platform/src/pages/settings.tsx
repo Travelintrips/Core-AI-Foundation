@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useListSettings } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -238,6 +238,7 @@ function AgentCredentialsPanel() {
   const [issued, setIssued] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  useEffect(() => { void refresh().catch(err => setError(String(err))); }, []);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (ADMIN_KEY) headers["x-admin-api-key"] = ADMIN_KEY;
   async function refresh() {
