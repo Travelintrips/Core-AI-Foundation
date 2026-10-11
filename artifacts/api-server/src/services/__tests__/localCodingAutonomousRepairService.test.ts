@@ -1,5 +1,20 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+describe("Retry logic in localCodingAutonomousRepairService", () => {
+  it("schedules a retry on cancellation event", async () => {
+    // TODO: implement test verifying cancellation triggers retry scheduling
+  });
+
+  it("does not schedule retry on non-cancellation event", async () => {
+    // TODO: implement test verifying non-cancellation does not trigger retry
+  });
+
+  it("enforces maximum retry limit", async () => {
+    // TODO: implement test verifying max retry limit enforcement
+  });
+});
+
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
