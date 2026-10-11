@@ -94,5 +94,16 @@ describe("AI Core no-worker GitHub control", () => {
 
   it("does not convert ordinary coding requests into GitHub fast actions", () => {
     expect(detectAiCoreGitHubOperation("perbaiki kode scheduler lalu commit")).toBeNull();
+  });  it("parses workflow dispatch parameters correctly", () => {
+    const result = requestedWorkflowDispatch(
+      "trigger workflow=build.yml ref=develop delay_seconds=30 conversation_id=12345"
+    );
+    expect(result).toEqual({
+      workflow: "build.yml",
+      ref: "develop",
+      delay_seconds: "30",
+      conversation_id: "12345"
+    });
   });
+
 });
