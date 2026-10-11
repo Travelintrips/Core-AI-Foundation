@@ -70,6 +70,7 @@ export interface ProductionCodingModelFailure {
   message: string;
 }
 
+// TODO: Wrap external model provider call in try/catch to handle HTTP 400 and PROVIDER_BAD_REQUEST errors; log concise message and throw DomainError
 function normalizeSlug(value: string): string {
   return value.trim().toLowerCase();
 }
