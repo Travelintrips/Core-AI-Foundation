@@ -1,3 +1,8 @@
+import { randomBytes } from "node:crypto";
+import { and, eq, desc } from "drizzle-orm";
+import { aiAgentServiceTokensTable, db } from "@workspace/db";
+import { adminAuth } from "../middleware/adminAuth.js";
+import { hashAgentServiceToken } from "../middleware/agentServiceAuth.js";
 import { Router } from "express";
 import { z } from "zod";
 import { getProviderApiKey } from "../services/aiSecretService.js";
@@ -11,6 +16,57 @@ import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeS
 import { getExternalAgentRule } from "../services/externalAgentRegistryService.js";
 
 const router = Router();
+
+// Agent credentials management. Secrets are returned once, never persisted in plaintext.
+const CredentialCreate = z.object({
+  name: z.string().regex(/^openclaw-pc-worker-[1-9][0-9]*$/).max(100),
+  scopes: z.array(z.enum(["agent:presence", "agent:work", "model:chat"])).min(1).max(3),
+}).strict();
+
+router.get("/ai/agent-runtime/credentials", adminAuth, async (_req, res): Promise<void> => {
+  const rows = await db.select({
+    id: aiAgentServiceTokensTable.id,
+    name: aiAgentServiceTokensTable.name,
+    scopes: aiAgentServiceTokensTable.scopes,
+    isActive: aiAgentServiceTokensTable.isActive,
+    createdAt: aiAgentServiceTokensTable.createdAt,
+    lastUsedAt: aiAgentServiceTokensTable.lastUsedAt,
+  }).from(aiAgentServiceTokensTable).orderBy(desc(aiAgentServiceTokensTable.createdAt));
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-")) });
+});
+
+router.post("/ai/agent-runtime/credentials", adminAuth, async (req, res): Promise<void> => {
+  const parsed = CredentialCreate.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid worker name or scopes" }); return; }
+  const existing = await db.select({ id: aiAgentServiceTokensTable.id })
+    .from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.name, parsed.data.name)).limit(1);
+  if (existing.length) { res.status(409).json({ error: "Worker credential already exists; revoke it before creating a replacement." }); return; }
+  const token = randomBytes(48).toString("base64url");
+  const [row] = await db.insert(aiAgentServiceTokensTable).values({
+    name: parsed.data.name,
+    tokenHash: hashAgentServiceToken(token),
+    scopes: [...new Set(parsed.data.scopes)],
+    metadata: { source: "workspace-admin" },
+  }).returning({ id: aiAgentServiceTokensTable.id, name: aiAgentServiceTokensTable.name });
+  res.setHeader("Cache-Control", "no-store");
+  res.status(201).json({ ...row, token });
+});
+
+router.post("/ai/agent-runtime/credentials/:id/revoke", adminAuth, async (req, res): Promise<void> => {
+  const id = z.string().uuid().safeParse(req.params["id"]);
+  if (!id.success) { res.status(400).json({ error: "Invalid credential ID" }); return; }
+  const [row] = await db.update(aiAgentServiceTokensTable)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(aiAgentServiceTokensTable.id, id.data)))
+    .returning({ id: aiAgentServiceTokensTable.id, name: aiAgentServiceTokensTable.name });
+  if (!row || !row.name.startsWith("openclaw-pc-worker-")) {
+    res.status(404).json({ error: "Worker credential not found" }); return;
+  }
+  res.json({ revoked: true, id: row.id });
+});
+
+
 const AGENT_MODEL_ID = "ai-core-agent";
 const AGENT_CHAT_MODEL_ID = "ai-core-agent-chat";
 const CHAT_NO_TOOLS_MARKER = "[AI_CORE_CHAT_NO_TOOLS]";
