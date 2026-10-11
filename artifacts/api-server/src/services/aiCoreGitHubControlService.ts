@@ -1,8 +1,8 @@
-import { logAudit } from "./aiAuditService.js";
+import { logAudit } from "./aiAuditService.ts";
 import {
   createGitHubApiClient,
   parseGitHubRepository,
-} from "./localCodingGitHubPublisherService.js";
+} from "./localCodingGitHubPublisherService.ts";
 
 export type AiCoreGitHubOperation =
   | "GITHUB_WORKFLOW_STATUS"
