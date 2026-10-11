@@ -28,7 +28,7 @@ DISCOVERY_RETRIES = max(1, min(5, int(os.environ.get("TEMPORAL_CODING_DISCOVERY_
 TERMINAL = {"APPROVAL_REQUIRED", "COMPLETED", "BLOCKED", "FAILED", "DISABLED"}
 
 
-def _request_json(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def _request_json(method: str, path: str, body: dict[str, Any] | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
     data = None if body is None else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         API_BASE + path,
@@ -42,7 +42,7 @@ def _request_json(method: str, path: str, body: dict[str, Any] | None = None) ->
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(req, timeout=timeout_seconds or HTTP_TIMEOUT_SECONDS) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
@@ -86,6 +86,7 @@ async def run_autonomous_cycle(task_id: str) -> dict[str, Any]:
         "POST",
         f"/ai/temporal-coding/tasks/{task_id}/run-once",
         {},
+        120,  # Bounded coding cycle can run longer than the short discovery timeout.
     )
 
 
