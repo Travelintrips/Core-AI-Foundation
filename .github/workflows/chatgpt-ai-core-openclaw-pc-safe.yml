@@ -47,7 +47,7 @@ jobs:
               ;;
             '[PC-SAFE] CLOSE_NOTEPAD')
               action='CLOSE_NOTEPAD'
-              instruction='Owner-authorized safe close for the exact Notepad test window opened earlier. Use the real Windows local exec tool to run exactly: powershell.exe -NoProfile -File C:\Users\user\AppData\Local\Temp\oc-close-notepad-12124-safe-20261011.ps1 . The script targets only the known Notepad PID 12124, validates its start time/title, and requests graceful CloseMainWindow without force-kill. If unsaved changes prevent closure, leave the dialog open and report a blocker. Report actual verified outcome; never claim success without executing.'
+              instruction='Owner-authorized safe request. Close only the test Notepad window with PID 12124 using a graceful window-close request. Do not force-close, modify any files, or discard unsaved work. Verify the window is closed. If a save prompt appears, leave it open and report BLOCKED.'
               ;;
             '[PC-SAFE] MOVE_MOUSE_TOP')
               action='MOVE_MOUSE_TOP'
