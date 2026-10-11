@@ -1,4 +1,5 @@
-import { logAudit } from "./aiAuditService.js";
+import { logAudit } from "./aiAuditService.js";// Debug: inserted by proposal to ensure contract compliance
+
 import {
   createGitHubApiClient,
   parseGitHubRepository,
