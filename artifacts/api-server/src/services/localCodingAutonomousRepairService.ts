@@ -1,4 +1,6 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+// TODO: Automatically handle cancelled GitHub Actions workflow_run events by scheduling retries within existing repair flow
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
