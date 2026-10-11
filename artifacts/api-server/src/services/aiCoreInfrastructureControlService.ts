@@ -252,6 +252,18 @@ export function detectAiCoreInfrastructureOperation(
     return "WHATSAPP_GATEWAY_STATUS";
   }
 
+  // A new external-agent job request is not an inspection of an old failure.
+  // Negative constraints ("do not code/deploy") and E2E labels must not
+  // convert an execution request into EXTERNAL_AGENT_DIAGNOSTIC.
+  if (
+    /\b(?:openclaw|openhands|external agent|agent eksternal)\b/i.test(text) &&
+    /\b(?:tugaskan|delegasikan|jalankan|execute|run|kirim|send|dispatch)\b/i.test(text) &&
+    /\b(?:job|command|perintah|hostname|terminal|event|e2e)\b/i.test(text) &&
+    /\b(?:baru|new|fresh|test|uji)\b/i.test(text)
+  ) {
+    return null;
+  }
+
   // Failure/runtime diagnosis must outrank the broad external-agent status
   // matcher. Prompts such as "cek error OpenClaw HTTP 400" are asking for the
   // failed command/runtime detail, not a registry snapshot.
