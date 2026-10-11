@@ -1,3 +1,4 @@
+// NOTE: This logger configuration is intended for development only.
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
