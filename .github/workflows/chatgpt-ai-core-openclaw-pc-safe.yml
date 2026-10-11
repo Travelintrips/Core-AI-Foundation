@@ -61,7 +61,7 @@ jobs:
             --arg action "$action" \
             --arg issue "$ISSUE_NUMBER" \
             --arg repo "$REPOSITORY" \
-            '{externalCommandId:$externalId,instruction:$instruction,source:"chatgpt-github-pc-safe",commandType:"EXTERNAL_AGENT_WORK",metadata:{assignedClientId:"openclaw-pc-worker-2",safePcAction:$action,issueNumber:$issue,repository:$repo}}')"
+            '{externalCommandId:$externalId,instruction:$instruction,source:"chatgpt-github-pc-safe",commandType:"EXTERNAL_AGENT_WORK",metadata:{assignedClientId:"openclaw-pc-worker-2",safePcAction:$action,issueNumber:$issue,repository:$repo,conversationId:("pc-safe-issue-" + $issue)}}')"
           response="$(curl --fail-with-body --silent --show-error \
             --retry 2 --retry-all-errors --retry-delay 2 \
             --connect-timeout 10 --max-time 30 \
@@ -92,9 +92,9 @@ jobs:
             response="$(curl --fail-with-body --silent --show-error \
               --connect-timeout 10 --max-time 15 \
               -H "x-admin-api-key: $ADMIN_API_KEY" \
-              "$API_BASE_URL/ai/coding/bridge/responses?limit=100")"
+              "$API_BASE_URL/ai/coding/bridge/subscriptions/pc-safe-issue-$ISSUE_NUMBER/events?limit=100")"
             event="$(jq -c --arg id "$COMMAND_ID" \
-              '[.responses[] | select(.commandId == $id and (.kind == "COMPLETED" or .kind == "FAILED"))] | last // empty' \
+              '[.events[] | select(.commandId == $id and (.kind == "COMPLETED" or .kind == "FAILED"))] | last // empty' \
               <<< "$response")"
             if [ -n "$event" ] && [ "$event" != 'null' ]; then
               kind="$(jq -r '.kind' <<< "$event")"
