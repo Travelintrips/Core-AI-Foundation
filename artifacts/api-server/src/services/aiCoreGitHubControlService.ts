@@ -23,6 +23,8 @@ export interface AiCoreGitHubOperationResult {
 }
 
 function normalize(message: string): string {
+  console.debug("normalize input:", message);
+
   return message.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
