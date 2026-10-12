@@ -230,7 +230,7 @@ router.get("/api/ai/core-chat/oauth/login", (_req, res): void => {
 <label>Email<input type="email" name="email" autocomplete="username" required></label>
 <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
 <button type="submit">Masuk</button></form>
-<p class="muted">Setelah login berhasil dan respons akun ditampilkan, kembali ke tab persetujuan OAuth lalu muat ulang halaman. Jangan bagikan respons login kepada pihak lain.</p>
+<h2>Login melalui email</h2><form method="post" action="/api/internal/auth/request-magic-link"><label>Email akun AI Core<input type="email" name="email" autocomplete="email" required></label><button type="submit">Kirim tautan login ke email</button></form><p class="muted">Tautan berlaku 10 menit. Setelah membukanya di browser yang sama, kembali ke halaman persetujuan OAuth dan muat ulang.</p>
 </body></html>`);
 });
 
