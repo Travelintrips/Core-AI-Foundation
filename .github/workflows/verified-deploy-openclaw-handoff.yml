@@ -60,7 +60,7 @@ jobs:
               assignedClientId:"openclaw-pc-worker",
               metadata:{verifiedDeploy:true,environment:"production",commitSha:$sha,
                 verificationRunId:$run,verificationUrl:$url,
-                openClawExecutionProfile:"agent-tools",requiresAuthenticatedChatGPT:true}}')"
+                openClawExecutionProfile:"agent-tools",assignedClientId:"openclaw-pc-worker",requiresAuthenticatedChatGPT:true}}')"
           curl --fail-with-body --silent --show-error \
             --retry 3 --retry-all-errors --retry-delay 3 \
             --connect-timeout 10 --max-time 30 \
