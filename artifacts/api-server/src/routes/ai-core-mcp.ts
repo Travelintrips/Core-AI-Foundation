@@ -559,6 +559,13 @@ const tools = [
     },
   },
   {
+    name: "handshake_ai_core",
+    description: "Discover authenticated AI Core capabilities and protocol limitations. Does not claim to know the current ChatGPT conversation URL or register a browser session.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    annotations: { title: "Handshake AI Core", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
     name: "get_profile",
     description:
       "Return the internal AI Core profile represented by the current OAuth connection.",
@@ -1000,7 +1007,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
   }
 
   const requiredScope =
-    params.name === "query_ai_core"
+    (params.name === "query_ai_core" || params.name === "handshake_ai_core")
       ? "ai_core.progress"
       : params.name === "send_ai_core_command"
         ? "ai_core.command"
@@ -1026,7 +1033,21 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
 
   try {
     let payload: unknown;
-    if (params.name === "query_ai_core") {
+    if (params.name === "handshake_ai_core") {
+      payload = {
+        protocol: "ai-core-communication/v1",
+        authenticated: true,
+        capabilities: tools.filter((tool) => tool.name !== "get_profile").map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          scope: tool.securitySchemes?.[0]?.scopes?.[0] ?? null,
+        })),
+        conversationBinding: "requires_verified_explicit_conversation_id",
+        conversationUrlKnown: false,
+        browserWakeVerified: false,
+        notes: "MCP does not expose the current ChatGPT conversation URL automatically. Never dispatch a session callback without verified pairing.",
+      };
+    } else if (params.name === "query_ai_core") {
       const parsed = ReadOnlyQueryArgs.parse(params.arguments ?? {});
       const message = readOnlyQueryMessage(parsed.message);
       if (!message) {
