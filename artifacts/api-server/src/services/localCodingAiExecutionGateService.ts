@@ -11,7 +11,7 @@ import {
   type AiCodingRun,
   type AiCodingTask,
 } from "@workspace/db";
-import { logAudit } from "./aiAuditService.js";
+import { logAudit } from "./aiAuditService.ts";
 import { executeAINoFallback, type ObservabilityContext } from "./aiExecutionService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
 import {
