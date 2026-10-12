@@ -140,8 +140,8 @@ router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
       updatedAt: aiJobsTable.updatedAt,
     }).from(aiJobsTable).orderBy(desc(aiJobsTable.updatedAt)).limit(50);
     const states: Record<string, string> = {
-      queued: "QUEUED", waiting: "WAITING_FOR_WORKER",
-      running: "RUNNING", retrying: "WAITING_FOR_CAPACITY",
+      queued: "QUEUED", waiting: "WAITING",
+      running: "RUNNING", retrying: "RETRYING",
       blocked: "BLOCKED", failed: "FAILED",
       completed: "COMPLETED", cancelled: "CANCELLED",
     };
@@ -149,7 +149,7 @@ router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
     res.json({ jobs: jobs.map((job) => ({
       id: String(job.id),
       application: String(job.application ?? "AI Core").slice(0, 100),
-      status: states[String(job.status)] ?? "BLOCKED",
+      status: states[String(job.status)] ?? "UNKNOWN",
       updatedAt: job.updatedAt?.toISOString() ?? null,
     })) });
   } catch {
