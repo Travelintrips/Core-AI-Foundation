@@ -17,8 +17,9 @@ concurrency:
 jobs:
   deploy:
     name: Deploy AI Core DEV
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    environment: production
+    environment: development
     timeout-minutes: 30
     env:
       HOSTINGER_API_BASE: https://developers.hostinger.com/api
