@@ -1,7 +1,7 @@
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
-import { Router, type Response } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -160,6 +160,14 @@ import {
 } from "../services/imageRouterService.js";
 
 const router = Router();
+
+// Global error handler for ai-core-chat routes
+router.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  const requestId = req.headers['x-request-id'] as string | undefined;
+  const userId = (req as any).user?.id;
+  logger.error({ err, requestId, userId }, 'Error in ai-core-chat route');
+  res.status(500).json({ error: err.message });
+});
 const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] !== "false";
 
 const VOICE_WAKE_WORD = /^(?:hi|hai|hey)(?:\s|[,!.:;-]|$)/i;
