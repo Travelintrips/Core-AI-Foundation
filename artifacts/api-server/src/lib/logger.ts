@@ -18,3 +18,13 @@ export const logger = pino({
         },
       }),
 });
+// Wrap error method to accept optional context object
+const originalError = logger.error.bind(logger);
+logger.error = (message: string, context: Record<string, any> = {}, ...args: any[]) => {
+  if (Object.keys(context).length) {
+    originalError({ ...context }, message, ...args);
+  } else {
+    originalError(message, ...args);
+  }
+};
+
