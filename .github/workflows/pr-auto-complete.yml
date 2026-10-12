@@ -49,7 +49,7 @@ jobs:
               pr.user?.login === owner
             );
 
-            // DEV-first release policy: do not auto-merge any main PR.
+            // Main auto-merge disabled until verified DEV-first promotion.
             // An authorized release promotion is a separate reviewed operation,
             // after DEV full CI, DEV deployment, live-SHA and ancestry checks.
             // Automated DEV PRs remain allowed by their own workflows.
