@@ -228,7 +228,10 @@ router.get("/internal/auth/magic-login", loginLimiter, async (req, res): Promise
   await db.update(internalUsersTable).set({ lastLoginAt: new Date() }).where(eq(internalUsersTable.id, user.id));
   setSessionCookie(res, issueSessionToken(user.id));
   await logAudit("internal_auth", "magic_login", String(user.id), "internal_user", "success", { ip: clientIp(req) });
-  res.redirect("/");
+  const oauthOrigin = process.env["AI_CORE_PUBLIC_BASE_URL"]?.replace(/\/$/, "");
+  const loginOrigin = publicPortalBaseUrl(req);
+  const isMcpLogin = Boolean(oauthOrigin && loginOrigin === oauthOrigin);
+  res.redirect(isMcpLogin ? "/api/ai/core-chat/oauth/login?authenticated=1" : "/");
 });
 
 router.post("/internal/auth/request-password-reset", loginLimiter, async (req, res): Promise<void> => {
