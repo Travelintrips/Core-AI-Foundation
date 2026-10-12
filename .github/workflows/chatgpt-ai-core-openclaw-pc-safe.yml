@@ -72,7 +72,7 @@ jobs:
             --arg targetClient "$target_client" \
             --arg issue "$ISSUE_NUMBER" \
             --arg repo "$REPOSITORY" \
-            '{externalCommandId:$externalId,instruction:$instruction,source:"chatgpt-github-pc-safe",commandType:"EXTERNAL_AGENT_WORK",assignedClientId:$targetClient,metadata:{safePcAction:$action,issueNumber:$issue,repository:$repo,conversationId:("pc-safe-issue-" + $issue)}}')"
+            '{externalCommandId:$externalId,instruction:$instruction,source:"chatgpt-github-pc-safe",commandType:"EXTERNAL_AGENT_WORK",assignedClientId:$targetClient,metadata:{assignedClientId:$targetClient,safePcAction:$action,issueNumber:$issue,repository:$repo,conversationId:("pc-safe-issue-" + $issue)}}')"
           response="$(curl --fail-with-body --silent --show-error \
             --retry 2 --retry-all-errors --retry-delay 2 \
             --connect-timeout 10 --max-time 30 \
