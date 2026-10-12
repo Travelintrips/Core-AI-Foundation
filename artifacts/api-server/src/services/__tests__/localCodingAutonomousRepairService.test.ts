@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+// Tests for failure scenarios: simulate async step failures, assert logging and error payload
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
