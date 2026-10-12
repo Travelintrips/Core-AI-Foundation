@@ -67,7 +67,7 @@ export const id = {
       settings:             "Pengaturan",
       aiCoreChat:          "Chat AI Core",
       aiCoreActivity:      "Aktivitas ChatGPT ↔ AI Core",
-      codingWorkspace:     "Workspace Coding AI",
+      codingWorkspace:     "AI Engine",
     },
   },
   status: {
@@ -746,7 +746,7 @@ export const id = {
     },
     codingWorkspace: {
       eyebrow: "Ruang kendali engineering",
-      title: "Workspace Coding AI",
+      title: "AI Engine",
       subtitle: "Ubah instruksi yang presisi menjadi pekerjaan engineering yang terlihat dan siap ditinjau.",
       newTask: "Tugas coding baru",
       taskQueue: "Antrean tugas",

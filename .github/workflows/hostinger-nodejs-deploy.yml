@@ -14,9 +14,11 @@ permissions:
   contents: read
   actions: read
 
+# Serialize releases but do not terminate an active Hostinger deploy mid-restart.
+# Stale SHA checks inside the job safely skip superseded queued releases.
 concurrency:
   group: hostinger-nodejs-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -65,10 +67,8 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # CI green on main alone is not sufficient. Require full DEV CI, an
-      # exact successful DEV deployment, a matching live DEV SHA, and promotion
-      # ancestry + shared source parity BEFORE any Hostinger build/restart.
-      - name: Block production release without verified DEV promotion
+      # Fail closed BEFORE checking Hostinger native deploy or using API tokens.
+      - name: Require verified live DEV release and exact CI ancestry
         if: steps.freshness.outputs.stale != 'true'
         shell: bash
         env:
@@ -259,25 +259,78 @@ jobs:
           size=$(stat -c%s "$ARCHIVE_PATH")
           target="${upload_base%/}/$ARCHIVE_NAME?override=true"
 
-          create_code=$(curl --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Upload-Length: $size"             -H "Upload-Offset: 0"             "$target")
+          create_code=$(curl --http1.1 --connect-timeout 15 --max-time 120 --silent --show-error -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Upload-Length: $size"             -H "Upload-Offset: 0"             "$target")
           if [ "$create_code" != "201" ]; then
             cat /tmp/tus-create.body || true
             echo "::error::Hostinger TUS create returned HTTP $create_code."
             exit 1
           fi
 
-          patch_code=$(curl --silent --show-error -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"             -X PATCH             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary "@$ARCHIVE_PATH"             "$target")
-          if [ "$patch_code" != "204" ]; then
-            cat /tmp/tus-patch.body || true
-            echo "::error::Hostinger TUS upload returned HTTP $patch_code."
-            exit 1
-          fi
+          # Hostinger's official upload API requires PATCH to the SAME
+          # file URL used for POST (including ?override=true). The Location
+          # header is not the documented PATCH target for this API.
+          upload_patch_url="$target"
 
-          uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)
-          if [ "$uploaded" != "$size" ]; then
-            echo "::error::Hostinger upload offset mismatch: uploaded=${uploaded:-missing} expected=$size"
-            exit 1
-          fi
+          # Upload in bounded TUS chunks to avoid resets on large archives.
+          # On a transport failure, HEAD the server offset before resending;
+          # never blindly repeat a potentially accepted PATCH.
+          offset=0
+          chunk_size=$((4 * 1024 * 1024))
+          retries=0
+          while [ "$offset" -lt "$size" ]; do
+            bytes=$((size - offset))
+            if [ "$bytes" -gt "$chunk_size" ]; then bytes="$chunk_size"; fi
+            python3 - "$ARCHIVE_PATH" "$offset" "$bytes" /tmp/tus-chunk.bin <<'PY'
+          import sys
+          source, offset, size, target = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+          with open(source, "rb") as source_file, open(target, "wb") as target_file:
+              source_file.seek(offset)
+              data = source_file.read(size)
+              if len(data) != size:
+                  raise SystemExit("short archive read")
+              target_file.write(data)
+          PY
+            patch_code=$(curl --connect-timeout 10 --max-time 90 --silent --show-error \
+              -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}" \
+              -X PATCH -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key" \
+              -H "Tus-Resumable: 1.0.0" \
+              -H "Content-Type: application/offset+octet-stream" \
+              -H "Upload-Offset: $offset" \
+              --data-binary @/tmp/tus-chunk.bin "$upload_patch_url") || patch_code=000
+            if [ "$patch_code" = "204" ]; then
+              next_offset=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)
+              if ! [[ "$next_offset" =~ ^[0-9]+$ ]] || [ "$next_offset" -ne "$((offset + bytes))" ]; then
+                echo "::error::Unexpected TUS PATCH offset: ${next_offset:-missing}."
+                exit 1
+              fi
+              offset="$next_offset"
+              retries=0
+              echo "tus_upload_offset=$offset total=$size"
+              continue
+            fi
+            # A failed PATCH may have been accepted; query its true offset.
+            head_code=$(curl --connect-timeout 10 --max-time 20 --silent --show-error \
+              -o /dev/null -D /tmp/tus-head.headers -w "%{http_code}" \
+              -I -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key" \
+              -H "Tus-Resumable: 1.0.0" "$upload_patch_url") || head_code=000
+            confirmed_offset=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-head.headers | tail -n1)
+            if [ "$head_code" != "200" ] || ! [[ "$confirmed_offset" =~ ^[0-9]+$ ]] || [ "$confirmed_offset" -lt "$offset" ] || [ "$confirmed_offset" -gt "$((offset + bytes))" ]; then
+              echo "::error::TUS PATCH failed (HTTP $patch_code); server offset could not be verified (HTTP $head_code)."
+              exit 1
+            fi
+            if [ "$confirmed_offset" -gt "$offset" ]; then
+              offset="$confirmed_offset"
+              retries=0
+            else
+              retries=$((retries + 1))
+              if [ "$retries" -ge 3 ]; then
+                echo "::error::TUS upload failed after three verified retries (HTTP $patch_code)."
+                exit 1
+              fi
+              sleep "$((retries * 2))"
+            fi
+          done
+          rm -f /tmp/tus-chunk.bin
           echo "archive_uploaded=$ARCHIVE_NAME bytes=$size"
 
       - name: Resolve Node.js build settings
@@ -398,32 +451,78 @@ jobs:
           curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/server/restart"
 
       - name: Verify exact live release
+        id: verify_release
         if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true' && steps.native.outputs.ready != 'true' && steps.fallback_freshness.outputs.stale != 'true'
         shell: bash
         run: |
           set -euo pipefail
           health="https://$HOSTINGER_DOMAIN/api/healthz"
-          for attempt in $(seq 1 30); do
+          consecutive_unknown=0
+          for attempt in $(seq 1 12); do
+            rm -f /tmp/live.headers /tmp/live.body
             curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
               -D /tmp/live.headers -o /tmp/live.body \
               -H "Accept: application/json" \
               -H "User-Agent: CST-AI-Core-Direct-Deploy/1.0" \
               "$health" || true
-            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/live.headers | tail -n1)
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/live.headers 2>/dev/null | tail -n1)
             echo "verify_attempt=$attempt live_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA"
-            if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/live.body; then
+            if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/live.body 2>/dev/null; then
               echo "exact_release=PASS"
               exit 0
             fi
-            sleep 10
+            if [ "$live_sha" = "unknown" ]; then
+              consecutive_unknown=$((consecutive_unknown + 1))
+              if [ "$consecutive_unknown" -ge 4 ]; then
+                echo "::error::Live release repeatedly reports unknown SHA; check embedded .cst-build-sha."
+                exit 1
+              fi
+            else
+              consecutive_unknown=0
+            fi
+            [ "$attempt" -eq 12 ] || sleep 10
           done
           echo "::error::Production did not expose the exact deployed SHA."
           exit 1
 
 
       - name: Skip runtime deployment for deploy-neutral change
+        id: neutral
         if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required != 'true'
         shell: bash
         run: |
           echo "::notice::Skipping Hostinger application redeploy because this commit changes deploy-neutral files only."
           echo "runtime_deploy=SKIPPED reason=${{ steps.deploy_scope.outputs.reason }}"
+
+      - name: Assert verified deployment outcome
+        if: always()
+        shell: bash
+        env:
+          STALE: ${{ steps.freshness.outputs.stale }}
+          DEPLOY_REQUIRED: ${{ steps.deploy_scope.outputs.deploy_required }}
+          NATIVE_READY: ${{ steps.native.outputs.ready }}
+          FALLBACK_STALE: ${{ steps.fallback_freshness.outputs.stale }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          VERIFY_RESULT: ${{ steps.verify_release.outcome }}
+          NEUTRAL_RESULT: ${{ steps.neutral.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$STALE" = "true" ] || [ "$FALLBACK_STALE" = "true" ]; then
+            echo "DEPLOY_SUPERSEDED: newer main commit exists; no deployment claimed." >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::DEPLOY_SUPERSEDED — this run must not be reported as DEPLOYED."
+            exit 0
+          fi
+          if [ "$DEPLOY_REQUIRED" = "true" ]; then
+            if [ "$NATIVE_READY" = "true" ] || [ "$VERIFY_RESULT" = "success" ]; then
+              echo "DEPLOYED: exact SHA and healthy production verified." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::error::DEPLOY_NOT_VERIFIED: runtime deployment required but exact live SHA was not verified."
+            exit 1
+          fi
+          if [ "$DEPLOY_REQUIRED" = "false" ] && [ "$NEUTRAL_RESULT" = "success" ]; then
+            echo "DEPLOY_SKIPPED_NEUTRAL: runtime unchanged; no new deployment claimed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::DEPLOY_UNCLASSIFIED: no valid deployment or skip result."
+          exit 1

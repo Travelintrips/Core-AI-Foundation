@@ -4,7 +4,8 @@ import { hostname } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import process from "node:process";
 
-const API_BASE = (process.env.AI_CORE_BASE_URL || "https://aicore.cstlogistic.co.id/api").replace(/\/$/, "");
+// Stable container DNS survives AI Core replacement without requiring a network alias.
+const API_BASE = (process.env.AI_CORE_INTERNAL_BASE_URL || "http://core-ai-dev:3000/api").replace(/\/$/, "");
 const TOKEN = (process.env.AI_CORE_SCOPED_AGENT_TOKEN || "").trim();
 const CLIENT_ID = (process.env.AI_CORE_OPENCLAW_CLIENT_ID || "gcp-openclaw-main").trim();
 const POLL_MS = Math.max(2000, Math.min(60000, Number(process.env.AI_CORE_AGENT_WORK_POLL_MS || 5000)));
@@ -270,6 +271,41 @@ function tailText(value, maxChars) {
   return text.length <= maxChars ? text : text.slice(-maxChars);
 }
 
+async function runDirectMonitoring(work) {
+  const operation = String(work?.metadata?.directOperation || "").trim();
+  const destinations = {
+    "ai-core-health": "http://core-ai-dev:3000/api/health",
+    "github-repository": "https://api.github.com/repos/Travelintrips/Core-AI-Foundation/actions/runs?per_page=1",
+    "hostinger-deployment": "https://aicore.cstlogistic.co.id/api/health",
+  };
+  if (!Object.hasOwn(destinations, operation)) {
+    return { ok: false, message: "Unsupported direct monitoring operation", details: { runtime: "direct-api", operation } };
+  }
+  try {
+    const response = await fetch(destinations[operation], {
+      method: "GET",
+      headers: { accept: "application/json", "user-agent": "ai-core-openclaw-monitor/1" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (operation === "github-repository" && response.ok) {
+      const payload = await response.json();
+      const run = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs[0] : null;
+      const failed = run?.status === "completed" && !["success", "skipped", "neutral"].includes(run?.conclusion);
+      return { ok: !failed, message: `GitHub Actions latest: ${run?.status || "none"}/${run?.conclusion || "none"}`,
+        details: { runtime: "direct-api", operation, httpStatus: response.status, llmUsed: false,
+          workflowRunId: run?.id || null, status: run?.status || null, conclusion: run?.conclusion || null } };
+    }
+    return {
+      ok: response.ok,
+      message: `${operation}: HTTP ${response.status}`,
+      details: { runtime: "direct-api", operation, httpStatus: response.status, llmUsed: false },
+    };
+  } catch (error) {
+    return { ok: false, message: `${operation}: ${String(error?.message || error).slice(0,200)}`,
+      details: { runtime: "direct-api", operation, llmUsed: false } };
+  }
+}
+
 async function runOpenClawAgent(work) {
   const sessionId = "ai-core-work-" + String(work.commandId).replace(/[^a-zA-Z0-9_-]/g, "");
   const executionProfile = String(work?.metadata?.openClawExecutionProfile || "agent-tools");
@@ -434,9 +470,64 @@ async function reportResult(work, result) {
   }
 }
 
+// Keep completed executions on disk until AI Core confirms receipt. Never re-run a
+// claimed operation merely because result delivery failed.
+const resultOutbox = new DatabaseSync(OPENCLAW_STATE_DIR + "/result-outbox.sqlite");
+resultOutbox.exec("CREATE TABLE IF NOT EXISTS pending_results (command_id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+function queueResult(work, result) {
+  resultOutbox.prepare("INSERT OR REPLACE INTO pending_results(command_id, payload) VALUES (?, ?)").run(String(work.commandId), JSON.stringify({ work, result }));
+}
+async function flushResults() {
+  const rows = resultOutbox.prepare("SELECT command_id, payload FROM pending_results ORDER BY created_at LIMIT 20").all();
+  for (const row of rows) {
+    const { work, result } = JSON.parse(row.payload);
+    try {
+      await reportResult(work, result);
+      resultOutbox.prepare("DELETE FROM pending_results WHERE command_id = ?").run(row.command_id);
+      log("result delivery acknowledged for " + row.command_id);
+    } catch (error) {
+      log("result delivery pending for " + row.command_id + ": " + String(error.message || error).slice(0, 180));
+      return false;
+    }
+  }
+  return true;
+}
+
+// The worker must maintain its own bounded presence lease. A healthy container
+// without a current heartbeat must never be considered dispatch-eligible.
+let presenceHeartbeatInFlight = false;
+async function heartbeatPresence() {
+  if (stopping || presenceHeartbeatInFlight) return;
+  presenceHeartbeatInFlight = true;
+  try {
+    const response = await aiCoreRequest(
+      "/ai/agent-runtime/presence/" + encodeURIComponent(CLIENT_ID) + "/heartbeat",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          health: "healthy",
+          version: "openclaw-supervisor",
+          details: { runtime: "vps-openclaw", workMode: "bounded" },
+        }),
+      },
+    );
+    if (!response.ok) {
+      log("presence heartbeat HTTP " + response.status);
+    }
+  } catch (error) {
+    log("presence heartbeat failed: " + String(error?.cause?.code || error?.message || error).slice(0, 180));
+  } finally {
+    presenceHeartbeatInFlight = false;
+  }
+}
+
 async function workLoop() {
   while (!stopping) {
     try {
+      if (!(await flushResults())) {
+        await sleep(POLL_MS);
+        continue;
+      }
       const work = await claimWork();
       if (!work) {
         await sleep(POLL_MS);
@@ -444,10 +535,13 @@ async function workLoop() {
       }
 
       log("claimed bounded work " + String(work.commandId));
-      const result = await runOpenClawAgent(work);
-      await reportResult(work, result);
+      const result = work?.metadata?.openClawExecutionProfile === "monitor-direct"
+        ? await runDirectMonitoring(work)
+        : await runOpenClawAgent(work);
+      queueResult(work, result);
+      const delivered = await flushResults();
       log(
-        "reported " +
+        (delivered ? "reported " : "queued result ") +
           (result.ok ? "COMPLETED" : "FAILED") +
           " for " +
           String(work.commandId),
@@ -515,7 +609,11 @@ gateway.on("exit", (code, signal) => {
 });
 
 await sleep(5000);
+await heartbeatPresence();
+const presenceTimer = setInterval(() => { void heartbeatPresence(); }, 30_000);
+presenceTimer.unref();
 await workLoop();
+clearInterval(presenceTimer);
 
 if (gateway && gateway.exitCode === null) {
   await new Promise((resolve) => gateway.once("exit", resolve));

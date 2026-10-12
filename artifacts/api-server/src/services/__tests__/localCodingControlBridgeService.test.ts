@@ -60,3 +60,103 @@ describe("coding control bridge contract", () => {
     expect(bridge).toHaveProperty("getCodingBridgeAvailability");
   });
 });
+
+describe("external-agent browser E2E terminal validation", () => {
+  it("rejects a false completed browser test with missing callback delivery", async () => {
+    const { hasUnverifiedExternalBrowserCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(hasUnverifiedExternalBrowserCompletion({
+      message: JSON.stringify({
+        sourceReplyDeliveryState: "missing",
+        terminalReply: { text: "Unable to perform the browser ChatGPT test" },
+      }),
+    })).toBe(true);
+  });
+
+  it("does not change unrelated or successfully delivered work", async () => {
+    const { hasUnverifiedExternalBrowserCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(hasUnverifiedExternalBrowserCompletion({
+      message: "Completed ordinary maintenance",
+      details: { sourceReplyDeliveryState: "missing" },
+    })).toBe(false);
+    expect(hasUnverifiedExternalBrowserCompletion({
+      message: "Unable to perform the browser ChatGPT test",
+      details: { sourceReplyDeliveryState: "delivered" },
+    })).toBe(false);
+  });
+});
+
+describe("evidence-qualified runtime status", () => {
+  it("keeps a successful browser subprocess separate from verified delivery", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({
+      status: "COMPLETED",
+      details: { browserConfirmed: true, sourceReplyDeliveryState: "missing", replayInvalid: true },
+    })).toEqual({
+      statusCode: "JOB_COMPLETED",
+      deliveryCode: "UNKNOWN_UNVERIFIED",
+      e2eCode: "UNKNOWN_UNVERIFIED",
+    });
+  });
+
+  it("allows independently checked SSH output without inferring callback success", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({
+      status: "COMPLETED",
+      details: { mode: "ssh-readonly-hostinger", sshVerified: true, exitCode: 0 },
+    })).toEqual({
+      statusCode: "RESULT_VERIFIED",
+      deliveryCode: "UNKNOWN_UNVERIFIED",
+      e2eCode: "UNKNOWN_UNVERIFIED",
+    });
+  });
+
+  it("does not classify a failed worker as completed", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({ status: "FAILED" }).statusCode).toBe("FAILED");
+  });
+});
+
+describe("browser status code normalization", () => {
+  const valid = {
+    chatgptSubmitted: true,
+    verifiedAssistantReply: true,
+    exitCode: 0,
+    eventId: "githubci-38053595144-1",
+    conversationId: "6ac8d2eb-db50-83ec-b53e-3c4a0f87ba2b",
+    evidenceFingerprint: "a".repeat(64),
+    verifiedAt: "2026-10-10T12:56:19.738Z",
+  };
+  it("confirms delivery and E2E only with bounded browser receipt", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    expect(classifyBridgeCompletion({ status: "COMPLETED", details: valid })).toEqual({
+      statusCode: "JOB_COMPLETED", deliveryCode: "DELIVERY_CONFIRMED", e2eCode: "E2E_VERIFIED",
+    });
+  });
+  it("does not infer delivery from a worker exit or partial claimed receipt", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    for (const details of [
+      { exitCode: 0 },
+      { ...valid, verifiedAssistantReply: false },
+      { ...valid, evidenceFingerprint: "" },
+      { ...valid, conversationId: "" },
+      { ...valid, exitCode: 1 },
+    ]) {
+      expect(classifyBridgeCompletion({ status: "COMPLETED", details }).deliveryCode).toBe("UNKNOWN_UNVERIFIED");
+      expect(classifyBridgeCompletion({ status: "COMPLETED", details }).e2eCode).toBe("UNKNOWN_UNVERIFIED");
+    }
+    expect(classifyBridgeCompletion({ status: "FAILED", details: valid }).e2eCode).toBe("UNKNOWN_UNVERIFIED");
+  });
+});
+
+describe("callback PROCESSING visibility", () => {
+  it("keeps nonterminal dispatched callbacks visible until they complete", async () => {
+    const { classifyCallbackProcessingState } = await import("../localCodingControlBridgeService.js");
+    expect(classifyCallbackProcessingState({ status: "PENDING" })).toBe("QUEUED");
+    expect(classifyCallbackProcessingState({ status: "QUEUED" })).toBe("QUEUED");
+    expect(classifyCallbackProcessingState({ status: "PROCESSING" })).toBe("PROCESSING");
+    expect(classifyCallbackProcessingState({ status: "RUNNING" })).toBe("PROCESSING");
+    expect(classifyCallbackProcessingState({ status: "COMPLETED" })).toBe("COMPLETED");
+    expect(classifyCallbackProcessingState({ status: "FAILED" })).toBe("FAILED");
+    expect(classifyCallbackProcessingState({ status: "CANCELLED" })).toBe("FAILED");
+  });
+});

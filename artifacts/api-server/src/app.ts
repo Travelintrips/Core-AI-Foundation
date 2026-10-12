@@ -17,6 +17,7 @@ import {
 import { requestCounterMiddleware } from "./routes/metrics.js";
 import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
 import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
+import aiCoreSignedCallbackReceiver from "./routes/ai-core-signed-callback-receiver.js";
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
@@ -46,6 +47,26 @@ app.use(
     crossOriginEmbedderPolicy: false, // allow embedding in Replit preview
   }),
 );
+
+// OAuth consent POST redirects to the validated ChatGPT/Codex callback. Browsers
+// apply form-action to redirects, so 'self' alone breaks authorization.
+// Only the OAuth consent page receives this narrowly scoped override.
+// Redirect targets are independently allowlisted and PKCE-validated by OAuth.
+app.use((req, res, next) => {
+  if (req.method === "GET" && req.path === "/api/ai/core-chat/oauth/authorize") {
+    const csp = res.getHeader("Content-Security-Policy");
+    if (typeof csp === "string") {
+      res.setHeader(
+        "Content-Security-Policy",
+        csp.replace(
+          /(?:^|;)\s*form-action\s+[^;]*/i,
+          ";form-action 'self' https://chatgpt.com http://localhost:* http://127.0.0.1:*",
+        ),
+      );
+    }
+  }
+  next();
+});
 
 // ── CORS whitelist (P0-4) ────────────────────────────────────────────────────
 // Allow origins from environment variable (comma-separated list), or fall back
@@ -126,6 +147,7 @@ app.use(
 // Webhooks that verify signatures must see exact raw bytes before the global JSON parser.
 app.use("/api", codingGithubWebhookRouter);
 app.use("/api", codingWhatsappWebhookRouter);
+app.use("/api", aiCoreSignedCallbackReceiver);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));

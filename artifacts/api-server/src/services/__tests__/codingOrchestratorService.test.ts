@@ -208,6 +208,19 @@ describe("Coding Orchestrator canonical terminal lifecycle", () => {
   });
 });
 
+describe("Repository Analyzer test-only terminal route", () => {
+  it("skips semantic AI handoff for a proven read-only analyzer smoke", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('verifiedAnalyzerOnly\n        ? "DONE"');
+    expect(source).toContain('localPlan?.status === "AI_REQUIRED" && !verifiedAnalyzerOnly');
+    expect(source).toContain('const shouldAutoAdvance =\n      !verifiedAnalyzerOnly');
+    expect(source).toContain('repositoryAnalyzerVerificationAck(input.task.instruction)');
+  });
+});
+
 describe("Coding Orchestrator AI gate monotonicity", () => {
   it("preserves handoff gates that already advanced beyond AI_REQUIRED", () => {
     expect(
@@ -507,6 +520,54 @@ describe("Coding Orchestrator", () => {
     expect(mockGenerateAndPersistCodingMultiTaskPlan).not.toHaveBeenCalled();
   });
 
+  it.each([0, 1])(
+    "reclaims a never-claimed analyzer immediately after child closes with code %s",
+    async (exitCode) => {
+      let closeHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+      const unref = vi.fn();
+      mockSpawn.mockReturnValueOnce({
+        unref,
+        once: vi.fn((event: string, fn: unknown) => {
+          if (event === "close") closeHandler = fn as typeof closeHandler;
+        }),
+      });
+      const queuedJob = {
+        id: 701,
+        jobType: "coding_repository_analyzer",
+        status: "queued",
+        payloadJson: { codingTaskId: task.id, codingRunId: run.id },
+      };
+      // First lookup: host-wide single-flight slot is clear.
+      // Second lookup: the child exited before claiming its own row.
+      mockSelectLimit.mockResolvedValueOnce([]).mockResolvedValueOnce([queuedJob]);
+      await startCodingOrchestration({ task: task as never, run: run as never });
+      expect(unref).toHaveBeenCalled();
+      expect(closeHandler).toBeTypeOf("function");
+      closeHandler!(exitCode, null);
+      await vi.waitFor(() => expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 701, status: "queued" }),
+        { finalizeCodingRun: false },
+      ));
+    },
+  );
+
+  it("never re-executes an analyzer job already claimed before child exit", async () => {
+    let closeHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+    mockSpawn.mockReturnValueOnce({
+      unref: vi.fn(),
+      once: vi.fn((event: string, fn: unknown) => {
+        if (event === "close") closeHandler = fn as typeof closeHandler;
+      }),
+    });
+    mockSelectLimit
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 701, status: "running" }]);
+    await startCodingOrchestration({ task: task as never, run: run as never });
+    closeHandler!(1, null);
+    await vi.waitFor(() => expect(mockSelectLimit).toHaveBeenCalledTimes(2));
+    expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+  });
+
   it("fails over in-process when local analyzer spawn hits EAGAIN", async () => {
     let spawnErrorHandler: ((error: Error) => void) | undefined;
     mockSpawn.mockReturnValueOnce({
@@ -532,7 +593,30 @@ describe("Coding Orchestrator", () => {
     );
   });
 
-  it("fails over in-process when a dedicated analyzer never claims the queued job", async () => {
+  it("uses the remote worker by default in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "");
+    try {
+      await startCodingOrchestration({ task: task as never, run: run as never });
+      expect(mockSpawn).not.toHaveBeenCalled();
+      expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("preserves an explicit local mode override in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "local");
+    try {
+      await startCodingOrchestration({ task: task as never, run: run as never });
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps remote analyzer jobs queued without in-process fallback", async () => {
     vi.useFakeTimers();
     vi.stubEnv("REPOSITORY_ANALYZER_EXECUTION_MODE", "remote");
     const queuedJob = {
@@ -545,9 +629,6 @@ describe("Coding Orchestrator", () => {
       },
     };
     mockEnqueue.mockResolvedValueOnce(queuedJob);
-    mockSelectLimit
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([queuedJob]);
 
     try {
       await startCodingOrchestration({ task: task as never, run: run as never });
@@ -557,21 +638,14 @@ describe("Coding Orchestrator", () => {
       await vi.advanceTimersByTimeAsync(15_000);
       for (let i = 0; i < 20; i += 1) await Promise.resolve();
 
-      expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 1701, status: "queued" }),
-        { finalizeCodingRun: false },
-      );
-      expect(mockLogAudit).toHaveBeenCalledWith(
+      expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+      expect(mockLogAudit).not.toHaveBeenCalledWith(
         "coding-orchestrator",
         "repository_analyzer_claim_failover",
-        task.id,
-        "coding_task",
-        "success",
-        expect.objectContaining({
-          codingRunId: run.id,
-          jobId: 1701,
-          failoverAfterMs: 15_000,
-        }),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
       );
     } finally {
       vi.clearAllTimers();

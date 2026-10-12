@@ -238,7 +238,7 @@ export function buildRepositoryCloneEnvironment(
 
 export function isRetryableRepositoryCloneResourceError(detail: string): boolean {
   if (
-    /unable to create thread|resource temporarily unavailable|spawn git eagain|\beagain\b|invalid index-pack output|index-pack.*failed|timeout exceeded when trying to connect|connection (?:timed out|reset|refused)|could not resolve host|temporary failure in name resolution|gnutls recv error|tls connection was non-properly terminated|http\/2 stream .* was not closed cleanly|remote end hung up unexpectedly|early eof/i.test(
+    /unable to create thread|getaddrinfo\(\) thread failed to start|resource temporarily unavailable|spawn git eagain|\beagain\b|invalid index-pack output|index-pack.*failed|timeout exceeded when trying to connect|connection (?:timed out|reset|refused)|could not resolve host|temporary failure in name resolution|gnutls recv error|tls connection was non-properly terminated|http\/2 stream .* was not closed cleanly|remote end hung up unexpectedly|early eof/i.test(
       detail,
     )
   ) {
@@ -827,7 +827,7 @@ async function analyzeRepository(input: AnalyzerInput): Promise<RepositoryAnalyz
     phase = "reserve_change_set";
     const changeReservation = await reserveCodingFileSet({
       repository: input.repository,
-      branch: input.branch,
+      branch: input.isolatedBranchName ?? input.branch,
       taskId: input.codingTaskId,
       runId: input.codingRunId,
       files: predictedChangeFiles,
@@ -1115,7 +1115,14 @@ export async function executeRepositoryAnalyzerJobOnDemand(
     // Legacy direct execution finalizes the Coding Workspace run here. The
     // Coding Orchestrator disables this so it can continue into Planner before
     // completing the user-facing run.
-    if (finalizeCodingRun) {
+    const payload = (claimed.payloadJson ?? {}) as Record<string, unknown>;
+    const requestText = typeof payload["description"] === "string" ? payload["description"] : "";
+    const verificationOnly = payload["testOnly"] === true &&
+      /\bTEST_ONLY\b/i.test(requestText) &&
+      /repository analyzer/i.test(requestText) &&
+      /\bE2E\b|verif/i.test(requestText) &&
+      /no code modifications|no code changes|read.only/i.test(requestText);
+    if (finalizeCodingRun || verificationOnly) {
       await completeRepositoryAnalyzerRun(result);
     }
 
@@ -1298,6 +1305,17 @@ export async function completeRepositoryAnalyzerRun(
     throw new Error("Repository Analyzer result is missing codingRunId or codingTaskId");
   }
 
+  const [task] = await db.select().from(aiCodingTasksTable)
+    .where(eq(aiCodingTasksTable.id, codingTaskId));
+  const instruction = task?.instruction ?? "";
+  const reservation = result.changeReservation as Record<string, unknown> | undefined;
+  const localExecution = result.localExecution as Record<string, unknown> | undefined;
+  const verificationOnly = /\bTEST_ONLY\b/i.test(instruction) &&
+    /repository analyzer/i.test(instruction) &&
+    /\bE2E\b|verif/i.test(instruction) &&
+    /no code modifications|no code changes|read.only/i.test(instruction) &&
+    result.executionStatus === "COMPLETED" &&
+    reservation?.status !== "CONFLICT" && localExecution?.status !== "APPLIED";
   const now = new Date();
   await db.transaction(async (tx) => {
     const [updatedRun] = await tx
@@ -1316,7 +1334,7 @@ export async function completeRepositoryAnalyzerRun(
     await tx
       .update(aiCodingTasksTable)
       .set({
-        status: "READY_REVIEW",
+        status: verificationOnly ? "COMPLETED" : "READY_REVIEW",
         resultSummary: summary,
       })
       .where(eq(aiCodingTasksTable.id, codingTaskId));

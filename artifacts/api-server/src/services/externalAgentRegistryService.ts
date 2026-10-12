@@ -40,6 +40,28 @@ export const EXTERNAL_AGENT_RULES = {
       productionDeploy: false,
     },
   },
+  "openclaw-pc-worker-2": {
+    source: "openclaw",
+    role: "bounded_orchestration_agent",
+    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
+  "openclaw-pc-worker-3": {
+    source: "openclaw",
+    role: "bounded_orchestration_agent",
+    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
   "gcp-openhands-coder": {
     source: "openhands",
     role: "coding_executor",
@@ -169,6 +191,10 @@ export async function getExternalAgentRegistrySnapshot() {
         lastSeenAt: row?.lastSeenAt ?? null,
         leaseExpiresAt: row?.leaseExpiresAt ?? null,
         version: typeof metadata["version"] === "string" ? metadata["version"] : null,
+        availableSlots: typeof (metadata["details"] as Record<string, unknown> | undefined)?.availableSlots === "number"
+          ? Math.max(0, (metadata["details"] as Record<string, number>).availableSlots) : undefined,
+        activeJobs: typeof (metadata["details"] as Record<string, unknown> | undefined)?.activeJobs === "number"
+          ? Math.max(0, (metadata["details"] as Record<string, number>).activeJobs) : undefined,
       };
     }),
   );

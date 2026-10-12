@@ -1,5 +1,6 @@
 ﻿import { randomUUID } from "node:crypto";
-import { selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
+import { OPENCLAW_PC_CLIENT_IDS, selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
+import { chooseActivePc } from "./openClawPcLeaderService.js";
 import {
   EXTERNAL_AGENT_POLICY_VERSION,
   getExternalAgentRegistrySnapshot,
@@ -14,6 +15,8 @@ import {
 export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
+export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
+export const OPENCLAW_PC3_CLIENT_ID = "openclaw-pc-worker-3" as const;
 export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
 export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
 
@@ -21,6 +24,8 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_VPS_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
   [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
   [N8N_AGENT_CLIENT_ID]: "workflow:automation",
 };
@@ -29,6 +34,9 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   clientId: ExternalAgentClientId;
   agent: RegExp;
 }> = [
+  // Host-specific requests must take precedence over the generic OpenClaw alias.
+  { clientId: OPENCLAW_PC_CLIENT_ID, agent: /\bopen\s*claw[\s-]*(?:pc|windows)\b|\b(?:pc|windows)[\s-]*open\s*claw\b/i },
+  { clientId: OPENCLAW_VPS_CLIENT_ID, agent: /\bopen\s*claw[\s-]*vps\b|\bvps[\s-]*open\s*claw\b/i },
   { clientId: OPENCLAW_AGENT_CLIENT_ID, agent: /\bopen\s*claw\b|\bopenclaw\b/i },
   { clientId: OPENHANDS_AGENT_CLIENT_ID, agent: /\bopen\s*hands\b|\bopenhands\b/i },
   { clientId: N8N_AGENT_CLIENT_ID, agent: /\bn8n\b/i },
@@ -50,11 +58,43 @@ export class ExternalAgentDispatchError extends Error {
   }
 }
 
+export function explainExternalAgentAvailability(
+  registry: Awaited<ReturnType<typeof getExternalAgentRegistrySnapshot>>,
+  candidateIds: readonly string[],
+): string {
+  const details = candidateIds.map((clientId) => {
+    const worker = registry.find((item) => item.clientId === clientId);
+    if (!worker) return `${clientId}: NOT_REGISTERED (worker tidak terdaftar dalam snapshot registry)`;
+    if (worker.presenceState !== "ACTIVE") {
+      return `${clientId}: OFFLINE_OR_LEASE_EXPIRED (heartbeat tidak aktif atau lease kedaluwarsa)`;
+    }
+    if (worker.reportedHealth !== "healthy") {
+      return `${clientId}: UNHEALTHY (health=${worker.reportedHealth})`;
+    }
+    if (!worker.eligible) {
+      return `${clientId}: INELIGIBLE (registry menolak kelayakan worker)`;
+    }
+    if (worker.availableSlots !== undefined && worker.availableSlots <= 0) {
+      return `${clientId}: AT_CAPACITY (slot eksekusi habis)`;
+    }
+    return `${clientId}: ELIGIBLE (worker tersedia; periksa pemilihan routing atau izin tugas)`;
+  });
+  return details.join("; ");
+}
+
 export function detectExplicitExternalAgentClientId(
   message: string,
 ): ExternalAgentClientId | null {
   const text = message.trim();
   if (!text || !DELEGATION_VERB.test(text)) return null;
+
+  // Merely mentioning OpenClaw while asking for repository changes must not
+  // hijack the coding route. Explicit delegation to OpenClaw is still allowed.
+  if (/\b(?:perbaiki|implementasikan|buat|patch|ubah|fix|coding)\b/i.test(text) &&
+      /\b(?:github|repo(?:sitory)?|pull request|\bpr\b)\b/i.test(text) &&
+      !/\b(?:suruh|delegasikan|delegate|gunakan|pakai)\s+(?:agent\s+)?open\s*claw\b/i.test(text)) {
+    return null;
+  }
 
   for (const candidate of EXPLICIT_AGENT_PATTERNS) {
     if (candidate.agent.test(text)) return candidate.clientId;
@@ -80,9 +120,40 @@ export async function dispatchExternalAgentWork(input: {
   // already claimed jobs require separate lease/idempotency handling.
   const registry = await getExternalAgentRegistrySnapshot();
   let resolvedClientId = input.clientId;
-  if (input.clientId === OPENCLAW_AGENT_CLIENT_ID) {
-    const preferred = selectOpenClawExecutor(registry);
-    if (preferred) resolvedClientId = preferred;
+  if (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
+      (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)) {
+    const serverMonitor = input.clientId === OPENCLAW_AGENT_CLIENT_ID &&
+      input.metadata?.openClawExecutionProfile === "monitor-direct";
+    // A specifically requested, healthy PC must not be silently replaced by
+    // the sticky chat leader. Generic OpenClaw requests retain sticky routing.
+    const explicitlyNamesPrimary =
+      /\b(?:pc\s+travelintrips|travelintrips[ -]pc|clientid\s*[:=]\s*openclaw-pc-worker\b)/i.test(input.instruction);
+    const explicitPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)
+      && input.metadata?.explicitWorkerTarget === true;
+    // The public generic OpenClaw alias is used by MCP even for a named PC.
+    // Do not let the sticky leader silently override a requested physical PC.
+    // A physical PC name identifies the destination machine, not a requirement
+    // to use worker-1. When worker-1 is offline, an eligible sibling PC worker
+    // must be allowed to execute the command on the same PC.
+    const targetPc = explicitPc ? input.clientId : null;
+    const preferred = serverMonitor
+      ? selectOpenClawExecutor(registry, { preferServer: true })
+      : targetPc && registry.some((worker) => worker.clientId === targetPc && worker.eligible)
+        ? targetPc
+        : explicitlyNamesPrimary || !targetPc
+          ? await chooseActivePc(registry)
+          : null;
+    // Do not route server-only monitoring to a PC that cannot execute it.
+    if (serverMonitor && !preferred) {
+      throw new ExternalAgentDispatchError(
+        "AGENT_UNAVAILABLE",
+        "No eligible VPS OpenClaw worker for direct API monitoring.",
+      );
+    }
+    if (!preferred) {
+      throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Tidak ada worker OpenClaw yang dapat dipilih. " + explainExternalAgentAvailability(registry, OPENCLAW_PC_CLIENT_IDS) + ". Perintah tidak dieksekusi.");
+    }
+    resolvedClientId = preferred;
   }
   const rule = getExternalAgentRule(resolvedClientId);
   if (!rule) {
@@ -98,11 +169,16 @@ export async function dispatchExternalAgentWork(input: {
   if (!rule.capabilities.some((capability) => capability === requiredCapability)) {
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
-      `External agent is not authorized for required capability ${requiredCapability}.`,
+      `SOP/CAPABILITY_DENIED: worker ${resolvedClientId} tidak diizinkan menggunakan capability ${requiredCapability}. Perintah tidak dieksekusi.`,
     );
   }
 
   const agent = registry.find((item) => item.clientId === resolvedClientId);
+  const selectedIsPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(resolvedClientId);
+  if (rule.source === "openclaw" && (!agent?.eligible ||
+    (!selectedIsPc && agent.availableSlots !== undefined && agent.availableSlots <= 0))) {
+    throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", "Worker yang dipilih tidak dapat menjalankan tugas. " + explainExternalAgentAvailability(registry, [resolvedClientId]) + ". Perintah tidak dieksekusi.");
+  }
   const coldStart = !agent?.eligible;
 
   const externalCommandId = `ai-core-agent-${randomUUID()}`;
