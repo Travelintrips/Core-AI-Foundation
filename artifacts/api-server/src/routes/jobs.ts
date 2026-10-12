@@ -55,6 +55,38 @@ const EnqueueBody      = CreateJobBody;
 const ListJobsQuery    = ListJobsQueryParams;
 const ReprioritizeBody = ReprioritizeJobBody;
 
+// Read-only, minimal DEV Control Center monitor endpoint.
+// The global /api admin/session middleware protects this route.
+router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
+  if (process.env["APP_ENV"] !== "development") {
+    res.sendStatus(404);
+    return;
+  }
+  try {
+    const jobs = await db.select({
+      id: aiJobsTable.id,
+      application: aiJobsTable.jobType,
+      status: aiJobsTable.status,
+      updatedAt: aiJobsTable.updatedAt,
+    }).from(aiJobsTable).orderBy(desc(aiJobsTable.updatedAt)).limit(50);
+    const states: Record<string, string> = {
+      queued: "QUEUED", waiting: "WAITING_FOR_WORKER",
+      running: "RUNNING", retrying: "WAITING_FOR_CAPACITY",
+      blocked: "BLOCKED", failed: "FAILED",
+      completed: "COMPLETED", cancelled: "CANCELLED",
+    };
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ jobs: jobs.map((job) => ({
+      id: String(job.id),
+      application: String(job.application ?? "AI Core").slice(0, 100),
+      status: states[String(job.status)] ?? "BLOCKED",
+      updatedAt: job.updatedAt?.toISOString() ?? null,
+    })) });
+  } catch {
+    res.status(503).json({ error: "DEV_JOB_MONITOR_UNAVAILABLE" });
+  }
+});
+
 // ── List Jobs ─────────────────────────────────────────────────────────────────
 
 router.get("/ai/jobs", async (req, res): Promise<void> => {
