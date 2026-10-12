@@ -18,7 +18,7 @@ vi.mock("../aiSecretService.js", () => ({
 import {
   classifyAiCoreWorkload,
   selectCloudModelForWorkload,
-} from "../aiCoreWorkloadRouterService.js";
+} from "../aiCoreWorkloadRouterService.ts";
 
 function row(input: {
   provider: string;

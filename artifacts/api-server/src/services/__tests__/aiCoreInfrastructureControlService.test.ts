@@ -12,7 +12,7 @@ vi.mock("../aiAuditService.js", () => ({
 import {
   detectAiCoreInfrastructureOperation,
   executeAiCoreInfrastructureOperation,
-} from "../aiCoreInfrastructureControlService.js";
+} from "../aiCoreInfrastructureControlService.ts";
 
 describe("AI Core mutation routing guard", () => {
   it.each([
