@@ -200,7 +200,7 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   if (!user || user.status !== "active") { res.json(generic); return; }
 
   const token = issueMagicLoginToken(user.id);
-  const baseUrl = publicPortalBaseUrl(req);
+  const baseUrl = (process.env["AI_CORE_PUBLIC_BASE_URL"] || publicPortalBaseUrl(req)).replace(/\/$/, "");
   const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
   const sent = await sendEmail({
     to: user.email,
