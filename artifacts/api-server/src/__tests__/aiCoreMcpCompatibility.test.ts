@@ -147,7 +147,8 @@ describe("AI Core MCP discovery compatibility", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers["www-authenticate"]).toContain("profile");
-    expect(response.body.error).toBeDefined();
+    expect(response.body.result).toBeDefined();
+    expect(response.body.result.isError).toBe(true);
   });
 
   it("continues to expose AI Core tools", async () => {
