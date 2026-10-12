@@ -55,6 +55,38 @@ const EnqueueBody      = CreateJobBody;
 const ListJobsQuery    = ListJobsQueryParams;
 const ReprioritizeBody = ReprioritizeJobBody;
 
+// Public login FORM only: requires existing internal account credentials.
+// All dashboard, assets, and job data still use the normal /api auth middleware.
+router.get("/dev-center/login", (_req, res): void => {
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
+  res.setHeader("Cache-Control", "no-store");
+  res.type("html").send(
+    '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Login AI Core DEV Monitor</title>' +
+    '<style>body{font:16px system-ui;background:#101d31;color:#fff;display:grid;place-items:center;min-height:90vh}' +
+    'main{width:min(420px,90%);padding:28px;background:#1d304c;border-radius:12px}input,button{box-sizing:border-box;width:100%;padding:12px;margin:9px 0;border-radius:7px}' +
+    'button{cursor:pointer}#message{color:#ffe1a0}</style></head><body><main>' +
+    '<h1>AI Core DEV Monitoring</h1><p>Masuk menggunakan akun internal AI Core.</p>' +
+    '<form id="login"><label>Email<input name="email" type="email" autocomplete="username" required></label>' +
+    '<label>Password<input name="password" type="password" autocomplete="current-password" required></label>' +
+    '<button type="submit">Masuk ke Dashboard</button></form><p role="status" id="message"></p>' +
+    '<script src="/api/dev-center/login.js" defer></script></main></body></html>'
+  );
+});
+router.get("/dev-center/login.js", (_req, res): void => {
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
+  res.setHeader("Cache-Control", "no-store");
+  res.type("javascript").send(
+    'document.getElementById("login").addEventListener("submit",async function(e){e.preventDefault();' +
+    'const f=e.currentTarget,m=document.getElementById("message"),b=f.querySelector("button");b.disabled=true;m.textContent="Memverifikasi...";' +
+    'try{const r=await fetch("/api/internal/auth/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},' +
+    'body:JSON.stringify({email:f.elements.email.value,password:f.elements.password.value})});' +
+    'if(!r.ok){m.textContent="Login gagal. Periksa akun internal Anda.";return;}' +
+    'window.location.assign("/api/dev-center/dashboard");' +
+    '}catch(_){m.textContent="Server login tidak dapat dihubungi.";}finally{b.disabled=false;}});'
+  );
+});
+
 // Authenticated DEV-only monitor page. Both assets and data use the same
 // global /api authentication boundary; nothing is exposed as public static HTML.
 router.get("/dev-center/dashboard", (_req, res): void => {

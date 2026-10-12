@@ -143,6 +143,9 @@ const PUBLIC_PATH_PREFIXES = [
  * showcase, live AI preview) and were incorrectly requiring ADMIN_API_KEY.
  */
 const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
+  // Only the DEV monitor login form is public. Job data remains protected.
+  { method: "GET", pattern: /^\/dev-center\/login$/ },
+  { method: "GET", pattern: /^\/dev-center\/login\.js$/ },
   // MCP owns its own bearer-token authentication (connector key or local service token).
   { method: "POST", pattern: /^\/ai\/core-chat\/mcp$/ },
   { method: "GET", pattern: /^\/ai\/core-chat\/mcp$/ },
@@ -262,6 +265,13 @@ export function adminAuthWithExceptions(req: Request, res: Response, next: NextF
       next();
       return;
     }
+  }
+  if (req.method === "GET" && req.path === "/dev-center/dashboard" &&
+      process.env["APP_ENV"] === "development" &&
+      !(req as Request & { internalUser?: unknown }).internalUser &&
+      !req.headers["authorization"] && !req.headers["x-admin-key"] && !req.headers["x-admin-api-key"]) {
+    res.redirect(302, "/api/dev-center/login");
+    return;
   }
   adminAuth(req, res, next);
 }
