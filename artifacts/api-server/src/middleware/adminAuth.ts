@@ -145,7 +145,7 @@ const PUBLIC_PATH_PREFIXES = [
 const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   // Only the DEV monitor login form is public. Job data remains protected.
   { method: "GET", pattern: /^\/dev-center\/login$/ },
-  { method: "GET", pattern: /^\/dev-center\/login.js$/ },
+  { method: "GET", pattern: /^\/dev-center\/login\.js$/ },
   // MCP owns its own bearer-token authentication (connector key or local service token).
   { method: "POST", pattern: /^\/ai\/core-chat\/mcp$/ },
   { method: "GET", pattern: /^\/ai\/core-chat\/mcp$/ },
