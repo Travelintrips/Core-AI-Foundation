@@ -5,6 +5,13 @@ import {
   requestedWorkflowDispatch,
 } from "../aiCoreGitHubControlService.js";
 
+describe("AI Core GitHub Control error scenarios", () => {
+  it("should throw an error for unsupported operation", () => {
+    expect(() => detectAiCoreGitHubOperation("invalid command")).toThrow("Unsupported GitHub operation");
+  });
+});
+
+
 describe("AI Core no-worker GitHub control", () => {
   it.each([
     ["cek GitHub workflow run=37470000000", "GITHUB_WORKFLOW_STATUS"],
