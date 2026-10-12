@@ -492,6 +492,34 @@ async function flushResults() {
   return true;
 }
 
+// The worker must maintain its own bounded presence lease. A healthy container
+// without a current heartbeat must never be considered dispatch-eligible.
+let presenceHeartbeatInFlight = false;
+async function heartbeatPresence() {
+  if (stopping || presenceHeartbeatInFlight) return;
+  presenceHeartbeatInFlight = true;
+  try {
+    const response = await aiCoreRequest(
+      "/ai/agent-runtime/presence/" + encodeURIComponent(CLIENT_ID) + "/heartbeat",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          health: "healthy",
+          version: "openclaw-supervisor",
+          details: { runtime: "vps-openclaw", workMode: "bounded" },
+        }),
+      },
+    );
+    if (!response.ok) {
+      log("presence heartbeat HTTP " + response.status);
+    }
+  } catch (error) {
+    log("presence heartbeat failed: " + String(error?.cause?.code || error?.message || error).slice(0, 180));
+  } finally {
+    presenceHeartbeatInFlight = false;
+  }
+}
+
 async function workLoop() {
   while (!stopping) {
     try {
@@ -580,7 +608,11 @@ gateway.on("exit", (code, signal) => {
 });
 
 await sleep(5000);
+await heartbeatPresence();
+const presenceTimer = setInterval(() => { void heartbeatPresence(); }, 30_000);
+presenceTimer.unref();
 await workLoop();
+clearInterval(presenceTimer);
 
 if (gateway && gateway.exitCode === null) {
   await new Promise((resolve) => gateway.once("exit", resolve));
