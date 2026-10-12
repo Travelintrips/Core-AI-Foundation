@@ -33,6 +33,14 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify AI Core command trigger
         run: node --test scripts/ai-core-command.test.mjs
+      - name: Verify fail-closed DEV-first production promotion
+        run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
+      - name: Verify GitHub event correlation contract
+        run: node --test scripts/github-event-correlation.test.mjs
+      - name: Verify bounded PostgreSQL pool cap
+        run: node --test scripts/pg-pool-max.test.mjs
+      - name: Verify Hostinger runtime diagnostics redact sensitive log content
+        run: node --test scripts/hostinger-runtime-classify.test.mjs
       - name: Verify ZeroLLM deployment scripts
         run: |
           pnpm run zerollm:verify

@@ -49,6 +49,13 @@ jobs:
               pr.user?.login === owner
             );
 
+            // DEV-first production promotion requires reviewed merge commits
+            // with tested DEV ancestry; auto-squash main merges would discard it.
+            if (candidates.length > 0) {
+              core.notice("Main auto-merge disabled until verified DEV-first promotion.");
+              return;
+            }
+
             if (candidates.length === 0) {
               core.info(`No eligible owner PR is open for ${headSha}.`);
               return;

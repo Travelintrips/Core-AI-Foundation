@@ -8,14 +8,11 @@ on:
         required: true
         default: main
         type: string
-  workflow_run:
-    workflows:
-      - AI Workers Stack Verify
-    types:
-      - completed
+  # Automatic deploy on CI is disabled; require approved DEV-first promotion.
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ai-workers-vps-deploy
@@ -23,13 +20,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main'
-      )
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ai-workers-vps
@@ -37,8 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
-          fetch-depth: 1
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
 
       - name: Resolve exact deployment commit
         id: target
@@ -48,6 +39,19 @@ jobs:
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Deploying exact commit: $sha"
+
+      - name: Block VPS deployment unless DEV release evidence is verified
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          REQUESTED_REF: ${{ inputs.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$REQUESTED_REF" = main || { echo "::error::Only the approved main commit may deploy to VPS"; exit 1; }
+          current_main=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          test "$current_main" = "$TARGET_SHA" || { echo "::error::Stale or non-main VPS deploy blocked"; exit 1; }
+          node scripts/verify-dev-first-release.mjs "$TARGET_SHA"
 
       - name: Configure SSH
         shell: bash

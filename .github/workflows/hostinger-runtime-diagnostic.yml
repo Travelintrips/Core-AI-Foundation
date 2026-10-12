@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - name: Read Hostinger website and Node runtime status
         env:
           HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
@@ -26,6 +27,17 @@ jobs:
             echo "domain=$domain found=$([ -n "$username" ] && echo yes || echo no) enabled=${enabled:-unknown}"
             if [ -z "$username" ]; then continue; fi
             root="$base/hosting/v1/accounts/$username/websites/$domain/nodejs"
+            # Hostinger runtime logs are read-only; never emit raw messages,
+            # stack traces, environment variables, credential-like strings or
+            # unchecked "timestamp"/"severity" values in GitHub logs.
+            runtime_code=$(curl --silent --show-error --connect-timeout 8 --max-time 25 \
+              -H "$auth" -o /tmp/aicore-runtime-logs.json -w "%{http_code}" \
+              "$root/runtime-logs?period=1h&limit=150") || runtime_code=000
+            echo "domain=$domain endpoint=runtime-logs http=$runtime_code"
+            if [ "$runtime_code" = "200" ]; then
+              jq -c -f scripts/hostinger-runtime-classify.jq \
+                /tmp/aicore-runtime-logs.json || echo "runtime_logs_format_unavailable"
+            fi
             for path in builds/settings server/status builds; do
               code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o /tmp/diag.json -w "%{http_code}" "$root/$path") || code=000
               echo "domain=$domain endpoint=$path http=$code"

@@ -520,6 +520,54 @@ describe("Coding Orchestrator", () => {
     expect(mockGenerateAndPersistCodingMultiTaskPlan).not.toHaveBeenCalled();
   });
 
+  it.each([0, 1])(
+    "reclaims a never-claimed analyzer immediately after child closes with code %s",
+    async (exitCode) => {
+      let closeHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+      const unref = vi.fn();
+      mockSpawn.mockReturnValueOnce({
+        unref,
+        once: vi.fn((event: string, fn: unknown) => {
+          if (event === "close") closeHandler = fn as typeof closeHandler;
+        }),
+      });
+      const queuedJob = {
+        id: 701,
+        jobType: "coding_repository_analyzer",
+        status: "queued",
+        payloadJson: { codingTaskId: task.id, codingRunId: run.id },
+      };
+      // First lookup: host-wide single-flight slot is clear.
+      // Second lookup: the child exited before claiming its own row.
+      mockSelectLimit.mockResolvedValueOnce([]).mockResolvedValueOnce([queuedJob]);
+      await startCodingOrchestration({ task: task as never, run: run as never });
+      expect(unref).toHaveBeenCalled();
+      expect(closeHandler).toBeTypeOf("function");
+      closeHandler!(exitCode, null);
+      await vi.waitFor(() => expect(mockExecuteRepositoryAnalyzerJobOnDemand).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 701, status: "queued" }),
+        { finalizeCodingRun: false },
+      ));
+    },
+  );
+
+  it("never re-executes an analyzer job already claimed before child exit", async () => {
+    let closeHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+    mockSpawn.mockReturnValueOnce({
+      unref: vi.fn(),
+      once: vi.fn((event: string, fn: unknown) => {
+        if (event === "close") closeHandler = fn as typeof closeHandler;
+      }),
+    });
+    mockSelectLimit
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 701, status: "running" }]);
+    await startCodingOrchestration({ task: task as never, run: run as never });
+    closeHandler!(1, null);
+    await vi.waitFor(() => expect(mockSelectLimit).toHaveBeenCalledTimes(2));
+    expect(mockExecuteRepositoryAnalyzerJobOnDemand).not.toHaveBeenCalled();
+  });
+
   it("fails over in-process when local analyzer spawn hits EAGAIN", async () => {
     let spawnErrorHandler: ((error: Error) => void) | undefined;
     mockSpawn.mockReturnValueOnce({

@@ -46,6 +46,25 @@ describe("AI Core mutation routing guard", () => {
   });
 });
 
+describe("OpenClaw execution request intent regression", () => {
+  it.each([
+    "Minta bantuan OpenClaw Hostinger untuk memasang markdown global ChatGPT, lalu cek status",
+    "Implementasikan SSH OpenClaw Hostinger dan verifikasi status",
+    "Perbaiki command router OpenClaw Hostinger",
+    "Siapkan instruksi global ChatGPT melalui OpenClaw VPS",
+  ])("routes implementation to execution handling, not status: %s", (message) => {
+    expect(detectAiCoreInfrastructureOperation(message)).toBeNull();
+  });
+  it("retains the explicit bounded Hostinger SSH public-key attachment route", () => {
+    expect(detectAiCoreInfrastructureOperation(
+      "Hostinger pasang SSH public key key=ssh-ed25519-AAAA",
+    )).toBe("HOSTINGER_SSH_PUBLIC_KEY_ATTACH");
+  });
+  it("retains genuine read-only OpenClaw status checks", () => {
+    expect(detectAiCoreInfrastructureOperation("cek status OpenClaw Hostinger")).toBe("EXTERNAL_AGENT_STATUS");
+  });
+});
+
 describe("AI Core deployment verification routing", () => {
   it.each([
     "Cek deployment production AI Core terakhir untuk commit a5241bf dan status route OpenClaw mutation serta bukti E2E",

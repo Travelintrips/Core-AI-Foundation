@@ -1,17 +1,7 @@
 name: AI Image Worker GCP
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/ai-image-worker-gcp.yml"
-      - "deploy/ai-image-worker/**"
-      - "scripts/install-ai-image-worker.sh"
-      - "scripts/ai-image-worker-idle-shutdown.sh"
-      - "scripts/ai-image-gateway.py"
-      - "scripts/ai-gpu-idle-guard.sh"
-      - "scripts/install-shared-gpu-image-gateway.sh"
+  # No automatic production GPU deploy from a push.
   workflow_dispatch:
     inputs:
       action:
@@ -26,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -38,6 +29,19 @@ jobs:
     environment: ai-image-worker-gcp
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify DEV before any production GPU deployment
+        if: inputs.action == 'start-deploy'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_main=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          test "$(git rev-parse HEAD)" = "$current_main" || { echo "::error::Non-current GPU release blocked"; exit 1; }
+          node scripts/verify-dev-first-release.mjs "$current_main"
 
       - id: auth
         uses: google-github-actions/auth@v3
@@ -60,7 +64,7 @@ jobs:
           gcloud config set project "$PROJECT"
 
       - name: Start GPU VM
-        if: github.event_name == 'push' || inputs.action == 'start-deploy'
+        if: inputs.action == 'start-deploy'
         env:
           ZONE: ${{ vars.GCP_GPU_ZONE }}
           INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
@@ -75,7 +79,7 @@ jobs:
           exit 1
 
       - name: Copy image-worker deployment
-        if: github.event_name == 'push' || inputs.action == 'start-deploy'
+        if: inputs.action == 'start-deploy'
         env:
           ZONE: ${{ vars.GCP_GPU_ZONE }}
           INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}
@@ -91,7 +95,7 @@ jobs:
           gcloud compute scp /tmp/ai-image-worker.tgz "$INSTANCE:/tmp/ai-image-worker.tgz" --zone "$ZONE"
 
       - name: Install and verify ComfyUI
-        if: github.event_name == 'push' || inputs.action == 'start-deploy'
+        if: inputs.action == 'start-deploy'
         env:
           ZONE: ${{ vars.GCP_GPU_ZONE }}
           INSTANCE: ${{ vars.GCP_IMAGE_WORKER_INSTANCE }}

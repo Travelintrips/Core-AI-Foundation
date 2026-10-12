@@ -95,9 +95,10 @@ jobs:
                   if (files.length === 100 || files.some(f => protectedPath.test(f.filename))) {
                     action = 'sensitive or oversized diff: human merge required';
                   } else {
-                    const mutation = 'mutation($id: ID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) { clientMutationId } }';
-                    await github.graphql(mutation, {id: detail.node_id});
-                    action = 'native GitHub auto-merge armed';
+                    // The DEV-first release cannot use squash auto-merge:
+                    // it would discard the validated DEV commit ancestry.
+                    // Queue Guardian stays read-only for main merge eligibility.
+                    action = 'eligible but DEV-first promotion requires reviewed merge commit';
                   }
                 } else if (ci !== 'GREEN') {
                   action = 'CI fix required; no merge';
