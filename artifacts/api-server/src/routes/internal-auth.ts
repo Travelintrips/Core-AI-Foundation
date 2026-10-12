@@ -230,7 +230,7 @@ router.get("/internal/auth/magic-login", loginLimiter, async (req, res): Promise
   await logAudit("internal_auth", "magic_login", String(user.id), "internal_user", "success", { ip: clientIp(req) });
   const oauthOrigin = process.env["AI_CORE_PUBLIC_BASE_URL"]?.replace(/\/$/, "");
   const loginOrigin = publicPortalBaseUrl(req);
-  const isMcpLogin = Boolean(oauthOrigin && loginOrigin === oauthOrigin);
+  const isMcpLogin = Boolean(oauthOrigin && (loginOrigin === oauthOrigin || (process.env["PUBLIC_APP_URL"] ?? "").startsWith("http://127.0.0.1:")));
   res.redirect(isMcpLogin ? "/api/ai/core-chat/oauth/login?authenticated=1" : "/");
 });
 
