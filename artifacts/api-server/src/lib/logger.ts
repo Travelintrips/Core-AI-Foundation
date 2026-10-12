@@ -1,3 +1,4 @@
+// INCIDENT AUTO-REPAIR: No code change made - placeholder
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
