@@ -492,7 +492,10 @@ export function extractAdminDbSemanticIntent(
     FOLLOW_UP_HINT.test(value.trim().toLowerCase()) ||
     (words.length <= 6 && Boolean(current.timeRange));
 
-  if ((!metric || !domain || (!timeRange && looksLikeFollowUp)) && context.length > 0) {
+  // Only explicitly contextual questions may borrow a previous data metric.
+  // A fresh conversational question (e.g. "maksudnya 23 itu apa") must not
+  // inherit a database aggregation merely because the prior turn was about data.
+  if (looksLikeFollowUp && (!metric || !domain || !timeRange) && context.length > 0) {
     for (let index = context.length - 1; index >= 0; index -= 1) {
       const previous = context[index];
       if (!previous || previous.role !== "user") continue;

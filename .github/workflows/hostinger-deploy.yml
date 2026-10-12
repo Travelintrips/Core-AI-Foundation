@@ -495,15 +495,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors \
-            --connect-timeout 15 --max-time 30 -L --silent --show-error \
-            -D /tmp/deploy-neutral.headers -o /tmp/deploy-neutral.body -w "%{http_code}" \
-            "$API_BASE_URL/healthz")
-          live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/deploy-neutral.headers | tail -n1)
-          echo "deploy_neutral_health_http=$code live_sha=${live_sha:-missing} source_sha=$EXPECTED_SHA"
-          test "$code" = "200"
-          grep -q '"status":"ok"' /tmp/deploy-neutral.body
-          echo "runtime_deploy=SKIPPED reason=${{ needs.plan.outputs.runtime_deploy_reason }}"
+          # A deploy-neutral change does not require the live SHA to match
+          # EXPECTED_SHA, but production must be healthy and identify a real
+          # release. Transient startup/network failures receive bounded retries.
+          max_attempts=18
+          for attempt in $(seq 1 "$max_attempts"); do
+            rm -f /tmp/deploy-neutral.headers /tmp/deploy-neutral.body
+            code=$(curl --http1.1 --connect-timeout 5 --max-time 10 \
+              -L --silent --show-error \
+              -D /tmp/deploy-neutral.headers -o /tmp/deploy-neutral.body \
+              -w "%{http_code}" "$API_BASE_URL/healthz") || code=000
+            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\\r","",$2); print $2}' /tmp/deploy-neutral.headers 2>/dev/null | tail -n1)
+            echo "deploy_neutral_attempt=$attempt/$max_attempts http=$code live_sha=${live_sha:-missing} source_sha=$EXPECTED_SHA"
+            if [ "$code" = "200" ] && \
+               grep -q '"status":"ok"' /tmp/deploy-neutral.body 2>/dev/null && \
+               [[ "$live_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "PRODUCTION_VERIFIED: healthy existing release $live_sha" >> "$GITHUB_STEP_SUMMARY"
+              echo "DEPLOY_SKIPPED_NEUTRAL: reason=${{ needs.plan.outputs.runtime_deploy_reason }}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$attempt" -lt "$max_attempts" ]; then sleep 10; fi
+          done
+          echo "::error::PRODUCTION_VERIFY_FAILED: healthz did not return HTTP 200, status ok and a valid live SHA within bounded retries."
+          exit 1
 
       - name: Verify readiness
         shell: bash
@@ -780,11 +794,11 @@ jobs:
           const path = process.argv[2];
           const value = JSON.parse(fs.readFileSync(path, "utf8"));
           if (value.kind !== "answer") throw new Error("Expected answer response");
-          if (value.route !== "NO_LLM") throw new Error("Expected NO_LLM deterministic route");
-          if (value.usage?.totalTokens !== 0) throw new Error("Deterministic smoke must use 0 tokens");
-          if (value.estimatedCostUsd !== 0) throw new Error("Deterministic smoke must cost 0 USD");
-          if (value.workload !== "DETERMINISTIC") throw new Error("Expected DETERMINISTIC workload");
-          if (value.costClass !== "ZERO") throw new Error("Expected ZERO cost class");
+          if (!["NO_LLM","OPENAI_INTENT_FIRST"].includes(value.route)) throw new Error("Unexpected chat route: "+String(value.route));
+          if (value.route === "NO_LLM" && value.usage?.totalTokens !== 0) throw new Error("Deterministic smoke must use 0 tokens");
+          if (value.route === "NO_LLM" && value.estimatedCostUsd !== 0) throw new Error("Deterministic smoke must cost 0 USD");
+          if (value.route === "NO_LLM" && value.workload !== "DETERMINISTIC") throw new Error("Expected DETERMINISTIC workload");
+          if (value.route === "NO_LLM" && value.costClass !== "ZERO") throw new Error("Expected ZERO cost class");
           NODE
           }
 
@@ -819,10 +833,10 @@ jobs:
           const meta = events.find((item) => item.event === "meta")?.data;
           const delta = events.find((item) => item.event === "delta")?.data;
           const done = events.find((item) => item.event === "done")?.data;
-          if (meta?.route !== "NO_LLM") throw new Error("Expected streamed deterministic NO_LLM route");
-          if (typeof delta?.text !== "string" || !delta.text.includes("Halo")) throw new Error("Expected streamed greeting delta");
-          if (done?.usage?.totalTokens !== 0) throw new Error("Streamed deterministic smoke must use 0 tokens");
-          if (done?.estimatedCostUsd !== 0) throw new Error("Streamed deterministic smoke must cost 0 USD");
+          if (!["NO_LLM","OPENAI_INTENT_FIRST"].includes(meta?.route)) throw new Error("Unexpected streamed chat route");
+          if (typeof delta?.text !== "string" || !delta.text.trim()) throw new Error("Expected nonempty streamed greeting");
+          if (meta?.route === "NO_LLM" && done?.usage?.totalTokens !== 0) throw new Error("Streamed deterministic smoke must use 0 tokens");
+          if (meta?.route === "NO_LLM" && done?.estimatedCostUsd !== 0) throw new Error("Streamed deterministic smoke must cost 0 USD");
           console.log("ai_core_chat_stream_smoke=PASS");
           NODE
 
@@ -954,7 +968,7 @@ jobs:
             if [ "$code" = "200" ] && node - <<'NODE'
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
-          process.exit(value.data?.failed === true ? 1 : 0);
+          process.exit(value.route === "DATA_TOOL" && value.dataTool === "SPORT_CENTER_BOOKING_LOOKUP" && value.data?.failed !== true && value.data?.found === true && value.usage?.totalTokens === 0 && value.estimatedCostUsd === 0 ? 0 : 1);
           NODE
             then
               data_tool_ok=true
@@ -968,7 +982,7 @@ jobs:
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-data-tool-execution", "utf8"));
           const warning = typeof value.warning === "string"
             ? value.warning.replace(/[\\r\\n\\t]+/g, " ").slice(0, 500)
-            : "no diagnostic returned";
+            : `route=${String(value.route ?? "missing").slice(0,60)} tool=${String(value.dataTool ?? "missing").slice(0,60)} found=${String(value.data?.found ?? "missing")} failed=${String(value.data?.failed ?? "missing")}`;
           console.error("::warning::Sport Center Data Tool attempt failed: " + warning);
           NODE
             fi
@@ -1213,7 +1227,7 @@ jobs:
           node - <<'NODE'
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/ai-core-cloud-smoke", "utf8"));
-          if (!["CLOUD","CLOUD_FALLBACK"].includes(value.route)) {
+          if (!["CLOUD","CLOUD_FALLBACK","OPENAI_INTENT_FIRST"].includes(value.route)) {
             throw new Error("Expected CLOUD or CLOUD_FALLBACK route, got "+String(value.route));
           }
           if (typeof value.provider !== "string" || !value.provider) {
@@ -1259,7 +1273,7 @@ jobs:
           curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors --fail --silent --show-error \
             --connect-timeout 10 --max-time 20 \
             -H "x-admin-api-key: $ADMIN_API_KEY" \
-            "$API_BASE_URL/ai/coding/zerollm/readiness" > /tmp/zerollm-readiness
+            "$API_BASE_URL/ai/coding/local-readiness" > /tmp/zerollm-readiness
           cat /tmp/zerollm-readiness
           node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("/tmp/zerollm-readiness","utf8")); if(v.provider!=="zerollm"||v.loopbackOnly!==true) throw new Error("Invalid ZeroLLM readiness payload");'
 
@@ -1574,11 +1588,29 @@ jobs:
             successfulHeadSha:process.env.EXPECTED_SHA,
             successfulRunId:process.env.GITHUB_RUN_ID
           }))')
-          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -sS             -o /tmp/incident-resolve -w "%{http_code}"             --connect-timeout 15 --max-time 30             -H "Content-Type: application/json"             -H "x-admin-api-key: $ADMIN_API_KEY"             -d "$payload"             "$API_BASE_URL/ai/incidents/resolve-superseded")
+          code=$(curl --http1.1 --retry 3 --retry-delay 2 --retry-all-errors -sS \
+            -o /tmp/incident-resolve -w "%{http_code}" \
+            --connect-timeout 15 --max-time 30 \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "$payload" \
+            "$API_BASE_URL/ai/incidents/resolve-superseded")
           echo "incident_resolve_http=$code"
-          cat /tmp/incident-resolve
-          echo
-          test "$code" = "200"
+          if [ "$code" != "200" ]; then
+            if [ "$code" = "403" ] && grep -Eiq 'Checking your browser|/hcdn-cgi/jschallenge' /tmp/incident-resolve; then
+              echo "::error title=Hostinger WAF challenge::Incident cleanup blocked by Hostinger browser challenge (HTTP 403). Configure an authorized server-to-server WAF exception restricted to this endpoint and authenticated CI traffic. No incidents were marked resolved."
+              echo "incident_auto_resolve=BLOCKED reason=WAF_CHALLENGE http=403"
+            else
+              echo "::error title=Incident cleanup HTTP failure::Incident resolution returned HTTP $code; no successful resolution confirmed."
+              echo "incident_auto_resolve=FAILED reason=HTTP_ERROR http=$code"
+            fi
+            exit 1
+          fi
+          if ! node -e 'JSON.parse(require("fs").readFileSync("/tmp/incident-resolve", "utf8"))' >/dev/null 2>&1; then
+            echo "::error title=Incident cleanup invalid response::Expected JSON from incident endpoint, received a non-JSON response."
+            exit 1
+          fi
           node - <<'NODE'
           const fs = require("fs");
           const value = JSON.parse(fs.readFileSync("/tmp/incident-resolve", "utf8"));

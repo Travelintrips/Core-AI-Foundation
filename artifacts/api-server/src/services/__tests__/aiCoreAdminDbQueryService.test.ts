@@ -234,6 +234,24 @@ describe("AI Core admin database query service", () => {
     expect(extractAdminDbSemanticIntent("Bukan pendapatan maksudnya agent ai", context)).toBeNull();
   });
 
+  it("keeps conversational clarifications out of prior numeric DB aggregates", () => {
+    const context = [
+      { role: "user" as const, text: "berapa jumlah tenant" },
+      { role: "assistant" as const, text: "Jumlah tenant: 23." },
+    ];
+    for (const message of [
+      "halo",
+      "halo apa kabar",
+      "apa kabar",
+      "maksudnya 23 itu apa",
+      "Maksudnya 23 itu apa?",
+    ]) {
+      expect(extractAdminDbSemanticIntent(message, context)).toBeNull();
+    }
+    expect(extractAdminDbSemanticIntent("berapa jumlah tenant", context))
+      .toMatchObject({ aggregation: "count", domain: "tenant" });
+  });
+
   it("inherits metric and domain for short conversational follow-ups", () => {
     expect(
       extractAdminDbSemanticIntent("kalau minggu lalu?", [

@@ -22,16 +22,10 @@ const allowedDevDifferences = new Set([
   ".github/workflows/hostinger-dev-discovery.yml",
   ".replit",
   "artifacts/api-server/build.mjs",
-  "artifacts/api-server/src/app.ts",
-  "artifacts/api-server/src/index.ts",
-  "artifacts/api-server/src/lib/supabaseStorage.ts",
-  "artifacts/api-server/src/services/__tests__/codingConflictRegistryService.test.ts",
-  "artifacts/api-server/src/services/codingConflictRegistryService.ts",
   "deploy/dev-hostinger/Dockerfile",
   "deploy/dev-hostinger/docker-compose.yml",
   "deploy/hostinger-dev/Dockerfile",
   "deploy/hostinger-dev/Dockerfile.dockerignore",
-  "lib/db/src/env.ts",
 ]);
 
 export const requiredDevWorkflows = Object.freeze([
