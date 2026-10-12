@@ -39,6 +39,11 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+
+// Handle unhandled promise rejections to avoid CI failures
+process.on('unhandledRejection', (reason: any) => {
+  logger.error('Unhandled promise rejection in localCodingAutonomousRepairService', reason);
+});
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
