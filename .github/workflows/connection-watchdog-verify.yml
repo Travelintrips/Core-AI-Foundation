@@ -20,5 +20,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify connection watchdog decision engine
-        run: node --test deploy/ai-workers/connection-watchdog.test.mjs
+      - name: Verify watchdog decision and integration adapter
+        run: node --test deploy/ai-workers/connection-watchdog*.test.mjs
