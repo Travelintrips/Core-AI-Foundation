@@ -98,6 +98,16 @@ jobs:
           ACTION: ${{ steps.enqueue.outputs.action }}
         run: |
           set -euo pipefail
+          # Register a fresh, bounded subscription before awaiting terminal events.
+          # A read-only GET cannot create the missing subscription.
+          subscription_id="pc-safe-issue-$ISSUE_NUMBER"
+          curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-all-errors --retry-delay 2 \
+            --connect-timeout 10 --max-time 20 \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$(jq -nc --arg conversationId "$subscription_id" '{conversationId:$conversationId,eventTypes:["COMPLETED","FAILED"],leaseSeconds:300}')" \
+            "$API_BASE_URL/ai/coding/bridge/subscriptions" | jq -e '.subscription'
           status='PENDING_UNVERIFIED'
           for i in $(seq 1 24); do
             response="$(curl --fail-with-body --silent --show-error \
