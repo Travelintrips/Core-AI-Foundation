@@ -4,6 +4,8 @@ import {
   verifyPublishedPullRequest,
 } from "../localCodingGitHubPullRequestService.js";
 import type { GitHubApiClient } from "../localCodingGitHubPublisherService.js";
+// Placeholder for tests handling closed pull request state and edge cases
+
 
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
