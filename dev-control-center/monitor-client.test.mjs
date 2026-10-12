@@ -21,3 +21,9 @@ test("mutating controls are denied without role or safe transition",()=>{
  assert.equal(canOperate({principal:{roles:["dev.control"]},job,operation:"stop"}),true);
  assert.equal(canOperate({principal:{roles:["dev.control"]},job,operation:"retry"}),false);
 });
+
+test("monitor preserves distinct queued, capacity and active analysis states",()=>{
+ const states=["QUEUED","WAITING_FOR_WORKER","WAITING_FOR_CAPACITY","ANALYZING_RUNNING","RUNNING"];
+ const jobs=normalizeJobs({jobs:states.map((status,i)=>({id:`job-${i}`,application:"AI Core",status}))});
+ assert.deepEqual(jobs.map(j=>j.status),states);
+});

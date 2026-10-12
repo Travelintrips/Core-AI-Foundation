@@ -24,6 +24,7 @@ import { DEFAULT_TENANT_ID } from "../security/tenantResolution.js";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { logger } from "../lib/logger.js";
+import { isDevSafeRuntimeEnabled, isDevSmokeSchedule } from "./devRuntimeSafety.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,9 @@ export function calculateNextRun(schedule: {
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 export async function createSchedule(input: CreateScheduleInput): Promise<AiSchedule> {
+  if (isDevSafeRuntimeEnabled() && !isDevSmokeSchedule(input)) {
+    throw new Error("DEV sandbox only accepts tagged no-op test schedules.");
+  }
   const scheduleCode = `SCH-${randomUUID().slice(0, 8).toUpperCase()}`;
 
   const nextRunAt = calculateNextRun({
@@ -441,6 +445,8 @@ async function executeTarget(schedule: AiSchedule): Promise<{ createdJobId?: num
  */
 export async function executeDueSchedules(schedule: AiSchedule): Promise<"completed" | "failed" | "skipped"> {
   try {
+    // Direct run-now requests cannot bypass the DEV test-only policy.
+    if (isDevSafeRuntimeEnabled() && !isDevSmokeSchedule(schedule)) return "skipped";
     return await _executeDueSchedulesInner(schedule);
   } finally {
     // Defensive release: the success/failure branches below already clear
@@ -567,6 +573,7 @@ export async function runNow(id: number): Promise<AiSchedule> {
     // Only active schedules are eligible to run — paused/cancelled/completed/
     // failed schedules should never be executed by run-now.
     if (schedule.status !== "active") return "inactive" as const;
+    if (isDevSafeRuntimeEnabled() && !isDevSmokeSchedule(schedule)) return "unsafe" as const;
     // isRunning persists across the *entire* execution (not just this claim
     // transaction) — it's what catches a second run-now/tick fired while the
     // first execution is still in flight, after this transaction has
@@ -586,6 +593,9 @@ export async function runNow(id: number): Promise<AiSchedule> {
     const [existing] = await db.select().from(aiSchedulesTable).where(eq(aiSchedulesTable.id, id));
     if (!existing) throw new Error(`Schedule ${id} not found`);
     throw new Error(`Schedule ${id} is currently being executed by the scheduler — try again shortly`);
+  }
+  if (claimed === "unsafe") {
+    throw new Error("DEV sandbox blocks running non-smoke schedules.");
   }
   if (claimed === "inactive") {
     const [existing] = await db.select().from(aiSchedulesTable).where(eq(aiSchedulesTable.id, id));
@@ -719,6 +729,13 @@ async function _tickInner(): Promise<TickResult> {
             eq(aiSchedulesTable.status, "active"),
             eq(aiSchedulesTable.isRunning, false),
             lte(aiSchedulesTable.nextRunAt, new Date()),
+            // Do not claim even a legacy schedule unless its target is a tagged
+            // noop job. This prevents touching production-like imported rows.
+            isDevSafeRuntimeEnabled()
+              ? sql`${aiSchedulesTable.targetType} = 'create_job'
+                  AND ${aiSchedulesTable.targetConfigJson}->>'jobType' = 'noop'
+                  AND ${aiSchedulesTable.payloadJson}->>'_devSmoke' = 'true'`
+              : undefined,
           ),
         )
         .orderBy(aiSchedulesTable.nextRunAt)

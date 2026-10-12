@@ -13,26 +13,71 @@ function normalizedEnvironmentValue(value: unknown): string {
 export function isProductionDatabaseEnvironment(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return (
-    normalizedEnvironmentValue(env["NODE_ENV"]) === "production" ||
-    normalizedEnvironmentValue(env["APP_ENV"]) === "production"
-  );
+  const appEnv = normalizedEnvironmentValue(env["APP_ENV"]);
+  if (appEnv === "development" || appEnv === "dev") return false;
+  if (appEnv === "production" || appEnv === "prod") return true;
+  return normalizedEnvironmentValue(env["NODE_ENV"]) === "production";
 }
 
-function projectRefFromSupabaseUrl(env: NodeJS.ProcessEnv): string | null {
-  for (const key of ["SUPABASE_URL", "VITE_SUPABASE_URL"]) {
-    const value = env[key];
-    if (!value) continue;
-    try {
-      const host = new URL(value).hostname.toLowerCase();
-      const match = /^([a-z0-9-]+)\.supabase\.co$/.exec(host);
-      if (match?.[1]) return match[1];
-    } catch {
-      // Ignore malformed metadata URLs. The database URL validation below
-      // remains authoritative for the actual connection.
+function projectRefFromUrlValue(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    const direct = /^([a-z0-9-]+)\.supabase\.co$/.exec(host);
+    if (direct?.[1]) return direct[1];
+
+    if (host.endsWith(".pooler.supabase.com")) {
+      const parsed = new URL(value);
+      const username = decodeURIComponent(parsed.username);
+      const pooled = /^postgres\.([a-z0-9-]+)$/.exec(username);
+      if (pooled?.[1]) return pooled[1];
     }
+  } catch {
+    return null;
   }
   return null;
+}
+
+function projectRefFromSupabaseUrl(
+  env: NodeJS.ProcessEnv,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const projectRef = projectRefFromUrlValue(env[key]);
+    if (projectRef) return projectRef;
+  }
+  return null;
+}
+
+export function assertDevelopmentDatabaseIsolation(
+  databaseUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (isProductionDatabaseEnvironment(env)) return;
+
+  const expectedDevRef = projectRefFromSupabaseUrl(env, [
+    "SUPABASE_URL_DEV",
+    "VITE_SUPABASE_URL_DEV",
+  ]);
+  const activeDatabaseRef = projectRefFromUrlValue(databaseUrl);
+
+  if (!expectedDevRef) {
+    throw new Error(
+      "SUPABASE_URL_DEV (or VITE_SUPABASE_URL_DEV) must be set in development so the database project can be verified.",
+    );
+  }
+
+  if (!activeDatabaseRef) {
+    throw new Error(
+      "Development database URL must identify a Supabase project ref; refusing an unverifiable database connection.",
+    );
+  }
+
+  if (activeDatabaseRef !== expectedDevRef) {
+    throw new Error(
+      `Development database isolation violation: active project ${activeDatabaseRef} does not match configured DEV project ${expectedDevRef}.`,
+    );
+  }
 }
 
 export function normalizeProductionPoolerUrl(
@@ -43,11 +88,11 @@ export function normalizeProductionPoolerUrl(
     const parsed = new URL(value);
     if (!parsed.hostname.endsWith(".pooler.supabase.com")) return value;
 
-    // Supavisor's shared pooler requires the tenant/project ref in the
-    // username (postgres.<project-ref>). A direct-connection username of plain
-    // "postgres" otherwise reaches the pooler but fails authentication.
     if (parsed.username === "postgres") {
-      const projectRef = projectRefFromSupabaseUrl(env);
+      const projectRef = projectRefFromSupabaseUrl(env, [
+        "SUPABASE_URL",
+        "VITE_SUPABASE_URL",
+      ]);
       if (projectRef) parsed.username = `postgres.${projectRef}`;
     }
 
@@ -59,8 +104,6 @@ export function normalizeProductionPoolerUrl(
 
     return parsed.toString();
   } catch {
-    // Keep the original value; node-postgres will report a precise connection
-    // error if the supplied URL itself is malformed.
     return value;
   }
 }
@@ -83,5 +126,10 @@ export function resolveDatabaseUrl(
     );
   }
 
-  return isProduction ? normalizeProductionPoolerUrl(url, env) : url;
+  if (!isProduction) {
+    assertDevelopmentDatabaseIsolation(url, env);
+    return url;
+  }
+
+  return normalizeProductionPoolerUrl(url, env);
 }

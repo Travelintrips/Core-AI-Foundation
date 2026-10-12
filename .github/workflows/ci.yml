@@ -2,7 +2,8 @@ name: CI Verify
 
 on:
   push:
-    branches: [main]
+    # Full CI on DEV is required as release evidence; main keeps normal CI.
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
 
@@ -45,6 +46,10 @@ jobs:
         run: |
           pnpm run zerollm:verify
           python3 -m py_compile services/zerollm/server.py
+      - name: Verify DEV-first release policy (offline unit tests)
+        run: node --test scripts/verify-dev-first-release.test.mjs
+      - name: Verify bounded Hostinger DEV restart acceptance
+        run: node --test scripts/dev-hostinger-restart-fallback.test.mjs
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -71,7 +76,8 @@ jobs:
         run: echo '127.0.0.1 ci-test-only.pooler.supabase.com ci-test-only.supabase.co' | sudo tee -a /etc/hosts
       - name: Test
         env:
-          APP_ENV: development
+          # Leave APP_ENV unset: production-mode unit tests must be able to
+          # stub NODE_ENV=production without a global DEV override.
           SUPABASE_URL_DEV: https://ci-test-only.supabase.co
           SUPABASE_DEV_DATABASE_URL: postgresql://postgres.ci-test-only:postgres@ci-test-only.pooler.supabase.com:5432/ci_test
         run: pnpm run ci:test
@@ -136,6 +142,7 @@ jobs:
 
       - name: Report CI failure to incident inbox
         if: >-
+          github.ref == 'refs/heads/main' &&
           github.event_name != 'pull_request' &&
           (needs.static.result != 'success' ||
            needs.test.result != 'success' ||

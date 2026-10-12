@@ -3,13 +3,15 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
-import esbuildPluginPino from "esbuild-plugin-pino";
 import { rm } from "node:fs/promises";
 
-// Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
-globalThis.require = createRequire(import.meta.url);
+// Keep a CommonJS resolver available for bundled dependencies and worker entrypoints.
+const require = createRequire(import.meta.url);
+globalThis.require = require;
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const pinoDir = path.dirname(require.resolve("pino"));
+const threadStreamDir = path.dirname(require.resolve("thread-stream"));
 
 function resolveBuildCommitSha() {
   for (const candidate of [
@@ -40,6 +42,10 @@ async function buildAll() {
     entryPoints: {
       index: path.resolve(artifactDir, "src/index.ts"),
       "repository-analyzer-worker": path.resolve(artifactDir, "src/workers/repositoryAnalyzerWorker.ts"),
+      "thread-stream-worker": path.join(threadStreamDir, "lib/worker.js"),
+      "pino-worker": path.join(pinoDir, "lib/worker.js"),
+      "pino-file": path.join(pinoDir, "file.js"),
+      "pino-pretty": require.resolve("pino-pretty"),
     },
     platform: "node",
     bundle: true,
@@ -140,10 +146,6 @@ async function buildAll() {
     define: {
       "process.env.CST_BUILD_COMMIT_SHA": JSON.stringify(buildCommitSha),
     },
-    plugins: [
-      // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
-    ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
       js: `import { createRequire as __bannerCrReq } from 'node:module';
@@ -153,6 +155,13 @@ import __bannerUrl from 'node:url';
 globalThis.require = __bannerCrReq(import.meta.url);
 globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
 globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
+globalThis.__bundlerPathsOverrides = {
+  ...(globalThis.__bundlerPathsOverrides || {}),
+  'thread-stream-worker': __bannerPath.join(globalThis.__dirname, 'thread-stream-worker.mjs'),
+  'pino/file': __bannerPath.join(globalThis.__dirname, 'pino-file.mjs'),
+  'pino-worker': __bannerPath.join(globalThis.__dirname, 'pino-worker.mjs'),
+  'pino-pretty': __bannerPath.join(globalThis.__dirname, 'pino-pretty.mjs'),
+};
     `,
     },
   });

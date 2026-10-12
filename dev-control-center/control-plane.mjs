@@ -8,7 +8,7 @@ import { Router } from "express";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { validateSeparation, canApproveRelease } from "./policy.mjs";
 
-const STATES = new Set(["QUEUED", "RUNNING", "BLOCKED", "FAILED", "COMPLETED", "CANCELLED"]);
+const STATES = new Set(["QUEUED", "WAITING_FOR_WORKER", "WAITING_FOR_CAPACITY", "ANALYZING_RUNNING", "RUNNING", "BLOCKED", "FAILED", "COMPLETED", "CANCELLED"]);
 const ACTIONS = new Set(["stop", "restart", "retry"]);
 const SAFE_ID = /^[a-zA-Z0-9_-]{1,100}$/;
 const SAFE_SHA = /^[0-9a-f]{40}$/;

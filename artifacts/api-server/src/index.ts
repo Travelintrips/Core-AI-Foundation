@@ -40,6 +40,8 @@ if (process.env["NODE_ENV"] === "production") {
 // ── Step 3: Dynamic imports — all env-dependent modules load here ─────────────
 const { default: app }              = await import("./app.js");
 const { logger }                    = await import("./lib/logger.js");
+const { assertDevSafeRuntimeConfiguration } = await import("./services/devRuntimeSafety.js");
+assertDevSafeRuntimeConfiguration();
 const jobDispatcher                 = await import("./services/jobDispatcherService.js");
 const scheduler                     = await import("./services/aiSchedulerService.js");
 const sseManager                    = await import("./services/sseManager.js");
@@ -108,6 +110,22 @@ async function runStartupStep(
 }
 
 async function initializeRuntimeServices(): Promise<void> {
+  const devBackgroundRuntimeDisabled =
+    !isProductionRuntime() &&
+    process.env["AI_DEV_BACKGROUND_RUNTIME_ENABLED"] === "false";
+
+  if (devBackgroundRuntimeDisabled) {
+    try {
+      await pool.query("SELECT 1");
+      logger.info(
+        "[startup] DEV background runtime disabled; HTTP/API remains available without autonomous workers or schedulers",
+      );
+    } catch (err) {
+      logger.error({ err }, "[startup] DEV database connectivity check failed");
+    }
+    return;
+  }
+
   // A bad production database credential is not transient. Starting every
   // database-backed poller in that state creates a retry storm that can keep
   // Supavisor's authentication circuit breaker open. Keep HTTP liveness and
@@ -207,7 +225,7 @@ async function initializeRuntimeServices(): Promise<void> {
   const dispatcherFlag = process.env["AI_DISPATCHER_ENABLED"];
   const dispatcherEnabled = isProduction
     ? productionWorkersAllowed && dispatcherFlag === "true"
-    : true;
+    : dispatcherFlag !== "false";
 
   if (dispatcherEnabled) {
     try {
@@ -232,7 +250,7 @@ async function initializeRuntimeServices(): Promise<void> {
   const schedulerFlag = process.env["AI_SCHEDULER_ENABLED"];
   const schedulerEnabled = isProduction
     ? productionWorkersAllowed && schedulerFlag === "true"
-    : true;
+    : schedulerFlag !== "false";
 
   const pollIntervalMs = Number(process.env["AI_SCHEDULER_POLL_INTERVAL_MS"]);
   const timezone = process.env["AI_SCHEDULER_TIMEZONE"];

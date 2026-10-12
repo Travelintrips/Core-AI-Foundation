@@ -32,7 +32,7 @@ jobs:
           set -euo pipefail
           test -n "$ADMIN_API_KEY"
           instruction='Audit AI Core Chat pada repository Core-AI-Foundation. Cari satu masalah kecil tetapi nyata pada reliability atau error handling yang aman untuk diperbaiki. Analisis penyebabnya, buat rencana kerja, bagi pekerjaan ke agent/worker yang sesuai bila diperlukan, implementasikan perbaikannya, tambahkan atau perbarui regression test, jalankan verification yang relevan, lalu laporkan hasil akhirnya beserta bukti test. Jangan melakukan perubahan production yang destruktif dan jangan melewati approval gate yang diwajibkan.'
-          jq -nc --arg m "$instruction" '{message:$m,mode:"agent",modelPolicy:"auto",projectName:"AI Core",repository:"Travelintrips/Core-AI-Foundation",branch:"main",conversationId:"live-coding-delegation-20260930"}' > /tmp/request.json
+          jq -nc --arg m "$instruction" '{message:$m,mode:"agent",modelPolicy:"auto",projectName:"AI Core",repository:"Travelintrips/Core-AI-Foundation",branch:"develop",conversationId:"live-coding-delegation-20260930"}' > /tmp/request.json
           code=""
           for attempt in $(seq 1 5); do
             code=$(curl -sS --connect-timeout 10 --max-time 90 -o /tmp/response.json -w "%{http_code}" \

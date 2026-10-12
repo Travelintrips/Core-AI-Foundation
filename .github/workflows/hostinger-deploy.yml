@@ -24,7 +24,7 @@ on:
           - "false"
   workflow_run:
     workflows:
-      - CI Verify
+      - Hostinger Node.js Deploy
     types:
       - completed
     branches:

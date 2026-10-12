@@ -21,6 +21,7 @@ import {
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { ensureGcpCodingWorkerStarted } from "../services/gcpCodingWorkerLifecycleService.js";
 import { logger } from "../lib/logger.js";
+import { resolveNewCodingJobBranch } from "../services/devFirstCodingBranchPolicy.js";
 import {
   approveAndValidateLocalPatch,
   LocalPatchApprovalError,
@@ -707,13 +708,21 @@ router.post("/ai/coding/tasks", async (req, res): Promise<void> => {
     return;
   }
 
+  let branch: string | undefined;
+  try {
+    branch = resolveNewCodingJobBranch(parsed.data.repository, parsed.data.branch);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Invalid coding base branch." });
+    return;
+  }
+
   const [task] = await db
     .insert(aiCodingTasksTable)
     .values({
       taskNumber: createTaskNumber(),
       projectName: parsed.data.projectName,
       repository: parsed.data.repository,
-      branch: parsed.data.branch,
+      branch: branch!,
       instruction: parsed.data.instruction,
       priority: parsed.data.priority,
       status: "PENDING",
