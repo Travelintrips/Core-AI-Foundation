@@ -126,6 +126,30 @@ describe("AI Core MCP discovery compatibility", () => {
     expect(response.headers["www-authenticate"]).toContain("ai_core.events");
   });
 
+
+  it("advertises get_profile with the profile OAuth scope and ChatGPT profile metadata", async () => {
+    const response = await request(app())
+      .post("/api/ai/core-chat/mcp")
+      .send({ jsonrpc: "2.0", id: 49, method: "tools/list" });
+
+    expect(response.status).toBe(200);
+    const profile = response.body.result.tools.find((tool: { name: string }) => tool.name === "get_profile");
+    expect(profile).toBeDefined();
+    expect(profile.securitySchemes).toEqual([{ type: "oauth2", scopes: ["profile"] }]);
+    expect(profile._meta).toMatchObject({ "openai/profile": true });
+    expect(profile.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+  });
+
+  it("challenges unauthenticated get_profile calls with the profile scope", async () => {
+    const response = await request(app())
+      .post("/api/ai/core-chat/mcp")
+      .send({ jsonrpc: "2.0", id: 50, method: "tools/call", params: { name: "get_profile", arguments: {} } });
+
+    expect(response.status).toBe(401);
+    expect(response.headers["www-authenticate"]).toContain("profile");
+    expect(response.body.error).toBeDefined();
+  });
+
   it("continues to expose AI Core tools", async () => {
     const response = await request(app())
       .post("/api/ai/core-chat/mcp")
