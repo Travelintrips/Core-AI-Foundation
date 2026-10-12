@@ -78,6 +78,7 @@ jobs:
             --arg stale "${upstream_stale}" \
             '{eventId:$eventId,source:"github",resource:$resource,status:"COMPLETED",details:("stale_main_sha="+$stale),summary:"CI Verify for a main push succeeded. Diagnostic-only handoff, possibly stale; verify current required checks before any action. Never authorize changes based on this event.",observedAt:$observedAt,conversationId:$conversationId}')"
           response="$(curl --fail-with-body -sS --connect-timeout 10 --max-time 30 \
+            --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 150 \
             -H "Authorization: Bearer $AGENT_TOKEN" \
             -H "Content-Type: application/json" \
             --data "$payload" \
