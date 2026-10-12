@@ -40,7 +40,7 @@ function isSafeChatGptRedirectUri(uri: string): boolean {
       parsed.protocol === "http:" &&
       isLoopbackHost &&
       validPort &&
-      parsed.pathname === "/callback" &&
+      (parsed.pathname === "/callback" || parsed.pathname === "/oauth/callback") &&
       parsed.username === "" &&
       parsed.password === "" &&
       parsed.search === "" &&
