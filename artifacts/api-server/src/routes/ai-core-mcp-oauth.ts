@@ -328,6 +328,10 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
 
 
 router.get("/api/ai/core-chat/oauth/pair/wait", async (req, res): Promise<void> => {
+  // Pairing state changes asynchronously; stale 304 responses can keep OAuth waiting.
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   const id = readString(req.query["id"]);
   const pairing = id ? await getMcpOauthPairing(id) : null;
   if (!pairing) {
