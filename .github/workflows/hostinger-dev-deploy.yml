@@ -112,6 +112,7 @@ jobs:
                 {key:"APP_ENV",value:"development"},
                 {key:"NODE_ENV",value:"development"},
                 {key:"SERVE_FRONTEND",value:"true"},
+                {key:"SERVE_STATIC_FRONTEND",value:"true"},
                 {key:"PORT",value:"3000"},
                 {key:"BASE_PATH",value:"/"},
                 {key:"HOSTINGER_FRONTEND",value:"ai-platform"},
