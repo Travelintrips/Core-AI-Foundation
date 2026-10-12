@@ -49,7 +49,8 @@ function publicPortalBaseUrl(req: import("express").Request): string {
     : "";
   const rawHost = forwardedHost || req.get("host") || "";
   const hostname = rawHost.replace(/:\d+$/, "").toLowerCase();
-  if (process.env["NODE_ENV"] === "production" && TRUSTED_PORTAL_HOSTS.has(hostname)) {
+  const oauthHostname = (() => { try { return new URL(process.env["AI_CORE_PUBLIC_BASE_URL"] ?? "https://mcp.cstlogistic.co.id").hostname; } catch { return ""; } })();
+  if (hostname === oauthHostname || (process.env["NODE_ENV"] === "production" && TRUSTED_PORTAL_HOSTS.has(hostname))) {
     return `https://${hostname}`;
   }
   return (process.env["PUBLIC_APP_URL"] ?? "https://aicore.cstlogistic.co.id").replace(/\/$/, "");
@@ -199,7 +200,7 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   if (!user || user.status !== "active") { res.json(generic); return; }
 
   const token = issueMagicLoginToken(user.id);
-  const baseUrl = publicPortalBaseUrl(req);
+  const baseUrl = (process.env["AI_CORE_PUBLIC_BASE_URL"] || publicPortalBaseUrl(req)).replace(/\/$/, "");
   const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
   const sent = await sendEmail({
     to: user.email,

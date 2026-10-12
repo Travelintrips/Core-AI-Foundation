@@ -102,7 +102,7 @@ function renderAuthorizePage(
       : `<p><strong>Session AI Core terdeteksi.</strong></p>`
     : `<p><strong>Session AI Core belum terdeteksi.</strong></p>
        <p class="muted">Buka AI Core dan pastikan Anda sudah login di browser ini, lalu kembali ke halaman ini dan refresh.</p>
-       <p><a href="/login" target="_blank" rel="noopener noreferrer">Buka Login AI Core</a></p>`;
+       <p><a href="/api/ai/core-chat/oauth/login" target="_blank" rel="noopener noreferrer">Buka Login AI Core</a></p>`;
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hubungkan AI Core</title><style>body{font-family:system-ui;max-width:560px;margin:48px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:6px}input{padding:10px}button{padding:11px 16px;font-weight:600}li{margin:6px 0}.muted{color:#666}</style></head><body>
   <h1>Hubungkan ChatGPT ke AI Core</h1>
   <p>ChatGPT meminta akses ke AI Core internal.</p>
@@ -217,6 +217,21 @@ router.post("/api/ai/core-chat/oauth/register", (req, res): void => {
       error: message === "invalid_redirect_uri" ? "invalid_redirect_uri" : "invalid_client_metadata",
     });
   }
+});
+
+// MCP is hosted on a dedicated subdomain, without the normal app /login UI.
+// Reuse the existing rate-limited internal authentication endpoint on this origin;
+// its host-only session cookie is then visible to OAuth pairing approval.
+router.get("/api/ai/core-chat/oauth/login", (_req, res): void => {
+  res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Core MCP</title>
+<style>body{font:16px system-ui;max-width:460px;margin:56px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:5px}input{padding:10px}button{padding:12px;font-weight:bold}.muted{color:#555}</style></head><body>
+<h1>Login AI Core MCP</h1><p>Masuk dengan akun internal AI Core untuk menyetujui koneksi ChatGPT.</p>
+<form method="post" action="/api/internal/auth/login" autocomplete="on">
+<label>Email<input type="email" name="email" autocomplete="username" required></label>
+<label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+<button type="submit">Masuk</button></form>
+<h2>Login melalui email</h2><form method="post" action="/api/internal/auth/request-magic-link"><label>Email akun AI Core<input type="email" name="email" autocomplete="email" required></label><button type="submit">Kirim tautan login ke email</button></form><p class="muted">Tautan berlaku 10 menit. Setelah membukanya di browser yang sama, kembali ke halaman persetujuan OAuth dan muat ulang.</p>
+</body></html>`);
 });
 
 router.get("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> => {
@@ -353,7 +368,7 @@ router.get("/api/ai/core-chat/oauth/pair/approve", async (req, res): Promise<voi
   const code = readString(req.query["code"]);
   const user = await resolveSessionUser(req);
   if (!user) {
-    res.status(401).type("html").send(`<p>Session AI Core belum terdeteksi di browser ini.</p><p><a href="/login" target="_blank" rel="noopener noreferrer">Login ke AI Core</a>, lalu buka kembali URL approval ini.</p><p>Kode pairing: <strong>${escapeHtml(code)}</strong></p>`);
+    res.status(401).type("html").send(`<p>Session AI Core belum terdeteksi di browser ini.</p><p><a href="/api/ai/core-chat/oauth/login" target="_blank" rel="noopener noreferrer">Login ke AI Core</a>, lalu buka kembali URL approval ini.</p><p>Kode pairing: <strong>${escapeHtml(code)}</strong></p>`);
     return;
   }
   if (!code) {
