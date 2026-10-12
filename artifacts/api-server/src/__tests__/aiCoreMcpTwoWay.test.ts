@@ -73,7 +73,7 @@ describe("MCP command two-way routing", () => {
     expect(response.body.result.structuredContent).toMatchObject({
       kind: "answer",
       route: "MCP_DISCOVERY",
-      toolCount: 9,
+      toolCount: 10,
       source: "LIVE_MCP_TOOL_REGISTRY",
       tools: [
         "query_ai_core",
@@ -84,6 +84,7 @@ describe("MCP command two-way routing", () => {
         "read_ai_core_events",
         "ack_ai_core_event",
         "unsubscribe_ai_core_events",
+        "handshake_ai_core",
         "get_profile",
       ],
       events: ["ai_core.task.terminal"],
