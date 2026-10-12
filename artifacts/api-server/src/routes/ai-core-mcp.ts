@@ -305,7 +305,9 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
 
   try {
     const verified = await verifyMcpAccessToken(supplied);
-    if (!connectorKey) return null;
+    // OAuth profile authentication must not depend on the optional legacy
+    // connector key. Commands using the internal connector still fail closed
+    // downstream when that key is absent.
     return {
       kind: "oauth",
       connectorKey,
