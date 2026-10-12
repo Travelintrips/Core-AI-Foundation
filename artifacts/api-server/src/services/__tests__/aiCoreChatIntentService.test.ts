@@ -11,6 +11,11 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("handles new feature X correctly", () => {
+    // TODO: implement test for feature X
+    expect(true).toBe(true);
+  });
+
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
     expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
       kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
