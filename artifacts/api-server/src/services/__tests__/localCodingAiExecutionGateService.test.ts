@@ -41,6 +41,21 @@ vi.mock("../aiSecretService.js", () => ({
 const execFileAsync = promisify(execFile);
 const cleanup: string[] = [];
 
+describe('localCodingAiExecutionGateService null and normal operation', () => {
+  it('should throw error when required parameter is null', () => {
+    // Attempt to invoke with null should throw
+    // @ts-expect-error testing null input
+    expect(() => invokeConstrainedAiProposal(null)).toThrow();
+  });
+
+  it('should process proposal successfully with valid input', async () => {
+    // Provide a dummy valid input object
+    const dummyInput = { proposal: {}, bindings: {} } as any;
+    const result = await invokeConstrainedAiProposal(dummyInput);
+    expect(result).toBeDefined();
+  });
+});
+
 async function git(root: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", args, {
     cwd: root,
