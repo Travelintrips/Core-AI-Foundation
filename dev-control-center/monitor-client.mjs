@@ -3,7 +3,7 @@
  * Never stores tokens, never uses production API fallback.
  * Backend must expose /api/dev-center behind established same-origin session auth.
  */
-export const VALID_JOB_STATES = Object.freeze(["QUEUED","WAITING_FOR_WORKER","RUNNING","BLOCKED","FAILED","COMPLETED","CANCELLED"]);
+export const VALID_JOB_STATES = Object.freeze(["QUEUED","WAITING_FOR_WORKER","WAITING_FOR_CAPACITY","ANALYZING_RUNNING","RUNNING","BLOCKED","FAILED","COMPLETED","CANCELLED"]);
 export function normalizeJobs(payload) {
  if (!payload || !Array.isArray(payload.jobs)) throw new Error("INVALID_JOBS_RESPONSE");
  return payload.jobs.slice(0,50).filter(j=>j && typeof j.id==="string" && VALID_JOB_STATES.includes(j.status))
