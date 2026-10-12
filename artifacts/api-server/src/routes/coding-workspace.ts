@@ -1481,4 +1481,13 @@ router.patch("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   res.json(UpdateCodingTaskResponse.parse(task));
 });
 
+router.use((err, req, res, next) => {
+  if (err.message.includes('PROVIDER_BAD_REQUEST')) {
+    logger.error({ err }, 'AI provider bad request encountered');
+    res.status(502).json({ error: 'AI model provider bad request' });
+  } else {
+    next(err);
+  }
+});
+
 export default router;
