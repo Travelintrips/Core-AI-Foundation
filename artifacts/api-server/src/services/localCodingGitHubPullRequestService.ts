@@ -48,9 +48,10 @@ export interface PullRequestMergeResult {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
+  if (!(value && typeof value === "object" && !Array.isArray(value))) {
+    throw new GitHubPublisherError(`Expected object, got ${typeof value}`);
+  }
+  return value as Record<string, unknown>;
 }
 
 function stringValue(value: unknown): string {
