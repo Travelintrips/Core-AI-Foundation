@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+if (!execFile) { throw new Error("execFile is undefined"); }
+
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { promisify } from "node:util";
