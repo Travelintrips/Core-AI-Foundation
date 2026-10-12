@@ -274,7 +274,7 @@ function tailText(value, maxChars) {
 async function runDirectMonitoring(work) {
   const operation = String(work?.metadata?.directOperation || "").trim();
   const destinations = {
-    "ai-core-health": "http://ai-core-backend:3000/api/health",
+    "ai-core-health": "http://core-ai-dev:3000/api/health",
     "github-repository": "https://api.github.com/repos/Travelintrips/Core-AI-Foundation/actions/runs?per_page=1",
     "hostinger-deployment": "https://aicore.cstlogistic.co.id/api/health",
   };
