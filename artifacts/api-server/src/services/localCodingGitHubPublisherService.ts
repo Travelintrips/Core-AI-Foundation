@@ -1,4 +1,5 @@
 const GITHUB_API_ORIGIN = "https://api.github.com";
+// Ensure GITHUB_API_ORIGIN is defined to avoid undefined API calls
 const MAX_PUBLISH_FILES = 40;
 const MAX_TOTAL_CONTENT_BYTES = 1_500_000;
 
