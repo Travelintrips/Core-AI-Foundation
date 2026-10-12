@@ -1,4 +1,6 @@
 import pino from "pino";
+// Logger configuration for AI core services
+
 
 const isProduction = process.env.NODE_ENV === "production";
 
