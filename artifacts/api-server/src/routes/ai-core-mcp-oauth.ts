@@ -219,6 +219,23 @@ router.post("/api/ai/core-chat/oauth/register", (req, res): void => {
   }
 });
 
+// MCP is hosted on a dedicated subdomain, without the normal app /login UI.
+// Reuse the existing rate-limited internal authentication endpoint on this origin;
+// its host-only session cookie is then visible to OAuth pairing approval.
+router.get("/login", (req, res, next): void => {
+  const mcpHost = new URL(oauthIssuer()).hostname;
+  if (req.hostname !== mcpHost) { next(); return; }
+  res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Core MCP</title>
+<style>body{font:16px system-ui;max-width:460px;margin:56px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:5px}input{padding:10px}button{padding:12px;font-weight:bold}.muted{color:#555}</style></head><body>
+<h1>Login AI Core MCP</h1><p>Masuk dengan akun internal AI Core untuk menyetujui koneksi ChatGPT.</p>
+<form method="post" action="/api/internal/auth/login" autocomplete="on">
+<label>Email<input type="email" name="email" autocomplete="username" required></label>
+<label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+<button type="submit">Masuk</button></form>
+<p class="muted">Setelah login berhasil dan respons akun ditampilkan, kembali ke tab persetujuan OAuth lalu muat ulang halaman. Jangan bagikan respons login kepada pihak lain.</p>
+</body></html>`);
+});
+
 router.get("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void> => {
   const params = oauthParams(req.query as Record<string, unknown>);
   const error = validateAuthorizationRequest(params);
