@@ -55,6 +55,76 @@ const EnqueueBody      = CreateJobBody;
 const ListJobsQuery    = ListJobsQueryParams;
 const ReprioritizeBody = ReprioritizeJobBody;
 
+// Authenticated DEV-only monitor page. Both assets and data use the same
+// global /api authentication boundary; nothing is exposed as public static HTML.
+router.get("/dev-center/dashboard", (_req, res): void => {
+  if (process.env["APP_ENV"] !== "development") {
+    res.sendStatus(404);
+    return;
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.type("html").send(
+    '<!doctype html><html lang="id"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>AI Core DEV - Job Monitor</title>' +
+    '<link rel="stylesheet" href="/api/dev-center/dashboard.css"></head>' +
+    '<body><main><header><h1>AI Core DEV - Job Monitoring</h1>' +
+    '<p>Data job read-only dari database DEV. Refresh otomatis setiap 15 detik.</p>' +
+    '<p id="connection" role="status" aria-live="polite">Memuat...</p></header>' +
+    '<section aria-label="Ringkasan"><div id="totals" class="totals"></div></section>' +
+    '<section aria-label="Daftar job"><div class="table-wrap"><table>' +
+    '<thead><tr><th>Job ID</th><th>Aplikasi / Tipe</th><th>Status</th><th>Terakhir diperbarui</th></tr></thead>' +
+    '<tbody id="jobs"><tr><td colspan="4">Memuat job DEV...</td></tr></tbody>' +
+    '</table></div></section></main>' +
+    '<script src="/api/dev-center/dashboard.js" defer></script></body></html>'
+  );
+});
+
+router.get("/dev-center/dashboard.css", (_req, res): void => {
+  if (process.env["APP_ENV"] !== "development") {
+    res.sendStatus(404);
+    return;
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.type("css").send(
+    ':root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0d1526;color:#eef4fc}' +
+    'body{margin:0}main{max-width:1160px;margin:0 auto;padding:32px 20px}' +
+    'header{margin-bottom:24px}h1{font-size:26px}p{color:#b9c8de}' +
+    '.totals{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}' +
+    '.metric{background:#1b2c46;border:1px solid #304a66;padding:14px;border-radius:10px}' +
+    '.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#142239}' +
+    'th,td{text-align:left;padding:12px;border-bottom:1px solid #30425d;white-space:nowrap}' +
+    'th{color:#c4d4e7}#connection{font-weight:600}'
+  );
+});
+
+router.get("/dev-center/dashboard.js", (_req, res): void => {
+  if (process.env["APP_ENV"] !== "development") {
+    res.sendStatus(404);
+    return;
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.type("javascript").send(
+    '(function(){"use strict";' +
+    'const status=document.getElementById("connection"),body=document.getElementById("jobs"),totals=document.getElementById("totals");' +
+    'function cell(tr,v){const el=document.createElement("td");el.textContent=String(v??"");tr.appendChild(el);}' +
+    'async function refresh(){if(document.hidden)return;' +
+    'try{const r=await fetch("/api/dev-center/jobs",{credentials:"same-origin",cache:"no-store",headers:{"Accept":"application/json"}});' +
+    'if(r.status===401||r.status===403)throw new Error("Sesi admin tidak valid. Login kembali.");' +
+    'if(!r.ok)throw new Error("API job tidak tersedia (HTTP "+r.status+").");' +
+    'const p=await r.json();if(!Array.isArray(p.jobs))throw new Error("Format respons tidak valid.");' +
+    'body.replaceChildren();totals.replaceChildren();' +
+    'const counts=new Map();for(const j of p.jobs)counts.set(j.status,(counts.get(j.status)||0)+1);' +
+    'for(const [name,n] of counts){const d=document.createElement("div");d.className="metric";d.textContent=name+": "+n;totals.append(d);}' +
+    'for(const j of p.jobs){const row=document.createElement("tr");cell(row,j.id);cell(row,j.application);cell(row,j.status);' +
+    'cell(row,j.updatedAt?new Date(j.updatedAt).toLocaleString("id-ID"):"-");body.append(row);}' +
+    'if(!p.jobs.length){const row=document.createElement("tr");const td=document.createElement("td");td.colSpan=4;td.textContent="Tidak ada job DEV.";row.append(td);body.append(row);}' +
+    'status.textContent="Terhubung ke DEV - "+new Date().toLocaleTimeString("id-ID")+" (maksimum 50 job terbaru)";' +
+    '}catch(e){status.textContent="Gagal: "+e.message;}}' +
+    'refresh();setInterval(refresh,15000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});})();'
+  );
+});
+
 // Read-only, minimal DEV Control Center monitor endpoint.
 // The global /api admin/session middleware protects this route.
 router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
