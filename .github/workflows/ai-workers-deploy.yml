@@ -8,7 +8,7 @@ on:
         required: true
         default: main
         type: string
-  # VPS releases are manual after DEV worker E2E; verify-only does not deploy.
+  # Automatic deploy on CI is disabled; require approved DEV-first promotion.
 
 permissions:
   contents: read
@@ -20,13 +20,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main'
-      )
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ai-workers-vps
@@ -34,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Resolve exact deployment commit
@@ -46,25 +40,17 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Deploying exact commit: $sha"
 
-      # Manual dispatch cannot target arbitrary refs; the VPS is production.
-      # No credentials or deployment side effects happen until DEV evidence passes.
-      - name: Block worker VPS deployment without tested DEV promotion
+      - name: Block VPS deployment unless DEV release evidence is verified
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ steps.target.outputs.sha }}
-          REQUESTED_REF: ${{ inputs.ref || 'main' }}
+          REQUESTED_REF: ${{ inputs.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "$REQUESTED_REF" != "main" ]; then
-            echo "::error::Production VPS worker deployment must target main, never a DEV branch."
-            exit 1
-          fi
+          test "$REQUESTED_REF" = main || { echo "::error::Only the approved main commit may deploy to VPS"; exit 1; }
           current_main=$(git ls-remote origin refs/heads/main | awk '{print $1}')
-          if [ "$TARGET_SHA" != "$current_main" ]; then
-            echo "::error::Worker deployment commit is not current main."
-            exit 1
-          fi
+          test "$current_main" = "$TARGET_SHA" || { echo "::error::Stale or non-main VPS deploy blocked"; exit 1; }
           node scripts/verify-dev-first-release.mjs "$TARGET_SHA"
 
       - name: Configure SSH

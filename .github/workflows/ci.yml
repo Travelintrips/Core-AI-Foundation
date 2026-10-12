@@ -34,6 +34,14 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify AI Core command trigger
         run: node --test scripts/ai-core-command.test.mjs
+      - name: Verify fail-closed DEV-first production promotion
+        run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
+      - name: Verify GitHub event correlation contract
+        run: node --test scripts/github-event-correlation.test.mjs
+      - name: Verify bounded PostgreSQL pool cap
+        run: node --test scripts/pg-pool-max.test.mjs
+      - name: Verify Hostinger runtime diagnostics redact sensitive log content
+        run: node --test scripts/hostinger-runtime-classify.test.mjs
       - name: Verify ZeroLLM deployment scripts
         run: |
           pnpm run zerollm:verify
@@ -187,7 +195,7 @@ jobs:
   dispatch-verified-deploy:
     name: Dispatch deploy after verified main CI
     needs: finalize
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.finalize.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.finalize.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -210,7 +218,7 @@ jobs:
               return;
             }
 
-            // workflow_dispatch is an allowed GITHUB_TOKEN chaining event.
+            // Dispatch after successful main CI on push or manual CI rerun.
             // Unlike eager post-merge dispatch, all CI gates passed before
             // this dispatch. The deploy workflow also rechecks main freshness.
             await github.rest.actions.createWorkflowDispatch({

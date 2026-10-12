@@ -26,6 +26,7 @@ import {
   validateAndApplyAiProposal,
 } from "../localCodingAiExecutionGateService.js";
 import type { ProductionCodingModelSelection } from "../localCodingAiProductionModelService.js";
+import { LOCAL_CODING_AI_PROMPT_LIMITS, buildLocalCodingAiPrompt } from "../localCodingAiPromptBuilderService.js";
 
 const runtimeFallback = vi.hoisted(() => ({ resolve: vi.fn() }));
 
@@ -639,6 +640,27 @@ describe("Local Coding AI Execution Gate integration", () => {
     );
     expect(await git(root, ["rev-parse", "HEAD"])).toBe(head);
   });
+
+  it.each([1, 6, 12, 16, 80])(
+    "keeps Proposal Contract V1 allowedFiles identical to the bounded model prompt with %s candidates",
+    (candidateCount) => {
+      const lease = leaseFixture("a".repeat(40));
+      const candidates = Array.from({ length: candidateCount }, (_, index) =>
+        "src/feature-" + String(index + 1).padStart(2, "0") + ".ts"
+      );
+      lease.package.allowedFiles = candidates;
+      const binding = buildAiProposalBinding(lease);
+      const prompt = buildLocalCodingAiPrompt(lease);
+      const modelContext = JSON.parse(prompt.user) as { contractBinding?: { allowedFiles?: string[] } };
+      const expected = candidates.slice(0, LOCAL_CODING_AI_PROMPT_LIMITS.maxAllowedFiles);
+      expect(binding.allowedFiles).toEqual(expected);
+      expect(binding.allowedFiles.length).toBeLessThanOrEqual(12);
+      expect(modelContext.contractBinding?.allowedFiles).toEqual(expected);
+      // The original handoff can still retain broader context; the model
+      // cannot acquire rights to edit the extra files by binding mismatch.
+      expect(lease.package.allowedFiles).toHaveLength(candidateCount);
+    },
+  );
 
   it("bridges Contract V1 operations into policy and patch applier formats deterministically", async () => {
     const { head } = await repositoryFixture();

@@ -61,6 +61,7 @@ jobs:
             case "$file" in
               artifacts/ai-platform/*|artifacts/ai-platform/**/*|\
               lib/*|lib/**/*|\
+              artifacts/api-server/src/services/localCodingGithubWebhookService.ts|\
               package.json|pnpm-lock.yaml|pnpm-workspace.yaml|\
               tsconfig.json|tsconfig.*.json|turbo.json|\
               .github/workflows/pr-fast-verify.yml)
@@ -74,6 +75,14 @@ jobs:
           echo "run_ai_platform=$run_ai_platform" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
           echo "pr_fast_scope=$([ "$run_ai_platform" = "true" ] && echo RUN || echo SKIP) reason=$reason"
+
+      - name: Verify GitHub webhook handler when changed
+        if: contains(steps.scope.outputs.reason, 'localCodingGithubWebhookService.ts')
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s artifacts/api-server/src/services/localCodingGithubWebhookService.ts
+          echo "Webhook handler change detected; backend typecheck and test suite must also pass in CI Verify."
 
       - name: Setup pnpm
         if: steps.scope.outputs.run_ai_platform == 'true'

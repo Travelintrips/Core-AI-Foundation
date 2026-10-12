@@ -1,3 +1,4 @@
+import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
@@ -135,6 +136,18 @@ export function hasVerifiedCompletionEvidence(input: {
   runs: Array<{ agentName?: string | null; status?: string | null }>;
 }): boolean {
   if (input.nextAction !== "DONE") return false;
+
+  // A read-only analyzer smoke is a terminal deliverable when the complete
+  // Coding Orchestrator run produced an explicit DONE analysis with no writes.
+  // Ordinary coding jobs retain their stricter commit/merge/test gates.
+  if (isRepositoryAnalyzerVerificationOnlyInstruction(input.instruction)) {
+    const orchestration = isRecord(input.payload.orchestration) ? input.payload.orchestration : null;
+    const localExecution = isRecord(input.payload.localExecution) ? input.payload.localExecution : null;
+    return input.payload.executionStatus === "COMPLETED" &&
+      orchestration?.nextAction === "DONE" &&
+      localExecution?.status !== "APPLIED" &&
+      input.runs.some((run) => run.agentName === "Coding Orchestrator" && run.status === "COMPLETED");
+  }
 
   const merge = isRecord(input.payload.localMergeApproval)
     ? input.payload.localMergeApproval
@@ -2303,8 +2316,13 @@ async function autonomousTick(): Promise<void> {
       }
     }
 
-    if (await temporalOrchestratorActive()) {
-      logger.debug("[coding-autonomous] Temporal orchestrator lease active; local tick skipped");
+    const temporalActive = await temporalOrchestratorActive();
+    // Temporal's presence heartbeat proves the process is alive, not that it is
+    // scheduling cycles. Recover only capacity-waiting tasks with no progress
+    // for at least three minutes; all other work remains owned by Temporal.
+    // Workstream dispatch retains its atomic claim/deduplication safeguards.
+    if (temporalActive && (await getAvailableOllamaCodingSlots()) <= 0) {
+      logger.debug("[coding-autonomous] Temporal active; no Ollama capacity for recovery");
       return;
     }
 
@@ -2313,6 +2331,14 @@ async function autonomousTick(): Promise<void> {
       FROM ai_platform.ai_coding_autonomous_tasks
       WHERE enabled = TRUE
         AND status IN ('ACTIVE','WAITING')
+        AND (
+          ${!temporalActive}
+          OR (
+            status = 'WAITING'
+            AND last_action LIKE 'WAIT_OLLAMA_CAPACITY%'
+            AND last_cycle_at < NOW() - INTERVAL '3 minutes'
+          )
+        )
       ORDER BY updated_at ASC
       LIMIT ${MAX_TASKS_PER_TICK}
     `), { attempts: 3, baseDelayMs: 250 });

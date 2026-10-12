@@ -2384,8 +2384,14 @@ function normalizedChangedFiles(value: unknown): string[] {
 }
 
 function gitCommandEnvironment(repository: string): NodeJS.ProcessEnv {
+  // Workstream metadata stores GitHub repositories as owner/name, while the
+  // shared Git authentication helper expects a URL. Without normalization it
+  // silently omits the configured token for ls-remote and git push.
+  const normalizedRemote = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+(?:\.git)?$/.test(repository)
+    ? `https://github.com/${repository.replace(/\.git$/, "")}.git`
+    : repository;
   return {
-    ...buildRepositoryCloneEnvironment(repository),
+    ...buildRepositoryCloneEnvironment(normalizedRemote),
     LANG: "C",
     LC_ALL: "C",
     GIT_TERMINAL_PROMPT: "0",

@@ -70,6 +70,19 @@ describe("AI Core workload router", () => {
   });
 
   it.each([
+    "Verifikasi deployment production AI Core apakah patch sudah live? Berikan bukti E2E read-only.",
+    "Cek deployment production AI Core terakhir untuk commit a5241bf dan status patch",
+    "Apakah deployment production sudah live?",
+    "Cek status deployment production AI Core terakhir: apakah patch PR #1017 sudah live? Berikan bukti E2E. Hanya baca, jangan lakukan perubahan.",
+  ])("allows observational deployment verification without approval: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "DETERMINISTIC",
+      requiresApproval: false,
+      requiresAgent: false,
+    });
+  });
+
+  it.each([
     "perbaiki routing AI Core",
     "restart VM",
     "deploy production",
@@ -87,6 +100,20 @@ describe("AI Core workload router", () => {
     expect(classifyAiCoreWorkload(message)).toMatchObject({
       workload: "CRITICAL_ACTION",
       requiresAgent: true,
+    });
+  });
+
+  it.each([
+    "retry task CWS-10F05E80 setelah cek status worker",
+    "requeue workstream WS-001 di worker tanpa mengubah repository",
+    "pulihkan task blocked lalu verifikasi status setelahnya",
+    "jalankan ulang task autonomous sesudah memeriksa GitHub",
+    "recover task dan cek status runtime worker",
+  ])("does not downgrade actionable recovery to read-only: %s", (message) => {
+    expect(classifyAiCoreWorkload(message)).toMatchObject({
+      workload: "CRITICAL_ACTION",
+      requiresAgent: true,
+      useLlm: false,
     });
   });
 
