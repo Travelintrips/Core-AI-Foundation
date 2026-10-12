@@ -65,7 +65,7 @@ jobs:
             --arg action "$action" \
             --arg issue "$ISSUE_NUMBER" \
             --arg repo "$REPOSITORY" \
-            '{externalCommandId:$externalId,instruction:$instruction,source:"chatgpt-github-pc-safe",commandType:"EXTERNAL_AGENT_WORK",metadata:{assignedClientId:"openclaw-pc-worker-2",safePcAction:$action,issueNumber:$issue,repository:$repo,conversationId:("pc-safe-issue-" + $issue)}}')"
+            '{externalCommandId:$externalId,instruction:$instruction,source:"chatgpt-github-pc-safe",commandType:"EXTERNAL_AGENT_WORK",assignedClientId:"openclaw-pc-worker-2",metadata:{safePcAction:$action,issueNumber:$issue,repository:$repo,conversationId:("pc-safe-issue-" + $issue)}}')"
           response="$(curl --fail-with-body --silent --show-error \
             --retry 2 --retry-all-errors --retry-delay 2 \
             --connect-timeout 10 --max-time 30 \
