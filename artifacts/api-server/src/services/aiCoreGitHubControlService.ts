@@ -1,4 +1,24 @@
 import { logAudit } from "./aiAuditService.js";
+const DEFAULT_RETRY_COUNT = 3;
+async function retryOn503<T>(fn: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  let delay = 500;
+  while (true) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      if (error.status === 503 && attempt < DEFAULT_RETRY_COUNT) {
+        attempt++;
+        console.warn('Retry attempt ' + attempt + ' after status ' + error.status);
+        await new Promise(res => setTimeout(res, delay));
+        delay *= 2;
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 import {
   createGitHubApiClient,
   parseGitHubRepository,
