@@ -1,3 +1,4 @@
+// TODO: Wrap deployment invocation in try/catch to handle workflow cancellation errors and log a warning without exposing secrets
 import JSZip from "jszip";
 
 const HOSTINGER_API_BASE = "https://developers.hostinger.com/api";
