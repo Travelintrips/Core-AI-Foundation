@@ -4,7 +4,8 @@ import { hostname } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import process from "node:process";
 
-const API_BASE = (process.env.AI_CORE_INTERNAL_BASE_URL || process.env.AI_CORE_BASE_URL || "https://aicore.cstlogistic.co.id/api").replace(/\/$/, "");
+// Stable container DNS survives AI Core replacement without requiring a network alias.
+const API_BASE = (process.env.AI_CORE_INTERNAL_BASE_URL || "http://core-ai-dev:3000/api").replace(/\/$/, "");
 const TOKEN = (process.env.AI_CORE_SCOPED_AGENT_TOKEN || "").trim();
 const CLIENT_ID = (process.env.AI_CORE_OPENCLAW_CLIENT_ID || "gcp-openclaw-main").trim();
 const POLL_MS = Math.max(2000, Math.min(60000, Number(process.env.AI_CORE_AGENT_WORK_POLL_MS || 5000)));
