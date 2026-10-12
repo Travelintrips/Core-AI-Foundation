@@ -1,6 +1,8 @@
 const GITHUB_API_ORIGIN = "https://api.github.com";
 const MAX_PUBLISH_FILES = 40;
 const MAX_TOTAL_CONTENT_BYTES = 1_500_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000; // Timeout for API requests in milliseconds
+
 
 export class GitHubPublisherError extends Error {
   constructor(
