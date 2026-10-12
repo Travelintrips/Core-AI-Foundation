@@ -1,0 +1,24 @@
+name: Connection Watchdog Verify
+on:
+  pull_request:
+    paths:
+      - 'deploy/ai-workers/connection-watchdog*.mjs'
+      - '.github/workflows/connection-watchdog-verify.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/ai-workers/connection-watchdog*.mjs'
+      - '.github/workflows/connection-watchdog-verify.yml'
+permissions:
+  contents: read
+jobs:
+  watchdog-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify connection watchdog decision engine
+        run: node --test deploy/ai-workers/connection-watchdog.test.mjs
