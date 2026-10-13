@@ -13,6 +13,7 @@ import {
   type AiJob,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
+import { mirrorAiTaskLedgerJob } from "./aiTaskLedgerBridgeService.js";
 import { computePriorityScore } from "./priorityEngine.js";
 import { getAvailableOllamaCodingSlots } from "./ollamaWorkerRegistryService.js";
 import { ensureGcpOllamaVmStarted } from "./gcpOllamaVmLifecycleService.js";
@@ -614,6 +615,13 @@ export async function dispatchReadyCodingWorkstreams(
     try {
       const binding = await createChildExecutionForClaim(claim);
       dispatched.push(binding);
+      // Passive ledger registration after the AI Core claim/job has been
+      // persisted. AI Task must never dispatch this same workstream again.
+      await mirrorAiTaskLedgerJob({
+        externalId: `coding-workstream:${claim.workstreamId}`,
+        title: `AI Core workstream ${binding.workstreamKey}`,
+        sessionId: graphId,
+      });
       await logAudit(
         "coding-multi-worker",
         "workstream_job_created",
