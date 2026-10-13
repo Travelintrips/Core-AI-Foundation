@@ -18,3 +18,26 @@ export const logger = pino({
         },
       }),
 });
+
+export interface AIError {
+  code?: string;
+  message: string;
+}
+
+export interface AIErrorMetadata {
+  invocationId?: string;
+  workstreamId?: string;
+}
+
+export function logAIProviderError(
+  error: AIError,
+  metadata?: AIErrorMetadata
+): void {
+  logger.error({
+    code: error.code,
+    message: error.message,
+    invocationId: metadata?.invocationId,
+    workstreamId: metadata?.workstreamId
+  }, 'AI provider error');
+}
+
