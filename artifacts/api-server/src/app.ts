@@ -204,7 +204,7 @@ const productionPublicDir = path.resolve(
 );
 
 const serveStaticFrontend =
-  process.env["NODE_ENV"] === "production" ||
+  shouldServeFrontend ||
   process.env["SERVE_STATIC_FRONTEND"] === "true";
 
 // Serve sitemap with an explicit XML content type. Search Console must receive
