@@ -180,7 +180,7 @@ describe("production data tool routing regression", () => {
     const { readFileSync } = await import("node:fs");
     const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
     const askStart = source.indexOf("async function answerAskMode(");
-    const askEnd = source.indexOf("if (isAiCoreAuditHistoryQuery(routingMessage))", askStart);
+    const askEnd = source.indexOf("const semantic = await openAiFirstReadOnlyIntent", askStart);
     expect(askStart).toBeGreaterThan(0);
     expect(askEnd).toBeGreaterThan(askStart);
     const preSemantic = source.slice(askStart, askEnd);

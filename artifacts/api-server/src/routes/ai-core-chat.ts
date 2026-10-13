@@ -1,3 +1,5 @@
+import {
+} from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -11,7 +13,6 @@ import {
 } from "@workspace/db";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { logger } from "../lib/logger.js";
-import { resolveNewCodingJobBranch } from "../services/devFirstCodingBranchPolicy.js";
 import {
   createConstrainedCodingProviderAdapter,
 } from "../services/localCodingAiExecutionGateService.js";
@@ -47,6 +48,7 @@ import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
   parseDirectOpenClawPcCommand,
+  parseOpenClawPcCodingRequest,
   hasExplicitSourceChange,
   isExplicitCodingOrchestratorRequest,
   detectRemoteWorkerPreset,
@@ -75,6 +77,7 @@ import {
 } from "../services/aiCoreCapabilityRegistryService.js";
 import {
   dispatchExternalAgentWork,
+  ExternalAgentDispatchError,
   getExternalAgentWorkState,
   N8N_AGENT_CLIENT_ID,
   OPENCLAW_AGENT_CLIENT_ID,
@@ -1263,6 +1266,103 @@ async function promoteTeacherFromResult(
   }).catch(() => false);
 }
 
+// OpenAI reviews the user's meaning before broad keyword/SQL routing. Only
+// narrowly scoped, read-only status requests can continue to deterministic tools.
+// This gate cannot authorize mutations: agent/control-plane approval remains separate.
+async function openAiFirstReadOnlyIntent(
+  message: string,
+  _policy: ChatPolicy,
+  workload: ReturnType<typeof classifyAiCoreWorkload>,
+  conversationalMessage: string,
+): Promise<Record<string, unknown> | null> {
+  const trimmed = message.trim();
+  if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
+  // Classifier-derived workload must not choose or bypass the semantic brain.
+  const cloud = await resolveCloudSelection("REASONING");
+  const meta = { workload: workload.workload, costClass: workload.costClass };
+  if (!cloud.ok || cloud.selection.provider.slug !== "openai") {
+    return unavailableAskReply("OpenAI intent gate unavailable; unrelated database routes are disabled.",
+      cloud.ok ? "Selected provider is not OpenAI." : cloud.message, meta);
+  }
+  const routingPrompt = [
+    "Classify the user's request for safe, read-only AI Core Chat routing.",
+    'Respond with exactly one JSON object: {"route":"ANSWER"} or {"route":"VERIFIED_TOOL"}.',
+    "VERIFIED_TOOL is allowed ONLY if the request directly asks for observable AI Core jobs, worker status, deployment health, or GCP cost from integrated sources.",
+    "Requests about OpenAI complimentary tokens/eligibility, architecture, integrations readiness, explanations, or TEST_ONLY event simulations are ANSWER unless an exact supporting tool exists.",
+    "Never interpret a request for one subject as permission to query unrelated coding-task records.",
+    "If uncertain choose ANSWER. This classification does not grant permission to modify anything.",
+    "Request: " + trimmed,
+  ].join("\n");
+  try {
+    const decision = await invokeChatModel(cloud.selection, routingPrompt);
+    const reply = typeof decision.reply === "string" ? decision.reply : "";
+    const routeMatch = reply.match(/"route"\s*:\s*"(ANSWER|VERIFIED_TOOL)"/i);
+    // A reasoning-model response can be empty when its output budget is spent.
+    // Default to a safe conversational answer instead of declaring the request
+    // failed or accidentally falling through to an unrelated database query.
+    // Legacy routes execute only after explicit OpenAI tool selection, and
+    // never as a workaround for a misclassified coding/critical request.
+    // Tool execution is admitted only for an explicit, narrowly scoped status
+    // query. A generic model VERIFIED_TOOL classification is not sufficient:
+    // it previously sent AI Task integration-readiness audits to deployment
+    // health and sent conceptual questions to unrelated operational handlers.
+    // Only explicit, single-purpose read-only status commands can invoke
+    // legacy data handlers. Conceptual/audit/plan/test requests stay with OpenAI.
+    const explicitStatusTool =
+      /\b(?:CWS|INC)-[A-Z0-9]{8}\b/i.test(trimmed) &&
+        /^(?:cek|check|lihat|periksa|status|show|get)\s+(?:status\s+)?(?:task|job)\s+(?:CWS|INC)-[A-Z0-9]{8}(?:\s+saja)?[.!?]?$/i.test(trimmed) ||
+      /^(?:cek|check|lihat|periksa|status|show|get)\s+(?:(?:status|kesehatan|health)\s+)?(?:deployment|produksi|production|worker|workers|gcp billing|biaya gcp|gcp cost)(?:\s+saja)?[.!?]?$/i.test(trimmed);
+    // LIVE deployment evidence must come from the dedicated source-of-truth
+    // handler. Never let the language model invent a production SHA.
+    const liveDeploymentEvidence = /^(?:check|cek|periksa|verify|verifikasi)\s+(?:live\s+)?(?:deployment\s+evidence|bukti\s+deployment)\b/i.test(trimmed) &&
+      !/\b(?:audit|kesiapan|readiness|integrasi|integration|ai\s+task)\b/i.test(trimmed);
+    if ((liveDeploymentEvidence || (routeMatch?.[1] === "VERIFIED_TOOL" && explicitStatusTool)) &&
+        workload.workload !== "CODING" && workload.workload !== "CRITICAL_ACTION") return null;
+    const answer = await invokeChatModel(cloud.selection,
+      conversationalMessage +
+      "\n\nAnswer the user's actual request. Never invent account-specific billing, permissions, status, token allocations or integration readiness. If you cannot inspect authoritative account/project data, say so explicitly.");
+    if (typeof answer.reply !== "string" || !answer.reply.trim()) {
+      return unavailableAskReply("OpenAI returned an empty reply. No irrelevant tool fallback was executed.",
+        "Empty model response.", meta);
+    }
+    return { kind: "answer", route: "OPENAI_INTENT_FIRST", ...meta, ...answer };
+  } catch (error) {
+    return unavailableAskReply("OpenAI intent gate failed; no unrelated database query executed.",
+      safeProviderFailure(error) || "Intent gate failure.", meta);
+  }
+}
+
+// An exact task-status question must never return an unfiltered task list,
+// even if the legacy SQL planner accidentally issued a broad read-only query.
+function scopeTaskStatusReply(
+  request: string,
+  result: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!result) return null;
+  const taskNumber = request.match(/\b(?:CWS|INC)-[A-Z0-9]{8}\b/i)?.[0]?.toUpperCase();
+  if (!taskNumber || result["route"] !== "ADMIN_DB_QUERY") return result;
+  const rows = result["data"];
+  if (!Array.isArray(rows)) {
+    return { kind: "answer", route: "TASK_STATUS_UNVERIFIED", reply: "Status task " + taskNumber + " belum dapat diverifikasi dari hasil query ini.", verified: false };
+  }
+  const matching = rows.filter((row): row is Record<string, unknown> =>
+    row !== null && typeof row === "object" &&
+    String((row as Record<string, unknown>)["task_number"] ?? "").toUpperCase() === taskNumber);
+  if (matching.length !== 1) {
+    return { kind: "answer", route: "TASK_STATUS_UNVERIFIED", reply: "Status task " + taskNumber + " tidak dapat dipastikan dari hasil query.", verified: false, data: [] };
+  }
+  const task = matching[0]!;
+  const state = String(task["persisted_status"] ?? "UNKNOWN");
+  const run = String(task["run_status"] ?? "UNKNOWN");
+  const autonomous = String(task["autonomous_status"] ?? "UNKNOWN");
+  return {
+    kind: "answer", route: "TASK_STATUS_SCOPED", verified: true,
+    reply: "Task " + taskNumber + ": status " + state + ", run " + run + ", autonomous " + autonomous + ".",
+    data: matching, workload: "DATA_LOOKUP", costClass: "ZERO",
+    provider: null, model: null,
+  };
+}
+
 async function answerAskMode(
   message: string,
   policy: ChatPolicy,
@@ -1276,6 +1376,27 @@ async function answerAskMode(
     workload: workload.workload,
     costClass: workload.costClass,
   };
+  // Exact, read-only business data intents must take priority over semantic
+  // routing. Otherwise an LLM answer can mask a working Data Tool.
+  const prioritizedDataTool = await tryRunAiCoreDataTool(routingMessage);
+  if (prioritizedDataTool.matched) {
+    return {
+      kind: "answer",
+      route: "DATA_TOOL",
+      provider: null,
+      model: null,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      estimatedCostUsd: 0,
+      workload: "DATA_LOOKUP",
+      costClass: "ZERO",
+      reply: prioritizedDataTool.reply,
+      dataTool: prioritizedDataTool.tool,
+      data: prioritizedDataTool.data,
+      ...(prioritizedDataTool.warning ? { warning: prioritizedDataTool.warning } : {}),
+    };
+  }
+  const semantic = await openAiFirstReadOnlyIntent(routingMessage, policy, workload, conversationalMessage);
+  if (semantic) return semantic;
   const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) return deterministic;
 
@@ -1330,8 +1451,7 @@ async function answerAskMode(
 
   // Read-only data tools run before any LLM. They never accept mutation verbs and
   // only execute parameterized SELECT queries against known business tables.
-  const prioritizedDataTool = await tryRunAiCoreDataTool(routingMessage);
-  const dataTool = prioritizedDataTool;
+  const dataTool = await tryRunAiCoreDataTool(routingMessage);
   if (dataTool.matched) {
     return {
       kind: "answer",
@@ -1391,7 +1511,7 @@ async function answerAskMode(
       warning: sanitizeAdminDbError(error),
     }),
   );
-  if (adminDbQuery) return adminDbQuery;
+  if (adminDbQuery) return scopeTaskStatusReply(routingMessage, adminDbQuery) ?? adminDbQuery;
 
   if (workload.workload === "CRITICAL_ACTION") {
     return {
@@ -1695,6 +1815,12 @@ async function streamAskMode(
     costClass: workload.costClass,
   };
 
+  const semantic = await openAiFirstReadOnlyIntent(routingMessage, policy, workload, conversationalMessage);
+  if (semantic) {
+    writeBufferedChatStream(res, semantic);
+    return;
+  }
+
   const deterministic = await deterministicReply(routingMessage, workload);
   if (deterministic) {
     writeBufferedChatStream(res, deterministic);
@@ -1781,7 +1907,7 @@ async function streamAskMode(
     }),
   );
   if (adminDbQuery) {
-    writeBufferedChatStream(res, adminDbQuery);
+    writeBufferedChatStream(res, scopeTaskStatusReply(routingMessage, adminDbQuery) ?? adminDbQuery);
     return;
   }
 
@@ -2066,7 +2192,7 @@ async function maybeRunRemoteWorkerPreset(
 
 const EXISTING_CWS_TASK = /\b(CWS-[0-9A-F]{8})\b/i;
 const EXISTING_CWS_STOP = /\b(?:stop|hentikan|berhentikan|disable|nonaktifkan)\b/i;
-const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete|retry|requeue)\b/i;
+const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete|retry|rerun|requeue|redispatch|recover|unblock|pulihkan|jalankan\s+ulang|coba\s+ulang|antrekan\s+ulang)\b/i;
 
 async function runExistingCodingTaskLifecycleCommand(
   message: string,
@@ -2074,16 +2200,29 @@ async function runExistingCodingTaskLifecycleCommand(
   const match = message.match(EXISTING_CWS_TASK);
   if (!match) return null;
 
-  const readOnlyAudit = /\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i.test(message) && /\b(?:jangan|tanpa|tidak|no)\b/i.test(message);
+  // A task ID mentioned in an audit must not make quoted/negated lifecycle
+  // words ("jangan dispatch/retry") perform a state-changing action.
+  const readOnlyAudit = /\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i.test(message)
+    && /\b(?:jangan|tanpa|tidak|no)\b/i.test(message);
   if (readOnlyAudit) {
     const taskNumber = match[1]!.toUpperCase();
-    const [task] = await db.select().from(aiCodingTasksTable).where(eq(aiCodingTasksTable.taskNumber, taskNumber)).limit(1);
-    if (!task) return { kind: "validation", route: "CONTROL_PLANE", reply: `Task ${taskNumber} tidak ditemukan.`, taskNumber };
-    return { kind: "answer", operation: "TASK_STATUS", mutating: false, taskId: task.id, taskNumber, status: task.status, reply: `Task ${taskNumber} status: ${task.status}. No mutation executed.` };
+    const [task] = await db.select().from(aiCodingTasksTable)
+      .where(eq(aiCodingTasksTable.taskNumber, taskNumber)).limit(1);
+    if (!task) return { kind: "validation", route: "CONTROL_PLANE", taskNumber, reply: `Task ${taskNumber} tidak ditemukan.` };
+    const autonomous = await getAutonomousCodingTaskStatus(task.id);
+    return {
+      kind: "query", route: "CONTROL_PLANE", executionLane: "NO_WORKER",
+      operation: "TASK_STATUS", mutating: false,
+      taskId: task.id, taskNumber, status: task.status,
+      autonomousStatus: (autonomous as { status?: unknown } | null)?.status ?? null,
+      autonomousEnabled: (autonomous as { enabled?: unknown } | null)?.enabled ?? null,
+      reply: `Status ${taskNumber}: ${task.status}; autonomous: ${String((autonomous as { status?: unknown } | null)?.status ?? "UNKNOWN")}.`,
+    };
   }
+
   const wantsStop = EXISTING_CWS_STOP.test(message);
   const wantsResume = EXISTING_CWS_RESUME.test(message);
-  if (!readOnlyAudit && !wantsStop && !wantsResume) return null;
+  if (!wantsStop && !wantsResume) return null;
 
   const taskNumber = match[1]!.toUpperCase();
   const [task] = await db
@@ -2207,6 +2346,8 @@ async function runExistingCodingTaskLifecycleCommand(
   const currentMax = Number((current as { max_cycles?: unknown } | null)?.max_cycles ?? 40);
   const boundedMax = Math.min(100, Math.max(40, Number.isFinite(currentMax) ? currentMax + 40 : 80));
   await enableAutonomousCodingTask(task.id, boundedMax, { forceDisabled: true });
+  // The scheduler can reconcile autonomous state concurrently. Always report
+  // the persisted budget and status, never the requested values as success.
   const persistedAutonomous = await getAutonomousCodingTaskStatus(task.id);
   const persistedMax = Number((persistedAutonomous as { max_cycles?: unknown } | null)?.max_cycles ?? 0);
   const persistedState = String((persistedAutonomous as { status?: unknown } | null)?.status ?? "UNKNOWN");
@@ -2214,18 +2355,22 @@ async function runExistingCodingTaskLifecycleCommand(
 
   return {
     kind: "execution",
+    operation: "TASK_RETRY",
+    accepted,
+    executionLane: "NO_WORKER",
     route: "CONTROL_PLANE",
     reply:
-      `Task ${task.taskNumber} dilanjutkan pada task yang sama dengan autonomous budget bounded sampai ${boundedMax} cycle. Tidak ada task duplikat yang dibuat.`,
+      accepted
+        ? `Task ${task.taskNumber} dilanjutkan pada task yang sama; budget ${persistedMax} cycle terverifikasi. Tidak ada task duplikat yang dibuat.`
+        : `Task ${task.taskNumber} belum terverifikasi ACTIVE dengan budget ${boundedMax}; status ${persistedState}, budget tersimpan ${persistedMax}. Tidak ada task baru dibuat.`,
     taskId: task.id,
     taskNumber: task.taskNumber,
     status: task.status,
     workspaceUrl: `/coding-workspace/${task.id}`,
-    autonomous: accepted,
-    accepted,
-    operation: "TASK_RETRY",
-    requestedMaxCycles: boundedMax,
+    autonomous: true,
     maxCycles: persistedMax,
+    requestedMaxCycles: boundedMax,
+    autonomousStatus: persistedState,
   };
 }
 
@@ -2247,31 +2392,14 @@ function githubDirectRequiredResponse(message: string): Record<string, unknown> 
 }
 
 async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Record<string, unknown>> {
-  if (
-    hasExplicitSourceChange(input.message) &&
-    !isExplicitCodingOrchestratorRequest(input.message)
-  ) {
-    return githubDirectRequiredResponse(input.message);
-  }
-  let taskBranch: string | undefined;
-  try {
-    taskBranch = resolveNewCodingJobBranch(input.repository, input.branch);
-  } catch (error) {
-    return {
-      kind: "validation",
-      reply: error instanceof Error ? error.message : "Invalid coding branch.",
-      missing: ["branch"],
-    };
-  }
-
-  if (!input.projectName || !input.repository || !taskBranch) {
+  if (!input.projectName || !input.repository || !input.branch) {
     return {
       kind: "validation",
       reply: "Agent Mode membutuhkan Project, Repository, dan Branch sebelum task dapat dijalankan.",
       missing: [
         ...(!input.projectName ? ["projectName"] : []),
         ...(!input.repository ? ["repository"] : []),
-        ...(!taskBranch ? ["branch"] : []),
+        ...(!input.branch ? ["branch"] : []),
       ],
     };
   }
@@ -2283,7 +2411,7 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
         taskNumber: createTaskNumber(),
         projectName: input.projectName!,
         repository: input.repository!,
-        branch: taskBranch,
+        branch: input.branch!,
         instruction: input.message,
         priority: input.priority ?? 50,
         status: "PENDING",
@@ -2361,7 +2489,7 @@ async function startExternalAgentWork(
 ): Promise<Record<string, unknown>> {
   const directOpenClawPcCommand =
     clientId === OPENCLAW_AGENT_CLIENT_ID
-      ? parseDirectOpenClawPcCommand(input.message)
+      ? (parseOpenClawPcCodingRequest(input.message) ?? parseDirectOpenClawPcCommand(input.message))
       : null;
   const openClawExecutionProfile =
     clientId !== OPENCLAW_AGENT_CLIENT_ID
@@ -2388,6 +2516,9 @@ async function startExternalAgentWork(
       ...(input.branch ? { branch: input.branch } : {}),
       ...(openClawExecutionProfile ? { openClawExecutionProfile } : {}),
       source: input.source,
+      ...(clientId === OPENCLAW_AGENT_CLIENT_ID && /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.test(input.message)
+        ? { openClawExecutionProfile: "monitor-direct", directOperation: /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.exec(input.message)![1]!.toLowerCase() }
+        : {}),
     },
   });
 
@@ -2620,6 +2751,25 @@ async function runAutoMode(
     input.context ?? [],
   );
 
+  // The @ prefix authorizes entering the agent gateway, not choosing a tool.
+  // Let OpenAI interpret single natural-language requests before keyword SQL
+  // shortcuts. Actual coding and critical actions continue through existing
+  // deterministic permission gates; this preflight never authorizes mutation.
+  // Deterministic authenticated actions must not be swallowed by a
+  // read-only LLM intent response. In particular, OpenClaw desktop wake
+  // requests have to reach the external-agent queue after confirmation.
+  const preflightDispatch = classifyAiCoreChatDispatch(contextualCommand);
+  if (parsedConversation.commands.length <= 1 && preflightDispatch.kind === "ANSWER") {
+    const intentWorkload = classifyAiCoreWorkload(contextualCommand);
+    const semantic = await openAiFirstReadOnlyIntent(
+      contextualCommand,
+      input.modelPolicy,
+      intentWorkload,
+      buildConversationPrompt(contextualCommand, input.context ?? []),
+    );
+    if (semantic) return { ...semantic, executionLane: "NO_WORKER" };
+  }
+
   const existingTaskLifecycle = await runExistingCodingTaskLifecycleCommand(contextualCommand);
   if (existingTaskLifecycle) return existingTaskLifecycle;
   if (parsedConversation.ambiguous) {
@@ -2681,7 +2831,7 @@ async function runAutoMode(
       if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
         results.push({
           ...(await startAgentTask(childInput)),
-          executionLane: "NO_WORKER",
+          executionLane: "CODING",
         });
         continue;
       }
@@ -2842,7 +2992,7 @@ router.get("/ai/core-chat/connector/openapi.json", (_req, res): void => {
               type: "string",
               default: "Travelintrips/Core-AI-Foundation",
             },
-            branch: { type: "string", default: "develop" },
+            branch: { type: "string", default: "main" },
             priority: { type: "integer", minimum: 0, maximum: 100, default: 50 },
             conversationId: { type: "string" },
             source: { type: "string", const: "text" },
@@ -3535,6 +3685,14 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   res.once("close", abort);
 
   try {
+    // Explicit coding in AI Core Chat streams is delegated to the authenticated
+    // controlled task lane; never streamed as an unverified LLM coding answer.
+    const streamCoding = classifyAiCoreChatDispatch(parsed.data.message);
+    if (streamCoding.kind === "GITHUB_DIRECT_REQUIRED" ||
+        (streamCoding.kind === "CONTROL_PLANE" && streamCoding.workload.workload === "CODING")) {
+      writeBufferedChatStream(res, await startAgentTask(parsed.data));
+      return;
+    }
     const scope = {
       sessionId: parsed.data.conversationId ?? null,
       projectName: parsed.data.projectName ?? null,
@@ -3587,7 +3745,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
 
     const directOpenClawPcCommand =
       !parsed.data.image
-        ? parseDirectOpenClawPcCommand(safeMessage)
+        ? (parseOpenClawPcCodingRequest(safeMessage) ?? parseDirectOpenClawPcCommand(safeMessage))
         : null;
     if (directOpenClawPcCommand) {
       const result = await startExternalAgentWork(
@@ -3657,18 +3815,14 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     return;
   }
 
-  if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
-    res.status(403).json({
-      error: "Execution blocked: commands must begin with @.",
-      blocked: true,
-      reason: "missing_execution_prefix",
-      requiredPrefix: "@",
-    });
-    return;
-  }
+  // Refuse source-changing coding at the chat boundary in every mode,
+  // rather than returning the ambiguous internal NO_WORKER routing lane.
 
   if (parsed.data.mode === "agent" && (parsed.data.source === "voice" || parsed.data.source === "whatsapp_voice")) {
-    const normalizedVoice = normalizeVoiceAgentCommand(parsed.data.message);
+    // Keep the required @ authorization marker while normalizing spoken wake words.
+    const authorized = parsed.data.message.trim().startsWith("@");
+    const spokenCommand = authorized ? parsed.data.message.trim().slice(1).trim() : parsed.data.message;
+    const normalizedVoice = normalizeVoiceAgentCommand(spokenCommand);
     if (!normalizedVoice.wakeWordMatched) {
       res.status(403).json({
         error: "Execution blocked: voice commands must begin with Hi, Hai, or Hey.",
@@ -3679,11 +3833,21 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       });
       return;
     }
-    parsed.data.message = normalizedVoice.command;
+    parsed.data.message = authorized ? "@"+normalizedVoice.command : normalizedVoice.command;
     if (!parsed.data.message) {
       res.status(400).json({ error: "Voice command is empty after Hi prefix." });
       return;
     }
+  }
+
+  if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
+    res.status(403).json({
+      error: "Execution blocked: commands must begin with @.",
+      blocked: true,
+      reason: "missing_execution_prefix",
+      requiredPrefix: "@",
+    });
+    return;
   }
 
   try {
@@ -3731,7 +3895,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         : null;
     const directOpenClawPcCommand =
       !parsed.data.image
-        ? parseDirectOpenClawPcCommand(rawInput.message)
+        ? (parseOpenClawPcCodingRequest(rawInput.message) ?? parseDirectOpenClawPcCommand(rawInput.message))
         : null;
     const result =
       directOpenClawPcCommand
@@ -3765,6 +3929,8 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             ? await maybeRunRemoteWorkerPreset(rawInput)
             : null) ??
           await startAgentTask(effectiveInput)
+        : (rawDispatch.kind === "GITHUB_DIRECT_REQUIRED" || (rawDispatch.kind === "CONTROL_PLANE" && rawDispatch.workload.workload === "CODING"))
+          ? await startAgentTask(effectiveInput)
         : effectiveInput.mode === "ask"
           ? await answerAskMode(
               effectiveInput.message,
@@ -3804,8 +3970,15 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       )
       .json(result);
   } catch (error) {
+    const workerError = error instanceof ExternalAgentDispatchError ? error : null;
     res.status(503).json({
-      error: safeProviderFailure(error) || "AI Core Chat request failed.",
+      error: workerError?.message ?? safeProviderFailure(error) ?? "AI Core Chat request failed.",
+      ...(workerError ? {
+        code: workerError.code,
+        reasonCategory: workerError.code === "CAPABILITY_DENIED" ? "SOP_POLICY" : workerError.code === "AGENT_UNAVAILABLE" ? "WORKER_AVAILABILITY" : "REGISTRATION",
+        executionLane: "NO_WORKER",
+        executed: false,
+      } : {}),
     });
   }
 });
