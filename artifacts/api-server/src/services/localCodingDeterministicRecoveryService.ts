@@ -42,6 +42,7 @@ const MAX_PATCH_BYTES = 160_000;
 const MAX_CHANGED_FILES = 40;
 const GIT_TIMEOUT_MS = 30_000;
 
+// Root cause analysis: 'validate_proposal' replacement does not execute if exact occurrence detection fails to find the expected occurrence count in the target file.
 export class LocalDeterministicRecoveryError extends Error {
   constructor(
     message: string,
