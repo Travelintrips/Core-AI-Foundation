@@ -328,7 +328,15 @@ router.post("/api/ai/core-chat/oauth/authorize", async (req, res): Promise<void>
 
 
 router.get("/api/ai/core-chat/oauth/pair/wait", async (req, res): Promise<void> => {
+  // Pairing state changes asynchronously; stale 304 responses can keep OAuth waiting.
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   const id = readString(req.query["id"]);
+  if (id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    res.status(400).type("html").send("<p>ID pairing tidak valid. Mulai ulang Authenticate dari ChatGPT.</p>");
+    return;
+  }
   const pairing = id ? await getMcpOauthPairing(id) : null;
   if (!pairing) {
     res.status(404).type("html").send("<p>Pairing tidak ditemukan. Mulai ulang Authenticate dari ChatGPT.</p>");
