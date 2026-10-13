@@ -8,6 +8,7 @@ import {
   matchesTerminalEventArguments,
   oauthPrincipalUserId,
   signStandardWebhook,
+  verifySignedMcpDeliveryReceipt,
 } from "../aiCoreMcpEventWebhookService.js";
 
 describe("AI Core MCP event webhook helpers", () => {
@@ -118,5 +119,40 @@ describe("AI Core MCP event webhook helpers", () => {
         eventType: "FAILED",
       },
     )).toBe(false);
+  });
+});
+
+
+describe("signed callback receipt verification", () => {
+  const raw = Buffer.alloc(24, 9);
+  const secret = `whsec_${raw.toString("base64")}`;
+  const eventId = "evt-test";
+  const subscriptionId = "sub-test";
+  const signature = createHmac("sha256", raw)
+    .update(`receipt:${eventId}:${subscriptionId}`).digest("hex");
+  it("accepts a correlated HMAC receipt", () => {
+    expect(verifySignedMcpDeliveryReceipt({ secret, eventId, subscriptionId,
+      responseBody: JSON.stringify({ eventId, subscriptionId, signature }) })).toBe(true);
+  });
+  it("rejects wrong correlation, missing signatures and bare HTTP success", () => {
+    for (const responseBody of ["", "{}", JSON.stringify({ eventId, subscriptionId }),
+      JSON.stringify({ eventId: "wrong", subscriptionId, signature }),
+      JSON.stringify({ eventId, subscriptionId: "wrong", signature }),
+      JSON.stringify({ eventId, subscriptionId, signature: "0".repeat(64) })]) {
+      expect(verifySignedMcpDeliveryReceipt({ secret, eventId, subscriptionId, responseBody })).toBe(false);
+    }
+  });
+});
+
+
+describe("signed receipt lifecycle promotion gate", () => {
+  it("promotes DELIVERY_CONFIRMED only after a verified receipt and never self-certifies E2E", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(new URL("../aiCoreMcpEventWebhookService.ts", import.meta.url), "utf8");
+    expect(source).toContain('input.status === "DELIVERED" && input.receiptVerified === true');
+    expect(source).toContain("delivery.receipt_verified_at IS NOT NULL");
+    expect(source).toContain("response.command_id = command.id");
+    expect(source).toContain("command.status = 'COMPLETED'");
+    expect(source).not.toContain("to_jsonb('E2E_VERIFIED'");
   });
 });

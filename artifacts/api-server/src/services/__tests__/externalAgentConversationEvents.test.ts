@@ -13,8 +13,12 @@ vi.mock("../externalAgentRegistryService.js", () => ({
     permissions: {},
   }),
   getExternalAgentRegistrySnapshot: vi.fn().mockResolvedValue([
-    { clientId: "gcp-openclaw-main", eligible: true },
+    { clientId: "openclaw-pc-worker", eligible: true },
   ]),
+}));
+
+vi.mock("../openClawPcLeaderService.js", () => ({
+  chooseActivePc: vi.fn().mockResolvedValue("openclaw-pc-worker"),
 }));
 
 vi.mock("../localCodingControlBridgeService.js", () => ({
@@ -49,7 +53,7 @@ describe("external agent conversation lifecycle binding", () => {
     expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
       source: "ai-core-chat",
       commandType: "EXTERNAL_AGENT_WORK",
-      assignedClientId: "gcp-openclaw-main",
+      assignedClientId: "openclaw-pc-worker",
       metadata: expect.objectContaining({
         conversationId: "conversation-a",
         repository: "Travelintrips/Core-AI-Foundation",

@@ -72,6 +72,51 @@ async function syncTerminalBridgeResponseToGitHub(input: {
   const issueNumber = githubIssueNumberFromCommand(command);
   if (!issueNumber) return;
 
+  // A task may generate hundreds of terminal bridge rows as its checkpoint
+  // changes. Publishing every BLOCKER as a fresh GitHub comment caused >1,000
+  // comments on issue #658. A single issue/task/kind gets one summary; full
+  // details remain in the durable bridge timeline. Preserve distinct kinds so
+  // a later BLOCKER can contradict an earlier COMPLETED (#942).
+  //
+  // Correlate by issue AND task, not just command: the same task can be
+  // resubmitted under several bridge command IDs.
+  // Historical rows may have NULL response.task_id even when callbacks carry
+  // the task UUID (#658): use this-command fallback to avoid dropping alerts.
+  const earliest = input.taskId
+    ? await db.execute(sql`
+        SELECT response.id
+        FROM ai_platform.ai_coding_bridge_responses AS response
+        JOIN ai_platform.ai_coding_bridge_commands AS command
+          ON command.id = response.command_id
+        WHERE command.source = 'github-trigger'
+          AND command.metadata_json ->> 'issueNumber' = ${String(issueNumber)}::text
+          AND response.kind = ${input.kind}
+          AND (
+            response.task_id = ${input.taskId}::uuid
+            OR (
+              -- Legacy github-trigger responses often stored NULL task_id
+              -- despite the callback carrying a valid task UUID. Correlate
+              -- those only to this command, never unrelated issue callbacks.
+              response.task_id IS NULL
+              AND response.command_id = ${input.commandId}::uuid
+            )
+          )
+        ORDER BY response.created_at ASC, response.id ASC
+        LIMIT 1
+      `)
+    : await db.execute(sql`
+        SELECT response.id
+        FROM ai_platform.ai_coding_bridge_responses AS response
+        WHERE response.command_id = ${input.commandId}::uuid
+          AND response.task_id IS NULL
+          AND response.kind = ${input.kind}
+        ORDER BY response.created_at ASC, response.id ASC
+        LIMIT 1
+      `);
+  if (String(earliest.rows?.[0]?.["id"] ?? "") !== input.responseId) {
+    return;
+  }
+
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -109,22 +154,11 @@ async function syncTerminalBridgeResponseToGitHub(input: {
     );
   }
 
-  if (input.kind !== "COMPLETED") return;
-
-  const closeResponse = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${issueNumber}`,
-    {
-      method: "PATCH",
-      headers,
-      signal: AbortSignal.timeout(20_000),
-      body: JSON.stringify({ state: "closed", state_reason: "completed" }),
-    },
-  );
-  if (!closeResponse.ok) {
-    throw new Error(
-      `GitHub terminal callback close failed with HTTP ${closeResponse.status}`,
-    );
-  }
+  // A bridge COMPLETED response is not evidence that the originating work
+  // is fully finished. Later BLOCKER/FAILED callbacks are possible (#942).
+  // Record the callback above, but leave the issue open until an independent
+  // reconciler checks authoritative task state and required PR/CI/deploy proof.
+  // Never close GitHub issues from an unverified bridge callback alone.
 }
 
 export async function submitCodingBridgeCommand(input: {
@@ -415,6 +449,46 @@ export async function acknowledgeCodingBridgeResponse(id: string) {
   return row ?? null;
 }
 
+/** Only ACK events belonging to the explicitly addressed ChatGPT conversation.
+ * A browser-visible message or a worker completion alone is not a bridge event. */
+export async function acknowledgeCodingBridgeResponseForConversation(input: {
+  responseId: string;
+  conversationId: string;
+}) {
+  await ensureCodingControlBridgeTables();
+  // A receiver-side MCP ACK is durable evidence of delivery to the subscribed
+  // conversation. It is not proof of browser automation or other external E2E paths.
+  const result = await db.execute(sql`
+    WITH acknowledged AS (
+      UPDATE ai_platform.ai_coding_bridge_responses AS response
+      SET acknowledged_at = NOW()
+      FROM ai_platform.ai_coding_bridge_commands AS command
+      WHERE response.command_id = command.id
+        AND response.id = ${input.responseId}::uuid
+        AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
+        AND response.acknowledged_at IS NULL
+      RETURNING response.id, response.command_id, response.acknowledged_at
+    ),
+    marked AS (
+      UPDATE ai_platform.ai_coding_bridge_commands AS command
+      SET metadata_json = COALESCE(command.metadata_json, '{}'::jsonb) ||
+        jsonb_build_object(
+          'deliveryCode', 'DELIVERY_CONFIRMED',
+          'e2eCode', 'MCP_ACK_VERIFIED',
+          'mcpAckResponseId', acknowledged.id::text,
+          'mcpAckConversationId', ${input.conversationId}::text,
+          'mcpAcknowledgedAt', acknowledged.acknowledged_at::text
+        ),
+        updated_at = NOW()
+      FROM acknowledged
+      WHERE command.id = acknowledged.command_id
+      RETURNING command.id
+    )
+    SELECT id FROM marked
+  `);
+  return (result.rows ?? []).length > 0;
+}
+
 export async function listPendingCodingBridgeResponsesForConversation(input: {
   conversationId: string;
   limit?: number;
@@ -500,7 +574,7 @@ export async function claimCodingBridgeCommand(input: {
 
   const result = await db.execute(sql`
     WITH candidate AS (
-      SELECT id
+      SELECT id, metadata_json ->> 'assignedClientId' AS assigned_client_id
       FROM ai_platform.ai_coding_bridge_commands
       WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text
         AND (
@@ -523,7 +597,7 @@ export async function claimCodingBridgeCommand(input: {
         metadata_json = command.metadata_json || jsonb_build_object(
           'claimToken', gen_random_uuid()::text,
           'claimLeaseExpiresAt', (NOW() + (${leaseSeconds}::integer * INTERVAL '1 second'))::text,
-          'claimedBy', ${input.clientId}::text,
+          'claimedBy', candidate.assigned_client_id,
           'claimedAt', NOW()::text
         ),
         updated_at = NOW()
@@ -594,6 +668,68 @@ export async function renewCodingBridgeCommandClaim(input: {
   return Boolean(result.rows?.[0]);
 }
 
+/**
+ * A worker process exit is not proof of a successful browser E2E test.
+ * Only the narrow case where the worker itself explicitly reports the
+ * browser/callback test could not run is downgraded, avoiding accidental
+ * failure of unrelated external-agent jobs.
+ */
+export function hasUnverifiedExternalBrowserCompletion(input: {
+  message: string;
+  details?: Record<string, unknown>;
+}): boolean {
+  const details = input.details ?? {};
+  const text = input.message;
+  const terminalReply = isRecord(details["terminalReply"])
+    ? String(details["terminalReply"]["text"] ?? "")
+    : "";
+  const combined = [text, terminalReply].join("\n");
+  const mentionsBrowserTest = /(?:chatgpt|browser)/i.test(combined);
+  const explicitlyUnable = /(?:unable to perform|cannot perform|could not perform|do not support direct interaction|tidak dapat menjalankan|tidak bisa menjalankan)/i.test(combined);
+  const deliveryMissing =
+    details["sourceReplyDeliveryState"] === "missing" ||
+    /["']?sourceReplyDeliveryState["']?\s*:\s*["']missing["']/i.test(text);
+  return mentionsBrowserTest && explicitlyUnable && deliveryMissing;
+}
+
+export type EvidenceStatusCode =
+  | "JOB_COMPLETED" | "RESULT_VERIFIED" | "DELIVERY_SUBMITTED"
+  | "DELIVERY_CONFIRMED" | "CALLBACK_RECEIVED" | "E2E_VERIFIED"
+  | "FAILED" | "UNKNOWN_UNVERIFIED";
+
+/** A worker's own narrative is never a destination receipt. */
+export function classifyBridgeCompletion(input: {
+  status: "COMPLETED" | "FAILED";
+  details?: Record<string, unknown>;
+}): { statusCode: EvidenceStatusCode; deliveryCode: EvidenceStatusCode; e2eCode: EvidenceStatusCode } {
+  if (input.status === "FAILED") {
+    return { statusCode: "FAILED", deliveryCode: "UNKNOWN_UNVERIFIED", e2eCode: "UNKNOWN_UNVERIFIED" };
+  }
+  const details = input.details ?? {};
+  // A direct, bounded read-only check can prove the result, but not callback delivery.
+  const verifiedResult = details["sshVerified"] === true &&
+    details["mode"] === "ssh-readonly-hostinger" && details["exitCode"] === 0;
+  // The PC browser worker supplies a bounded proof of the ChatGPT reply,
+  // not just a narrative or successful process exit. Keep unrelated jobs unverified.
+  const verifiedBrowserReply =
+    details["chatgptSubmitted"] === true &&
+    details["verifiedAssistantReply"] === true &&
+    details["exitCode"] === 0 &&
+    typeof details["eventId"] === "string" &&
+    /^[a-zA-Z0-9:_-]{8,160}$/.test(details["eventId"]) &&
+    typeof details["conversationId"] === "string" &&
+    /^[a-zA-Z0-9-]{30,64}$/.test(details["conversationId"]) &&
+    typeof details["evidenceFingerprint"] === "string" &&
+    /^[a-f0-9]{64}$/.test(details["evidenceFingerprint"]) &&
+    typeof details["verifiedAt"] === "string" &&
+    !Number.isNaN(Date.parse(details["verifiedAt"]));
+  return {
+    statusCode: verifiedResult ? "RESULT_VERIFIED" : "JOB_COMPLETED",
+    deliveryCode: verifiedBrowserReply ? "DELIVERY_CONFIRMED" : "UNKNOWN_UNVERIFIED",
+    e2eCode: verifiedBrowserReply ? "E2E_VERIFIED" : "UNKNOWN_UNVERIFIED",
+  };
+}
+
 export async function completeCodingBridgeCommand(input: {
   clientId: string;
   commandId: string;
@@ -604,6 +740,12 @@ export async function completeCodingBridgeCommand(input: {
 }) {
   await ensureCodingControlBridgeTables();
   const details = input.details ?? {};
+  // Prevent a successful process exit from masquerading as a passed E2E.
+  const verifiedStatus = input.status === "COMPLETED" &&
+    hasUnverifiedExternalBrowserCompletion({ message: input.message, details })
+    ? "FAILED"
+    : input.status;
+  const evidence = classifyBridgeCompletion({ status: verifiedStatus, details });
   const encoded = JSON.stringify(details);
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
@@ -611,13 +753,16 @@ export async function completeCodingBridgeCommand(input: {
 
   const result = await db.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_commands
-    SET status = ${input.status},
+    SET status = ${verifiedStatus},
         processed_at = NOW(),
         metadata_json = (
           metadata_json - 'claimToken' - 'claimLeaseExpiresAt'
         ) || jsonb_build_object(
           'completedBy', ${input.clientId}::text,
-          'completedAt', NOW()::text
+          'completedAt', NOW()::text,
+          'statusCode', ${evidence.statusCode}::text,
+          'deliveryCode', ${evidence.deliveryCode}::text,
+          'e2eCode', ${evidence.e2eCode}::text
         ),
         updated_at = NOW()
     WHERE id = ${input.commandId}::uuid
@@ -633,16 +778,19 @@ export async function completeCodingBridgeCommand(input: {
   const response = await appendCodingBridgeResponse({
     commandId: input.commandId,
     taskId: row["task_id"] ? String(row["task_id"]) : null,
-    kind: input.status,
+    kind: verifiedStatus,
     message: input.message,
     checkpoint: {
-      status: input.status,
+      status: verifiedStatus,
+      statusCode: evidence.statusCode,
+      deliveryCode: evidence.deliveryCode,
+      e2eCode: evidence.e2eCode,
       clientId: input.clientId,
     },
-    metadata: details,
+    metadata: { ...details, ...evidence },
   });
 
-  return { commandId: input.commandId, status: input.status, response };
+  return { commandId: input.commandId, status: verifiedStatus, ...evidence, response };
 }
 
 export async function getExternalAgentDiagnostic(input: {
@@ -737,6 +885,17 @@ export async function getExternalAgentDiagnostic(input: {
   };
 }
 
+/** Nonterminal callbacks remain visible while awaiting a worker or verified reply. */
+export function classifyCallbackProcessingState(input: {
+  status: string;
+  metadata?: Record<string, unknown> | null;
+}): "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" {
+  if (input.status === "COMPLETED") return "COMPLETED";
+  if (input.status === "FAILED" || input.status === "CANCELLED") return "FAILED";
+  if (input.status === "PROCESSING" || input.status === "RUNNING") return "PROCESSING";
+  return "QUEUED";
+}
+
 export async function getCodingBridgeCommandExecutionState(commandId: string) {
   await ensureCodingControlBridgeTables();
   const [command] = await db
@@ -756,6 +915,8 @@ export async function getCodingBridgeCommandExecutionState(commandId: string) {
   return {
     command,
     latestResponse: latestResponse ?? null,
+    // Derived only from durable command state, never assumed from a green CI.
+    callbackProcessingState: classifyCallbackProcessingState({ status: command.status }),
   };
 }
 
@@ -827,4 +988,22 @@ export async function getCodingBridgeAvailability(clientId: string) {
     leaseExpiresAt: row.leaseExpiresAt,
     lastSeenAt: row.lastSeenAt,
   };
+}
+
+/** Read-only correlated timeline; never exposes other bridge sources or tenants. */
+export async function getAiTaskBridgeTimeline(externalCommandId: string) {
+  await ensureCodingControlBridgeTables();
+  const [command] = await db.select().from(aiCodingBridgeCommandsTable).where(
+    and(eq(aiCodingBridgeCommandsTable.source, "ai-task-hub"), eq(aiCodingBridgeCommandsTable.externalCommandId, externalCommandId))
+  ).limit(1);
+  if (!command) return null;
+  const responses = await db.select({
+    id: aiCodingBridgeResponsesTable.id,
+    kind: aiCodingBridgeResponsesTable.kind,
+    message: aiCodingBridgeResponsesTable.message,
+    createdAt: aiCodingBridgeResponsesTable.createdAt,
+  }).from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
+    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
+  return { commandId: command.id, status: command.status, responses };
 }

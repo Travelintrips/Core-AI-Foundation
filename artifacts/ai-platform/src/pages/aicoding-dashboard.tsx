@@ -423,7 +423,7 @@ export default function AicodingDashboard() {
                 <Zap className="h-5 w-5" />
               </div>
               <div>
-                <p className="font-semibold text-white">AI Coding</p>
+                <p className="font-semibold text-white">AI Engine</p>
                 <p className="text-[11px] text-slate-500">Operations Center</p>
               </div>
             </div>
@@ -452,7 +452,7 @@ export default function AicodingDashboard() {
               </p>
             </div>
             <a href="/coding-workspace" className="block rounded-xl border border-slate-800 px-3 py-2 text-center text-xs text-slate-400 hover:border-slate-700 hover:text-white">
-              Buka Coding Workspace
+              Buka AI Engine Workspace
             </a>
           </div>
         </aside>
@@ -461,7 +461,7 @@ export default function AicodingDashboard() {
           <header id="overview" className="sticky top-0 z-20 border-b border-slate-800/80 bg-[#06101d]/90 px-4 py-4 backdrop-blur-xl lg:px-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h1 className="text-xl font-semibold tracking-tight text-white lg:text-2xl">Dashboard Operasional AI Coding</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-white lg:text-2xl">Dashboard Operasional AI Engine</h1>
                 <p className="mt-1 text-xs text-slate-500">Coding, worker, infrastruktur, GitHub, Supabase, Hostinger, dan device WhatsApp dalam satu monitor live.</p>
               </div>
               <div className="flex items-center gap-2">
@@ -838,7 +838,7 @@ export default function AicodingDashboard() {
             )}
 
             <footer className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2 text-[10px] text-slate-700">
-              <span>AI Coding Operations · data live tanpa angka dummy</span>
+              <span>AI Engine Operations · data live tanpa angka dummy</span>
               <span>Terakhir sinkron: {fmtTime(data?.generatedAt)}</span>
             </footer>
           </div>

@@ -7,9 +7,78 @@ import {
   isAiCoreCapabilityQuery,
   isSafeDirectOpenClawPcCommand,
   parseDirectOpenClawPcCommand,
+  parseOpenClawPcCodingRequest,
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
+    expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
+    });
+    expect(classifyAiCoreChatDispatch("Instruksikan OpenClaw untuk memindahkan kursor mouse ke bagian atas layar")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
+    });
+  });
+
+  it("does not allow semantic read-only intent to intercept explicit external-agent commands", () => {
+    const routeSource = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    expect(routeSource).toContain('rawDispatch.kind === "EXTERNAL_AGENT"');
+    expect(classifyAiCoreChatDispatch("OpenClaw kirim pesan teks ke sesi ChatGPT via UI")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
+    });
+  });
+
+  it.each([
+    "Minta OpenClaw membangunkan ChatGPT melalui pesan teks di sesi browser; TEST_ONLY tanpa mengubah kode atau deploy.",
+    "UJI E2E TERBATAS OpenClaw ke ChatGPT: kirim satu pesan TEKS BIASA melalui UI composer, bukan script; task TEST_ONLY tanpa merge atau deploy.",
+    "Suruh OpenClaw ketik pesan ke sesi ChatGPT dan tunggu callback.",
+    "UJI E2E TERBATAS OpenClaw ke ChatGPT: kirim satu pesan TEKS BIASA melalui UI composer dengan command_id dan correlation_id; ini TEST_ONLY tanpa merge, tanpa deploy, tanpa perubahan DB.",
+  ])("routes browser text wake to OpenClaw, never Coding Orchestrator: %s", (message) => {
+    expect(classifyAiCoreChatDispatch(message)).toMatchObject({
+      kind: "EXTERNAL_AGENT",
+      externalAgentClientId: "gcp-openclaw-main",
+      executionLane: "TARGETED",
+    });
+  });
+  it("preserves source-code mutation boundary", () => {
+    expect(classifyAiCoreChatDispatch("OpenClaw perbaiki kode ChatGPT browser script")).not.toMatchObject({
+      kind: "EXTERNAL_AGENT",
+      executionLane: "TARGETED",
+    });
+  });
+
+
+  it("routes leading pipe as OpenClaw messaging without coding classification", () => {
+    expect(parseOpenClawPcCodingRequest("| perbaiki bug login")).toBe("perbaiki bug login");
+    expect(parseOpenClawPcCodingRequest("tolong | perbaiki bug")).toBeNull();
+    expect(parseOpenClawPcCodingRequest("|")).toBeNull();
+    expect(classifyAiCoreChatDispatch("| ping OpenClaw PC")).toMatchObject({
+      kind: "EXTERNAL_AGENT", executionLane: "TARGETED", externalAgentClientId: "gcp-openclaw-main", workload: { workload: "REVIEW" },
+    });
+    expect(classifyAiCoreChatDispatch("perbaiki bug login").kind).not.toBe("EXTERNAL_AGENT");
+  });
+  it.each([
+    "Jalankan satu job uji Temporal Coding Worker VPS Hostinger TEST_ONLY tanpa merge atau deploy.",
+    "Buat tepat satu job Coding Orchestrator TEST_ONLY untuk uji worker VPS.",
+    "Execute one task temporal coding worker TEST_ONLY; do not deploy.",
+  ])("routes explicit bounded Temporal coding TEST_ONLY jobs to coding control plane: %s", (message) => {
+    expect(classifyAiCoreChatDispatch(message)).toMatchObject({
+      kind: "CONTROL_PLANE",
+      executionLane: "CODING",
+    });
+  });
+  it("does not treat a read-only Temporal worker status request as a job", () => {
+    expect(classifyAiCoreChatDispatch("Cek status worker Temporal VPS tanpa membuat job").kind).not.toBe("CONTROL_PLANE");
+  });
+
+  it("delegates explicit OpenClaw monitoring instead of reading agent registry", () => {
+    expect(classifyAiCoreChatDispatch("Delegasikan ke OpenClaw monitor-direct ai-core-health, cek status dan laporkan")).toMatchObject({
+      kind: "EXTERNAL_AGENT", externalAgentClientId: "gcp-openclaw-main",
+    });
+    expect(classifyAiCoreChatDispatch("cek status OpenClaw")).toMatchObject({
+      kind: "INFRA_OPERATION", infrastructureOperation: "EXTERNAL_AGENT_STATUS",
+    });
+  });
   it.each([
     "Uji koneksi dua arah saja. Balas dengan AI_CORE_TWO_WAY_OK. Jangan mengubah file, konfigurasi, repository, atau melakukan deployment.",
     "Test two-way connection and echo OK",
@@ -310,6 +379,16 @@ describe("AI Core Chat automatic dispatch", () => {
     expect(decision.workload.workload).toBe("CODING");
     expect(decision.workload.requiresApproval).toBe(false);
     expect(decision.reason).not.toContain("explicit approval gate");
+  });
+
+  it("routes explicit TEST_ONLY coding jobs into the coding control plane", () => {
+    const decision = classifyAiCoreChatDispatch(
+      "TEST_ROUTING_CODING_20261009 — Buat job coding TEST_ONLY untuk memverifikasi routing AI Core → OpenClaw → ChatGPT → AI Core. Jangan mengubah kode produksi, jangan merge dan jangan deploy. Minta ChatGPT membalas ACK_CODING_20261009.",
+    );
+    expect(decision.kind).toBe("CONTROL_PLANE");
+    expect(decision.executionLane).toBe("CODING");
+    expect(decision.workload.workload).toBe("CODING");
+    expect(classifyAiCoreChatDispatch("cek status OpenClaw").kind).not.toBe("CONTROL_PLANE");
   });
 
   it("allows Coding Orchestrator only when explicitly requested by name", () => {

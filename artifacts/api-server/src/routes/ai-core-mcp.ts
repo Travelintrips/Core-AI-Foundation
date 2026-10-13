@@ -1,3 +1,5 @@
+import {
+} from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
@@ -23,7 +25,7 @@ import {
 import { logAudit } from "../services/aiAuditService.js";
 import { getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
 import {
-  acknowledgeCodingBridgeResponse,
+  acknowledgeCodingBridgeResponseForConversation,
   listPendingCodingBridgeResponsesForConversation,
   subscribeCodingBridgeConversation,
   unsubscribeCodingBridgeConversation,
@@ -123,6 +125,7 @@ const ReadEventsArgs = z.object({
 }).strict();
 const AckEventArgs = z.object({
   responseId: z.string().uuid(),
+  conversationId: z.string().trim().min(1).max(200),
 }).strict();
 const UnsubscribeEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
@@ -302,7 +305,9 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
 
   try {
     const verified = await verifyMcpAccessToken(supplied);
-    if (!connectorKey) return null;
+    // OAuth profile authentication must not depend on the optional legacy
+    // connector key. Commands using the internal connector still fail closed
+    // downstream when that key is absent.
     return {
       kind: "oauth",
       connectorKey,
@@ -387,7 +392,7 @@ const tools = [
   {
     name: "send_ai_core_command",
     description:
-      "Send an explicit operational instruction to AI Core with automatic routing to read-only workers or the coding control plane. No @ prefix is required; the server applies the internal execution gate. This can cause code, configuration, deployment, or other operational changes.",
+      "Send an authenticated operational instruction to AI Core. Routing is intent-dependent: read-only operations, GitHub-direct-required source changes, explicitly requested coding control-plane work, infrastructure operations, or bounded external-agent delegation. No @ prefix is required. A returned command/job ID is not proof of execution or a ChatGPT round-trip ACK. This tool can cause code, configuration, deployment, or other operational changes; critical gates still apply.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -517,9 +522,10 @@ const tools = [
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["responseId"],
+      required: ["responseId", "conversationId"],
       properties: {
         responseId: { type: "string", format: "uuid" },
+        conversationId: { type: "string", description: "Exact conversation ID used for event subscription." },
       },
     },
     securitySchemes: [{ type: "oauth2", scopes: ["ai_core.events"] }],
@@ -553,6 +559,13 @@ const tools = [
     },
   },
   {
+    name: "handshake_ai_core",
+    description: "Discover authenticated AI Core capabilities and protocol limitations. Does not claim to know the current ChatGPT conversation URL or register a browser session.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    annotations: { title: "Handshake AI Core", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
     name: "get_profile",
     description:
       "Return the internal AI Core profile represented by the current OAuth connection.",
@@ -584,6 +597,98 @@ const tools = [
     _meta: { "openai/profile": true },
   },
 ];
+
+function isProductionDeploymentEvidenceQuery(message: string): boolean {
+  // Exact diagnostic status checks need authoritative GitHub + production
+  // health data, not an LLM-generated SHA. Conceptual integration-readiness
+  // questions must still go through the OpenAI-first semantic router.
+  const value = message.trim().toLowerCase().replace(/\s+/g, " ");
+  if (/\b(?:audit|kesiapan|readiness|integrasi|integration|ai task)\b/.test(value)) return false;
+  return /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\s+(?:(?:status|bukti|evidence)\s+)?(?:(?:live|current)\s+)?(?:deploy(?:ment)?|production|produksi|prod)\b/.test(value) ||
+    /^(?:cek|check|periksa|verify|verifikasi|lihat|show)\s+(?:live\s+)?(?:deployment|production)\s+(?:evidence|bukti|sha|commit)\b/.test(value);
+}
+
+type DeploymentEndpointEvidence = {
+  domain: string;
+  httpStatus: number | null;
+  commitSha: string | null;
+  error?: string;
+};
+
+async function readProductionHealth(domain: string): Promise<DeploymentEndpointEvidence> {
+  try {
+    const response = await fetch(`https://${domain}/api/healthz`, {
+      method: "HEAD",
+      redirect: "error",
+      signal: AbortSignal.timeout(8_000),
+    });
+    const rawSha = response.headers.get("x-cst-commit-sha");
+    const commitSha = rawSha && /^[a-f0-9]{40}$/i.test(rawSha) ? rawSha.toLowerCase() : null;
+    return { domain, httpStatus: response.status, commitSha };
+  } catch {
+    return { domain, httpStatus: null, commitSha: null, error: "Health endpoint unavailable" };
+  }
+}
+
+async function readGitHubMainSha(): Promise<string | null> {
+  try {
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const response = await fetch(
+      "https://api.github.com/repos/Travelintrips/Core-AI-Foundation/git/ref/heads/main",
+      {
+        headers: {
+          accept: "application/vnd.github+json",
+          "user-agent": "ai-core-deployment-evidence",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        redirect: "error",
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { object?: { sha?: unknown } };
+    const sha = payload.object?.sha;
+    return typeof sha === "string" && /^[a-f0-9]{40}$/i.test(sha) ? sha.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildDeploymentEvidencePayload() {
+  const [internal, customer, mainSha] = await Promise.all([
+    readProductionHealth("aicore.cstlogistic.co.id"),
+    readProductionHealth("aifront.cstlogistic.co.id"),
+    readGitHubMainSha(),
+  ]);
+  const endpoints = [internal, customer];
+  const verified = Boolean(
+    mainSha &&
+    endpoints.every((endpoint) => endpoint.httpStatus === 200 && endpoint.commitSha === mainSha),
+  );
+  const summary = verified
+    ? "Kedua domain production sehat dan commit SHA cocok dengan GitHub main."
+    : "Deployment belum dapat diverifikasi sepenuhnya; lihat bukti per domain dan GitHub main.";
+  return {
+    kind: "answer",
+    route: "DEPLOYMENT_EVIDENCE_LIVE",
+    provider: null,
+    model: null,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    estimatedCostUsd: 0,
+    workload: "DETERMINISTIC",
+    costClass: "ZERO",
+    verified,
+    requiresApproval: false,
+    evidence: {
+      checkedAt: new Date().toISOString(),
+      mainSha,
+      endpoints,
+      source: "LIVE_HEALTHZ_AND_GITHUB_REF",
+      e2eVerified: false,
+    },
+    reply: `${summary} GitHub main: ${mainSha ?? "tidak tersedia"}. ${endpoints.map((endpoint) => `${endpoint.domain}: HTTP ${endpoint.httpStatus ?? "unavailable"}, SHA ${endpoint.commitSha ?? "tidak tersedia"}`).join("; ")}. Hasil E2E belum diverifikasi oleh pemeriksaan ini.`,
+  };
+}
 
 function isMcpDiscoveryQuery(message: string): boolean {
   const value = message.toLowerCase().replace(/\s+/g, " ").trim();
@@ -902,7 +1007,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
   }
 
   const requiredScope =
-    params.name === "query_ai_core"
+    (params.name === "query_ai_core" || params.name === "handshake_ai_core")
       ? "ai_core.progress"
       : params.name === "send_ai_core_command"
         ? "ai_core.command"
@@ -928,7 +1033,21 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
 
   try {
     let payload: unknown;
-    if (params.name === "query_ai_core") {
+    if (params.name === "handshake_ai_core") {
+      payload = {
+        protocol: "ai-core-communication/v1",
+        authenticated: true,
+        capabilities: tools.filter((tool) => tool.name !== "get_profile").map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          scope: tool.securitySchemes?.[0]?.scopes?.[0] ?? null,
+        })),
+        conversationBinding: "requires_verified_explicit_conversation_id",
+        conversationUrlKnown: false,
+        browserWakeVerified: false,
+        notes: "MCP does not expose the current ChatGPT conversation URL automatically. Never dispatch a session callback without verified pairing.",
+      };
+    } else if (params.name === "query_ai_core") {
       const parsed = ReadOnlyQueryArgs.parse(params.arguments ?? {});
       const message = readOnlyQueryMessage(parsed.message);
       if (!message) {
@@ -943,6 +1062,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       }
       if (isMcpDiscoveryQuery(message)) {
         payload = buildMcpDiscoveryPayload();
+      } else if (isProductionDeploymentEvidenceQuery(message)) {
+        payload = await buildDeploymentEvidencePayload();
       } else {
         payload = await callAiCore(
           "/ai/core-chat/messages",
@@ -971,8 +1092,36 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
-      const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(parsed.message);
-      if (!parsed.confirmed) {
+      // A callback to the originating ChatGPT session cannot be verified without
+      // an explicit conversation binding. Do not enqueue a job that promises an
+      // ACK or delivery to an unknown session.
+      const requestsChatCallback = /(?:callback|balasan|reply|kirim hasil|send result)[\s\S]{0,180}(?:chatgpt|sesi|session|conversation)|(?:chatgpt|sesi|session|conversation)[\s\S]{0,180}(?:callback|balasan|reply|ack)/i.test(command.instruction);
+      if (requestsChatCallback && !parsed.conversationId) {
+        res.status(200).json(rpcResult(body.id ?? null, {
+          content: [{ type: "text", text: "CHATGPT_CONVERSATION_ID_REQUIRED: Provide the actual originating conversationId before requesting an E2E ChatGPT callback. No command was dispatched." }],
+          structuredContent: { blocked: true, reason: "CHATGPT_CONVERSATION_ID_REQUIRED", deliveryVerified: false, dispatched: false },
+          isError: true,
+        }));
+        return;
+      }
+      // Compatibility for MCP clients whose cached tool schema predates the
+      // confirmed boolean. They can echo "confirmed=true" in the message after
+      // the user explicitly confirms. Strip the marker before forwarding so it
+      // never becomes part of the operational instruction.
+      const inlineConfirmation = /^@?\s*confirmed=true\b[\s:,-]*/i.test(parsed.message);
+      const effectiveConfirmed = parsed.confirmed || inlineConfirmation;
+      if (inlineConfirmation) {
+        const cleanMessage = parsed.message.replace(/^(@?\s*)confirmed=true\b[\s:,-]*/i, "$1");
+        const cleanCommand = executionCommandMessage(cleanMessage);
+        if (cleanCommand) {
+          command.instruction = cleanCommand.instruction;
+          command.gatedMessage = cleanCommand.gatedMessage;
+        }
+      }
+      // Deny prohibited coding immediately, even before MCP intent confirmation:
+      // a policy prohibition must never be described as missing workers.
+      const safeDirectPcCommand = isSafeDirectOpenClawPcCommand(command.instruction);
+      if (!effectiveConfirmed) {
         if (!safeDirectPcCommand) {
           payload = buildIntentConfirmation(command.instruction);
           await recordChatLearningEvent({ role: "assistant", content: JSON.stringify(payload), scope: { sessionId: parsed.conversationId ?? null, projectName: parsed.projectName, repository: parsed.repository, branch: parsed.branch }, metadata: { kind: "intent_confirmation", status: "awaiting_confirmation", originalInstruction: command.instruction } }).catch(() => undefined);
@@ -1056,6 +1205,34 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         },
         identity.connectorKey,
       );
+      // A model-generated claim of external-agent dispatch is not execution evidence.
+      // Fail closed when there is no persisted bridge command to track.
+      if (payload && typeof payload === "object") {
+        const response = payload as Record<string, unknown>;
+        const reply = typeof response.reply === "string" ? response.reply : "";
+        const lane = typeof response.executionLane === "string" ? response.executionLane : "";
+        const claimsDispatch = /(?:command\s*id|commandid|perintah.{0,30}dikirim|dispatch.{0,30}(?:succeeded|berhasil))/i.test(reply);
+        const mentionsExternalWorker = /(?:openclaw|open\s*claw|external.agent|worker)/i.test(command.instruction);
+        if (claimsDispatch && mentionsExternalWorker) {
+          const ids = [...reply.matchAll(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi)].map((match) => match[0]);
+          let verified = false;
+          if (lane !== "NO_WORKER") {
+            for (const id of ids) {
+              const persisted = await getExternalAgentWorkState(id);
+              if (persisted) { verified = true; break; }
+            }
+          }
+          if (!verified) {
+            payload = {
+              kind: "dispatch_unverified",
+              status: "BLOCKED",
+              reason: lane === "NO_WORKER" ? "NO_WORKER" : "EXTERNAL_COMMAND_NOT_PERSISTED",
+              reply: "AI Core did not produce a verifiable external-agent command. No successful dispatch or browser callback can be claimed.",
+              isError: true,
+            };
+          }
+        }
+      }
       if (
         payload &&
         typeof payload === "object" &&
@@ -1115,6 +1292,13 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           found: true,
           commandId: parsed.commandId,
           status: state.command.status,
+          statusCode: (state.command.metadataJson as Record<string, unknown> | null)?.["statusCode"] ??
+            (state.command.status === "COMPLETED" ? "JOB_COMPLETED" :
+              state.command.status === "FAILED" ? "FAILED" : "UNKNOWN_UNVERIFIED"),
+          deliveryCode: (state.command.metadataJson as Record<string, unknown> | null)?.["deliveryCode"] ?? "UNKNOWN_UNVERIFIED",
+          e2eCode: (state.command.metadataJson as Record<string, unknown> | null)?.["e2eCode"] ?? "UNKNOWN_UNVERIFIED",
+          callbackProcessingState: state.callbackProcessingState,
+          progressSource: "bridge_database",
           externalCommandId: state.command.externalCommandId,
           commandType: state.command.commandType,
           taskId: state.command.taskId ?? null,
@@ -1172,7 +1356,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       };
     } else if (params.name === "ack_ai_core_event") {
       const parsed = AckEventArgs.parse(params.arguments ?? {});
-      const acknowledged = await acknowledgeCodingBridgeResponse(parsed.responseId);
+      const acknowledged = await acknowledgeCodingBridgeResponseForConversation(parsed);
       payload = { acknowledged: Boolean(acknowledged), responseId: parsed.responseId };
     } else if (params.name === "unsubscribe_ai_core_events") {
       const parsed = UnsubscribeEventsArgs.parse(params.arguments ?? {});

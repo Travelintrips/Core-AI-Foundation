@@ -170,3 +170,34 @@ describe("AI Core read-only data tools", () => {
   });
 
 });
+
+
+describe("production data tool routing regression", () => {
+  beforeEach(() => mocks.execute.mockReset());
+  it("keeps the smoke booking query ahead of the semantic gate", async () => {
+    const { detectAiCoreDataTool } = await import("../aiCoreDataToolService.js");
+    expect(detectAiCoreDataTool("cek booking SC-0992")).toEqual({ tool: "SPORT_CENTER_BOOKING_LOOKUP", bookingNumber: "SC-0992" });
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
+    const askStart = source.indexOf("async function answerAskMode(");
+    const askEnd = source.indexOf("if (isAiCoreAuditHistoryQuery(routingMessage))", askStart);
+    expect(askStart).toBeGreaterThan(0);
+    expect(askEnd).toBeGreaterThan(askStart);
+    const preSemantic = source.slice(askStart, askEnd);
+    // Exactly one supported read-only lookup before the semantic intent gate:
+    // duplicated calls make an otherwise read-only query run twice on misses.
+    expect(preSemantic.match(/await tryRunAiCoreDataTool\(routingMessage\)/g)).toHaveLength(1);
+    expect(preSemantic).toContain("const prioritizedDataTool = await tryRunAiCoreDataTool");
+  });
+
+  it.each([
+    "halo",
+    "halo apa kabar",
+    "apa kabar",
+    "maksudnya 23 itu apa",
+    "Maksudnya 23 itu apa?",
+  ])("never classifies ordinary conversation as a data-tool lookup: %s", (message) => {
+    expect(detectAiCoreDataTool(message)).toBeNull();
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+});

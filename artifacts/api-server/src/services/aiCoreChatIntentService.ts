@@ -43,6 +43,15 @@ const MUTATING =
   /\b(fix|perbaiki|ubah|edit|patch|deploy|merge|commit|push|hapus|delete|create|buat|tambah|add|implement(?:asikan)?|refactor)\b/i;
 
 const DIRECT_OPENCLAW_PC_PREFIX = /^#\s*/;
+const OPENCLAW_PC_MESSAGE_PREFIX = /^\|\s*/;
+
+/** Explicit OpenClaw PC message route; never interprets a pipe in the middle of text. */
+export function parseOpenClawPcCodingRequest(message: string): string | null {
+  const value = message.trim().replace(/^@\s*/, "");
+  if (!OPENCLAW_PC_MESSAGE_PREFIX.test(value)) return null;
+  const instruction = value.replace(OPENCLAW_PC_MESSAGE_PREFIX, "").trim();
+  return instruction || null;
+}
 
 const SAFE_DIRECT_PC_ACTION =
   /^(?:buka|open|fokus(?:kan)?|focus|klik|click|ketik|type|tulis|write|scroll|gulir|screenshot|ambil\s+screenshot|capture\s+(?:the\s+)?screen|tekan\s+(?:enter|tab|escape|esc)|press\s+(?:enter|tab|escape|esc))\b/i;
@@ -122,6 +131,19 @@ export function detectRemoteWorkerPreset(
 export function classifyAiCoreChatDispatch(
   message: string,
 ): AiCoreChatDispatchDecision {
+  const pcMessageRequest = parseOpenClawPcCodingRequest(message);
+  if (pcMessageRequest) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload: { ...classifyAiCoreWorkload(pcMessageRequest), workload: "REVIEW", requiresAgent: true },
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: OPENCLAW_AGENT_CLIENT_ID,
+      executionLane: "TARGETED",
+      reason: "Leading | routes a message to an eligible OpenClaw PC; it does not authorize coding or source changes.",
+    };
+  }
   const directOpenClawPcCommand = parseDirectOpenClawPcCommand(message);
   const workload = classifyAiCoreWorkload(directOpenClawPcCommand ?? message);
 
@@ -141,11 +163,88 @@ export function classifyAiCoreChatDispatch(
         "Leading # explicitly routes this command to the paired PC through OpenClaw without Coding Orchestrator.",
     };
   }
+  // Explicit benign pointer movement delegated to OpenClaw is a device action,
+  // not an OpenAI answer or a repository coding task.
+  const explicitMouseMove =
+    /\bopenclaw\b/i.test(message) &&
+    /\b(?:mouse|kursor|cursor|pointer)\b/i.test(message) &&
+    /\b(?:gerak(?:kan)?|menggerakkan|pindah(?:kan)?|memindah(?:kan)?|move|geser|shift)\b/i.test(message) &&
+    !hasExplicitSourceChange(message) &&
+    !/\b(?:powershell|cmd|terminal|shell|script|hapus|delete|install|download|password|credential|token)\b/i.test(message);
+  if (explicitMouseMove) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload: { ...workload, requiresAgent: false },
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: OPENCLAW_AGENT_CLIENT_ID,
+      executionLane: "TARGETED",
+      reason: "Explicit benign OpenClaw mouse movement routes to the desktop agent.",
+    };
+  }
+  // Browser wake/notification is desktop delivery, even if the request mentions
+  // TEST_ONLY, callbacks or Coding Orchestrator as context. Do not create a
+  // repository coding task for a ChatGPT message-delivery probe.
+  const browserWake =
+    /\bopenclaw\b/i.test(message) &&
+    /\bchatgpt\b/i.test(message) &&
+    /\b(?:bangunkan|membangunkan|wake|wakeup|wake-up|kirim|mengirim|ketik|mengetik|pesan|message|notifikasi|notify)\b/i.test(message) &&
+    /\b(?:sesi|session|browser|desktop|chat|teks|text|composer|keyboard|ui)\b/i.test(message);
+  if (browserWake && !hasExplicitSourceChange(message)) {
+    return {
+      kind: "EXTERNAL_AGENT",
+      workload: { ...workload, requiresAgent: false },
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: OPENCLAW_AGENT_CLIENT_ID,
+      executionLane: "TARGETED",
+      reason: "Explicit OpenClaw-to-ChatGPT text delivery uses the desktop agent, never a coding task.",
+    };
+  }
+  // Explicit test-only job creation is an orchestration request, not a chat
+  // answer or a source mutation. Never simulate its ACK with a local echo.
+  const explicitTestOnlyCodingJob =
+    /\b(?:buat|create|jalankan|run|eksekusi|execute)\b/i.test(message) &&
+    /\b(?:job|task|pekerjaan)\b/i.test(message) &&
+    /\b(?:coding|orchestrator|temporal|worker)\b/i.test(message) &&
+    /\bTEST_ONLY\b/i.test(message) &&
+    /\b(?:routing|orchestrator|chatgpt|openclaw|temporal|worker)\b/i.test(message);
+  if (explicitTestOnlyCodingJob) {
+    return {
+      kind: "CONTROL_PLANE",
+      workload: { ...workload, workload: "CODING", requiresAgent: true },
+      preset: null,
+      infrastructureOperation: null,
+      githubOperation: null,
+      externalAgentClientId: null,
+      executionLane: "CODING",
+      reason: "Explicit TEST_ONLY coding job must enter the control plane; an ACK requires a verified external round trip.",
+    };
+  }
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
   const githubOperation = detectAiCoreGitHubOperation(message);
   const externalAgentClientId = detectExplicitExternalAgentClientId(message);
   const sourceChange = hasExplicitSourceChange(message);
 
+  // Safe explicit delegation wins over generic registry status queries.
+  // Source changes and sensitive actions continue through their gated routes.
+  // Explicit read-only delegation should not be blocked by forbidden-action
+  // words inside negative instructions ("jangan deploy", "dilarang restart").
+  // Never grant mutation authority based on a negative clause.
+  const delegationAffirmativeText = message
+    .replace(/\b(?:jangan|dilarang|tanpa|never|do not|don't|without)\b[^.!?;\n]{0,180}/gi, " ");
+  if (externalAgentClientId && !sourceChange &&
+      /\b(delegasikan|delegate|suruh|minta|route|rutekan)\b/i.test(delegationAffirmativeText) &&
+      !/\b(deploy|merge|restart|reboot|hapus|delete|uninstall|install|push|commit|password|secret|credential|token)\b/i.test(delegationAffirmativeText)) {
+    return {
+      kind: "EXTERNAL_AGENT", workload, preset: null,
+      infrastructureOperation: null, githubOperation: null,
+      externalAgentClientId, executionLane: "TARGETED",
+      reason: "Explicit safe delegation takes precedence over agent status inspection.",
+    };
+  }
   const explicitCodingOrchestrator = isExplicitCodingOrchestratorRequest(message);
 
   // Source-code mutation is GitHub-direct by default. This is intentionally

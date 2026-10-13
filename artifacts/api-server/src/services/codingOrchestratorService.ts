@@ -26,6 +26,7 @@ import {
 } from "./repositoryAnalyzerService.js";
 import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
 import { reportCodingTaskTerminalTransition } from "./codingTaskTerminalReportingService.js";
+import { isRepositoryAnalyzerVerificationOnlyInstruction, repositoryAnalyzerVerificationAck } from "./repositoryAnalyzerVerificationOnlyService.js";
 
 type CodingStageId =
   | "repository_analyzer"
@@ -250,18 +251,24 @@ async function completeLocalAnalysis(
       ? (analysis.changeReservation as Record<string, unknown>)
       : null;
   const activeConflict = changeReservation?.status === "CONFLICT";
+  const verifiedAnalyzerOnly = isRepositoryAnalyzerVerificationOnlyInstruction(input.task.instruction) &&
+    !activeConflict && localExecution?.status !== "APPLIED";
   const nextAction =
     activeConflict
       ? "REVIEW_CONFLICT"
       : localExecution?.status === "APPLIED"
         ? "REVIEW_LOCAL_PATCH"
+      : verifiedAnalyzerOnly
+        ? "DONE"
       : aiEscalation
         ? "APPROVE_TASK_GRAPH"
         : localPlan?.status === "AI_REQUIRED"
           ? "AI_REQUIRED"
           : "REVIEW_LOCAL_CONTEXT";
   const summary =
-    nextAction === "REVIEW_CONFLICT"
+    nextAction === "DONE"
+      ? `${analysisSummary} Repository Analyzer verification-only completed with no repository changes. ${repositoryAnalyzerVerificationAck(input.task.instruction) ?? ""}`.trim()
+    : nextAction === "REVIEW_CONFLICT"
       ? `${analysisSummary} Coding stopped before worker execution because the predicted change set overlaps an active task. QC can sequence, revise, or rebase the conflicting task; no AI/LLM worker was invoked.`
       : nextAction === "REVIEW_LOCAL_PATCH"
         ? `${analysisSummary} A deterministic local patch is ready for automated QC; repository scripts were not executed. No AI/LLM was invoked.`
@@ -538,6 +545,8 @@ export async function continueCodingOrchestration(
       analysis.changeReservation && typeof analysis.changeReservation === "object"
         ? (analysis.changeReservation as Record<string, unknown>)
         : null;
+    const verifiedAnalyzerOnly = isRepositoryAnalyzerVerificationOnlyInstruction(input.task.instruction) &&
+      changeReservation?.status !== "CONFLICT" && localExecution?.status !== "APPLIED";
 
     if (changeReservation?.status === "CONFLICT") {
       stages = updateStage(
@@ -638,12 +647,12 @@ export async function continueCodingOrchestration(
     // COMPLETED Coding Orchestrator/Repository Analyzer run, so invoking it
     // while this run is still RUNNING creates a circular ANALYSIS_REQUIRED
     // failure even though repository_analyzer has already completed.
-    if (localPlan?.status === "AI_REQUIRED") {
+    if (localPlan?.status === "AI_REQUIRED" && !verifiedAnalyzerOnly) {
       await completeLocalAnalysis(input, sessionId, stages, analysis);
     }
 
     let aiEscalation: Awaited<ReturnType<typeof generateAndPersistCodingMultiTaskPlan>> | undefined;
-    if (localPlan?.status === "AI_REQUIRED") {
+    if (localPlan?.status === "AI_REQUIRED" && !verifiedAnalyzerOnly) {
       try {
         aiEscalation = await generateAndPersistCodingMultiTaskPlan(input.task.id, analysis);
       } catch (plannerError) {
@@ -680,8 +689,10 @@ export async function continueCodingOrchestration(
     await completeLocalAnalysis(input, sessionId, stages, analysis, aiEscalation);
 
     const shouldAutoAdvance =
-      localExecution?.status === "APPLIED" ||
-      localPlan?.status === "AI_REQUIRED";
+      !verifiedAnalyzerOnly && (
+        localExecution?.status === "APPLIED" ||
+        localPlan?.status === "AI_REQUIRED"
+      );
 
     if (shouldAutoAdvance) {
       let autonomousState:
@@ -759,12 +770,26 @@ export async function continueCodingOrchestration(
   }
 }
 
+function repositoryAnalyzerExecutionMode(): "remote" | "local" {
+  const configured = process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase();
+  if (configured === "remote" || configured === "local") return configured;
+  const prod = process.env.NODE_ENV?.trim().toLowerCase() === "production" ||
+    process.env.APP_ENV?.trim().toLowerCase() === "production";
+  return prod ? "remote" : "local";
+}
+
 function scheduleRepositoryAnalyzerClaimFailover(
   input: CodingOrchestrationInput,
   sessionId: string,
   queuedJob: AiJob,
   stages: CodingStage[],
 ): void {
+  // Remote mode must never reclaim analyzer jobs inside the constrained API host.
+  // The durable queued row remains available for a remote worker or operator recovery.
+  if (repositoryAnalyzerExecutionMode() === "remote") {
+    return;
+  }
+
   const timer = setTimeout(() => {
     void (async () => {
       try {
@@ -1057,7 +1082,7 @@ export async function startCodingOrchestration(
 
   // In remote mode the API remains enqueue-first. The watchdog above is only a
   // bounded safety net when the separately supervised CPU worker is unavailable.
-  const analyzerMode = process.env.REPOSITORY_ANALYZER_EXECUTION_MODE?.trim().toLowerCase();
+  const analyzerMode = repositoryAnalyzerExecutionMode();
   if (analyzerMode === "remote") {
     logger.info(
       { jobId: queuedJob.id, taskId: input.task.id, codingRunId: input.run.id },
@@ -1076,7 +1101,40 @@ export async function startCodingOrchestration(
     detached: false,
   });
   child.unref();
+  // A child can spawn successfully and then exit before claiming its durable
+  // queued row. Recover on close rather than leaving the global single-flight
+  // slot occupied until the 60-second stale queue recovery.
+  let childSpawnErrored = false;
+  child.once("close", (exitCode, signal) => {
+    if (childSpawnErrored) return; // The error handler already owns recovery.
+    void (async () => {
+      const [currentJob] = await withTransientDatabaseRetry(
+        () => db
+          .select()
+          .from(aiJobsTable)
+          .where(eq(aiJobsTable.id, queuedJob!.id))
+          .limit(1),
+        { attempts: 3, baseDelayMs: 150 },
+      );
+      // CAS inside continueCodingOrchestration preserves single-flight:
+      // never rerun an analyzer that another worker already claimed.
+      if (!currentJob || currentJob.status !== "queued") return;
+      logger.warn(
+        { jobId: currentJob.id, exitCode, signal, taskId: input.task.id },
+        "[coding-orchestrator] Analyzer child exited before claim; reclaiming queued job",
+      );
+      await continueCodingOrchestration(
+        input, sessionId, currentJob, stages,
+      );
+    })().catch((error) => {
+      logger.error(
+        { err: error, jobId: queuedJob?.id, taskId: input.task.id },
+        "[coding-orchestrator] Analyzer early-exit reclaim failed",
+      );
+    });
+  });
   child.once("error", (error) => {
+    childSpawnErrored = true;
     const spawnCode =
       typeof (error as NodeJS.ErrnoException).code === "string"
         ? (error as NodeJS.ErrnoException).code

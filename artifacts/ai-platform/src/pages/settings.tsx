@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useListSettings } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -232,6 +232,65 @@ function ProviderAlertSettings() {
   );
 }
 
+
+function AgentCredentialsPanel() {
+  const [items, setItems] = useState<Array<{ id: string; name: string; scopes: string[]; isActive: boolean }>>([]);
+  const [issued, setIssued] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { void refresh().catch(err => setError(String(err))); }, []);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (ADMIN_KEY) headers["x-admin-api-key"] = ADMIN_KEY;
+  async function refresh() {
+    const response = await fetch("/api/ai/agent-runtime/credentials", { headers, credentials: "same-origin", cache: "no-store" });
+    if (!response.ok) throw new Error("Cannot load agent credentials (" + response.status + ")");
+    const body = await response.json();
+    setItems(body.credentials ?? []);
+  }
+  async function issue() {
+    setLoading(true); setError(""); setIssued("");
+    try {
+      const response = await fetch("/api/ai/agent-runtime/credentials", {
+        method: "POST", headers, credentials: "same-origin",
+        body: JSON.stringify({ name: "openclaw-pc-worker-3", scopes: ["agent:presence", "agent:work", "model:chat"] }),
+      });
+      if (!response.ok) throw new Error("Issuing credential failed (" + response.status + ")");
+      const body = await response.json();
+      setIssued(body.token);
+      await refresh();
+    } catch (err) { setError(String(err)); } finally { setLoading(false); }
+  }
+  async function revoke(id: string) {
+    if (!window.confirm("Revoke this worker credential? Running workers using it will disconnect.")) return;
+    setLoading(true); setError(""); setIssued("");
+    try {
+      const response = await fetch("/api/ai/agent-runtime/credentials/" + encodeURIComponent(id) + "/revoke", {
+        method: "POST", headers, credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error("Revocation failed (" + response.status + ")");
+      await refresh();
+    } catch (err) { setError(String(err)); } finally { setLoading(false); }
+  }
+  return (
+    <Card>
+      <CardHeader><CardTitle>Agent Credentials</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">Issue a dedicated scoped credential for OpenClaw PC Worker 3. The secret is shown only once.</p>
+        <div className="flex gap-2">
+          <Button onClick={issue} disabled={loading || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
+          <Button variant="outline" onClick={() => { setError(""); void refresh().catch(err => setError(String(err))); }}>Refresh credentials</Button>
+        </div>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {issued && <div className="space-y-2"><Label htmlFor="issued-worker-token">One-time token (store securely; do not send via chat)</Label><Input id="issued-worker-token" value={issued} readOnly autoComplete="off" /><Button variant="outline" onClick={() => setIssued("")}>Hide token</Button></div>}
+        {items.map(item => <div key={item.id} className="flex items-center justify-between gap-3 border-b py-2 text-sm">
+          <span>{item.name} — {item.isActive ? "Active" : "Revoked"} ({item.scopes.join(", ")})</span>
+          {item.isActive && <Button variant="outline" disabled={loading} onClick={() => void revoke(item.id)}>Revoke</Button>}
+        </div>)}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Settings page ────────────────────────────────────────────────────────
 
 export default function Settings() {
@@ -263,6 +322,7 @@ export default function Settings() {
       </div>
 
       {/* Provider Health Alert config */}
+      <AgentCredentialsPanel />
       <ProviderAlertSettings />
 
       <div className="space-y-8">

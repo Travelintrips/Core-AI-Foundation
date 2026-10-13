@@ -1058,6 +1058,28 @@ describe("autonomous terminal task status", () => {
     ).toBe(true);
   });
 
+  it("completes a proven read-only analyzer E2E but rejects unverified or mutated runs", async () => {
+    const { hasVerifiedCompletionEvidence } = await import("../localCodingAutonomousRepairService.js");
+    const instruction = "TEST_ONLY E2E verifikasi Repository Analyzer tanpa perubahan file ACK_ANALYZER_REMOTE_VPS_RETEST_20261010";
+    const payload = {
+      executionStatus: "COMPLETED",
+      orchestration: { nextAction: "DONE" },
+      localExecution: null,
+    };
+    const runs = [{ agentName: "Coding Orchestrator", status: "COMPLETED" }];
+    expect(hasVerifiedCompletionEvidence({
+      nextAction: "DONE", taskCommitSha: null, instruction, payload, runs,
+    })).toBe(true);
+    expect(hasVerifiedCompletionEvidence({
+      nextAction: "DONE", taskCommitSha: null, instruction,
+      payload: { ...payload, localExecution: { status: "APPLIED" } }, runs,
+    })).toBe(false);
+    expect(hasVerifiedCompletionEvidence({
+      nextAction: "DONE", taskCommitSha: null, instruction,
+      payload, runs: [{ agentName: "Coding Orchestrator", status: "FAILED" }],
+    })).toBe(false);
+  });
+
   it("allows explicit verification-only tasks to finish without a source commit", async () => {
     const { hasVerifiedCompletionEvidence } = await import(
       "../localCodingAutonomousRepairService.js"

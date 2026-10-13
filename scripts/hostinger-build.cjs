@@ -31,6 +31,14 @@ function resolveBuildCommitSha(env) {
   // Native Hostinger Git deployments may retain CST_BUILD_COMMIT_SHA from an
   // older release. The checked-out Git HEAD is the source of truth whenever
   // the repository metadata is available.
+  // GitHub Actions uploads a git archive without .git metadata. The archive
+  // embeds the immutable checkout SHA in .cst-build-sha; use it before any
+  // potentially stale environment variable supplied by Hostinger.
+  const marker = path.join(process.cwd(), ".cst-build-sha");
+  if (fs.existsSync(marker)) {
+    const archivedSha = fs.readFileSync(marker, "utf8").trim();
+    if (isCommitSha(archivedSha)) return archivedSha.toLowerCase();
+  }
   const gitSha = readCommand("git", ["rev-parse", "HEAD"]);
   if (isCommitSha(gitSha)) return gitSha.toLowerCase();
 
