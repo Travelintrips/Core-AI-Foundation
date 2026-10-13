@@ -6,6 +6,7 @@ import {
   db,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { notifyAiTaskLedgerSourceState } from "./aiTaskLedgerBridgeService.js";
 import {
   dispatchExternalAgentWork,
   OPENCLAW_AGENT_CLIENT_ID,
@@ -184,7 +185,15 @@ export async function reportCodingTaskTerminalTransition(input: {
 
   for (let attempt = 1; attempt <= TERMINAL_REPORT_MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await reportCodingTaskTerminalTransitionOnce(input);
+      const result = await reportCodingTaskTerminalTransitionOnce(input);
+      // The mirror is side-effect-only and must never block AI Core completion.
+      void notifyAiTaskLedgerSourceState({
+        externalId: `coding-task:${input.taskId}`,
+        title: `AI Core coding task ${input.taskId}`,
+        status: input.status,
+        version: "terminal",
+      }).catch(() => undefined);
+      return result;
     } catch (error) {
       lastError = error;
       if (attempt >= TERMINAL_REPORT_MAX_ATTEMPTS) break;

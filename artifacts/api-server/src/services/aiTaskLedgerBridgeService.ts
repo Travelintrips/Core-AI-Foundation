@@ -128,3 +128,58 @@ export async function mirrorAiTaskLedgerJob(
     }, "[ai-task-ledger] passive registration unsuccessful");
   }
 }
+
+/**
+ * Observe a status transition after the authoritative AI Core DB write commits.
+ * AI Task only mirrors source events; it never dispatches a coding worker.
+ * Completion needs a separate, source-database-verified receiver ACK.
+ */
+export async function mirrorAiTaskLedgerSourceState(input: AiTaskLedgerJobInput & {
+  status: string;
+  version?: Date | string | null;
+}): Promise<AiTaskLedgerResult> {
+  if (!ledgerBridgeEnabled()) return { synced: false, reason: "disabled" };
+  const registered = await registerAiTaskLedgerJob(input);
+  if (!registered.synced || !registered.id ||
+      !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(registered.id)) return registered;
+  const token = process.env["AI_TASK_BRIDGE_TOKEN"]?.trim();
+  const url = ledgerRequestUrl();
+  if (!token || !url) return { synced: false, reason: "unconfigured" };
+  const eventId = `ai-core:${input.externalId}:${input.status}:${input.version instanceof Date
+    ? input.version.getTime() : input.version ?? "initial"}`;
+  if (eventId.length > 180 || input.status.length > 40) {
+    return { synced: false, reason: "invalid_input" };
+  }
+  try {
+    const response = await fetch(`${url}/${registered.id}/source-event`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ eventId, status: input.status }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status !== 200 && response.status !== 202) {
+      return { synced: false, reason: "remote_error" };
+    }
+    const body = await response.json() as Record<string, unknown>;
+    if (body["accepted"] !== true) return { synced: false, reason: "remote_error" };
+    return { synced: true, id: registered.id, created: registered.created };
+  } catch {
+    return { synced: false, reason: "network_error" };
+  }
+}
+
+/** Nonblocking, bounded source status notification. */
+export async function notifyAiTaskLedgerSourceState(input: AiTaskLedgerJobInput & {
+  status: string;
+  version?: Date | string | null;
+}): Promise<void> {
+  if (!ledgerBridgeEnabled()) return;
+  const result = await mirrorAiTaskLedgerSourceState(input);
+  if (!result.synced) logger.warn(
+    { externalId: input.externalId, reason: result.reason, status: input.status },
+    "[ai-task-ledger] source status was not mirrored",
+  );
+}
