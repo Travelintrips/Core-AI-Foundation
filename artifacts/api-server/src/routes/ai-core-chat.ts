@@ -1330,7 +1330,8 @@ async function answerAskMode(
 
   // Read-only data tools run before any LLM. They never accept mutation verbs and
   // only execute parameterized SELECT queries against known business tables.
-  const dataTool = await tryRunAiCoreDataTool(routingMessage);
+  const prioritizedDataTool = await tryRunAiCoreDataTool(routingMessage);
+  const dataTool = prioritizedDataTool;
   if (dataTool.matched) {
     return {
       kind: "answer",
@@ -2065,7 +2066,7 @@ async function maybeRunRemoteWorkerPreset(
 
 const EXISTING_CWS_TASK = /\b(CWS-[0-9A-F]{8})\b/i;
 const EXISTING_CWS_STOP = /\b(?:stop|hentikan|berhentikan|disable|nonaktifkan)\b/i;
-const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete)\b/i;
+const EXISTING_CWS_RESUME = /\b(?:lanjutkan|continue|resume|reactivate|aktifkan\s+kembali|selesaikan|complete|retry|requeue)\b/i;
 
 async function runExistingCodingTaskLifecycleCommand(
   message: string,
@@ -2073,9 +2074,16 @@ async function runExistingCodingTaskLifecycleCommand(
   const match = message.match(EXISTING_CWS_TASK);
   if (!match) return null;
 
+  const readOnlyAudit = /\b(?:read[ -]?only|audit|monitor(?:ing)?|periksa|cek status)\b/i.test(message) && /\b(?:jangan|tanpa|tidak|no)\b/i.test(message);
+  if (readOnlyAudit) {
+    const taskNumber = match[1]!.toUpperCase();
+    const [task] = await db.select().from(aiCodingTasksTable).where(eq(aiCodingTasksTable.taskNumber, taskNumber)).limit(1);
+    if (!task) return { kind: "validation", route: "CONTROL_PLANE", reply: `Task ${taskNumber} tidak ditemukan.`, taskNumber };
+    return { kind: "answer", operation: "TASK_STATUS", mutating: false, taskId: task.id, taskNumber, status: task.status, reply: `Task ${taskNumber} status: ${task.status}. No mutation executed.` };
+  }
   const wantsStop = EXISTING_CWS_STOP.test(message);
   const wantsResume = EXISTING_CWS_RESUME.test(message);
-  if (!wantsStop && !wantsResume) return null;
+  if (!readOnlyAudit && !wantsStop && !wantsResume) return null;
 
   const taskNumber = match[1]!.toUpperCase();
   const [task] = await db
@@ -2199,6 +2207,10 @@ async function runExistingCodingTaskLifecycleCommand(
   const currentMax = Number((current as { max_cycles?: unknown } | null)?.max_cycles ?? 40);
   const boundedMax = Math.min(100, Math.max(40, Number.isFinite(currentMax) ? currentMax + 40 : 80));
   await enableAutonomousCodingTask(task.id, boundedMax, { forceDisabled: true });
+  const persistedAutonomous = await getAutonomousCodingTaskStatus(task.id);
+  const persistedMax = Number((persistedAutonomous as { max_cycles?: unknown } | null)?.max_cycles ?? 0);
+  const persistedState = String((persistedAutonomous as { status?: unknown } | null)?.status ?? "UNKNOWN");
+  const accepted = persistedState === "ACTIVE" && persistedMax >= boundedMax;
 
   return {
     kind: "execution",
@@ -2209,8 +2221,11 @@ async function runExistingCodingTaskLifecycleCommand(
     taskNumber: task.taskNumber,
     status: task.status,
     workspaceUrl: `/coding-workspace/${task.id}`,
-    autonomous: true,
-    maxCycles: boundedMax,
+    autonomous: accepted,
+    accepted,
+    operation: "TASK_RETRY",
+    requestedMaxCycles: boundedMax,
+    maxCycles: persistedMax,
   };
 }
 
@@ -2665,7 +2680,7 @@ async function runAutoMode(
 
       if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
         results.push({
-          ...githubDirectRequiredResponse(command),
+          ...(await startAgentTask(childInput)),
           executionLane: "NO_WORKER",
         });
         continue;
@@ -2752,7 +2767,7 @@ async function runAutoMode(
   }
 
   if (decision.kind === "GITHUB_DIRECT_REQUIRED") {
-    return { ...githubDirectRequiredResponse(contextualCommand), ...routingMeta };
+    return { ...(await startAgentTask({ ...executionInput, message: contextualCommand })), ...routingMeta };
   }
 
   if (decision.kind === "CONTROL_PLANE") {
@@ -3738,7 +3753,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             ? await runGitHubOperation(rawInput.message, rawInput.repository)
             : null) ??
           (rawDispatch.kind === "GITHUB_DIRECT_REQUIRED"
-            ? githubDirectRequiredResponse(rawInput.message)
+            ? await startAgentTask(effectiveInput)
             : null) ??
           (rawDispatch.kind === "EXTERNAL_AGENT"
             ? await startExternalAgentWork(
