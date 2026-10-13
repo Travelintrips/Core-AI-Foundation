@@ -45,6 +45,9 @@ jobs:
             '[PC-SAFE] PING_PC1')
               action='PING'
               target_client='openclaw-pc-worker'
+              # PC1 is registered and polls the VPS MCP AI Core control plane.
+              # Do not submit its work to the separate Hostinger app backend.
+              API_BASE_URL='https://mcp.cstlogistic.co.id/api'
               instruction='ping'
               ;;
             '[PC-SAFE] OPEN_NOTEPAD')
@@ -84,13 +87,16 @@ jobs:
           test "$command_id" != ''
           echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
           echo "action=$action" >> "$GITHUB_OUTPUT"
-          echo "AI Core accepted bounded $action for OpenClaw PC2 (command $command_id)."
+          echo "target_client=$target_client" >> "$GITHUB_OUTPUT"
+          echo "target_api_base=$API_BASE_URL" >> "$GITHUB_OUTPUT"
+          echo "AI Core queued bounded $action for $target_client (command $command_id)."
 
       - name: Observe verified agent result and report to issue
         shell: bash
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-          API_BASE_URL: ${{ vars.AI_CORE_API_BASE_URL || 'https://aicore.cstlogistic.co.id/api' }}
+          API_BASE_URL: ${{ steps.enqueue.outputs.target_api_base }}
+          TARGET_CLIENT: ${{ steps.enqueue.outputs.target_client }}
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -119,7 +125,18 @@ jobs:
               <<< "$response")"
             if [ -n "$event" ] && [ "$event" != 'null' ]; then
               kind="$(jq -r '.kind' <<< "$event")"
-              if [ "$kind" = 'COMPLETED' ]; then status='VERIFIED_COMPLETED'; else status='VERIFIED_FAILED'; fi
+              actual_client="$(jq -r '.checkpoint.clientId // empty' <<< "$event")"
+              actual_message="$(jq -r '.message // empty' <<< "$event")"
+              expected_pong='pong from DESKTOP-CPS76BH'
+              if [ "$TARGET_CLIENT" = 'openclaw-pc-worker' ]; then expected_pong='pong from Travelintrips-PC'; fi
+              if [ "$kind" = 'COMPLETED' ] && [ "$ACTION" = 'PING' ] &&
+                 [ "$actual_client" = "$TARGET_CLIENT" ] && [ "$actual_message" = "$expected_pong" ]; then
+                status='VERIFIED_COMPLETED'
+              elif [ "$kind" = 'FAILED' ]; then
+                status='VERIFIED_FAILED'
+              else
+                status='UNVERIFIED_TERMINAL_RESULT'
+              fi
               break
             fi
             sleep 5
