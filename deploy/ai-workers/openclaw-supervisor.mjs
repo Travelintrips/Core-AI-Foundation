@@ -522,6 +522,8 @@ async function heartbeatPresence() {
 }
 
 async function workLoop() {
+  let idleStreak = 0;
+  const idleDelay = () => Math.min(60000, POLL_MS * (2 ** Math.min(Math.max(idleStreak - 1, 0), 4))) * (0.85 + Math.random() * 0.3);
   while (!stopping) {
     try {
       if (!(await flushResults())) {
@@ -530,9 +532,11 @@ async function workLoop() {
       }
       const work = await claimWork();
       if (!work) {
-        await sleep(POLL_MS);
+        idleStreak = Math.min(idleStreak + 1, 8);
+        await sleep(idleDelay());
         continue;
       }
+      idleStreak = 0;
 
       log("claimed bounded work " + String(work.commandId));
       const result = work?.metadata?.openClawExecutionProfile === "monitor-direct"
@@ -551,7 +555,8 @@ async function workLoop() {
         "work loop error: " +
           (error instanceof Error ? error.message : String(error)).slice(0, 1000),
       );
-      await sleep(POLL_MS);
+      idleStreak = Math.min(idleStreak + 1, 8);
+      await sleep(idleDelay());
     }
   }
 }
