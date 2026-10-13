@@ -12,6 +12,7 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
+import { mirrorAiTaskLedgerJob } from "../services/aiTaskLedgerBridgeService.js";
 import { logger } from "../lib/logger.js";
 import {
   createConstrainedCodingProviderAdapter,
@@ -2439,6 +2440,12 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
       .returning();
 
     return { task: updatedTask ?? createdTask, run: createdRun };
+  });
+
+  await mirrorAiTaskLedgerJob({
+    externalId: `coding-task:${task.id}`,
+    title: `AI Core coding task ${task.taskNumber}`,
+    sessionId: input.conversationId ?? undefined,
   });
 
   await bindAiCoreTaskLifecycleReporting({
