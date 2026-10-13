@@ -1,3 +1,4 @@
+// Ensure exactly one 'validate_proposal' placeholder exists, or throw a descriptive error
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
