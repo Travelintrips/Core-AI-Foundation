@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import time
 import urllib.error
 import urllib.request
@@ -287,13 +288,17 @@ def main():
     if not TOKEN:
         raise RuntimeError("AI_CORE_SCOPED_AGENT_TOKEN is required")
 
+    idle_streak = 0
     while True:
         work = None
         try:
             work = claim_work()
             if not work:
-                time.sleep(POLL_SECONDS)
+                idle_streak = min(idle_streak + 1, 8)
+                delay = min(60, POLL_SECONDS * (2 ** min(idle_streak - 1, 4)))
+                time.sleep(delay * random.uniform(0.85, 1.15))
                 continue
+            idle_streak = 0
             print("claimed work client=" + CLIENT_ID + " command=" + str(work.get("commandId")), flush=True)
             message, details = execute(work)
             report_result(work, True, message, details)
@@ -325,7 +330,8 @@ def main():
                     )
                 except Exception:
                     pass
-            time.sleep(POLL_SECONDS)
+            idle_streak = min(idle_streak + 1, 8)
+            time.sleep(min(60, POLL_SECONDS * (2 ** min(idle_streak - 1, 4))) * random.uniform(0.85, 1.15))
 
 
 if __name__ == "__main__":
