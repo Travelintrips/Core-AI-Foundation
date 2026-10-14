@@ -93,12 +93,13 @@ jobs:
             exit 1
           fi
 
-          # Fail closed if the resolved DEV identity is the production website.
-          prod_username=$(jq -r --arg d "$PROD_TEMPLATE_DOMAIN" '.data[] | select(.domain == $d and .is_enabled == true) | .username // empty' /tmp/websites.json | head -n1)
-          if [ -z "$prod_username" ] || [ "$DEV_DOMAIN" = "$PROD_TEMPLATE_DOMAIN" ] || [ "$username" = "$prod_username" ]; then
-            echo "::error::DEV website isolation check failed; refusing to touch shared/production website identity."
-            exit 1
-          fi
+          # Hostinger usernames identify hosting accounts, not necessarily a unique
+          # website. Protect the actual virtual host/document-root identity.
+          # Shared usernames are safe only when DEV/PROD are distinct websites.
+          # The verifier fails closed for missing/ambiguous sites, aliases,
+          # missing root paths and any shared document root with production.
+          node scripts/verify-hostinger-dev-website-isolation.mjs \
+            /tmp/websites.json "$DEV_DOMAIN" "$PROD_TEMPLATE_DOMAIN" "$username"
           echo "username=$username" >> "$GITHUB_OUTPUT"
           echo "dev_website=READY domain=$DEV_DOMAIN"
 

@@ -37,12 +37,12 @@ test("main-branch auto-merges cannot bypass DEV-first promotion", () => {
 });
 
 
-test("DEV hosting stops before environment writes if website identity overlaps PROD", () => {
+test("DEV hosting verifies distinct website roots before all environment writes", () => {
   const yaml = workflow("hostinger-dev-deploy.yml");
-  const guard = yaml.indexOf('if [ -z "$prod_username" ] || [ "$DEV_DOMAIN" = "$PROD_TEMPLATE_DOMAIN" ] || [ "$username" = "$prod_username" ]; then');
+  const guard = yaml.indexOf("node scripts/verify-hostinger-dev-website-isolation.mjs");
   const configure = yaml.indexOf("- name: Configure isolated DEV environment");
-  assert.ok(guard > 0 && configure > guard, "DEV/PROD identity guard must precede any environment write");
-  assert.match(yaml, /DEV website isolation check failed; refusing to touch shared\/production website identity/);
+  assert.ok(guard > 0 && configure > guard, "DEV/PROD virtual-host guard must precede any environment write");
+  assert.match(yaml, /\/tmp\/websites\.json "\$DEV_DOMAIN" "\$PROD_TEMPLATE_DOMAIN" "\$username"/);
   assert.match(yaml, /SUPABASE_URL_DEV/);
   assert.match(yaml, /APP_ENV",value:"development"/);
 });
