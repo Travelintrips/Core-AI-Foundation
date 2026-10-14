@@ -47,6 +47,11 @@ jobs:
               target_client='openclaw-pc-worker'
               instruction='ping'
               ;;
+            '[PC-SAFE] HOSTNAME_PC1')
+              action='HOSTNAME'
+              target_client='openclaw-pc-worker'
+              instruction='hostname'
+              ;;
             '[PC-SAFE] OPEN_NOTEPAD')
               action='OPEN_NOTEPAD'
               instruction='This is an owner-authorized safe PC test. Use the real local exec tool to run: powershell.exe -NoProfile -Command Start-Process -FilePath notepad.exe . Do not write or delete files. Report the actual execution result. Do not claim success without a tool call.'
@@ -109,6 +114,7 @@ jobs:
             --data "$(jq -nc --arg conversationId "$subscription_id" '{conversationId:$conversationId,eventTypes:["COMPLETED","FAILED"],leaseSeconds:300}')" \
             "$API_BASE_URL/ai/coding/bridge/subscriptions" | jq -e '.subscription'
           status='PENDING_UNVERIFIED'
+          ack_status='ACK_NOT_VERIFIED'
           for i in $(seq 1 24); do
             response="$(curl --fail-with-body --silent --show-error \
               --connect-timeout 10 --max-time 15 \
@@ -120,11 +126,25 @@ jobs:
             if [ -n "$event" ] && [ "$event" != 'null' ]; then
               kind="$(jq -r '.kind' <<< "$event")"
               if [ "$kind" = 'COMPLETED' ]; then status='VERIFIED_COMPLETED'; else status='VERIFIED_FAILED'; fi
+              # A returned hostname must be machine-verified, not merely completed.
+              if [ "$ACTION" = 'HOSTNAME' ] && [ "$status" = 'VERIFIED_COMPLETED' ]; then
+                jq -e '.message == "Travelintrips" and .checkpoint.statusCode == "RESULT_VERIFIED"' <<< "$event" >/dev/null || status='HOSTNAME_PROOF_FAILED'
+              fi
+              response_id="$(jq -r '.id // empty' <<< "$event")"
+              if [ -n "$response_id" ]; then
+                receipt="$(curl --fail-with-body --silent --show-error \
+                  --connect-timeout 10 --max-time 20 \
+                  -H "x-admin-api-key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
+                  -X POST "$API_BASE_URL/ai/coding/bridge/responses/$response_id/ack")"
+                if jq -e --arg id "$response_id" '.id == $id and .acknowledgedAt != null' <<< "$receipt" >/dev/null; then
+                  ack_status='ACK_VERIFIED'
+                fi
+              fi
               break
             fi
             sleep 5
           done
-          message="ChatGPT → GitHub Actions → AI Core → OpenClaw PC2 check: **${status}**. Action: ${ACTION}. AI Core command: \`${COMMAND_ID}\`. No Desktop Commander was used to enqueue or execute this command. Terminal result is only confirmed if status is VERIFIED_COMPLETED or VERIFIED_FAILED."
+          message="ChatGPT → GitHub Actions → AI Core → OpenClaw PC worker check: **${status}**; ${ack_status}. Action: ${ACTION}. AI Core command: \`${COMMAND_ID}\`. AI Core callback reception is confirmed only with a persisted terminal response and receiver ACK. This does not assert delivery to a separate ChatGPT conversation."
           gh api -X POST "repos/$REPOSITORY/issues/$ISSUE_NUMBER/comments" -f body="$message" >/dev/null
-          printf '### OpenClaw PC safe bridge\n\nAction: %s\nAI Core command: %s\nStatus: %s\n' "$ACTION" "$COMMAND_ID" "$status" >> "$GITHUB_STEP_SUMMARY"
-          [ "$status" = 'VERIFIED_COMPLETED' ]
+          printf '### OpenClaw PC safe bridge\n\nAction: %s\nAI Core command: %s\nStatus: %s\nReceipt: %s\n' "$ACTION" "$COMMAND_ID" "$status" "$ack_status" >> "$GITHUB_STEP_SUMMARY"
+          [ "$status" = 'VERIFIED_COMPLETED' ] && [ "$ack_status" = 'ACK_VERIFIED' ]
