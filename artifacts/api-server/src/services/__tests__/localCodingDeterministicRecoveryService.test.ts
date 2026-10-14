@@ -4,6 +4,30 @@ import {
 } from "../localCodingDeterministicRecoveryService.js";
 import type { LocalFailureContext } from "../localCodingFailureDiagnosticService.js";
 import type { LocalFailureRecoveryContext } from "../localCodingFailureRecoveryService.js";
+import { validate_proposal } from "../localCodingDeterministicRecoveryService.js";
+
+describe("validate_proposal", () => {
+  it("returns original input when no pattern occurrences", () => {
+    const input = "original text";
+    expect(validate_proposal(input, /pattern/, "replacement")).toBe(input);
+  });
+
+  it("applies replacement when one occurrence", () => {
+    const input = "prefix pattern suffix";
+    const expected = "prefix replacement suffix";
+    expect(validate_proposal(input, /pattern/, "replacement")).toBe(expected);
+  });
+
+  it("logs warning and returns original when multiple occurrences", () => {
+    const input = "pattern pattern";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = validate_proposal(input, /pattern/, "replacement");
+    expect(warn).toHaveBeenCalled();
+    expect(result).toBe(input);
+    warn.mockRestore();
+  });
+});
+
 
 function recoveryContext(): LocalFailureRecoveryContext {
   return {
