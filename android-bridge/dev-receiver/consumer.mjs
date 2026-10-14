@@ -63,6 +63,14 @@ async function processReceipt(filename, bridgeToken, ackToken) {
  const callback='android-intake:'+receiptHash;
  const ackEvent='android-auto-ack:'+receiptHash;
  const prior = verify(item.jobId,callback,item.resultSummary);
+ const receiptAge = Date.now() - Date.parse(item.receivedAt || '');
+ if ((prior.status === null || (prior.status === 'COMPLETED' && (!prior.callbackMatch || !prior.summaryMatch)))
+     && Number.isFinite(receiptAge) && receiptAge > 15*60*1000) {
+   fs.writeFileSync(done,JSON.stringify({jobId:item.jobId,receiptId:receiptHash,
+     status:'IGNORED_STALE_OR_UNMATCHED',markedAt:new Date().toISOString()})+'\\n',{flag:'wx',mode:0o600});
+   console.log('ANDROID_DEV_IGNORED',item.jobId,receiptHash);
+   return;
+ }
  if(prior.status==='COMPLETED' && prior.callbackMatch && prior.summaryMatch) {
    fs.writeFileSync(done,JSON.stringify({jobId:item.jobId,receiptId:receiptHash,status:'COMPLETED',recovered:true})+'\\n',{flag:'wx',mode:0o600});
    return;
