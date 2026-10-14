@@ -187,6 +187,24 @@ jobs:
           rm -f /tmp/aicore-secrets.json
           echo "dev_env=CONFIGURED keys=$env_count"
 
+      - name: Verify DEV bridge credential against isolated receiver
+        env:
+          AI_TASK_BRIDGE_TOKEN: ${{ secrets.AI_TASK_BRIDGE_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "${#AI_TASK_BRIDGE_TOKEN}" -ge 32
+          code="$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $AI_TASK_BRIDGE_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary "{}" \
+            https://dev-ai-task.cstlogistic.co.id/api/bridge/jobs)"
+          if [ "$code" != "400" ]; then
+            echo "::error::DEV bridge credential handshake failed, HTTP=$code"
+            exit 1
+          fi
+          echo "AI_TASK_DEV_BRIDGE_AUTH=PASS (rejected malformed request with HTTP 400, no job created)"
+
       - name: Create source archive
         id: archive
         shell: bash
