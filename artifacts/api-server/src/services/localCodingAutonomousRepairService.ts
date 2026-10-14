@@ -1,3 +1,9 @@
+/**
+ * Workflow Run Handling Analysis (Cancelled Status):
+ * - GitHub workflow_run events with conclusion='cancelled' trigger abort logic.
+ * - Code path revokes pending AI handoffs and halts retry loops to prevent orphan state.
+ * - Error transforms mark the workstream status as failed and audit the cancellation event.
+ */
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
