@@ -79,6 +79,7 @@ test("VPS source release and watcher retain project-ref checks and CI gating", (
   const release = readFileSync(new URL("deploy_dev_release.py", base), "utf8");
   const watcher = readFileSync(new URL("dev_ci_watcher.py", base), "utf8");
   assert.match(release, /EXPECTED_DEV_PROJECT/);
+  assert.match(release, /tempstatic\.chmod\(0o755\)/);
   assert.match(release, /prod_unchanged=PASS/);
   assert.match(release, /VPS_DEV_RELEASE=PASS/);
   assert.match(release, /core-ai-dev-prev-/);

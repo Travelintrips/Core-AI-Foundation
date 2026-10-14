@@ -181,6 +181,14 @@ def main(sha):
             command("docker", "cp", canary + ":/app/artifacts/api-server/dist/public/.", str(tempstatic) + "/")
             if not (tempstatic / "index.html").is_file() or not (tempstatic / "assets").is_dir():
                 raise RuntimeError("Frontend artifacts missing from verified image")
+            # tempfile.mkdtemp creates 0700 directories. Nginx serves this
+            # directory as www-data, so make the vetted static tree readable.
+            tempstatic.chmod(0o755)
+            for entry in tempstatic.rglob("*"):
+                if entry.is_dir():
+                    entry.chmod(0o755)
+                elif entry.is_file():
+                    entry.chmod(0o644)
             rollback = "core-ai-dev-prev-" + time.strftime("%Y%m%d%H%M%S", time.gmtime())
             command("docker", "rename", DEV, rollback)
             command("docker", "stop", "--time", "15", rollback)
