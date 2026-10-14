@@ -2,6 +2,6 @@ plugins { id 'com.android.application' }
 android {
     namespace 'id.cst.openclawbridge'
     compileSdk 35
-    defaultConfig { applicationId 'id.cst.openclawbridge.autosend'; minSdk 26; targetSdk 35; versionCode 3; versionName '0.2.1-dev-autosend' }
+    defaultConfig { applicationId 'id.cst.openclawbridge.autosend'; minSdk 26; targetSdk 35; versionCode 4; versionName '0.3.0-dev-reply' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
