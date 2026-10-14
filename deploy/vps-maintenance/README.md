@@ -73,15 +73,17 @@ databases, WhatsApp sessions or images still referenced by any container.
 Images pulled for a future rollout should be deployed promptly; Docker image
 creation time may predate when an image was pulled.
 
-Intentionally stopped Compose one-shot containers and migration/backup
-containers remain intact by default. Clearing those requires a specific,
-reviewed decision, not a blanket `docker container prune`.
+Only historical AI Task/Repository Analyzer backup containers from the reviewed
+name allowlist, stopped for at least 72 hours without Docker data volumes,
+are eligible for cleanup after healthy-service revalidation. Temporal setup,
+OpenClaw supervisors and WhatsApp migration exports remain protected.
+No blanket `docker container prune` is performed.
 
 ## Install and schedule
 
     bash deploy/vps-maintenance/install.sh
 
-The installer runs both offline test suites, installs two cleanup executables
+The installer runs three offline test suites, installs three cleanup executables
 and updates the existing `cst-docker-image-retention.service`. The existing
 systemd timer runs every day at 04:30 Asia/Jakarta (21:30 UTC) with up to
 15 minutes randomized delay.

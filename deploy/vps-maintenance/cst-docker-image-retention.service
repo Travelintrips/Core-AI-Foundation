@@ -19,5 +19,6 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/cst-docker-image-retention
 ExecStart=/usr/bin/python3 /usr/local/libexec/cst-docker-active-only.py --apply
 ExecStart=/usr/bin/python3 /usr/local/libexec/cst-docker-image-retention.py sweep --apply --exclude-service core-dev --exclude-service core-prod
+ExecStart=/usr/bin/python3 /usr/local/libexec/cst-docker-stale-backups.py --apply
 ExecStart=/usr/bin/docker image prune --all --force --filter until=168h
 ExecStart=/usr/bin/docker buildx prune --all --force --filter until=168h --max-used-space 4gb --reserved-space 2gb
