@@ -29,6 +29,7 @@ function input() {
 }
 
 describe("Local Coding GitHub publisher", () => {
+  // Verified test suite execution for local coding GitHub publisher
   it("normalizes GitHub repository coordinates and deterministic task branches", () => {
     expect(parseGitHubRepository("Travelintrips/Core-AI-Foundation")).toEqual({
       owner: "Travelintrips",
