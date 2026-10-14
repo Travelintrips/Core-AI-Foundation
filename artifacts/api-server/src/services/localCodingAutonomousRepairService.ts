@@ -39,6 +39,28 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+// GitHub Actions workflow_run cancellation handling with retry
+const DEFAULT_RETRY_BASE_MS = Number(process.env.WORKFLOW_RETRY_BASE_MS) || 1000;
+const DEFAULT_RETRY_MAX_MS = Number(process.env.WORKFLOW_RETRY_MAX_MS) || 10000;
+async function runWithCancellationRetry(fn: () => Promise<any>): Promise<any> {
+  let attempt = 0;
+  const base = DEFAULT_RETRY_BASE_MS;
+  const max = DEFAULT_RETRY_MAX_MS;
+  while (true) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      if (error?.status === 'cancelled') {
+        const delay = Math.min(base * 2 ** attempt, max);
+        attempt++;
+        await new Promise(res => setTimeout(res, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
