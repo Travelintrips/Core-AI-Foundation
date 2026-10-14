@@ -1,0 +1,16 @@
+[Unit]
+Description=Deploy CI-verified AI Core DEV source on isolated Hostinger VPS
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min
+NoNewPrivileges=true
+ExecStart=/usr/bin/python3 /usr/local/sbin/cst-vps-dev-ci-watcher.py

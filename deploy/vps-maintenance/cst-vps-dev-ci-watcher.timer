@@ -1,0 +1,13 @@
+[Unit]
+Description=Check verified develop release for isolated VPS DEV
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=3min
+RandomizedDelaySec=30s
+AccuracySec=30s
+Unit=cst-vps-dev-ci-watcher.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

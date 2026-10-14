@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const workflow = (name) => readFileSync(new URL("../.github/workflows/" + name, import.meta.url), "utf8");
+const workflow = (name) =>
+  readFileSync(new URL("../.github/workflows/" + name, import.meta.url), "utf8");
 
 test("all GitHub production Node release paths require DEV proof before scope and deploy", () => {
   const yaml = workflow("hostinger-nodejs-deploy.yml");
@@ -13,7 +14,7 @@ test("all GitHub production Node release paths require DEV proof before scope an
   assert.match(yaml, /steps\.freshness\.outputs\.stale != 'true'/);
 });
 
-test("VPS release cannot auto-deploy from CI and requires exact DEV proof before SSH", () => {
+test("VPS PROD release is manual and proves exact DEV before SSH", () => {
   const yaml = workflow("ai-workers-deploy.yml");
   assert.doesNotMatch(yaml, /^  workflow_run:/m);
   assert.match(yaml, /REQUESTED_REF.*inputs\.ref/);
@@ -26,30 +27,35 @@ test("GPU deployment is manual and checks DEV before cloud authentication", () =
   assert.ok(yaml.indexOf("node scripts/verify-dev-first-release.mjs") < yaml.indexOf("- id: auth"));
 });
 
-test("main-branch auto-merges cannot bypass DEV-first promotion", () => {
+test("main branch auto-merges cannot bypass DEV-first promotion", () => {
   const native = workflow("native-auto-merge.yml");
   const direct = workflow("pr-auto-complete.yml");
   const guardian = workflow("pr-queue-guardian.yml");
-  assert.match(native, /if: \$\{\{ false \}\}/);
+  assert.match(native, /if: \${{ false }}/);
   assert.match(direct, /Main auto-merge disabled until verified DEV-first promotion/);
   assert.doesNotMatch(guardian, /await github\.graphql\(mutation,/);
   assert.match(guardian, /DEV-first promotion requires reviewed merge commit/);
 });
 
-
-test("DEV requires different Hostinger account and plan before environment writes", () => {
+test("DEV has isolated VPS release gate, not shared Hostinger account mutations", () => {
   const yaml = workflow("hostinger-dev-deploy.yml");
-  const guard = yaml.indexOf('dev_order=$(jq -r --arg d "$DEV_DOMAIN"');
-  const configure = yaml.indexOf("- name: Configure isolated DEV environment");
-  assert.ok(guard > 0 && configure > guard, "DEV/PROD identity guard must precede any environment write");
-  assert.match(yaml, /DEV requires an independent Hostinger account and hosting plan/);
-  assert.match(yaml, /\[ "\$dev_order" = "\$prod_order" \]/);
-  assert.doesNotMatch(yaml, /--data-binary @\/tmp\/create-site\.json/);
-  assert.match(yaml, /SUPABASE_URL_DEV/);
-  assert.match(yaml, /APP_ENV",value:"development"/);
+  const wait = yaml.indexOf("- name: Wait for CI-gated VPS DEV build and exact release");
+  const smoke = yaml.indexOf("- name: Check isolated DEV frontend, protected jobs and unchanged production");
+  const dns = yaml.indexOf("- name: Change only DEV A record after verified independent VPS release");
+  const publicVerify = yaml.indexOf("- name: Verify authoritative DNS and public DEV exact SHA");
+  assert.ok(wait > 0 && wait < smoke && smoke < dns && dns < publicVerify);
+  assert.match(yaml, /VPS_DEV_SHA=PASS/);
+  assert.match(yaml, /--resolve/);
+  assert.match(yaml, /x-cst-commit-sha/);
+  assert.match(yaml, /DEV_VPS_IP/);
+  assert.match(yaml, /HOSTINGER_API_TOKEN/);
+  assert.match(yaml, /DEV_DNS_UPDATED=PASS/);
+  assert.match(yaml, /prod_sha/);
+  assert.doesNotMatch(yaml, /hosting\/v1\/accounts/);
+  assert.doesNotMatch(yaml, /source_type:"archive"/);
 });
 
-test("DEV SPA static serving is explicit and preserved independently of NODE_ENV", () => {
+test("DEV SPA static serving is explicit and independently configured", () => {
   const app = readFileSync(new URL("../artifacts/api-server/src/app.ts", import.meta.url), "utf8");
   const compose = readFileSync(new URL("../deploy/dev-hostinger/docker-compose.yml", import.meta.url), "utf8");
   assert.match(app, /const serveStaticFrontend\s*=\s*shouldServeFrontend\s*\|\|\s*process\.env\["SERVE_STATIC_FRONTEND"\]\s*===\s*"true"/);
@@ -57,15 +63,29 @@ test("DEV SPA static serving is explicit and preserved independently of NODE_ENV
   assert.match(compose, /APP_ENV:\s*development/);
 });
 
-
-test("DEV deployment requires a bounded live frontend and authenticated dashboard smoke", () => {
+test("DEV deployment requires bounded frontend, JS asset, and anonymous auth smoke", () => {
   const yaml = workflow("hostinger-dev-deploy.yml");
-  const runtime = yaml.indexOf("- name: Verify DEV runtime and exact commit");
-  const smoke = yaml.indexOf("- name: Verify DEV frontend and authenticated dashboard (bounded smoke)");
-  assert.ok(runtime > 0 && smoke > runtime, "smoke must run after exact DEV runtime verification");
-  assert.match(yaml, /dev-smoke-root\.html/);
-  assert.match(yaml, /dev-center\/dashboard/);
+  const runtime = yaml.indexOf("- name: Wait for CI-gated VPS DEV build and exact release");
+  const smoke = yaml.indexOf("- name: Check isolated DEV frontend, protected jobs and unchanged production");
+  assert.ok(runtime > 0 && smoke > runtime);
+  assert.match(yaml, /dev-index\.html/);
   assert.match(yaml, /dev-center\/jobs/);
-  assert.match(yaml, /x-admin-api-key: \$admin_key/);
-  assert.match(yaml, /anonymous auth boundary failed/);
+  assert.match(yaml, /anonymous dashboard authorization failed/);
+  assert.match(yaml, /DEV_ISOLATION_SMOKE=PASS/);
+});
+
+test("VPS source release and watcher retain project-ref checks and CI gating", () => {
+  const base = new URL("./vps/", import.meta.url);
+  const release = readFileSync(new URL("deploy_dev_release.py", base), "utf8");
+  const watcher = readFileSync(new URL("dev_ci_watcher.py", base), "utf8");
+  assert.match(release, /EXPECTED_DEV_PROJECT/);
+  assert.match(release, /tempstatic\.chmod\(0o755\)/);
+  assert.match(release, /prod_unchanged=PASS/);
+  assert.match(release, /VPS_DEV_RELEASE=PASS/);
+  assert.match(release, /core-ai-dev-prev-/);
+  assert.match(release, /AI_PRODUCTION_WORKERS_ALLOWED=false/);
+  assert.match(watcher, /CI Verify/);
+  assert.match(watcher, /DEV Fast Verify/);
+  assert.match(watcher, /run.get\("head_sha"\) == sha/);
+  assert.match(watcher, /VPS_DEV_POLL=PASS/);
 });
