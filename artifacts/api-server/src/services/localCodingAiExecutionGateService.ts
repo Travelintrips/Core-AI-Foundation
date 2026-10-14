@@ -1,3 +1,7 @@
+// Safe guard for process.env
+if (typeof process.env === 'undefined') {
+  throw new Error('process.env is not available');
+}
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
