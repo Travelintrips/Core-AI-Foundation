@@ -133,3 +133,40 @@ jobs:
           if not dev_separate:
               print('DEV_HOSTING_PLAN_SEPARATION_REQUIRED=true')
           PY
+
+
+      - name: Audit separately owned VPS capacity (read-only)
+        if: steps.token.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Not all Hostinger API tokens grant VPS scope. Access denied is a
+          # limitation, not evidence that no VPS exists.
+          code=$(curl --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -o /tmp/hostinger-vps.json -w "%{http_code}" \
+            "$HOSTINGER_API_BASE/vps/v1/virtual-machines" || true)
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "vps_inventory_access=denied"
+            exit 0
+          fi
+          if [ "$code" != "200" ]; then
+            echo "vps_inventory_access=unavailable_http_$code"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('/tmp/hostinger-vps.json').read_text())
+          vms=data if isinstance(data,list) else data.get('data',[])
+          if not isinstance(vms,list):
+              raise SystemExit('HOSTINGER_VPS_INVENTORY_INVALID')
+          active=[v for v in vms if str(v.get('state','')).lower() in ('running','stopped')]
+          prod=[v for v in active if str(v.get('hostname','')).lower().split('.')[0]=='srv1792369']
+          alternatives=[v for v in active if str(v.get('hostname','')).lower().split('.')[0]!='srv1792369']
+          print('vps_inventory_access=granted')
+          print('vps_total_visible='+str(len(vms)))
+          print('vps_active_visible='+str(len(active)))
+          print('vps_prod_hostname_matched='+str(len(prod)==1).lower())
+          print('vps_other_active_candidates='+str(len(alternatives)) if len(prod)==1 else 'vps_other_active_candidates=unverified')
+          PY
