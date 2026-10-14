@@ -28,3 +28,15 @@ JDK 17, Gradle 8.10.2, AGP 8.7.3, Android SDK 35.
 
 ## Constraints
 No Accessibility Service, automated ChatGPT screen scraping, or silent background sending. Android's ChatGPT app is not an automation API.
+
+## Experimental Auto Kirim (DEV only)
+
+The optional, unchecked-by-default **Auto Kirim sekali** checkbox arms a single ChatGPT prompt after the user taps **Buka ChatGPT / bagikan prompt**. Requires manually enabling the OpenClaw Chat Bridge accessibility service in Android Settings. If permission is missing the app opens Accessibility settings and **does not launch or arm a prompt** until the user returns and presses the button again.
+
+Safety limits:
+- The accessibility service only receives events for `com.openai.chatgpt`; there is no network permission, response scraping, or hidden remote automation.
+- Only attempts to act when exactly one visible editable composer contains the exact armed prompt, and exactly one accessible enabled Send/Kirim control is present.
+- Expires after 45 seconds, clears the pending prompt before tapping Send, and does not retry after an attempted click.
+- If the ChatGPT UI does not expose an accessible Send/Kirim control or share intent uses a different screen, the user must press Send manually.
+- Service may have broad Android permissions by design. Disable it in Android Accessibility Settings whenever it is not required.
+- **Not validated on physical Samsung Z Fold4 until user tests the new DEV APK**.
