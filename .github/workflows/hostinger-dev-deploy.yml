@@ -75,28 +75,22 @@ jobs:
 
           username=$(jq -r --arg d "$DEV_DOMAIN"             '.data[] | select(.domain == $d and .is_enabled == true) | .username // empty'             /tmp/websites.json | head -n1)
 
+          # Strict DEV/PROD isolation: provisioning against PROD order is forbidden.
+          # An independent Hostinger hosting plan must exist before this workflow.
+          # Never auto-create a DEV site under the PRODUCTION order_id.
           if [ -z "$username" ]; then
-            jq -n --arg domain "$DEV_DOMAIN" --argjson order_id "$prod_order"               '{domain:$domain,order_id:$order_id}' > /tmp/create-site.json
-            curl --fail-with-body --silent --show-error               -X POST               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               -H "Content-Type: application/json"               --data-binary @/tmp/create-site.json               "$HOSTINGER_API_BASE/hosting/v1/websites" >/tmp/create-site-response.json
-
-            for attempt in $(seq 1 36); do
-              sleep 5
-              list_websites
-              username=$(jq -r --arg d "$DEV_DOMAIN"                 '.data[] | select(.domain == $d and .is_enabled == true) | .username // empty'                 /tmp/websites.json | head -n1)
-              if [ -n "$username" ]; then break; fi
-              echo "waiting_for_dev_website attempt=$attempt"
-            done
-          fi
-
-          if [ -z "$username" ]; then
-            echo "::error::DEV website was not provisioned."
+            echo "::error::DEV hosting must be provisioned on a separate plan/account before deployment."
             exit 1
           fi
 
-          # Fail closed if the resolved DEV identity is the production website.
+          # Fail closed unless DEV and PROD have distinct website, account, AND
+          # Hostinger hosting-plan order identities (independent billing/resources).
           prod_username=$(jq -r --arg d "$PROD_TEMPLATE_DOMAIN" '.data[] | select(.domain == $d and .is_enabled == true) | .username // empty' /tmp/websites.json | head -n1)
-          if [ -z "$prod_username" ] || [ "$DEV_DOMAIN" = "$PROD_TEMPLATE_DOMAIN" ] || [ "$username" = "$prod_username" ]; then
-            echo "::error::DEV website isolation check failed; refusing to touch shared/production website identity."
+          dev_order=$(jq -r --arg d "$DEV_DOMAIN" '.data[] | select(.domain == $d and .is_enabled == true) | .order_id // empty' /tmp/websites.json | head -n1)
+          if [ -z "$prod_username" ] || [ -z "$dev_order" ] || \
+             [ "$DEV_DOMAIN" = "$PROD_TEMPLATE_DOMAIN" ] || \
+             [ "$username" = "$prod_username" ] || [ "$dev_order" = "$prod_order" ]; then
+            echo "::error::DEV requires an independent Hostinger account and hosting plan; shared PROD identity is blocked."
             exit 1
           fi
           echo "username=$username" >> "$GITHUB_OUTPUT"
