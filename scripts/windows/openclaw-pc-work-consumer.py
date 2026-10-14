@@ -149,6 +149,22 @@ def execute(work):
     }
 
 
+def verified_server_callback_receipt(receipt, command_id, expected_status):
+    """Confirms AI Core persisted the command result and returned its response ID.
+
+    This is a server callback receipt, NOT a ChatGPT conversation delivery ACK.
+    """
+    if not isinstance(receipt, dict) or receipt.get("commandId") != command_id:
+        return False
+    if receipt.get("status") != expected_status:
+        return False
+    response = receipt.get("response")
+    return (isinstance(response, dict) and
+            isinstance(response.get("id"), str) and
+            re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}",
+                         response["id"], re.I) is not None)
+
+
 def main():
     if CLIENT_ID not in ALLOWED_CLIENT_IDS:
         raise SystemExit("Invalid AI_CORE_OPENCLAW_CLIENT_ID")
@@ -163,12 +179,16 @@ def main():
                     ok, message, details = execute(work)
                 except Exception as exc:
                     ok, message, details = False, "Worker execution failed", {"errorType": type(exc).__name__}
-                api("/ai/agent-runtime/work/" + str(work["commandId"]) + "/result", {
+                expected_status = "COMPLETED" if ok else "FAILED"
+                receipt = api("/ai/agent-runtime/work/" + str(work["commandId"]) + "/result", {
                     "clientId": CLIENT_ID, "claimToken": work["claimToken"],
-                    "status": "COMPLETED" if ok else "FAILED",
+                    "status": expected_status,
                     "message": message[:3000], "details": details,
                 })
-                print("reported command " + str(work["commandId"]), flush=True)
+                if not verified_server_callback_receipt(receipt, str(work["commandId"]), expected_status):
+                    raise RuntimeError("AI Core result callback lacks a persisted receipt")
+                print("callback persisted command " + str(work["commandId"]) +
+                      " response " + receipt["response"]["id"], flush=True)
         except Exception as exc:
             print("worker cycle error: " + type(exc).__name__, flush=True)
         time.sleep(POLL)

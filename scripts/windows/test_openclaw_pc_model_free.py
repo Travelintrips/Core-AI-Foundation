@@ -49,5 +49,15 @@ class ModelFreeExecutionTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertFalse(proof["verified"])
 
+    def test_callback_receipt_requires_command_status_and_persisted_id(self):
+        command_id = "c" * 36
+        proof = {"commandId": command_id, "status": "COMPLETED",
+                 "response": {"id": "11111111-1111-4111-8111-111111111111"}}
+        self.assertTrue(worker.verified_server_callback_receipt(proof, command_id, "COMPLETED"))
+        self.assertFalse(worker.verified_server_callback_receipt({**proof, "response": {}}, command_id, "COMPLETED"))
+        self.assertFalse(worker.verified_server_callback_receipt(proof, "different", "COMPLETED"))
+        self.assertFalse(worker.verified_server_callback_receipt(proof, command_id, "FAILED"))
+
+
 if __name__ == "__main__":
     unittest.main()
