@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
     <queries><package android:name="com.openai.chatgpt"/></queries>
     <application android:allowBackup="false" android:label="OpenClaw Auto Kirim (DEV)" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <service android:name=".ChatSendService"
