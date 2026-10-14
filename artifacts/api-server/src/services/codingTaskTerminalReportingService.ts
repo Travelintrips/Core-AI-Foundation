@@ -26,7 +26,7 @@ export function canonicalTerminalEventStatus(
   requestedStatus: CodingTaskTerminalStatus,
   persistedStatus: unknown,
 ): CodingTaskTerminalStatus {
-  return persistedStatus === "COMPLETED" ||
+  return persistedStatus === "COMPLETED" || persistedStatus === "TERMINATED" ||
     persistedStatus === "FAILED" ||
     persistedStatus === "BLOCKED"
     ? persistedStatus
