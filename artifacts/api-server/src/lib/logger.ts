@@ -18,3 +18,13 @@ export const logger = pino({
         },
       }),
 });
+// Capture uncaught exceptions and rejections to log and exit gracefully
+process.on('uncaughtException', (error) => {
+  logger.fatal({ error }, 'Uncaught Exception');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled Rejection');
+});
+
