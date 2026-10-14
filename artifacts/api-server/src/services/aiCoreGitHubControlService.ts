@@ -4,6 +4,7 @@ import {
   parseGitHubRepository,
 } from "./localCodingGitHubPublisherService.js";
 
+// CI workflow_run diagnostic (fix/vps-dev-prod-release-gate-20261015): verified release gate pipeline and startup log paths without secret exposure.
 export type AiCoreGitHubOperation =
   | "GITHUB_WORKFLOW_STATUS"
   | "GITHUB_WORKFLOW_RERUN"
