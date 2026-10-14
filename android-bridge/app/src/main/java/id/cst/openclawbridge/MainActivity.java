@@ -27,6 +27,7 @@ public class MainActivity extends Activity {
     private EditText taskId;
     private String eventId;
     private CheckBox autoSend;
+    private CheckBox captureReply;
     private TextView autoSendStatus;
 
     @Override public void onCreate(Bundle state) {
@@ -52,6 +53,10 @@ public class MainActivity extends Activity {
         autoSend.setText("Auto Kirim sekali (aktifkan Accessibility di Settings HP)");
         autoSend.setChecked(false);
         root.addView(autoSend);
+        captureReply = new CheckBox(this);
+        captureReply.setText("Ambil jawaban bertanda ke Bridge (eksperimen DEV)");
+        captureReply.setChecked(false);
+        root.addView(captureReply);
         autoSendStatus = new TextView(this);
         root.addView(autoSendStatus);
         Button diagnostic = new Button(this);
@@ -86,6 +91,18 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (autoSendStatus != null) showAutoSendStatus();
+        loadCapturedReply();
+    }
+
+    private void loadCapturedReply() {
+        if (result == null) return;
+        String captured = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
+                .getString(ChatSendService.CAPTURED_REPLY, "");
+        if (!captured.isEmpty()) {
+            result.setText(captured);
+            getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
+                .edit().remove(ChatSendService.CAPTURED_REPLY).apply();
+        }
     }
 
     private void showAutoSendStatus() {
@@ -115,27 +132,42 @@ public class MainActivity extends Activity {
         String text = prompt.getText().toString().trim();
         if (text.isEmpty()) { Toast.makeText(this,"Masukkan prompt",Toast.LENGTH_SHORT).show(); return; }
         boolean armed = autoSend.isChecked();
+        boolean capture = captureReply.isChecked();
+        if (capture && !armed) {
+            Toast.makeText(this, "Aktifkan Auto Kirim untuk mengambil jawaban bertanda.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String nonce = capture ? UUID.randomUUID().toString().replace("-", "") : "";
+        String transmitText = capture
+                ? text + "\\n\\nBalas dalam satu paragraf teks biasa (maksimal 1800 karakter). " +
+                    "Awali jawaban dengan awalan OCB: tepat disambung tanpa spasi " +
+                    "dengan identitas " + nonce + ". " +
+                    "Akhiri jawaban dengan penanda END-OCB. " +
+                    "Jangan pakai Markdown atau code block." : text;
         if (armed && !accessibilityEnabled()) {
             Toast.makeText(this, "Aktifkan OpenClaw Chat Bridge di Accessibility, lalu tekan Buka ChatGPT lagi.", Toast.LENGTH_LONG).show();
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
             return;
         }
         getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
-            .edit().remove("text").remove("at").commit();
+            .edit().remove("text").remove("at")
+            .remove(ChatSendService.REPLY_MARKER).remove(ChatSendService.REPLY_STARTED)
+            .remove(ChatSendService.CAPTURED_REPLY).commit();
         if (armed) {
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
-                .edit().putString("text", text).putLong("at", System.currentTimeMillis())
+                .edit().putString("text", transmitText).putLong("at", System.currentTimeMillis())
+                .putString(ChatSendService.REPLY_MARKER, nonce)
                 .putString(ChatSendService.STATUS, "Auto Kirim disiapkan; menunggu ChatGPT.").commit();
         }
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
-        share.putExtra(Intent.EXTRA_TEXT,text);
+        share.putExtra(Intent.EXTRA_TEXT,transmitText);
         share.setPackage("com.openai.chatgpt");
         try { startActivity(share); }
         catch (Exception ex) {
             Intent open = getPackageManager().getLaunchIntentForPackage("com.openai.chatgpt");
             if (open != null) {
-                ((ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("OpenClaw prompt",text));
+                ((ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("OpenClaw prompt",transmitText));
                 startActivity(open);
                 Toast.makeText(this,"Prompt disalin; tempel dan kirim di ChatGPT",Toast.LENGTH_LONG).show();
             } else Toast.makeText(this,"Aplikasi ChatGPT tidak ditemukan",Toast.LENGTH_LONG).show();
