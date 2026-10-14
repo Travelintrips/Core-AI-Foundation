@@ -20,6 +20,11 @@ import {
   type PullRequestVerificationResult,
 } from "./localCodingGitHubPullRequestService.js";
 import { finalizeCodingCriticalApproval } from "./codingCriticalApprovalService.js";
+const ENV = process.env.NODE_ENV;
+if (!['production', 'development'].includes(ENV)) {
+  throw new Error(`Unsupported NODE_ENV: ${ENV}`);
+}
+
 
 export class LocalPullRequestGateError extends Error {
   constructor(
