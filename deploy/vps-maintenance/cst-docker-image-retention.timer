@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily retention of old verified Docker images (04:30 WIB)
+
+[Timer]
+OnCalendar=*-*-* 21:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=cst-docker-image-retention.service
+
+[Install]
+WantedBy=timers.target

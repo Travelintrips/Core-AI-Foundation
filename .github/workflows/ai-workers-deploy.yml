@@ -161,6 +161,19 @@ jobs:
           "${SUDO[@]}" env AI_WORKERS_ENV_FILE="$REMOTE_ENV_FILE" \
             bash scripts/ai-workers-healthcheck.sh
 
+          # Record verified image evidence ONLY AFTER all full-stack checks pass.
+          # Never prune volumes, running containers, or any rollback image.
+          # Optional housekeeping cannot turn a healthy deploy into a failure.
+          if [ -f scripts/vps/docker_image_retention.py ]; then
+            if "${SUDO[@]}" bash deploy/vps-maintenance/install.sh &&
+              "${SUDO[@]}" python3 scripts/vps/docker_image_retention.py \
+                record --service openclaw --evidence "ai-workers-vps:$TARGET_SHA"; then
+              echo "verified_image_retention=REGISTERED"
+            else
+              echo "::warning::Image retention registration failed; no image was removed."
+            fi
+          fi
+
           echo "AI workers deployed and healthy at commit $TARGET_SHA"
           REMOTE
 
