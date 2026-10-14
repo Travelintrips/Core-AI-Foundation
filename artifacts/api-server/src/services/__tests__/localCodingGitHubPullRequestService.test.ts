@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+// TODO: simulate cancelled workflow run and assert no retries beyond policy limits
+
 import {
   mergeVerifiedPullRequest,
   verifyPublishedPullRequest,
