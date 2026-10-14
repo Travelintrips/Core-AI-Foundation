@@ -54,6 +54,7 @@ jobs:
         run: |
           python3 scripts/vps/test_docker_image_retention.py -q
           python3 scripts/vps/test_active_app_image_cleanup.py -q
+          python3 scripts/vps/test_stale_backup_cleanup.py -q
       - name: Typecheck
         run: pnpm run typecheck
 
