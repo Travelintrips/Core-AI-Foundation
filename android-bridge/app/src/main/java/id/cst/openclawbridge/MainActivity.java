@@ -6,6 +6,12 @@ import android.content.ClipboardManager;
 import android.content.Intent;
 import android.os.Bundle;
 import android.content.Context;
+import android.provider.Settings;
+import android.content.ComponentName;
+import android.text.TextUtils;
+import android.view.accessibility.AccessibilityManager;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.widget.CheckBox;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -20,6 +26,7 @@ public class MainActivity extends Activity {
     private EditText result;
     private EditText taskId;
     private String eventId;
+    private CheckBox autoSend;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -40,6 +47,10 @@ public class MainActivity extends Activity {
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
         root.addView(prompt);
+        autoSend = new CheckBox(this);
+        autoSend.setText("Auto Kirim sekali (aktifkan Accessibility di Settings HP)");
+        autoSend.setChecked(false);
+        root.addView(autoSend);
         Button launch = new Button(this);
         launch.setText("Buka ChatGPT / bagikan prompt");
         launch.setOnClickListener(v -> launchChatGPT());
@@ -82,6 +93,17 @@ public class MainActivity extends Activity {
     private void launchChatGPT() {
         String text = prompt.getText().toString().trim();
         if (text.isEmpty()) { Toast.makeText(this,"Masukkan prompt",Toast.LENGTH_SHORT).show(); return; }
+        boolean armed = autoSend.isChecked();
+        if (armed && !accessibilityEnabled()) {
+            Toast.makeText(this, "Aktifkan OpenClaw Chat Bridge di Accessibility, lalu tekan Buka ChatGPT lagi.", Toast.LENGTH_LONG).show();
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            return;
+        }
+        getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE).edit().clear().commit();
+        if (armed) {
+            getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
+                .edit().putString("text", text).putLong("at", System.currentTimeMillis()).commit();
+        }
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
         share.putExtra(Intent.EXTRA_TEXT,text);
@@ -95,6 +117,16 @@ public class MainActivity extends Activity {
                 Toast.makeText(this,"Prompt disalin; tempel dan kirim di ChatGPT",Toast.LENGTH_LONG).show();
             } else Toast.makeText(this,"Aplikasi ChatGPT tidak ditemukan",Toast.LENGTH_LONG).show();
         }
+    }
+    private boolean accessibilityEnabled() {
+        AccessibilityManager mgr = (AccessibilityManager)getSystemService(Context.ACCESSIBILITY_SERVICE);
+        if (mgr == null) return false;
+        for (AccessibilityServiceInfo info : mgr.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
+            if (info.getResolveInfo() != null
+                && getPackageName().equals(info.getResolveInfo().serviceInfo.packageName)
+                && ChatSendService.class.getName().equals(info.getResolveInfo().serviceInfo.name)) return true;
+        }
+        return false;
     }
     private void copyResult() {
         String text = result.getText().toString();
