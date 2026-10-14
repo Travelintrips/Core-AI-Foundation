@@ -35,7 +35,9 @@ public class MainActivity extends Activity {
     private CheckBox autoSend;
     private CheckBox captureReply;
     private TextView autoSendStatus;
-    private EditText devEndpoint;
+    private static final String DEV_INTAKE_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/result";
+    private CheckBox autoSubmit;
+    private boolean submissionInFlight = false;
     private EditText jobToken;
     private TextView deliveryStatus;
 
@@ -80,10 +82,13 @@ public class MainActivity extends Activity {
         result.setHint("Jawaban dari ChatGPT (Share atau tempel manual)");
         result.setMinLines(4);
         root.addView(result);
-        devEndpoint = new EditText(this);
-        devEndpoint.setHint("URL HTTPS intake DEV (dari admin)");
-        devEndpoint.setSingleLine(true);
-        root.addView(devEndpoint);
+        TextView endpointInfo = new TextView(this);
+        endpointInfo.setText("Endpoint DEV: " + DEV_INTAKE_URL);
+        root.addView(endpointInfo);
+        autoSubmit = new CheckBox(this);
+        autoSubmit.setText("Setelah jawaban tertangkap, kirim hasil ke VPS DEV saat kembali ke Bridge");
+        autoSubmit.setChecked(false);
+        root.addView(autoSubmit);
         jobToken = new EditText(this);
         jobToken.setHint("Token singkat untuk job ini (dari admin)");
         jobToken.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -126,6 +131,7 @@ public class MainActivity extends Activity {
             result.setText(captured);
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
                 .edit().remove(ChatSendService.CAPTURED_REPLY).apply();
+            if (autoSubmit != null && autoSubmit.isChecked()) deliverResult();
         }
     }
 
@@ -242,12 +248,14 @@ public class MainActivity extends Activity {
     private void deliverResult() {
         String envelope = resultEnvelope();
         if (envelope == null) return;
-        String endpoint = devEndpoint.getText().toString().trim();
+        if (submissionInFlight) return;
+        String endpoint = DEV_INTAKE_URL;
         String token = jobToken.getText().toString().trim();
-        if (!endpoint.matches("https://[^\\s?#]+/v1/android/result") || token.length() < 40 || token.length() > 1500) {
-            deliveryStatus.setText("Isi URL intake HTTPS dan token job singkat yang valid.");
+        if (token.length() < 40 || token.length() > 1500) {
+            deliveryStatus.setText("Isi token job sementara yang valid.");
             return;
         }
+        submissionInFlight = true;
         deliveryStatus.setText("Mengirim... (belum ACK AI Core)");
         new Thread(() -> {
             HttpURLConnection conn = null;
@@ -274,9 +282,9 @@ public class MainActivity extends Activity {
                 String display = confirmed ? "Intake DEV menerima hasil. Receipt: " + receipt +
                     ". Status: RECEIVED_UNVERIFIED (bukan callback/ACK AI Core)." :
                     "Gagal mengirim ke intake DEV (HTTP " + status + ").";
-                runOnUiThread(() -> deliveryStatus.setText(display));
+                runOnUiThread(() -> { submissionInFlight = false; deliveryStatus.setText(display); });
             } catch (Exception ex) {
-                runOnUiThread(() -> deliveryStatus.setText("Koneksi gagal. Periksa URL/token dan jaringan DEV."));
+                runOnUiThread(() -> { submissionInFlight = false; deliveryStatus.setText("Koneksi gagal. Periksa token dan jaringan DEV."); });
             } finally { if (conn != null) conn.disconnect(); }
         }).start();
     }
