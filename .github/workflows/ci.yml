@@ -52,6 +52,10 @@ jobs:
         run: node --test scripts/verify-dev-first-release.test.mjs
       - name: Verify bounded Hostinger DEV restart acceptance
         run: node --test scripts/dev-hostinger-restart-fallback.test.mjs
+      - name: Validate isolated VPS DEV release and watcher scripts
+        run: |
+          python3 -m py_compile scripts/vps/deploy_dev_release.py scripts/vps/dev_ci_watcher.py
+          bash -n scripts/vps/dev_ssh_gate.sh
       - name: Verify E2E-gated VPS Docker image retention (offline)
         run: |
           python3 scripts/vps/test_docker_image_retention.py -q

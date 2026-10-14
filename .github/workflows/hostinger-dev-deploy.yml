@@ -2,13 +2,11 @@ name: Hostinger DEV Deploy
 
 on:
   push:
-    branches:
-      - develop
+    branches: [develop]
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: hostinger-dev-deploy
@@ -16,478 +14,144 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy AI Core DEV
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    name: Deploy AI Core DEV (isolated VPS)
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     environment: development
-    timeout-minutes: 30
+    timeout-minutes: 28
     env:
-      HOSTINGER_API_BASE: https://developers.hostinger.com/api
-      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
       DEV_DOMAIN: dev-aicore.cstlogistic.co.id
-      PROD_TEMPLATE_DOMAIN: aicore.cstlogistic.co.id
+      PROD_DOMAIN: aicore.cstlogistic.co.id
+      DEV_VPS_IP: 72.61.210.205
       EXPECTED_SHA: ${{ github.sha }}
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
-
-      - name: Authenticate to GCP without static credentials
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: projects/96593896464/locations/global/workloadIdentityPools/github-aicore-dev/providers/github-core-ai
-          service_account: aicore-dev-github@aicore-505614.iam.gserviceaccount.com
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
-
-      - name: Load and validate DEV configuration
+      - name: Require current develop commit before any DNS action
         shell: bash
         run: |
           set -euo pipefail
-          umask 077
-          gcloud secrets versions access latest             --secret=aicore-app-secrets             --project=aicore-505614 > /tmp/aicore-secrets.json
-
-          jq -e '.SUPABASE_URL_DEV == "https://xssrfshdrtdfupgqwfdw.supabase.co"'             /tmp/aicore-secrets.json >/dev/null
-          jq -e '.SUPABASE_DATABASE_URL_DEV | contains("xssrfshdrtdfupgqwfdw")'             /tmp/aicore-secrets.json >/dev/null
-          jq -e '.SUPABASE_SERVICE_ROLE_KEY_DEV | type == "string" and length > 20'             /tmp/aicore-secrets.json >/dev/null
-          echo "dev_config_validation=PASS project_ref=xssrfshdrtdfupgqwfdw"
-
-      - name: Resolve or create dedicated DEV website
-        id: website
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${HOSTINGER_API_TOKEN:-}"
-
-          list_websites() {
-            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100"               -o /tmp/websites.json
+          current="$(git ls-remote origin refs/heads/develop | awk '{print $1}')"
+          test "$current" = "$EXPECTED_SHA" || {
+            echo "::error::Stale develop commit; refusing DEV promotion"; exit 1;
           }
+          echo "dev_target_sha=$EXPECTED_SHA"
 
-          list_websites
-          prod_order=$(jq -r --arg d "$PROD_TEMPLATE_DOMAIN"             '.data[] | select(.domain == $d and .is_enabled == true) | .order_id // empty'             /tmp/websites.json | head -n1)
-
-          if [ -z "$prod_order" ]; then
-            echo "::error::Could not resolve Hostinger order_id from $PROD_TEMPLATE_DOMAIN"
-            exit 1
-          fi
-
-          username=$(jq -r --arg d "$DEV_DOMAIN"             '.data[] | select(.domain == $d and .is_enabled == true) | .username // empty'             /tmp/websites.json | head -n1)
-
-          # Strict DEV/PROD isolation: provisioning against PROD order is forbidden.
-          # An independent Hostinger hosting plan must exist before this workflow.
-          # Never auto-create a DEV site under the PRODUCTION order_id.
-          if [ -z "$username" ]; then
-            echo "::error::DEV hosting must be provisioned on a separate plan/account before deployment."
-            exit 1
-          fi
-
-          # Fail closed unless DEV and PROD have distinct website, account, AND
-          # Hostinger hosting-plan order identities (independent billing/resources).
-          prod_username=$(jq -r --arg d "$PROD_TEMPLATE_DOMAIN" '.data[] | select(.domain == $d and .is_enabled == true) | .username // empty' /tmp/websites.json | head -n1)
-          dev_order=$(jq -r --arg d "$DEV_DOMAIN" '.data[] | select(.domain == $d and .is_enabled == true) | .order_id // empty' /tmp/websites.json | head -n1)
-          if [ -z "$prod_username" ] || [ -z "$dev_order" ] || \
-             [ "$DEV_DOMAIN" = "$PROD_TEMPLATE_DOMAIN" ] || \
-             [ "$username" = "$prod_username" ] || [ "$dev_order" = "$prod_order" ]; then
-            echo "::error::DEV requires an independent Hostinger account and hosting plan; shared PROD identity is blocked."
-            exit 1
-          fi
-          echo "username=$username" >> "$GITHUB_OUTPUT"
-          echo "dev_website=READY domain=$DEV_DOMAIN"
-
-      - name: Configure isolated DEV environment
-        shell: bash
-        env:
-          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
-          AI_TASK_BRIDGE_TOKEN: ${{ secrets.AI_TASK_BRIDGE_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ "${#AI_TASK_BRIDGE_TOKEN}" -lt 32 ]; then
-            echo "::error::AI_TASK_BRIDGE_TOKEN is missing from the development environment"
-            exit 1
-          fi
-          admin_key=$(jq -r '.ADMIN_API_KEY // empty' /tmp/aicore-secrets.json)
-          session_secret=$(printf 'aicore-dev-session:%s' "$admin_key" | sha256sum | awk '{print $1}')
-
-          jq --arg session "$session_secret" --arg expected_sha "$EXPECTED_SHA" --arg bridge_token "$AI_TASK_BRIDGE_TOKEN" '
-            def add($k;$v): if ($v // "") == "" then [] else [{key:$k,value:$v}] end;
-            {env_vars: (
-              [
-                {key:"APP_ENV",value:"development"},
-                {key:"NODE_ENV",value:"development"},
-                {key:"SERVE_FRONTEND",value:"true"},
-                {key:"SERVE_STATIC_FRONTEND",value:"true"},
-                {key:"PORT",value:"3000"},
-                {key:"BASE_PATH",value:"/"},
-                {key:"HOSTINGER_FRONTEND",value:"ai-platform"},
-                {key:"CST_BUILD_COMMIT_SHA",value:$expected_sha},
-                {key:"PUBLIC_APP_URL",value:"https://dev-aicore.cstlogistic.co.id"},
-                {key:"ALLOWED_ORIGINS",value:"https://dev-aicore.cstlogistic.co.id"},
-                {key:"AI_TASK_LEDGER_SYNC_ENABLED",value:"true"},
-                {key:"AI_TASK_LEDGER_URL",value:"https://dev-ai-task.cstlogistic.co.id"},
-                {key:"AI_TASK_BRIDGE_TOKEN",value:$bridge_token},
-                {key:"SUPABASE_URL_DEV",value:.SUPABASE_URL_DEV},
-                {key:"VITE_SUPABASE_URL_DEV",value:(.VITE_SUPABASE_URL_DEV // .SUPABASE_URL_DEV)},
-                {key:"SUPABASE_DATABASE_URL_DEV",value:.SUPABASE_DATABASE_URL_DEV},
-                {key:"SUPABASE_DEV_DATABASE_URL",value:.SUPABASE_DATABASE_URL_DEV},
-                {key:"SUPABASE_ANON_KEY_DEV",value:.SUPABASE_ANON_KEY_DEV},
-                {key:"VITE_SUPABASE_ANON_KEY_DEV",value:(.VITE_SUPABASE_ANON_KEY_DEV // .SUPABASE_ANON_KEY_DEV)},
-                {key:"SUPABASE_SERVICE_ROLE_KEY_DEV",value:.SUPABASE_SERVICE_ROLE_KEY_DEV},
-                {key:"SESSION_SECRET",value:$session},
-                {key:"AI_PROVIDER_BILLING_MONITOR_ENABLED",value:"false"},
-                {key:"AI_PRODUCTION_WORKERS_ALLOWED",value:"false"},
-                {key:"AI_DEV_SAFE_WORKERS_ENABLED",value:"true"},
-                {key:"AI_DISPATCHER_ENABLED",value:"true"},
-                {key:"AI_SCHEDULER_ENABLED",value:"true"},
-                {key:"AI_INCIDENT_WATCHER_ENABLED",value:"false"},
-                {key:"OLLAMA_WORKER_RUNTIME_ENABLED",value:"false"},
-                {key:"GCP_OLLAMA_AUTOSTART_ENABLED",value:"false"},
-                {key:"GCP_CODING_WORKER_AUTOSTART_ENABLED",value:"false"}
-              ]
-              + add("ADMIN_API_KEY"; .ADMIN_API_KEY)
-              + add("OPENAI_API_KEY"; .OPENAI_API_KEY)
-              + add("ANTHROPIC_API_KEY"; .ANTHROPIC_API_KEY)
-              + add("GEMINI_API_KEY"; .GEMINI_API_KEY)
-              + add("MISTRAL_API_KEY"; .MISTRAL_API_KEY)
-              + add("COHERE_API_KEY"; .COHERE_API_KEY)
-              + add("REPLICATE_API_TOKEN"; .REPLICATE_API_TOKEN)
-              + add("QWEN_API_KEY"; .QWEN_API_KEY)
-            )}
-          ' /tmp/aicore-secrets.json > /tmp/dev-env.json
-
-          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds"
-          # Hostinger occasionally returns transient 500/502/503 responses even
-          # for idempotent settings PUT. Retry safely; never log response bodies
-          # because environment configuration can contain credentials.
-          env_saved=false
-          for env_attempt in 1 2 3 4 5; do
-            code=$(curl --silent --show-error --connect-timeout 15 --max-time 45 \
-              -o /tmp/env-update.json -w "%{http_code}" -X PUT \
-              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data-binary @/tmp/dev-env.json "$base/settings/env" || true)
-            if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "204" ]; then
-              env_saved=true
-              break
-            fi
-            if [ "$code" = "400" ] || [ "$code" = "401" ] || [ "$code" = "403" ]; then
-              echo "::error::DEV environment settings rejected, HTTP $code."
-              exit 1
-            fi
-            echo "::warning::Hostinger DEV env settings transient HTTP ${code:-000}; retry=$env_attempt"
-            if [ "$env_attempt" -lt 5 ]; then sleep $((env_attempt * 3)); fi
-          done
-          if [ "$env_saved" != "true" ]; then
-            echo "::error::Hostinger DEV env settings did not succeed after bounded retries."
-            exit 1
-          fi
-
-          env_count=$(jq '.env_vars | length' /tmp/dev-env.json)
-          rm -f /tmp/aicore-secrets.json
-          echo "dev_env=CONFIGURED keys=$env_count"
-
-      - name: Verify DEV bridge credential against isolated receiver
-        env:
-          AI_TASK_BRIDGE_TOKEN: ${{ secrets.AI_TASK_BRIDGE_TOKEN }}
-        run: |
-          set -euo pipefail
-          test "${#AI_TASK_BRIDGE_TOKEN}" -ge 32
-          code="$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
-            -o /dev/null -w "%{http_code}" -X POST \
-            -H "Authorization: Bearer $AI_TASK_BRIDGE_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary "{}" \
-            https://dev-ai-task.cstlogistic.co.id/api/bridge/jobs)"
-          if [ "$code" != "400" ]; then
-            echo "::error::DEV bridge credential handshake failed, HTTP=$code"
-            exit 1
-          fi
-          echo "AI_TASK_DEV_BRIDGE_AUTH=PASS (rejected malformed request with HTTP 400, no job created)"
-
-      - name: Create source archive
-        id: archive
+      - name: Wait for CI-gated VPS DEV build and exact release
         shell: bash
         run: |
           set -euo pipefail
-          archive_name="aicore-dev-${EXPECTED_SHA}.zip"
-          archive_path="/tmp/$archive_name"
-          git archive --format=zip --output="$archive_path" HEAD
-          printf '%s\n' "$EXPECTED_SHA" > /tmp/.cst-build-sha
-          zip -q -j "$archive_path" /tmp/.cst-build-sha
-          echo "name=$archive_name" >> "$GITHUB_OUTPUT"
-          echo "path=$archive_path" >> "$GITHUB_OUTPUT"
-
-      - name: Upload source archive
-        shell: bash
-        env:
-          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
-          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
-          ARCHIVE_PATH: ${{ steps.archive.outputs.path }}
-        run: |
-          set -euo pipefail
-          size=$(stat -c%s "$ARCHIVE_PATH")
-          uploaded_ok=false
-
-          for upload_attempt in 1 2 3 4 5; do
-            jq -n --arg username "$HOSTINGER_USERNAME" --arg domain "$DEV_DOMAIN" \
-              '{username:$username,domain:$domain}' > /tmp/upload-url-request.json
-
-            if ! curl --fail-with-body --silent --show-error --connect-timeout 15 --max-time 35 \
-              -X POST \
-              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data-binary @/tmp/upload-url-request.json \
-              "$HOSTINGER_API_BASE/hosting/v1/files/upload-urls" \
-              -o /tmp/upload-url.json; then
-              echo "::warning::Hostinger upload URL request failed; retry=$upload_attempt"
-              sleep 3
-              continue
-            fi
-
-            upload_base=$(jq -r '.url // empty' /tmp/upload-url.json)
-            auth_key=$(jq -r '.auth_key // empty' /tmp/upload-url.json)
-            rest_auth_key=$(jq -r '.rest_auth_key // empty' /tmp/upload-url.json)
-            test -n "$upload_base"
-            test -n "$auth_key"
-            test -n "$rest_auth_key"
-            echo "::add-mask::$auth_key"
-            echo "::add-mask::$rest_auth_key"
-
-            target="${upload_base%/}/$ARCHIVE_NAME?override=true"
-
-            create_code=$(curl --http1.1 --silent --show-error --connect-timeout 15 --max-time 35 \
-              -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}" \
-              -X POST \
-              -H "X-Auth: $auth_key" \
-              -H "X-Auth-Rest: $rest_auth_key" \
-              -H "Tus-Resumable: 1.0.0" \
-              -H "Upload-Length: $size" \
-              -H "Upload-Offset: 0" \
-              -H "Expect:" \
-              "$target" || true)
-
-            if [ "$create_code" != "201" ]; then
-              echo "Hostinger upload create retry=$upload_attempt http=$create_code"
-              sleep 3
-              continue
-            fi
-
-            patch_code=$(curl --http1.1 --silent --show-error --connect-timeout 15 --max-time 180 \
-              -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}" \
-              -X PATCH \
-              -H "X-Auth: $auth_key" \
-              -H "X-Auth-Rest: $rest_auth_key" \
-              -H "Tus-Resumable: 1.0.0" \
-              -H "Content-Type: application/offset+octet-stream" \
-              -H "Upload-Offset: 0" \
-              -H "Expect:" \
-              --data-binary "@$ARCHIVE_PATH" \
-              "$target" || true)
-
-            uploaded=$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\\r","",$2); print $2}' \
-              /tmp/tus-patch.headers 2>/dev/null | tail -n1 || true)
-
-            if [ "$patch_code" = "204" ] && [ "$uploaded" = "$size" ]; then
-              uploaded_ok=true
-              echo "archive_upload=PASS bytes=$size attempt=$upload_attempt"
-              break
-            fi
-
-            echo "Hostinger upload retry=$upload_attempt http=$patch_code uploaded=${uploaded:-missing} expected=$size"
-            sleep 3
-          done
-
-          if [ "$uploaded_ok" != "true" ]; then
-            echo "::error::Hostinger archive upload failed after fresh signed-URL retries."
-            exit 1
-          fi
-
-      - name: Configure explicit DEV Node.js build settings
-        shell: bash
-        env:
-          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
-        run: |
-          set -euo pipefail
-          jq -n '{
-            node_version:22,
-            app_type:"express",
-            root_directory:".",
-            output_directory:".",
-            build_script:"build",
-            entry_file:"artifacts/api-server/dist/index.mjs",
-            package_manager:"pnpm"
-          }' > /tmp/dev-build-settings.json
-
-          echo "DEV Hostinger build settings:"
-          cat /tmp/dev-build-settings.json
-
-          curl --fail-with-body --silent --show-error \
-            -X PUT \
-            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary @/tmp/dev-build-settings.json \
-            "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds/settings" \
-            >/tmp/settings-update.json
-
-      - name: Start DEV Node.js build
-        id: build
-        shell: bash
-        env:
-          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
-          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
-        run: |
-          set -euo pipefail
-          jq --arg archive "$ARCHIVE_NAME"             '. + {source_type:"archive",source_options:{archive_path:$archive}}'             /tmp/dev-build-settings.json > /tmp/build-request.json
-
-          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds"
-          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/build-request.json             "$base" -o /tmp/build-start.json
-
-          uuid=$(jq -r '.uuid // empty' /tmp/build-start.json)
-          test -n "$uuid"
-          echo "uuid=$uuid" >> "$GITHUB_OUTPUT"
-          echo "dev_build_started=$uuid"
-
-      - name: Wait for DEV deployment
-        shell: bash
-        env:
-          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
-          BUILD_UUID: ${{ steps.build.outputs.uuid }}
-        run: |
-          set -euo pipefail
-          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/builds"
-          for attempt in $(seq 1 90); do
-            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$base/$BUILD_UUID" -o /tmp/build-status.json
-            state=$(jq -r '.state' /tmp/build-status.json)
-            echo "build_attempt=$attempt state=$state"
-            [ "$state" = "completed" ] && exit 0
-            if [ "$state" = "failed" ]; then
-              curl --silent --show-error \
-                -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-                "$base/$BUILD_UUID/analysis" -o /tmp/dev-build-analysis.json || true
-              analysis=$(jq -r '.analysis // empty' /tmp/dev-build-analysis.json 2>/dev/null | tr '\n' ' ' | cut -c1-1800)
-              solution=$(jq -r '.solution // empty' /tmp/dev-build-analysis.json 2>/dev/null | tr '\n' ' ' | cut -c1-1800)
-              [ -n "$analysis" ] && echo "::error title=Hostinger DEV build analysis::$analysis"
-              [ -n "$solution" ] && echo "::error title=Hostinger DEV build solution::$solution"
-              echo "::error::Hostinger DEV Node.js build failed."
-              exit 1
-            fi
-            sleep 10
-          done
-          exit 1
-
-      - name: Restart DEV Node.js application
-        shell: bash
-        env:
-          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
-        run: |
-          set -euo pipefail
-          # Hostinger may transiently return HTTP 500 after an otherwise
-          # completed build. Retry only transient failures; permanent auth or
-          # validation errors must fail closed.
-          restart_url="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$DEV_DOMAIN/nodejs/server/restart"
-          for attempt in 1 2 3 4 5; do
-            code=$(curl --silent --show-error --connect-timeout 15 --max-time 45 \
-              -o /tmp/dev-restart.body -w "%{http_code}" -X POST \
-              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-              "$restart_url" || true)
-            if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
-              echo "dev_runtime_restart=PASS attempt=$attempt"
-              break
-            fi
-            if [[ "$code" != "500" && "$code" != "502" && "$code" != "503" && "$code" != "504" && "$code" != "000" ]]; then
-              echo "::error::DEV restart rejected with HTTP $code (non-retryable)."
-              exit 1
-            fi
-            # A build may already have activated the release even when the
-            # optional restart endpoint returned a transient Hostinger 5xx.
-            # Accept only an independently live, healthy exact DEV commit.
-            rm -f /tmp/dev-restart-health.headers /tmp/dev-restart-health.body
-            health_code=$(curl --http1.1 --silent --show-error --connect-timeout 8 --max-time 15 \
-              -D /tmp/dev-restart-health.headers -o /tmp/dev-restart-health.body \
-              -w "%{http_code}" "https://$DEV_DOMAIN/api/healthz" || true)
-            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
-              /tmp/dev-restart-health.headers 2>/dev/null | tail -n1 || true)
-            if [ "$health_code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ] \
-              && jq -e '.status == "ok"' /tmp/dev-restart-health.body >/dev/null 2>&1; then
-              echo "dev_runtime_restart=PASS mode=already_live_verified sha=$live_sha"
-              break
-            fi
-            echo "::warning::DEV restart transient HTTP $code on attempt $attempt"
-            if [ "$attempt" -eq 5 ]; then
-              echo "::error::DEV restart did not succeed after bounded retries."
-              exit 1
-            fi
-            sleep $((attempt * 4))
-          done
-
-      - name: Verify DEV runtime and exact commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          health="https://$DEV_DOMAIN/api/healthz"
-          for attempt in $(seq 1 60); do
-            code=$(curl --silent --show-error -o /tmp/health.body -D /tmp/health.headers               -w "%{http_code}" --connect-timeout 10 --max-time 20 "$health" || true)
-            live_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}'               /tmp/health.headers | tail -n1)
-            if [ "$code" = "200" ] && [ "$live_sha" = "$EXPECTED_SHA" ]; then
-              echo "dev_runtime=PASS sha=$live_sha"
+          for attempt in $(seq 1 105); do
+            rm -f /tmp/vps-dev.headers /tmp/vps-dev.json
+            code="$(curl --silent --show-error --connect-timeout 5 --max-time 9 \
+              --resolve "$DEV_DOMAIN:443:$DEV_VPS_IP" \
+              -D /tmp/vps-dev.headers -o /tmp/vps-dev.json \
+              -w '%{http_code}' "https://$DEV_DOMAIN/api/healthz" || true)"
+            sha="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
+              /tmp/vps-dev.headers 2>/dev/null | tail -n1)"
+            if [[ "$code" == 200 && "$sha" == "$EXPECTED_SHA" ]] &&
+               jq -e '.status == "ok"' /tmp/vps-dev.json >/dev/null; then
+              echo "VPS_DEV_SHA=PASS sha=$sha"
               exit 0
             fi
-            echo "runtime_wait attempt=$attempt http=$code sha=${live_sha:-missing}"
+            if (( attempt % 12 == 0 )); then
+              echo "vps_dev_wait=$attempt http=$code current_sha=$sha expected_sha=$EXPECTED_SHA"
+            fi
             sleep 10
           done
-          echo "::error::DEV runtime did not converge to expected SHA."
+          echo "::error::VPS DEV did not converge to current develop after CI."
           exit 1
 
-
-      # Healthz alone does not prove that the DEV SPA, authentication boundary,
-      # and real DEV job dashboard survived the deployment.
-      - name: Verify DEV frontend and authenticated dashboard (bounded smoke)
+      - name: Check isolated DEV frontend, protected jobs and unchanged production
         shell: bash
         run: |
           set -euo pipefail
           base="https://$DEV_DOMAIN"
-          admin_key=$(jq -r '.ADMIN_API_KEY // empty' /tmp/aicore-secrets.json)
-          if [ "$(printf '%s' "$admin_key" | wc -c)" -lt 16 ]; then
-            echo "::error::DEV dashboard smoke credential unavailable."
-            exit 1
+          pin="--resolve $DEV_DOMAIN:443:$DEV_VPS_IP"
+          html_code="$(curl --silent --show-error --connect-timeout 5 --max-time 12 \
+            $pin -o /tmp/dev-index.html -w '%{http_code}' "$base/" || true)"
+          test "$html_code" = 200 && grep -qi '<html' /tmp/dev-index.html
+          asset="$(grep -oE '/assets/[^"]+\.js' /tmp/dev-index.html | head -n 1 || true)"
+          test -n "$asset" || { echo "::error::DEV static JS asset missing"; exit 1; }
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 12 \
+            $pin -o /dev/null "$base$asset"
+          anon="$(curl --silent --show-error --connect-timeout 5 --max-time 12 \
+            $pin -o /dev/null -w '%{http_code}' "$base/api/dev-center/jobs" || true)"
+          [[ "$anon" == 401 || "$anon" == 403 ]] ||
+            { echo "::error::DEV anonymous dashboard authorization failed http=$anon"; exit 1; }
+
+          prod_before="$(curl --fail --silent --show-error --connect-timeout 5 --max-time 12 \
+            -D /tmp/prod.headers -o /tmp/prod.json "https://$PROD_DOMAIN/api/healthz")"
+          jq -e '.status == "ok"' /tmp/prod.json >/dev/null
+          prod_sha="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
+            /tmp/prod.headers | tail -n1)"
+          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$prod_sha" = "$current_main" ||
+            { echo "::error::PROD no longer runs exact main; DNS switch blocked"; exit 1; }
+          echo "DEV_ISOLATION_SMOKE=PASS asset=200 anonymous=$anon prod_sha=$prod_sha"
+
+      - name: Change only DEV A record after verified independent VPS release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOSTINGER_API_TOKEN" ||
+            { echo "::error::Hostinger DNS API credentials unavailable"; exit 1; }
+          dns="https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id"
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            "$dns" -o /tmp/current-zone.json
+          jq -e 'type=="array"' /tmp/current-zone.json >/dev/null
+          # A CNAME/AAAA on DEV could route some users to a different application.
+          # Do not silently delete or replace unrelated record types.
+          jq -e 'all(.[]; .name != "dev-aicore" or .type == "A")' \
+            /tmp/current-zone.json >/dev/null ||
+            { echo "::error::Ambiguous DEV DNS record types"; exit 1; }
+          jq -n --arg ip "$DEV_VPS_IP" \
+            '{overwrite:true,zone:[{name:"dev-aicore",type:"A",ttl:300,
+            records:[{content:$ip}]}]}' > /tmp/new-zone.json
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -X POST --data-binary @/tmp/new-zone.json "$dns/validate" -o /dev/null
+          current_ip="$(jq -r '[.[] | select(.name=="dev-aicore" and .type=="A") |
+            .records[]?.content] | unique | join(",")' /tmp/current-zone.json)"
+          if [[ "$current_ip" != "$DEV_VPS_IP" ]]; then
+            curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -X PUT --data-binary @/tmp/new-zone.json "$dns" -o /dev/null
+            echo "DEV_DNS_UPDATED=PASS record=dev-aicore type=A"
+          else
+            echo "DEV_DNS_ALREADY_CORRECT=PASS"
           fi
-          # Log no tokens, cookies, user details or job payloads.
-          root_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
-            -o /tmp/dev-smoke-root.html -w "%{http_code}" "$base/" || true)
-          if [ "$root_code" != "200" ] || ! grep -qi '<html' /tmp/dev-smoke-root.html; then
-            echo "::error::DEV frontend HTML failed: HTTP $root_code"
-            exit 1
-          fi
-          asset=$(grep -oE '/assets/[^"]+\.js' /tmp/dev-smoke-root.html | head -n 1 || true)
-          if [ -z "$asset" ]; then
-            echo "::error::DEV frontend JS asset reference missing."
-            exit 1
-          fi
-          asset_code=$(curl --silent --show-error --connect-timeout 10 --max-time 25 \
-            -o /dev/null -w "%{http_code}" "$base$asset" || true)
-          if [ "$asset_code" != "200" ]; then
-            echo "::error::DEV frontend JS asset unavailable: HTTP $asset_code"
-            exit 1
-          fi
-          anonymous_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
-            -o /dev/null -w "%{http_code}" "$base/api/dev-center/jobs" || true)
-          if [ "$anonymous_code" != "401" ] && [ "$anonymous_code" != "403" ]; then
-            echo "::error::DEV job dashboard anonymous auth boundary failed: HTTP $anonymous_code"
-            exit 1
-          fi
-          dashboard_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
-            -H "x-admin-api-key: $admin_key" -o /tmp/dev-smoke-dashboard.html \
-            -w "%{http_code}" "$base/api/dev-center/dashboard" || true)
-          if [ "$dashboard_code" != "200" ] || ! grep -q 'AI Core DEV - Job Monitoring' /tmp/dev-smoke-dashboard.html; then
-            echo "::error::DEV authenticated dashboard unavailable: HTTP $dashboard_code"
-            exit 1
-          fi
-          jobs_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
-            -H "x-admin-api-key: $admin_key" -o /tmp/dev-smoke-jobs.json \
-            -w "%{http_code}" "$base/api/dev-center/jobs" || true)
-          if [ "$jobs_code" != "200" ] || ! jq -e '(.jobs | type) == "array"' /tmp/dev-smoke-jobs.json >/dev/null; then
-            echo "::error::DEV authenticated job data unavailable: HTTP $jobs_code"
-            exit 1
-          fi
-          echo "dev_frontend_dashboard_smoke=PASS (JS 200, anonymous denied, authenticated dashboard and jobs 200)"
+
+      - name: Verify authoritative DNS and public DEV exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            for ns in ns1.dns-parking.com ns2.dns-parking.com; do
+              resolved="$(dig @"$ns" +short A "$DEV_DOMAIN" | sort -u)"
+              if [[ "$resolved" != "$DEV_VPS_IP" ]]; then
+                echo "Waiting for $ns DEV DNS propagation attempt=$attempt"
+                sleep 10
+                continue 2
+              fi
+            done
+            rm -f /tmp/public-dev.headers /tmp/public-dev.json
+            code="$(curl --silent --show-error --connect-timeout 6 --max-time 15 \
+              -D /tmp/public-dev.headers -o /tmp/public-dev.json -w '%{http_code}' \
+              "https://$DEV_DOMAIN/api/healthz" || true)"
+            live_sha="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
+              /tmp/public-dev.headers | tail -n1)"
+            if [[ "$code" == 200 && "$live_sha" == "$EXPECTED_SHA" ]] &&
+               jq -e '.status == "ok"' /tmp/public-dev.json >/dev/null; then
+              echo "DEV_E2E_PUBLIC=PASS sha=$live_sha dns=$DEV_VPS_IP"
+              exit 0
+            fi
+            echo "DEV_PUBLIC_WAIT attempt=$attempt http=$code"
+            sleep 10
+          done
+          echo "::error::DEV DNS or public exact-release SHA failed."
+          exit 1
