@@ -37,6 +37,8 @@ public class MainActivity extends Activity {
     private TextView autoSendStatus;
     private static final String DEV_INTAKE_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/result";
     private static final String DEV_TOKEN_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/token";
+    private static final String DEV_PAIR_START_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/start";
+    private static final String DEV_PAIR_STATUS_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/status";
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
     private EditText jobToken;
@@ -111,6 +113,10 @@ public class MainActivity extends Activity {
             deliveryStatus.setText("Pairing tersimpan secara lokal. Token job akan diminta otomatis.");
         });
         root.addView(saveDevice);
+        Button pairAutomatically = new Button(this);
+        pairAutomatically.setText("Minta pairing satu ketukan (DEV)");
+        pairAutomatically.setOnClickListener(v -> beginPairing());
+        root.addView(pairAutomatically);
         Button deliver = new Button(this);
         deliver.setText("Kirim hasil ke intake DEV (belum ACK AI Core)");
         deliver.setOnClickListener(v -> deliverResult());
@@ -330,6 +336,57 @@ public class MainActivity extends Activity {
             } finally { if (conn != null) conn.disconnect(); }
         }).start();
     }
+
+    private JSONObject callPairApi(String endpoint, JSONObject input) throws Exception {
+        HttpURLConnection http=(HttpURLConnection)new URL(endpoint).openConnection();
+        try {
+            http.setRequestMethod("POST");
+            http.setConnectTimeout(10000);
+            http.setReadTimeout(12000);
+            http.setInstanceFollowRedirects(false);
+            http.setDoOutput(true);
+            http.setRequestProperty("Content-Type","application/json");
+            try(OutputStream out=http.getOutputStream()) {
+                out.write(input.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            int status=http.getResponseCode();
+            try(InputStream in=status>=400?http.getErrorStream():http.getInputStream()){
+                String body=in==null?"":new String(in.readNBytes(4096),StandardCharsets.UTF_8);
+                if(status!=200 && status!=201 && status!=202)throw new IllegalStateException("HTTP "+status);
+                return new JSONObject(body);
+            }
+        }finally{http.disconnect();}
+    }
+    private void beginPairing() {
+        deliveryStatus.setText("Meminta pairing DEV...");
+        new Thread(() -> {
+            try {
+                JSONObject start=callPairApi(DEV_PAIR_START_URL,new JSONObject());
+                String id=start.getString("requestId");
+                String proof=start.getString("proof");
+                String code=start.getString("code");
+                runOnUiThread(()->deliveryStatus.setText(
+                    "Kode pairing: "+code+". Konfirmasi kode ini kepada admin, lalu tunggu persetujuan (maks. 5 menit)."));
+                for(int i=0;i<55;i++) {
+                    Thread.sleep(4500);
+                    JSONObject body=new JSONObject();
+                    body.put("requestId",id);body.put("proof",proof);
+                    JSONObject state=callPairApi(DEV_PAIR_STATUS_URL,body);
+                    if("paired".equals(state.optString("status"))) {
+                        String credential=state.getString("credential");
+                        getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE)
+                            .edit().putString("credential",credential).apply();
+                        runOnUiThread(()->deliveryStatus.setText("PAIRING DEV BERHASIL. Token job diterbitkan otomatis."));
+                        return;
+                    }
+                }
+                runOnUiThread(()->deliveryStatus.setText("Pairing belum disetujui. Tekan pairing lagi."));
+            }catch(Exception ignored){
+                runOnUiThread(()->deliveryStatus.setText("Pairing belum berhasil. Periksa jaringan DEV dan ulangi."));
+            }
+        }).start();
+    }
+
     private void shareResult() {
         String envelope = resultEnvelope();
         if (envelope == null) return;
