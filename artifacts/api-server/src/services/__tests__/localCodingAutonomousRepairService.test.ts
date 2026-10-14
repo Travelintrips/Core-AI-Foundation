@@ -1,5 +1,21 @@
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";import { LocalCodingAutonomousRepairService } from "../localCodingAutonomousRepairService";
+
+// Test for cancelled workflow_run event
+it("should handle workflow_run cancelled event without throwing and log cancellation message", async () => {
+  const payload = { workflow_run: { status: 'cancelled', workflow: { id: 123 }, run_id: 456 } };
+  const logger = vi.spyOn(console, 'info').mockImplementation(() => {});
+  await expect(LocalCodingAutonomousRepairService.handleWorkflowRunEvent(payload)).resolves.not.toThrow();
+  expect(logger).toHaveBeenCalledWith('Workflow run cancelled, exiting without action');
+});
+
+it("should be idempotent for repeated cancelled events", async () => {
+  const payload = { workflow_run: { status: 'cancelled' } };
+  await expect(LocalCodingAutonomousRepairService.handleWorkflowRunEvent(payload)).resolves.not.toThrow();
+  await expect(LocalCodingAutonomousRepairService.handleWorkflowRunEvent(payload)).resolves.not.toThrow();
+});
+
+
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
