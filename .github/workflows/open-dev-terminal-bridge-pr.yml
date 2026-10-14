@@ -1,0 +1,33 @@
+name: Open DEV terminal bridge fix PR
+
+on:
+  push:
+    branches:
+      - fix/ai-task-dev-terminal-event-20261014
+    paths:
+      - .github/workflows/open-dev-terminal-bridge-pr.yml
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create or verify PR to develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          existing="$(gh pr list --repo "${GITHUB_REPOSITORY}" --head fix/ai-task-dev-terminal-event-20261014 --base develop --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "Existing PR number: $existing"
+            exit 0
+          fi
+          gh pr create --repo "${GITHUB_REPOSITORY}" \
+            --head fix/ai-task-dev-terminal-event-20261014 --base develop \
+            --title "fix(dev): mirror analyzer terminal transitions to AI Task" \
+            --body "DEV E2E issue: task CWS-617BA8AE reached canonical COMPLETED but ledger stayed RUNNING without CALLBACK_ACK. This patch notifies AI Task after repository analyzer completion or failure commits; receiver still validates canonical source state. Nonblocking, no PROD configuration changes. Includes regression tests."
