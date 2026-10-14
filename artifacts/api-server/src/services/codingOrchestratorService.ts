@@ -26,6 +26,7 @@ import {
 } from "./repositoryAnalyzerService.js";
 import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMultiTaskPlannerService.js";
 import { reportCodingTaskTerminalTransition } from "./codingTaskTerminalReportingService.js";
+import { notifyAiTaskLedgerSourceState } from "./aiTaskLedgerBridgeService.js";
 import { isRepositoryAnalyzerVerificationOnlyInstruction, repositoryAnalyzerVerificationAck } from "./repositoryAnalyzerVerificationOnlyService.js";
 
 type CodingStageId =
@@ -372,6 +373,16 @@ async function completeLocalAnalysis(
     return;
   }
 
+  // The Repository Analyzer can complete the task without going through
+  // terminal bridge reporting. Mirror only after the authoritative commit.
+  // Source-side verification rejects races with a concurrent manual stop.
+  void notifyAiTaskLedgerSourceState({
+    externalId: `coding-task:${input.task.id}`,
+    title: `AI Core coding task ${input.task.taskNumber}`,
+    status: "COMPLETED",
+    version: completedAt,
+  }).catch(() => undefined);
+
   await logAudit(
     "coding-orchestrator",
     nextAction === "REVIEW_LOCAL_PATCH"
@@ -441,6 +452,15 @@ async function failOrchestration(
       })
       .where(eq(aiCodingTasksTable.id, input.task.id));
   });
+
+  // Failure is persisted above; publish the terminal state without
+  // altering worker ownership or the canonical AI Core result.
+  void notifyAiTaskLedgerSourceState({
+    externalId: `coding-task:${input.task.id}`,
+    title: `AI Core coding task ${input.task.taskNumber}`,
+    status: "FAILED",
+    version: finishedAt,
+  }).catch(() => undefined);
 
   await logAudit(
     "coding-orchestrator",
