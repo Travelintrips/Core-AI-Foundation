@@ -1,0 +1,20 @@
+[Unit]
+Description=Safely retire superseded, verified CST Docker image tags
+Documentation=https://github.com/Travelintrips/Core-AI-Foundation
+Requires=docker.service
+After=docker.service
+ConditionPathExists=/var/lib/cst-docker-image-retention
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=5min
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cst-docker-image-retention
+ExecStart=/usr/bin/python3 /usr/local/libexec/cst-docker-image-retention.py sweep --apply
