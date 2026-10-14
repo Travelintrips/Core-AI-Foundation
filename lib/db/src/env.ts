@@ -25,11 +25,17 @@ function projectRefFromUrlValue(value: string | undefined): string | null {
     const host = new URL(value).hostname.toLowerCase();
     const direct = /^([a-z0-9-]+)\.supabase\.co$/.exec(host);
     if (direct?.[1]) return direct[1];
+    // The Postgres direct connection uses db.<project-ref>.supabase.co,
+    // while the HTTP project URL uses <project-ref>.supabase.co.
+    const directDb = /^db\.([a-z0-9-]+)\.supabase\.co$/.exec(host);
+    if (directDb?.[1]) return directDb[1];
 
     if (host.endsWith(".pooler.supabase.com")) {
       const parsed = new URL(value);
       const username = decodeURIComponent(parsed.username);
-      const pooled = /^postgres\.([a-z0-9-]+)$/.exec(username);
+      // Supabase permits custom Postgres roles in pooler usernames, e.g.
+      // app_worker.<project-ref>. Preserve the ref check for every role.
+      const pooled = /^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.([a-z0-9-]+)$/.exec(username);
       if (pooled?.[1]) return pooled[1];
     }
   } catch {
