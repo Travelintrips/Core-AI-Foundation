@@ -42,16 +42,40 @@ Run the approved cleanup immediately:
 The most recent root-only audit summary is written at
 `/var/lib/cst-docker-image-retention/active-only-last-run.json`.
 
-## Policy B — other opted-in workers: retain one verified rollback
+## Policy B — verified worker-image history
 
-The existing `docker_image_retention.py` policy still applies to the
-Repository Analyzer and OpenClaw after verified deploys. It requires CI
-evidence and preserves the running image, one rollback image, and all
-images referenced by any running or stopped container.
+The existing `docker_image_retention.py` checks deployment evidence for
+Repository Analyzer and OpenClaw. Its narrowly scoped retirement still keeps
+a verified rollback image, but the global 7-day cleanup below can subsequently
+remove an **unreferenced** rollback image once it is sufficiently old.
+A rollback image is therefore not guaranteed to remain on the VPS indefinitely;
+it must be pulled or rebuilt when needed. Any image referenced by an existing
+container, including a stopped container, remains protected.
 
-AI Core DEV and PROD are explicitly **excluded** from that rollback policy.
-The AI Workers VPS deployment records OpenClaw evidence only after its full
-stack healthcheck passed.
+AI Core DEV and PROD remain explicitly excluded from the older rollback policy.
+The AI Workers VPS deployment records OpenClaw evidence only after the stack
+healthcheck succeeds.
+
+## Policy C — unused images and Docker build cache (all repositories)
+
+The daily timer also runs **Docker's native unused-image cleanup** with an
+age threshold of **7 days**, using Docker's own container-reference checks:
+
+    docker image prune --all --force --filter until=168h
+
+It then attempts to reclaim unused **BuildKit build cache** last used more
+than 7 days ago, while reserving up to 4 GB for subsequent builds:
+
+    docker buildx prune --all --force --filter until=168h --max-used-space 4gb --reserved-space 2gb
+
+Neither command removes containers, bind-mounted files, named volumes,
+databases, WhatsApp sessions or images still referenced by any container.
+Images pulled for a future rollout should be deployed promptly; Docker image
+creation time may predate when an image was pulled.
+
+Intentionally stopped Compose one-shot containers and migration/backup
+containers remain intact by default. Clearing those requires a specific,
+reviewed decision, not a blanket `docker container prune`.
 
 ## Install and schedule
 
@@ -71,15 +95,15 @@ Monitoring:
     journalctl -u cst-docker-image-retention.service -n 80 --no-pager
     sudo python3 /usr/local/libexec/cst-docker-active-only.py
 
-To disable both automatic policies:
+To disable all scheduled image/cache cleanup policies:
 
     sudo systemctl disable --now cst-docker-image-retention.timer
 
 ## Scope and limitations
 
-This is intentionally **not** a global Docker garbage collector. PostgreSQL,
-Redis, n8n, WhatsApp Gateway, OpenHands, Temporal and other application
-images must not be treated as unused just because a container is currently
-stopped; some jobs are intentionally started only when needed.
+This is intentionally **not** a global container/volume prune. PostgreSQL,
+Redis, n8n, WhatsApp Gateway, OpenHands, Temporal, and intentionally stopped
+one-shot workloads keep their images as long as those containers exist.
+Only image IDs with **no container references** can be reclaimed after 7 days.
 
 No hosting/DEV–PROD isolation or release-gate protections are relaxed.
