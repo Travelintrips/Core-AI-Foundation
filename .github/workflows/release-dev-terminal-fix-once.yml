@@ -1,0 +1,74 @@
+name: One-time DEV terminal PR release
+
+on:
+  push:
+    branches:
+      - ops/ai-task-dev-terminal-release-20261014
+    paths:
+      - .github/workflows/release-dev-terminal-fix-once.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  verified-merge-and-dev-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: Travelintrips/Core-AI-Foundation
+      EXPECTED_SHA: c8363f46d2b6434651c2789ee092e5d3e9dbbb3b
+    steps:
+      - name: Wait for exact PR CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          approved=false
+          for attempt in $(seq 1 85); do
+            conclusion="$(gh api "repos/$REPO/actions/runs?head_sha=$EXPECTED_SHA&per_page=100" --jq '.workflow_runs | map(select(.name == "CI Verify" and .event == "pull_request")) | sort_by(.run_number) | last | .conclusion // ""')"
+            state="$(gh api "repos/$REPO/actions/runs?head_sha=$EXPECTED_SHA&per_page=100" --jq '.workflow_runs | map(select(.name == "CI Verify" and .event == "pull_request")) | sort_by(.run_number) | last | .status // ""')"
+            if [ "$state" = completed ] && [ "$conclusion" = success ]; then
+              approved=true
+              break
+            fi
+            if [ "$state" = completed ] && [ "$conclusion" != success ]; then
+              echo "::error::CI gate failed: $conclusion"
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$approved" = true
+          echo "EXACT_SHA_CI=PASS"
+
+      - name: Verify branch and safe scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/$REPO/pulls/1247")"
+          test "$(jq -r '.state' <<<"$pr")" = open
+          test "$(jq -r '.base.ref' <<<"$pr")" = develop
+          test "$(jq -r '.head.sha' <<<"$pr")" = "$EXPECTED_SHA"
+          test "$(jq -r '.draft' <<<"$pr")" = false
+          paths="$(gh api "repos/$REPO/pulls/1247/files?per_page=100" --jq '.[].filename' | sort)"
+          expected="$(printf '%s\n' 'artifacts/api-server/src/services/__tests__/codingOrchestratorService.test.ts' 'artifacts/api-server/src/services/codingOrchestratorService.ts' | sort)"
+          test "$paths" = "$expected"
+          echo "PR_HEAD_SCOPE=PASS"
+
+      - name: Merge verified DEV PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -X PUT "repos/$REPO/pulls/1247/merge" \
+            -f sha="$EXPECTED_SHA" \
+            -f merge_method=merge \
+            --jq '{merged,sha,message}'
+          state="$(gh api "repos/$REPO/pulls/1247" --jq '.state')"
+          test "$state" = closed
+
+      - name: Dispatch official DEV deployment
+        run: |
+          set -euo pipefail
+          gh workflow run hostinger-dev-deploy.yml --repo "$REPO" --ref develop
+          echo "Official Hostinger DEV deployment dispatched; PROD unchanged."
