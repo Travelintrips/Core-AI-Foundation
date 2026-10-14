@@ -19,7 +19,7 @@ class HostingerProofTests(unittest.TestCase):
     @patch.object(consumer.os.path, "isfile", return_value=True)
     @patch.object(consumer.subprocess, "run")
     def test_success_requires_exact_remote_output(self, run, _exists):
-        run.return_value = subprocess.CompletedProcess([], 0, "u684045296\\nid-dci-web1320.main-hosting.eu\\n", "")
+        run.return_value = subprocess.CompletedProcess([], 0, "u684045296" + chr(10) + "id-dci-web1320.main-hosting.eu" + chr(10), "")
         ok, output, details = consumer.execute({"instruction": INSTRUCTION})
         self.assertTrue(ok)
         self.assertEqual(details["exitCode"], 0)
