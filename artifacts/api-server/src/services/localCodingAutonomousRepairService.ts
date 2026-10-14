@@ -1,3 +1,9 @@
+/**
+ * Workflow run cancellation handling note:
+ * Cancelled GitHub Actions workflow_run events (status: 'completed', conclusion: 'cancelled')
+ * require explicit status transitions to mark associated coding workstreams and tasks as cancelled/aborted
+ * rather than awaiting completion or failing silently.
+ */
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
