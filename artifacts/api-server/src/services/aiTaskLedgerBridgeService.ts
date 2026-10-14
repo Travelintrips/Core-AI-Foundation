@@ -20,6 +20,9 @@ export interface AiTaskLedgerResult {
   synced: boolean;
   id?: string;
   created?: boolean;
+  observedStatus?: string;
+  /** True only after the AI Task receiver reports a terminal persisted state. */
+  acknowledged?: boolean;
   reason?: "disabled" | "unconfigured" | "invalid_input" | "remote_error" | "network_error";
 }
 
@@ -108,7 +111,12 @@ export async function registerAiTaskLedgerJob(
         typeof result["id"] !== "string") {
       return { synced: false, reason: "remote_error" };
     }
-    return { synced: true, id: result["id"], created: data["created"] === true };
+    return {
+      synced: true,
+      id: result["id"],
+      created: data["created"] === true,
+      observedStatus: typeof result["status"] === "string" ? result["status"] : undefined,
+    };
   } catch {
     // Sanitized error output: never log tokens, URLs containing credentials,
     // instruction text, or raw remote response bodies.
@@ -142,6 +150,12 @@ export async function mirrorAiTaskLedgerSourceState(input: AiTaskLedgerJobInput 
   const registered = await registerAiTaskLedgerJob(input);
   if (!registered.synced || !registered.id ||
       !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(registered.id)) return registered;
+  // An idempotent registry replay also provides the receiver's persisted status.
+  // COMPLETED is only reachable through the independent source-verified ACK.
+  if ((input.status === "COMPLETED" || input.status === "FAILED") &&
+      registered.observedStatus === input.status) {
+    return { ...registered, acknowledged: true };
+  }
   const token = process.env["AI_TASK_BRIDGE_TOKEN"]?.trim();
   const url = ledgerRequestUrl();
   if (!token || !url) return { synced: false, reason: "unconfigured" };
@@ -165,7 +179,15 @@ export async function mirrorAiTaskLedgerSourceState(input: AiTaskLedgerJobInput 
     }
     const body = await response.json() as Record<string, unknown>;
     if (body["accepted"] !== true) return { synced: false, reason: "remote_error" };
-    return { synced: true, id: registered.id, created: registered.created };
+    const observedStatus = typeof body["status"] === "string" ? body["status"] : undefined;
+    return {
+      synced: true,
+      id: registered.id,
+      created: registered.created,
+      observedStatus,
+      acknowledged: (input.status === "COMPLETED" || input.status === "FAILED") &&
+        observedStatus === input.status,
+    };
   } catch {
     return { synced: false, reason: "network_error" };
   }

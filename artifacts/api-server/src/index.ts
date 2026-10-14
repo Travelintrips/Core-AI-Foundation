@@ -74,6 +74,8 @@ const codingAutonomous =
   await import("./services/localCodingAutonomousRepairService.js");
 const codingOrchestrationRecovery =
   await import("./services/codingOrchestratorService.js");
+const ledgerReconciliation =
+  await import("./services/aiTaskLedgerReconciliationService.js");
 const providerBilling =
   await import("./services/aiProviderBillingService.js");
 const { pool, isDatabaseAuthenticationError } = await import("@workspace/db");
@@ -218,6 +220,9 @@ async function initializeRuntimeServices(): Promise<void> {
   // Resume only repository-analysis runs already requested by a user. This
   // continuation also serves tasks whose autonomous approval/dispatch is off.
   codingOrchestrationRecovery.startCodingOrchestrationRecoveryRuntime();
+  // Source-backed retries recover missed terminal notifications after crashes.
+  // No effect unless the existing AI_TASK_LEDGER_SYNC_ENABLED flag is on.
+  ledgerReconciliation.startAiTaskLedgerReconciliationRuntime();
 
   // Production workers fail closed: they only auto-start when explicitly enabled.
   // Development keeps the existing auto-start behavior for local workflows.
