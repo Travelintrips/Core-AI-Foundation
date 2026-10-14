@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     private EditText jobToken;
     private EditText deviceCredential;
     private TextView deliveryStatus;
+    private TextView jobFetchStatus;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -65,6 +66,10 @@ public class MainActivity extends Activity {
         fetchAssignedJob.setText("AMBIL JOB DEV OTOMATIS");
         fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice());
         root.addView(fetchAssignedJob);
+        jobFetchStatus = new TextView(this);
+        jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
+        jobFetchStatus.setTextSize(16);
+        root.addView(jobFetchStatus);
         prompt = new EditText(this);
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
@@ -365,8 +370,8 @@ public class MainActivity extends Activity {
 
     private void fetchJobForDevice() {
         String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
-        if(credential.length()<32){deliveryStatus.setText("Pairing perangkat belum tersedia.");return;}
-        deliveryStatus.setText("Memeriksa job DEV untuk perangkat ini...");
+        if(credential.length()<32){jobFetchStatus.setText("Pairing perangkat tidak ditemukan di aplikasi. Periksa pairing DEV.");return;}
+        jobFetchStatus.setText("Memeriksa job DEV untuk perangkat ini...");
         new Thread(()->{
             HttpURLConnection conn=null;
             try{
@@ -381,7 +386,7 @@ public class MainActivity extends Activity {
                 try(OutputStream out=conn.getOutputStream()){out.write("{}".getBytes(StandardCharsets.UTF_8));}
                 int status=conn.getResponseCode();
                 if(status==204){
-                    runOnUiThread(()->deliveryStatus.setText("Belum ada job DEV untuk perangkat ini."));
+                    runOnUiThread(()->jobFetchStatus.setText("Belum ada job DEV untuk perangkat ini."));
                     return;
                 }
                 if(status!=200)throw new IllegalStateException("HTTP "+status);
@@ -392,9 +397,9 @@ public class MainActivity extends Activity {
                 String id=new JSONObject(response).getString("jobId");
                 if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
                     throw new IllegalStateException("Invalid job");
-                runOnUiThread(()->{taskId.setText(id);deliveryStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");});
+                runOnUiThread(()->{taskId.setText(id);jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");});
             }catch(Exception ex){
-                runOnUiThread(()->deliveryStatus.setText("Gagal mengambil job DEV. Periksa pairing dan jaringan."));
+                runOnUiThread(()->jobFetchStatus.setText("Gagal mengambil job DEV ("+(ex instanceof IllegalStateException?ex.getMessage():"koneksi")+"). Periksa pairing dan jaringan."));
             }finally{if(conn!=null)conn.disconnect();}
         }).start();
     }
