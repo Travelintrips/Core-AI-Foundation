@@ -2,6 +2,10 @@ name: Provision Combined DEV VPS DNS
 
 on:
   workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - .github/workflows/provision-combined-dev-dns.yml
 
 permissions:
   contents: read
