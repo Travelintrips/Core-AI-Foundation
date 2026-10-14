@@ -18,6 +18,12 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.InputType;
+import java.net.URL;
+import java.net.HttpURLConnection;
+import java.io.OutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 import java.util.UUID;
 
@@ -29,6 +35,9 @@ public class MainActivity extends Activity {
     private CheckBox autoSend;
     private CheckBox captureReply;
     private TextView autoSendStatus;
+    private EditText devEndpoint;
+    private EditText jobToken;
+    private TextView deliveryStatus;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -71,6 +80,21 @@ public class MainActivity extends Activity {
         result.setHint("Jawaban dari ChatGPT (Share atau tempel manual)");
         result.setMinLines(4);
         root.addView(result);
+        devEndpoint = new EditText(this);
+        devEndpoint.setHint("URL HTTPS intake DEV (dari admin)");
+        devEndpoint.setSingleLine(true);
+        root.addView(devEndpoint);
+        jobToken = new EditText(this);
+        jobToken.setHint("Token singkat untuk job ini (dari admin)");
+        jobToken.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        root.addView(jobToken);
+        Button deliver = new Button(this);
+        deliver.setText("Kirim hasil ke intake DEV (belum ACK AI Core)");
+        deliver.setOnClickListener(v -> deliverResult());
+        root.addView(deliver);
+        deliveryStatus = new TextView(this);
+        deliveryStatus.setText("Belum ada hasil dikirim. Jangan isi token AI Core/OpenClaw utama.");
+        root.addView(deliveryStatus);
         Button copy = new Button(this);
         copy.setText("Salin jawaban");
         copy.setOnClickListener(v -> copyResult());
@@ -110,7 +134,7 @@ public class MainActivity extends Activity {
         boolean enabled = accessibilityEnabled();
         String message = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
             .getString(ChatSendService.STATUS, "Belum ada uji Auto Kirim.");
-        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\\n" + message);
+        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message);
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
@@ -214,6 +238,47 @@ public class MainActivity extends Activity {
             object.put("verifiedByAiCore", false);
             return object.toString();
         } catch (Exception ex) { return null; }
+    }
+    private void deliverResult() {
+        String envelope = resultEnvelope();
+        if (envelope == null) return;
+        String endpoint = devEndpoint.getText().toString().trim();
+        String token = jobToken.getText().toString().trim();
+        if (!endpoint.matches("https://[^\\s?#]+/v1/android/result") || token.length() < 40 || token.length() > 1500) {
+            deliveryStatus.setText("Isi URL intake HTTPS dan token job singkat yang valid.");
+            return;
+        }
+        deliveryStatus.setText("Mengirim... (belum ACK AI Core)");
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            try {
+                conn = (HttpURLConnection)new URL(endpoint).openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(12000);
+                conn.setInstanceFollowRedirects(false);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+                byte[] bytes = envelope.getBytes(StandardCharsets.UTF_8);
+                try (OutputStream output = conn.getOutputStream()) { output.write(bytes); }
+                int status = conn.getResponseCode();
+                String response;
+                try (InputStream in = status >= 400 ? conn.getErrorStream() : conn.getInputStream()) {
+                    response = in == null ? "" : new String(in.readNBytes(4096),StandardCharsets.UTF_8);
+                }
+                JSONObject value = response.isEmpty() ? new JSONObject() : new JSONObject(response);
+                boolean accepted = status == 202 || status == 200;
+                boolean confirmed = accepted && value.optBoolean("accepted", false);
+                String receipt = value.optString("receiptId", "");
+                String display = confirmed ? "Intake DEV menerima hasil. Receipt: " + receipt +
+                    ". Status: RECEIVED_UNVERIFIED (bukan callback/ACK AI Core)." :
+                    "Gagal mengirim ke intake DEV (HTTP " + status + ").";
+                runOnUiThread(() -> deliveryStatus.setText(display));
+            } catch (Exception ex) {
+                runOnUiThread(() -> deliveryStatus.setText("Koneksi gagal. Periksa URL/token dan jaringan DEV."));
+            } finally { if (conn != null) conn.disconnect(); }
+        }).start();
     }
     private void shareResult() {
         String envelope = resultEnvelope();
