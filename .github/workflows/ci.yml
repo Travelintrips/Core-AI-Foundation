@@ -40,6 +40,8 @@ jobs:
         run: node --test scripts/github-event-correlation.test.mjs
       - name: Verify bounded PostgreSQL pool cap
         run: node --test scripts/pg-pool-max.test.mjs
+      - name: Verify isolated DEV database pooler credentials
+        run: pnpm --filter @workspace/scripts exec tsx --test ./dev-db-isolation.test.mjs
       - name: Verify Hostinger runtime diagnostics redact sensitive log content
         run: node --test scripts/hostinger-runtime-classify.test.mjs
       - name: Verify ZeroLLM deployment scripts
