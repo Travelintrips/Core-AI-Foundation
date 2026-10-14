@@ -15,10 +15,12 @@ command -v systemctl >/dev/null
 docker info >/dev/null
 
 python3 "$ROOT/scripts/vps/test_docker_image_retention.py" -q
+python3 "$ROOT/scripts/vps/test_active_app_image_cleanup.py" -q
 
 install -d -m 700 /var/lib/cst-docker-image-retention
 install -d -m 755 /usr/local/libexec
 install -m 755 "$ROOT/scripts/vps/docker_image_retention.py" /usr/local/libexec/cst-docker-image-retention.py
+install -m 755 "$ROOT/scripts/vps/active_app_image_cleanup.py" /usr/local/libexec/cst-docker-active-only.py
 install -m 644 "$HERE/cst-docker-image-retention.service" /etc/systemd/system/
 install -m 644 "$HERE/cst-docker-image-retention.timer" /etc/systemd/system/
 

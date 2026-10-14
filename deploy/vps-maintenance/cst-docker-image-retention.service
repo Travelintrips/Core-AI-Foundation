@@ -17,4 +17,5 @@ PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/var/lib/cst-docker-image-retention
-ExecStart=/usr/bin/python3 /usr/local/libexec/cst-docker-image-retention.py sweep --apply
+ExecStart=/usr/bin/python3 /usr/local/libexec/cst-docker-active-only.py --apply
+ExecStart=/usr/bin/python3 /usr/local/libexec/cst-docker-image-retention.py sweep --apply --exclude-service core-dev --exclude-service core-prod

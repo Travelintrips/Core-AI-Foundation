@@ -281,6 +281,8 @@ def sweep(args) -> None:
                 created[row["id"]] = created_seconds(row["id"])
         deleted = 0
         for service in SERVICES:
+            if service in getattr(args, "exclude_service", []):
+                continue  # DEV/PROD follow the active-image-only policy
             proof = read_state(args.state_dir, service)
             if proof is None:
                 continue
@@ -340,6 +342,8 @@ def main() -> int:
     mark.add_argument("--expected-image", help="Optional immutable sha256: image ID")
     apply = sub.add_parser("sweep", help="Only prune old verified image tags")
     apply.add_argument("--apply", action="store_true", help="Enable removal (default: dry-run)")
+    apply.add_argument("--exclude-service", action="append", choices=tuple(SERVICES), default=[],
+                       help="Exclude app services handled by separate active-only policy")
     args = parser.parse_args()
     try:
         if args.command == "record":

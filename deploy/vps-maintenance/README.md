@@ -1,80 +1,85 @@
-# Verified Docker image retention on a shared VPS
+# VPS Docker image cleanup
 
-**Purpose:** After a newer release has passed its deployment checks, retire
-old, unreferenced application image tags without harming production, rollback,
-databases, WhatsApp sessions or active agents.
+This VPS has two distinct policies. Nothing modifies named Docker volumes,
+database contents, WhatsApp sessions, or running containers.
 
-## Safety contract
+## Policy A — AI Core DEV and PROD: only images actively running
 
-- **No deletion at first install or first enrollment.** The initial record
-  establishes an immutable baseline. Only a later image, recorded by a
-  successful deployment, can make older versions eligible for retirement.
-- The new image must remain the exact running, Docker-healthy image for
-  **24 hours** after verification. AI Core app images additionally require the
-  exact SHA from the local healthz endpoint.
-- Always retain the verified active image and **one previously verified image
-  for rollback**. If that rollback is missing, fail closed.
-- All running AND stopped containers protect their image IDs. The script
-  **never deletes containers**, even historical backup containers.
-- Only these opt-in application image repositories are in scope:
-  core-ai-dev, ai-core-prod, ai-core-repository-analyzer, and
-  ghcr.io/openclaw/openclaw.
-- Tags latest, stable, production, and develop are protected; images
-  newer than the verified release are protected.
-- Maximum five old tags per scheduled execution. Docker can refuse removal;
-  no force flag, broad system prune, volume removal, or container removal.
-- A failed health check, missing receipt, failed SHA check, or missing
-  rollback results in zero removals for that service.
-- Deletion is opt-in through post-deploy registration, not inferred from the
-  presence of a recently built image.
+Applies only to these image repositories and their exact canonical containers:
 
-## Install (authorized VPS root; no immediate cleanup)
+- `core-ai-dev` → `core-ai-dev`, health `127.0.0.1:18082/api/healthz`
+- `ai-core-prod` → `ai-core-prod-api`, health `127.0.0.1:18088/api/healthz`
+- Legacy unused DEV image repositories `ai-core-dev` and `core-ai` may be removed.
+
+Requirements before removal:
+
+1. BOTH canonical DEV and PROD Docker containers are **running and healthy**.
+2. BOTH local application health endpoints return HTTP 200, JSON
+   `{"status":"ok"}`, and a valid 40-character `X-CST-Commit-SHA` header.
+3. There are no additional running DEV/PROD app canaries or duplicate instances.
+4. Recheck exact container ID, image ID, health, and Git SHA before EACH removal.
+5. Only stopped containers from the four allowlisted repositories can be
+   removed. A stopped container with any Docker **volume** mount is retained.
+   Bind mount files and named Docker volumes are never deleted.
+6. Only unused app image tags older than 2 hours can be removed. Newly built
+   images are temporarily protected against collisions with ongoing deploys.
+7. Image tags shared with unrelated repositories and images referenced by any
+   preserved container are always protected.
+8. No `--force`, no `docker system prune`, and no unscoped container pruning.
+
+**No old image or rollback image is intentionally kept for DEV/PROD.** Rollback
+must rebuild an image from the source Git commit if needed. This is deliberate
+per the administrator's active-image-only directive.
+
+Dry run (prints exact candidates, **does not remove anything**):
+
+    sudo python3 /usr/local/libexec/cst-docker-active-only.py
+
+Run the approved cleanup immediately:
+
+    sudo python3 /usr/local/libexec/cst-docker-active-only.py --apply
+
+The most recent root-only audit summary is written at
+`/var/lib/cst-docker-image-retention/active-only-last-run.json`.
+
+## Policy B — other opted-in workers: retain one verified rollback
+
+The existing `docker_image_retention.py` policy still applies to the
+Repository Analyzer and OpenClaw after verified deploys. It requires CI
+evidence and preserves the running image, one rollback image, and all
+images referenced by any running or stopped container.
+
+AI Core DEV and PROD are explicitly **excluded** from that rollback policy.
+The AI Workers VPS deployment records OpenClaw evidence only after its full
+stack healthcheck passed.
+
+## Install and schedule
 
     bash deploy/vps-maintenance/install.sh
 
-The installer runs offline Python tests, installs the guarded script, and
-enables the cst-docker-image-retention.timer for 04:30 Asia/Jakarta daily
-(21:30 UTC, jitter up to 15 minutes). It uses low I/O priority.
+The installer runs both offline test suites, installs two cleanup executables
+and updates the existing `cst-docker-image-retention.service`. The existing
+systemd timer runs every day at 04:30 Asia/Jakarta (21:30 UTC) with up to
+15 minutes randomized delay.
 
-## After a verified deployment
+Installing the timer does NOT delete anything immediately. The active-only
+script has dry-run behavior unless explicitly passed `--apply`.
 
-Only after all deployment checks/E2E have passed, enroll the new image:
+Monitoring:
 
-    sudo python3 /usr/local/libexec/cst-docker-image-retention.py record \
-      --service openclaw \
-      --evidence "verified-deploy:EXACT_RUN_ID"
+    systemctl status cst-docker-image-retention.timer --no-pager
+    journalctl -u cst-docker-image-retention.service -n 80 --no-pager
+    sudo python3 /usr/local/libexec/cst-docker-active-only.py
 
-The VPS worker deployment workflow does this automatically for OpenClaw,
-strictly after its full-stack healthcheck succeeds. Failed verifications
-cannot enroll a release.
-
-For AI Core DEV/PROD application images, supply the exact commit SHA:
-
-    sudo python3 /usr/local/libexec/cst-docker-image-retention.py record \
-      --service core-dev \
-      --sha EXACT_40_CHARACTER_GIT_SHA \
-      --evidence "dev-e2e:EXACT_RUN_ID"
-
-The local health endpoint must return status ok with exactly the matching
-X-CST-Commit-SHA header. This example is documentation, not proof that
-currently deployed DEV or PROD passed an E2E test.
-
-## Inspection and recovery
-
-    sudo python3 /usr/local/libexec/cst-docker-image-retention.py sweep
-    systemctl list-timers cst-docker-image-retention.timer
-    journalctl -u cst-docker-image-retention.service -n 100 --no-pager
-
-Dry run is the CLI default. Only the scheduled service explicitly passes
-sweep --apply. Disable safely with:
+To disable both automatic policies:
 
     sudo systemctl disable --now cst-docker-image-retention.timer
 
-Root-only receipts are stored at /var/lib/cst-docker-image-retention/;
-they contain image IDs and CI identifiers but no authentication tokens.
+## Scope and limitations
 
-**Limitations:** Old images referenced by stopped rollback/test containers
-remain protected. Existing historical images need a separate reviewed cleanup
-plan; future automated retirements do not prune stopped containers. This
-policy does not replace independent DEV hosting or the DEV-first production
-release gate.
+This is intentionally **not** a global Docker garbage collector. PostgreSQL,
+Redis, n8n, WhatsApp Gateway, OpenHands, Temporal and other application
+images must not be treated as unused just because a container is currently
+stopped; some jobs are intentionally started only when needed.
+
+No hosting/DEV–PROD isolation or release-gate protections are relaxed.

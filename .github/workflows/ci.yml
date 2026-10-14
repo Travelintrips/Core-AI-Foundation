@@ -51,7 +51,9 @@ jobs:
       - name: Verify bounded Hostinger DEV restart acceptance
         run: node --test scripts/dev-hostinger-restart-fallback.test.mjs
       - name: Verify E2E-gated VPS Docker image retention (offline)
-        run: python3 scripts/vps/test_docker_image_retention.py -q
+        run: |
+          python3 scripts/vps/test_docker_image_retention.py -q
+          python3 scripts/vps/test_active_app_image_cleanup.py -q
       - name: Typecheck
         run: pnpm run typecheck
 
