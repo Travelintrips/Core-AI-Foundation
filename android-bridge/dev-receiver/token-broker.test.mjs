@@ -23,7 +23,13 @@ test('DEV pairing grants, deny by default, and revoke',async()=>{
   const req=(jobId,key)=>fetch('http://127.0.0.1:18897/v1/android/token',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+key},body:JSON.stringify({jobId})});
   assert.equal((await req(uuid,'incorrect-device-credential')).status,401);
   assert.equal((await req(uuid,deviceSecret)).status,403);
+  const next=(key)=>fetch('http://127.0.0.1:18897/v1/android/jobs/next',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+key},body:'{}'});
+  assert.equal((await next('unknown-device')).status,401);
+  assert.equal((await next(deviceSecret)).status,204);
   admin('grant','zfold4-dev',uuid);
+  const assigned=await next(deviceSecret);
+  assert.equal(assigned.status,200);
+  assert.equal((await assigned.json()).jobId,uuid);
   const granted=await req(uuid,deviceSecret);
   assert.equal(granted.status,200);
   const body=await granted.json();assert.ok(body.token.length>90);

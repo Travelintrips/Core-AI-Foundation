@@ -18,7 +18,7 @@ const respond=(res,status,obj)=>{res.writeHead(status,{'content-type':'applicati
 const sign=raw=>crypto.createHmac('sha256',secret).update(raw).digest('base64url');
 fs.mkdirSync(directory,{recursive:true,mode:0o700});
 const broker=http.createServer((req,res)=>{
- if(req.method!=='POST'||!['/v1/android/token','/v1/android/pair/start','/v1/android/pair/status'].includes(req.url))return respond(res,404,{error:'not_found'});
+ if(req.method!=='POST'||!['/v1/android/token','/v1/android/pair/start','/v1/android/pair/status','/v1/android/jobs/next'].includes(req.url))return respond(res,404,{error:'not_found'});
  if(req.headers['content-type']?.split(';')[0]!=='application/json')return respond(res,415,{error:'content_type'});
  let raw='',oversize=false;req.on('data',b=>{raw+=b;if(raw.length>2048){oversize=true;req.destroy();}});
  req.on('end',()=>{
@@ -49,12 +49,20 @@ const broker=http.createServer((req,res)=>{
     save(devices,registry);save(requests,pending);
     return respond(res,200,{status:'paired',deviceId,credential});
    }
-   if(!uuid.test(body.jobId||''))return respond(res,400,{error:'invalid_job'});
+   if(req.url==='/v1/android/token'&&!uuid.test(body.jobId||''))return respond(res,400,{error:'invalid_job'});
    const h=req.headers.authorization||'';
    if(!h.startsWith('Bearer ')||h.length>200)return respond(res,401,{error:'invalid_device'});
    const registry=load(devices),key=h.slice(7);
    const device=Object.entries(registry).find(([,v])=>v.active===true&&equal(v.hash,hash(key)));
    if(!device)return respond(res,401,{error:'device_not_paired'});
+   if(req.url==='/v1/android/jobs/next'){
+    const eligible=Object.entries(load(grants))
+      .filter(([id,g])=>uuid.test(id)&&g.active===true&&g.deviceId===device[0]
+        &&Number.isSafeInteger(g.expiresAt)&&g.expiresAt>now)
+      .sort((a,b)=>b[1].expiresAt-a[1].expiresAt);
+    if(!eligible.length)return respond(res,204,{});
+    return respond(res,200,{jobId:eligible[0][0],expiresAt:eligible[0][1].expiresAt});
+   }
    const grant=load(grants)[body.jobId];
    if(!grant||grant.active!==true||grant.deviceId!==device[0]||!Number.isSafeInteger(grant.expiresAt)||grant.expiresAt<now)
     return respond(res,403,{error:'job_not_assigned'});

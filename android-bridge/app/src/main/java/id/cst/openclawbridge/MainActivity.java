@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     private static final String DEV_TOKEN_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/token";
     private static final String DEV_PAIR_START_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/start";
     private static final String DEV_PAIR_STATUS_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/status";
+    private static final String DEV_NEXT_JOB_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/jobs/next";
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
     private EditText jobToken;
@@ -60,6 +61,10 @@ public class MainActivity extends Activity {
         taskId.setHint("AI Task job ID (UUID, opsional untuk prompt biasa)");
         taskId.setSingleLine(true);
         root.addView(taskId);
+        Button fetchAssignedJob = new Button(this);
+        fetchAssignedJob.setText("AMBIL JOB DEV OTOMATIS");
+        fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice());
+        root.addView(fetchAssignedJob);
         prompt = new EditText(this);
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
@@ -357,6 +362,43 @@ public class MainActivity extends Activity {
             }
         }finally{http.disconnect();}
     }
+
+    private void fetchJobForDevice() {
+        String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
+        if(credential.length()<32){deliveryStatus.setText("Pairing perangkat belum tersedia.");return;}
+        deliveryStatus.setText("Memeriksa job DEV untuk perangkat ini...");
+        new Thread(()->{
+            HttpURLConnection conn=null;
+            try{
+                conn=(HttpURLConnection)new URL(DEV_NEXT_JOB_URL).openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(12000);
+                conn.setInstanceFollowRedirects(false);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type","application/json");
+                conn.setRequestProperty("Authorization","Bearer "+credential);
+                try(OutputStream out=conn.getOutputStream()){out.write("{}".getBytes(StandardCharsets.UTF_8));}
+                int status=conn.getResponseCode();
+                if(status==204){
+                    runOnUiThread(()->deliveryStatus.setText("Belum ada job DEV untuk perangkat ini."));
+                    return;
+                }
+                if(status!=200)throw new IllegalStateException("HTTP "+status);
+                String response;
+                try(InputStream in=conn.getInputStream()){
+                    response=new String(in.readNBytes(4096),StandardCharsets.UTF_8);
+                }
+                String id=new JSONObject(response).getString("jobId");
+                if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
+                    throw new IllegalStateException("Invalid job");
+                runOnUiThread(()->{taskId.setText(id);deliveryStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");});
+            }catch(Exception ex){
+                runOnUiThread(()->deliveryStatus.setText("Gagal mengambil job DEV. Periksa pairing dan jaringan."));
+            }finally{if(conn!=null)conn.disconnect();}
+        }).start();
+    }
+
     private void beginPairing() {
         deliveryStatus.setText("Meminta pairing DEV...");
         new Thread(() -> {
