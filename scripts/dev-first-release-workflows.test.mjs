@@ -54,3 +54,16 @@ test("DEV SPA static serving is explicit and preserved independently of NODE_ENV
   assert.match(compose, /SERVE_FRONTEND:\s*"true"[\s\S]*?SERVE_STATIC_FRONTEND:\s*"true"/);
   assert.match(compose, /APP_ENV:\s*development/);
 });
+
+
+test("DEV deployment requires a bounded live frontend and authenticated dashboard smoke", () => {
+  const yaml = workflow("hostinger-dev-deploy.yml");
+  const runtime = yaml.indexOf("- name: Verify DEV runtime and exact commit");
+  const smoke = yaml.indexOf("- name: Verify DEV frontend and authenticated dashboard (bounded smoke)");
+  assert.ok(runtime > 0 && smoke > runtime, "smoke must run after exact DEV runtime verification");
+  assert.match(yaml, /dev-smoke-root\.html/);
+  assert.match(yaml, /dev-center\/dashboard/);
+  assert.match(yaml, /dev-center\/jobs/);
+  assert.match(yaml, /x-admin-api-key: \$admin_key/);
+  assert.match(yaml, /anonymous auth boundary failed/);
+});

@@ -444,3 +444,56 @@ jobs:
           done
           echo "::error::DEV runtime did not converge to expected SHA."
           exit 1
+
+
+      # Healthz alone does not prove that the DEV SPA, authentication boundary,
+      # and real DEV job dashboard survived the deployment.
+      - name: Verify DEV frontend and authenticated dashboard (bounded smoke)
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://$DEV_DOMAIN"
+          admin_key=$(jq -r '.ADMIN_API_KEY // empty' /tmp/aicore-secrets.json)
+          if [ "$(printf '%s' "$admin_key" | wc -c)" -lt 16 ]; then
+            echo "::error::DEV dashboard smoke credential unavailable."
+            exit 1
+          fi
+          # Log no tokens, cookies, user details or job payloads.
+          root_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            -o /tmp/dev-smoke-root.html -w "%{http_code}" "$base/" || true)
+          if [ "$root_code" != "200" ] || ! grep -qi '<html' /tmp/dev-smoke-root.html; then
+            echo "::error::DEV frontend HTML failed: HTTP $root_code"
+            exit 1
+          fi
+          asset=$(grep -oE '/assets/[^"]+\.js' /tmp/dev-smoke-root.html | head -n 1 || true)
+          if [ -z "$asset" ]; then
+            echo "::error::DEV frontend JS asset reference missing."
+            exit 1
+          fi
+          asset_code=$(curl --silent --show-error --connect-timeout 10 --max-time 25 \
+            -o /dev/null -w "%{http_code}" "$base$asset" || true)
+          if [ "$asset_code" != "200" ]; then
+            echo "::error::DEV frontend JS asset unavailable: HTTP $asset_code"
+            exit 1
+          fi
+          anonymous_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            -o /dev/null -w "%{http_code}" "$base/api/dev-center/jobs" || true)
+          if [ "$anonymous_code" != "401" ] && [ "$anonymous_code" != "403" ]; then
+            echo "::error::DEV job dashboard anonymous auth boundary failed: HTTP $anonymous_code"
+            exit 1
+          fi
+          dashboard_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            -H "x-admin-api-key: $admin_key" -o /tmp/dev-smoke-dashboard.html \
+            -w "%{http_code}" "$base/api/dev-center/dashboard" || true)
+          if [ "$dashboard_code" != "200" ] || ! grep -q 'AI Core DEV - Job Monitoring' /tmp/dev-smoke-dashboard.html; then
+            echo "::error::DEV authenticated dashboard unavailable: HTTP $dashboard_code"
+            exit 1
+          fi
+          jobs_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            -H "x-admin-api-key: $admin_key" -o /tmp/dev-smoke-jobs.json \
+            -w "%{http_code}" "$base/api/dev-center/jobs" || true)
+          if [ "$jobs_code" != "200" ] || ! jq -e '(.jobs | type) == "array"' /tmp/dev-smoke-jobs.json >/dev/null; then
+            echo "::error::DEV authenticated job data unavailable: HTTP $jobs_code"
+            exit 1
+          fi
+          echo "dev_frontend_dashboard_smoke=PASS (JS 200, anonymous denied, authenticated dashboard and jobs 200)"
