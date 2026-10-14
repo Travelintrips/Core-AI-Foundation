@@ -11,6 +11,7 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+// TODO: Wrap each external API invocation in try/catch blocks and log errors using logger.
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
