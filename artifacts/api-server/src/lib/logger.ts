@@ -8,6 +8,14 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
+    "secret",
+    "token",
+    "password",
+    "apiKey",
+    "*.secret",
+    "*.token",
+    "*.password",
+    "*.apiKey",
   ],
   ...(isProduction
     ? {}
@@ -18,3 +26,26 @@ export const logger = pino({
         },
       }),
 });
+
+export interface GateEvaluationLog {
+  environment: string;
+  gate: string;
+  evaluation: string;
+  decision: "allow" | "deny" | "warn" | "skip" | string;
+  details?: Record<string, unknown>;
+}
+
+export function logGateDecision(data: GateEvaluationLog): void {
+  logger.info(
+    {
+      gateEvaluation: {
+        environment: data.environment,
+        gate: data.gate,
+        evaluation: data.evaluation,
+        decision: data.decision,
+        details: data.details,
+      },
+    },
+    `Release gate [${data.gate}] evaluated with decision: ${data.decision}`
+  );
+}
