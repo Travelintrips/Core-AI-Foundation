@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   assertDevelopmentDatabaseIsolation,
   resolveDatabaseUrl,
-} from "../../lib/db/src/env.ts";
+} from "../lib/db/src/env.ts";
 
 const dev = "abcdefghijklmnopqrst";
 const prod = "zyxwvutsrqponmlkjihgf";
