@@ -1,4 +1,9 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+// Ensure repository analyzer instruction is available
+if (typeof isRepositoryAnalyzerVerificationOnlyInstruction !== "function") {
+  throw new Error("Missing repository analyzer verification function");
+}
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
