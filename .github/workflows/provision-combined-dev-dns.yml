@@ -1,0 +1,51 @@
+name: Provision Combined DEV VPS DNS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dns:
+    name: Create isolated DEV DNS A record only
+    runs-on: ubuntu-latest
+    environment: development
+    timeout-minutes: 5
+    env:
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+    steps:
+      - name: Ensure only the unclaimed DEV hostname is changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOSTINGER_API_TOKEN"
+          endpoint="https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" "$endpoint" > /tmp/zone.json
+          jq -e 'type=="array"' /tmp/zone.json >/dev/null
+          records="$(jq '[.[] | select(.name=="dev") | {name,type,records}]' /tmp/zone.json)"
+          echo "dev_dns_record_types=$(echo "$records" | jq -r '[.[].type] | unique | join(",")')"
+          if echo "$records" | jq -e 'any(.[]; .type != "A")' >/dev/null; then
+            echo "::error::Unexpected existing DEV DNS record type. Refusing to replace it."
+            exit 1
+          fi
+          current="$(echo "$records" | jq -r '[.[] | .records[]?.content] | unique | join(",")')"
+          if [ -n "$current" ] && [ "$current" != "72.61.210.205" ]; then
+            echo "::error::DEV DNS already exists with a different target. Refusing overwrite."
+            exit 1
+          fi
+          if [ "$current" = "72.61.210.205" ]; then
+            echo "COMBINED_DEV_DNS=ALREADY_CORRECT"
+            exit 0
+          fi
+          jq -n '{overwrite:true,zone:[{name:"dev",type:"A",ttl:300,records:[{content:"72.61.210.205"}]}]}' > /tmp/dev-zone.json
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/dev-zone.json "$endpoint/validate" > /dev/null
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -X PUT --data-binary @/tmp/dev-zone.json "$endpoint" > /dev/null
+          echo "COMBINED_DEV_DNS=WRITE_ACCEPTED domain=dev.cstlogistic.co.id target=72.61.210.205"
