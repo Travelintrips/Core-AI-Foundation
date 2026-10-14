@@ -100,12 +100,17 @@ jobs:
         shell: bash
         env:
           HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          AI_TASK_BRIDGE_TOKEN: ${{ secrets.AI_TASK_BRIDGE_TOKEN }}
         run: |
           set -euo pipefail
+          if [ "${#AI_TASK_BRIDGE_TOKEN}" -lt 32 ]; then
+            echo "::error::AI_TASK_BRIDGE_TOKEN is missing from the development environment"
+            exit 1
+          fi
           admin_key=$(jq -r '.ADMIN_API_KEY // empty' /tmp/aicore-secrets.json)
           session_secret=$(printf 'aicore-dev-session:%s' "$admin_key" | sha256sum | awk '{print $1}')
 
-          jq --arg session "$session_secret" --arg expected_sha "$EXPECTED_SHA" '
+          jq --arg session "$session_secret" --arg expected_sha "$EXPECTED_SHA" --arg bridge_token "$AI_TASK_BRIDGE_TOKEN" '
             def add($k;$v): if ($v // "") == "" then [] else [{key:$k,value:$v}] end;
             {env_vars: (
               [
@@ -119,6 +124,9 @@ jobs:
                 {key:"CST_BUILD_COMMIT_SHA",value:$expected_sha},
                 {key:"PUBLIC_APP_URL",value:"https://dev-aicore.cstlogistic.co.id"},
                 {key:"ALLOWED_ORIGINS",value:"https://dev-aicore.cstlogistic.co.id"},
+                {key:"AI_TASK_LEDGER_SYNC_ENABLED",value:"true"},
+                {key:"AI_TASK_LEDGER_URL",value:"https://dev-ai-task.cstlogistic.co.id"},
+                {key:"AI_TASK_BRIDGE_TOKEN",value:$bridge_token},
                 {key:"SUPABASE_URL_DEV",value:.SUPABASE_URL_DEV},
                 {key:"VITE_SUPABASE_URL_DEV",value:(.VITE_SUPABASE_URL_DEV // .SUPABASE_URL_DEV)},
                 {key:"SUPABASE_DATABASE_URL_DEV",value:.SUPABASE_DATABASE_URL_DEV},
