@@ -110,6 +110,24 @@ describe("evidence-qualified runtime status", () => {
     });
   });
 
+  it("verifies deterministic PC hostname without treating it as callback ACK", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    const proof = {
+      runtime: "openclaw-pc", mode: "model-free-hostname",
+      workerId: "openclaw-pc-worker", hostname: "Travelintrips",
+      verified: true, modelInvoked: false, exitCode: 0,
+    };
+    expect(classifyBridgeCompletion({ status: "COMPLETED", details: proof })).toEqual({
+      statusCode: "RESULT_VERIFIED",
+      deliveryCode: "UNKNOWN_UNVERIFIED",
+      e2eCode: "UNKNOWN_UNVERIFIED",
+    });
+    expect(classifyBridgeCompletion({ status: "COMPLETED", details: { ...proof, hostname: "DELL" } }).statusCode)
+      .toBe("JOB_COMPLETED");
+    expect(classifyBridgeCompletion({ status: "COMPLETED", details: { ...proof, modelInvoked: true } }).statusCode)
+      .toBe("JOB_COMPLETED");
+  });
+
   it("does not classify a failed worker as completed", async () => {
     const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
     expect(classifyBridgeCompletion({ status: "FAILED" }).statusCode).toBe("FAILED");

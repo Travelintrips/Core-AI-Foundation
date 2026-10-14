@@ -94,14 +94,11 @@ if (message==='AI_CORE_CHATGPT_BROWSER_E2E') {
  const output=String(run.stdout||run.stderr||run.error?.message||'').slice(-2000);
  return {ok:run.status===0 && output.includes('"verifiedAssistantReply":true'),message:output||'Browser E2E failed without output',details:{runtime:'openclaw-pc2-browser',exitCode:run.status}};
 }
- const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ai-core-worker-'));
- const filename=path.join(dir,'instruction.txt');
- try {
-  fs.writeFileSync(filename,message,{encoding:'utf8',mode:0o600});
-  const run=spawnSync(node,[entry,'agent','--message-file',filename,'--session-id','ai-core-openclaw-pc-worker-2','--timeout','90','--json'],{windowsHide:true,encoding:'utf8',timeout:105000,maxBuffer:1024*1024});
-  const output=String(run.stdout||run.stderr||run.error?.message||'').slice(-3000);
-  return {ok:run.status===0,message:output||'OpenClaw returned no output',details:{runtime:'openclaw-pc2',exitCode:run.status}};
- } finally { fs.rmSync(dir,{recursive:true,force:true}); }
+ // AI Core should provide a bounded, authorized operation rather than
+ // delegating arbitrary natural language to a model on this Windows PC.
+ return {ok:false,message:'Action requires AI Core routing; no PC model was invoked',
+  details:{runtime:'openclaw-pc2',mode:'model-free',
+    reason:'requires_ai_core_routing',workerId,modelInvoked:false,verified:false}};
 }
 while (true) {
  try {

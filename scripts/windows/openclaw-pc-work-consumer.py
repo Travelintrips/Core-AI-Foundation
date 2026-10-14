@@ -6,6 +6,7 @@ Never logs bearer tokens or claim tokens. Runs agent instructions through OpenCl
 import json
 import re
 import os
+import socket
 import subprocess
 import tempfile
 import time
@@ -43,8 +44,8 @@ def verify_execution_result(instruction, output, process_exit_code):
         return False
     requested_hostinger_probe = (
         "185.124.136.115" in instruction and
-        re.search(r"\\bwhoami\\b", instruction, re.I) and
-        re.search(r"\\bhostname\\b", instruction, re.I)
+        re.search(r"\bwhoami\b", instruction, re.I) and
+        re.search(r"\bhostname\b", instruction, re.I)
     )
     if not requested_hostinger_probe:
         return True
@@ -64,17 +65,56 @@ def verify_execution_result(instruction, output, process_exit_code):
     )
 
 
+# These actions are deterministic and require neither Ollama nor OpenAI on a PC.
+# Keep the grammar exact: do not turn untrusted text into shell commands.
+HOSTNAME_INSTRUCTIONS = {
+    "hostname",
+    "read hostname",
+    "baca hostname",
+    "cek hostname",
+    "get hostname",
+    "hostname pc travelintrips",
+    "baca hostname pc travelintrips",
+    "cek hostname pc travelintrips",
+    "read hostname pc travelintrips",
+    "jalankan hostname pada pc travelintrips",
+}
+
+
+def model_free_hostname(work, worker_id):
+    instruction = str(work.get("instruction", "")).strip()
+    normalized = re.sub(r"\s+", " ", instruction).lower().rstrip(".!?")
+    if normalized not in HOSTNAME_INSTRUCTIONS:
+        return None
+    if worker_id != "openclaw-pc-worker":
+        return False, "Travelintrips hostname requires the primary PC worker", {
+            "runtime": "openclaw-pc", "mode": "model-free-hostname",
+            "reason": "worker_target_mismatch", "workerId": worker_id,
+            "verified": False, "modelInvoked": False,
+        }
+    hostname = socket.gethostname()
+    verified = hostname.casefold() == "travelintrips"
+    return verified, hostname if verified else "Unexpected hostname (not Travelintrips)", {
+        "runtime": "openclaw-pc", "mode": "model-free-hostname",
+        "workerId": worker_id, "hostname": hostname,
+        "verified": verified, "modelInvoked": False, "exitCode": 0,
+    }
+
+
 def execute(work):
     instruction = str(work.get("instruction", "")).strip()
     if not instruction or len(instruction) > 12000:
         return False, "Invalid instruction length", {"reason": "invalid_instruction"}
+    bounded = model_free_hostname(work, CLIENT_ID)
+    if bounded is not None:
+        return bounded
     # Exact, user-authorized read-only Hostinger probe. Execute directly on the
     # assigned PC with the existing key: no shell interpolation or passwords.
     if (CLIENT_ID == "openclaw-pc-worker" and
         "185.124.136.115" in instruction and
-        re.search(r"\\bwhoami\\b", instruction, re.I) and
-        re.search(r"\\bhostname\\b", instruction, re.I) and
-        re.search(r"\\b(?:ssh|hostinger)\\b", instruction, re.I)):
+        re.search(r"\bwhoami\b", instruction, re.I) and
+        re.search(r"\bhostname\b", instruction, re.I) and
+        re.search(r"\b(?:ssh|hostinger)\b", instruction, re.I)):
         identity = os.path.join(os.path.expanduser("~"), ".ssh", "hostinger_shared_20261010_ed25519")
         if not os.path.isfile(identity):
             return False, "Existing Hostinger SSH identity not found", {"reason": "ssh_identity_missing"}
@@ -100,29 +140,13 @@ def execute(work):
         result = subprocess.run(args, capture_output=True, text=True, timeout=30, shell=False)
         return result.returncode == 0, (result.stdout or result.stderr)[-3000:], {"runtime": "openclaw-pc", "mode": "status"}
 
-    # Send arbitrary natural-language instructions only through the existing
-    # OpenClaw agent and its configured tool/approval boundaries; never shell.
-    # A private temporary message file prevents command-line argument exposure.
-    fd, path = tempfile.mkstemp(prefix="ai-core-openclaw-", suffix=".txt")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(instruction)
-        result = subprocess.run(
-            ["openclaw.cmd" if os.name == "nt" else "openclaw", "agent", "--message-file", path,
-             "--session-id", "ai-core-" + CLIENT_ID, "--timeout", "90", "--json"],
-            capture_output=True, text=True, timeout=105, shell=False,
-        )
-        response = (result.stdout or result.stderr)[-10000:]
-        verified = verify_execution_result(instruction, response, result.returncode)
-        return verified, response[-3000:] if verified else "SSH execution evidence missing or failed", {
-            "runtime": "openclaw-pc", "mode": "agent",
-            "exitCode": result.returncode, "verified": verified,
-        }
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
+    # AI Core/ChatGPT must plan any non-allowlisted action and send back an
+    # explicitly typed, authorized PC operation. Never invoke local AI agents.
+    return False, "Action needs AI Core routing; no PC model was invoked", {
+        "runtime": "openclaw-pc", "mode": "model-free",
+        "reason": "requires_ai_core_routing", "workerId": CLIENT_ID,
+        "modelInvoked": False, "verified": False,
+    }
 
 
 def main():

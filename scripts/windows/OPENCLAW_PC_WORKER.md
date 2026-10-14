@@ -15,10 +15,13 @@ $workerPath = Join-Path $env:LOCALAPPDATA 'AI-Core\openclaw-pc-work-consumer.py'
 python $workerPath
 ```
 
-Do not run multiple consumer instances for the same clientId. The current
-allowlist intentionally supports only PING and STATUS diagnostics; arbitrary
-shell execution and browser control are not enabled. Extend the allowlist
-with audited, separately authorized actions before production orchestration.
+Do not run multiple consumer instances for the same clientId. The repository
+consumer allowlist supports PING, STATUS and an exact, read-only HOSTNAME
+operation for the primary Travelintrips PC. The installed PC runtime may also
+support additional separately allowlisted browser actions. Unknown free-form
+instructions **must fail closed** with `requires_ai_core_routing`; they must
+not fall back to `openclaw agent` or require an OpenAI/Ollama key on the PC.
+Extend the allowlist only with audited, authorized, typed operations.
 
 A successful heartbeat alone is **not** evidence of command delivery. Validate
 command ID, claim, completion result and acknowledgement against the actual
