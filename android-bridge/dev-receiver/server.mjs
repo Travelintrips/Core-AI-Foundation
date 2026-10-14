@@ -9,7 +9,6 @@ const secret = process.env.BRIDGE_DEVICE_HMAC_SECRET || '';
 if (Buffer.byteLength(secret) < 32) throw Error('BRIDGE_DEVICE_HMAC_SECRET must be 32+ bytes');
 const spoolDir = process.env.BRIDGE_DEVICE_SPOOL_DIR || '/var/lib/openclaw-android-bridge-dev';
 const port = Number(process.env.BRIDGE_DEVICE_PORT || '18798');
-const used = new Map();
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const equal = (x,y) => { const a=Buffer.from(x),b=Buffer.from(y);return a.length===b.length && crypto.timingSafeEqual(a,b); };
 const sign = raw => crypto.createHmac('sha256',secret).update(raw).digest('base64url');
