@@ -12,6 +12,43 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { logAudit } from "./aiAuditService.js";
+
+/**
+ * Inspect and handle cancelled CI / GitHub workflow runs to avoid unhandled exceptions.
+ */
+export function isCancelledWorkflowResponse(responseOrError: unknown): boolean {
+  if (!responseOrError || typeof responseOrError !== "object") {
+    return false;
+  }
+  const target = responseOrError as Record<string, unknown>;
+  const status = String(target.status || "").toLowerCase();
+  const conclusion = String(target.conclusion || "").toLowerCase();
+  const message = String(target.message || "").toLowerCase();
+  return (
+    status === "cancelled" ||
+    conclusion === "cancelled" ||
+    message.includes("cancelled") ||
+    message.includes("workflow run was cancelled")
+  );
+}
+
+export const isCancelledWorkflowError = isCancelledWorkflowResponse;
+
+export function handleCancelledWorkflowResponse(
+  errorOrResponse: unknown,
+  context?: Record<string, unknown>
+): boolean {
+  if (isCancelledWorkflowResponse(errorOrResponse)) {
+    logger.warn(
+      { err: errorOrResponse, ...context },
+      "Cancelled workflow response detected from CI or GitHub API; handled and ignored per policy"
+    );
+    return true;
+  }
+  return false;
+}
+
+export const handleCancelledWorkflowRun = handleCancelledWorkflowResponse;
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
   approveCodingTaskGraph,
