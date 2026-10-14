@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Release gating logic unit tests
+iit.todo("release gating logic: allow under development environment");
+it.todo("release gating logic: block under production environment");
+
 const execFileMock = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({
   execFile: (...args: unknown[]) => execFileMock(...args),
