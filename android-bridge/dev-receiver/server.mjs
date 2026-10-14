@@ -47,10 +47,18 @@ const server = http.createServer((req,res)=>{
       // Durable no-overwrite idempotent inbox for a future trusted server-side bridge consumer.
       const receiptId=crypto.createHash('sha256').update(msg.jobId+'|'+msg.eventId).digest('hex');
       const destination=path.join(spoolDir,receiptId+'.json');
-      const record={receiptId,jobId:msg.jobId,eventId:msg.eventId,resultSummary:msg.resultSummary,
+      const resultDigest=crypto.createHash('sha256').update(msg.resultSummary).digest('hex');
+      const record={receiptId,jobId:msg.jobId,eventId:msg.eventId,resultDigest,resultSummary:msg.resultSummary,
                     receivedAt:new Date().toISOString(),state:'RECEIVED_UNVERIFIED'};
       try { fs.writeFileSync(destination,JSON.stringify(record),{flag:'wx',mode:0o600}); }
-      catch(e) { if(e.code!=='EEXIST') throw e; return reply(res,200,{accepted:true,duplicate:true,receiptId,status:'RECEIVED_UNVERIFIED'}); }
+      catch(e) {
+        if(e.code!=='EEXIST') throw e;
+        const prior=JSON.parse(fs.readFileSync(destination,'utf8'));
+        if(prior.jobId !== msg.jobId || prior.eventId !== msg.eventId ||
+           crypto.createHash('sha256').update(prior.resultSummary).digest('hex') !== resultDigest)
+          return reply(res,409,{accepted:false,error:'event_content_conflict'});
+        return reply(res,200,{accepted:true,duplicate:true,receiptId,status:'RECEIVED_UNVERIFIED'});
+      }
       return reply(res,202,{accepted:true,receiptId,status:'RECEIVED_UNVERIFIED'});
     } catch {return reply(res,400,{error:'malformed_request'});}
   });
