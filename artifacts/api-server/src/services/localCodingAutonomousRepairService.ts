@@ -1,3 +1,8 @@
+/**
+ * Review Note: workflow_run event handling and conclusion === 'cancelled' analysis.
+ * Workflow runs with conclusion === 'cancelled' require explicit handling to avoid
+ * unexpected exceptions during autonomous repair evaluations.
+ */
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
