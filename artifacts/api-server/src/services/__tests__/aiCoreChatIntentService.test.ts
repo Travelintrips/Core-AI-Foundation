@@ -11,6 +11,11 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("handles terminal event success scenario", () => {
+    // Verify that terminal event triggers the expected dispatch behavior
+    const result = classifyAiCoreChatDispatch("Terminal event terjadi sukses");
+    expect(result).toMatchObject({ kind: "TERMINAL_EVENT", executionLane: "SUCCESS" });
+  });
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
     expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
       kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
