@@ -8,7 +8,9 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
-  ],
+  ],  serializers: {
+    workflow_run: (wr) => ({ id: wr.id, status: wr.status, cancellation_reason: wr.cancellation_reason }),
+  },
   ...(isProduction
     ? {}
     : {
