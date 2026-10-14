@@ -9,22 +9,33 @@ import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import org.json.JSONObject;
+import java.util.UUID;
 
 public class MainActivity extends Activity {
     private EditText prompt;
     private EditText result;
+    private EditText taskId;
+    private String eventId;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        eventId = state == null ? UUID.randomUUID().toString() : state.getString("eventId", UUID.randomUUID().toString());
+        ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (16 * getResources().getDisplayMetrics().density);
         root.setPadding(pad,pad,pad,pad);
         TextView heading = new TextView(this);
-        heading.setText("OpenClaw Chat Bridge - DEV\nManual, consent-based ChatGPT handoff. No background screen scraping.");
+        heading.setText("OpenClaw Chat Bridge - DEV\nUser-confirmed ChatGPT handoff; no background scraping or callback credentials.");
         root.addView(heading);
+        taskId = new EditText(this);
+        taskId.setHint("AI Task job ID (UUID, opsional untuk prompt biasa)");
+        taskId.setSingleLine(true);
+        root.addView(taskId);
         prompt = new EditText(this);
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
@@ -34,15 +45,28 @@ public class MainActivity extends Activity {
         launch.setOnClickListener(v -> launchChatGPT());
         root.addView(launch);
         result = new EditText(this);
-        result.setHint("Hasil yang dibagikan dari ChatGPT atau ditempel manual");
+        result.setHint("Jawaban dari ChatGPT (Share atau tempel manual)");
         result.setMinLines(4);
         root.addView(result);
         Button copy = new Button(this);
-        copy.setText("Salin hasil (belum mengirim callback)");
+        copy.setText("Salin jawaban");
         copy.setOnClickListener(v -> copyResult());
         root.addView(copy);
-        setContentView(root);
+        Button share = new Button(this);
+        share.setText("Bagikan paket hasil job (manual)");
+        share.setOnClickListener(v -> shareResult());
+        root.addView(share);
+        TextView warning = new TextView(this);
+        warning.setText("Paket hasil bukan ACK dari AI Core. Pilih penerima tepercaya; jangan kirim data sensitif ke aplikasi lain.");
+        root.addView(warning);
+        scroll.addView(root);
+        setContentView(scroll);
         consumeShare(getIntent());
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        outState.putString("eventId", eventId);
+        super.onSaveInstanceState(outState);
     }
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -76,6 +100,40 @@ public class MainActivity extends Activity {
         String text = result.getText().toString();
         if (text.isEmpty()) return;
         ((ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("ChatGPT result",text));
-        Toast.makeText(this,"Hasil disalin",Toast.LENGTH_SHORT).show();
+        Toast.makeText(this,"Jawaban disalin",Toast.LENGTH_SHORT).show();
+    }
+    private String resultEnvelope() {
+        String id = taskId.getText().toString().trim();
+        String answer = result.getText().toString().trim();
+        if (!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) {
+            taskId.setError("Masukkan UUID job yang sah");
+            return null;
+        }
+        if (answer.isEmpty()) {
+            result.setError("Hasil masih kosong");
+            return null;
+        }
+        if (answer.length() > 2000) {
+            result.setError("Ringkas hasil maksimal 2000 karakter");
+            return null;
+        }
+        try {
+            JSONObject object = new JSONObject();
+            object.put("protocol", "openclaw-chat-bridge-dev-v1");
+            object.put("jobId", id);
+            object.put("eventId", "android-result:" + eventId);
+            object.put("resultSummary", answer);
+            object.put("source", "user-confirmed-chatgpt-android");
+            object.put("verifiedByAiCore", false);
+            return object.toString();
+        } catch (Exception ex) { return null; }
+    }
+    private void shareResult() {
+        String envelope = resultEnvelope();
+        if (envelope == null) return;
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_TEXT, envelope);
+        startActivity(Intent.createChooser(send, "Bagikan hasil job ke penerima tepercaya"));
     }
 }
