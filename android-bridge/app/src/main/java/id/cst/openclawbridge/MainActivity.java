@@ -36,9 +36,11 @@ public class MainActivity extends Activity {
     private CheckBox captureReply;
     private TextView autoSendStatus;
     private static final String DEV_INTAKE_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/result";
+    private static final String DEV_TOKEN_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/token";
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
     private EditText jobToken;
+    private EditText deviceCredential;
     private TextView deliveryStatus;
 
     @Override public void onCreate(Bundle state) {
@@ -93,6 +95,22 @@ public class MainActivity extends Activity {
         jobToken.setHint("Token singkat untuk job ini (dari admin)");
         jobToken.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         root.addView(jobToken);
+        deviceCredential = new EditText(this);
+        deviceCredential.setHint("Credential pairing perangkat (isi sekali, DEV)");
+        deviceCredential.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        root.addView(deviceCredential);
+        Button saveDevice = new Button(this);
+        saveDevice.setText("Simpan pairing perangkat (DEV)");
+        saveDevice.setOnClickListener(v -> {
+            String value = deviceCredential.getText().toString().trim();
+            if (value.length() < 32 || value.length() > 128) {
+                deviceCredential.setError("Credential tidak valid"); return;
+            }
+            getSharedPreferences("bridge-pairing-dev", MODE_PRIVATE).edit().putString("credential",value).apply();
+            deviceCredential.setText("");
+            deliveryStatus.setText("Pairing tersimpan secara lokal. Token job akan diminta otomatis.");
+        });
+        root.addView(saveDevice);
         Button deliver = new Button(this);
         deliver.setText("Kirim hasil ke intake DEV (belum ACK AI Core)");
         deliver.setOnClickListener(v -> deliverResult());
@@ -170,7 +188,7 @@ public class MainActivity extends Activity {
         eventId = UUID.randomUUID().toString(); // New logical request must never reuse result event identity.
         String nonce = capture ? UUID.randomUUID().toString().replace("-", "") : "";
         String transmitText = capture
-                ? text + "\\n\\nBalas dalam satu paragraf teks biasa (maksimal 1800 karakter). " +
+                ? text + "\n\nBalas dalam satu paragraf teks biasa (maksimal 1800 karakter). " +
                     "Awali jawaban dengan awalan OCB: tepat disambung tanpa spasi " +
                     "dengan identitas " + nonce + ". " +
                     "Akhiri jawaban dengan penanda END-OCB. " +
@@ -252,8 +270,9 @@ public class MainActivity extends Activity {
         if (submissionInFlight) return;
         String endpoint = DEV_INTAKE_URL;
         String token = jobToken.getText().toString().trim();
-        if (token.length() < 40 || token.length() > 1500) {
-            deliveryStatus.setText("Isi token job sementara yang valid.");
+        String paired = getSharedPreferences("bridge-pairing-dev", MODE_PRIVATE).getString("credential", "");
+        if ((token.length() < 40 || token.length() > 1500) && paired.length() < 32) {
+            deliveryStatus.setText("Isi token sementara atau lakukan pairing perangkat satu kali.");
             return;
         }
         submissionInFlight = true;
@@ -261,6 +280,28 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             HttpURLConnection conn = null;
             try {
+                String activeToken = token;
+                if (activeToken.length() < 40 || activeToken.length() > 1500) {
+                    HttpURLConnection auth = (HttpURLConnection)new URL(DEV_TOKEN_URL).openConnection();
+                    try {
+                        auth.setRequestMethod("POST");
+                        auth.setConnectTimeout(10000);
+                        auth.setReadTimeout(12000);
+                        auth.setInstanceFollowRedirects(false);
+                        auth.setDoOutput(true);
+                        auth.setRequestProperty("Content-Type","application/json");
+                        auth.setRequestProperty("Authorization","Bearer "+paired);
+                        JSONObject job = new JSONObject();
+                        job.put("jobId", taskId.getText().toString().trim());
+                        try(OutputStream out=auth.getOutputStream()) {
+                            out.write(job.toString().getBytes(StandardCharsets.UTF_8));
+                        }
+                        if (auth.getResponseCode()!=200) throw new SecurityException("Token job tidak diizinkan: HTTP "+auth.getResponseCode());
+                        try(InputStream in=auth.getInputStream()) {
+                            activeToken = new JSONObject(new String(in.readNBytes(4096),StandardCharsets.UTF_8)).getString("token");
+                        }
+                    } finally { auth.disconnect(); }
+                }
                 conn = (HttpURLConnection)new URL(endpoint).openConnection();
                 conn.setRequestMethod("POST");
                 conn.setConnectTimeout(10000);
@@ -268,7 +309,7 @@ public class MainActivity extends Activity {
                 conn.setInstanceFollowRedirects(false);
                 conn.setDoOutput(true);
                 conn.setRequestProperty("Content-Type", "application/json");
-                conn.setRequestProperty("Authorization", "Bearer " + token);
+                conn.setRequestProperty("Authorization", "Bearer " + activeToken);
                 byte[] bytes = envelope.getBytes(StandardCharsets.UTF_8);
                 try (OutputStream output = conn.getOutputStream()) { output.write(bytes); }
                 int status = conn.getResponseCode();
