@@ -11,6 +11,12 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+// Handle cancelled workflow_run event: log and exit without failing the pipeline
+if (event.type === "workflow_run" && event.payload?.workflow_run?.status === "cancelled") {
+  logger.info("Workflow run cancelled, exiting without marking pipeline as failed.");
+  return;
+}
+
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
