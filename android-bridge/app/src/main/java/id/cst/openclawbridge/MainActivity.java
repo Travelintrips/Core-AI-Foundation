@@ -27,6 +27,7 @@ public class MainActivity extends Activity {
     private EditText taskId;
     private String eventId;
     private CheckBox autoSend;
+    private TextView autoSendStatus;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -51,6 +52,12 @@ public class MainActivity extends Activity {
         autoSend.setText("Auto Kirim sekali (aktifkan Accessibility di Settings HP)");
         autoSend.setChecked(false);
         root.addView(autoSend);
+        autoSendStatus = new TextView(this);
+        root.addView(autoSendStatus);
+        Button diagnostic = new Button(this);
+        diagnostic.setText("Periksa status Auto Kirim");
+        diagnostic.setOnClickListener(v -> showAutoSendStatus());
+        root.addView(diagnostic);
         Button launch = new Button(this);
         launch.setText("Buka ChatGPT / bagikan prompt");
         launch.setOnClickListener(v -> launchChatGPT());
@@ -73,6 +80,20 @@ public class MainActivity extends Activity {
         scroll.addView(root);
         setContentView(scroll);
         consumeShare(getIntent());
+        showAutoSendStatus();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (autoSendStatus != null) showAutoSendStatus();
+    }
+
+    private void showAutoSendStatus() {
+        if (autoSendStatus == null) return;
+        boolean enabled = accessibilityEnabled();
+        String message = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
+            .getString(ChatSendService.STATUS, "Belum ada uji Auto Kirim.");
+        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\\n" + message);
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
@@ -99,10 +120,12 @@ public class MainActivity extends Activity {
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
             return;
         }
-        getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE).edit().clear().commit();
+        getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
+            .edit().remove("text").remove("at").commit();
         if (armed) {
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
-                .edit().putString("text", text).putLong("at", System.currentTimeMillis()).commit();
+                .edit().putString("text", text).putLong("at", System.currentTimeMillis())
+                .putString(ChatSendService.STATUS, "Auto Kirim disiapkan; menunggu ChatGPT.").commit();
         }
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
