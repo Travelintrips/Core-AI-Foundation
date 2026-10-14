@@ -129,6 +129,17 @@ def verify_https_local(sha):
         match = re.search(r"(?im)^x-cst-commit-sha:\s*([0-9a-f]{40})\s*$", text)
         if not match or match.group(1) != sha:
             raise RuntimeError("Local nginx DEV exact-SHA verification failed")
+        html = command("curl", "--fail", "--silent", "--show-error", "--max-time", "10",
+                       "--resolve", DOMAIN + ":443:127.0.0.1",
+                       "https://" + DOMAIN + "/", output=True)
+        if "<html" not in html.lower():
+            raise RuntimeError("Local nginx DEV frontend HTML not served")
+        asset = re.search(r'/assets/[^" ]+\.js', html)
+        if not asset:
+            raise RuntimeError("Local nginx DEV frontend JS path missing")
+        command("curl", "--fail", "--silent", "--show-error", "--max-time", "10",
+                "--resolve", DOMAIN + ":443:127.0.0.1",
+                "-o", "/dev/null", "https://" + DOMAIN + asset.group(0))
     finally:
         Path(header.name).unlink(missing_ok=True)
 
