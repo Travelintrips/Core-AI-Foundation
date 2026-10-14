@@ -95,7 +95,7 @@ async function processReceipt(filename, bridgeToken, ackToken) {
    return;
  }
  const lease=result.data.task.lease_token;
- result=await post('/jobs/'+item.jobId+'/result',{owner,leaseToken:lease,eventId:item.eventId,
+ result=await post('/jobs/'+item.jobId+'/result',{owner,leaseToken:lease,eventId:'android-bridge:'+receiptHash,
   callbackId:callback,resultSummary:item.resultSummary},bridgeToken);
  if(result.code!==202 && !(result.code===200 && result.data.duplicate)) throw Error('Result delivery failed '+result.code);
  await sendAck();
