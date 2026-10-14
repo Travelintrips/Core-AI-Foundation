@@ -4,6 +4,13 @@ import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+// Placeholder synthetic context fallback
+// Used when no context files are provided to prevent failures.
+// This static stub contains no sensitive data.
+const DEFAULT_SYNTHETIC_CONTEXT = JSON.stringify({
+  message: "No synthetic context available",
+  files: []
+});
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   aiCodingCiBindingsTable,
