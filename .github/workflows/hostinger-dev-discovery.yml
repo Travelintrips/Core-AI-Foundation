@@ -66,3 +66,77 @@ jobs:
               -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
               "$base/settings/env" | jq -r '.[].key' | sort
           done
+
+
+      - name: Discover independent hosting orders and VPS capacity (read only)
+        if: steps.token.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Do not print API responses, access tokens, subscriptions, IPs or credentials.
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            "$HOSTINGER_API_BASE/hosting/v1/orders?per_page=100" \
+            -o /tmp/dev-hosting-orders.json
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100" \
+            -o /tmp/dev-hosting-websites.json
+          vps_code=$(curl --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -w "%{http_code}" -o /tmp/dev-hosting-vps.json \
+            "$HOSTINGER_API_BASE/vps/v1/virtual-machines" || true)
+          export HOSTINGER_AUDIT_VPS_STATUS="$vps_code"
+          node --input-type=commonjs <<'NODE'
+          const fs = require("node:fs");
+          const load = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
+          const sites = load("/tmp/dev-hosting-websites.json").data;
+          const orders = load("/tmp/dev-hosting-orders.json").data;
+          if (!Array.isArray(sites) || !Array.isArray(orders)) {
+            throw new Error("HOSTINGER_ORDER_INVENTORY_INVALID");
+          }
+          const dev = sites.filter(s => s.domain === "dev-aicore.cstlogistic.co.id" && s.is_enabled);
+          const prod = sites.filter(s => s.domain === "aicore.cstlogistic.co.id" && s.is_enabled);
+          if (dev.length !== 1 || prod.length !== 1) {
+            throw new Error("HOSTINGER_DEV_OR_PROD_WEBSITE_AMBIGUOUS");
+          }
+          const assigned = new Map();
+          for (const s of sites) {
+            const id = String(s.order_id ?? "");
+            assigned.set(id, (assigned.get(id) ?? 0) + 1);
+          }
+          const prodOrder = String(prod[0].order_id);
+          const devOrder = String(dev[0].order_id);
+          const active = orders.filter(o => o.status === "active");
+          const eligible = active.filter(o => String(o.id) !== prodOrder && !assigned.has(String(o.id)));
+          const nonprod = active.filter(o => String(o.id) !== prodOrder);
+          const summary = {
+            devAndProdShareOrder: prodOrder === devOrder,
+            devAndProdShareAccount: dev[0].username === prod[0].username,
+            totalHostingOrders: orders.length,
+            activeHostingOrders: active.length,
+            eligibleUnusedIndependentHostingOrders: eligible.map(o => ({
+              orderId: o.id,
+              plan: o.plan?.name ?? "unknown",
+            })),
+            allNonProdActiveHostingOrders: nonprod.map(o => ({
+              orderId: o.id,
+              plan: o.plan?.name ?? "unknown",
+              assignedWebsiteCount: assigned.get(String(o.id)) ?? 0,
+            })),
+          };
+          console.log("HOSTINGER_INDEPENDENT_HOSTING=" + JSON.stringify(summary));
+          console.log("HOSTINGER_VPS_QUERY_HTTP=" + process.env.HOSTINGER_AUDIT_VPS_STATUS);
+          if (process.env.HOSTINGER_AUDIT_VPS_STATUS === "200") {
+            const raw = load("/tmp/dev-hosting-vps.json");
+            const vms = Array.isArray(raw) ? raw : Array.isArray(raw.data) ? raw.data : [];
+            console.log("HOSTINGER_VPS_SUMMARY=" + JSON.stringify(vms.map(vm => ({
+              id: vm.id,
+              hostname: vm.hostname,
+              plan: vm.plan,
+              state: vm.state,
+              cpus: vm.cpus,
+              memoryMb: vm.memory,
+            }))));
+          }
+          NODE
