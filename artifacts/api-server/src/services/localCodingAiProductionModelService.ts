@@ -2,6 +2,11 @@ import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js"
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
+// Fallback default AI model identifier used when configuration lookup fails or returns undefined.
+// This default ensures a valid modelId is always returned and prevents unhandled exceptions.
+export const DEFAULT_AI_MODEL_ID = "openai/gpt-4";
+
+
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 60_000;
