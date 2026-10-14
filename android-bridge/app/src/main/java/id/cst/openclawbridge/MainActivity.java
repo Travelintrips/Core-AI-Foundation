@@ -167,6 +167,7 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Aktifkan Auto Kirim untuk mengambil jawaban bertanda.", Toast.LENGTH_LONG).show();
             return;
         }
+        eventId = UUID.randomUUID().toString(); // New logical request must never reuse result event identity.
         String nonce = capture ? UUID.randomUUID().toString().replace("-", "") : "";
         String transmitText = capture
                 ? text + "\\n\\nBalas dalam satu paragraf teks biasa (maksimal 1800 karakter). " +
