@@ -707,8 +707,19 @@ export function classifyBridgeCompletion(input: {
   }
   const details = input.details ?? {};
   // A direct, bounded read-only check can prove the result, but not callback delivery.
-  const verifiedResult = details["sshVerified"] === true &&
+  const verifiedHostingerSsh = details["sshVerified"] === true &&
     details["mode"] === "ssh-readonly-hostinger" && details["exitCode"] === 0;
+  // A bounded Windows hostname proof is local execution evidence only.
+  // Callback delivery and chat reception still need independent ACKs.
+  const verifiedPcHostname =
+    details["mode"] === "model-free-hostname" &&
+    details["runtime"] === "openclaw-pc" &&
+    details["workerId"] === "openclaw-pc-worker" &&
+    details["hostname"] === "Travelintrips" &&
+    details["verified"] === true &&
+    details["modelInvoked"] === false &&
+    details["exitCode"] === 0;
+  const verifiedResult = verifiedHostingerSsh || verifiedPcHostname;
   // The PC browser worker supplies a bounded proof of the ChatGPT reply,
   // not just a narrative or successful process exit. Keep unrelated jobs unverified.
   const verifiedBrowserReply =
