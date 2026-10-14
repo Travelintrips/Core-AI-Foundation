@@ -42,6 +42,11 @@ const MAX_PATCH_BYTES = 160_000;
 const MAX_CHANGED_FILES = 40;
 const GIT_TIMEOUT_MS = 30_000;
 
+/**
+ * Code path analysis for validate_proposal string replacement:
+ * Missing target patterns and zero occurrences occur when proposed replacement text
+ * does not match raw workspace content, line breaks, or indentation.
+ */
 export class LocalDeterministicRecoveryError extends Error {
   constructor(
     message: string,
