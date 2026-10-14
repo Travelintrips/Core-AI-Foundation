@@ -40,3 +40,11 @@ Safety limits:
 - If the ChatGPT UI does not expose an accessible Send/Kirim control or share intent uses a different screen, the user must press Send manually.
 - Service may have broad Android permissions by design. Disable it in Android Accessibility Settings whenever it is not required.
 - **Not validated on physical Samsung Z Fold4 until user tests the new DEV APK**.
+
+## Opt-in ChatGPT answer capture (v0.3.0 DEV)
+
+On the phone, check **Auto Kirim sekali** and **Ambil jawaban bertanda**. The app adds a random, per-request reply marker to the prompt and waits for exactly one accessible, visible text node on the ChatGPT screen containing both `OCB:<random ID>` and `END-OCB`. After Send succeeds, the capture window is 180 seconds. The result is stored locally only and shown in the result field when the user returns to Bridge.
+
+The reply marker is a correlation hint, **not proof that content came from a trusted API or that it is complete**. ChatGPT updates may split messages across Accessibility nodes or reformat responses. In those cases, capture fails closed and the user can share/paste manually. No other conversations are collected and there is no automatic network transfer.
+
+Do not put secrets or sensitive information in this test prompt. This stage does not implement OpenClaw remote wakeup or an AI Core callback/ACK. A separate authenticated job-scoped broker is required before enabling automatic server submission.
