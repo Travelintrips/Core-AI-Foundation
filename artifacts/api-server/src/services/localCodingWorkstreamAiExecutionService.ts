@@ -46,6 +46,8 @@ import {
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
+import { BadModelRequestError } from "./localCodingAiProductionModelService.js";
+import { incidentAutoRepairService } from "./incidentAutoRepairService.js";
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
 import {
