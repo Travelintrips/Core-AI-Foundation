@@ -1,5 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Error handling tests for localCodingAiProductionModelService
+describe('localCodingAiProductionModelService error handling', () => {
+  it('should throw BadModelRequestError when provider returns PROVIDER_BAD_REQUEST', async () => {
+    // Arrange: mock provider to throw PROVIDER_BAD_REQUEST error
+    vi.mocked(localCodingAiProductionModelService).mockImplementationOnce(async () => {
+      const error = new Error('Bad request');
+      // @ts-ignore
+      error.code = 'PROVIDER_BAD_REQUEST';
+      throw error;
+    });
+
+    // Act & Assert
+    await expect(() => localCodingAiProductionModelService()).rejects.toThrow(BadModelRequestError);
+  });
+
+  it('should propagate non-PROVIDER_BAD_REQUEST errors', async () => {
+    // Arrange: mock provider to throw a generic error
+    vi.mocked(localCodingAiProductionModelService).mockImplementationOnce(async () => {
+      throw new Error('Some other failure');
+    });
+
+    // Act & Assert: original error should propagate
+    await expect(() => localCodingAiProductionModelService()).rejects.toThrow('Some other failure');
+  });
+});
+
+
 const mocks = vi.hoisted(() => ({
   models: [] as any[],
   keys: new Map<string, string>(),
