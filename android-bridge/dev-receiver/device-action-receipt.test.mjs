@@ -78,7 +78,7 @@ test('paired DEV token -> receipt intake is user confirmed, idempotent, never a 
   assert.equal((await post(base,{...evidence,userConfirmation:'NO'},token)).status,403);
   assert.equal((await post(base,{...evidence,source:'user-confirmed-chatgpt-android',userConfirmation:undefined,deviceAction:undefined},token)).status,403);
   const first=await post(base,evidence,token);
-  assert.equal(first.status,202,await first.text().catch(()=>'')); // response may already be consumed
+  assert.equal(first.status,202);
   const accepted=await first.json();
   assert.equal(accepted.accepted,true);
   assert.equal(accepted.status,'RECEIVED_UNVERIFIED');
