@@ -89,8 +89,10 @@ public class MainActivity extends Activity {
         root.addView(oneTapTest);
         CheckBox autoPolling = new CheckBox(this);
         autoPolling.setText("AUTO JOB DEV saat Bridge terbuka (20 detik; boleh membuka ChatGPT)");
-        autoPolling.setChecked(false);
+        autoPolling.setChecked(getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).getBoolean("auto_enabled", true));
+        foregroundAutoEnabled = autoPolling.isChecked();
         autoPolling.setOnCheckedChangeListener((button, checked) -> {
+            getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit().putBoolean("auto_enabled", checked).apply();
             foregroundAutoEnabled = checked;
             autoHandler.removeCallbacks(autoPoll);
             if (checked && foreground) autoHandler.post(autoPoll);
