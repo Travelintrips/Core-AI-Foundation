@@ -99,6 +99,25 @@ public class MainActivity extends Activity {
             if (checked && foreground) autoHandler.post(autoPoll);
         });
         root.addView(autoPolling);
+        TextView controlHeader=new TextView(this);
+        controlHeader.setText("Kendali Browser DEV (sekali jalan, Chrome/Samsung Internet)");
+        root.addView(controlHeader);
+        EditText controlValue=new EditText(this);
+        controlValue.setHint("Teks untuk diketik atau label tombol untuk tap");
+        controlValue.setSingleLine(true);
+        root.addView(controlValue);
+        Button tapControl=new Button(this);
+        tapControl.setText("ARM TAP LABEL DI BROWSER");
+        tapControl.setOnClickListener(v -> armScreenControl("tap",controlValue.getText().toString()));
+        root.addView(tapControl);
+        Button typeControl=new Button(this);
+        typeControl.setText("ARM KETIK PADA INPUT FOKUS");
+        typeControl.setOnClickListener(v -> armScreenControl("type",controlValue.getText().toString()));
+        root.addView(typeControl);
+        Button scrollControl=new Button(this);
+        scrollControl.setText("ARM SCROLL BROWSER");
+        scrollControl.setOnClickListener(v -> armScreenControl("scroll",""));
+        root.addView(scrollControl);
         prompt = new EditText(this);
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
@@ -521,6 +540,21 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> fetchInFlight = false);
             }
         }).start();
+    }
+
+    private void armScreenControl(String kind,String value) {
+        if(!accessibilityEnabled()){
+            Toast.makeText(this,"Aktifkan Accessibility DEV dahulu",Toast.LENGTH_LONG).show();
+            return;
+        }
+        if(!"scroll".equals(kind) && (value.trim().isEmpty() || value.length()>250)){
+            Toast.makeText(this,"Isi teks/label maksimal 250 karakter",Toast.LENGTH_LONG).show();
+            return;
+        }
+        boolean saved=getSharedPreferences("screen_controls_dev",MODE_PRIVATE).edit()
+                .putString("kind",kind).putString("value",value)
+                .putLong("at",System.currentTimeMillis()).commit();
+        Toast.makeText(this,saved?"Perintah DEV siap 15 detik. Pindah ke browser.":"Gagal menyimpan perintah",Toast.LENGTH_LONG).show();
     }
 
     private void reportDispatchedAction(String id,String kind,String target) {

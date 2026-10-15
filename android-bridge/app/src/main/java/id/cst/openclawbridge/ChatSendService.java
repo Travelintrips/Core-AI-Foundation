@@ -1,6 +1,11 @@
 package id.cst.openclawbridge;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
+import android.graphics.Path;
+import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.accessibility.AccessibilityEvent;
@@ -22,6 +27,71 @@ public final class ChatSendService extends AccessibilityService {
     private static final String TARGET = "com.openai.chatgpt";
     private static final String END_TOKEN = "END-OCB";
     private boolean handling;
+    private static final String CONTROL_PREFS = "screen_controls_dev";
+    private static final long CONTROL_TTL_MS = 15000;
+    private static final String[] BLOCKED = {"delete","remove","hapus","bayar","pay","transfer",
+            "approve","setuju","password","sandi","security","keamanan","submit"};
+    private boolean blockedControl(String label) {
+        String lower=label.toLowerCase(Locale.ROOT);
+        for(String word:BLOCKED) if(lower.contains(word)) return true;
+        return false;
+    }
+    private void executeScreenControl(AccessibilityNodeInfo root, String pkg) {
+        if(!("com.android.chrome".equals(pkg) || "com.sec.android.app.sbrowser".equals(pkg)))return;
+        SharedPreferences prefs=getSharedPreferences(CONTROL_PREFS,MODE_PRIVATE);
+        long at=prefs.getLong("at",0);
+        String kind=prefs.getString("kind","");
+        String value=prefs.getString("value","");
+        if(kind.isEmpty())return;
+        if(at<=0 || System.currentTimeMillis()-at>CONTROL_TTL_MS){
+            prefs.edit().clear().apply();return;
+        }
+        if(!prefs.edit().remove("kind").remove("value").remove("at").commit())return;
+        boolean ok=false;
+        if("tap".equals(kind) && !blockedControl(value)){
+            List<AccessibilityNodeInfo> matches=new ArrayList<>();
+            findMatchingVisible(root,value,matches);
+            if(matches.size()==1){
+                AccessibilityNodeInfo target=matches.get(0);
+                for(int i=0;i<3 && !target.isClickable() && target.getParent()!=null;i++)
+                    target=target.getParent();
+                ok=target.isClickable() && target.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
+        }else if("type".equals(kind) && value.length()<=250){
+            List<AccessibilityNodeInfo> matches=new ArrayList<>();
+            findFocusedEditor(root,matches);
+            if(matches.size()==1){
+                AccessibilityNodeInfo editor=matches.get(0);
+                Bundle args=new Bundle();
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,value);
+                ok=editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args);
+            }
+        }else if("scroll".equals(kind)){
+            Path path=new Path();
+            int width=getResources().getDisplayMetrics().widthPixels;
+            int height=getResources().getDisplayMetrics().heightPixels;
+            path.moveTo(width/2f,height*0.75f);
+            path.lineTo(width/2f,height*0.3f);
+            ok=dispatchGesture(new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(path,0,450)).build(),null,null);
+        }
+        status("Kendali browser DEV "+kind+": "+(ok?"dikirim (belum terverifikasi)":"gagal/tidak unik"));
+    }
+    private void findMatchingVisible(AccessibilityNodeInfo node,String label,List<AccessibilityNodeInfo> out){
+        if(node==null || out.size()>1)return;
+        if(node.isVisibleToUser()){
+            String text=node.getText()==null?"":node.getText().toString();
+            String desc=node.getContentDescription()==null?"":node.getContentDescription().toString();
+            if(label.equalsIgnoreCase(text.trim()) || label.equalsIgnoreCase(desc.trim()))out.add(node);
+        }
+        for(int i=0;i<node.getChildCount();i++)findMatchingVisible(node.getChild(i),label,out);
+    }
+    private void findFocusedEditor(AccessibilityNodeInfo node,List<AccessibilityNodeInfo> out){
+        if(node==null || out.size()>1)return;
+        if(node.isVisibleToUser() && node.isEditable() && node.isFocused() && node.isEnabled()
+                && !node.isPassword())out.add(node);
+        for(int i=0;i<node.getChildCount();i++)findFocusedEditor(node.getChild(i),out);
+    }
 
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
@@ -33,8 +103,15 @@ public final class ChatSendService extends AccessibilityService {
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (handling || event == null || event.getPackageName() == null ||
-                !TARGET.contentEquals(event.getPackageName())) return;
+        if (handling || event == null || event.getPackageName() == null) return;
+        String eventPackage=event.getPackageName().toString();
+        if (!TARGET.equals(eventPackage)) {
+            AccessibilityNodeInfo browserRoot=getRootInActiveWindow();
+            if(browserRoot!=null && browserRoot.getPackageName()!=null &&
+                    eventPackage.contentEquals(browserRoot.getPackageName()))
+                executeScreenControl(browserRoot,eventPackage);
+            return;
+        }
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String pending = prefs.getString("text", "");
         String marker = prefs.getString(REPLY_MARKER, "");
