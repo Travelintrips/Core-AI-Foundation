@@ -19,7 +19,7 @@ export function normalizeDeviceAction(value) {
   const target = value.target === undefined ? '' : value.target;
   if (typeof target !== 'string' || target.length > 600 || /[\x00-\x1f\x7f]/.test(target)) throw Error('Invalid target');
   if (kind === 'OPEN_URL') {
-    if (!/^https:\/\//i.test(target) || /\s/.test(target)) throw Error('HTTPS URL required');
+    if (!/^https:\/\//i.test(target) || /[\s\\]/.test(target)) throw Error('HTTPS URL required');
     let url;
     try { url = new URL(target); } catch { throw Error('Malformed URL'); }
     if (url.protocol !== 'https:' || url.username || url.password ||
