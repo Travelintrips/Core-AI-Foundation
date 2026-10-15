@@ -153,7 +153,11 @@ http.createServer(async(req,res)=>{
  }
  if(req.url!=='/mcp/android-dev')return respond(res,404,{error:'not_found'});
  if(req.method!=='POST')return respond(res,405,{error:'method_not_allowed'}, {'allow':'POST'});
- if(!checkAuth(req.headers.authorization)&&!(await verifyOAuthToken(req.headers.authorization)))return respond(res,401,{error:'unauthorized'},{'www-authenticate':'Bearer realm="ai-task-android-dev"'});
+ if(!checkAuth(req.headers.authorization)&&!(await verifyOAuthToken(req.headers.authorization))){
+  const metadata=resourceMetadata();
+  const challenge=metadata?'Bearer realm="ai-task-android-dev", resource_metadata="https://dev-ai-task.cstlogistic.co.id/.well-known/oauth-protected-resource/mcp/android-dev"':'Bearer realm="ai-task-android-dev"';
+  return respond(res,401,{error:'unauthorized'},{'www-authenticate':challenge});
+ }
  if(req.headers['content-type']?.split(';')[0]!=='application/json')return respond(res,415,{error:'content_type'});
  let body='',tooLarge=false;
  req.on('data',data=>{body+=data;if(body.length>MAX_BODY){tooLarge=true;req.destroy();}});
