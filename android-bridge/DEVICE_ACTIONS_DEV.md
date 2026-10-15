@@ -1,5 +1,35 @@
 # Z Fold4 restricted device actions (DEV only)
 
+## Correct route for opening GitHub on the Z Fold4
+
+**Do not use the generic OpenClaw/PC browser command:** that opens GitHub on the
+selected OpenClaw computer, including DELL. It is not a phone action.
+
+Use **only** an authorized Android DEV entry point:
+
+- Admin UI: `https://dev-ai-task.cstlogistic.co.id/android-admin/` (requires authenticated admin). Select **Buka GitHub di HP Z Fold4**.
+- Authenticated Android DEV MCP: tool `open_github_on_zfold4_dev` with empty arguments, if that separate MCP connector has been enrolled.
+
+Both create a DEV job with `source=OPENCLAW`,
+`source_session_id=android-dev:<most-recently-paired-active-Z-Fold4>`,
+title `Z Fold4 DEV OPEN_URL GitHub`, and a matching one-hour scoped
+`OPEN_URL https://github.com/` action. The DEV dispatcher **refuses to
+grant** that title when the action is absent, expired, or targets any other
+device. There is no PC fallback. Existing generic DEV test jobs remain
+separate.
+
+On the Z Fold4, open the Bridge app, press **AMBIL JOB DEV OTOMATIS**,
+and approve **Jalankan** on the Android confirmation dialog. Do not press
+the separate automatic ChatGPT test button. The app opens GitHub via
+an Android foreground intent; its local status explicitly does not claim
+successful browser rendering, callback, or ACK.
+
+A generic OpenClaw chat command still may dispatch to a PC if sent through
+the **generic desktop route**. The Android DEV entry point is required until
+the calling app explicitly selects the phone-targeted tool. Do not infer
+Z Fold4 execution from GitHub appearing on DELL.
+
+
 Run this only from an authorized VPS admin shell after creating an explicitly assigned Android DEV job.
 
 ```sh
