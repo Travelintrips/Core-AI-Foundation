@@ -16,7 +16,7 @@ test('Android DEV opens allowlisted URLs in explicit Chrome package, never gener
  assert.match(launcher,/browser\.resolveActivity\(getPackageManager\(\)\) == null/);
  assert.match(launcher,/startActivity\(browser\)/);
  assert.match(launcher,/AndroidActionReceipt\.supportedUrl\(destination\.toString\(\)\)/);
- assert.match(source,/KONFIRMASI SITUS SUDAH TERBUKA DI HP/);
+ assert.match(source,/BUKTI TAMBAHAN MANUAL UNTUK JOB LAMA/);
  assert.match(source,/if \("OPEN_URL"\.equals\(taskKind\) && AndroidActionReceipt\.supportedUrl\(taskTarget\)\)/);
  assert.match(source,/queueAutoDispatchReceipt\(jobId,destination\.toString\(\)\)/);
  assert.match(source,/submitDispatchedSite\(id,event,paired,url\)/);
