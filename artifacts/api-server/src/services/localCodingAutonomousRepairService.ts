@@ -1,4 +1,6 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+// TODO: Implement retry logic with exponential backoff (3 attempts, starting at 10s) for GitHub workflow_run status checks to handle cancellations cleanly.
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
