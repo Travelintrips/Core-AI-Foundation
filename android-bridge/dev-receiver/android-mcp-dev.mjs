@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {saveDeviceAction} from './device-actions.mjs';
+import {siteForKey} from './phone-site-catalog.mjs';
 const ORIGIN='https://dev-ai-task.cstlogistic.co.id';
 const DEVICE_DIR='/var/lib/openclaw-android-bridge-dev';
 const DEVICE_FILE=DEVICE_DIR+'/device-registry.json';
@@ -11,9 +12,20 @@ const SECRET_FILE='/etc/ai-task-android-mcp-dev/token';
 const CONTAINER='ai-task-dev-pr49-hostnet';
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const MAX_BODY=8192;
+const PHONE_MCP_SITES=Object.freeze({
+ open_github_on_zfold4_dev:'github',
+ open_hostinger_on_zfold4_dev:'hostinger',
+ open_gcp_on_zfold4_dev:'gcp',
+ open_hostinger_vps_on_zfold4_dev:'hostinger-vps',
+ open_gcp_compute_on_zfold4_dev:'gcp-compute'
+});
 const TOOLS=[
  {name:'create_android_dev_job',description:'Create one DEV-only Android Z Fold4 test job for the most recently paired active device. No PROD.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'open_github_on_zfold4_dev',description:'Create a DEV-only OPEN_URL GitHub job assigned to the paired Z Fold4, never PC/DELL; requires foreground confirmation on the phone.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+ {name:'open_hostinger_on_zfold4_dev',description:'Open Hostinger hPanel in Chrome on paired Z Fold4 with mandatory phone confirmation; no login/changes automated, never PC/PROD.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+ {name:'open_gcp_on_zfold4_dev',description:'Open Google Cloud Console in Chrome on paired Z Fold4 with mandatory phone confirmation; no IAM or VM writes, never PC/PROD.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+ {name:'open_hostinger_vps_on_zfold4_dev',description:'Guide phone user to Hostinger VPS page in Chrome using a predefined URL; read-only navigation intent, no mutation.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+ {name:'open_gcp_compute_on_zfold4_dev',description:'Guide phone user to GCP Compute Engine VM instances page in Chrome using a predefined URL; read-only navigation intent, no mutation.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_android_dev_job',description:'Read authoritative DEV status, callback, verification, and ACK count for one Android job UUID.',inputSchema:{type:'object',properties:{jobId:{type:'string'}},required:['jobId'],additionalProperties:false}},
  {name:'get_android_dev_job_events',description:'Read bounded DEV lifecycle event types for one Android job UUID.',inputSchema:{type:'object',properties:{jobId:{type:'string'}},required:['jobId'],additionalProperties:false}}
 ];
@@ -75,24 +87,33 @@ const EVENTS_SQL=`SELECT kind,received_at FROM ai_task_bridge.job_events WHERE j
 async function callTool(name,args){
  if(!TOOLS.some(x=>x.name===name))throw Error('Unknown DEV tool');
  if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Invalid arguments');
- if(name==='create_android_dev_job'||name==='open_github_on_zfold4_dev'){
-  const openGitHub=name==='open_github_on_zfold4_dev';
+ if(name==='create_android_dev_job'||Object.hasOwn(PHONE_MCP_SITES,name)){
+  const siteKey=PHONE_MCP_SITES[name];
+  const site=siteKey?siteForKey(siteKey):null;
   if(Object.keys(args).length)throw Error('Unexpected arguments');
   const device=latestDevice(),key='android-mcp-dev:'+crypto.randomUUID();
   const response=await fetch('http://127.0.0.1:18183/api/bridge/jobs',{
    method:'POST',headers:{'authorization':'Bearer '+bridgeToken(),'content-type':'application/json'},
    body:JSON.stringify({source:'OPENCLAW',externalId:key,idempotencyKey:key,
-    title:openGitHub?'Z Fold4 DEV OPEN_URL GitHub':'Z Fold4 DEV MCP E2E check',
+    title:site?site.title:'Z Fold4 DEV MCP E2E check',
     sessionId:'android-dev:'+device}),
    signal:AbortSignal.timeout(12000)});
   const body=await response.json();
   if(response.status!==201||!body.accepted||!UUID.test(body.task?.id||''))throw Error('DEV creation rejected');
-  if(openGitHub){
-   // The DEV dispatcher will not grant this job until its scoped action exists.
-   saveDeviceAction(DEVICE_DIR,body.task.id,device,{kind:'OPEN_URL',target:'https://github.com/'});
+  if(site){
+   // The DEV dispatcher will not grant a phone URL job until its scoped action exists.
+   try {
+    saveDeviceAction(DEVICE_DIR,body.task.id,device,{kind:'OPEN_URL',target:site.url});
+   } catch {
+    // Do not conceal a successfully created job: returning its identity avoids
+    // the user generating duplicates when action registration failed.
+    return {jobId:body.task.id,status:'ACTION_REGISTRATION_FAILED',
+      deviceId:device,environment:'DEV',action:'OPEN_URL',url:site.url,
+      error:'action_registration_failed',retryCreatesDuplicate:true};
+   }
   }
   return {jobId:body.task.id,status:body.task.status,deviceId:device,environment:'DEV',
-    ...(openGitHub?{action:'OPEN_URL',url:'https://github.com/'}:{})};
+    ...(site?{action:'OPEN_URL',url:site.url,site:site.label}:{})};
  }
  if(Object.keys(args).length!==1||!UUID.test(args.jobId||''))throw Error('Valid jobId UUID required');
  const rows=query(name==='get_android_dev_job'?JOB_SQL:EVENTS_SQL,args.jobId);
