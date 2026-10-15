@@ -20,7 +20,7 @@ jobs:
     environment: development
     timeout-minutes: 28
     env:
-      DEV_DOMAIN: dev-aicore.cstlogistic.co.id
+      DEV_DOMAIN: dev.cstlogistic.co.id
       PROD_DOMAIN: aicore.cstlogistic.co.id
       DEV_VPS_IP: 72.61.210.205
       EXPECTED_SHA: ${{ github.sha }}
@@ -91,41 +91,20 @@ jobs:
             { echo "::error::PROD no longer runs exact main; DNS switch blocked"; exit 1; }
           echo "DEV_ISOLATION_SMOKE=PASS asset=200 anonymous=$anon prod_sha=$prod_sha"
 
-      - name: Change only DEV A record after verified independent VPS release
+      - name: Verify canonical combined DEV DNS (read-only)
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$HOSTINGER_API_TOKEN" ||
-            { echo "::error::Hostinger DNS API credentials unavailable"; exit 1; }
-          dns="https://developers.hostinger.com/api/dns/v1/zones/cstlogistic.co.id"
-          curl --fail --silent --show-error --connect-timeout 10 --max-time 25 \
-            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-            "$dns" -o /tmp/current-zone.json
-          jq -e 'type=="array"' /tmp/current-zone.json >/dev/null
-          # A CNAME/AAAA on DEV could route some users to a different application.
-          # Do not silently delete or replace unrelated record types.
-          jq -e 'all(.[]; .name != "dev-aicore" or .type == "A")' \
-            /tmp/current-zone.json >/dev/null ||
-            { echo "::error::Ambiguous DEV DNS record types"; exit 1; }
-          jq -n --arg ip "$DEV_VPS_IP" \
-            '{overwrite:true,zone:[{name:"dev-aicore",type:"A",ttl:300,
-            records:[{content:$ip}]}]}' > /tmp/new-zone.json
-          curl --fail --silent --show-error --connect-timeout 10 --max-time 25 \
-            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-            -H 'Content-Type: application/json' \
-            -X POST --data-binary @/tmp/new-zone.json "$dns/validate" -o /dev/null
-          current_ip="$(jq -r '[.[] | select(.name=="dev-aicore" and .type=="A") |
-            .records[]?.content] | unique | join(",")' /tmp/current-zone.json)"
-          if [[ "$current_ip" != "$DEV_VPS_IP" ]]; then
-            curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
-              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
-              -H 'Content-Type: application/json' \
-              -X PUT --data-binary @/tmp/new-zone.json "$dns" -o /dev/null
-            echo "DEV_DNS_UPDATED=PASS record=dev-aicore type=A"
-          else
-            echo "DEV_DNS_ALREADY_CORRECT=PASS"
-          fi
-
+          # No DNS mutations; Hostinger automatically routes dev-aicore to shared hosting.
+          # The canonical combined DEV VPS hostname is already independently provisioned.
+          for ns in ns1.dns-parking.com ns2.dns-parking.com; do
+            resolved="$(dig @"$ns" +short A "$DEV_DOMAIN" | sort -u)"
+            if [[ "$resolved" != "$DEV_VPS_IP" ]]; then
+              echo "::error::Canonical DEV DNS drift at $ns; refusing promotion"
+              exit 1
+            fi
+          done
+          echo "COMBINED_DEV_DNS=PASS domain=$DEV_DOMAIN target=$DEV_VPS_IP"
       - name: Verify authoritative DNS and public DEV exact SHA
         shell: bash
         run: |
