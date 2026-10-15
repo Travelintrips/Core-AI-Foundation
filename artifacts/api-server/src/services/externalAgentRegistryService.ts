@@ -29,6 +29,17 @@ export const EXTERNAL_AGENT_RULES = {
       productionDeploy: false,
     },
   },
+  "openclaw-pc-worker-dev": {
+    source: "openclaw",
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
   "openclaw-pc-worker": {
     source: "openclaw",
     role: "bounded_orchestration_agent",
