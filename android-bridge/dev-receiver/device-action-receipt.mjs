@@ -7,7 +7,7 @@ import {loadDeviceActions, verifiedDeviceAction} from './device-actions.mjs';
 
 export const CONFIRMATION = 'USER_CONFIRMED_VISIBLE';
 export const ACTION_REPORT_SOURCE = 'user-confirmed-device-action';
-const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 function read(file) {
   try { return JSON.parse(fs.readFileSync(file,'utf8')); }
   catch(error) { if (error.code === 'ENOENT') return {}; throw error; }
