@@ -17,8 +17,8 @@ android {
         applicationId 'id.cst.openclawbridge.autosend'
         minSdk 26
         targetSdk 35
-        versionCode 19
-        versionName '0.11.0-dev-action-receipt'
+        versionCode 20
+        versionName '0.11.1-dev-direct-chrome'
     }
     signingConfigs {
         stableDev {
