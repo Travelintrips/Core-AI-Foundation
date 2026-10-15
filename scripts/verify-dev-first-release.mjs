@@ -28,6 +28,8 @@ const allowedDevDifferences = new Set([
   "deploy/hostinger-dev/Dockerfile.dockerignore",
 ]);
 
+export const DEV_HEALTH_ENDPOINT = "https://dev.cstlogistic.co.id/api/healthz";
+
 export const requiredDevWorkflows = Object.freeze([
   "CI Verify",
   "DEV Fast Verify",
@@ -87,7 +89,8 @@ async function checkPromotion() {
   // DEV-first route simply by being pushed directly to main.
   checkedGit("fetch", "--no-tags", "origin", "develop");
   const developHead = checkedGit("rev-parse", "FETCH_HEAD");
-  const health = await fetch("https://dev-aicore.cstlogistic.co.id/api/healthz", {
+  // Use the VPS-isolated combined DEV host already covered by DNS and exact SHA gates.
+  const health = await fetch(DEV_HEALTH_ENDPOINT, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(15_000),
   });
