@@ -9,7 +9,7 @@ test('strict allowlist blocks arbitrary websites, local network, credentials and
  for(const url of ['http://github.com/', 'https://evil.com/', 'https://github.com.evil.com/',
   'https://user:pass@github.com/', 'https://github.com:444/', 'javascript:alert(1)',
   'https://127.0.0.1/', 'https://github.com\\n.evil.com/'])
-  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_URL',target:url}));
+  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_URL',target:url}), `URL must be rejected: ${JSON.stringify(url)}`);
  assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:'https://github.com/Travelintrips/Core-AI-Foundation'}),
    {kind:'OPEN_URL',target:'https://github.com/Travelintrips/Core-AI-Foundation'});
  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_APP',target:'com.android.settings'}));
