@@ -95,7 +95,7 @@ public class MainActivity extends Activity {
         retrySite.setOnClickListener(v -> retrySiteInChrome());
         root.addView(retrySite);
         Button confirmSite = new Button(this);
-        confirmSite.setText("KONFIRMASI SITUS SUDAH TERBUKA DI HP (DEV)");
+        confirmSite.setText("BUKTI TAMBAHAN MANUAL UNTUK JOB LAMA (OPSIONAL)");
         confirmSite.setOnClickListener(v -> confirmSiteVisible());
         root.addView(confirmSite);
         actionReceiptStatus = new TextView(this);
@@ -748,6 +748,11 @@ public class MainActivity extends Activity {
     private void confirmSiteVisible() {
         android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS, MODE_PRIVATE);
         String id=prefs.getString("pending_job","");
+        if (id.equals(prefs.getString("auto_dispatch_job","")) ||
+            id.equals(prefs.getString("auto_dispatch_completed_job",""))) {
+            actionReceiptStatus.setText("Laporan intent otomatis sudah diproses atau dikirim untuk job ini. Tidak perlu konfirmasi berulang.");
+            return;
+        }
         String event=prefs.getString("pending_event","");
         String url=prefs.getString("pending_target",AndroidActionReceipt.GITHUB);
         if (id.isEmpty() || event.isEmpty() || !AndroidActionReceipt.supportedUrl(url)) {
