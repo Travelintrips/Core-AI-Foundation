@@ -66,9 +66,9 @@ const JOB_SQL=`SELECT j.id,j.status,j.source_session_id,
  (SELECT count(*)::int FROM ai_task_bridge.job_events e WHERE e.job_id=j.id AND e.kind='CALLBACK_ACK') AS ack_count
  FROM ai_task_bridge.jobs j WHERE j.id=$1 AND j.source='OPENCLAW'
  AND j.source_session_id LIKE 'android-dev:%' LIMIT 1`;
-const EVENTS_SQL=`SELECT kind,created_at FROM ai_task_bridge.job_events WHERE job_id=$1
+const EVENTS_SQL=`SELECT kind,received_at FROM ai_task_bridge.job_events WHERE job_id=$1
  AND EXISTS(SELECT 1 FROM ai_task_bridge.jobs j WHERE j.id=$1 AND j.source='OPENCLAW'
- AND j.source_session_id LIKE 'android-dev:%') ORDER BY created_at ASC LIMIT 30`;
+ AND j.source_session_id LIKE 'android-dev:%') ORDER BY received_at ASC LIMIT 30`;
 async function callTool(name,args){
  if(!TOOLS.some(x=>x.name===name))throw Error('Unknown DEV tool');
  if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Invalid arguments');
@@ -101,7 +101,7 @@ async function handle(req){
   try{const name=req.params?.name,args=req.params?.arguments??{};
    const value=await callTool(name,args);
    return result(id,{content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,isError:false});
-  }catch(e){return result(id,{content:[{type:'text',text:String(e.message)}],isError:true});}
+  }catch(e){return result(id,{content:[{type:'text',text:'DEV tool failed; check MCP server logs'}],isError:true});}
  }
  return error(id,-32601,'Method not found');
 }
