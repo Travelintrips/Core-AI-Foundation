@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <queries><package android:name="com.openai.chatgpt"/><package android:name="com.github.android"/><package android:name="com.android.chrome"/></queries>
+    <queries><package android:name="com.openai.chatgpt"/><package android:name="com.github.android"/><package android:name="com.android.chrome"/><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
     <application android:allowBackup="false" android:label="OpenClaw Auto Kirim (DEV)" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <service android:name=".ChatSendService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
