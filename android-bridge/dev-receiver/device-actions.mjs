@@ -27,7 +27,7 @@ export function normalizeDeviceAction(value) {
     return {kind, target: url.href};
   }
   if (kind === 'OPEN_APP') {
-    if (!ALLOWED_APPS.includes(target)) throw Error('App is not allowlisted');
+    if (!/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/.test(target) || target.startsWith('android.') || target.startsWith('com.android.settings') || target.startsWith('com.android.packageinstaller')) throw Error('Invalid or privileged Android app package');
     return {kind, target};
   }
   if (kind === 'DEVICE_STATUS' && target === '') return {kind, target: ''};
