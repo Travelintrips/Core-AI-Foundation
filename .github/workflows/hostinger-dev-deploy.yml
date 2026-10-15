@@ -24,7 +24,6 @@ jobs:
       PROD_DOMAIN: aicore.cstlogistic.co.id
       DEV_VPS_IP: 72.61.210.205
       EXPECTED_SHA: ${{ github.sha }}
-      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
 
     steps:
       - uses: actions/checkout@v7

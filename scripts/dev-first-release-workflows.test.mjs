@@ -37,19 +37,21 @@ test("main branch auto-merges cannot bypass DEV-first promotion", () => {
   assert.match(guardian, /DEV-first promotion requires reviewed merge commit/);
 });
 
-test("DEV has isolated VPS release gate, not shared Hostinger account mutations", () => {
+test("DEV has isolated VPS release gate and read-only canonical DNS", () => {
   const yaml = workflow("hostinger-dev-deploy.yml");
   const wait = yaml.indexOf("- name: Wait for CI-gated VPS DEV build and exact release");
   const smoke = yaml.indexOf("- name: Check isolated DEV frontend, protected jobs and unchanged production");
-  const dns = yaml.indexOf("- name: Change only DEV A record after verified independent VPS release");
+  const dns = yaml.indexOf("- name: Verify canonical combined DEV DNS (read-only)");
   const publicVerify = yaml.indexOf("- name: Verify authoritative DNS and public DEV exact SHA");
   assert.ok(wait > 0 && wait < smoke && smoke < dns && dns < publicVerify);
   assert.match(yaml, /VPS_DEV_SHA=PASS/);
   assert.match(yaml, /--resolve/);
   assert.match(yaml, /x-cst-commit-sha/);
   assert.match(yaml, /DEV_VPS_IP/);
-  assert.match(yaml, /HOSTINGER_API_TOKEN/);
-  assert.match(yaml, /DEV_DNS_UPDATED=PASS/);
+  assert.doesNotMatch(yaml, /HOSTINGER_API_TOKEN/);
+  assert.match(yaml, /COMBINED_DEV_DNS=PASS/);
+  assert.match(yaml, /DEV_DOMAIN: dev\.cstlogistic\.co\.id/);
+  assert.doesNotMatch(yaml, /dns\/v1\/zones/);
   assert.match(yaml, /prod_sha/);
   assert.doesNotMatch(yaml, /hosting\/v1\/accounts/);
   assert.doesNotMatch(yaml, /source_type:"archive"/);
