@@ -42,6 +42,8 @@ public class MainActivity extends Activity {
     private static final String DEV_PAIR_START_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/start";
     private static final String DEV_PAIR_STATUS_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/status";
     private static final String DEV_NEXT_JOB_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/jobs/next";
+    // Explicit package targeting avoids Android's web browser chooser.
+    private static final String DEV_CHROME_PACKAGE = "com.android.chrome";
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
     private boolean devOneTapLaunch = false;
@@ -88,6 +90,10 @@ public class MainActivity extends Activity {
         jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
         jobFetchStatus.setTextSize(16);
         root.addView(jobFetchStatus);
+        Button retryGithub = new Button(this);
+        retryGithub.setText("BUKA GITHUB LANGSUNG DI CHROME (JOB DEV)");
+        retryGithub.setOnClickListener(v -> retryGithubInChrome());
+        root.addView(retryGithub);
         Button confirmGithub = new Button(this);
         confirmGithub.setText("KONFIRMASI GITHUB SUDAH TERBUKA DI HP (DEV)");
         confirmGithub.setOnClickListener(v -> confirmGithubVisible());
@@ -533,7 +539,7 @@ public class MainActivity extends Activity {
                     !( "github.com".equals(host) || "www.github.com".equals(host) ||
                        "dev-ai-task.cstlogistic.co.id".equals(host))) throw new IllegalArgumentException("URL ditolak");
             } catch (Exception ex) { jobFetchStatus.setText("OPEN_URL ditolak oleh kebijakan DEV."); return; }
-            description = "Buka alamat berikut di browser HP?\\n" + target;
+            description = "Buka alamat berikut langsung di Chrome pada HP (tanpa memilih browser)?\\n" + target;
         } else if ("OPEN_APP".equals(kind)) {
             if (!("com.github.android".equals(target) || "com.openai.chatgpt".equals(target) ||
                   "com.android.chrome".equals(target))) {
@@ -565,24 +571,73 @@ public class MainActivity extends Activity {
                           ". Pemeriksaan lokal saja, belum ACK.");
                       return;
                   }
-                  Intent launch;
                   if ("OPEN_URL".equals(taskKind)) {
-                      launch = new Intent(Intent.ACTION_VIEW, destination);
-                      launch.addCategory(Intent.CATEGORY_BROWSABLE);
-                  } else {
-                      launch = getPackageManager().getLaunchIntentForPackage(taskTarget);
-                      if (launch == null) {jobFetchStatus.setText("Aplikasi tidak terpasang: "+taskTarget); return;}
+                      openDevUrlInChrome(id, destination);
+                      return;
+                  }
+                  Intent launch = getPackageManager().getLaunchIntentForPackage(taskTarget);
+                  if (launch == null) {
+                      jobFetchStatus.setText("Aplikasi tidak terpasang: "+taskTarget);
+                      return;
                   }
                   startActivity(launch);
-                  if ("OPEN_URL".equals(taskKind) && AndroidActionReceipt.GITHUB.equals(taskTarget)) {
-                      rememberGithubAction(id);
-                  }
                   jobFetchStatus.setText("Job "+id+": intent membuka "+taskKind+
-                     " dikirim. Kembali ke Bridge dan konfirmasi hanya setelah GitHub terlihat di HP.");
+                     " dikirim; belum ada bukti callback/ACK.");
               } catch (Exception ex) {
                   jobFetchStatus.setText("Job "+id+": Android gagal membuka target (belum ACK).");
               }
           }).show();
+    }
+
+    // Foreground-only explicit Chrome dispatch. Never call a generic ACTION_VIEW
+    // for a DEV OPEN_URL: the generic resolver displays the browser chooser.
+    // If Chrome is unavailable, fail closed without choosing a different browser
+    // or delegating the action to any PC/OpenClaw worker.
+    private boolean openDevUrlInChrome(String jobId, Uri destination) {
+        if (destination == null || !"https".equals(destination.getScheme()) ||
+            destination.getUserInfo()!=null || destination.getPort()!=-1 ||
+            !("github.com".equals(destination.getHost()) ||
+              "www.github.com".equals(destination.getHost()) ||
+              "dev-ai-task.cstlogistic.co.id".equals(destination.getHost()))) {
+            jobFetchStatus.setText("URL DEV ditolak; hanya domain yang disetujui.");
+            return false;
+        }
+        Intent browser = new Intent(Intent.ACTION_VIEW, destination);
+        browser.addCategory(Intent.CATEGORY_BROWSABLE);
+        browser.setPackage(DEV_CHROME_PACKAGE);
+        if (browser.resolveActivity(getPackageManager()) == null) {
+            jobFetchStatus.setText("Chrome belum tersedia/aktif di Z Fold4. Aktifkan Google Chrome; tidak memakai pemilih browser atau PC DELL.");
+            return false;
+        }
+        try {
+            startActivity(browser);
+            if (AndroidActionReceipt.GITHUB.equals(destination.toString())) {
+                rememberGithubAction(jobId);
+            }
+            jobFetchStatus.setText("Job "+jobId+": Chrome diminta membuka "+destination.getHost()+
+                " langsung di HP. Konfirmasi setelah halaman benar-benar terlihat.");
+            return true;
+        } catch (Exception ex) {
+            jobFetchStatus.setText("Chrome gagal membuka URL di Z Fold4; job belum dikonfirmasi.");
+            return false;
+        }
+    }
+
+    // Recover a previously offered one-shot job after an APK update without
+    // generating a second AI Task job or re-delivering an already accepted ACK.
+    private void retryGithubInChrome() {
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
+        String id=prefs.getString("pending_job","");
+        if (!id.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
+            !id.equals(prefs.getString("last_action_job",""))) {
+            jobFetchStatus.setText("Belum ada job GitHub terotorisasi di HP. Tekan AMBIL JOB DEV OTOMATIS terlebih dahulu.");
+            return;
+        }
+        if (id.equals(prefs.getString("confirmed_job",""))) {
+            jobFetchStatus.setText("Job "+id+" sudah dikonfirmasi; jangan mengulang aksi.");
+            return;
+        }
+        openDevUrlInChrome(id, Uri.parse(AndroidActionReceipt.GITHUB));
     }
 
     private void rememberGithubAction(String id) {
