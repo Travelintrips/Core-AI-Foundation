@@ -74,8 +74,15 @@ public final class AndroidActionReceipt {
         } finally {conn.disconnect();}
     }
 
-    private static String submitActionReceipt(String jobId,String uuidEvent,String pairingCredential,String siteUrl,boolean userConfirmed) throws Exception {
-        if (!supportedUrl(siteUrl)) throw new SecurityException("Situs tidak termasuk daftar aksi DEV yang disetujui");
+    public static boolean supportedApp(String p) {
+        return p!=null && p.length()<180 &&
+            p.matches("[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*){1,15}") &&
+            !p.startsWith("android.") && !p.startsWith("com.android.") &&
+            !p.startsWith("com.google.android.permissioncontroller") &&
+            !p.startsWith("com.samsung.android.knox");
+    }
+    private static String submitActionReceipt(String jobId,String uuidEvent,String pairingCredential,String target,boolean userConfirmed,boolean isApp) throws Exception {
+        if (isApp?!supportedApp(target):!supportedUrl(target)) throw new SecurityException("Target DEV tidak diizinkan");
         if (!jobId.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
             !uuidEvent.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
             pairingCredential.length()<32) {
@@ -87,8 +94,8 @@ public final class AndroidActionReceipt {
         if (tokenResponse.getInt("_status") != 200) throw new SecurityException("Token DEV ditolak");
         String shortLivedToken=tokenResponse.getString("token");
         JSONObject action=new JSONObject();
-        action.put("kind","OPEN_URL");
-        action.put("target",siteUrl);
+        action.put("kind",isApp?"OPEN_APP":"OPEN_URL");
+        action.put("target",target);
         JSONObject receipt=new JSONObject();
         receipt.put("protocol","openclaw-chat-bridge-dev-v1");
         receipt.put("jobId",jobId);
@@ -115,10 +122,13 @@ public final class AndroidActionReceipt {
     // the allowlisted site. An Android intent can be reported without an
     // additional dialog, but is NOT evidence that the page finished loading.
     public static String submitDispatchedSite(String jobId,String uuidEvent,String pairingCredential,String siteUrl) throws Exception {
-        return submitActionReceipt(jobId,uuidEvent,pairingCredential,siteUrl,false);
+        return submitActionReceipt(jobId,uuidEvent,pairingCredential,siteUrl,false,false);
     }
     public static String submitUserConfirmedSite(String jobId,String uuidEvent,String pairingCredential,String siteUrl) throws Exception {
-        return submitActionReceipt(jobId,uuidEvent,pairingCredential,siteUrl,true);
+        return submitActionReceipt(jobId,uuidEvent,pairingCredential,siteUrl,true,false);
+    }
+    public static String submitDispatchedApp(String jobId,String uuidEvent,String pairingCredential,String packageName) throws Exception {
+        return submitActionReceipt(jobId,uuidEvent,pairingCredential,packageName,false,true);
     }
     // Backwards compatibility for a previously pending DEV GitHub job.
     public static String submitUserConfirmedGithub(String jobId,String uuidEvent,String pairingCredential) throws Exception {
