@@ -69,7 +69,7 @@ test('one-tap pairing requires explicit approval and is single use',async()=>{
   const pairingStatsAfter=fs.statSync(pairingFile);
   assert.equal(pairingStatsAfter.uid,pairingStatsBefore.uid);
   assert.equal(pairingStatsAfter.gid,pairingStatsBefore.gid);
-  assert.equal(pairingStatsAfter.mode & 0o777,0o600);
+  if(process.platform!=='win32')assert.equal(pairingStatsAfter.mode & 0o777,0o600);
   const paired=await api('/v1/android/pair/status',{requestId:item.requestId,proof:item.proof});
   assert.equal(paired.status,200);
   const data=await paired.json();
