@@ -38,3 +38,22 @@ test('Z Fold4 GitHub job is never granted without matching phone-only OPEN_URL i
  assert.deepEqual(eligible([row],registry,now,{[a]:{...allowed,action:{kind:'OPEN_URL',target:'https://github.com.evil.test/'}}}),[]);
  assert.deepEqual(eligible([row],registry,now+60*60*1000,valid),[]);
 });
+
+test('Hostinger/GCP dashboard and read-only section routing requires exact scoped phone action',()=>{
+ const now=1000,registry={[device]:{active:true},another:{active:true}};
+ for(const site of Object.values(DEV_PHONE_SITES)){
+  const row={...assigned(a,'android-dev:'+device),title:site.title};
+  assert.deepEqual(eligible([row],registry,now),[]);
+  assert.deepEqual(eligible([row],registry,now,{[a]:{
+   jobId:a,deviceId:device,expiresAt:now+5000,
+   action:{kind:'OPEN_URL',target:site.url==='https://github.com/'?'https://github.com.evil.test/':'https://github.com/'}
+  }}),[]);
+  const valid={ [a]:{jobId:a,deviceId:device,expiresAt:now+5000,
+    action:{kind:'OPEN_URL',target:site.url}} };
+  assert.deepEqual(eligible([row],registry,now,valid),[{id:a,deviceId:device}]);
+  assert.equal(planGrants([row],registry,{},now,valid)[a].deviceId,device);
+  assert.deepEqual(eligible([row],registry,now,{[a]:{...valid[a],deviceId:'another'}}),[]);
+ }
+ const unknown={...assigned(b,'android-dev:'+device),title:'Z Fold4 DEV OPEN_URL Arbitrary'};
+ assert.deepEqual(eligible([unknown],registry,now),[]);
+});
