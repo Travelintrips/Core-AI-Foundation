@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
     private boolean devOneTapLaunch = false;
+    private volatile boolean pairingInFlight = false;
     private boolean foreground = false;
     private boolean fetchInFlight = false;
     private boolean foregroundAutoEnabled = false;
@@ -489,36 +490,75 @@ public class MainActivity extends Activity {
     }
 
     private void beginPairing() {
+        if (pairingInFlight) {
+            deliveryStatus.setText("Pairing sedang berjalan. Tunggu proses sebelumnya.");
+            return;
+        }
+        pairingInFlight = true;
         deliveryStatus.setText("Meminta pairing DEV...");
         new Thread(() -> {
+            int consecutiveNetworkErrors = 0;
             try {
-                JSONObject start=callPairApi(DEV_PAIR_START_URL,new JSONObject());
-                String id=start.getString("requestId");
-                String proof=start.getString("proof");
-                String code=start.getString("code");
-                runOnUiThread(()->deliveryStatus.setText(
-                    "Kode pairing: "+code+". Konfirmasi kode ini kepada admin, lalu tunggu persetujuan (maks. 5 menit)."));
-                for(int i=0;i<55;i++) {
+                JSONObject start = callPairApi(DEV_PAIR_START_URL, new JSONObject());
+                String id = start.getString("requestId");
+                String proof = start.getString("proof");
+                String code = start.getString("code");
+                long expiresAt = start.getLong("expiresAt");
+                runOnUiThread(() -> deliveryStatus.setText(
+                    "Kode pairing: " + code + ". Minta persetujuan admin (berlaku 5 menit)."));
+                while (System.currentTimeMillis() < expiresAt) {
                     Thread.sleep(4500);
-                    JSONObject body=new JSONObject();
-                    body.put("requestId",id);body.put("proof",proof);
-                    JSONObject state=callPairApi(DEV_PAIR_STATUS_URL,body);
-                    if("paired".equals(state.optString("status"))) {
-                        String credential=state.getString("credential");
-                        getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE)
-                            .edit().putString("credential",credential).apply();
-                        runOnUiThread(()->deliveryStatus.setText("PAIRING DEV BERHASIL. Token job diterbitkan otomatis."));
-                        return;
+                    JSONObject body = new JSONObject();
+                    body.put("requestId", id);
+                    body.put("proof", proof);
+                    try {
+                        JSONObject state = callPairApi(DEV_PAIR_STATUS_URL, body);
+                        consecutiveNetworkErrors = 0;
+                        if ("paired".equals(state.optString("status"))) {
+                            String credential = state.getString("credential");
+                            if (!getSharedPreferences("bridge-pairing-dev", MODE_PRIVATE)
+                                    .edit().putString("credential", credential).commit()) {
+                                throw new IllegalStateException("Credential tidak tersimpan");
+                            }
+                            runOnUiThread(() -> deliveryStatus.setText(
+                                "PAIRING DEV BERHASIL. Credential tersimpan di HP."));
+                            return;
+                        }
+                        if (!"pending".equals(state.optString("status"))) {
+                            runOnUiThread(() -> deliveryStatus.setText(
+                                "Status pairing tak dikenal. Periksa VPS DEV."));
+                            return;
+                        }
+                    } catch (Exception error) {
+                        consecutiveNetworkErrors++;
+                        final String category = error instanceof IllegalStateException
+                            ? error.getMessage() : error.getClass().getSimpleName();
+                        final int count = consecutiveNetworkErrors;
+                        runOnUiThread(() -> deliveryStatus.setText(
+                            "Kode " + code + ": polling gagal (" + category +
+                            "), percobaan ulang " + count + "/5."));
+                        if (count >= 5) {
+                            runOnUiThread(() -> deliveryStatus.setText(
+                                "Pairing terhenti setelah 5 kegagalan koneksi (" +
+                                category + "). Minta kode baru setelah jaringan pulih."));
+                            return;
+                        }
                     }
                 }
-                runOnUiThread(()->deliveryStatus.setText("Pairing belum disetujui. Tekan pairing lagi."));
-            }catch(Exception ignored){
-                runOnUiThread(()->deliveryStatus.setText("Pairing belum berhasil. Periksa jaringan DEV dan ulangi."));
+                runOnUiThread(() -> deliveryStatus.setText(
+                    "Kode pairing kedaluwarsa (5 menit). Minta kode baru."));
+            } catch (Exception error) {
+                final String category = error instanceof IllegalStateException
+                    ? error.getMessage() : error.getClass().getSimpleName();
+                runOnUiThread(() -> deliveryStatus.setText(
+                    "Tidak bisa memulai pairing DEV (" + category + ")."));
+            } finally {
+                pairingInFlight = false;
             }
-        }).start();
+        }, "android-dev-pairing").start();
     }
 
-    private void shareResult() {
+        private void shareResult() {
         String envelope = resultEnvelope();
         if (envelope == null) return;
         Intent send = new Intent(Intent.ACTION_SEND);
