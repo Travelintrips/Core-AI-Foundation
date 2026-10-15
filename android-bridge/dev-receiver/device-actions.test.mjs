@@ -5,19 +5,19 @@ import os from 'node:os';
 import path from 'node:path';
 import {normalizeDeviceAction,saveDeviceAction,loadDeviceActions,verifiedDeviceAction} from './device-actions.mjs';
 const id='123e4567-e89b-42d3-a456-426614174000', device='zfold4-paired-dev-10';
-test('strict allowlist blocks arbitrary websites, local network, credentials and apps',()=>{
- for(const url of ['http://github.com/', 'https://evil.com/', 'https://github.com.evil.com/',
-  'https://user:pass@github.com/', 'https://github.com:444/', 'javascript:alert(1)',
-  'https://127.0.0.1/', 'https://github.com\\n.evil.com/'])
-  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_URL',target:url}), `URL must be rejected: ${JSON.stringify(url)}`);
- assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:'https://hpanel.hostinger.com/'}),{kind:'OPEN_URL',target:'https://hpanel.hostinger.com/'});
- assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:'https://console.cloud.google.com/compute/instances'}),{kind:'OPEN_URL',target:'https://console.cloud.google.com/compute/instances'});
- for (const bad of ['https://hpanel.hostinger.com.evil.test/', 'https://console.cloud.google.com.attacker.test/',
-   'http://console.cloud.google.com/', 'https://name:pass@hpanel.hostinger.com/','https://hpanel.hostinger.com:8080/']) {
-  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_URL',target:bad}));
+test('public HTTPS websites need no domain allowlist but refuse local targets and credentials',()=>{
+ for(const url of ['http://github.com/', 'https://user:pass@github.com/',
+   'https://github.com:444/', 'javascript:alert(1)',
+   'https://127.0.0.1/', 'https://localhost/', 'https://host.local/',
+   'https://service.internal/', 'https://github.com\\n.evil.com/','https://[::1]/',
+   'https://host.test/', 'https://x/'])
+   assert.throws(()=>normalizeDeviceAction({kind:'OPEN_URL',target:url}),
+     'URL must be rejected: '+JSON.stringify(url));
+ for(const url of ['https://hpanel.hostinger.com/','https://console.cloud.google.com/compute/instances',
+   'https://example.org/path','https://github.com.evil.com/',
+   'https://example.net/anything']) {
+  assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:url}),{kind:'OPEN_URL',target:url});
  }
- assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:'https://github.com/Travelintrips/Core-AI-Foundation'}),
-   {kind:'OPEN_URL',target:'https://github.com/Travelintrips/Core-AI-Foundation'});
  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_APP',target:'com.android.settings'}));
  assert.throws(()=>normalizeDeviceAction({kind:'SHELL',target:'id'}));
  assert.deepEqual(normalizeDeviceAction({kind:'DEVICE_STATUS'}),{kind:'DEVICE_STATUS',target:''});
