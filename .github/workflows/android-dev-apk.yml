@@ -62,8 +62,10 @@ jobs:
           expected=$(keytool -exportcert -rfc -keystore "$RUNNER_TEMP/android-dev-signing.p12" \
             -storetype PKCS12 -alias cst-android-dev -storepass:env ANDROID_DEV_SIGNING_PASSWORD \
             | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')
-          if [[ -z "$actual" || "$actual" != "$expected" ]]; then
-            echo 'APK certificate does not match pinned DEV signing keystore' >&2
+          # Public certificate fingerprint is pinned to prevent accidental key rotation.
+          pinned="f3e97c0a9db83c151b7c180a16c6caaf17892dbd0a462051a0dcbe4d0c7d4eaa"
+          if [[ -z "$actual" || "$actual" != "$expected" || "$actual" != "$pinned" ]]; then
+            echo 'APK certificate does not match pinned DEV signing identity' >&2
             exit 1
           fi
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" \
