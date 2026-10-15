@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.content.Context;
 import android.provider.Settings;
@@ -460,7 +461,9 @@ public class MainActivity extends Activity {
                 try(InputStream in=conn.getInputStream()){
                     response=new String(in.readNBytes(4096),StandardCharsets.UTF_8);
                 }
-                String id=new JSONObject(response).getString("jobId");
+                JSONObject assignment=new JSONObject(response);
+                String id=assignment.getString("jobId");
+                JSONObject assignedAction=assignment.optJSONObject("action");
                 if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
                     throw new IllegalStateException("Invalid job");
                 runOnUiThread(()->{
@@ -471,6 +474,35 @@ public class MainActivity extends Activity {
                     }
                     taskId.setText(id);
                     jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");
+                    if(startTest && assignedAction!=null){
+                        String kind=assignedAction.optString("kind","");
+                        String target=assignedAction.optString("target","");
+                        if(!"OPEN_URL".equals(kind) || target.length()>600 || !target.startsWith("https://")){
+                            jobFetchStatus.setText("Aksi DEV tidak didukung.");
+                            return;
+                        }
+                        Uri uri=Uri.parse(target);
+                        if(!"https".equals(uri.getScheme()) || uri.getHost()==null ||
+                                uri.getUserInfo()!=null || uri.getPort()!=-1 ||
+                                uri.getHost().endsWith(".local") || uri.getHost().endsWith(".internal")){
+                            jobFetchStatus.setText("URL DEV ditolak.");
+                            return;
+                        }
+                        if (!getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
+                                .putString("last_launched_job",id).commit()) return;
+                        try {
+                            Intent intent=new Intent(Intent.ACTION_VIEW,uri);
+                            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                            startActivity(intent);
+                            jobFetchStatus.setText("Browser diluncurkan untuk "+id+"; halaman belum diverifikasi.");
+                            reportDispatchedAction(id,kind,target);
+                        } catch(Exception error) {
+                            getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
+                                    .remove("last_launched_job").apply();
+                            jobFetchStatus.setText("Gagal membuka browser DEV.");
+                        }
+                        return;
+                    }
                     if(startTest){
                         if (!getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
                                 .putString("last_launched_job", id).commit()) return;
@@ -489,6 +521,58 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> fetchInFlight = false);
             }
         }).start();
+    }
+
+    private void reportDispatchedAction(String id,String kind,String target) {
+        new Thread(() -> {
+            try {
+                String paired=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE)
+                        .getString("credential","");
+                JSONObject request=new JSONObject();
+                request.put("jobId",id);
+                JSONObject auth=postAuthorized(DEV_TOKEN_URL,paired,request);
+                JSONObject body=new JSONObject();
+                body.put("protocol","openclaw-chat-bridge-dev-v1");
+                body.put("jobId",id);
+                body.put("eventId","android-result:"+id);
+                body.put("resultSummary","Android dispatched browser intent; page rendering not verified.");
+                body.put("source","device-intent-dispatched");
+                body.put("verifiedByAiCore",false);
+                body.put("deviceOutcome","ANDROID_INTENT_DISPATCHED");
+                JSONObject action=new JSONObject();
+                action.put("kind",kind);
+                action.put("target",target);
+                body.put("deviceAction",action);
+                JSONObject receipt=postAuthorized(DEV_INTAKE_URL,auth.getString("token"),body);
+                runOnUiThread(() -> jobFetchStatus.setText(receipt.optBoolean("accepted",false)
+                        ? "Intent browser diterima intake DEV; tunggu callback dan ACK."
+                        : "Intent dikirim, tetapi intake belum menerima laporan."));
+            }catch(Exception error){
+                runOnUiThread(() -> jobFetchStatus.setText(
+                        "Intent browser dikirim, laporan DEV gagal. Jangan ulangi job."));
+            }
+        },"android-dev-browser-receipt").start();
+    }
+
+    private JSONObject postAuthorized(String endpoint,String bearer,JSONObject payload) throws Exception {
+        HttpURLConnection conn=(HttpURLConnection)new URL(endpoint).openConnection();
+        try {
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(12000);
+            conn.setInstanceFollowRedirects(false);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type","application/json");
+            conn.setRequestProperty("Authorization","Bearer "+bearer);
+            try(OutputStream out=conn.getOutputStream()){
+                out.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            int code=conn.getResponseCode();
+            if(code!=200 && code!=202)throw new IllegalStateException("HTTP "+code);
+            try(InputStream in=conn.getInputStream()){
+                return new JSONObject(new String(in.readNBytes(4096),StandardCharsets.UTF_8));
+            }
+        }finally{conn.disconnect();}
     }
 
     private void beginPairing() {
