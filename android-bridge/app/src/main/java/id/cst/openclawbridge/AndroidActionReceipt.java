@@ -22,8 +22,11 @@ public final class AndroidActionReceipt {
     public static final String GCP_COMPUTE = "https://console.cloud.google.com/compute/instances";
     public static boolean supportedUrl(String url) {
         try {
-            if (url == null || url.length() > 600 || url.matches("(?s).*\\\\s.*") || url.indexOf('\\\\')>=0)
-                return false;
+            if (url == null || url.length() > 600) return false;
+            for (int i=0;i<url.length();i++) {
+                char c=url.charAt(i);
+                if (Character.isWhitespace(c) || c=='\\' || c<32 || c==127) return false;
+            }
             android.net.Uri uri=android.net.Uri.parse(url);
             String host=uri.getHost();
             if (!"https".equals(uri.getScheme()) || host==null ||
@@ -32,7 +35,7 @@ public final class AndroidActionReceipt {
             if (host.equals("localhost") || host.endsWith(".localhost") ||
                 host.endsWith(".local") || host.endsWith(".internal") ||
                 host.endsWith(".test") || !host.contains(".") ||
-                host.startsWith("[") || host.matches("(?:[0-9]{1,3}\\\\.){3}[0-9]{1,3}")) return false;
+                host.startsWith("[") || host.matches("[0-9.]+")) return false;
             return true;
         } catch(Exception e) { return false; }
     }
