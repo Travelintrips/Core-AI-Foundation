@@ -61,6 +61,9 @@ public class MainActivity extends Activity {
     private EditText deviceCredential;
     private TextView deliveryStatus;
     private TextView jobFetchStatus;
+    private TextView actionReceiptStatus;
+    private volatile boolean actionReceiptInFlight = false;
+    private static final String ACTION_PREFS = "bridge-device-actions-dev";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -85,6 +88,13 @@ public class MainActivity extends Activity {
         jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
         jobFetchStatus.setTextSize(16);
         root.addView(jobFetchStatus);
+        Button confirmGithub = new Button(this);
+        confirmGithub.setText("KONFIRMASI GITHUB SUDAH TERBUKA DI HP (DEV)");
+        confirmGithub.setOnClickListener(v -> confirmGithubVisible());
+        root.addView(confirmGithub);
+        actionReceiptStatus = new TextView(this);
+        actionReceiptStatus.setText("Setelah GitHub terlihat di browser HP, kembali ke Bridge dan konfirmasi. Ini bukti pengguna, bukan pemeriksaan layar otomatis.");
+        root.addView(actionReceiptStatus);
         Button oneTapTest = new Button(this);
         oneTapTest.setText("UJI CHATGPT OTOMATIS DEV (SATU KETUKAN)");
         oneTapTest.setOnClickListener(v -> fetchJobForDevice(true));
@@ -474,8 +484,15 @@ public class MainActivity extends Activity {
                     taskId.setText(id);
                     jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");
                     if (action != null) {
-                        if (getSharedPreferences("bridge-device-actions-dev", MODE_PRIVATE).getString("last_action_job", "").equals(id)) {
-                            jobFetchStatus.setText("Aksi job ini telah ditawarkan sekali; tidak diulang.");
+                        if (getSharedPreferences(ACTION_PREFS, MODE_PRIVATE).getString("last_action_job", "").equals(id)) {
+                            // APK upgrades preserve pairing and one-shot history. For a
+                            // previously launched GitHub job, let the person attest
+                            // that it was actually visible, without opening it twice.
+                            if ("OPEN_URL".equals(action.optString("kind")) &&
+                                AndroidActionReceipt.GITHUB.equals(action.optString("target"))) {
+                                rememberGithubAction(id);
+                            }
+                            jobFetchStatus.setText("Aksi job ini telah ditawarkan sekali; tidak dibuka ulang.");
                             return;
                         }
                         presentDeviceAction(id, action);
@@ -557,12 +574,80 @@ public class MainActivity extends Activity {
                       if (launch == null) {jobFetchStatus.setText("Aplikasi tidak terpasang: "+taskTarget); return;}
                   }
                   startActivity(launch);
+                  if ("OPEN_URL".equals(taskKind) && AndroidActionReceipt.GITHUB.equals(taskTarget)) {
+                      rememberGithubAction(id);
+                  }
                   jobFetchStatus.setText("Job "+id+": intent membuka "+taskKind+
-                     " dikirim. Ini bukan bukti halaman/aplikasi terbuka atau ACK.");
+                     " dikirim. Kembali ke Bridge dan konfirmasi hanya setelah GitHub terlihat di HP.");
               } catch (Exception ex) {
                   jobFetchStatus.setText("Job "+id+": Android gagal membuka target (belum ACK).");
               }
           }).show();
+    }
+
+    private void rememberGithubAction(String id) {
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS, MODE_PRIVATE);
+        if (id.equals(prefs.getString("confirmed_job",""))) {
+            actionReceiptStatus.setText("Konfirmasi untuk job "+id+" sudah diterima intake DEV. Menunggu verifikasi callback/ACK.");
+            return;
+        }
+        if (!id.equals(prefs.getString("pending_job",""))) {
+            boolean saved=prefs.edit().putString("pending_job",id)
+                .putString("pending_event",UUID.randomUUID().toString()).commit();
+            if (!saved) {
+                actionReceiptStatus.setText("Gagal menyimpan pending job pada perangkat.");
+                return;
+            }
+        }
+        actionReceiptStatus.setText("Job "+id+": Jika GitHub SUDAH terlihat pada Z Fold4, tekan KONFIRMASI GITHUB di atas.");
+    }
+
+    private void confirmGithubVisible() {
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS, MODE_PRIVATE);
+        String id=prefs.getString("pending_job","");
+        String event=prefs.getString("pending_event","");
+        if (id.isEmpty() || event.isEmpty()) {
+            actionReceiptStatus.setText("Tidak ada job GitHub yang menunggu konfirmasi. Ambil job DEV dahulu.");
+            return;
+        }
+        if (actionReceiptInFlight) return;
+        new AlertDialog.Builder(this)
+          .setTitle("Konfirmasi GitHub pada HP")
+          .setMessage("Apakah halaman GitHub benar-benar SUDAH terlihat pada Z Fold4? Jawab Ya hanya setelah melihatnya di browser HP. Tidak boleh mengaku berhasil jika baru muncul pemilih browser.")
+          .setNegativeButton("Belum", (dialog,which) ->
+              actionReceiptStatus.setText("Belum dikonfirmasi. Buka GitHub dahulu, lalu kembali ke Bridge."))
+          .setPositiveButton("Ya, GitHub terlihat", (dialog,which) ->
+              submitGithubConfirmation(id,event))
+          .show();
+    }
+
+    private void submitGithubConfirmation(String id,String event) {
+        if (actionReceiptInFlight) return;
+        String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
+        if (credential.length()<32) {
+            actionReceiptStatus.setText("Pairing DEV hilang; tidak dapat mengirim konfirmasi.");
+            return;
+        }
+        actionReceiptInFlight=true;
+        actionReceiptStatus.setText("Mengirim konfirmasi pengguna ke intake DEV; bukan ACK akhir...");
+        new Thread(()->{
+            try {
+                String receipt=AndroidActionReceipt.submitUserConfirmedGithub(id,event,credential);
+                boolean saved=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit()
+                    .putString("confirmed_job",id).remove("pending_job").remove("pending_event").commit();
+                runOnUiThread(()->actionReceiptStatus.setText(
+                    saved ? "Intake DEV menerima konfirmasi pengguna. Receipt: "+receipt+
+                      ". Status RECEIVED_UNVERIFIED; menunggu server memverifikasi callback/ACK." :
+                      "Intake menerima hasil, tetapi status lokal belum tersimpan; jangan buat job baru."));
+            } catch (Exception ex) {
+                final String cause=ex instanceof IllegalStateException ?
+                  ex.getMessage() : ex instanceof SecurityException ? "otorisasi" : "koneksi";
+                runOnUiThread(()->actionReceiptStatus.setText(
+                    "Gagal mengirim konfirmasi DEV ("+cause+"). Coba lagi dengan event yang sama; jangan membuat job baru."));
+            } finally {
+                runOnUiThread(()->actionReceiptInFlight=false);
+            }
+        },"android-dev-action-receipt").start();
     }
 
     private void beginPairing() {
