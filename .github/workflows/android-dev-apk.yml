@@ -31,7 +31,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - name: Verify DEV action and pairing policy
-        run: node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs
+        run: node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs android-bridge/dev-receiver/device-action-receipt.test.mjs
       - name: Restore persistent DEV signing identity
         shell: bash
         env:
@@ -67,8 +67,8 @@ jobs:
           apk="android-bridge/app/build/outputs/apk/debug/app-debug.apk"
           package_line="$("${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep -m1 '^package: ')"
           if [[ "$package_line" != *"name='id.cst.openclawbridge.autosend'"* ||
-                "$package_line" != *"versionCode='18'"* ||
-                "$package_line" != *"versionName='0.10.1-dev-stable-signing'"* ]]; then
+                "$package_line" != *"versionCode='19'"* ||
+                "$package_line" != *"versionName='0.11.0-dev-action-receipt'"* ]]; then
             echo "::error::DEV APK package ID or version does not match the approved release."
             exit 1
           fi
