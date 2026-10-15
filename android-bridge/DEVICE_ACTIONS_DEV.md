@@ -1,70 +1,78 @@
-# Z Fold4 restricted device actions (DEV only)
+# Z Fold4 DEV: preauthorized phone browser commands
 
-## Direct Chrome on Z Fold4, no browser picker (v0.11.1)
+## Supported destinations
 
-For a DEV `OPEN_URL` job, the Android APK calls
-`Intent.ACTION_VIEW` with `setPackage("com.android.chrome")`. This keeps
-the action on the Z Fold4 and targets Chrome directly. It does not use the
-generic browser chooser or fall back to a DELL/PC worker. Chrome must be
-installed and enabled; otherwise the app shows a clear error instead of a
-chooser. The user still approves the job's foreground launch.
+The Android DEV bridge supports the following exact HTTPS commands, dispatched
+only to a paired Z Fold4 (never to DELL, another PC, or PROD):
 
-If the old APK already displayed Android's browser picker for an assigned
-GitHub job, **do not create another job**. Update the installed DEV APK in
-place using the stable signer, open the Bridge app, and tap **BUKA GITHUB
-LANGSUNG DI CHROME (JOB DEV)**. This button only uses the job ID already
-offered on that phone; it never creates a fresh job and does not produce
-a callback automatically. Once GitHub visibly loads on the HP, return to
-the Bridge app and tap **KONFIRMASI GITHUB SUDAH TERBUKA DI HP (DEV)**.
+| Key | Site / location | Exact Android URL |
+| --- | --- | --- |
+| `github` | GitHub | `https://github.com/` |
+| `hostinger` | Hostinger hPanel | `https://hpanel.hostinger.com/` |
+| `hostinger-vps` | Hostinger VPS section | `https://hpanel.hostinger.com/vps` |
+| `gcp` | Google Cloud Console | `https://console.cloud.google.com/` |
+| `gcp-compute` | Compute Engine VM instances | `https://console.cloud.google.com/compute/instances` |
 
-Confirmation remains user-attested. E2E PASS still requires a DEV database
-row in `COMPLETED`, verified callback, and exactly one ACK; an Android
-intent being launched or GitHub appearing in Chrome is not that proof.
+No arbitrary site, HTTP, embedded credentials, LAN address, nonstandard ports,
+shell/ADB commands, cloud API changes, form submissions, or arbitrary UI taps.
 
+## Preauthorization and automatic receipt (APK 0.12.0)
 
-## Correct route for opening GitHub on the Z Fold4
+An administrator- or separately authenticated MCP-created DEV job is the prior
+authorization for a single exact allowlisted URL. Once the user opens the Bridge
+app, it polls for an assigned job every 20 seconds **only while in the
+foreground**. A matching job automatically launches Chrome directly with
+`Intent.ACTION_VIEW` and `setPackage("com.android.chrome")`; no browser picker
+and **no second confirmation dialog**. Site launch is not a login, cloud
+mutation, deploy or infrastructure action. The person may disable foreground
+auto pickup in the app.
 
-**Do not use the generic OpenClaw/PC browser command:** that opens GitHub on the
-selected OpenClaw computer, including DELL. It is not a phone action.
+The APK then submits a job-scoped, paired-device-authenticated receipt with
+`source=device-intent-dispatched` and
+`deviceOutcome=ANDROID_INTENT_DISPATCHED`. The server verifies the device,
+active grant, exact immutable action and short-lived token. The existing
+DEV consumer independently validates the callback and sends exactly one ACK.
+The receipt says only that Android successfully issued a Chrome launch intent;
+it **does not prove** page rendering, successful login or actual menu
+interaction. The final authoritative status comes from the DEV database.
+A failed receipt is retried with the **same event ID** when Bridge resumes.
 
-Use **only** an authorized Android DEV entry point:
+An older explicit `USER_CONFIRMED_VISIBLE` path is retained for previously
+in-progress jobs. Do not send a second manual event for an automatically
+reported job.
 
-- Admin UI: `https://dev-ai-task.cstlogistic.co.id/android-admin/` (requires authenticated admin). Select **Buka GitHub di HP Z Fold4**.
-- Authenticated Android DEV MCP: tool `open_github_on_zfold4_dev` with empty arguments, if that separate MCP connector has been enrolled.
+## Authorized job entry points
 
-Both create a DEV job with `source=OPENCLAW`,
-`source_session_id=android-dev:<most-recently-paired-active-Z-Fold4>`,
-title `Z Fold4 DEV OPEN_URL GitHub`, and a matching one-hour scoped
-`OPEN_URL https://github.com/` action. The DEV dispatcher **refuses to
-grant** that title when the action is absent, expired, or targets any other
-device. There is no PC fallback. Existing generic DEV test jobs remain
-separate.
+- Basic-auth-protected DEV admin UI at
+  `https://dev-ai-task.cstlogistic.co.id/android-admin/`.
+- Separately connected authenticated Android DEV MCP with tools
+  `open_github_on_zfold4_dev`, `open_hostinger_on_zfold4_dev`,
+  `open_hostinger_vps_on_zfold4_dev`, `open_gcp_on_zfold4_dev`,
+  `open_gcp_compute_on_zfold4_dev`, and DEV-only status/event readers.
 
-On the Z Fold4, open the Bridge app, press **AMBIL JOB DEV OTOMATIS**,
-and approve **Jalankan** on the Android confirmation dialog. Do not press
-the separate automatic ChatGPT test button. The app opens GitHub via
-an Android foreground intent; its local status explicitly does not claim
-successful browser rendering, callback, or ACK.
+The connected ChatGPT skill is verification only and by itself does not
+authorize direct job creation. Do not bypass authentication or extract service
+tokens to simulate an MCP connection. Real ChatGPT-initiated dispatch requires
+a separately authorized connected MCP action tool.
 
-A generic OpenClaw chat command still may dispatch to a PC if sent through
-the **generic desktop route**. The Android DEV entry point is required until
-the calling app explicitly selects the phone-targeted tool. Do not infer
-Z Fold4 execution from GitHub appearing on DELL.
+## Navigation and safety
 
+The Hostinger VPS and GCP Compute pages are opened through exact approved
+URLs, which often avoids the need for in-page clicks. A text-only guide
+explains manual menus where login is required. This DEV bridge **does not yet
+safely automate arbitrary Chrome UI clicks**: it never accesses credentials,
+accepts permission prompts, changes billing/IAM, deploys, deletes resources,
+or starts/stops VMs. A distinct auditable, allowlisted operation must be
+implemented and tested before such automation can be enabled.
 
-Run this only from an authorized VPS admin shell after creating an explicitly assigned Android DEV job.
+## Validation and environment isolation
 
-```sh
-node android-bridge/dev-receiver/action-admin.mjs <job-uuid> <active-zfold4-device-id> OPEN_URL https://github.com/Travelintrips/Core-AI-Foundation
-node android-bridge/dev-receiver/action-admin.mjs <job-uuid> <active-zfold4-device-id> OPEN_APP com.github.android
-node android-bridge/dev-receiver/action-admin.mjs <job-uuid> <active-zfold4-device-id> DEVICE_STATUS
-```
+Run:
+`node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/device-action-receipt.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs android-bridge/dev-receiver/android-direct-browser.test.mjs`.
 
-The device identity must match the job's existing grant and be active in the DEV pairing registry.
-The broker returns a scoped action on `/v1/android/jobs/next` only for a valid matching device, job, and expiry.
-The Android app validates the action again, shows a mandatory dialog on the handset and offers each job action only once.
-Supported commands are `OPEN_URL` (HTTPS hosts github.com, www.github.com, dev-ai-task.cstlogistic.co.id only), `OPEN_APP` (GitHub/ChatGPT/Chrome), and `DEVICE_STATUS` (local Bridge/network availability, no sensitive identifiers). No arbitrary shell, ADB, taps, clipboard reads, background launch, or PROD access.
-
-**Important:** Opening an Android intent is not independently verified app navigation. These actions do not auto-create job results or ACK. A job stays pending until a separate trusted proof workflow is completed. Direct control from ChatGPT also requires a separately connected authenticated MCP action tool; existing verification-only skill is insufficient.
-
-Verification: `node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs` and Android DEV APK workflow. Actual Z Fold4 verification requires phone-installed APK, accepted dialog, screenshot/physical observer, authoritative callback and exactly one ACK.
+CI must verify versionCode 21, the stable DEV signer fingerprint, and Android
+APK compilation. The server-side changes deploy **only to DEV** and must
+preserve active pairing IDs. A physical handset test is necessary to claim the
+URL actually opened. A result is complete only when the DEV database reports
+`COMPLETED`, verified callback and exactly one `CALLBACK_ACK`. A synthetic
+receipt or an Android intent by itself is not a physical page-rendering PASS.
