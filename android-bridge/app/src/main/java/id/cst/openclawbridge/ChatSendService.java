@@ -15,6 +15,8 @@ public final class ChatSendService extends AccessibilityService {
     static final String REPLY_MARKER = "reply_marker";
     static final String REPLY_STARTED = "reply_started";
     static final String CAPTURED_REPLY = "captured_reply";
+    static final String AUTO_SENT_AT = "auto_sent_at";
+    static final String AUTO_CAPTURED_AT = "auto_captured_at";
     private static final long SEND_TIMEOUT_MS = 45000;
     private static final long REPLY_TIMEOUT_MS = 180000;
     private static final String TARGET = "com.openai.chatgpt";
@@ -88,6 +90,8 @@ public final class ChatSendService extends AccessibilityService {
                 .putString(STATUS, "Menekan Kirim satu kali.").commit();
         boolean clicked = buttons.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK);
         if (clicked) {
+            // ACTION_CLICK returned success; this is not proof the server received a message.
+            prefs.edit().putLong(AUTO_SENT_AT, System.currentTimeMillis()).commit();
             if (!prefs.getString(REPLY_MARKER, "").isEmpty()) {
                 prefs.edit().putLong(REPLY_STARTED, System.currentTimeMillis()).apply();
                 status("Kirim dipicu; menunggu jawaban bertanda dari ChatGPT.");
@@ -128,6 +132,7 @@ public final class ChatSendService extends AccessibilityService {
         }
         // A reply marker is consumed once. No automatic network upload or callback.
         prefs.edit().putString(CAPTURED_REPLY, answer)
+                .putLong(AUTO_CAPTURED_AT, System.currentTimeMillis())
                 .remove(REPLY_MARKER).remove(REPLY_STARTED)
                 .putString(STATUS, "Jawaban ditemukan. Kembali ke Bridge untuk melihat hasil.")
                 .commit();
