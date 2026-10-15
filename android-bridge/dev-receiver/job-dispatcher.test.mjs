@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {eligible,planGrants} from './job-dispatcher.mjs';
+import {DEV_PHONE_SITES} from './phone-site-catalog.mjs';
 const a='123e4567-e89b-42d3-a456-426614174000';
 const b='123e4567-e89b-42d3-a456-426614174001';
 const device='zfold4-paired-dev-03';
