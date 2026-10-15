@@ -36,6 +36,7 @@ import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
 
 const execFileAsync = promisify(execFile);
 
+// TODO: When no deterministic AI proposal matches are found, log a warning and exit without throwing an error.
 const MAX_RECOVERY_OPERATIONS = 8;
 const MAX_RECOVERY_ATTEMPTS = 2;
 const MAX_PATCH_BYTES = 160_000;
