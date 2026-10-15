@@ -3,7 +3,10 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
+import {saveDeviceAction} from './device-actions.mjs';
 const host='dev-ai-task.cstlogistic.co.id';
+const actionDirectory='/var/lib/openclaw-android-bridge-dev';
+const githubTarget='https://github.com/';
 // Resolve the latest active, locally paired Z Fold4 each time, never a stale hardcoded ID.
 function target(){
  const registry=JSON.parse(fs.readFileSync('/var/lib/openclaw-android-bridge-dev/device-registry.json','utf8'));
@@ -31,28 +34,56 @@ function reply(res,status,body,type='application/json'){
 const page=`<!doctype html><html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI Task DEV — Job Z Fold4</title>
 <style>body{font:16px system-ui;margin:2rem auto;max-width:560px;padding:0 1rem;line-height:1.6}button{font:inherit;padding:12px 22px;cursor:pointer}code{overflow-wrap:anywhere}small{color:#666}.error{color:#b00020}</style>
 <h2>AI Task DEV — Job Z Fold4</h2><p>Target terverifikasi: <code>__LATEST_ZFOLD4_TARGET__</code></p><p>Ini hanya membuat job uji DEV untuk perangkat tersebut. PROD tidak dipakai.</p>
-<button id="create" type="button">Buat job Z Fold4</button><p id="status" role="status">Belum ada job baru.</p>
-<small>Setelah job dibuat, buka aplikasi Z Fold4 dan tekan AMBIL JOB DEV OTOMATIS.</small>
-<script>document.getElementById('create').onclick=async()=>{const b=document.getElementById('create'),s=document.getElementById('status');b.disabled=true;s.textContent='Mendaftarkan job DEV...';try{const r=await fetch('/android-admin/jobs',{method:'POST',headers:{'content-type':'application/json','x-dev-csrf':${JSON.stringify(session)}},body:'{}'});const j=await r.json();s.textContent=r.ok?'Job berhasil dibuat: '+j.jobId+' ('+j.status+')':'Gagal HTTP '+r.status+' '+(j.error||'');}catch(e){s.textContent='Koneksi gagal';}finally{b.disabled=false}}</script></html>`;
+<button id="create" type="button">Buat job uji ChatGPT</button>
+<button id="github" type="button">Buka GitHub di HP Z Fold4</button>
+<p id="status" role="status">Belum ada job baru.</p>
+<small>Perintah GitHub hanya ditujukan ke Z Fold4 yang ter-pairing; tidak ada fallback ke PC DELL. Setelah job dibuat, buka aplikasi Android Bridge di Z Fold4 dan tekan AMBIL JOB DEV OTOMATIS, lalu konfirmasi Jalankan di HP.</small>
+<script>
+async function createDevJob(button,route) {
+ const b=document.getElementById(button),s=document.getElementById('status');
+ b.disabled=true;
+ s.textContent='Mengirim job DEV khusus Z Fold4...';
+ try{
+  const r=await fetch(route,{method:'POST',headers:{'content-type':'application/json','x-dev-csrf':${JSON.stringify(session)}},body:'{}'});
+  const j=await r.json();
+  s.textContent=r.ok?('Job '+j.jobId+' ('+j.status+'), target '+(j.target||'Z Fold4')+
+   (j.action?' — OPEN_URL GitHub, konfirmasi di HP':''))
+   :('Gagal HTTP '+r.status+': '+(j.error||'tidak diketahui'));
+ }catch(e){s.textContent='Koneksi DEV gagal; tidak ada fallback ke PC';}
+ finally{b.disabled=false}
+}
+document.getElementById('create').onclick=()=>createDevJob('create','/android-admin/jobs');
+document.getElementById('github').onclick=()=>createDevJob('github','/android-admin/open-github');
+</script></html>`;
 http.createServer((req,res)=>{
  if(req.method==='GET'&&req.url==='/android-admin/'){
   try{return reply(res,200,page.replace('__LATEST_ZFOLD4_TARGET__',target()),'text/html; charset=utf-8')}
   catch{return reply(res,503,{error:'no_active_zfold4_pairing'})}
  }
- if(req.method!=='POST'||req.url!=='/android-admin/jobs')return reply(res,404,{error:'not_found'});
+ if(req.method!=='POST'||!['/android-admin/jobs','/android-admin/open-github'].includes(req.url))return reply(res,404,{error:'not_found'});
  if(req.headers.origin!=='https://'+host||req.headers['x-dev-csrf']!==session||req.headers['content-type']?.split(';')[0]!=='application/json')
    return reply(res,403,{error:'request_not_allowed'});
  let size=0;req.on('data',b=>{size+=b.length;if(size>512)req.destroy()});
  req.on('end',async()=>{
   try{
+   const androidTarget=target(); // Resolve once, never redirect to a PC worker.
+   const openGitHub=req.url==='/android-admin/open-github';
    const id=crypto.randomUUID(), key='zfold4-dev-admin:'+id;
    const response=await fetch('http://127.0.0.1:18183/api/bridge/jobs',{method:'POST',
     headers:{'authorization':'Bearer '+token(),'content-type':'application/json'},
-    body:JSON.stringify({source:'OPENCLAW',externalId:key,idempotencyKey:key,title:'Z Fold4 DEV admin E2E check',sessionId:target()}),
+    body:JSON.stringify({source:'OPENCLAW',externalId:key,idempotencyKey:key,
+      title:openGitHub?'Z Fold4 DEV OPEN_URL GitHub':'Z Fold4 DEV admin E2E check',
+      sessionId:androidTarget}),
     signal:AbortSignal.timeout(12000)});
    const json=await response.json();
-   if(!response.ok||!json.accepted||!json.task?.id)return reply(res,502,{error:'dev_job_creation_failed'});
-   return reply(res,201,{jobId:json.task.id,status:json.task.status});
+   if(response.status!==201||!json.accepted||!json.task?.id)return reply(res,502,{error:'dev_job_creation_failed'});
+   if(openGitHub){
+    // The DEV dispatcher refuses this job until this allowlisted action exists.
+    saveDeviceAction(actionDirectory,json.task.id,androidTarget.slice('android-dev:'.length),
+      {kind:'OPEN_URL',target:githubTarget});
+   }
+   return reply(res,201,{jobId:json.task.id,status:json.task.status,
+     target:androidTarget,...(openGitHub?{action:'OPEN_URL'}:{})});
   }catch{return reply(res,503,{error:'dev_backend_unavailable'})}
  });
 }).listen(18796,'127.0.0.1',()=>console.log('DEV Android admin web ready on localhost'));
