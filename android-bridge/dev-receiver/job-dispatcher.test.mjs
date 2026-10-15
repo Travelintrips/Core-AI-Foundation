@@ -62,3 +62,13 @@ test('Hostinger/GCP dashboard and read-only section routing requires exact scope
  assert.deepEqual(eligible([custom],registry,now,validCustom),[{id:b,deviceId:device}]);
  assert.deepEqual(eligible([custom],registry,now,{[b]:{...validCustom[b],deviceId:'another'}}),[]);
 });
+
+test('paired OPEN_APP WhatsApp job requires exact device-scoped action, never dispatched to another device',()=>{
+ const now=1000,deviceId=device,registry={[deviceId]:{active:true},another:{active:true}};
+ const row={...assigned(a,'android-dev:'+deviceId),title:'Z Fold4 DEV OPEN_APP Custom'};
+ assert.deepEqual(eligible([row],registry,now),[]);
+ const permitted={[a]:{jobId:a,deviceId,expiresAt:now+5000,action:{kind:'OPEN_APP',target:'com.whatsapp'}}};
+ assert.deepEqual(eligible([row],registry,now,permitted),[{id:a,deviceId}]);
+ assert.deepEqual(eligible([row],registry,now,{[a]:{...permitted[a],deviceId:'another'}}),[]);
+ assert.deepEqual(eligible([row],registry,now,{[a]:{...permitted[a],action:{kind:'OPEN_URL',target:'https://example.org/'}}}),[]);
+});
