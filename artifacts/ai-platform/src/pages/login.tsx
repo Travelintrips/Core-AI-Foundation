@@ -12,7 +12,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [devSubmitting, setDevSubmitting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
 
   if (user && !user.mustChangePassword) {
@@ -62,26 +63,30 @@ export default function Login() {
     }
   }
 
-  async function handleDevLogin() {
-    setDevSubmitting(true);
+  async function handlePasswordLogin() {
+    if (!email.trim() || !password) {
+      setMessage("Masukkan email dan password.");
+      return;
+    }
+    setPasswordSubmitting(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/internal/auth/dev-login", {
+      const res = await fetch("/api/internal/auth/login", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage(data.error ?? "Login lokal gagal.");
+        setMessage(data.error ?? "Login gagal.");
         return;
       }
       navigate("/");
     } catch {
-      setMessage("Login lokal gagal. Pastikan backend lokal aktif.");
+      setMessage("Tidak dapat menghubungi layanan login.");
     } finally {
-      setDevSubmitting(false);
+      setPasswordSubmitting(false);
     }
   }
 
@@ -100,31 +105,30 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)} data-testid="input-email" />
             </div>
             {message && <p className="text-sm text-muted-foreground">{message}</p>}
-            <Button type="submit" className="w-full" disabled={submitting || devSubmitting || resetSubmitting} data-testid="button-login">
+            <Button type="submit" className="w-full" disabled={submitting || passwordSubmitting || resetSubmitting} data-testid="button-login">
               {submitting ? "Mengirim..." : "Kirim link login"}
             </Button>
             <Button
               type="button"
               variant="outline"
               className="w-full"
-              disabled={submitting || devSubmitting || resetSubmitting}
+              disabled={submitting || passwordSubmitting || resetSubmitting}
               onClick={handleResetPassword}
               data-testid="button-reset-password"
             >
               {resetSubmitting ? "Mengirim..." : "Kirim ulang link reset password"}
             </Button>
-            {import.meta.env.DEV && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                disabled={submitting || devSubmitting || !email.trim()}
-                onClick={handleDevLogin}
-                data-testid="button-dev-login"
-              >
-                {devSubmitting ? "Masuk lokal..." : "Login lokal (development)"}
-              </Button>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password (jika sudah memiliki akun)</Label>
+              <Input id="password" type="password" autoComplete="current-password"
+                value={password} onChange={(e) => setPassword(e.target.value)}
+                data-testid="input-password" />
+            </div>
+            <Button type="button" variant="outline" className="w-full"
+              disabled={submitting || passwordSubmitting || resetSubmitting || !email.trim() || !password}
+              onClick={handlePasswordLogin} data-testid="button-password-login">
+              {passwordSubmitting ? "Masuk..." : "Login dengan password"}
+            </Button>
             <p className="text-center text-xs text-muted-foreground">Link berlaku 10 menit. Password tidak diperlukan.</p>
           </form>
         </CardContent>
