@@ -48,7 +48,7 @@ const page=`<!doctype html><html lang="id"><meta charset="utf-8"><meta name="vie
 <button id="hostinger-vps" type="button">Buka menu VPS Hostinger di HP</button>
 <button id="gcp-compute" type="button">Buka Compute Engine GCP di HP</button>
 <p id="status" role="status">Belum ada job baru.</p>
-<small>Perintah GitHub, Hostinger, dan GCP ditujukan hanya ke Z Fold4 ter-pairing, tanpa fallback PC. Buka Android Bridge, tekan AMBIL JOB DEV OTOMATIS, setujui Jalankan di HP. Login dan klik menu dilakukan oleh pemilik HP. Jangan masukkan sandi ke ChatGPT. Tindakan perubahan atau penghapusan tidak otomatis.</small>
+<small>Perintah GitHub, Hostinger, dan GCP ditujukan hanya ke Z Fold4 ter-pairing, tanpa fallback PC. Buka Android Bridge di HP; job akan diambil dan membuka Chrome otomatis saat aplikasi di foreground (atau tekan AMBIL JOB DEV OTOMATIS). Tidak perlu konfirmasi kedua. Login tetap dilakukan pemilik HP. Jangan masukkan sandi ke ChatGPT. Tindakan perubahan atau penghapusan tidak otomatis.</small>
 <script>
 async function createDevJob(button,route) {
  const b=document.getElementById(button),s=document.getElementById('status');
@@ -60,7 +60,7 @@ async function createDevJob(button,route) {
   const j=await r.json();
   if(r.ok) {
    s.textContent='Job '+j.jobId+' ('+j.status+'), target '+(j.target||'Z Fold4')+
-    (j.action?' — OPEN_URL '+(j.site||'situs')+', konfirmasi di HP':'');
+    (j.action?' — OPEN_URL '+(j.site||'situs')+', otomatis saat Bridge foreground':'');
   }else if(j.jobId && j.error==='action_registration_failed') {
    blockRetry=true;
    s.textContent='Job '+j.jobId+' SUDAH dibuat, tetapi izin aksi gagal disimpan. Jangan buat job kedua. Hubungi admin DEV untuk melengkapi job ini.';
