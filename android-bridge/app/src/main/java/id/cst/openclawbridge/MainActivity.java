@@ -557,9 +557,7 @@ public class MainActivity extends Activity {
             } catch (Exception ex) { jobFetchStatus.setText("OPEN_URL ditolak oleh kebijakan DEV."); return; }
             description = "Situs DEV diizinkan: " + target;
         } else if ("OPEN_APP".equals(kind)) {
-            if (!target.matches("[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+") ||
-                target.startsWith("android.") || target.startsWith("com.android.settings") ||
-                target.startsWith("com.android.packageinstaller")) {
+            if (!AndroidActionReceipt.supportedApp(target)) {
                 jobFetchStatus.setText("OPEN_APP ditolak oleh kebijakan DEV."); return;
             }
             description = "Buka aplikasi " + target + " di HP?";
@@ -668,7 +666,7 @@ public class MainActivity extends Activity {
     // Recover a previously offered one-shot job after an APK update without
     // generating a second AI Task job or re-delivering an already accepted ACK.
     private void queueAutoDispatchReceipt(String jobId,String url) {
-        if (!AndroidActionReceipt.supportedUrl(url)) return;
+        if (!AndroidActionReceipt.supportedUrl(url) && !AndroidActionReceipt.supportedApp(url)) return;
         android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
         if (jobId.equals(prefs.getString("auto_dispatch_completed_job",""))) return;
         String previous=prefs.getString("auto_dispatch_job","");
@@ -692,7 +690,7 @@ public class MainActivity extends Activity {
         String event=prefs.getString("auto_dispatch_event","");
         if (!id.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
             !event.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
-            !AndroidActionReceipt.supportedUrl(url) || actionReceiptInFlight) return;
+            !(AndroidActionReceipt.supportedUrl(url) || AndroidActionReceipt.supportedApp(url)) || actionReceiptInFlight) return;
         String paired=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
         if(paired.length()<32) {
             actionReceiptStatus.setText("Receipt tertunda: pairing DEV tidak tersedia.");
@@ -702,7 +700,9 @@ public class MainActivity extends Activity {
         actionReceiptStatus.setText("Mengirim bukti Chrome intent ke AI Task DEV...");
         new Thread(()->{
             try {
-                String receipt=AndroidActionReceipt.submitDispatchedSite(id,event,paired,url);
+                String receipt=AndroidActionReceipt.supportedApp(url) ?
+                    AndroidActionReceipt.submitDispatchedApp(id,event,paired,url) :
+                    AndroidActionReceipt.submitDispatchedSite(id,event,paired,url);
                 boolean stored=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit()
                     .putString("auto_dispatch_completed_job",id)
                     .remove("auto_dispatch_job")
