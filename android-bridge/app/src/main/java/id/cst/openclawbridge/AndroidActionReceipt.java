@@ -21,8 +21,20 @@ public final class AndroidActionReceipt {
     public static final String GCP = "https://console.cloud.google.com/";
     public static final String GCP_COMPUTE = "https://console.cloud.google.com/compute/instances";
     public static boolean supportedUrl(String url) {
-        return GITHUB.equals(url) || HOSTINGER.equals(url) ||
-            HOSTINGER_VPS.equals(url) || GCP.equals(url) || GCP_COMPUTE.equals(url);
+        try {
+            if (url == null || url.length() > 600 || url.matches("(?s).*\\\\s.*") || url.indexOf('\\\\')>=0)
+                return false;
+            android.net.Uri uri=android.net.Uri.parse(url);
+            String host=uri.getHost();
+            if (!"https".equals(uri.getScheme()) || host==null ||
+                uri.getUserInfo()!=null || uri.getPort()!=-1) return false;
+            host=host.toLowerCase(java.util.Locale.ROOT);
+            if (host.equals("localhost") || host.endsWith(".localhost") ||
+                host.endsWith(".local") || host.endsWith(".internal") ||
+                host.endsWith(".test") || !host.contains(".") ||
+                host.startsWith("[") || host.matches("(?:[0-9]{1,3}\\\\.){3}[0-9]{1,3}")) return false;
+            return true;
+        } catch(Exception e) { return false; }
     }
     public static String labelForUrl(String url) {
         if (GITHUB.equals(url)) return "GitHub";
@@ -30,7 +42,7 @@ public final class AndroidActionReceipt {
         if (HOSTINGER_VPS.equals(url)) return "Hostinger VPS";
         if (GCP.equals(url)) return "Google Cloud Console";
         if (GCP_COMPUTE.equals(url)) return "GCP VM instances";
-        return "Situs tidak dikenal";
+        return "Situs HTTPS";
     }
     private AndroidActionReceipt() {}
 
