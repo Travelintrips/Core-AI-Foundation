@@ -4138,3 +4138,9 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
 });
 
 export default router;
+
+// Global error handler for ai-core-chat routes
+router.use((err, req, res, next) => {
+  logger.error({ err }, 'Unhandled error in ai-core-chat route');
+  res.status(500).json({ error: 'Internal Server Error' });
+});
