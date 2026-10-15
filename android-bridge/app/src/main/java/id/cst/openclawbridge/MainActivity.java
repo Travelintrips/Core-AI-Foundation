@@ -43,6 +43,17 @@ public class MainActivity extends Activity {
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
     private boolean devOneTapLaunch = false;
+    private boolean foreground = false;
+    private boolean fetchInFlight = false;
+    private boolean foregroundAutoEnabled = false;
+    private final android.os.Handler autoHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable autoPoll = new Runnable() {
+        @Override public void run() {
+            if (!foreground || !foregroundAutoEnabled) return;
+            if (!fetchInFlight) fetchJobForDevice(true);
+            autoHandler.postDelayed(this, 20000);
+        }
+    };
     private EditText jobToken;
     private EditText deviceCredential;
     private TextView deliveryStatus;
@@ -75,6 +86,15 @@ public class MainActivity extends Activity {
         oneTapTest.setText("UJI CHATGPT OTOMATIS DEV (SATU KETUKAN)");
         oneTapTest.setOnClickListener(v -> fetchJobForDevice(true));
         root.addView(oneTapTest);
+        CheckBox autoPolling = new CheckBox(this);
+        autoPolling.setText("AUTO JOB DEV saat Bridge terbuka (20 detik; boleh membuka ChatGPT)");
+        autoPolling.setChecked(false);
+        autoPolling.setOnCheckedChangeListener((button, checked) -> {
+            foregroundAutoEnabled = checked;
+            autoHandler.removeCallbacks(autoPoll);
+            if (checked && foreground) autoHandler.post(autoPoll);
+        });
+        root.addView(autoPolling);
         prompt = new EditText(this);
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
@@ -158,8 +178,17 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        foreground = true;
+        autoHandler.removeCallbacks(autoPoll);
+        if (foregroundAutoEnabled) autoHandler.post(autoPoll);
         if (autoSendStatus != null) showAutoSendStatus();
         loadCapturedReply();
+    }
+
+    @Override protected void onPause() {
+        foreground = false;
+        autoHandler.removeCallbacks(autoPoll);
+        super.onPause();
     }
 
     private void loadCapturedReply() {
@@ -396,6 +425,7 @@ public class MainActivity extends Activity {
     }
 
     private void fetchJobForDevice(boolean startTest) {
+        if (fetchInFlight) return;
         if (startTest && !accessibilityEnabled()) {
             jobFetchStatus.setText("Aktifkan Accessibility OpenClaw Auto Kirim (DEV) terlebih dahulu.");
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
@@ -403,6 +433,7 @@ public class MainActivity extends Activity {
         }
         String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
         if(credential.length()<32){jobFetchStatus.setText("Pairing perangkat tidak ditemukan di aplikasi. Periksa pairing DEV.");return;}
+        fetchInFlight = true;
         jobFetchStatus.setText("Memeriksa job DEV untuk perangkat ini...");
         new Thread(()->{
             HttpURLConnection conn=null;
@@ -430,9 +461,16 @@ public class MainActivity extends Activity {
                 if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
                     throw new IllegalStateException("Invalid job");
                 runOnUiThread(()->{
+                    if (startTest && id.equals(getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE)
+                            .getString("last_launched_job", ""))) {
+                        jobFetchStatus.setText("Job sama sudah dipicu; menunggu hasil, tanpa pengiriman ulang.");
+                        return;
+                    }
                     taskId.setText(id);
                     jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");
                     if(startTest){
+                        if (!getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
+                                .putString("last_launched_job", id).commit()) return;
                         prompt.setText("Jawab singkat: Pengujian otomatis ChatGPT DEV berhasil.");
                         autoSend.setChecked(true);
                         captureReply.setChecked(true);
@@ -443,7 +481,10 @@ public class MainActivity extends Activity {
                 });
             }catch(Exception ex){
                 runOnUiThread(()->jobFetchStatus.setText("Gagal mengambil job DEV ("+(ex instanceof IllegalStateException?ex.getMessage():"koneksi")+"). Periksa pairing dan jaringan."));
-            }finally{if(conn!=null)conn.disconnect();}
+            }finally{
+                if(conn!=null)conn.disconnect();
+                runOnUiThread(() -> fetchInFlight = false);
+            }
         }).start();
     }
 
