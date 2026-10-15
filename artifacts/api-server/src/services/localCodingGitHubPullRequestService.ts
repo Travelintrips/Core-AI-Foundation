@@ -2,7 +2,7 @@ import {
   GitHubPublisherError,
   parseGitHubRepository,
   type GitHubApiClient,
-} from "./localCodingGitHubPublisherService.js";
+} from "./localCodingGitHubPublisherService.ts";
 
 const MAX_PR_FILES = 100;
 const MAX_CHECK_RUNS = 100;
