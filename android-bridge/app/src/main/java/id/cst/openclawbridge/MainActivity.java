@@ -64,12 +64,16 @@ public class MainActivity extends Activity {
         root.addView(taskId);
         Button fetchAssignedJob = new Button(this);
         fetchAssignedJob.setText("AMBIL JOB DEV OTOMATIS");
-        fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice());
+        fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice(false));
         root.addView(fetchAssignedJob);
         jobFetchStatus = new TextView(this);
         jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
         jobFetchStatus.setTextSize(16);
         root.addView(jobFetchStatus);
+        Button oneTapTest = new Button(this);
+        oneTapTest.setText("UJI CHATGPT OTOMATIS DEV (SATU KETUKAN)");
+        oneTapTest.setOnClickListener(v -> fetchJobForDevice(true));
+        root.addView(oneTapTest);
         prompt = new EditText(this);
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
@@ -368,7 +372,12 @@ public class MainActivity extends Activity {
         }finally{http.disconnect();}
     }
 
-    private void fetchJobForDevice() {
+    private void fetchJobForDevice(boolean startTest) {
+        if (startTest && !accessibilityEnabled()) {
+            jobFetchStatus.setText("Aktifkan Accessibility OpenClaw Auto Kirim (DEV) terlebih dahulu.");
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            return;
+        }
         String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
         if(credential.length()<32){jobFetchStatus.setText("Pairing perangkat tidak ditemukan di aplikasi. Periksa pairing DEV.");return;}
         jobFetchStatus.setText("Memeriksa job DEV untuk perangkat ini...");
@@ -397,7 +406,17 @@ public class MainActivity extends Activity {
                 String id=new JSONObject(response).getString("jobId");
                 if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
                     throw new IllegalStateException("Invalid job");
-                runOnUiThread(()->{taskId.setText(id);jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");});
+                runOnUiThread(()->{
+                    taskId.setText(id);
+                    jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");
+                    if(startTest){
+                        prompt.setText("Jawab singkat: Pengujian otomatis ChatGPT DEV berhasil.");
+                        autoSend.setChecked(true);
+                        captureReply.setChecked(true);
+                        autoSubmit.setChecked(true);
+                        launchChatGPT(); // Explicit one-tap action; uploads only after captured reply returns to Bridge.
+                    }
+                });
             }catch(Exception ex){
                 runOnUiThread(()->jobFetchStatus.setText("Gagal mengambil job DEV ("+(ex instanceof IllegalStateException?ex.getMessage():"koneksi")+"). Periksa pairing dan jaringan."));
             }finally{if(conn!=null)conn.disconnect();}
