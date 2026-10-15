@@ -31,9 +31,9 @@ export function eligible(rows,registry,now=Date.now(),actions={}){
    // All phone browser jobs require a matching device-scoped immutable action,
    // including Hostinger/GCP. An unknown title is denied (never sent to PC).
    const site=siteForTitle(r.title);
-   if(!site)return false;
    const action=verifiedDeviceAction(actions[r.id],r.id,r.source_session_id.slice(12),now);
-   return action?.kind==='OPEN_URL'&&action.target===site.url;
+   if (r.title==='Z Fold4 DEV OPEN_URL Custom') return action?.kind==='OPEN_URL';
+   return !!site && action?.kind==='OPEN_URL'&&action.target===site.url;
  })
  .map(r=>({id:r.id,deviceId:r.source_session_id.slice(12)}));
 }
