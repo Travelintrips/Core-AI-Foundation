@@ -5,6 +5,8 @@ on:
     paths:
       - 'android-bridge/**'
       - '.github/workflows/android-dev-apk.yml'
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,10 +26,54 @@ jobs:
           gradle-version: '8.10.2'
       - name: Verify DEV action and pairing policy
         run: node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs
-      - name: Build DEV debug APK
+      - name: Restore stable DEV signing keystore (fail closed)
+        shell: bash
+        env:
+          ANDROID_DEV_SIGNING_KEYSTORE_B64: ${{ secrets.ANDROID_DEV_SIGNING_KEYSTORE_B64 }}
+          ANDROID_DEV_SIGNING_PASSWORD: ${{ secrets.ANDROID_DEV_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "$ANDROID_DEV_SIGNING_KEYSTORE_B64" || -z "$ANDROID_DEV_SIGNING_PASSWORD" ]]; then
+            echo "Missing protected DEV signing secrets; refusing to publish a disposable debug signature" >&2
+            exit 1
+          fi
+          printf '%s' "$ANDROID_DEV_SIGNING_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/android-dev-signing.p12"
+          chmod 600 "$RUNNER_TEMP/android-dev-signing.p12"
+          keytool -list -keystore "$RUNNER_TEMP/android-dev-signing.p12" \
+            -storetype PKCS12 -alias cst-android-dev \
+            -storepass:env ANDROID_DEV_SIGNING_PASSWORD >/dev/null
+      - name: Build DEV debug APK with stable signing
         working-directory: android-bridge
+        env:
+          ANDROID_DEV_SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/android-dev-signing.p12
+          ANDROID_DEV_SIGNING_PASSWORD: ${{ secrets.ANDROID_DEV_SIGNING_PASSWORD }}
         run: gradle --no-daemon :app:assembleDebug
+      - name: Verify stable certificate, APK integrity and update version
+        shell: bash
+        env:
+          ANDROID_DEV_SIGNING_PASSWORD: ${{ secrets.ANDROID_DEV_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          apk="android-bridge/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/dev-apk-certificates.txt"
+          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/dev-apk-certificates.txt" | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          expected=$(keytool -exportcert -rfc -keystore "$RUNNER_TEMP/android-dev-signing.p12" \
+            -storetype PKCS12 -alias cst-android-dev -storepass:env ANDROID_DEV_SIGNING_PASSWORD \
+            | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          if [[ -z "$actual" || "$actual" != "$expected" ]]; then
+            echo 'APK certificate does not match pinned DEV signing keystore' >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" \
+            | grep -q "name='id.cst.openclawbridge.autosend' versionCode='18'"
+          echo "Verified stable DEV signing SHA-256: $actual"
       - uses: actions/upload-artifact@v4
         with:
           name: openclaw-chat-bridge-dev-apk
           path: android-bridge/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Destroy runner signing keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/android-dev-signing.p12"
