@@ -10,6 +10,12 @@ test('strict allowlist blocks arbitrary websites, local network, credentials and
   'https://user:pass@github.com/', 'https://github.com:444/', 'javascript:alert(1)',
   'https://127.0.0.1/', 'https://github.com\\n.evil.com/'])
   assert.throws(()=>normalizeDeviceAction({kind:'OPEN_URL',target:url}), `URL must be rejected: ${JSON.stringify(url)}`);
+ assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:'https://hpanel.hostinger.com/'}),{kind:'OPEN_URL',target:'https://hpanel.hostinger.com/'});
+ assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:'https://console.cloud.google.com/compute/instances'}),{kind:'OPEN_URL',target:'https://console.cloud.google.com/compute/instances'});
+ for (const bad of ['https://hpanel.hostinger.com.evil.test/', 'https://console.cloud.google.com.attacker.test/',
+   'http://console.cloud.google.com/', 'https://name:pass@hpanel.hostinger.com/','https://hpanel.hostinger.com:8080/']) {
+  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_URL',target:bad}));
+ }
  assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:'https://github.com/Travelintrips/Core-AI-Foundation'}),
    {kind:'OPEN_URL',target:'https://github.com/Travelintrips/Core-AI-Foundation'});
  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_APP',target:'com.android.settings'}));
