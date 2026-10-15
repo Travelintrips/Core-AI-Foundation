@@ -18,6 +18,9 @@ test('public HTTPS websites need no domain allowlist but refuse local targets an
    'https://example.net/anything']) {
   assert.deepEqual(normalizeDeviceAction({kind:'OPEN_URL',target:url}),{kind:'OPEN_URL',target:url});
  }
+ assert.deepEqual(normalizeDeviceAction({kind:'OPEN_APP',target:'com.whatsapp'}),{kind:'OPEN_APP',target:'com.whatsapp'});
+ assert.deepEqual(normalizeDeviceAction({kind:'OPEN_APP',target:'org.telegram.messenger'}),{kind:'OPEN_APP',target:'org.telegram.messenger'});
+ assert.throws(()=>normalizeDeviceAction({kind:'OPEN_APP',target:'bad package'}));
  assert.throws(()=>normalizeDeviceAction({kind:'OPEN_APP',target:'com.android.settings'}));
  assert.throws(()=>normalizeDeviceAction({kind:'SHELL',target:'id'}));
  assert.deepEqual(normalizeDeviceAction({kind:'DEVICE_STATUS'}),{kind:'DEVICE_STATUS',target:''});
