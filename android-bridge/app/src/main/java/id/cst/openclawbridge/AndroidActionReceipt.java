@@ -16,6 +16,22 @@ public final class AndroidActionReceipt {
     private static final String TOKEN = "https://dev-ai-task.cstlogistic.co.id/v1/android/token";
     private static final String INTAKE = "https://dev-ai-task.cstlogistic.co.id/v1/android/result";
     public static final String GITHUB = "https://github.com/";
+    public static final String HOSTINGER = "https://hpanel.hostinger.com/";
+    public static final String HOSTINGER_VPS = "https://hpanel.hostinger.com/vps";
+    public static final String GCP = "https://console.cloud.google.com/";
+    public static final String GCP_COMPUTE = "https://console.cloud.google.com/compute/instances";
+    public static boolean supportedUrl(String url) {
+        return GITHUB.equals(url) || HOSTINGER.equals(url) ||
+            HOSTINGER_VPS.equals(url) || GCP.equals(url) || GCP_COMPUTE.equals(url);
+    }
+    public static String labelForUrl(String url) {
+        if (GITHUB.equals(url)) return "GitHub";
+        if (HOSTINGER.equals(url)) return "Hostinger hPanel";
+        if (HOSTINGER_VPS.equals(url)) return "Hostinger VPS";
+        if (GCP.equals(url)) return "Google Cloud Console";
+        if (GCP_COMPUTE.equals(url)) return "GCP VM instances";
+        return "Situs tidak dikenal";
+    }
     private AndroidActionReceipt() {}
 
     private static JSONObject post(String endpoint, JSONObject payload, String bearer) throws Exception {
@@ -43,7 +59,8 @@ public final class AndroidActionReceipt {
         } finally {conn.disconnect();}
     }
 
-    public static String submitUserConfirmedGithub(String jobId,String uuidEvent,String pairingCredential) throws Exception {
+    public static String submitUserConfirmedSite(String jobId,String uuidEvent,String pairingCredential,String siteUrl) throws Exception {
+        if (!supportedUrl(siteUrl)) throw new SecurityException("Situs tidak termasuk daftar aksi DEV yang disetujui");
         if (!jobId.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
             !uuidEvent.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
             pairingCredential.length()<32) {
@@ -56,12 +73,12 @@ public final class AndroidActionReceipt {
         String shortLivedToken=tokenResponse.getString("token");
         JSONObject action=new JSONObject();
         action.put("kind","OPEN_URL");
-        action.put("target",GITHUB);
+        action.put("target",siteUrl);
         JSONObject receipt=new JSONObject();
         receipt.put("protocol","openclaw-chat-bridge-dev-v1");
         receipt.put("jobId",jobId);
         receipt.put("eventId","android-result:"+uuidEvent);
-        receipt.put("resultSummary","User explicitly confirmed GitHub was visible on Z Fold4 after opening the browser.");
+        receipt.put("resultSummary","User confirmed an allowlisted site was visible on Z Fold4 after opening Chrome.");
         receipt.put("source","user-confirmed-device-action");
         receipt.put("userConfirmation","USER_CONFIRMED_VISIBLE");
         receipt.put("deviceAction",action);
@@ -71,5 +88,10 @@ public final class AndroidActionReceipt {
             throw new IllegalStateException("Intake DEV belum menerima konfirmasi");
         }
         return accepted.getString("receiptId");
+    }
+
+    // Keep compatibility with an in-progress GitHub job from an older DEV APK.
+    public static String submitUserConfirmedGithub(String jobId,String uuidEvent,String pairingCredential) throws Exception {
+        return submitUserConfirmedSite(jobId,uuidEvent,pairingCredential,GITHUB);
     }
 }
