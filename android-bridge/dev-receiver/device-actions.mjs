@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-export const ALLOWED_URL_HOSTS = Object.freeze(['github.com', 'www.github.com', 'dev-ai-task.cstlogistic.co.id']);
+export const ALLOWED_URL_HOSTS = Object.freeze(['github.com', 'www.github.com', 'dev-ai-task.cstlogistic.co.id', 'hpanel.hostinger.com', 'console.cloud.google.com']);
 export const ALLOWED_APPS = Object.freeze(['com.github.android', 'com.openai.chatgpt', 'com.android.chrome']);
 const ACTION_FILE = 'device-job-actions.json';
 function readJson(file) {
