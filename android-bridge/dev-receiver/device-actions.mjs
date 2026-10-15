@@ -23,7 +23,7 @@ export function normalizeDeviceAction(value) {
     let url;
     try { url = new URL(target); } catch { throw Error('Malformed URL'); }
     if (url.protocol !== 'https:' || url.username || url.password ||
-        url.port || !url.hostname || url.hostname==='localhost' || url.hostname.endsWith('.localhost') || url.hostname.endsWith('.local') || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(url.hostname) || url.hostname.startsWith('[')) throw Error('URL host is not allowlisted');
+        url.port || !url.hostname || url.hostname==='localhost' || url.hostname.endsWith('.localhost') || url.hostname.endsWith('.local') || url.hostname.endsWith('.internal') || url.hostname.endsWith('.test') || !url.hostname.includes('.') || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(url.hostname) || url.hostname.startsWith('[')) throw Error('URL host is not allowlisted');
     return {kind, target: url.href};
   }
   if (kind === 'OPEN_APP') {
