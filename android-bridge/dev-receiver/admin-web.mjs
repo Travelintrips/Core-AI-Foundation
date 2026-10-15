@@ -3,7 +3,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 const host='dev-ai-task.cstlogistic.co.id';
-const target='android-dev:zfold4-paired-dev-06';
+const target='android-dev:zfold4-paired-dev-07';
 const container='ai-task-dev-pr49-hostnet';
 const session=crypto.randomBytes(24).toString('base64url');
 function token(){
@@ -20,7 +20,7 @@ function reply(res,status,body,type='application/json'){
 }
 const page=`<!doctype html><html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI Task DEV — Job Z Fold4</title>
 <style>body{font:16px system-ui;margin:2rem auto;max-width:560px;padding:0 1rem;line-height:1.6}button{font:inherit;padding:12px 22px;cursor:pointer}code{overflow-wrap:anywhere}small{color:#666}.error{color:#b00020}</style>
-<h2>AI Task DEV — Job Z Fold4</h2><p>Target terverifikasi: <code>android-dev:zfold4-paired-dev-06</code></p><p>Ini hanya membuat job uji DEV untuk perangkat tersebut. PROD tidak dipakai.</p>
+<h2>AI Task DEV — Job Z Fold4</h2><p>Target terverifikasi: <code>android-dev:zfold4-paired-dev-07</code></p><p>Ini hanya membuat job uji DEV untuk perangkat tersebut. PROD tidak dipakai.</p>
 <button id="create" type="button">Buat job Z Fold4</button><p id="status" role="status">Belum ada job baru.</p>
 <small>Setelah job dibuat, buka aplikasi Z Fold4 dan tekan AMBIL JOB DEV OTOMATIS.</small>
 <script>document.getElementById('create').onclick=async()=>{const b=document.getElementById('create'),s=document.getElementById('status');b.disabled=true;s.textContent='Mendaftarkan job DEV...';try{const r=await fetch('/android-admin/jobs',{method:'POST',headers:{'content-type':'application/json','x-dev-csrf':${JSON.stringify(session)}},body:'{}'});const j=await r.json();s.textContent=r.ok?'Job berhasil dibuat: '+j.jobId+' ('+j.status+')':'Gagal HTTP '+r.status+' '+(j.error||'');}catch(e){s.textContent='Koneksi gagal';}finally{b.disabled=false}}</script></html>`;
