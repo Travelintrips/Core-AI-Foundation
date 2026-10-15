@@ -6,6 +6,7 @@ import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
+import {markCompletedJob} from './completed-jobs.mjs';
 const uuid='e2b234b3-28bf-4f02-bb1a-9ff9126b84fc';
 const other='e9203104-0938-4f58-9fea-0873b77a53d8';
 test('DEV pairing grants, deny by default, and revoke',async()=>{
@@ -42,6 +43,18 @@ test('DEV pairing grants, deny by default, and revoke',async()=>{
   assert.equal(claims.jobId,uuid);
   assert.equal(claims.scope,'android-result:submit');
   assert.equal((await req(other,deviceSecret)).status,403);
+  // A newer grant is offered first. Its independently verified ACK marker
+  // skips it immediately, allowing the older pending job without waiting 1h.
+  admin('grant','zfold4-dev',other);
+  const newest=await next(deviceSecret);
+  assert.equal(newest.status,200);
+  assert.equal((await newest.json()).jobId,other);
+  markCompletedJob(dir,other);
+  const remaining=await next(deviceSecret);
+  assert.equal(remaining.status,200);
+  assert.equal((await remaining.json()).jobId,uuid);
+  markCompletedJob(dir,uuid);
+  assert.equal((await next(deviceSecret)).status,204);
   admin('revoke','zfold4-dev');
   const registryStatsAfter=fs.statSync(path.join(dir,'device-registry.json'));
   assert.equal(registryStatsAfter.uid,registryStatsBefore.uid);
