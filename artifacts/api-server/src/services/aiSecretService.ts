@@ -1,3 +1,4 @@
+// WARNING: This service must not log or expose secret values in logs or error messages.
 /**
  * aiSecretService — reads provider API keys from environment variables.
  * Never stores or logs actual secret values.
