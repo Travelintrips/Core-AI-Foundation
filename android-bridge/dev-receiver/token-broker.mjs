@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {loadDeviceActions, verifiedDeviceAction} from './device-actions.mjs';
+import {isCompletedJob} from './completed-jobs.mjs';
 const directory=process.env.BRIDGE_DEVICE_SPOOL_DIR||'/var/lib/openclaw-android-bridge-dev';
 const secret=process.env.BRIDGE_DEVICE_HMAC_SECRET||'';
 if(Buffer.byteLength(secret)<32)throw Error('DEV HMAC secret missing');
@@ -59,11 +60,18 @@ const broker=http.createServer((req,res)=>{
    if(req.url==='/v1/android/jobs/next'){
     const eligible=Object.entries(load(grants))
       .filter(([id,g])=>uuid.test(id)&&g.active===true&&g.deviceId===device[0]
-        &&Number.isSafeInteger(g.expiresAt)&&g.expiresAt>now)
+        &&Number.isSafeInteger(g.expiresAt)&&g.expiresAt>now
+        &&!isCompletedJob(directory,id))
       .sort((a,b)=>b[1].expiresAt-a[1].expiresAt);
     if(!eligible.length)return respond(res,204,{});
-    const [jobId, grant] = eligible[0];
-    const action = verifiedDeviceAction(loadDeviceActions(directory)[jobId], jobId, device[0], now);
+    const actions=loadDeviceActions(directory);
+    // Do not downgrade an expired/invalid browser action to an ordinary
+    // ChatGPT test job. The device must never receive an unscoped website job.
+    const offered=eligible.find(([id])=>!actions[id] ||
+      verifiedDeviceAction(actions[id],id,device[0],now));
+    if(!offered)return respond(res,204,{});
+    const [jobId, grant]=offered;
+    const action=verifiedDeviceAction(actions[jobId],jobId,device[0],now);
     return respond(res,200,{jobId,expiresAt:grant.expiresAt,...(action?{action}:{})});
    }
    const grant=load(grants)[body.jobId];
