@@ -14,6 +14,8 @@ import {
   type AiJob,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+logger.info("Coding Orchestrator Service initialized. CI HEAD: 55568fee6a634953fb90f122436fd3729be2d199");
+
 import {
   enableAutonomousCodingTask,
   getAutonomousCodingTaskStatus,
