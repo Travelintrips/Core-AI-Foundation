@@ -11,6 +11,10 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("defines default AI Core chat mode", () => {
+    expect(DEFAULT_AI_CORE_CHAT_MODE).toBeDefined();
+  });
+
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
     expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
       kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
