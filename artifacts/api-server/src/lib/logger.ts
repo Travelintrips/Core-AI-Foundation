@@ -18,3 +18,4 @@ export const logger = pino({
         },
       }),
 });
+// Auto-repair: no-op change
