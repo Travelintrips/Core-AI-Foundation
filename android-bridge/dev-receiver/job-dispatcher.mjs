@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {loadDeviceActions, verifiedDeviceAction} from './device-actions.mjs';
+import {ACTION_TITLE_PREFIX,siteForTitle} from './phone-site-catalog.mjs';
 const spool=process.env.BRIDGE_DEVICE_SPOOL_DIR||'/var/lib/openclaw-android-bridge-dev';
 const devicesFile=path.join(spool,'device-registry.json');
 const grantsFile=path.join(spool,'device-job-grants.json');
@@ -26,9 +27,13 @@ export function eligible(rows,registry,now=Date.now(),actions={}){
  registry[r.source_session_id.slice(12)]?.active===true)
  .filter(r=>{
    // Navigation jobs cannot fall through to the ordinary ChatGPT test path.
-   if(r.title!=='Z Fold4 DEV OPEN_URL GitHub')return true;
+   if(typeof r.title!=='string'||!r.title.startsWith(ACTION_TITLE_PREFIX))return true;
+   // All phone browser jobs require a matching device-scoped immutable action,
+   // including Hostinger/GCP. An unknown title is denied (never sent to PC).
+   const site=siteForTitle(r.title);
+   if(!site)return false;
    const action=verifiedDeviceAction(actions[r.id],r.id,r.source_session_id.slice(12),now);
-   return action?.kind==='OPEN_URL'&&action.target==='https://github.com/';
+   return action?.kind==='OPEN_URL'&&action.target===site.url;
  })
  .map(r=>({id:r.id,deviceId:r.source_session_id.slice(12)}));
 }
