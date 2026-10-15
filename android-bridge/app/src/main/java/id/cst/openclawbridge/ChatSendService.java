@@ -130,12 +130,13 @@ public final class ChatSendService extends AccessibilityService {
             prefs.edit().remove(REPLY_MARKER).remove(REPLY_STARTED).apply();
             return;
         }
-        // A reply marker is consumed once. No automatic network upload or callback.
+        // Consume marker once; network delivery is restricted to user-armed DEV job only.
         prefs.edit().putString(CAPTURED_REPLY, answer)
                 .putLong(AUTO_CAPTURED_AT, System.currentTimeMillis())
                 .remove(REPLY_MARKER).remove(REPLY_STARTED)
-                .putString(STATUS, "Jawaban ditemukan. Kembali ke Bridge untuk melihat hasil.")
+                .putString(STATUS, "Jawaban ditemukan. Pengiriman DEV diperiksa.")
                 .commit();
+        CapturedResultDelivery.onCapture(this, prefs, answer);
     }
 
     private void findMarkedTexts(AccessibilityNodeInfo node, String prefix, List<String> results) {
