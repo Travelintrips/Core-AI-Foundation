@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+// TODO: Add new unit tests to cover WS-002 fixed code paths
+
 import {
   mergeVerifiedPullRequest,
   verifyPublishedPullRequest,
