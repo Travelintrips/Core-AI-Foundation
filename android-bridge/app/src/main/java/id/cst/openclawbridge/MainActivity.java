@@ -557,8 +557,9 @@ public class MainActivity extends Activity {
             } catch (Exception ex) { jobFetchStatus.setText("OPEN_URL ditolak oleh kebijakan DEV."); return; }
             description = "Situs DEV diizinkan: " + target;
         } else if ("OPEN_APP".equals(kind)) {
-            if (!("com.github.android".equals(target) || "com.openai.chatgpt".equals(target) ||
-                  "com.android.chrome".equals(target))) {
+            if (!target.matches("[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+") ||
+                target.startsWith("android.") || target.startsWith("com.android.settings") ||
+                target.startsWith("com.android.packageinstaller")) {
                 jobFetchStatus.setText("OPEN_APP ditolak oleh kebijakan DEV."); return;
             }
             description = "Buka aplikasi " + target + " di HP?";
@@ -582,6 +583,23 @@ public class MainActivity extends Activity {
                 android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
                 if (id.equals(prefs.getString("last_action_job","")))
                     prefs.edit().remove("last_action_job").apply();
+            }
+            return;
+        }
+        if ("OPEN_APP".equals(taskKind)) {
+            Intent launch=getPackageManager().getLaunchIntentForPackage(taskTarget);
+            if(launch==null) {
+                jobFetchStatus.setText("Aplikasi belum terpasang/terlihat: "+taskTarget);
+                getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit().remove("last_action_job").apply();
+                return;
+            }
+            try {
+                startActivity(launch);
+                queueAutoDispatchReceipt(id,taskTarget);
+                jobFetchStatus.setText("Job "+id+": intent membuka aplikasi "+taskTarget+" dikirim ke HP.");
+            } catch(Exception ex) {
+                jobFetchStatus.setText("Aplikasi gagal dibuka; job belum selesai.");
+                getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit().remove("last_action_job").apply();
             }
             return;
         }
