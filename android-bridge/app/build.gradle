@@ -1,0 +1,7 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'id.cst.openclawbridge'
+    compileSdk 35
+    defaultConfig { applicationId 'id.cst.openclawbridge.autosend'; minSdk 26; targetSdk 35; versionCode 11; versionName '0.6.1-dev-visible-job-status' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
