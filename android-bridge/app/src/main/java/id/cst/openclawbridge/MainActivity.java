@@ -87,7 +87,7 @@ public class MainActivity extends Activity {
         fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice(false));
         root.addView(fetchAssignedJob);
         jobFetchStatus = new TextView(this);
-        jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
+        jobFetchStatus.setText("Situs DEV terotorisasi akan dibuka otomatis di Chrome selama Bridge terbuka. Tombol ambil job tetap tersedia.");
         jobFetchStatus.setTextSize(16);
         root.addView(jobFetchStatus);
         Button retrySite = new Button(this);
@@ -541,7 +541,8 @@ public class MainActivity extends Activity {
     }
 
 
-    // DEV action dispatcher: user confirmation is mandatory and no UI launch is reported as E2E PASS.
+    // DEV action dispatcher: restricted authorized OPEN_URL jobs run without a redundant dialog.
+    // Other actions still require on-device confirmation; no intent is page-rendering evidence.
     private void presentDeviceAction(String id, JSONObject action) {
         String kind = action.optString("kind", "");
         String target = action.optString("target", "");
@@ -554,7 +555,7 @@ public class MainActivity extends Activity {
                     !AndroidActionReceipt.supportedUrl(target))
                     throw new IllegalArgumentException("URL ditolak");
             } catch (Exception ex) { jobFetchStatus.setText("OPEN_URL ditolak oleh kebijakan DEV."); return; }
-            description = "Buka alamat berikut langsung di Chrome pada HP (tanpa memilih browser)?\\n" + target;
+            description = "Situs DEV diizinkan: " + target;
         } else if ("OPEN_APP".equals(kind)) {
             if (!("com.github.android".equals(target) || "com.openai.chatgpt".equals(target) ||
                   "com.android.chrome".equals(target))) {
