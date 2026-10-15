@@ -26,6 +26,7 @@ const TOOLS=[
  {name:'open_gcp_on_zfold4_dev',description:'Open Google Cloud Console in Chrome on paired Z Fold4 automatically opens on paired phone in foreground; no IAM or VM writes, never PC/PROD.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'open_hostinger_vps_on_zfold4_dev',description:'Guide phone user to Hostinger VPS page in Chrome using a predefined URL; read-only navigation intent, no mutation.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'open_gcp_compute_on_zfold4_dev',description:'Guide phone user to GCP Compute Engine VM instances page in Chrome using a predefined URL; read-only navigation intent, no mutation.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+ {name:'open_app_on_zfold4_dev',description:'Launch a named installed Android application on paired DEV Z Fold4. No interaction, data access, messaging, deletion or account changes.',inputSchema:{type:'object',properties:{packageName:{type:'string',minLength:3,maxLength:180}},required:['packageName'],additionalProperties:false}},
  {name:'open_url_on_zfold4_dev',description:'Create paired Z Fold4 DEV job to open an arbitrary public HTTPS page. Navigates only; does not click, log in, delete or change accounts.',inputSchema:{type:'object',properties:{url:{type:'string',minLength:12,maxLength:600}},required:['url'],additionalProperties:false}},
  {name:'get_android_dev_job',description:'Read authoritative DEV status, callback, verification, and ACK count for one Android job UUID.',inputSchema:{type:'object',properties:{jobId:{type:'string'}},required:['jobId'],additionalProperties:false}},
  {name:'get_android_dev_job_events',description:'Read bounded DEV lifecycle event types for one Android job UUID.',inputSchema:{type:'object',properties:{jobId:{type:'string'}},required:['jobId'],additionalProperties:false}}
@@ -88,18 +89,18 @@ const EVENTS_SQL=`SELECT kind,received_at FROM ai_task_bridge.job_events WHERE j
 async function callTool(name,args){
  if(!TOOLS.some(x=>x.name===name))throw Error('Unknown DEV tool');
  if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Invalid arguments');
- if(name==='create_android_dev_job'||name==='open_url_on_zfold4_dev'||Object.hasOwn(PHONE_MCP_SITES,name)){
+ if(name==='create_android_dev_job'||name==='open_url_on_zfold4_dev'||name==='open_app_on_zfold4_dev'||Object.hasOwn(PHONE_MCP_SITES,name)){
   const siteKey=PHONE_MCP_SITES[name];
   const site=siteKey?siteForKey(siteKey):null;
-  if(name==='open_url_on_zfold4_dev') {
+  if(name==='open_url_on_zfold4_dev'||name==='open_app_on_zfold4_dev') {
    if(Object.keys(args).length!==1)throw Error('URL only');
   } else if(Object.keys(args).length)throw Error('Unexpected arguments');
-  const customAction=name==='open_url_on_zfold4_dev'?normalizeDeviceAction({kind:'OPEN_URL',target:args.url}):null;
+  const customAction=name==='open_url_on_zfold4_dev'?normalizeDeviceAction({kind:'OPEN_URL',target:args.url}):name==='open_app_on_zfold4_dev'?normalizeDeviceAction({kind:'OPEN_APP',target:args.packageName}):null;
   const device=latestDevice(),key='android-mcp-dev:'+crypto.randomUUID();
   const response=await fetch('http://127.0.0.1:18183/api/bridge/jobs',{
    method:'POST',headers:{'authorization':'Bearer '+bridgeToken(),'content-type':'application/json'},
    body:JSON.stringify({source:'OPENCLAW',externalId:key,idempotencyKey:key,
-    title:site?site.title:customAction?'Z Fold4 DEV OPEN_URL Custom':'Z Fold4 DEV MCP E2E check',
+    title:site?site.title:customAction?(customAction.kind==='OPEN_APP'?'Z Fold4 DEV OPEN_APP Custom':'Z Fold4 DEV OPEN_URL Custom'):'Z Fold4 DEV MCP E2E check',
     sessionId:'android-dev:'+device}),
    signal:AbortSignal.timeout(12000)});
   const body=await response.json();
@@ -117,7 +118,7 @@ async function callTool(name,args){
    }
   }
   return {jobId:body.task.id,status:body.task.status,deviceId:device,environment:'DEV',
-    ...((site||customAction)?{action:'OPEN_URL',url:customAction?.target||site.url,site:site?.label||'Public HTTPS'}:{})};
+    ...((site||customAction)?{action:customAction?.kind||'OPEN_URL',target:customAction?.target||site.url,site:site?.label||'Public HTTPS'}:{})};
  }
  if(Object.keys(args).length!==1||!UUID.test(args.jobId||''))throw Error('Valid jobId UUID required');
  const rows=query(name==='get_android_dev_job'?JOB_SQL:EVENTS_SQL,args.jobId);
