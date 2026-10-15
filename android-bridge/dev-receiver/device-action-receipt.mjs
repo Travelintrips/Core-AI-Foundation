@@ -16,18 +16,19 @@ function read(file) {
   catch(error) { if (error.code === 'ENOENT') return {}; throw error; }
 }
 function siteForAction(action) {
-  if(action?.kind!=='OPEN_URL')throw Error('Unsupported phone action');
   const normalized=normalizeDeviceAction(action);
+  if(normalized.kind==='OPEN_APP') return {label:'Android application '+normalized.target};
+  if(normalized.kind!=='OPEN_URL')throw Error('Unsupported phone action');
   const site=siteForUrl(normalized.target);
   return site||{label:'public HTTPS site '+new URL(normalized.target).hostname};
 }
 export function confirmedSummary(action) {
   const site=siteForAction(action);
-  return 'Z Fold4 DEV: user confirmed '+site.label+' was visible on the phone after Android OPEN_URL. This is user-attested, not independent page verification.';
+  return 'Z Fold4 DEV: user confirmed '+site.label+' was visible on the phone after Android '+action.kind+'. This is user-attested, not independent page verification.';
 }
 export function dispatchedSummary(action) {
   const site=siteForAction(action);
-  return 'Z Fold4 DEV: Android successfully dispatched a Chrome intent to '+site.label+'. Page rendering and login were NOT independently verified; no taps or cloud account changes performed.';
+  return 'Z Fold4 DEV: Android dispatched a foreground launch intent for '+site.label+'. Successful app/page rendering or login was NOT independently verified; no taps or account changes performed.';
 }
 export function validateActionReceipt(directory, jobId, claims, message, now=Date.now()) {
   if (!UUID.test(jobId) || !claims || typeof claims.deviceId !== 'string' ||
