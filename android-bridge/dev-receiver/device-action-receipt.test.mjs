@@ -8,7 +8,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {saveDeviceAction} from './device-actions.mjs';
-import {validateActionReceipt,CONFIRMATION,ACTION_REPORT_SOURCE,confirmedSummary} from './device-action-receipt.mjs';
+import {validateActionReceipt,CONFIRMATION,ACTION_REPORT_SOURCE,confirmedSummary,DISPATCHED,AUTO_REPORT_SOURCE,dispatchedSummary} from './device-action-receipt.mjs';
 
 const jobId='afcf1637-e6c9-4c59-9d79-4ccf0fb4f7cb';
 const device='zfold4-paired-dev-11';
@@ -36,6 +36,15 @@ test('confirmation validator requires exact active scoped target',()=>{
   assert.equal(a.resultSummary,confirmedSummary(action));
   assert.equal(a.evidence,CONFIRMATION);
   assert.match(a.resultSummary,/not independent page verification/);
+  const auto={...evidence,source:AUTO_REPORT_SOURCE,userConfirmation:undefined,deviceOutcome:DISPATCHED};
+  const safe=validateActionReceipt(dir,jobId,claims,auto);
+  assert.equal(safe.resultSummary,dispatchedSummary(action));
+  assert.equal(safe.evidence,DISPATCHED);
+  assert.match(safe.resultSummary,/NOT independently verified/);
+  assert.throws(()=>validateActionReceipt(dir,jobId,claims,{...auto,deviceOutcome:undefined}));
+  assert.throws(()=>validateActionReceipt(dir,jobId,claims,{...auto,userConfirmation:CONFIRMATION}));
+  assert.throws(()=>validateActionReceipt(dir,jobId,claims,{...auto,deviceAction:{kind:'OPEN_URL',target:'https://evil.test/'}}));
+  assert.throws(()=>validateActionReceipt(dir,jobId,{deviceId:'zfold4-paired-dev-10'},auto));
   assert.throws(()=>validateActionReceipt(dir,jobId,{deviceId:'zfold4-paired-dev-10'},evidence));
   assert.throws(()=>validateActionReceipt(dir,jobId,claims,{...evidence,deviceAction:{kind:'OPEN_URL',target:'https://example.com/'}}));
   assert.throws(()=>validateActionReceipt(dir,jobId,claims,{...evidence,userConfirmation:'NOT_CONFIRMED'}));
@@ -90,8 +99,23 @@ test('paired DEV token -> receipt intake is user confirmed, idempotent, never a 
   const duplicate=await post(base,evidence,token);
   assert.equal(duplicate.status,200);
   assert.equal((await duplicate.json()).duplicate,true);
+  // A separate logical event may attest only Android intent dispatch.
+  const automated={...evidence,
+    eventId:'android-result:5145a2a5-8013-4d02-8406-f98a29459078',
+    source:AUTO_REPORT_SOURCE,userConfirmation:undefined,deviceOutcome:DISPATCHED};
+  assert.equal((await post(base,{...automated,deviceOutcome:'VISIBLE'},token)).status,403);
+  const sent=await post(base,automated,token);
+  assert.equal(sent.status,202);
+  const received=await sent.json();
+  const receipt=JSON.parse(fs.readFileSync(path.join(dir,received.receiptId+'.json'),'utf8'));
+  assert.equal(receipt.evidence,DISPATCHED);
+  assert.equal(receipt.source,AUTO_REPORT_SOURCE);
+  assert.equal(receipt.resultSummary,dispatchedSummary(action));
+  const autoDuplicate=await post(base,automated,token);
+  assert.equal(autoDuplicate.status,200);
+  assert.equal((await autoDuplicate.json()).duplicate,true);
   const files=fs.readdirSync(dir).filter(x=>/^[a-f0-9]{64}\.json$/.test(x));
-  assert.equal(files.length,1);
+  assert.equal(files.length,2);
  }finally{
   broker.kill();intake.kill();
   fs.rmSync(dir,{recursive:true,force:true});
