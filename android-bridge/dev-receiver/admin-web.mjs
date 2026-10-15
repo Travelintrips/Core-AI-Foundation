@@ -41,16 +41,23 @@ const page=`<!doctype html><html lang="id"><meta charset="utf-8"><meta name="vie
 <script>
 async function createDevJob(button,route) {
  const b=document.getElementById(button),s=document.getElementById('status');
+ let blockRetry=false;
  b.disabled=true;
  s.textContent='Mengirim job DEV khusus Z Fold4...';
  try{
   const r=await fetch(route,{method:'POST',headers:{'content-type':'application/json','x-dev-csrf':${JSON.stringify(session)}},body:'{}'});
   const j=await r.json();
-  s.textContent=r.ok?('Job '+j.jobId+' ('+j.status+'), target '+(j.target||'Z Fold4')+
-   (j.action?' — OPEN_URL GitHub, konfirmasi di HP':''))
-   :('Gagal HTTP '+r.status+': '+(j.error||'tidak diketahui'));
+  if(r.ok) {
+   s.textContent='Job '+j.jobId+' ('+j.status+'), target '+(j.target||'Z Fold4')+
+    (j.action?' — OPEN_URL GitHub, konfirmasi di HP':'');
+  }else if(j.jobId && j.error==='action_registration_failed') {
+   blockRetry=true;
+   s.textContent='Job '+j.jobId+' SUDAH dibuat, tetapi izin aksi gagal disimpan. Jangan buat job kedua. Hubungi admin DEV untuk melengkapi job ini.';
+  }else{
+   s.textContent='Gagal HTTP '+r.status+': '+(j.error||'tidak diketahui');
+  }
  }catch(e){s.textContent='Koneksi DEV gagal; tidak ada fallback ke PC';}
- finally{b.disabled=false}
+ finally{if(!blockRetry)b.disabled=false}
 }
 document.getElementById('create').onclick=()=>createDevJob('create','/android-admin/jobs');
 document.getElementById('github').onclick=()=>createDevJob('github','/android-admin/open-github');
@@ -79,11 +86,22 @@ http.createServer((req,res)=>{
    if(response.status!==201||!json.accepted||!json.task?.id)return reply(res,502,{error:'dev_job_creation_failed'});
    if(openGitHub){
     // The DEV dispatcher refuses this job until this allowlisted action exists.
-    saveDeviceAction(actionDirectory,json.task.id,androidTarget.slice('android-dev:'.length),
-      {kind:'OPEN_URL',target:githubTarget});
+    // Never disguise a post-creation action-write failure as a failed job creation:
+    // doing so encourages duplicate jobs when the operator retries.
+    try {
+     saveDeviceAction(actionDirectory,json.task.id,androidTarget.slice('android-dev:'.length),
+       {kind:'OPEN_URL',target:githubTarget});
+    } catch (e) {
+     console.error('DEV_ADMIN_ACTION_REGISTRATION_FAILED',e?.code||'unknown');
+     return reply(res,503,{error:'action_registration_failed',jobId:json.task.id,
+       target:androidTarget});
+    }
    }
    return reply(res,201,{jobId:json.task.id,status:json.task.status,
      target:androidTarget,...(openGitHub?{action:'OPEN_URL'}:{})});
-  }catch{return reply(res,503,{error:'dev_backend_unavailable'})}
+  }catch(e){
+   console.error('DEV_ADMIN_BACKEND_FAILURE',e?.code||e?.name||'unknown');
+   return reply(res,503,{error:'dev_backend_unavailable'});
+  }
  });
 }).listen(18796,'127.0.0.1',()=>console.log('DEV Android admin web ready on localhost'));
