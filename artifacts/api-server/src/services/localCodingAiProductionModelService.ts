@@ -2,6 +2,16 @@ import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js"
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
+// Handle provider bad request errors uniformly
+function handleModelProviderError(error: unknown) {
+  const anyErr = error as any;
+  if (anyErr?.status === 400 || anyErr?.code === 'PROVIDER_BAD_REQUEST') {
+    throw new BadModelRequestError('Invalid request to production model');
+  }
+  throw error;
+}
+
+
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 60_000;
