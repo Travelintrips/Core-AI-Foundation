@@ -61,3 +61,10 @@ Thumbs.db
 # Hostinger build metadata generated during deployment
 /.cst-build-sha
 /artifacts/ai-platform/public/build-meta.json
+
+# Android DEV private signing material - never commit certificates with private keys
+/android-bridge/**/*.keystore
+/android-bridge/**/*.jks
+/android-bridge/**/*.p12
+/android-bridge/**/*.pfx
+/android-bridge/**/signing-password*
