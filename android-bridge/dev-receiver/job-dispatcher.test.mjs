@@ -56,4 +56,9 @@ test('Hostinger/GCP dashboard and read-only section routing requires exact scope
  }
  const unknown={...assigned(b,'android-dev:'+device),title:'Z Fold4 DEV OPEN_URL Arbitrary'};
  assert.deepEqual(eligible([unknown],registry,now),[]);
+ const custom={...assigned(b,'android-dev:'+device),title:'Z Fold4 DEV OPEN_URL Custom'};
+ assert.deepEqual(eligible([custom],registry,now),[]);
+ const validCustom={[b]:{jobId:b,deviceId:device,expiresAt:now+5000,action:{kind:'OPEN_URL',target:'https://example.org/other'}}};
+ assert.deepEqual(eligible([custom],registry,now,validCustom),[{id:b,deviceId:device}]);
+ assert.deepEqual(eligible([custom],registry,now,{[b]:{...validCustom[b],deviceId:'another'}}),[]);
 });
