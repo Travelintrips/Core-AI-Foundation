@@ -70,7 +70,7 @@ const broker=http.createServer((req,res)=>{
    if(!grant||grant.active!==true||grant.deviceId!==device[0]||!Number.isSafeInteger(grant.expiresAt)||grant.expiresAt<now)
     return respond(res,403,{error:'job_not_assigned'});
    const exp=now+5*60*1000;
-   const tokenBody=Buffer.from(JSON.stringify({scope:'android-result:submit',jobId:body.jobId,exp,nonce:crypto.randomBytes(16).toString('hex')})).toString('base64url');
+   const tokenBody=Buffer.from(JSON.stringify({scope:'android-result:submit',jobId:body.jobId,deviceId:device[0],exp,nonce:crypto.randomBytes(16).toString('hex')})).toString('base64url');
    return respond(res,200,{token:tokenBody+'.'+sign(tokenBody),expiresAt:exp});
   }catch{return respond(res,400,{error:'invalid_request'});}
  });
