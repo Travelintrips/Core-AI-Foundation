@@ -496,6 +496,28 @@ public class MainActivity extends Activity {
                     if(startTest && assignedAction!=null){
                         String kind=assignedAction.optString("kind","");
                         String target=assignedAction.optString("target","");
+                        if("SCREEN_TAP".equals(kind) || "SCREEN_TYPE".equals(kind) || "SCREEN_SCROLL".equals(kind)){
+                            String command="SCREEN_TAP".equals(kind)?"tap":"SCREEN_TYPE".equals(kind)?"type":"scroll";
+                            if(!accessibilityEnabled() || target.length()>250 ||
+                                    (!"scroll".equals(command) && target.trim().isEmpty()) ||
+                                    ("scroll".equals(command) && !target.isEmpty())){
+                                jobFetchStatus.setText("Perintah layar DEV ditolak; periksa Accessibility atau parameter.");
+                                return;
+                            }
+                            if(!getSharedPreferences("bridge-autojob-dev",MODE_PRIVATE).edit()
+                                    .putString("last_launched_job",id).commit())return;
+                            armScreenControl(command,target);
+                            try{
+                                Intent browser=getPackageManager().getLaunchIntentForPackage("com.android.chrome");
+                                if(browser==null)throw new IllegalStateException("Chrome tidak tersedia");
+                                startActivity(browser);
+                                jobFetchStatus.setText("Kendali layar DEV dijadwalkan satu kali; hasil belum diverifikasi.");
+                            }catch(Exception ex){
+                                getSharedPreferences("screen_controls_dev",MODE_PRIVATE).edit().clear().apply();
+                                jobFetchStatus.setText("Tidak dapat beralih ke Chrome untuk kendali DEV.");
+                            }
+                            return;
+                        }
                         if(!"OPEN_URL".equals(kind) || target.length()>600 || !target.startsWith("https://")){
                             jobFetchStatus.setText("Aksi DEV tidak didukung.");
                             return;
