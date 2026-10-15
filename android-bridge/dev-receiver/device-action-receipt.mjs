@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {loadDeviceActions, verifiedDeviceAction} from './device-actions.mjs';
+import {siteForUrl} from './phone-site-catalog.mjs';
 
 export const CONFIRMATION = 'USER_CONFIRMED_VISIBLE';
 export const ACTION_REPORT_SOURCE = 'user-confirmed-device-action';
@@ -13,10 +14,9 @@ function read(file) {
   catch(error) { if (error.code === 'ENOENT') return {}; throw error; }
 }
 export function confirmedSummary(action) {
-  if (action?.kind !== 'OPEN_URL' || action.target !== 'https://github.com/') {
-    throw Error('Unsupported user-confirmed device action');
-  }
-  return 'Z Fold4 DEV: user confirmed GitHub was visible on the phone after Android OPEN_URL. This is user-attested, not independent page verification.';
+  const site=action?.kind==='OPEN_URL'?siteForUrl(action.target):null;
+  if (!site) throw Error('Unsupported user-confirmed device action');
+  return 'Z Fold4 DEV: user confirmed '+site.label+' was visible on the phone after Android OPEN_URL. This is user-attested, not independent page verification.';
 }
 export function validateActionReceipt(directory, jobId, claims, message, now=Date.now()) {
   if (!UUID.test(jobId) || !claims || typeof claims.deviceId !== 'string' ||
