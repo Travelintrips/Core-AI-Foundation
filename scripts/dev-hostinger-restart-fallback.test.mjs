@@ -8,7 +8,7 @@ const release = readFileSync(new URL("./vps/deploy_dev_release.py", import.meta.
 test("VPS DEV health retry requires exact immutable SHA before GitHub release acceptance", () => {
   const start = workflow.indexOf("- name: Wait for CI-gated VPS DEV build and exact release");
   const check = workflow.indexOf("- name: Check isolated DEV frontend, protected jobs and unchanged production");
-  const dns = workflow.indexOf("- name: Change only DEV A record after verified independent VPS release");
+  const dns = workflow.indexOf("- name: Verify canonical combined DEV DNS (read-only)");
   assert.ok(start >= 0 && check > start && dns > check);
   const retry = workflow.slice(start, check);
   assert.match(retry, /seq 1 105/);
