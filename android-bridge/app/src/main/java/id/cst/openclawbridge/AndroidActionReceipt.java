@@ -59,7 +59,7 @@ public final class AndroidActionReceipt {
         } finally {conn.disconnect();}
     }
 
-    public static String submitUserConfirmedSite(String jobId,String uuidEvent,String pairingCredential,String siteUrl) throws Exception {
+    private static String submitActionReceipt(String jobId,String uuidEvent,String pairingCredential,String siteUrl,boolean userConfirmed) throws Exception {
         if (!supportedUrl(siteUrl)) throw new SecurityException("Situs tidak termasuk daftar aksi DEV yang disetujui");
         if (!jobId.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
             !uuidEvent.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
@@ -78,9 +78,15 @@ public final class AndroidActionReceipt {
         receipt.put("protocol","openclaw-chat-bridge-dev-v1");
         receipt.put("jobId",jobId);
         receipt.put("eventId","android-result:"+uuidEvent);
-        receipt.put("resultSummary","User confirmed an allowlisted site was visible on Z Fold4 after opening Chrome.");
-        receipt.put("source","user-confirmed-device-action");
-        receipt.put("userConfirmation","USER_CONFIRMED_VISIBLE");
+        if (userConfirmed) {
+            receipt.put("resultSummary","User confirmed an allowlisted site was visible on Z Fold4 after opening Chrome.");
+            receipt.put("source","user-confirmed-device-action");
+            receipt.put("userConfirmation","USER_CONFIRMED_VISIBLE");
+        } else {
+            receipt.put("resultSummary","Android started an explicit Chrome intent for an allowlisted website; rendering not independently verified.");
+            receipt.put("source","device-intent-dispatched");
+            receipt.put("deviceOutcome","ANDROID_INTENT_DISPATCHED");
+        }
         receipt.put("deviceAction",action);
         JSONObject accepted=post(INTAKE,receipt,shortLivedToken);
         if (!accepted.optBoolean("accepted",false) ||
@@ -90,7 +96,16 @@ public final class AndroidActionReceipt {
         return accepted.getString("receiptId");
     }
 
-    // Keep compatibility with an in-progress GitHub job from an older DEV APK.
+    // An authenticated admin/MCP job is prior authorization to open exactly
+    // the allowlisted site. An Android intent can be reported without an
+    // additional dialog, but is NOT evidence that the page finished loading.
+    public static String submitDispatchedSite(String jobId,String uuidEvent,String pairingCredential,String siteUrl) throws Exception {
+        return submitActionReceipt(jobId,uuidEvent,pairingCredential,siteUrl,false);
+    }
+    public static String submitUserConfirmedSite(String jobId,String uuidEvent,String pairingCredential,String siteUrl) throws Exception {
+        return submitActionReceipt(jobId,uuidEvent,pairingCredential,siteUrl,true);
+    }
+    // Backwards compatibility for a previously pending DEV GitHub job.
     public static String submitUserConfirmedGithub(String jobId,String uuidEvent,String pairingCredential) throws Exception {
         return submitUserConfirmedSite(jobId,uuidEvent,pairingCredential,GITHUB);
     }
