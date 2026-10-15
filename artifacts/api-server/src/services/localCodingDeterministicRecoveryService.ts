@@ -37,7 +37,7 @@ import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
 const execFileAsync = promisify(execFile);
 
 const MAX_RECOVERY_OPERATIONS = 8;
-const MAX_RECOVERY_ATTEMPTS = 2;
+const MAX_RECOVERY_ATTEMPTS = 3;
 const MAX_PATCH_BYTES = 160_000;
 const MAX_CHANGED_FILES = 40;
 const GIT_TIMEOUT_MS = 30_000;
