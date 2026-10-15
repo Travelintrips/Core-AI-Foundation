@@ -27,7 +27,12 @@ export function eligible(rows,registry,now=Date.now(),actions={}){
  registry[r.source_session_id.slice(12)]?.active===true)
  .filter(r=>{
    // Navigation jobs cannot fall through to the ordinary ChatGPT test path.
-   if(typeof r.title!=='string'||!r.title.startsWith(ACTION_TITLE_PREFIX))return true;
+   if(typeof r.title!=='string')return true;
+   if(r.title==='Z Fold4 DEV OPEN_APP Custom'){
+     const action=verifiedDeviceAction(actions[r.id],r.id,r.source_session_id.slice(12),now);
+     return action?.kind==='OPEN_APP';
+   }
+   if(!r.title.startsWith(ACTION_TITLE_PREFIX))return true;
    // All phone browser jobs require a matching device-scoped immutable action,
    // including Hostinger/GCP. An unknown title is denied (never sent to PC).
    const site=siteForTitle(r.title);
