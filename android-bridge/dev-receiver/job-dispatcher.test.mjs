@@ -21,3 +21,19 @@ test('grant renews only queued explicitly routed jobs; no cross-device takeover'
  assert.deepEqual(planGrants(rows,registry,created,2000),created);
  assert.equal(planGrants(rows,registry,created,3101000)[a].expiresAt,6701000);
 });
+
+test('Z Fold4 GitHub job is never granted without matching phone-only OPEN_URL intent',()=>{
+ const now=1000;
+ const registry={[device]:{active:true},other:{active:true}};
+ const row={...assigned(a,'android-dev:'+device),title:'Z Fold4 DEV OPEN_URL GitHub'};
+ assert.deepEqual(eligible([row],registry,now),[]);
+ assert.deepEqual(planGrants([row],registry,{},now),{});
+ const allowed={jobId:a,deviceId:device,expiresAt:now+60*60*1000,
+   action:{kind:'OPEN_URL',target:'https://github.com/'}};
+ const valid={[a]:allowed};
+ assert.deepEqual(eligible([row],registry,now,valid),[{id:a,deviceId:device}]);
+ assert.equal(planGrants([row],registry,{},now,valid)[a].deviceId,device);
+ assert.deepEqual(eligible([row],registry,now,{[a]:{...allowed,deviceId:'other'}}),[]);
+ assert.deepEqual(eligible([row],registry,now,{[a]:{...allowed,action:{kind:'OPEN_URL',target:'https://github.com.evil.test/'}}}),[]);
+ assert.deepEqual(eligible([row],registry,now+60*60*1000,valid),[]);
+});
