@@ -3,6 +3,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {loadDeviceActions, verifiedDeviceAction} from './device-actions.mjs';
 const directory=process.env.BRIDGE_DEVICE_SPOOL_DIR||'/var/lib/openclaw-android-bridge-dev';
 const secret=process.env.BRIDGE_DEVICE_HMAC_SECRET||'';
 if(Buffer.byteLength(secret)<32)throw Error('DEV HMAC secret missing');
@@ -61,7 +62,9 @@ const broker=http.createServer((req,res)=>{
         &&Number.isSafeInteger(g.expiresAt)&&g.expiresAt>now)
       .sort((a,b)=>b[1].expiresAt-a[1].expiresAt);
     if(!eligible.length)return respond(res,204,{});
-    return respond(res,200,{jobId:eligible[0][0],expiresAt:eligible[0][1].expiresAt});
+    const [jobId, grant] = eligible[0];
+    const action = verifiedDeviceAction(loadDeviceActions(directory)[jobId], jobId, device[0], now);
+    return respond(res,200,{jobId,expiresAt:grant.expiresAt,...(action?{action}:{})});
    }
    const grant=load(grants)[body.jobId];
    if(!grant||grant.active!==true||grant.deviceId!==device[0]||!Number.isSafeInteger(grant.expiresAt)||grant.expiresAt<now)
