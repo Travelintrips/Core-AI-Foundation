@@ -22,6 +22,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Verify DEV action and pairing policy
+        run: node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs
       - name: Build DEV debug APK
         working-directory: android-bridge
         run: gradle --no-daemon :app:assembleDebug
