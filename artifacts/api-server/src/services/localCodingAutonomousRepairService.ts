@@ -11,6 +11,9 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+// Debug instrumentation: log timestamp when checking workflow_run status
+logger.debug("[localCodingAutonomousRepairService] Checking workflow_run status at", new Date().toISOString());
+
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
