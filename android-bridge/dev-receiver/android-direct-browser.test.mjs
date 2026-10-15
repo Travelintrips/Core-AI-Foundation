@@ -43,5 +43,6 @@ test('paired DEV app action launches installed WhatsApp or any visible launchabl
  assert.match(source,/queueAutoDispatchReceipt\(id,taskTarget\)/);
  assert.match(source,/submitDispatchedApp\(id,event,paired,url\)/);
  assert.match(manifest,/<category android:name="android\.intent\.category\.LAUNCHER"\s*\/>/);
- assert.doesNotMatch(source,/Intent\.createChooser\(/);
+ // ChatGPT share flow legitimately uses a chooser; app launches do not.
+ assert.doesNotMatch(source.slice(source.indexOf('if ("OPEN_APP".equals(taskKind))'),source.indexOf('new AlertDialog.Builder(this).setTitle("Konfirmasi perintah AI Task DEV")')),/Intent\.createChooser\(/);
 });
