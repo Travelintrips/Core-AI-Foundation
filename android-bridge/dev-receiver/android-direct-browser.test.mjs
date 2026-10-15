@@ -36,3 +36,12 @@ test('manual retry only re-opens an authorized pending job without new job creat
  assert.doesNotMatch(retry,/\/android-admin\//);
  assert.doesNotMatch(retry,/post\(/);
 });
+
+test('paired DEV app action launches installed WhatsApp or any visible launchable package with automatic receipt',()=>{
+ assert.match(source,/AndroidActionReceipt\.supportedApp\(target\)/);
+ assert.match(source,/getLaunchIntentForPackage\(taskTarget\)/);
+ assert.match(source,/queueAutoDispatchReceipt\(id,taskTarget\)/);
+ assert.match(source,/submitDispatchedApp\(id,event,paired,url\)/);
+ assert.match(manifest,/<category android:name="android\.intent\.category\.LAUNCHER"\s*\/>/);
+ assert.doesNotMatch(source,/Intent\.createChooser\(/);
+});
