@@ -3,7 +3,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
-import {saveDeviceAction} from './device-actions.mjs';
+import {saveDeviceAction, normalizeDeviceAction} from './device-actions.mjs';
 import {siteForKey} from './phone-site-catalog.mjs';
 const host='dev-ai-task.cstlogistic.co.id';
 const actionDirectory='/var/lib/openclaw-android-bridge-dev';
@@ -47,6 +47,8 @@ const page=`<!doctype html><html lang="id"><meta charset="utf-8"><meta name="vie
 <button id="gcp" type="button">Buka GCP Console di HP</button>
 <button id="hostinger-vps" type="button">Buka menu VPS Hostinger di HP</button>
 <button id="gcp-compute" type="button">Buka Compute Engine GCP di HP</button>
+<p><label for="custom-url">Alamat HTTPS lain</label> <input id="custom-url" type="url" placeholder="https://contoh.com/" style="width:100%"></p>
+<button id="custom" type="button">Buka URL di Z Fold4</button>
 <p id="status" role="status">Belum ada job baru.</p>
 <small>Perintah GitHub, Hostinger, dan GCP ditujukan hanya ke Z Fold4 ter-pairing, tanpa fallback PC. Buka Android Bridge di HP; job akan diambil dan membuka Chrome otomatis saat aplikasi di foreground (atau tekan AMBIL JOB DEV OTOMATIS). Tidak perlu konfirmasi kedua. Login tetap dilakukan pemilik HP. Jangan masukkan sandi ke ChatGPT. Tindakan perubahan atau penghapusan tidak otomatis.</small>
 <script>
@@ -56,7 +58,7 @@ async function createDevJob(button,route) {
  b.disabled=true;
  s.textContent='Mengirim job DEV khusus Z Fold4...';
  try{
-  const r=await fetch(route,{method:'POST',headers:{'content-type':'application/json','x-dev-csrf':${JSON.stringify(session)}},body:'{}'});
+  const r=await fetch(route,{method:'POST',headers:{'content-type':'application/json','x-dev-csrf':${JSON.stringify(session)}},body:button==='custom'?JSON.stringify({url:document.getElementById('custom-url').value}):'{}'});
   const j=await r.json();
   if(r.ok) {
    s.textContent='Job '+j.jobId+' ('+j.status+'), target '+(j.target||'Z Fold4')+
@@ -70,6 +72,7 @@ async function createDevJob(button,route) {
  }catch(e){s.textContent='Koneksi DEV gagal; tidak ada fallback ke PC';}
  finally{if(!blockRetry)b.disabled=false}
 }
+document.getElementById('custom').onclick=()=>createDevJob('custom','/android-admin/open-url');
 document.getElementById('create').onclick=()=>createDevJob('create','/android-admin/jobs');
 document.getElementById('github').onclick=()=>createDevJob('github','/android-admin/open-github');
 document.getElementById('hostinger').onclick=()=>createDevJob('hostinger','/android-admin/open-hostinger');
@@ -82,31 +85,36 @@ http.createServer((req,res)=>{
   try{return reply(res,200,page.replace('__LATEST_ZFOLD4_TARGET__',target()),'text/html; charset=utf-8')}
   catch{return reply(res,503,{error:'no_active_zfold4_pairing'})}
  }
- if(req.method!=='POST'||!(req.url==='/android-admin/jobs'||Object.hasOwn(ACTION_ROUTES,req.url)))return reply(res,404,{error:'not_found'});
+ if(req.method!=='POST'||!(req.url==='/android-admin/jobs'||req.url==='/android-admin/open-url'||Object.hasOwn(ACTION_ROUTES,req.url)))return reply(res,404,{error:'not_found'});
  if(req.headers.origin!=='https://'+host||req.headers['x-dev-csrf']!==session||req.headers['content-type']?.split(';')[0]!=='application/json')
    return reply(res,403,{error:'request_not_allowed'});
- let size=0;req.on('data',b=>{size+=b.length;if(size>512)req.destroy()});
+ let size=0,requestBody='';req.on('data',b=>{size+=b.length;requestBody+=b;if(size>1024)req.destroy()});
  req.on('end',async()=>{
   try{
    const androidTarget=target(); // Resolve once, never redirect to a PC worker.
    const siteKey=ACTION_ROUTES[req.url];
    const site=siteKey?siteForKey(siteKey):null;
+   let custom=null;
+   if(req.url==='/android-admin/open-url') {
+     try {const data=JSON.parse(requestBody);if(Object.keys(data).length!==1)throw Error('invalid');custom=normalizeDeviceAction({kind:'OPEN_URL',target:data.url});}
+     catch {return reply(res,400,{error:'invalid_public_https_url'});}
+   }
    const id=crypto.randomUUID(), key='zfold4-dev-admin:'+id;
    const response=await fetch('http://127.0.0.1:18183/api/bridge/jobs',{method:'POST',
     headers:{'authorization':'Bearer '+token(),'content-type':'application/json'},
     body:JSON.stringify({source:'OPENCLAW',externalId:key,idempotencyKey:key,
-      title:site?site.title:'Z Fold4 DEV admin E2E check',
+      title:site?site.title:custom?'Z Fold4 DEV OPEN_URL Custom':'Z Fold4 DEV admin E2E check',
       sessionId:androidTarget}),
     signal:AbortSignal.timeout(12000)});
    const json=await response.json();
    if(response.status!==201||!json.accepted||!json.task?.id)return reply(res,502,{error:'dev_job_creation_failed'});
-   if(site){
+   if(site||custom){
     // The DEV dispatcher refuses any phone browser job without this matching action.
     // Never disguise a post-creation action-write failure as a failed job creation:
     // doing so encourages duplicate jobs when the operator retries.
     try {
      saveDeviceAction(actionDirectory,json.task.id,androidTarget.slice('android-dev:'.length),
-       {kind:'OPEN_URL',target:site.url});
+       custom||{kind:'OPEN_URL',target:site.url});
     } catch (e) {
      console.error('DEV_ADMIN_ACTION_REGISTRATION_FAILED',e?.code||'unknown');
      return reply(res,503,{error:'action_registration_failed',jobId:json.task.id,
@@ -114,7 +122,7 @@ http.createServer((req,res)=>{
     }
    }
    return reply(res,201,{jobId:json.task.id,status:json.task.status,
-     target:androidTarget,...(site?{action:'OPEN_URL',site:site.label}:{})});
+     target:androidTarget,...((site||custom)?{action:'OPEN_URL',site:site?.label||'Public HTTPS'}:{})});
   }catch(e){
    console.error('DEV_ADMIN_BACKEND_FAILURE',e?.code||e?.name||'unknown');
    return reply(res,503,{error:'dev_backend_unavailable'});
