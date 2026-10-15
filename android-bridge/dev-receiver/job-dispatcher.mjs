@@ -34,6 +34,7 @@ export function eligible(rows,registry,now=Date.now(),actions={}){
    const action=verifiedDeviceAction(actions[r.id],r.id,r.source_session_id.slice(12),now);
    if (r.title==='Z Fold4 DEV OPEN_URL Custom') return action?.kind==='OPEN_URL';
    if (r.title==='Z Fold4 DEV OPEN_APP Custom') return action?.kind==='OPEN_APP';
+   if (r.title==='Z Fold4 DEV OPEN_APP Custom') return action?.kind==='OPEN_APP';
    return !!site && action?.kind==='OPEN_URL'&&action.target===site.url;
  })
  .map(r=>({id:r.id,deviceId:r.source_session_id.slice(12)}));
