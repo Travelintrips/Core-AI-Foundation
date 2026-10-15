@@ -7,7 +7,17 @@ const dir=process.env.BRIDGE_DEVICE_SPOOL_DIR || '/var/lib/openclaw-android-brid
 const devices=path.join(dir,'device-registry.json');
 const grants=path.join(dir,'device-job-grants.json');
 const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'));}catch(e){if(e.code==='ENOENT')return {};throw e;}};
-function save(p,data){const temp=p+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(data),{mode:0o600,flag:'wx'});fs.renameSync(temp,p);}
+// The paired broker is www-data, even when this privileged CLI runs as root.
+function save(p,data){
+ const owner=fs.statSync(fs.existsSync(p)?p:dir);
+ const temp=p+'.'+process.pid+'.tmp';
+ try{
+  fs.writeFileSync(temp,JSON.stringify(data),{mode:0o600,flag:'wx'});
+  const written=fs.statSync(temp);
+  if(written.uid!==owner.uid||written.gid!==owner.gid)fs.chownSync(temp,owner.uid,owner.gid);
+  fs.renameSync(temp,p);
+ }finally{try{fs.unlinkSync(temp)}catch(e){if(e.code!=='ENOENT')throw e}}
+}
 const [action,deviceId,jobId]=process.argv.slice(2);
 if(!['enroll','grant','revoke'].includes(action)||!/^[-_a-zA-Z0-9]{3,48}$/.test(deviceId||''))throw Error('usage: enroll|grant|revoke <device-id> [job-id]');
 fs.mkdirSync(dir,{recursive:true,mode:0o700});

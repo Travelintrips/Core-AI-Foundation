@@ -2,9 +2,17 @@ name: Android Bridge DEV APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - feat/openclaw-android-chat-bridge-dev
+      - feat/zfold4-dev-actions-20261015
     paths:
       - 'android-bridge/**'
       - '.github/workflows/android-dev-apk.yml'
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,10 +30,65 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Build DEV debug APK
+      - name: Verify DEV action and pairing policy
+        run: node --test android-bridge/dev-receiver/completed-jobs.test.mjs android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs android-bridge/dev-receiver/device-action-receipt.test.mjs android-bridge/dev-receiver/android-direct-browser.test.mjs
+      - name: Restore persistent DEV signing identity
+        shell: bash
+        env:
+          DEV_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEV_SIGNING_KEYSTORE_B64 }}
+          ANDROID_DEV_SIGNING_PASSWORD: ${{ secrets.ANDROID_DEV_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DEV_KEYSTORE_BASE64" || -z "$ANDROID_DEV_SIGNING_PASSWORD" ]]; then
+            echo "::error::DEV signing secrets are missing; unsigned/ephemeral APKs are forbidden."
+            exit 1
+          fi
+          umask 077
+          store="$RUNNER_TEMP/openclaw-android-stable-dev.keystore"
+          printf '%s' "$DEV_KEYSTORE_BASE64" | base64 --decode > "$store"
+          test -s "$store" || { echo "::error::Invalid signing keystore"; exit 1; }
+          mapfile -t aliases < <(keytool -list -keystore "$store" -storepass "$ANDROID_DEV_SIGNING_PASSWORD" -J-Duser.language=en |
+            awk -F, '/PrivateKeyEntry/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1}')
+          if [[ ${#aliases[@]} -ne 1 || -z "${aliases[0]}" ]]; then
+            echo "::error::Expected exactly one DEV signing private key."
+            exit 1
+          fi
+          echo "ANDROID_DEV_SIGNING_KEYSTORE_FILE=$store" >> "$GITHUB_ENV"
+          echo "ANDROID_DEV_SIGNING_ALIAS=${aliases[0]}" >> "$GITHUB_ENV"
+      - name: Build consistently signed DEV APK
         working-directory: android-bridge
+        env:
+          ANDROID_DEV_SIGNING_PASSWORD: ${{ secrets.ANDROID_DEV_SIGNING_PASSWORD }}
         run: gradle --no-daemon :app:assembleDebug
-      - uses: actions/upload-artifact@v4
+      - name: Verify signature matches pinned DEV certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-bridge/app/build/outputs/apk/debug/app-debug.apk"
+          package_line="$("${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep -m1 '^package: ')"
+          if [[ "$package_line" != *"name='id.cst.openclawbridge.autosend'"* ||
+                "$package_line" != *"versionCode='23'"* ||
+                "$package_line" != *"versionName='0.14.0-dev-open-apps'"* ]]; then
+            echo "::error::DEV APK package ID or version does not match the approved release."
+            exit 1
+          fi
+          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk" |
+            tee "$RUNNER_TEMP/verified-dev-apk-certificate.txt"
+          actual="$(awk '/^Signer #1 certificate SHA-256 digest:/ {print $NF}' "$RUNNER_TEMP/verified-dev-apk-certificate.txt")"
+          count="$(grep -cE '^Signer #[0-9]+ certificate SHA-256 digest:' "$RUNNER_TEMP/verified-dev-apk-certificate.txt")"
+          expected="$(tr -d '[:space:]' < android-bridge/DEV_SIGNER_SHA256)"
+          if [[ "$count" -ne 1 || ! "$actual" =~ ^[a-f0-9]{64}$ || "$actual" != "$expected" ]]; then
+            echo "::error::DEV signing certificate changed or is invalid. Reject APK to protect upgrades."
+            exit 1
+          fi
+          echo "DEV APK certificate verified against pinned fingerprint."
+      - name: Upload signed DEV APK
+        uses: actions/upload-artifact@v4
         with:
           name: openclaw-chat-bridge-dev-apk
           path: android-bridge/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Erase temporary signing material
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/openclaw-android-stable-dev.keystore"

@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.net.Uri;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.content.Context;
 import android.provider.Settings;
@@ -40,6 +42,8 @@ public class MainActivity extends Activity {
     private static final String DEV_PAIR_START_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/start";
     private static final String DEV_PAIR_STATUS_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/pair/status";
     private static final String DEV_NEXT_JOB_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/jobs/next";
+    // Explicit package targeting avoids Android's web browser chooser.
+    private static final String DEV_CHROME_PACKAGE = "com.android.chrome";
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
     private boolean devOneTapLaunch = false;
@@ -51,7 +55,7 @@ public class MainActivity extends Activity {
     private final Runnable autoPoll = new Runnable() {
         @Override public void run() {
             if (!foreground || !foregroundAutoEnabled) return;
-            if (!fetchInFlight) fetchJobForDevice(true);
+            if (!fetchInFlight) fetchJobForDevice(false);
             autoHandler.postDelayed(this, 20000);
         }
     };
@@ -59,6 +63,9 @@ public class MainActivity extends Activity {
     private EditText deviceCredential;
     private TextView deliveryStatus;
     private TextView jobFetchStatus;
+    private TextView actionReceiptStatus;
+    private volatile boolean actionReceiptInFlight = false;
+    private static final String ACTION_PREFS = "bridge-device-actions-dev";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -80,16 +87,31 @@ public class MainActivity extends Activity {
         fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice(false));
         root.addView(fetchAssignedJob);
         jobFetchStatus = new TextView(this);
-        jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
+        jobFetchStatus.setText("Situs DEV terotorisasi akan dibuka otomatis di Chrome selama Bridge terbuka. Tombol ambil job tetap tersedia.");
         jobFetchStatus.setTextSize(16);
         root.addView(jobFetchStatus);
+        Button retrySite = new Button(this);
+        retrySite.setText("BUKA ULANG SITUS JOB DI CHROME (DEV)");
+        retrySite.setOnClickListener(v -> retrySiteInChrome());
+        root.addView(retrySite);
+        Button confirmSite = new Button(this);
+        confirmSite.setText("BUKTI TAMBAHAN MANUAL UNTUK JOB LAMA (OPSIONAL)");
+        confirmSite.setOnClickListener(v -> confirmSiteVisible());
+        root.addView(confirmSite);
+        actionReceiptStatus = new TextView(this);
+        actionReceiptStatus.setText("Setelah situs terverifikasi terlihat di Chrome HP, kembali ke Bridge dan konfirmasi. Bukti adalah pengakuan pengguna, bukan pengamatan layar otomatis.");
+        root.addView(actionReceiptStatus);
+        TextView navigationGuide = new TextView(this);
+        navigationGuide.setText("Panduan klik manual: GitHub → Repositories; Hostinger → VPS; GCP → Compute Engine → VM instances. Klik sendiri pada HP. Perintah tidak memasukkan password, tidak mengklik Deploy, Delete, Start/Stop VM, atau mengubah IAM.");
+        root.addView(navigationGuide);
         Button oneTapTest = new Button(this);
         oneTapTest.setText("UJI CHATGPT OTOMATIS DEV (SATU KETUKAN)");
         oneTapTest.setOnClickListener(v -> fetchJobForDevice(true));
         root.addView(oneTapTest);
         CheckBox autoPolling = new CheckBox(this);
-        autoPolling.setText("AUTO JOB DEV saat Bridge terbuka (20 detik; boleh membuka ChatGPT)");
-        autoPolling.setChecked(false);
+        autoPolling.setText("TERIMA JOB DEV OTOMATIS saat Bridge terbuka (20 detik; situs terbatas)");
+        autoPolling.setChecked(true);
+        foregroundAutoEnabled=true;
         autoPolling.setOnCheckedChangeListener((button, checked) -> {
             foregroundAutoEnabled = checked;
             autoHandler.removeCallbacks(autoPoll);
@@ -184,6 +206,7 @@ public class MainActivity extends Activity {
         if (foregroundAutoEnabled) autoHandler.post(autoPoll);
         if (autoSendStatus != null) showAutoSendStatus();
         loadCapturedReply();
+        retryPendingAutoReceipt();
     }
 
     @Override protected void onPause() {
@@ -458,7 +481,9 @@ public class MainActivity extends Activity {
                 try(InputStream in=conn.getInputStream()){
                     response=new String(in.readNBytes(4096),StandardCharsets.UTF_8);
                 }
-                String id=new JSONObject(response).getString("jobId");
+                JSONObject payload = new JSONObject(response);
+                String id=payload.getString("jobId");
+                JSONObject action=payload.optJSONObject("action");
                 if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
                     throw new IllegalStateException("Invalid job");
                 runOnUiThread(()->{
@@ -469,6 +494,32 @@ public class MainActivity extends Activity {
                     }
                     taskId.setText(id);
                     jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");
+                    if (action != null) {
+                        if (getSharedPreferences(ACTION_PREFS, MODE_PRIVATE).getString("last_action_job", "").equals(id)) {
+                            // APK upgrades preserve pairing and one-shot history. For a
+                            // previously launched phone browser job, preserve its exact
+                            // destination and offer user confirmation without opening twice.
+                            android.content.SharedPreferences saved=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
+                            if (id.equals(saved.getString("auto_dispatch_job",""))) {
+                                retryPendingAutoReceipt();
+                                jobFetchStatus.setText("Job "+id+": Chrome telah dipanggil, mengirim ulang receipt yang sama jika diperlukan.");
+                                return;
+                            }
+                            if (id.equals(saved.getString("auto_dispatch_completed_job",""))) {
+                                jobFetchStatus.setText("Job "+id+": laporan Android diterima intake DEV; tunggu ACK server.");
+                                return;
+                            }
+                            if ("OPEN_URL".equals(action.optString("kind")) &&
+                                AndroidActionReceipt.supportedUrl(action.optString("target"))) {
+                                // Legacy installed APK may have saved a manual pending event.
+                                rememberPhoneSiteAction(id,action.optString("target"));
+                            }
+                            jobFetchStatus.setText("Aksi job ini sudah dicatat; tidak akan dibuka ulang.");
+                            return;
+                        }
+                        presentDeviceAction(id, action);
+                        return;
+                    }
                     if(startTest){
                         if (!getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
                                 .putString("last_launched_job", id).commit()) return;
@@ -487,6 +538,285 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> fetchInFlight = false);
             }
         }).start();
+    }
+
+
+    // DEV action dispatcher: restricted authorized OPEN_URL jobs run without a redundant dialog.
+    // Other actions still require on-device confirmation; no intent is page-rendering evidence.
+    private void presentDeviceAction(String id, JSONObject action) {
+        String kind = action.optString("kind", "");
+        String target = action.optString("target", "");
+        Uri uri = null;
+        String description;
+        if ("OPEN_URL".equals(kind)) {
+            try {
+                uri = Uri.parse(target);
+                if (!"https".equals(uri.getScheme()) || uri.getUserInfo() != null || uri.getPort() != -1 ||
+                    !AndroidActionReceipt.supportedUrl(target))
+                    throw new IllegalArgumentException("URL ditolak");
+            } catch (Exception ex) { jobFetchStatus.setText("OPEN_URL ditolak oleh kebijakan DEV."); return; }
+            description = "Situs DEV diizinkan: " + target;
+        } else if ("OPEN_APP".equals(kind)) {
+            if (!AndroidActionReceipt.supportedApp(target)) {
+                jobFetchStatus.setText("OPEN_APP ditolak oleh kebijakan DEV."); return;
+            }
+            description = "Buka aplikasi " + target + " di HP?";
+        } else if ("DEVICE_STATUS".equals(kind) && target.isEmpty()) {
+            description = "Periksa status aplikasi Bridge dan koneksi jaringan tanpa mengambil data pribadi?";
+        } else { jobFetchStatus.setText("Jenis aksi DEV tidak dikenal."); return; }
+        // Record the one-shot offer before user interaction, preventing replay after rotation/restart.
+        if (!getSharedPreferences("bridge-device-actions-dev", MODE_PRIVATE).edit()
+                .putString("last_action_job", id).commit()) {
+            jobFetchStatus.setText("Tidak dapat menyimpan status aksi."); return;
+        }
+        final Uri destination = uri;
+        final String taskKind = kind;
+        final String taskTarget = target;
+        // A paired DEV admin/MCP job is prior user authorization for this
+        // bounded site navigation. Repeated approval dialogs are unnecessary.
+        // This does NOT grant Chrome taps, passwords or cloud mutations.
+        if ("OPEN_URL".equals(taskKind) && AndroidActionReceipt.supportedUrl(taskTarget)) {
+            if (!openDevUrlInChrome(id,destination)) {
+                // On Chrome launch failure permit a later bounded retry.
+                android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
+                if (id.equals(prefs.getString("last_action_job","")))
+                    prefs.edit().remove("last_action_job").apply();
+            }
+            return;
+        }
+        if ("OPEN_APP".equals(taskKind)) {
+            Intent launch=getPackageManager().getLaunchIntentForPackage(taskTarget);
+            if(launch==null) {
+                jobFetchStatus.setText("Aplikasi belum terpasang/terlihat: "+taskTarget);
+                getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit().remove("last_action_job").apply();
+                return;
+            }
+            try {
+                startActivity(launch);
+                queueAutoDispatchReceipt(id,taskTarget);
+                jobFetchStatus.setText("Job "+id+": intent membuka aplikasi "+taskTarget+" dikirim ke HP.");
+            } catch(Exception ex) {
+                jobFetchStatus.setText("Aplikasi gagal dibuka; job belum selesai.");
+                getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit().remove("last_action_job").apply();
+            }
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Konfirmasi perintah AI Task DEV")
+          .setMessage(description).setCancelable(false)
+          .setNegativeButton("Tolak", (dialog, which) -> jobFetchStatus.setText("Job "+id+": aksi ditolak pengguna; belum COMPLETED."))
+          .setPositiveButton("Jalankan", (dialog, which) -> {
+              try {
+                  if ("DEVICE_STATUS".equals(taskKind)) {
+                      android.net.ConnectivityManager manager =
+                          (android.net.ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+                      android.net.Network network = manager == null ? null : manager.getActiveNetwork();
+                      jobFetchStatus.setText("Job "+id+": Bridge DEV aktif, jaringan "+
+                          (network == null ? "tidak tersedia" : "tersedia") +
+                          ". Pemeriksaan lokal saja, belum ACK.");
+                      return;
+                  }
+                  if ("OPEN_URL".equals(taskKind)) {
+                      openDevUrlInChrome(id, destination);
+                      return;
+                  }
+                  Intent launch = getPackageManager().getLaunchIntentForPackage(taskTarget);
+                  if (launch == null) {
+                      jobFetchStatus.setText("Aplikasi tidak terpasang: "+taskTarget);
+                      return;
+                  }
+                  startActivity(launch);
+                  jobFetchStatus.setText("Job "+id+": intent membuka "+taskKind+
+                     " dikirim; belum ada bukti callback/ACK.");
+              } catch (Exception ex) {
+                  jobFetchStatus.setText("Job "+id+": Android gagal membuka target (belum ACK).");
+              }
+          }).show();
+    }
+
+    // Foreground-only explicit Chrome dispatch. Never call a generic ACTION_VIEW
+    // for a DEV OPEN_URL: the generic resolver displays the browser chooser.
+    // If Chrome is unavailable, fail closed without choosing a different browser
+    // or delegating the action to any PC/OpenClaw worker.
+    private boolean openDevUrlInChrome(String jobId, Uri destination) {
+        if (destination == null || !"https".equals(destination.getScheme()) ||
+            destination.getUserInfo()!=null || destination.getPort()!=-1 ||
+            !AndroidActionReceipt.supportedUrl(destination.toString())) {
+            jobFetchStatus.setText("URL DEV ditolak; hanya domain yang disetujui.");
+            return false;
+        }
+        Intent browser = new Intent(Intent.ACTION_VIEW, destination);
+        browser.addCategory(Intent.CATEGORY_BROWSABLE);
+        browser.setPackage(DEV_CHROME_PACKAGE);
+        if (browser.resolveActivity(getPackageManager()) == null) {
+            jobFetchStatus.setText("Chrome belum tersedia/aktif di Z Fold4. Aktifkan Google Chrome; tidak memakai pemilih browser atau PC DELL.");
+            return false;
+        }
+        try {
+            startActivity(browser);
+            queueAutoDispatchReceipt(jobId,destination.toString());
+            jobFetchStatus.setText("Job "+jobId+": Chrome menerima intent membuka "+destination.getHost()+
+                " di Z Fold4. Bukti intent dikirim ke DEV; tampilan web/login belum diverifikasi.");
+            return true;
+        } catch (Exception ex) {
+            jobFetchStatus.setText("Chrome gagal membuka URL di Z Fold4; job belum dikonfirmasi.");
+            return false;
+        }
+    }
+
+    // Recover a previously offered one-shot job after an APK update without
+    // generating a second AI Task job or re-delivering an already accepted ACK.
+    private void queueAutoDispatchReceipt(String jobId,String url) {
+        if (!AndroidActionReceipt.supportedUrl(url) && !AndroidActionReceipt.supportedApp(url)) return;
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
+        if (jobId.equals(prefs.getString("auto_dispatch_completed_job",""))) return;
+        String previous=prefs.getString("auto_dispatch_job","");
+        String event=jobId.equals(previous)?prefs.getString("auto_dispatch_event",""):UUID.randomUUID().toString();
+        if (event.isEmpty()) event=UUID.randomUUID().toString();
+        boolean persisted=prefs.edit()
+            .putString("auto_dispatch_job",jobId)
+            .putString("auto_dispatch_target",url)
+            .putString("auto_dispatch_event",event).commit();
+        if (!persisted) {
+            actionReceiptStatus.setText("Chrome dibuka, tetapi status receipt belum tersimpan. Tidak mengaku E2E selesai.");
+            return;
+        }
+        retryPendingAutoReceipt();
+    }
+
+    private void retryPendingAutoReceipt() {
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
+        String id=prefs.getString("auto_dispatch_job","");
+        String url=prefs.getString("auto_dispatch_target","");
+        String event=prefs.getString("auto_dispatch_event","");
+        if (!id.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
+            !event.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
+            !(AndroidActionReceipt.supportedUrl(url) || AndroidActionReceipt.supportedApp(url)) || actionReceiptInFlight) return;
+        String paired=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
+        if(paired.length()<32) {
+            actionReceiptStatus.setText("Receipt tertunda: pairing DEV tidak tersedia.");
+            return;
+        }
+        actionReceiptInFlight=true;
+        actionReceiptStatus.setText("Mengirim bukti Chrome intent ke AI Task DEV...");
+        new Thread(()->{
+            try {
+                String receipt=AndroidActionReceipt.supportedApp(url) ?
+                    AndroidActionReceipt.submitDispatchedApp(id,event,paired,url) :
+                    AndroidActionReceipt.submitDispatchedSite(id,event,paired,url);
+                boolean stored=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit()
+                    .putString("auto_dispatch_completed_job",id)
+                    .remove("auto_dispatch_job")
+                    .remove("auto_dispatch_event")
+                    .remove("auto_dispatch_target").commit();
+                runOnUiThread(()->actionReceiptStatus.setText(
+                    stored ? "DEV menerima intent Chrome ("+AndroidActionReceipt.labelForUrl(url)+
+                        "), receipt "+receipt+". Menunggu callback/ACK; tampilan halaman belum diverifikasi." :
+                        "DEV menerima receipt, tetapi status lokal belum tersimpan."));
+            } catch (Exception ex) {
+                final String cause=ex instanceof IllegalStateException?
+                    ex.getMessage():ex instanceof SecurityException?"otorisasi":"koneksi";
+                runOnUiThread(()->actionReceiptStatus.setText(
+                    "Receipt DEV tertunda ("+cause+"). Akan dicoba lagi dengan event sama saat Bridge aktif."));
+            } finally {
+                runOnUiThread(()->actionReceiptInFlight=false);
+            }
+        },"android-dev-preauthorized-receipt").start();
+    }
+
+    private void retrySiteInChrome() {
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
+        String id=prefs.getString("pending_job","");
+        String url=prefs.getString("pending_target",AndroidActionReceipt.GITHUB);
+        if (!id.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
+            !id.equals(prefs.getString("last_action_job","")) ||
+            !AndroidActionReceipt.supportedUrl(url)) {
+            jobFetchStatus.setText("Belum ada job situs terotorisasi di HP. Tekan AMBIL JOB DEV OTOMATIS terlebih dahulu.");
+            return;
+        }
+        if (id.equals(prefs.getString("confirmed_job","")) ||
+            id.equals(prefs.getString("auto_dispatch_completed_job",""))) {
+            jobFetchStatus.setText("Job "+id+" sudah dilaporkan; tidak perlu membuka ulang.");
+            return;
+        }
+        openDevUrlInChrome(id, Uri.parse(url));
+    }
+
+    private void rememberPhoneSiteAction(String id,String url) {
+        if (!AndroidActionReceipt.supportedUrl(url)) {
+            actionReceiptStatus.setText("Situs tidak termasuk aksi DEV yang disetujui.");
+            return;
+        }
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS, MODE_PRIVATE);
+        if (id.equals(prefs.getString("confirmed_job",""))) {
+            actionReceiptStatus.setText("Konfirmasi untuk job "+id+" sudah diterima intake DEV. Menunggu verifikasi callback/ACK.");
+            return;
+        }
+        if (!id.equals(prefs.getString("pending_job",""))) {
+            boolean saved=prefs.edit().putString("pending_job",id)
+                .putString("pending_target",url)
+                .putString("pending_event",UUID.randomUUID().toString()).commit();
+            if (!saved) {
+                actionReceiptStatus.setText("Gagal menyimpan pending job pada perangkat.");
+                return;
+            }
+        }
+        actionReceiptStatus.setText("Job "+id+": Jika "+AndroidActionReceipt.labelForUrl(url)+
+            " SUDAH terlihat pada Z Fold4, tekan KONFIRMASI SITUS di atas.");
+    }
+
+    private void confirmSiteVisible() {
+        android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS, MODE_PRIVATE);
+        String id=prefs.getString("pending_job","");
+        if (id.equals(prefs.getString("auto_dispatch_job","")) ||
+            id.equals(prefs.getString("auto_dispatch_completed_job",""))) {
+            actionReceiptStatus.setText("Laporan intent otomatis sudah diproses atau dikirim untuk job ini. Tidak perlu konfirmasi berulang.");
+            return;
+        }
+        String event=prefs.getString("pending_event","");
+        String url=prefs.getString("pending_target",AndroidActionReceipt.GITHUB);
+        if (id.isEmpty() || event.isEmpty() || !AndroidActionReceipt.supportedUrl(url)) {
+            actionReceiptStatus.setText("Tidak ada job situs DEV yang sah menunggu konfirmasi. Ambil job terlebih dahulu.");
+            return;
+        }
+        if (actionReceiptInFlight) return;
+        final String label=AndroidActionReceipt.labelForUrl(url);
+        new AlertDialog.Builder(this)
+          .setTitle("Konfirmasi "+label+" pada HP")
+          .setMessage("Apakah "+label+" benar-benar SUDAH terlihat di Chrome Z Fold4? Jawab Ya hanya setelah melihat situs yang benar di HP; ini bukan izin klik, deploy, hapus, atau ubah akun.")
+          .setNegativeButton("Belum", (dialog,which) ->
+              actionReceiptStatus.setText("Belum dikonfirmasi. Buka situs dahulu, lalu kembali ke Bridge."))
+          .setPositiveButton("Ya, situs terlihat", (dialog,which) ->
+              submitSiteConfirmation(id,event,url))
+          .show();
+    }
+
+    private void submitSiteConfirmation(String id,String event,String url) {
+        if (actionReceiptInFlight) return;
+        String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
+        if (credential.length()<32) {
+            actionReceiptStatus.setText("Pairing DEV hilang; tidak dapat mengirim konfirmasi.");
+            return;
+        }
+        actionReceiptInFlight=true;
+        actionReceiptStatus.setText("Mengirim konfirmasi pengguna ke intake DEV; bukan ACK akhir...");
+        new Thread(()->{
+            try {
+                String receipt=AndroidActionReceipt.submitUserConfirmedSite(id,event,credential,url);
+                boolean saved=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit()
+                    .putString("confirmed_job",id).remove("pending_job").remove("pending_target").remove("pending_event").commit();
+                runOnUiThread(()->actionReceiptStatus.setText(
+                    saved ? "Intake DEV menerima konfirmasi pengguna. Receipt: "+receipt+
+                      ". Status RECEIVED_UNVERIFIED; menunggu server memverifikasi callback/ACK." :
+                      "Intake menerima hasil, tetapi status lokal belum tersimpan; jangan buat job baru."));
+            } catch (Exception ex) {
+                final String cause=ex instanceof IllegalStateException ?
+                  ex.getMessage() : ex instanceof SecurityException ? "otorisasi" : "koneksi";
+                runOnUiThread(()->actionReceiptStatus.setText(
+                    "Gagal mengirim konfirmasi DEV ("+cause+"). Coba lagi dengan event yang sama; jangan membuat job baru."));
+            } finally {
+                runOnUiThread(()->actionReceiptInFlight=false);
+            }
+        },"android-dev-action-receipt").start();
     }
 
     private void beginPairing() {

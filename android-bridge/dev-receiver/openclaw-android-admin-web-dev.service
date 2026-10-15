@@ -1,0 +1,25 @@
+[Unit]
+Description=AI Task DEV Android Admin Web (localhost)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/openclaw-android-bridge-dev
+ExecStart=/usr/bin/node /opt/openclaw-android-bridge-dev/admin-web.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+# Required only for the locally approved phone action registry. All other paths
+# stay read-only, and the nginx Basic Auth + CSRF check remains mandatory.
+ReadWritePaths=/var/lib/openclaw-android-bridge-dev
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import {markCompletedJob} from './completed-jobs.mjs';
 
 const container = 'ai-task-dev-pr49-hostnet';
 const spool = process.env.BRIDGE_DEVICE_SPOOL_DIR || '/var/lib/openclaw-android-bridge-dev';
@@ -72,6 +73,7 @@ async function processReceipt(filename, bridgeToken, ackToken) {
    return;
  }
  if(prior.status==='COMPLETED' && prior.callbackMatch && prior.summaryMatch) {
+   markCompletedJob(spool,item.jobId);
    fs.writeFileSync(done,JSON.stringify({jobId:item.jobId,receiptId:receiptHash,status:'COMPLETED',recovered:true})+'\\n',{flag:'wx',mode:0o600});
    return;
  }
@@ -84,6 +86,9 @@ async function processReceipt(filename, bridgeToken, ackToken) {
    const ack=await post('/jobs/'+item.jobId+'/ack',{eventId:ackEvent,callbackId:callback,
      receiver:'android-dev-database-verifier',accepted:true},ackToken);
    if(![200,201].includes(ack.code) || !ack.data.accepted) throw Error('ACK not accepted '+ack.code);
+   // The independent DB check plus accepted callback ACK is the only
+   // authority to release the handset broker slot.
+   markCompletedJob(spool,item.jobId);
    fs.writeFileSync(done,JSON.stringify({jobId:item.jobId,receiptId:receiptHash,ackReceiptId:ack.data.receiptId,
      completedAt:new Date().toISOString(),status:'COMPLETED'})+'\\n',{flag:'wx',mode:0o600});
    console.log('ANDROID_DEV_COMPLETED',item.jobId,receiptHash);

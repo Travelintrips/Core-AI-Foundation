@@ -6,6 +6,7 @@ import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
+import {markCompletedJob} from './completed-jobs.mjs';
 const uuid='e2b234b3-28bf-4f02-bb1a-9ff9126b84fc';
 const other='e9203104-0938-4f58-9fea-0873b77a53d8';
 test('DEV pairing grants, deny by default, and revoke',async()=>{
@@ -26,15 +27,38 @@ test('DEV pairing grants, deny by default, and revoke',async()=>{
   const next=(key)=>fetch('http://127.0.0.1:18897/v1/android/jobs/next',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+key},body:'{}'});
   assert.equal((await next('unknown-device')).status,401);
   assert.equal((await next(deviceSecret)).status,204);
+  const registryStatsBefore=fs.statSync(path.join(dir,'device-registry.json'));
   admin('grant','zfold4-dev',uuid);
+  const grantStats=fs.statSync(path.join(dir,'device-job-grants.json'));
+  assert.equal(grantStats.uid,fs.statSync(dir).uid);
+  assert.equal(grantStats.gid,fs.statSync(dir).gid);
   const assigned=await next(deviceSecret);
   assert.equal(assigned.status,200);
   assert.equal((await assigned.json()).jobId,uuid);
   const granted=await req(uuid,deviceSecret);
   assert.equal(granted.status,200);
   const body=await granted.json();assert.ok(body.token.length>90);
+  const claims=JSON.parse(Buffer.from(body.token.split('.')[0],'base64url').toString('utf8'));
+  assert.equal(claims.deviceId,'zfold4-dev');
+  assert.equal(claims.jobId,uuid);
+  assert.equal(claims.scope,'android-result:submit');
   assert.equal((await req(other,deviceSecret)).status,403);
+  // A newer grant is offered first. Its independently verified ACK marker
+  // skips it immediately, allowing the older pending job without waiting 1h.
+  admin('grant','zfold4-dev',other);
+  const newest=await next(deviceSecret);
+  assert.equal(newest.status,200);
+  assert.equal((await newest.json()).jobId,other);
+  markCompletedJob(dir,other);
+  const remaining=await next(deviceSecret);
+  assert.equal(remaining.status,200);
+  assert.equal((await remaining.json()).jobId,uuid);
+  markCompletedJob(dir,uuid);
+  assert.equal((await next(deviceSecret)).status,204);
   admin('revoke','zfold4-dev');
+  const registryStatsAfter=fs.statSync(path.join(dir,'device-registry.json'));
+  assert.equal(registryStatsAfter.uid,registryStatsBefore.uid);
+  assert.equal(registryStatsAfter.gid,registryStatsBefore.gid);
   assert.equal((await req(uuid,deviceSecret)).status,401);
  }finally{proc.kill();fs.rmSync(dir,{recursive:true,force:true});}
 });
@@ -55,8 +79,14 @@ test('one-tap pairing requires explicit approval and is single use',async()=>{
   assert.equal(pending.status,202);
   const wrong=await api('/v1/android/pair/status',{requestId:item.requestId,proof:'wrong'});
   assert.equal(wrong.status,401);
+  const pairingFile=path.join(dir,'pairing-requests.json');
+  const pairingStatsBefore=fs.statSync(pairingFile);
   const approval=spawnSync(process.execPath,[fileURLToPath(new URL('./approve-pairing.mjs',import.meta.url)),item.code,'physical-fold4-dev'],{env,encoding:'utf8'});
   assert.equal(approval.status,0,approval.stderr);
+  const pairingStatsAfter=fs.statSync(pairingFile);
+  assert.equal(pairingStatsAfter.uid,pairingStatsBefore.uid);
+  assert.equal(pairingStatsAfter.gid,pairingStatsBefore.gid);
+  if(process.platform!=='win32')assert.equal(pairingStatsAfter.mode & 0o777,0o600);
   const paired=await api('/v1/android/pair/status',{requestId:item.requestId,proof:item.proof});
   assert.equal(paired.status,200);
   const data=await paired.json();

@@ -4,6 +4,8 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {loadDeviceActions} from './device-actions.mjs';
+import {validateActionReceipt, ACTION_REPORT_SOURCE, AUTO_REPORT_SOURCE} from './device-action-receipt.mjs';
 
 const secret = process.env.BRIDGE_DEVICE_HMAC_SECRET || '';
 if (Buffer.byteLength(secret) < 32) throw Error('BRIDGE_DEVICE_HMAC_SECRET must be 32+ bytes');
@@ -13,15 +15,16 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const equal = (x,y) => { const a=Buffer.from(x),b=Buffer.from(y);return a.length===b.length && crypto.timingSafeEqual(a,b); };
 const sign = raw => crypto.createHmac('sha256',secret).update(raw).digest('base64url');
 function verify(rawToken, jobId) {
-  if (typeof rawToken !== 'string' || rawToken.length > 1500) return false;
+  if (typeof rawToken !== 'string' || rawToken.length > 1500) return null;
   const parts = rawToken.split('.');
-  if (parts.length !== 2 || !equal(sign(parts[0]),parts[1])) return false;
+  if (parts.length !== 2 || !equal(sign(parts[0]),parts[1])) return null;
   try {
     const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
-    return payload.scope === 'android-result:submit' && payload.jobId === jobId &&
-      Number.isInteger(payload.exp) && payload.exp >= Date.now() && payload.exp <= Date.now()+15*60*1000 &&
-      typeof payload.nonce === 'string' && payload.nonce.length > 10;
-  } catch { return false; }
+    if (payload.scope !== 'android-result:submit' || payload.jobId !== jobId ||
+        !Number.isInteger(payload.exp) || payload.exp < Date.now() || payload.exp > Date.now()+15*60*1000 ||
+        typeof payload.nonce !== 'string' || payload.nonce.length <= 10) return null;
+    return payload;
+  } catch { return null; }
 }
 function reply(res,code,data) {
   res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});
@@ -43,13 +46,27 @@ const server = http.createServer((req,res)=>{
           typeof msg.resultSummary !== 'string' || !msg.resultSummary.trim() ||
           msg.resultSummary.length > 2000 || msg.protocol !== 'openclaw-chat-bridge-dev-v1')
         return reply(res,400,{error:'invalid_result'});
-      if (!verify(authorization.slice(7),msg.jobId)) return reply(res,401,{error:'invalid_or_expired_job_token'});
-      // Durable no-overwrite idempotent inbox for a future trusted server-side bridge consumer.
+      const claims=verify(authorization.slice(7),msg.jobId);
+      if (!claims) return reply(res,401,{error:'invalid_or_expired_job_token'});
+      // For a phone action, the intake requires a paired-device-scoped token,
+      // a currently valid grant, the exact allowlisted action and a user
+      // confirmation from that device. Never auto-claim a generic text result
+      // as proof that a browser page opened.
+      let attestation=null;
+      const storedAction=loadDeviceActions(spoolDir)[msg.jobId];
+      if (storedAction || msg.deviceAction || msg.source === ACTION_REPORT_SOURCE || msg.source === AUTO_REPORT_SOURCE) {
+        try {attestation=validateActionReceipt(spoolDir,msg.jobId,claims,msg);}
+        catch {return reply(res,403,{error:'action_confirmation_not_authorized'});}
+      }
+      const resultSummary=attestation?.resultSummary ?? msg.resultSummary;
+      // Durable no-overwrite idempotent inbox for a trusted server-side bridge consumer.
       const receiptId=crypto.createHash('sha256').update(msg.jobId+'|'+msg.eventId).digest('hex');
       const destination=path.join(spoolDir,receiptId+'.json');
-      const resultDigest=crypto.createHash('sha256').update(msg.resultSummary).digest('hex');
-      const record={receiptId,jobId:msg.jobId,eventId:msg.eventId,resultDigest,resultSummary:msg.resultSummary,
-                    receivedAt:new Date().toISOString(),state:'RECEIVED_UNVERIFIED'};
+      const resultDigest=crypto.createHash('sha256').update(resultSummary).digest('hex');
+      const record={receiptId,jobId:msg.jobId,eventId:msg.eventId,resultDigest,resultSummary,
+                    receivedAt:new Date().toISOString(),state:'RECEIVED_UNVERIFIED',
+                    ...(attestation?{deviceId:attestation.deviceId,deviceAction:attestation.deviceAction,
+                      evidence:attestation.evidence,source:attestation.source}:{})};
       try { fs.writeFileSync(destination,JSON.stringify(record),{flag:'wx',mode:0o600}); }
       catch(e) {
         if(e.code!=='EEXIST') throw e;
