@@ -1,4 +1,4 @@
-const GITHUB_API_ORIGIN = "https://api.github.com";
+const GITHUB_API_BASE = "https://api.github.com";
 const MAX_PUBLISH_FILES = 40;
 const MAX_TOTAL_CONTENT_BYTES = 1_500_000;
 
