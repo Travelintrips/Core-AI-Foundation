@@ -1,5 +1,27 @@
 # Z Fold4 restricted device actions (DEV only)
 
+## Direct Chrome on Z Fold4, no browser picker (v0.11.1)
+
+For a DEV `OPEN_URL` job, the Android APK calls
+`Intent.ACTION_VIEW` with `setPackage("com.android.chrome")`. This keeps
+the action on the Z Fold4 and targets Chrome directly. It does not use the
+generic browser chooser or fall back to a DELL/PC worker. Chrome must be
+installed and enabled; otherwise the app shows a clear error instead of a
+chooser. The user still approves the job's foreground launch.
+
+If the old APK already displayed Android's browser picker for an assigned
+GitHub job, **do not create another job**. Update the installed DEV APK in
+place using the stable signer, open the Bridge app, and tap **BUKA GITHUB
+LANGSUNG DI CHROME (JOB DEV)**. This button only uses the job ID already
+offered on that phone; it never creates a fresh job and does not produce
+a callback automatically. Once GitHub visibly loads on the HP, return to
+the Bridge app and tap **KONFIRMASI GITHUB SUDAH TERBUKA DI HP (DEV)**.
+
+Confirmation remains user-attested. E2E PASS still requires a DEV database
+row in `COMPLETED`, verified callback, and exactly one ACK; an Android
+intent being launched or GitHub appearing in Chrome is not that proof.
+
+
 ## Correct route for opening GitHub on the Z Fold4
 
 **Do not use the generic OpenClaw/PC browser command:** that opens GitHub on the
