@@ -67,8 +67,8 @@ jobs:
           apk="android-bridge/app/build/outputs/apk/debug/app-debug.apk"
           package_line="$("${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" | grep -m1 '^package: ')"
           if [[ "$package_line" != *"name='id.cst.openclawbridge.autosend'"* ||
-                "$package_line" != *"versionCode='22'"* ||
-                "$package_line" != *"versionName='0.13.0-dev-public-https'"* ]]; then
+                "$package_line" != *"versionCode='23'"* ||
+                "$package_line" != *"versionName='0.14.0-dev-open-apps'"* ]]; then
             echo "::error::DEV APK package ID or version does not match the approved release."
             exit 1
           fi
