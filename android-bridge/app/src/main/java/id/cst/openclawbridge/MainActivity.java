@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.net.Uri;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.content.Context;
 import android.provider.Settings;
@@ -458,7 +460,9 @@ public class MainActivity extends Activity {
                 try(InputStream in=conn.getInputStream()){
                     response=new String(in.readNBytes(4096),StandardCharsets.UTF_8);
                 }
-                String id=new JSONObject(response).getString("jobId");
+                JSONObject payload = new JSONObject(response);
+                String id=payload.getString("jobId");
+                JSONObject action=payload.optJSONObject("action");
                 if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
                     throw new IllegalStateException("Invalid job");
                 runOnUiThread(()->{
@@ -469,6 +473,14 @@ public class MainActivity extends Activity {
                     }
                     taskId.setText(id);
                     jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");
+                    if (action != null) {
+                        if (getSharedPreferences("bridge-device-actions-dev", MODE_PRIVATE).getString("last_action_job", "").equals(id)) {
+                            jobFetchStatus.setText("Aksi job ini telah ditawarkan sekali; tidak diulang.");
+                            return;
+                        }
+                        presentDeviceAction(id, action);
+                        return;
+                    }
                     if(startTest){
                         if (!getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
                                 .putString("last_launched_job", id).commit()) return;
@@ -487,6 +499,70 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> fetchInFlight = false);
             }
         }).start();
+    }
+
+
+    // DEV action dispatcher: user confirmation is mandatory and no UI launch is reported as E2E PASS.
+    private void presentDeviceAction(String id, JSONObject action) {
+        String kind = action.optString("kind", "");
+        String target = action.optString("target", "");
+        Uri uri = null;
+        String description;
+        if ("OPEN_URL".equals(kind)) {
+            try {
+                uri = Uri.parse(target);
+                String host = uri.getHost();
+                if (!"https".equals(uri.getScheme()) || uri.getUserInfo() != null || uri.getPort() != -1 ||
+                    !( "github.com".equals(host) || "www.github.com".equals(host) ||
+                       "dev-ai-task.cstlogistic.co.id".equals(host))) throw new IllegalArgumentException("URL ditolak");
+            } catch (Exception ex) { jobFetchStatus.setText("OPEN_URL ditolak oleh kebijakan DEV."); return; }
+            description = "Buka alamat berikut di browser HP?\\n" + target;
+        } else if ("OPEN_APP".equals(kind)) {
+            if (!("com.github.android".equals(target) || "com.openai.chatgpt".equals(target) ||
+                  "com.android.chrome".equals(target))) {
+                jobFetchStatus.setText("OPEN_APP ditolak oleh kebijakan DEV."); return;
+            }
+            description = "Buka aplikasi " + target + " di HP?";
+        } else if ("DEVICE_STATUS".equals(kind) && target.isEmpty()) {
+            description = "Periksa status aplikasi Bridge dan koneksi jaringan tanpa mengambil data pribadi?";
+        } else { jobFetchStatus.setText("Jenis aksi DEV tidak dikenal."); return; }
+        // Record the one-shot offer before user interaction, preventing replay after rotation/restart.
+        if (!getSharedPreferences("bridge-device-actions-dev", MODE_PRIVATE).edit()
+                .putString("last_action_job", id).commit()) {
+            jobFetchStatus.setText("Tidak dapat menyimpan status aksi."); return;
+        }
+        final Uri destination = uri;
+        final String taskKind = kind;
+        final String taskTarget = target;
+        new AlertDialog.Builder(this).setTitle("Konfirmasi perintah AI Task DEV")
+          .setMessage(description).setCancelable(false)
+          .setNegativeButton("Tolak", (dialog, which) -> jobFetchStatus.setText("Job "+id+": aksi ditolak pengguna; belum COMPLETED."))
+          .setPositiveButton("Jalankan", (dialog, which) -> {
+              try {
+                  if ("DEVICE_STATUS".equals(taskKind)) {
+                      android.net.ConnectivityManager manager =
+                          (android.net.ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+                      android.net.Network network = manager == null ? null : manager.getActiveNetwork();
+                      jobFetchStatus.setText("Job "+id+": Bridge DEV aktif, jaringan "+
+                          (network == null ? "tidak tersedia" : "tersedia") +
+                          ". Pemeriksaan lokal saja, belum ACK.");
+                      return;
+                  }
+                  Intent launch;
+                  if ("OPEN_URL".equals(taskKind)) {
+                      launch = new Intent(Intent.ACTION_VIEW, destination);
+                      launch.addCategory(Intent.CATEGORY_BROWSABLE);
+                  } else {
+                      launch = getPackageManager().getLaunchIntentForPackage(taskTarget);
+                      if (launch == null) {jobFetchStatus.setText("Aplikasi tidak terpasang: "+taskTarget); return;}
+                  }
+                  startActivity(launch);
+                  jobFetchStatus.setText("Job "+id+": intent membuka "+taskKind+
+                     " dikirim. Ini bukan bukti halaman/aplikasi terbuka atau ACK.");
+              } catch (Exception ex) {
+                  jobFetchStatus.setText("Job "+id+": Android gagal membuka target (belum ACK).");
+              }
+          }).show();
     }
 
     private void beginPairing() {
