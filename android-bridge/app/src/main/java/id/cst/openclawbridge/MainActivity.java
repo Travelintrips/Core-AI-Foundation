@@ -178,7 +178,12 @@ public class MainActivity extends Activity {
         boolean enabled = accessibilityEnabled();
         String message = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
             .getString(ChatSendService.STATUS, "Belum ada uji Auto Kirim.");
-        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message);
+        android.content.SharedPreferences statusPrefs = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE);
+        long sentAt = statusPrefs.getLong(ChatSendService.AUTO_SENT_AT, 0);
+        long capturedAt = statusPrefs.getLong(ChatSendService.AUTO_CAPTURED_AT, 0);
+        String evidence = "\nAUTO_SENT (klik Accessibility diterima): " + (sentAt > 0 ? new java.util.Date(sentAt).toString() : "BELUM") +
+                "\nAUTO_CAPTURED (jawaban bertanda): " + (capturedAt > 0 ? new java.util.Date(capturedAt).toString() : "BELUM");
+        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message + evidence);
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
@@ -221,7 +226,8 @@ public class MainActivity extends Activity {
         getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
             .edit().remove("text").remove("at")
             .remove(ChatSendService.REPLY_MARKER).remove(ChatSendService.REPLY_STARTED)
-            .remove(ChatSendService.CAPTURED_REPLY).commit();
+            .remove(ChatSendService.CAPTURED_REPLY)
+            .remove(ChatSendService.AUTO_SENT_AT).remove(ChatSendService.AUTO_CAPTURED_AT).commit();
         if (armed) {
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
                 .edit().putString("text", transmitText).putLong("at", System.currentTimeMillis())
