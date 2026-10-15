@@ -37,6 +37,10 @@ test('DEV pairing grants, deny by default, and revoke',async()=>{
   const granted=await req(uuid,deviceSecret);
   assert.equal(granted.status,200);
   const body=await granted.json();assert.ok(body.token.length>90);
+  const claims=JSON.parse(Buffer.from(body.token.split('.')[0],'base64url').toString('utf8'));
+  assert.equal(claims.deviceId,'zfold4-dev');
+  assert.equal(claims.jobId,uuid);
+  assert.equal(claims.scope,'android-result:submit');
   assert.equal((await req(other,deviceSecret)).status,403);
   admin('revoke','zfold4-dev');
   const registryStatsAfter=fs.statSync(path.join(dir,'device-registry.json'));
