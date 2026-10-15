@@ -3,7 +3,7 @@
 // independent evidence that a web page was rendered.
 import fs from 'node:fs';
 import path from 'node:path';
-import {loadDeviceActions, verifiedDeviceAction} from './device-actions.mjs';
+import {loadDeviceActions, verifiedDeviceAction, normalizeDeviceAction} from './device-actions.mjs';
 import {siteForUrl} from './phone-site-catalog.mjs';
 
 export const CONFIRMATION = 'USER_CONFIRMED_VISIBLE';
@@ -16,9 +16,10 @@ function read(file) {
   catch(error) { if (error.code === 'ENOENT') return {}; throw error; }
 }
 function siteForAction(action) {
-  const site=action?.kind==='OPEN_URL'?siteForUrl(action.target):null;
-  if (!site) throw Error('Unsupported phone action');
-  return site;
+  if(action?.kind!=='OPEN_URL')throw Error('Unsupported phone action');
+  const normalized=normalizeDeviceAction(action);
+  const site=siteForUrl(normalized.target);
+  return site||{label:'public HTTPS site '+new URL(normalized.target).hostname};
 }
 export function confirmedSummary(action) {
   const site=siteForAction(action);
