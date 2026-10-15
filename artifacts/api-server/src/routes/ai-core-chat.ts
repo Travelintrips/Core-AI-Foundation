@@ -14,6 +14,11 @@ import {
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { mirrorAiTaskLedgerJob } from "../services/aiTaskLedgerBridgeService.js";
 import { logger } from "../lib/logger.js";
+// Auto-repair: catch and log unhandled promise rejections
+type UnhandledReason = unknown;
+process.on('unhandledRejection', (reason: UnhandledReason) => {
+  logger.error({ reason }, 'Unhandled promise rejection in AI core chat route');
+});
 import {
   createConstrainedCodingProviderAdapter,
 } from "../services/localCodingAiExecutionGateService.js";
