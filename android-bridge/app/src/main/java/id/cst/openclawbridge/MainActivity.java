@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     private static final String DEV_NEXT_JOB_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/jobs/next";
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
+    private boolean devOneTapLaunch = false;
     private EditText jobToken;
     private EditText deviceCredential;
     private TextView deliveryStatus;
@@ -169,7 +170,10 @@ public class MainActivity extends Activity {
             result.setText(captured);
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
                 .edit().remove(ChatSendService.CAPTURED_REPLY).apply();
-            if (autoSubmit != null && autoSubmit.isChecked()) deliverResult();
+            String delivery = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
+                    .getString(CapturedResultDelivery.STATUS, "");
+            if (autoSubmit != null && autoSubmit.isChecked() && !delivery.startsWith("AUTO_DELIVERY_"))
+                deliverResult();
         }
     }
 
@@ -183,7 +187,9 @@ public class MainActivity extends Activity {
         long capturedAt = statusPrefs.getLong(ChatSendService.AUTO_CAPTURED_AT, 0);
         String evidence = "\nAUTO_SENT (klik Accessibility diterima): " + (sentAt > 0 ? new java.util.Date(sentAt).toString() : "BELUM") +
                 "\nAUTO_CAPTURED (jawaban bertanda): " + (capturedAt > 0 ? new java.util.Date(capturedAt).toString() : "BELUM");
-        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message + evidence);
+        String delivery = statusPrefs.getString(CapturedResultDelivery.STATUS, "");
+        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message + evidence +
+                (delivery.isEmpty() ? "" : "\n" + delivery));
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
@@ -210,6 +216,9 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Aktifkan Auto Kirim untuk mengambil jawaban bertanda.", Toast.LENGTH_LONG).show();
             return;
         }
+        boolean directDelivery = devOneTapLaunch && armed && capture && autoSubmit.isChecked() &&
+                taskId.getText().toString().trim().matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}");
+        devOneTapLaunch = false;
         eventId = UUID.randomUUID().toString(); // New logical request must never reuse result event identity.
         String nonce = capture ? UUID.randomUUID().toString().replace("-", "") : "";
         String transmitText = capture
@@ -227,7 +236,15 @@ public class MainActivity extends Activity {
             .edit().remove("text").remove("at")
             .remove(ChatSendService.REPLY_MARKER).remove(ChatSendService.REPLY_STARTED)
             .remove(ChatSendService.CAPTURED_REPLY)
-            .remove(ChatSendService.AUTO_SENT_AT).remove(ChatSendService.AUTO_CAPTURED_AT).commit();
+            .remove(ChatSendService.AUTO_SENT_AT).remove(ChatSendService.AUTO_CAPTURED_AT)
+            .putBoolean(CapturedResultDelivery.ARMED, false)
+            .remove(CapturedResultDelivery.STATUS).commit();
+        if (directDelivery) {
+            getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE).edit()
+                .putString(CapturedResultDelivery.JOB_ID, taskId.getText().toString().trim())
+                .putString(CapturedResultDelivery.EVENT_ID, eventId)
+                .putBoolean(CapturedResultDelivery.ARMED, true).commit();
+        }
         if (armed) {
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
                 .edit().putString("text", transmitText).putLong("at", System.currentTimeMillis())
@@ -420,7 +437,8 @@ public class MainActivity extends Activity {
                         autoSend.setChecked(true);
                         captureReply.setChecked(true);
                         autoSubmit.setChecked(true);
-                        launchChatGPT(); // Explicit one-tap action; uploads only after captured reply returns to Bridge.
+                        devOneTapLaunch = true;
+                        launchChatGPT(); // Explicit one-tap DEV run; marked result can upload without UI return.
                     }
                 });
             }catch(Exception ex){
