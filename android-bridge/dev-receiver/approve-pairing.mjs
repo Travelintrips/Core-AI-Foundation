@@ -12,5 +12,14 @@ const entries=Object.entries(data).filter(([,x])=>x.status==='pending'&&x.expire
 if(entries.length!==1)throw Error('No unique valid pending approval');
 const [requestId,entry]=entries[0];
 entry.status='approved';entry.deviceId=deviceId;delete entry.codeHash;
-const tmp=file+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data),{flag:'wx',mode:0o600});fs.renameSync(tmp,file);
+// The broker runs as www-data. Atomic replacement by a root operator must
+// retain its existing owner; otherwise the next status poll fails with HTTP 400.
+const owner=fs.statSync(file);
+const tmp=file+'.'+process.pid+'.tmp';
+try {
+ fs.writeFileSync(tmp,JSON.stringify(data),{flag:'wx',mode:0o600});
+ const written=fs.statSync(tmp);
+ if(written.uid!==owner.uid||written.gid!==owner.gid)fs.chownSync(tmp,owner.uid,owner.gid);
+ fs.renameSync(tmp,file);
+}finally{try{fs.unlinkSync(tmp)}catch(e){if(e.code!=='ENOENT')throw e}}
 console.log('APPROVED',requestId,'DEVICE',deviceId);
