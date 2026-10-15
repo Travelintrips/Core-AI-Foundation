@@ -1,4 +1,4 @@
-import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
+import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";import { BadRequestModelException } from "../exceptions/badRequestModelException.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
