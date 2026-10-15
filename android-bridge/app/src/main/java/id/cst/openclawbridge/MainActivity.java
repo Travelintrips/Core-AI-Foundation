@@ -90,17 +90,20 @@ public class MainActivity extends Activity {
         jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
         jobFetchStatus.setTextSize(16);
         root.addView(jobFetchStatus);
-        Button retryGithub = new Button(this);
-        retryGithub.setText("BUKA GITHUB LANGSUNG DI CHROME (JOB DEV)");
-        retryGithub.setOnClickListener(v -> retryGithubInChrome());
-        root.addView(retryGithub);
-        Button confirmGithub = new Button(this);
-        confirmGithub.setText("KONFIRMASI GITHUB SUDAH TERBUKA DI HP (DEV)");
-        confirmGithub.setOnClickListener(v -> confirmGithubVisible());
-        root.addView(confirmGithub);
+        Button retrySite = new Button(this);
+        retrySite.setText("BUKA ULANG SITUS JOB DI CHROME (DEV)");
+        retrySite.setOnClickListener(v -> retrySiteInChrome());
+        root.addView(retrySite);
+        Button confirmSite = new Button(this);
+        confirmSite.setText("KONFIRMASI SITUS SUDAH TERBUKA DI HP (DEV)");
+        confirmSite.setOnClickListener(v -> confirmSiteVisible());
+        root.addView(confirmSite);
         actionReceiptStatus = new TextView(this);
-        actionReceiptStatus.setText("Setelah GitHub terlihat di browser HP, kembali ke Bridge dan konfirmasi. Ini bukti pengguna, bukan pemeriksaan layar otomatis.");
+        actionReceiptStatus.setText("Setelah situs terverifikasi terlihat di Chrome HP, kembali ke Bridge dan konfirmasi. Bukti adalah pengakuan pengguna, bukan pengamatan layar otomatis.");
         root.addView(actionReceiptStatus);
+        TextView navigationGuide = new TextView(this);
+        navigationGuide.setText("Panduan klik manual: GitHub → Repositories; Hostinger → VPS; GCP → Compute Engine → VM instances. Klik sendiri pada HP. Perintah tidak memasukkan password, tidak mengklik Deploy, Delete, Start/Stop VM, atau mengubah IAM.");
+        root.addView(navigationGuide);
         Button oneTapTest = new Button(this);
         oneTapTest.setText("UJI CHATGPT OTOMATIS DEV (SATU KETUKAN)");
         oneTapTest.setOnClickListener(v -> fetchJobForDevice(true));
@@ -492,11 +495,11 @@ public class MainActivity extends Activity {
                     if (action != null) {
                         if (getSharedPreferences(ACTION_PREFS, MODE_PRIVATE).getString("last_action_job", "").equals(id)) {
                             // APK upgrades preserve pairing and one-shot history. For a
-                            // previously launched GitHub job, let the person attest
-                            // that it was actually visible, without opening it twice.
+                            // previously launched phone browser job, preserve its exact
+                            // destination and offer user confirmation without opening twice.
                             if ("OPEN_URL".equals(action.optString("kind")) &&
-                                AndroidActionReceipt.GITHUB.equals(action.optString("target"))) {
-                                rememberGithubAction(id);
+                                AndroidActionReceipt.supportedUrl(action.optString("target"))) {
+                                rememberPhoneSiteAction(id,action.optString("target"));
                             }
                             jobFetchStatus.setText("Aksi job ini telah ditawarkan sekali; tidak dibuka ulang.");
                             return;
@@ -534,10 +537,9 @@ public class MainActivity extends Activity {
         if ("OPEN_URL".equals(kind)) {
             try {
                 uri = Uri.parse(target);
-                String host = uri.getHost();
                 if (!"https".equals(uri.getScheme()) || uri.getUserInfo() != null || uri.getPort() != -1 ||
-                    !( "github.com".equals(host) || "www.github.com".equals(host) ||
-                       "dev-ai-task.cstlogistic.co.id".equals(host))) throw new IllegalArgumentException("URL ditolak");
+                    !AndroidActionReceipt.supportedUrl(target))
+                    throw new IllegalArgumentException("URL ditolak");
             } catch (Exception ex) { jobFetchStatus.setText("OPEN_URL ditolak oleh kebijakan DEV."); return; }
             description = "Buka alamat berikut langsung di Chrome pada HP (tanpa memilih browser)?\\n" + target;
         } else if ("OPEN_APP".equals(kind)) {
@@ -596,9 +598,7 @@ public class MainActivity extends Activity {
     private boolean openDevUrlInChrome(String jobId, Uri destination) {
         if (destination == null || !"https".equals(destination.getScheme()) ||
             destination.getUserInfo()!=null || destination.getPort()!=-1 ||
-            !("github.com".equals(destination.getHost()) ||
-              "www.github.com".equals(destination.getHost()) ||
-              "dev-ai-task.cstlogistic.co.id".equals(destination.getHost()))) {
+            !AndroidActionReceipt.supportedUrl(destination.toString())) {
             jobFetchStatus.setText("URL DEV ditolak; hanya domain yang disetujui.");
             return false;
         }
@@ -611,9 +611,7 @@ public class MainActivity extends Activity {
         }
         try {
             startActivity(browser);
-            if (AndroidActionReceipt.GITHUB.equals(destination.toString())) {
-                rememberGithubAction(jobId);
-            }
+            rememberPhoneSiteAction(jobId,destination.toString());
             jobFetchStatus.setText("Job "+jobId+": Chrome diminta membuka "+destination.getHost()+
                 " langsung di HP. Konfirmasi setelah halaman benar-benar terlihat.");
             return true;
@@ -625,22 +623,28 @@ public class MainActivity extends Activity {
 
     // Recover a previously offered one-shot job after an APK update without
     // generating a second AI Task job or re-delivering an already accepted ACK.
-    private void retryGithubInChrome() {
+    private void retrySiteInChrome() {
         android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE);
         String id=prefs.getString("pending_job","");
+        String url=prefs.getString("pending_target",AndroidActionReceipt.GITHUB);
         if (!id.matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}") ||
-            !id.equals(prefs.getString("last_action_job",""))) {
-            jobFetchStatus.setText("Belum ada job GitHub terotorisasi di HP. Tekan AMBIL JOB DEV OTOMATIS terlebih dahulu.");
+            !id.equals(prefs.getString("last_action_job","")) ||
+            !AndroidActionReceipt.supportedUrl(url)) {
+            jobFetchStatus.setText("Belum ada job situs terotorisasi di HP. Tekan AMBIL JOB DEV OTOMATIS terlebih dahulu.");
             return;
         }
         if (id.equals(prefs.getString("confirmed_job",""))) {
             jobFetchStatus.setText("Job "+id+" sudah dikonfirmasi; jangan mengulang aksi.");
             return;
         }
-        openDevUrlInChrome(id, Uri.parse(AndroidActionReceipt.GITHUB));
+        openDevUrlInChrome(id, Uri.parse(url));
     }
 
-    private void rememberGithubAction(String id) {
+    private void rememberPhoneSiteAction(String id,String url) {
+        if (!AndroidActionReceipt.supportedUrl(url)) {
+            actionReceiptStatus.setText("Situs tidak termasuk aksi DEV yang disetujui.");
+            return;
+        }
         android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS, MODE_PRIVATE);
         if (id.equals(prefs.getString("confirmed_job",""))) {
             actionReceiptStatus.setText("Konfirmasi untuk job "+id+" sudah diterima intake DEV. Menunggu verifikasi callback/ACK.");
@@ -648,35 +652,39 @@ public class MainActivity extends Activity {
         }
         if (!id.equals(prefs.getString("pending_job",""))) {
             boolean saved=prefs.edit().putString("pending_job",id)
+                .putString("pending_target",url)
                 .putString("pending_event",UUID.randomUUID().toString()).commit();
             if (!saved) {
                 actionReceiptStatus.setText("Gagal menyimpan pending job pada perangkat.");
                 return;
             }
         }
-        actionReceiptStatus.setText("Job "+id+": Jika GitHub SUDAH terlihat pada Z Fold4, tekan KONFIRMASI GITHUB di atas.");
+        actionReceiptStatus.setText("Job "+id+": Jika "+AndroidActionReceipt.labelForUrl(url)+
+            " SUDAH terlihat pada Z Fold4, tekan KONFIRMASI SITUS di atas.");
     }
 
-    private void confirmGithubVisible() {
+    private void confirmSiteVisible() {
         android.content.SharedPreferences prefs=getSharedPreferences(ACTION_PREFS, MODE_PRIVATE);
         String id=prefs.getString("pending_job","");
         String event=prefs.getString("pending_event","");
-        if (id.isEmpty() || event.isEmpty()) {
-            actionReceiptStatus.setText("Tidak ada job GitHub yang menunggu konfirmasi. Ambil job DEV dahulu.");
+        String url=prefs.getString("pending_target",AndroidActionReceipt.GITHUB);
+        if (id.isEmpty() || event.isEmpty() || !AndroidActionReceipt.supportedUrl(url)) {
+            actionReceiptStatus.setText("Tidak ada job situs DEV yang sah menunggu konfirmasi. Ambil job terlebih dahulu.");
             return;
         }
         if (actionReceiptInFlight) return;
+        final String label=AndroidActionReceipt.labelForUrl(url);
         new AlertDialog.Builder(this)
-          .setTitle("Konfirmasi GitHub pada HP")
-          .setMessage("Apakah halaman GitHub benar-benar SUDAH terlihat pada Z Fold4? Jawab Ya hanya setelah melihatnya di browser HP. Tidak boleh mengaku berhasil jika baru muncul pemilih browser.")
+          .setTitle("Konfirmasi "+label+" pada HP")
+          .setMessage("Apakah "+label+" benar-benar SUDAH terlihat di Chrome Z Fold4? Jawab Ya hanya setelah melihat situs yang benar di HP; ini bukan izin klik, deploy, hapus, atau ubah akun.")
           .setNegativeButton("Belum", (dialog,which) ->
-              actionReceiptStatus.setText("Belum dikonfirmasi. Buka GitHub dahulu, lalu kembali ke Bridge."))
-          .setPositiveButton("Ya, GitHub terlihat", (dialog,which) ->
-              submitGithubConfirmation(id,event))
+              actionReceiptStatus.setText("Belum dikonfirmasi. Buka situs dahulu, lalu kembali ke Bridge."))
+          .setPositiveButton("Ya, situs terlihat", (dialog,which) ->
+              submitSiteConfirmation(id,event,url))
           .show();
     }
 
-    private void submitGithubConfirmation(String id,String event) {
+    private void submitSiteConfirmation(String id,String event,String url) {
         if (actionReceiptInFlight) return;
         String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
         if (credential.length()<32) {
@@ -687,9 +695,9 @@ public class MainActivity extends Activity {
         actionReceiptStatus.setText("Mengirim konfirmasi pengguna ke intake DEV; bukan ACK akhir...");
         new Thread(()->{
             try {
-                String receipt=AndroidActionReceipt.submitUserConfirmedGithub(id,event,credential);
+                String receipt=AndroidActionReceipt.submitUserConfirmedSite(id,event,credential,url);
                 boolean saved=getSharedPreferences(ACTION_PREFS,MODE_PRIVATE).edit()
-                    .putString("confirmed_job",id).remove("pending_job").remove("pending_event").commit();
+                    .putString("confirmed_job",id).remove("pending_job").remove("pending_target").remove("pending_event").commit();
                 runOnUiThread(()->actionReceiptStatus.setText(
                     saved ? "Intake DEV menerima konfirmasi pengguna. Receipt: "+receipt+
                       ". Status RECEIVED_UNVERIFIED; menunggu server memverifikasi callback/ACK." :
