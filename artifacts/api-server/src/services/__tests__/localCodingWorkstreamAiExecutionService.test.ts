@@ -11,6 +11,16 @@ import {
   shouldContinueApprovedWorkstreamAiCandidate,
 } from "../localCodingWorkstreamAiExecutionService.js";
 
+describe("model provider error handling", () => {
+  it("should handle PROVIDER_BAD_REQUEST from model provider", async () => {
+    const mockProvider = { call: vi.fn().mockRejectedValue({ code: "PROVIDER_BAD_REQUEST", message: "Bad request" }) };
+    const logger = { error: vi.fn(), warn: vi.fn() } as any;
+    await expect(decideWorkstreamAiAutoRepair({ provider: mockProvider, logger })).rejects.toThrow(LocalCodingWorkstreamAiExecutionError);
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("PROVIDER_BAD_REQUEST"));
+  });
+});
+
+
 const GRAPH_ID = "11111111-1111-4111-8111-111111111111";
 const WORKSTREAM_ID = "22222222-2222-4222-8222-222222222222";
 const CHILD_TASK_ID = "33333333-3333-4333-8333-333333333333";
