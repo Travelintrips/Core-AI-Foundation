@@ -60,12 +60,21 @@ jobs:
         env:
           ANDROID_DEV_SIGNING_PASSWORD: ${{ secrets.ANDROID_DEV_SIGNING_PASSWORD }}
         run: gradle --no-daemon :app:assembleDebug
-      - name: Independently verify APK signature
+      - name: Verify signature matches pinned DEV certificate
         shell: bash
         run: |
           set -euo pipefail
-          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-bridge/app/build/outputs/apk/debug/app-debug.apk |
+          apk="android-bridge/app/build/outputs/apk/debug/app-debug.apk"
+          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk" |
             tee "$RUNNER_TEMP/verified-dev-apk-certificate.txt"
+          actual="$(awk '/^Signer #1 certificate SHA-256 digest:/ {print $NF}' "$RUNNER_TEMP/verified-dev-apk-certificate.txt")"
+          count="$(grep -cE '^Signer #[0-9]+ certificate SHA-256 digest:' "$RUNNER_TEMP/verified-dev-apk-certificate.txt")"
+          expected="$(tr -d '[:space:]' < android-bridge/DEV_SIGNER_SHA256)"
+          if [[ "$count" -ne 1 || ! "$actual" =~ ^[a-f0-9]{64}$ || "$actual" != "$expected" ]]; then
+            echo "::error::DEV signing certificate changed or is invalid. Reject APK to protect upgrades."
+            exit 1
+          fi
+          echo "DEV APK certificate verified against pinned fingerprint."
       - name: Upload signed DEV APK
         uses: actions/upload-artifact@v4
         with:
