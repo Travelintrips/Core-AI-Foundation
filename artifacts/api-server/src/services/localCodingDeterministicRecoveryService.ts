@@ -53,7 +53,10 @@ export class LocalDeterministicRecoveryError extends Error {
       | "SANDBOX_BLOCKED"
       | "RECOVERY_FAILED",
   ) {
-    super(message);
+    super(message);    if (kind === "NOT_FOUND") {
+      console.warn(`Deterministic recovery warning: ${message}`);
+    }
+
     this.name = "LocalDeterministicRecoveryError";
   }
 }
