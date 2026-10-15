@@ -31,7 +31,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - name: Verify DEV action and pairing policy
-        run: node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs android-bridge/dev-receiver/device-action-receipt.test.mjs
+        run: node --test android-bridge/dev-receiver/device-actions.test.mjs android-bridge/dev-receiver/token-broker.test.mjs android-bridge/dev-receiver/job-dispatcher.test.mjs android-bridge/dev-receiver/device-action-receipt.test.mjs android-bridge/dev-receiver/android-direct-browser.test.mjs
       - name: Restore persistent DEV signing identity
         shell: bash
         env:
