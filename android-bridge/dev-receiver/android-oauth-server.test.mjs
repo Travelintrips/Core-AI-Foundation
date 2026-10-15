@@ -6,6 +6,7 @@ import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {verifyOAuthToken} from './android-oauth-auth.mjs';
 const work=mkdtempSync(join(tmpdir(),'android-oauth-test-'));
 const privateKey=crypto.generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs8',format:'pem'});
 const key=join(work,'key.pem');writeFileSync(key,privateKey,{mode:0o600});
@@ -38,5 +39,7 @@ test('OAuth DEV PKCE code flow requires explicit admin approval',async()=>{
   const tokenCode=new URL(ok.headers.get('location')).searchParams.get('code');
   const token=await fetch(root+'/oauth/android-dev/token',{method:'POST',body:new URLSearchParams({code:tokenCode,grant_type:'authorization_code',client_id:client,redirect_uri:redirect,code_verifier:verifier})});
   assert.equal(token.status,200);const data=await token.json();assert.equal(data.token_type,'Bearer');assert.ok(data.access_token.length>300);
+  const verified=await verifyOAuthToken('Bearer '+data.access_token,{issuer:'https://dev-ai-task.cstlogistic.co.id',jwksUrl:'https://dev-ai-task.cstlogistic.co.id/oauth/android-dev/jwks',fetch:()=>fetch(root+'/oauth/android-dev/jwks')});
+  assert.equal(verified,true);
  }finally{proc.kill();rmSync(work,{recursive:true,force:true});}
 });
