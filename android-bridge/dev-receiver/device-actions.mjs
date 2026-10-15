@@ -1,4 +1,4 @@
-// DEV-only, allowlisted device actions. Never a shell/ADB/Accessibility command surface.
+// DEV only: arbitrary public HTTPS sites, scoped to a single paired job. Never local networks, shell, ADB, or broad accessibility actions.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -23,7 +23,7 @@ export function normalizeDeviceAction(value) {
     let url;
     try { url = new URL(target); } catch { throw Error('Malformed URL'); }
     if (url.protocol !== 'https:' || url.username || url.password ||
-        !ALLOWED_URL_HOSTS.includes(url.hostname) || url.port) throw Error('URL host is not allowlisted');
+        url.port || !url.hostname || url.hostname==='localhost' || url.hostname.endsWith('.localhost') || url.hostname.endsWith('.local') || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(url.hostname) || url.hostname.startsWith('[')) throw Error('URL host is not allowlisted');
     return {kind, target: url.href};
   }
   if (kind === 'OPEN_APP') {
