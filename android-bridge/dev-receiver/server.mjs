@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {loadDeviceActions} from './device-actions.mjs';
-import {validateActionReceipt, ACTION_REPORT_SOURCE} from './device-action-receipt.mjs';
+import {validateActionReceipt, ACTION_REPORT_SOURCE, AUTO_REPORT_SOURCE} from './device-action-receipt.mjs';
 
 const secret = process.env.BRIDGE_DEVICE_HMAC_SECRET || '';
 if (Buffer.byteLength(secret) < 32) throw Error('BRIDGE_DEVICE_HMAC_SECRET must be 32+ bytes');
@@ -54,7 +54,7 @@ const server = http.createServer((req,res)=>{
       // as proof that a browser page opened.
       let attestation=null;
       const storedAction=loadDeviceActions(spoolDir)[msg.jobId];
-      if (storedAction || msg.deviceAction || msg.source === ACTION_REPORT_SOURCE) {
+      if (storedAction || msg.deviceAction || msg.source === ACTION_REPORT_SOURCE || msg.source === AUTO_REPORT_SOURCE) {
         try {attestation=validateActionReceipt(spoolDir,msg.jobId,claims,msg);}
         catch {return reply(res,403,{error:'action_confirmation_not_authorized'});}
       }
