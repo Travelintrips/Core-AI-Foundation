@@ -1,7 +1,46 @@
 plugins { id 'com.android.application' }
+
+// CI Android DEV artifacts must always use the same private PKCS12 identity.
+// Local development may use Gradle's normal debug signing, but those APKs must
+// never be distributed as update artifacts.
+def devSigningPath = System.getenv('ANDROID_DEV_SIGNING_KEYSTORE_PATH')
+def devSigningPassword = System.getenv('ANDROID_DEV_SIGNING_PASSWORD')
+if (System.getenv('GITHUB_ACTIONS') == 'true' && (!devSigningPath || !devSigningPassword)) {
+    throw new GradleException('Android DEV CI signing secrets are required; refusing ephemeral debug signing')
+}
+if (devSigningPath && devSigningPassword && !file(devSigningPath).isFile()) {
+    throw new GradleException('Android DEV signing keystore file is missing')
+}
 android {
     namespace 'id.cst.openclawbridge'
     compileSdk 35
-    defaultConfig { applicationId 'id.cst.openclawbridge.autosend'; minSdk 26; targetSdk 35; versionCode 17; versionName '0.10.0-dev-device-actions' }
-    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    defaultConfig {
+        applicationId 'id.cst.openclawbridge.autosend'
+        minSdk 26
+        targetSdk 35
+        versionCode 18
+        versionName '0.10.1-dev-stable-signing'
+    }
+    signingConfigs {
+        if (devSigningPath && devSigningPassword) {
+            devStable {
+                storeFile file(devSigningPath)
+                storePassword devSigningPassword
+                keyAlias 'cst-android-dev'
+                keyPassword devSigningPassword
+                storeType 'PKCS12'
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            if (devSigningPath && devSigningPassword) {
+                signingConfig signingConfigs.devStable
+            }
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 }
