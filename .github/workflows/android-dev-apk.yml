@@ -1,0 +1,31 @@
+name: Android Bridge DEV APK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android-bridge/**'
+      - '.github/workflows/android-dev-apk.yml'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          accept-android-sdk-licenses: 'true'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build DEV debug APK
+        working-directory: android-bridge
+        run: gradle --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openclaw-chat-bridge-dev-apk
+          path: android-bridge/app/build/outputs/apk/debug/app-debug.apk
