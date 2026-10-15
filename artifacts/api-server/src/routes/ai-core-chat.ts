@@ -1,5 +1,5 @@
 import {
-} from "../services/aiCoreCodingPolicyGuardService.js";
+} from "../services/aiCoreCodingPolicyGuardService.ts";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -11,20 +11,20 @@ import {
   isTransientDatabaseConnectionError,
   withTransientDatabaseRetry,
 } from "@workspace/db";
-import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
-import { mirrorAiTaskLedgerJob } from "../services/aiTaskLedgerBridgeService.js";
-import { logger } from "../lib/logger.js";
+import { startCodingOrchestration } from "../services/codingOrchestratorService.ts";
+import { mirrorAiTaskLedgerJob } from "../services/aiTaskLedgerBridgeService.ts";
+import { logger } from "../lib/logger.ts";
 import {
   createConstrainedCodingProviderAdapter,
-} from "../services/localCodingAiExecutionGateService.js";
+} from "../services/localCodingAiExecutionGateService.ts";
 import {
   createConstrainedModelInvocationAdapter,
   type ConstrainedModelProvider,
-} from "../services/localCodingAiModelAdapterService.js";
+} from "../services/localCodingAiModelAdapterService.ts";
 import {
   describePreferredCodingModelConfig,
   resolveConfiguredCodingFallbackModel,
-} from "../services/localCodingAiPreferredModelService.js";
+} from "../services/localCodingAiPreferredModelService.ts";
 import {
   readProductionCodingModelConfig,
   resolveAlternativeCloudCodingModels,
