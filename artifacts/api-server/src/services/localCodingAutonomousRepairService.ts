@@ -11,6 +11,13 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+// Guard to prevent automatic workflow cancellation in production
+function shouldCancelWorkflows() {
+  const inProd = process.env.NODE_ENV === 'production';
+  logger.info({ inProd }, 'Workflow cancellation guard evaluated');
+  return !inProd;
+}
+
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
