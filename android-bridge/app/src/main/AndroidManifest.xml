@@ -3,9 +3,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <queries><package android:name="com.openai.chatgpt"/></queries>
     <application android:allowBackup="false" android:label="OpenClaw Auto Kirim (DEV)" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <service android:name=".ChatSendService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
+        <service android:name=".DevPushMessagingService" android:exported="false">
+            <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT"/></intent-filter>
+        </service>
+        <service android:name=".ChatSendService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/chat_send_accessibility"/>
         </service>
