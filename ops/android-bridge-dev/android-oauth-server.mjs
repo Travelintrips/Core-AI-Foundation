@@ -38,7 +38,12 @@ http.createServer(async(req,res)=>{try{
   return html(res,200,'<!doctype html><meta charset="utf-8"><title>Android DEV access approval</title><h2>Izinkan ChatGPT mengakses Android DEV?</h2><p>Hanya perangkat DEV, cakupan android_dev.control. Tindakan sensitif tetap memerlukan izin perangkat.</p><form method="POST" action="/oauth/android-dev/authorize"><input type="hidden" name="nonce" value="'+nonce+'"><input type="hidden" name="csrf" value="'+csrf+'"><button name="decision" value="approve">Setujui akses DEV</button><button name="decision" value="deny">Tolak</button></form>');
  }
  if(p==='/oauth/android-dev/authorize'&&req.method==='POST'){
-  const b=new URLSearchParams(await body(req)),v=pending.get(b.get('nonce'));
+  const rawBody=await body(req),b=new URLSearchParams(rawBody),submittedNonce=b.get('nonce');
+  const v=pending.get(submittedNonce);
+  // No raw form, nonce, CSRF, cookies or request identifiers in diagnostics.
+  const nonceShape=typeof submittedNonce==='string'&&/^[A-Za-z0-9_-]{32}$/.test(submittedNonce);
+  const hasPendingConsent=[...pending.values()].some(item=>!item.approved);
+  if(!v)console.warn('[oauth-authorize] POST nonce diagnostics',JSON.stringify({nonceFieldPresent:b.has('nonce'),nonceShapeValid:nonceShape,formFields:[...b.keys()].sort(),pendingConsentPresent:hasPendingConsent}));
   // Log failure category only: never record nonce, cookie, CSRF, authorization code, or PKCE values.
   const csrfCookiePresent=(req.headers.cookie||'').split(';').some(x=>x.trim().startsWith('android_oauth_csrf='));
   const csrfCookieMatches=!!v&&(req.headers.cookie||'').split(';').map(x=>x.trim()).includes('android_oauth_csrf='+v.csrf);
