@@ -39,6 +39,12 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+// Short-circuit if GitHub workflow_run event is cancelled
+if (typeof event !== 'undefined' && event.status === 'cancelled') {
+  logger.info("Workflow run cancelled, exiting repair service.");
+  return;
+}
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
