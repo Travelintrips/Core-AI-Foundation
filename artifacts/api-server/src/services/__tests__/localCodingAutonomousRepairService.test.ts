@@ -1,4 +1,24 @@
 import { readFileSync } from "node:fs";
+
+describe('LocalCodingAutonomousRepairService workflow_run cancellation', () => {
+  it('should retry once when workflow_run is cancelled and succeed on retry', async () => {
+    // setup mock to simulate cancel then success
+    mockDbExecute.mockImplementationOnce(async () => { throw new Error('Cancelled workflow_run'); })
+                 .mockResolvedValueOnce([]);
+    const { handleWorkflowRun } = await import('../localCodingAutonomousRepairService.js');
+    const result = await handleWorkflowRun();
+    expect(mockDbExecute).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ success: true });
+  });
+
+  it('should retry once and surface error if retry fails', async () => {
+    mockDbExecute.mockRejectedValue(new Error('Persistent failure'));
+    const { handleWorkflowRun } = await import('../localCodingAutonomousRepairService.js');
+    await expect(handleWorkflowRun()).rejects.toThrow('Persistent failure');
+    expect(mockDbExecute).toHaveBeenCalledTimes(1);
+  });
+});
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
