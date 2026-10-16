@@ -63,6 +63,8 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        androidx.work.PeriodicWorkRequest backgroundCheck = new androidx.work.PeriodicWorkRequest.Builder(DevJobDiscoveryWorker.class, 15, java.util.concurrent.TimeUnit.MINUTES).build();
+        androidx.work.WorkManager.getInstance(getApplicationContext()).enqueueUniquePeriodicWork(DevJobDiscoveryWorker.UNIQUE, androidx.work.ExistingPeriodicWorkPolicy.KEEP, backgroundCheck);
         eventId = state == null ? UUID.randomUUID().toString() : state.getString("eventId", UUID.randomUUID().toString());
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
