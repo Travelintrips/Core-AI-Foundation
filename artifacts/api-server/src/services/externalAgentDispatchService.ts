@@ -26,7 +26,6 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
-  "openclaw-pc-worker-dev": "tools:bounded",
   [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
   [N8N_AGENT_CLIENT_ID]: "workflow:automation",
 };
