@@ -49,7 +49,17 @@ export const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: jsonHandler("Terlalu banyak permintaan untuk sementara. Silakan coba lagi dalam beberapa menit."),
-  skip: isAdminRequest,
+  skip: (req) => isAdminRequest(req) || req.path === "/ai/core-chat/mcp" || req.path === "/ai/core-chat/mcp-v2",
+});
+
+/** Dedicated bounded MCP request bucket. No unlimited exemption. */
+export const mcpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonHandler("Terlalu banyak permintaan MCP. Silakan coba lagi nanti."),
+  skip: (req) => isAdminRequest(req) || (req.path !== "/ai/core-chat/mcp" && req.path !== "/ai/core-chat/mcp-v2"),
 });
 
 /** 20 req per 60 min — payment proof submit, checkout */
