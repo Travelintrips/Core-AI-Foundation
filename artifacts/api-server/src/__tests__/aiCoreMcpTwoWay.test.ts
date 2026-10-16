@@ -356,6 +356,13 @@ describe("MCP command two-way routing", () => {
     expect(subscribed.body.result.structuredContent.bindingStatus).toBe("OAUTH_PRINCIPAL_CLIENT_CHANNEL");
     expect(subscribed.body.result.structuredContent.chatSessionIdVerified).toBe(false);
     expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
+    // OAuth command auto-subscription and job forwarding must use the SAME server channel.
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "user-1" }, scopes: new Set(["ai_core.events", "ai_core.command"]), clientId: "chatgpt-client-1",
+    } as never);
+    await invoke("send_ai_core_command", { conversationId: "arbitrary-input", message: "Uji koneksi MCP", confirmed: true });
+    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toMatchObject({ conversationId: channel });
     await invoke("read_ai_core_events", { conversationId: "other-user-channel" });
     expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
     const responseId = "11111111-1111-4111-8111-111111111111";
