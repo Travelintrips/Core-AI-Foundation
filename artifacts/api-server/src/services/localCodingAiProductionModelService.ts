@@ -1,6 +1,8 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
+// TODO: Ensure outgoing payload uses 'model' instead of 'modelName', includes 'messages', and sets a default 'temperature' per provider API spec.
+
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
