@@ -11,6 +11,37 @@ import {
   shouldContinueApprovedWorkstreamAiCandidate,
 } from "../localCodingWorkstreamAiExecutionService.js";
 
+describe("error handling for PROVIDER_BAD_REQUEST", () => {
+  it("rethrows ApplicationError with user-facing message on PROVIDER_BAD_REQUEST", async () => {
+    // Mock constrained provider to throw PROVIDER_BAD_REQUEST
+    const jobPayload = {} as any;
+    const error = new Error("Bad request");
+    (error as any).code = "PROVIDER_BAD_REQUEST";
+    // Spy on logger
+    const loggerSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      decideWorkstreamAiAutoRepair(GRAPH_ID, WORKSTREAM_ID, CHILD_TASK_ID, jobPayload)
+    ).rejects.toMatchObject({ message: /Bad request from AI provider/ });
+    expect(loggerSpy).toHaveBeenCalled();
+    loggerSpy.mockRestore();
+  });
+});
+
+describe("input validation", () => {
+  it("rejects missing GRAPH_ID", async () => {
+    await expect(
+      decideWorkstreamAiAutoRepair(undefined as any, WORKSTREAM_ID, CHILD_TASK_ID, {})
+    ).rejects.toThrow(/GRAPH_ID is required/);
+  });
+  it("rejects malformed WORKSTREAM_ID", async () => {
+    await expect(
+      decideWorkstreamAiAutoRepair(GRAPH_ID, "", CHILD_TASK_ID, {})
+    ).rejects.toThrow(/WORKSTREAM_ID must be a non-empty string/);
+  });
+});
+
+
 const GRAPH_ID = "11111111-1111-4111-8111-111111111111";
 const WORKSTREAM_ID = "22222222-2222-4222-8222-222222222222";
 const CHILD_TASK_ID = "33333333-3333-4333-8333-333333333333";
