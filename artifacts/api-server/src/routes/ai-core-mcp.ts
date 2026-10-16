@@ -1341,13 +1341,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       };
     } else if (params.name === "read_ai_core_events") {
       const parsed = ReadEventsArgs.parse(params.arguments ?? {});
-      // Reading events also renews the conversation lease so a long-running
-      // AI Core task cannot silently lose its callback channel.
-      await subscribeCodingBridgeConversation({
-        conversationId: parsed.conversationId,
-        eventTypes: [...DEFAULT_TERMINAL_EVENT_TYPES],
-        leaseSeconds: DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS,
-      });
+      // A read-only event query must not create or renew a subscription.
+      // Subscriptions require an explicit subscribe_ai_core_events call.
       const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
       payload = {
         conversationId: parsed.conversationId,
