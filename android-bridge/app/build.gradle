@@ -5,3 +5,5 @@ android {
     defaultConfig { applicationId 'id.cst.openclawbridge.autosend'; minSdk 26; targetSdk 35; versionCode 16; versionName '0.9.1-dev-pairing-retry' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
+
+dependencies { implementation 'androidx.work:work-runtime:2.10.2' }
