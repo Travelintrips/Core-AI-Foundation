@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {expiredAndroidJobs} from './expired-android-jobs.mjs';
+const id='e5a67678-d53a-438b-a607-cc52df46ca6b';
+const row={id,source:'OPENCLAW',status:'QUEUED',source_session_id:'android-dev:zfold4-paired-dev-16',title:'Z Fold4 DEV OPEN_URL GitHub'};
+test('stale guarded navigation requires reconciliation',()=>assert.deepEqual(expiredAndroidJobs([row],{[id]:{expiresAt:1}},Date.now()),[id]));
+test('ordinary jobs are never reconciled from this detector',()=>assert.deepEqual(expiredAndroidJobs([{...row,title:'Read-only generic job'}],{[id]:{expiresAt:1}}),[]));
+test('no action record is not automatically declared expired',()=>assert.deepEqual(expiredAndroidJobs([row],{}),[]));
+test('completed jobs are never selected',()=>assert.deepEqual(expiredAndroidJobs([{...row,status:'COMPLETED'}],{[id]:{expiresAt:1}}),[]));
+test('non-DEV jobs are excluded',()=>assert.deepEqual(expiredAndroidJobs([{...row,source_session_id:'prod:device'}],{[id]:{expiresAt:1}}),[]));
