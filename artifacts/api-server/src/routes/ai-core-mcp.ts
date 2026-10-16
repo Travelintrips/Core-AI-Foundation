@@ -330,7 +330,7 @@ function oauthEventChannel(identity: McpIdentity): string | null {
   return "ai-engine-oauth:" + digest;
 }
 
-function eventChannelArgs<T extends { conversationId: string }>(identity: McpIdentity, args: T): T {
+function eventChannelArgs<T extends { conversationId?: string }>(identity: McpIdentity, args: T): T {
   const channel = oauthEventChannel(identity);
   if (!channel) return args;
   // Prevent an authenticated OAuth client from reading/ACKing another caller's channel.
@@ -1060,6 +1060,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         handshakeAck: { received: true, handshakeId, source: "ai_core_mcp_server" },
         chatSessionId: null,
         chatSessionIdVerified: false,
+        aiEngineSessionId: oauthEventChannel(identity),
+        aiEngineSessionVerified: oauthEventChannel(identity) !== null,
         conversationAckVerified: false,
         capabilities: tools.filter((tool) => tool.name !== "get_profile").map((tool) => ({
           name: tool.name,
@@ -1104,7 +1106,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
       }
     } else if (params.name === "send_ai_core_command") {
-      const parsed = SendCommandArgs.parse(params.arguments ?? {});
+      const parsed = eventChannelArgs(identity, SendCommandArgs.parse(params.arguments ?? {}));
       const command = executionCommandMessage(parsed.message);
       if (!command) {
         res.status(200).json(
