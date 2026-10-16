@@ -11,6 +11,21 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("simulates reading events without an explicit subscription", () => {
+    const mockEventData = [{ id: "evt_1", type: "chat_event", payload: {} }];
+    const subscriptionServiceStub = {
+      subscribed: false,
+      readEvents: () => {
+        if (!subscriptionServiceStub.subscribed) {
+          throw new Error("No active subscription for event reading");
+        }
+        return mockEventData;
+      },
+    };
+
+    expect(() => subscriptionServiceStub.readEvents()).not.toThrow();
+  });
+
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
     expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
       kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
