@@ -118,6 +118,20 @@ describe("MCP command two-way routing", () => {
     });
   });
 
+  it("does not silently create a subscription when reading events", async () => {
+    mocks.list.mockResolvedValueOnce([]);
+    const response = await callTool("read_ai_core_events", { conversationId: "conversation-a" });
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      conversationId: "conversation-a",
+      events: [],
+    });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+    expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: "conversation-a",
+    }));
+  });
+
   it("refuses event ACK without a matching conversation and passes scoped IDs to storage", async () => {
     const id = "11111111-1111-4111-8111-111111111111";
     const missing = await callTool("ack_ai_core_event", { responseId: id });
