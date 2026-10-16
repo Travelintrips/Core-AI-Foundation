@@ -38,6 +38,7 @@ import {
 } from "./localCodingMultiWorkerOrchestratorService.js";
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
+// TODO: Wrap workflow_run invocation in try/catch with exponential backoff retry for cancelled errors.
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
 import {
   approveAiHandoff,
