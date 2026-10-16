@@ -1,3 +1,8 @@
+/**
+ * Failure Analysis (commit 8c753f89dc1e42a1c023e37db66b4f7e7781abc9):
+ * Service: aiCoreChatIntentService
+ * Hypothesis: aiCoreChatIntentService is missing an explicit subscription to the event stream.
+ */
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
