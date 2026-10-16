@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { OPENCLAW_PC_CLIENT_IDS, selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
 import { chooseActivePc } from "./openClawPcLeaderService.js";
 import {
@@ -14,6 +14,7 @@ import {
 
 export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
+export const OPENCLAW_PC_DEV_CLIENT_ID = "openclaw-pc-worker-dev" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
 export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
 export const OPENCLAW_PC3_CLIENT_ID = "openclaw-pc-worker-3" as const;
@@ -23,6 +24,7 @@ export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
 const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_VPS_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PC_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
@@ -217,4 +219,3 @@ export async function dispatchExternalAgentWork(input: {
 export async function getExternalAgentWorkState(commandId: string) {
   return getCodingBridgeCommandExecutionState(commandId);
 }
-
