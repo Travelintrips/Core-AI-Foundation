@@ -1,4 +1,30 @@
 import { describe, expect, it } from "vitest";
+
+describe("Deterministic Local Recovery Planner additional scenarios", () => {
+  it("handles zero occurrences without exception", () => {
+    const plan = planDeterministicLocalRecovery([], recoveryContext(), []);
+    expect(plan).not.toBeNull();
+  });
+
+  it("replaces single occurrence correctly", () => {
+    const plan = planDeterministicLocalRecovery(
+      [failure("TS0001", "Sample error")],
+      recoveryContext(),
+      []
+    );
+    expect(plan).toHaveProperty("failureCommands");
+  });
+
+  it("throws error for multiple occurrences", () => {
+    expect(() =>
+      planDeterministicLocalRecovery(
+        [failure("TS0001", "Error1"), failure("TS0002", "Error2")],
+        recoveryContext(),
+        []
+      )
+    ).toThrow();
+  });
+});
 import {
   planDeterministicLocalRecovery,
 } from "../localCodingDeterministicRecoveryService.js";
