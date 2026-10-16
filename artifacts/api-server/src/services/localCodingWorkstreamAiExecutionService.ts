@@ -46,6 +46,8 @@ import {
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
+// TODO: Wrap model invocation call to catch errors with code 'PROVIDER_BAD_REQUEST' and fallback to localCodingAiPreferredModelService.invokeModel(request)
+
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
 import {
