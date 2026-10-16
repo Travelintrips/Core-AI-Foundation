@@ -243,7 +243,9 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   if (!user || user.status !== "active") { res.json(generic); return; }
 
   const token = issueMagicLoginToken(user.id);
-  const baseUrl = (process.env["AI_CORE_PUBLIC_BASE_URL"] || publicPortalBaseUrl(req)).replace(/\/$/, "");
+  // Keep the magic-login callback on the same trusted origin that issued the request.
+  // Host-only internal_session cookies cannot authenticate on a different subdomain.
+  const baseUrl = publicPortalBaseUrl(req);
   const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
   const sent = await sendEmail({
     to: user.email,
