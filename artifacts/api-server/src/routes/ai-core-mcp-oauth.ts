@@ -228,7 +228,7 @@ router.get("/api/ai/core-chat/oauth/login", async (req, res): Promise<void> => {
   res.setHeader("Expires", "0");
   const user = await resolveSessionUser(req);
   if (user) {
-    res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif. Kembali ke tab pairing ChatGPT, lalu buka kembali halaman persetujuan pairing. Jangan login ulang.</p><p><a href="/mcp-pair">Buka halaman pairing</a></p></body></html>`);
+    res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif. Kembali ke tab pairing ChatGPT, lalu buka kembali halaman persetujuan pairing. Jangan login ulang.</p><p><a href="/api/ai/core-chat/oauth/pair/enter">Buka halaman pairing</a></p></body></html>`);
     return;
   }
   res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Core MCP</title>
@@ -379,6 +379,16 @@ router.get("/api/ai/core-chat/oauth/pair/wait", async (req, res): Promise<void> 
   if (pairing.state) url.searchParams.set("state", pairing.state);
   url.searchParams.set("iss", oauthIssuer());
   res.redirect(302, url.toString());
+});
+
+router.get("/api/ai/core-chat/oauth/pair/enter", async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await resolveSessionUser(req);
+  if (!user) {
+    res.redirect(302, "/api/ai/core-chat/oauth/login");
+    return;
+  }
+  res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pairing AI Engine</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Hubungkan ChatGPT ke AI Engine</h1><p>Masukkan kode 8 digit dari halaman pairing ChatGPT.</p><form method="get" action="/api/ai/core-chat/oauth/pair/approve"><label>Kode pairing <input name="code" required minlength="8" maxlength="8" pattern="[0-9]{8}" inputmode="numeric" autocomplete="one-time-code"></label><button type="submit">Lanjut ke Persetujuan</button></form><p>Kode tersedia di halaman pairing ChatGPT; jangan gunakan kode yang sudah kedaluwarsa.</p></body></html>`);
 });
 
 router.get("/api/ai/core-chat/oauth/pair/approve", async (req, res): Promise<void> => {
