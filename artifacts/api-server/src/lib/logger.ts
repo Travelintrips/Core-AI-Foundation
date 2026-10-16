@@ -8,6 +8,10 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
+    "password",
+    "token",
+    "secret",
+    "authorization",
   ],
   ...(isProduction
     ? {}
@@ -18,3 +22,29 @@ export const logger = pino({
         },
       }),
 });
+
+export interface AutoRetryLogContext {
+  errorType: string;
+  retryCount: number;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+export const localCodingAutonomousRepairLogger = logger.child({
+  service: "localCodingAutonomousRepairService",
+});
+
+export const logAutoRetryEvent = (
+  context: AutoRetryLogContext,
+  message = "Auto-retry event occurred"
+): void => {
+  localCodingAutonomousRepairLogger.info(
+    {
+      timestamp: context.timestamp ?? new Date().toISOString(),
+      errorType: context.errorType,
+      retryCount: context.retryCount,
+      ...context,
+    },
+    message
+  );
+};
