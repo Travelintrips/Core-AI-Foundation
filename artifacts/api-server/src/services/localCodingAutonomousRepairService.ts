@@ -11,6 +11,8 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+const LOCAL_CODING_AUTONOMOUS_REPAIR_TIMEOUT_MS = parseInt(process.env.LOCAL_CODING_AUTONOMOUS_REPAIR_TIMEOUT_MS || "30000", 10);
+
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
