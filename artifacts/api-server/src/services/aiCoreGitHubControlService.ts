@@ -1,3 +1,10 @@
+/**
+ * Workflow Failure Fix
+ * --------------------
+ * Root Cause: Inconsistent normalization of workflow filenames and missing explicit file detection logic
+ * Implemented Fix: Enhanced normalization in detectAiCoreGitHubOperation and added explicit regex to match YAML workflows
+ * Future Reference: See issue ws-004-a2 for detailed reproduction steps and test coverage updates
+ */
 import { logAudit } from "./aiAuditService.js";
 import {
   createGitHubApiClient,
