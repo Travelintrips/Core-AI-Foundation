@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+// TODO: Add schema validation and error handling for constrained model provider invocation
+
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
