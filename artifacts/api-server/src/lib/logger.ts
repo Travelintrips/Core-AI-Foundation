@@ -18,3 +18,18 @@ export const logger = pino({
         },
       }),
 });
+// Add guards for undefined messages
+const originalInfo = logger.info;
+const originalError = logger.error;
+const originalWarn = logger.warn;
+const originalDebug = logger.debug;
+const originalTrace = logger.trace;
+const originalFatal = logger.fatal;
+
+logger.info = (msg: string = "", ...args: unknown[]) => originalInfo(msg, ...args);
+logger.error = (msg: string = "", ...args: unknown[]) => originalError(msg, ...args);
+logger.warn = (msg: string = "", ...args: unknown[]) => originalWarn(msg, ...args);
+logger.debug = (msg: string = "", ...args: unknown[]) => originalDebug(msg, ...args);
+logger.trace = (msg: string = "", ...args: unknown[]) => originalTrace(msg, ...args);
+logger.fatal = (msg: string = "", ...args: unknown[]) => originalFatal(msg, ...args);
+
