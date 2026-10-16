@@ -664,6 +664,8 @@ public class MainActivity extends Activity {
                                     .edit().putString("credential", credential).commit()) {
                                 throw new IllegalStateException("Credential tidak tersimpan");
                             }
+                            com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+                                .addOnSuccessListener(fcm -> DevPushMessagingService.registerToken(getApplicationContext(), fcm));
                             runOnUiThread(() -> deliveryStatus.setText(
                                 "PAIRING DEV BERHASIL. Credential tersimpan di HP."));
                             return;
