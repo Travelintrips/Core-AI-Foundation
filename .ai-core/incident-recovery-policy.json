@@ -1,8 +1,73 @@
 {
-  "version": 1,
+  "version": 2,
   "activation": "on_blocker_only",
-  "triggers": ["JOB_BLOCKED", "CONNECTOR_DISCONNECTED"],
   "normalHandshakeSop": false,
   "codingExecutor": "chatgpt-github-direct",
-  "recovery": {"requireAuthorizedResources": true, "requireVerifiedPass": true, "neverBypassSecurity": true}
+  "aiCoreCodingCommands": false,
+  "policies": [
+    {
+      "id": "BLOCKER_RESOURCE_FIRST_V1",
+      "events": [
+        "JOB_BLOCKED"
+      ],
+      "steps": [
+        "collect_error_evidence",
+        "notify_ai_core",
+        "dispatch_policy_with_authorized_resources",
+        "attempt_authorized_fallback",
+        "verify_end_to_end",
+        "resume_or_escalate"
+      ]
+    },
+    {
+      "id": "CONNECTOR_AUTO_RECOVERY_V1",
+      "events": [
+        "CONNECTOR_DISCONNECTED",
+        "CONNECTOR_AUTH_FAILED"
+      ],
+      "steps": [
+        "recheck_connector",
+        "notify_ai_core",
+        "dispatch_recovery_sop",
+        "bounded_retry",
+        "inspect_online_authorized_openclaw",
+        "restore_via_official_auth_and_service_controls",
+        "verify_connection_and_operation",
+        "resume_or_escalate"
+      ]
+    }
+  ],
+  "recovery": {
+    "maxAttempts": 3,
+    "backoffSeconds": [
+      5,
+      15,
+      45
+    ],
+    "dedupeKeys": [
+      "jobId",
+      "incidentId",
+      "policyId"
+    ],
+    "requireFreshResourceHeartbeat": true,
+    "requireAuthorizedResources": true,
+    "requireVerifiedPass": true,
+    "requireCallbackAndAckProof": true,
+    "neverBypassSecurity": true
+  },
+  "humanApprovalRequiredFor": [
+    "oauth_reauthorization",
+    "new_credentials",
+    "security_policy_change",
+    "destructive_action",
+    "critical_prod_change"
+  ],
+  "states": [
+    "ACTIVE",
+    "BLOCKED",
+    "RECOVERING",
+    "VERIFIED",
+    "HUMAN_APPROVAL_REQUIRED"
+  ],
+  "deployGate": "DEV_E2E_PASS_BEFORE_PROD"
 }
