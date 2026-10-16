@@ -223,6 +223,8 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   const generic = { ok: true, message: "Jika akun aktif terdaftar, link login akan dikirim ke email." };
   if (!email) { res.status(400).json({ error: "Email wajib diisi." }); return; }
 
+  let diagnosticStage = "smtp_verify";
+  try {
   // Check SMTP before looking up the account so an outage is reported
   // consistently and does not disclose whether a particular email exists.
   const smtp = await verifyEmailTransport();
@@ -239,12 +241,17 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
     return;
   }
 
+  diagnosticStage = "account_lookup";
   const user = await getInternalUserByEmail(email);
   if (!user || user.status !== "active") { res.json(generic); return; }
 
+  diagnosticStage = "magic_token_issue";
   const token = issueMagicLoginToken(user.id);
-  const baseUrl = (process.env["AI_CORE_PUBLIC_BASE_URL"] || publicPortalBaseUrl(req)).replace(/\/$/, "");
+  // Keep the magic-login callback on the same trusted origin that issued the request.
+  // Host-only internal_session cookies cannot authenticate on a different subdomain.
+  const baseUrl = publicPortalBaseUrl(req);
   const magicUrl = `${baseUrl}/api/internal/auth/magic-login?token=${encodeURIComponent(token)}`;
+  diagnosticStage = "email_send";
   const sent = await sendEmail({
     to: user.email,
     subject: "Link login Portal AI Internal",
@@ -261,6 +268,11 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   }
 
   res.json(generic);
+  } catch (error) {
+    // Never include email, SMTP details, token, or raw exception messages in logs.
+    req.log?.error?.({ stage: diagnosticStage, errorType: error instanceof Error ? error.name : "UnknownError" }, "[internal-auth] magic link request failed");
+    if (!res.headersSent) res.status(500).json({ ok: false, error: "Permintaan login belum dapat diproses." });
+  }
 });
 
 router.get("/internal/auth/magic-login", loginLimiter, async (req, res): Promise<void> => {
