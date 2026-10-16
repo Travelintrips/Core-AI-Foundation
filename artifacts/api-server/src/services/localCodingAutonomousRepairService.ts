@@ -1,4 +1,7 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+// Handle GitHub Actions workflow_run cancelled events
+// TODO: detect when event.payload.workflow_run.status === "cancelled", log at info level, and trigger safe retry via GitHub API client
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
