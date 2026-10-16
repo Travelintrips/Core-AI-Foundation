@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { AiCoreCyclicHandshakeCoordinator } from "../services/aiCoreCyclicHandshakeCoordinatorService.js";
 
 /**
- * Mount only in DEV behind a scoped, server-verified service-token middleware.
+ * Mount only in isolated DEV behind a scoped, server-verified service-token middleware.\n * NODE_ENV=production is normal for compiled DEV deployments; the dedicated\n * AI_CORE_RUNTIME_ENV=DEV marker and explicit feature flag are required.
  * Caller-supplied VERIFIED/ACK flags are never sufficient: the coordinator
  * independently checks a trusted verifier and durable store.
  */
@@ -13,7 +13,7 @@ export function createDevCyclicHandshakeRouter(
 ) {
   const router = Router();
   router.use((req, res, next) => {
-    if (process.env["NODE_ENV"] === "production" || process.env["AI_CORE_CYCLE_DEV_ENABLED"] !== "true") {
+    if (process.env["AI_CORE_RUNTIME_ENV"] !== "DEV" || process.env["AI_CORE_CYCLE_DEV_ENABLED"] !== "true") {
       res.status(404).json({ error: "not_enabled" });
       return;
     }
