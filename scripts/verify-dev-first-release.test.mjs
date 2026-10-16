@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { requiredDevWorkflows, verifyDevEvidence } from "./verify-dev-first-release.mjs";
+import { DEV_HEALTH_ENDPOINT, requiredDevWorkflows, verifyDevEvidence } from "./verify-dev-first-release.mjs";
 
 const sha = "a".repeat(40), expected = "b".repeat(40);
 const greenRuns = requiredDevWorkflows.map((name) => ({
@@ -13,6 +13,9 @@ function input(patch = {}) {
 }
 
 describe("DEV-first release fail-closed evidence", () => {
+  it("reads live DEV only from the canonical VPS hostname, not shared Hostinger", () => {
+    assert.equal(DEV_HEALTH_ENDPOINT, "https://dev.cstlogistic.co.id/api/healthz");
+  });
   it("accepts only an exact live SHA with all three successful gates", () => {
     assert.equal(verifyDevEvidence(input()).devSha, sha);
   });

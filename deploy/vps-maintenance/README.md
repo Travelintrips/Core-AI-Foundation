@@ -1,0 +1,111 @@
+# VPS Docker image cleanup
+
+This VPS has two distinct policies. Nothing modifies named Docker volumes,
+database contents, WhatsApp sessions, or running containers.
+
+## Policy A — AI Core DEV and PROD: only images actively running
+
+Applies only to these image repositories and their exact canonical containers:
+
+- `core-ai-dev` → `core-ai-dev`, health `127.0.0.1:18082/api/healthz`
+- `ai-core-prod` → `ai-core-prod-api`, health `127.0.0.1:18088/api/healthz`
+- Legacy unused DEV image repositories `ai-core-dev` and `core-ai` may be removed.
+
+Requirements before removal:
+
+1. BOTH canonical DEV and PROD Docker containers are **running and healthy**.
+2. BOTH local application health endpoints return HTTP 200, JSON
+   `{"status":"ok"}`, and a valid 40-character `X-CST-Commit-SHA` header.
+3. There are no additional running DEV/PROD app canaries or duplicate instances.
+4. Recheck exact container ID, image ID, health, and Git SHA before EACH removal.
+5. Only stopped containers from the four allowlisted repositories can be
+   removed. A stopped container with any Docker **volume** mount is retained.
+   Bind mount files and named Docker volumes are never deleted.
+6. Only unused app image tags older than 2 hours can be removed. Newly built
+   images are temporarily protected against collisions with ongoing deploys.
+7. Image tags shared with unrelated repositories and images referenced by any
+   preserved container are always protected.
+8. No `--force`, no `docker system prune`, and no unscoped container pruning.
+
+**No old image or rollback image is intentionally kept for DEV/PROD.** Rollback
+must rebuild an image from the source Git commit if needed. This is deliberate
+per the administrator's active-image-only directive.
+
+Dry run (prints exact candidates, **does not remove anything**):
+
+    sudo python3 /usr/local/libexec/cst-docker-active-only.py
+
+Run the approved cleanup immediately:
+
+    sudo python3 /usr/local/libexec/cst-docker-active-only.py --apply
+
+The most recent root-only audit summary is written at
+`/var/lib/cst-docker-image-retention/active-only-last-run.json`.
+
+## Policy B — verified worker-image history
+
+The existing `docker_image_retention.py` checks deployment evidence for
+Repository Analyzer and OpenClaw. Its narrowly scoped retirement still keeps
+a verified rollback image, but the global 7-day cleanup below can subsequently
+remove an **unreferenced** rollback image once it is sufficiently old.
+A rollback image is therefore not guaranteed to remain on the VPS indefinitely;
+it must be pulled or rebuilt when needed. Any image referenced by an existing
+container, including a stopped container, remains protected.
+
+AI Core DEV and PROD remain explicitly excluded from the older rollback policy.
+The AI Workers VPS deployment records OpenClaw evidence only after the stack
+healthcheck succeeds.
+
+## Policy C — unused images and Docker build cache (all repositories)
+
+The daily timer also runs **Docker's native unused-image cleanup** with an
+age threshold of **7 days**, using Docker's own container-reference checks:
+
+    docker image prune --all --force --filter until=168h
+
+It then attempts to reclaim unused **BuildKit build cache** last used more
+than 7 days ago, while reserving up to 4 GB for subsequent builds:
+
+    docker buildx prune --all --force --filter until=168h --max-used-space 4gb --reserved-space 2gb
+
+Neither command removes containers, bind-mounted files, named volumes,
+databases, WhatsApp sessions or images still referenced by any container.
+Images pulled for a future rollout should be deployed promptly; Docker image
+creation time may predate when an image was pulled.
+
+Only historical AI Task/Repository Analyzer backup containers from the reviewed
+name allowlist, stopped for at least 72 hours without Docker data volumes,
+are eligible for cleanup after healthy-service revalidation. Temporal setup,
+OpenClaw supervisors and WhatsApp migration exports remain protected.
+No blanket `docker container prune` is performed.
+
+## Install and schedule
+
+    bash deploy/vps-maintenance/install.sh
+
+The installer runs three offline test suites, installs three cleanup executables
+and updates the existing `cst-docker-image-retention.service`. The existing
+systemd timer runs every day at 04:30 Asia/Jakarta (21:30 UTC) with up to
+15 minutes randomized delay.
+
+Installing the timer does NOT delete anything immediately. The active-only
+script has dry-run behavior unless explicitly passed `--apply`.
+
+Monitoring:
+
+    systemctl status cst-docker-image-retention.timer --no-pager
+    journalctl -u cst-docker-image-retention.service -n 80 --no-pager
+    sudo python3 /usr/local/libexec/cst-docker-active-only.py
+
+To disable all scheduled image/cache cleanup policies:
+
+    sudo systemctl disable --now cst-docker-image-retention.timer
+
+## Scope and limitations
+
+This is intentionally **not** a global container/volume prune. PostgreSQL,
+Redis, n8n, WhatsApp Gateway, OpenHands, Temporal, and intentionally stopped
+one-shot workloads keep their images as long as those containers exist.
+Only image IDs with **no container references** can be reclaimed after 7 days.
+
+No hosting/DEV–PROD isolation or release-gate protections are relaxed.

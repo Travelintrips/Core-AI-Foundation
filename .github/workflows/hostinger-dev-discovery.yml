@@ -66,3 +66,107 @@ jobs:
               -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
               "$base/settings/env" | jq -r '.[].key' | sort
           done
+
+
+      - name: Audit independent Hostinger plan availability (read-only)
+        if: steps.token.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Read-only inventory. Do not log domains, account identifiers, API
+          # responses, order IDs, credentials, or personal hosting data.
+          for resource in websites orders; do
+            : > "/tmp/hostinger-$resource.jsonl"
+            complete=false
+            for page in $(seq 1 20); do
+              curl --fail-with-body --silent --show-error \
+                --connect-timeout 10 --max-time 25 \
+                -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+                "$HOSTINGER_API_BASE/hosting/v1/$resource?per_page=100&page=$page" \
+                -o "/tmp/hostinger-$resource-page.json"
+              jq -e '(.data | type) == "array"' "/tmp/hostinger-$resource-page.json" >/dev/null
+              jq -c '.data[]' "/tmp/hostinger-$resource-page.json" >> "/tmp/hostinger-$resource.jsonl"
+              items=$(jq '.data | length' "/tmp/hostinger-$resource-page.json")
+              total=$(jq -r '.meta.total // 0' "/tmp/hostinger-$resource-page.json")
+              if [ "$items" -lt 100 ] || { [ "$total" -gt 0 ] && [ $((page * 100)) -ge "$total" ]; }; then
+                complete=true
+                break
+              fi
+            done
+            if [ "$complete" != true ]; then
+              echo "::error::Hostinger $resource inventory truncated; cannot determine DEV isolation."
+              exit 1
+            fi
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          def rows(name):
+              p=Path('/tmp/hostinger-'+name+'.jsonl')
+              return [json.loads(line) for line in p.read_text().splitlines() if line]
+          websites, orders = rows('websites'), rows('orders')
+          prod = [s for s in websites if s.get('domain')=='aicore.cstlogistic.co.id' and s.get('is_enabled') is True]
+          dev = [s for s in websites if s.get('domain')=='dev-aicore.cstlogistic.co.id' and s.get('is_enabled') is True]
+          if len(prod)!=1:
+              raise SystemExit('HOSTINGER_PROD_INVENTORY_AMBIGUOUS')
+          origin_order=str(prod[0].get('order_id') or '')
+          origin_user=str(prod[0].get('username') or '')
+          if not origin_order or not origin_user:
+              raise SystemExit('HOSTINGER_PROD_IDENTITY_MISSING')
+          all_orders = {str(o.get('id') or o.get('order_id') or ''):o for o in orders}
+          other_orders = [o for key,o in all_orders.items() if key and key!=origin_order]
+          active = [o for o in other_orders if str(o.get('status','')).lower()=='active']
+          occupied = {str(s.get('order_id')) for s in websites}
+          spare = [o for o in active if str(o.get('id') or o.get('order_id')) not in occupied]
+          separate_sites = [s for s in websites if s.get('is_enabled') is True
+              and str(s.get('order_id'))!=origin_order
+              and str(s.get('username') or '')!=origin_user
+              and s.get('username')]
+          dev_separate = len(dev)==1 and str(dev[0].get('order_id'))!=origin_order and str(dev[0].get('username') or '')!=origin_user
+          print('hosting_sites_visible='+str(len(websites)))
+          print('hosting_orders_visible='+str(len(orders)))
+          print('independent_active_plan_candidates='+str(len(active)))
+          print('unused_independent_plan_candidates='+str(len(spare)))
+          print('independent_active_website_candidates='+str(len(separate_sites)))
+          print('dev_separate_plan_ready='+str(dev_separate).lower())
+          print('dev_website_present='+str(len(dev)==1).lower())
+          if not dev_separate:
+              print('DEV_HOSTING_PLAN_SEPARATION_REQUIRED=true')
+          PY
+
+
+      - name: Audit separately owned VPS capacity (read-only)
+        if: steps.token.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Not all Hostinger API tokens grant VPS scope. Access denied is a
+          # limitation, not evidence that no VPS exists.
+          code=$(curl --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            -o /tmp/hostinger-vps.json -w "%{http_code}" \
+            "$HOSTINGER_API_BASE/vps/v1/virtual-machines" || true)
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "vps_inventory_access=denied"
+            exit 0
+          fi
+          if [ "$code" != "200" ]; then
+            echo "vps_inventory_access=unavailable_http_$code"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('/tmp/hostinger-vps.json').read_text())
+          vms=data if isinstance(data,list) else data.get('data',[])
+          if not isinstance(vms,list):
+              raise SystemExit('HOSTINGER_VPS_INVENTORY_INVALID')
+          active=[v for v in vms if str(v.get('state','')).lower() in ('running','stopped')]
+          prod=[v for v in active if str(v.get('hostname','')).lower().split('.')[0]=='srv1792369']
+          alternatives=[v for v in active if str(v.get('hostname','')).lower().split('.')[0]!='srv1792369']
+          print('vps_inventory_access=granted')
+          print('vps_total_visible='+str(len(vms)))
+          print('vps_active_visible='+str(len(active)))
+          print('vps_prod_hostname_matched='+str(len(prod)==1).lower())
+          print('vps_other_active_candidates='+str(len(alternatives)) if len(prod)==1 else 'vps_other_active_candidates=unverified')
+          PY

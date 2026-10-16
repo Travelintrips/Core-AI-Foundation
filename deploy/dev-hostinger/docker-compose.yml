@@ -11,6 +11,7 @@ services:
       NODE_ENV: development
       APP_ENV: development
       SERVE_FRONTEND: "true"
+      SERVE_STATIC_FRONTEND: "true"
       PORT: "8080"
       PUBLIC_APP_URL: https://dev-aicore.cstlogistic.co.id
       ALLOWED_ORIGINS: https://dev-aicore.cstlogistic.co.id

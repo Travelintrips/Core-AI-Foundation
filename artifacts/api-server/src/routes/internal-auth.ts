@@ -7,7 +7,7 @@
  *   GET  /internal/auth/me                (requireAuth)
  *   POST /internal/auth/change-password   (requireAuth)
  */
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, internalUsersTable, toSafeInternalUser, type InternalRole, type InternalUser } from "@workspace/db";
@@ -136,6 +136,49 @@ router.post("/internal/auth/login", loginLimiter, async (req, res): Promise<void
   setSessionCookie(res, token);
   await logAudit("internal_auth", "login", String(user.id), "internal_user", "success", { ip });
 
+  res.json({ user: toSafeInternalUser(user) });
+});
+
+
+// Device login requires an mTLS-verified identity injected only by a trusted local
+// reverse proxy. Never trust client-supplied identity headers over public HTTP.
+router.post("/internal/auth/device-login", loginLimiter, async (req, res): Promise<void> => {
+  if (process.env["AI_CORE_DEV_DEVICE_AUTH_ENABLED"] !== "true" ||
+      process.env["NODE_ENV"] === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const proxySecret = process.env["AI_CORE_DEV_DEVICE_PROXY_SECRET"];
+  const presentedSecret = req.get("x-dev-device-proxy-secret");
+  if (!proxySecret || !presentedSecret ||
+      presentedSecret.length !== proxySecret.length ||
+      !timingSafeEqual(Buffer.from(presentedSecret), Buffer.from(proxySecret))) {
+    res.status(403).json({ error: "Verified device required" });
+    return;
+  }
+
+  const verified = req.get("x-dev-device-verified") === "SUCCESS";
+  const subject = req.get("x-dev-device-subject") ?? "";
+  const mapping: Record<string, string | undefined> = {
+    "CN=AI-Core-DEV-DELL": process.env["AI_CORE_DEV_DELL_EMAIL"],
+    "CN=AI-Core-DEV-Travelintrips": process.env["AI_CORE_DEV_TRAVELINTRIPS_EMAIL"],
+  };
+  const email = Object.hasOwn(mapping, subject) ? mapping[subject] : undefined;
+  if (!verified || !email) {
+    res.status(403).json({ error: "Device not authorized" });
+    return;
+  }
+
+  const user = await getInternalUserByEmail(email);
+  if (!user || user.status !== "active" || user.accountType !== "internal") {
+    res.status(403).json({ error: "Authorized user unavailable" });
+    return;
+  }
+  setSessionCookie(res, issueSessionToken(user.id));
+  await logAudit("internal_auth", "device_login", String(user.id), "internal_user", "success", {
+    device: subject, ip: clientIp(req),
+  });
   res.json({ user: toSafeInternalUser(user) });
 });
 

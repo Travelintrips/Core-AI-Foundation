@@ -40,6 +40,8 @@ jobs:
         run: node --test scripts/github-event-correlation.test.mjs
       - name: Verify bounded PostgreSQL pool cap
         run: node --test scripts/pg-pool-max.test.mjs
+      - name: Verify isolated DEV database pooler credentials
+        run: pnpm --filter @workspace/scripts exec tsx --test ./dev-db-isolation.test.mjs
       - name: Verify Hostinger runtime diagnostics redact sensitive log content
         run: node --test scripts/hostinger-runtime-classify.test.mjs
       - name: Verify ZeroLLM deployment scripts
@@ -50,6 +52,15 @@ jobs:
         run: node --test scripts/verify-dev-first-release.test.mjs
       - name: Verify bounded Hostinger DEV restart acceptance
         run: node --test scripts/dev-hostinger-restart-fallback.test.mjs
+      - name: Validate isolated VPS DEV release and watcher scripts
+        run: |
+          python3 -m py_compile scripts/vps/deploy_dev_release.py scripts/vps/dev_ci_watcher.py
+          bash -n scripts/vps/dev_ssh_gate.sh
+      - name: Verify E2E-gated VPS Docker image retention (offline)
+        run: |
+          python3 scripts/vps/test_docker_image_retention.py -q
+          python3 scripts/vps/test_active_app_image_cleanup.py -q
+          python3 scripts/vps/test_stale_backup_cleanup.py -q
       - name: Typecheck
         run: pnpm run typecheck
 
