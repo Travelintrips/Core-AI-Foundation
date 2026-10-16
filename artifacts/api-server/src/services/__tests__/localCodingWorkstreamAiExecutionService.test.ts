@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+// TODO: add tests to simulate provider bad request and fallback invocation
+
 import {
   decideWorkstreamAiAutoRepair,
   LocalCodingWorkstreamAiExecutionError,
