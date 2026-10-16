@@ -1,3 +1,4 @@
+// Updated test coverage for workflow fix
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCodingBranchName,
