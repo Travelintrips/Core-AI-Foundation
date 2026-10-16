@@ -54,7 +54,9 @@ export class LocalDeterministicRecoveryError extends Error {
       | "RECOVERY_FAILED",
   ) {
     super(message);
-    this.name = "LocalDeterministicRecoveryError";
+    this.name = "LocalDeterministicRecoveryError";    if (this.kind === "NOT_FOUND") {
+      console.warn(`LocalDeterministicRecoveryWarning: ${this.message}`);
+    }
   }
 }
 
