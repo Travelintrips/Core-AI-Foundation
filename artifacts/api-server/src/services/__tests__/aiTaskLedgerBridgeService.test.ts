@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ledgerBridgeEnabled,
   ledgerRequestUrl,
+  mirrorAiTaskLedgerSourceState,
   registerAiTaskLedgerJob,
   validateLedgerJob,
 } from "../aiTaskLedgerBridgeService.js";
@@ -83,5 +84,59 @@ describe("AI Task passive ledger bridge", () => {
       .toEqual({ synced: false, reason: "remote_error" });
     expect(await registerAiTaskLedgerJob(task, env, wrongTask as unknown as typeof fetch))
       .toEqual({ synced: false, reason: "remote_error" });
+  });
+});
+
+
+describe("source-verified terminal receipt", () => {
+  const setup = () => {
+    vi.stubEnv("AI_TASK_LEDGER_SYNC_ENABLED", "true");
+    vi.stubEnv("AI_TASK_BRIDGE_TOKEN", env.AI_TASK_BRIDGE_TOKEN!);
+    vi.stubEnv("AI_TASK_LEDGER_URL", env.AI_TASK_LEDGER_URL!);
+  };
+
+  it("trusts only a terminal status returned by the authenticated receiver", async () => {
+    setup();
+    const fetcher = vi.fn(async () => response(200, {
+      ...accepted(false),
+      task: { ...accepted(false).task, status: "COMPLETED" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const result = await mirrorAiTaskLedgerSourceState({
+        ...task, status: "COMPLETED", version: "terminal",
+      });
+      expect(result).toMatchObject({ synced: true, acknowledged: true, observedStatus: "COMPLETED" });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("does not mistake an accepted lifecycle event for its later ACK", async () => {
+    setup();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response(200, accepted(false)))
+      .mockResolvedValueOnce(response(202, { accepted: true, status: "WAITING_FOR_ACK" }))
+      .mockResolvedValueOnce(response(200, {
+        ...accepted(false), task: { ...accepted(false).task, status: "COMPLETED" },
+      }));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const source = { ...task, status: "COMPLETED", version: "terminal" };
+      const first = await mirrorAiTaskLedgerSourceState(source);
+      expect(first).toMatchObject({ synced: true, acknowledged: false, observedStatus: "WAITING_FOR_ACK" });
+      const second = await mirrorAiTaskLedgerSourceState(source);
+      expect(second).toMatchObject({ synced: true, acknowledged: true, observedStatus: "COMPLETED" });
+      expect(fetcher).toHaveBeenCalledTimes(3);
+      const [, request] = fetcher.mock.calls[1] as unknown as [string, RequestInit];
+      expect(JSON.parse(String(request.body))).toMatchObject({
+        status: "COMPLETED", eventId: "ai-core:" + task.externalId + ":COMPLETED:terminal",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
 });

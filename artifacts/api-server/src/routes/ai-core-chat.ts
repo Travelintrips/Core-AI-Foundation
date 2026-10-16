@@ -12,7 +12,7 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
-import { mirrorAiTaskLedgerJob } from "../services/aiTaskLedgerBridgeService.js";
+import { mirrorAiTaskLedgerJob, notifyAiTaskLedgerSourceState } from "../services/aiTaskLedgerBridgeService.js";
 import { logger } from "../lib/logger.js";
 import {
   createConstrainedCodingProviderAdapter,
@@ -2447,6 +2447,13 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
     title: `AI Core coding task ${task.taskNumber}`,
     sessionId: input.conversationId ?? undefined,
   });
+  void notifyAiTaskLedgerSourceState({
+    externalId: `coding-task:${task.id}`,
+    title: `AI Core coding task ${task.taskNumber}`,
+    sessionId: input.conversationId ?? undefined,
+    status: "ANALYZING",
+    version: task.updatedAt,
+  }).catch(() => undefined);
 
   await bindAiCoreTaskLifecycleReporting({
     taskId: task.id,
