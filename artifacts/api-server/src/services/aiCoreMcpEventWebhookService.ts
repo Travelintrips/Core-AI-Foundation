@@ -518,69 +518,37 @@ async function verifyCallback(input: {
 }
 
 async function ensureTablesInternal(): Promise<void> {
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS ai_platform.ai_core_mcp_event_subscriptions (
-      id TEXT PRIMARY KEY,
-      principal_id TEXT NOT NULL,
-      event_name TEXT NOT NULL,
-      arguments_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-      arguments_digest TEXT NOT NULL,
-      callback_url TEXT NOT NULL,
-      secret_ciphertext TEXT NOT NULL,
-      previous_secret_ciphertext TEXT,
-      previous_secret_valid_until TIMESTAMPTZ,
-      verified_at TIMESTAMPTZ NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL,
-      active BOOLEAN NOT NULL DEFAULT TRUE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
+  // Schema migrations run separately with the table owner's credentials.
+  // Runtime uses a read-only readiness check instead of attempting DDL.
+  const result = await db.execute(sql`
+    SELECT
+      to_regclass('ai_platform.ai_core_mcp_event_subscriptions') IS NOT NULL AS subscriptions_ready,
+      to_regclass('ai_platform.ai_core_mcp_event_deliveries') IS NOT NULL AS deliveries_ready,
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'ai_platform'
+          AND table_name = 'ai_core_mcp_event_subscriptions'
+          AND column_name = 'previous_secret_ciphertext'
+      ) AS previous_secret_ready,
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'ai_platform'
+          AND table_name = 'ai_core_mcp_event_subscriptions'
+          AND column_name = 'previous_secret_valid_until'
+      ) AS previous_secret_expiry_ready,
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'ai_platform'
+          AND table_name = 'ai_core_mcp_event_deliveries'
+          AND column_name = 'receipt_verified_at'
+      ) AS receipt_ready
   `);
-  await db.execute(sql`
-    ALTER TABLE ai_platform.ai_core_mcp_event_subscriptions
-      ADD COLUMN IF NOT EXISTS previous_secret_ciphertext TEXT
-  `);
-  await db.execute(sql`
-    ALTER TABLE ai_platform.ai_core_mcp_event_subscriptions
-      ADD COLUMN IF NOT EXISTS previous_secret_valid_until TIMESTAMPTZ
-  `);
-
-  await db.execute(sql`
-    CREATE INDEX IF NOT EXISTS ai_core_mcp_event_subscriptions_active_idx
-      ON ai_platform.ai_core_mcp_event_subscriptions(event_name, active, expires_at)
-  `);
-  await db.execute(sql`
-    CREATE INDEX IF NOT EXISTS ai_core_mcp_event_subscriptions_principal_idx
-      ON ai_platform.ai_core_mcp_event_subscriptions(principal_id, active)
-  `);
-
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS ai_platform.ai_core_mcp_event_deliveries (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      event_id TEXT NOT NULL UNIQUE,
-      subscription_id TEXT NOT NULL REFERENCES ai_platform.ai_core_mcp_event_subscriptions(id) ON DELETE CASCADE,
-      response_id UUID,
-      task_id UUID,
-      event_name TEXT NOT NULL,
-      payload_json JSONB NOT NULL,
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      attempt_count INTEGER NOT NULL DEFAULT 0,
-      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_http_status INTEGER,
-      last_error TEXT,
-      delivered_at TIMESTAMPTZ,
-      receipt_verified_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      CONSTRAINT ai_core_mcp_event_deliveries_status_check
-        CHECK (status IN ('PENDING','DELIVERING','DELIVERED','FAILED','TERMINATED'))
-    )
-  `);
-  await db.execute(sql`ALTER TABLE ai_platform.ai_core_mcp_event_deliveries ADD COLUMN IF NOT EXISTS receipt_verified_at TIMESTAMPTZ`);
-  await db.execute(sql`
-    CREATE INDEX IF NOT EXISTS ai_core_mcp_event_deliveries_pending_idx
-      ON ai_platform.ai_core_mcp_event_deliveries(status, next_attempt_at, created_at)
-  `);
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row || Object.values(row).some((ready) => ready !== true)) {
+    throw new Error(
+      "MCP event database schema is not ready; apply the owner-run DEV migration before starting delivery.",
+    );
+  }
 }
 
 export async function ensureAiCoreMcpEventTables(): Promise<void> {
