@@ -43,6 +43,7 @@ public final class DevPushMessagingService extends FirebaseMessagingService {
             String credential = context.getSharedPreferences("bridge-pairing-dev", Context.MODE_PRIVATE)
                     .getString("credential", "");
             if (credential.length() < 32 || token == null || token.length() < 32) return;
+            Context app = context.getApplicationContext();
             HttpURLConnection conn = null;
             try {
                 conn = (HttpURLConnection) new URL(
@@ -57,9 +58,16 @@ public final class DevPushMessagingService extends FirebaseMessagingService {
                 byte[] payload = new JSONObject().put("fcmToken", token).toString()
                     .getBytes(StandardCharsets.UTF_8);
                 try (OutputStream out = conn.getOutputStream()) { out.write(payload); }
-                if (conn.getResponseCode() != 200)
-                    Log.w(TAG, "DEV FCM registration pending: HTTP " + conn.getResponseCode());
+                int status = conn.getResponseCode();
+                app.getSharedPreferences("bridge-fcm-dev", Context.MODE_PRIVATE).edit()
+                    .putInt("lastHttpStatus", status).putString("lastError", "")
+                    .putLong("lastAttemptAt", System.currentTimeMillis()).apply();
+                if (status != 200)
+                    Log.w(TAG, "DEV FCM registration pending: HTTP " + status);
             } catch (Exception ex) {
+                app.getSharedPreferences("bridge-fcm-dev", Context.MODE_PRIVATE).edit()
+                    .putInt("lastHttpStatus", 0).putString("lastError", ex.getClass().getSimpleName())
+                    .putLong("lastAttemptAt", System.currentTimeMillis()).apply();
                 Log.w(TAG, "DEV FCM registration pending: network error");
             } finally {
                 if (conn != null) conn.disconnect();
