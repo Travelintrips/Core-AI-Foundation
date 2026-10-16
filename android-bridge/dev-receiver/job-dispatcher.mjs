@@ -3,6 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {loadDeviceActions, verifiedDeviceAction} from './device-actions.mjs';
+import {ACTION_TITLE_PREFIX,siteForTitle} from './phone-site-catalog.mjs';
+import {expiredAndroidJobs} from './expired-android-jobs.mjs';
 const spool=process.env.BRIDGE_DEVICE_SPOOL_DIR||'/var/lib/openclaw-android-bridge-dev';
 const devicesFile=path.join(spool,'device-registry.json');
 const grantsFile=path.join(spool,'device-job-grants.json');
@@ -14,20 +17,37 @@ const {Pool}=require('/app/artifacts/api-server/node_modules/pg');
 if(process.env.NODE_ENV!=='development'||!process.env.SUPABASE_DATABASE_URL_DEV||
 process.env.SUPABASE_DATABASE_URL||process.env.SUPABASE_PROD_DATABASE_URL)process.exit(12);
 (async()=>{const p=new Pool({connectionString:process.env.SUPABASE_DATABASE_URL_DEV,ssl:{rejectUnauthorized:false},max:1,connectionTimeoutMillis:7000});
-try{const r=await p.query("SELECT id,source,source_session_id,status FROM ai_task_bridge.jobs WHERE source='OPENCLAW' AND status='QUEUED' AND source_session_id LIKE 'android-dev:%' ORDER BY created_at DESC LIMIT 100");
+try{const r=await p.query("SELECT id,title,source,source_session_id,status FROM ai_task_bridge.jobs WHERE source='OPENCLAW' AND status='QUEUED' AND source_session_id LIKE 'android-dev:%' ORDER BY created_at DESC LIMIT 100");
 console.log(JSON.stringify(r.rows));}finally{await p.end()}})().catch(()=>process.exit(13));
 `;
 function load(file){try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code==='ENOENT')return {};throw e}}
 function save(file,data){const tmp=file+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data),{mode:0o600,flag:'wx'});try{const owner=fs.statSync(devicesFile);fs.chownSync(tmp,owner.uid,owner.gid);fs.renameSync(tmp,file)}catch(e){try{fs.unlinkSync(tmp)}catch{}throw e}}
-export function eligible(rows,registry,now=Date.now()){
+export function eligible(rows,registry,now=Date.now(),actions={}){
  return rows.filter(r=>r.status==='QUEUED'&&r.source==='OPENCLAW'&&uuid.test(r.id||'')&&
  /^android-dev:[a-zA-Z0-9_-]{3,48}$/.test(r.source_session_id||'')&&
  registry[r.source_session_id.slice(12)]?.active===true)
+ .filter(r=>{
+   // Navigation jobs cannot fall through to the ordinary ChatGPT test path.
+   if(typeof r.title!=='string')return true;
+   if(r.title==='Z Fold4 DEV OPEN_APP Custom'){
+     const action=verifiedDeviceAction(actions[r.id],r.id,r.source_session_id.slice(12),now);
+     return action?.kind==='OPEN_APP';
+   }
+   if(!r.title.startsWith(ACTION_TITLE_PREFIX))return true;
+   // All phone browser jobs require a matching device-scoped immutable action,
+   // including Hostinger/GCP. An unknown title is denied (never sent to PC).
+   const site=siteForTitle(r.title);
+   const action=verifiedDeviceAction(actions[r.id],r.id,r.source_session_id.slice(12),now);
+   if (r.title==='Z Fold4 DEV OPEN_URL Custom') return action?.kind==='OPEN_URL';
+   if (r.title==='Z Fold4 DEV OPEN_APP Custom') return action?.kind==='OPEN_APP';
+   if (r.title==='Z Fold4 DEV OPEN_APP Custom') return action?.kind==='OPEN_APP';
+   return !!site && action?.kind==='OPEN_URL'&&action.target===site.url;
+ })
  .map(r=>({id:r.id,deviceId:r.source_session_id.slice(12)}));
 }
-export function planGrants(rows,registry,grants,now=Date.now()){
+export function planGrants(rows,registry,grants,now=Date.now(),actions={}){
  const updates={...grants};
- for(const r of eligible(rows,registry,now)){
+ for(const r of eligible(rows,registry,now,actions)){
   const old=updates[r.id];
   if(old?.deviceId&&old.deviceId!==r.deviceId)continue; // immutable target once granted
   if(old?.active===true&&old.expiresAt>now+15*60*1000)continue;
@@ -40,7 +60,18 @@ async function tick(){
   {encoding:'utf8',timeout:16000,maxBuffer:128*1024});
  const rows=JSON.parse(raw);
  const registry=load(devicesFile),grants=load(grantsFile);
- const updated=planGrants(rows,registry,grants);
+ const actions=loadDeviceActions(spool);
+ const expired=expiredAndroidJobs(rows,actions);
+ if(expired.length){
+  // DEV-only conditional reconciliation, bound IDs, no SQL interpolation.
+  const sql="UPDATE ai_task_bridge.jobs SET status='FAILED',updated_at=now() WHERE id=ANY($1::uuid[]) AND source='OPENCLAW' AND status='QUEUED' AND source_session_id LIKE 'android-dev:%' RETURNING id";
+  const script="const {Pool}=require('/app/artifacts/api-server/node_modules/pg');"+
+   "if(process.env.NODE_ENV!=='development'||!process.env.SUPABASE_DATABASE_URL_DEV||process.env.SUPABASE_DATABASE_URL||process.env.SUPABASE_PROD_DATABASE_URL)process.exit(12);"+
+   "(async()=>{const p=new Pool({connectionString:process.env.SUPABASE_DATABASE_URL_DEV,ssl:{rejectUnauthorized:false},max:1,connectionTimeoutMillis:7000});try{const r=await p.query("+JSON.stringify(sql)+",[JSON.parse(process.argv[1])]);console.log(JSON.stringify(r.rows))}finally{await p.end()}})().catch(()=>process.exit(13));";
+  const done=execFileSync('/usr/bin/docker',['exec',container,'node','-e',script,JSON.stringify(expired)],{encoding:'utf8',timeout:16000,maxBuffer:128*1024});
+  console.log('DEV_ANDROID_EXPIRED_FAILED',JSON.parse(done).length);
+ }
+ const updated=planGrants(rows.filter(r=>!expired.includes(r.id)),registry,grants,Date.now(),actions);
  if(JSON.stringify(updated)!==JSON.stringify(grants)){
   save(grantsFile,updated);
   console.log('DEV_ANDROID_AUTOGRANT',Object.keys(updated).length-Object.keys(grants).length);
