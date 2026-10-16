@@ -245,7 +245,14 @@ public class MainActivity extends Activity {
         String evidence = "\nAUTO_SENT (klik Accessibility diterima): " + (sentAt > 0 ? new java.util.Date(sentAt).toString() : "BELUM") +
                 "\nAUTO_CAPTURED (jawaban bertanda): " + (capturedAt > 0 ? new java.util.Date(capturedAt).toString() : "BELUM");
         String delivery = statusPrefs.getString(CapturedResultDelivery.STATUS, "");
-        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message + evidence +
+        android.content.SharedPreferences fcmPrefs = getSharedPreferences("bridge-fcm-dev", MODE_PRIVATE);
+        long fcmAttempt = fcmPrefs.getLong("lastAttemptAt", 0);
+        int fcmHttp = fcmPrefs.getInt("lastHttpStatus", 0);
+        String fcmError = fcmPrefs.getString("lastError", "");
+        String fcmState = fcmAttempt == 0 ? "BELUM MENCOBA" :
+                (fcmHttp == 200 ? "TERDAFTAR (HTTP 200)" :
+                ("GAGAL (HTTP " + fcmHttp + (fcmError.isEmpty() ? "" : ", " + fcmError) + ")"));
+        autoSendStatus.setText("FCM DEV: " + fcmState + "\nAksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message + evidence +
                 (delivery.isEmpty() ? "" : "\n" + delivery));
     }
 
