@@ -26,6 +26,7 @@ function makeApp() {
   });
   app.get("/api/ai/core-chat/oauth/authorize", (_req, res) => res.send("Consent"));
   app.post("/api/ai/core-chat/oauth/token", (_req, res) => res.sendStatus(200));
+  app.post("/api/internal/auth/request-magic-link", (_req, res) => res.json({ ok: true }));
   return app;
 }
 
@@ -42,6 +43,21 @@ describe("OAuth browser navigation CORS", () => {
       expect(res.headers["access-control-allow-credentials"]).toBeUndefined();
     },
   );
+
+  it("allows same-site opaque magic-link form without granting CORS access", async () => {
+    const res = await request(makeApp()).post("/api/internal/auth/request-magic-link")
+      .set("Origin", "null").set("Sec-Fetch-Site", "same-origin")
+      .set("Sec-Fetch-Mode", "navigate").type("form").send({ email: "invalid-format" });
+    expect(res.status).toBe(200);
+    expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("rejects opaque-origin cross-site magic-link form", async () => {
+    const res = await request(makeApp()).post("/api/internal/auth/request-magic-link")
+      .set("Origin", "null").set("Sec-Fetch-Site", "cross-site")
+      .set("Sec-Fetch-Mode", "navigate").type("form").send({ email: "invalid-format" });
+    expect(res.status).toBe(500);
+  });
 
   it("still reaches OAuth request validation for an opaque-origin form", async () => {
     const res = await request(makeApp()).post("/api/ai/core-chat/oauth/authorize")
