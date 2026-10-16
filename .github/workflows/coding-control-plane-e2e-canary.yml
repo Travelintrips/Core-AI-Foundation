@@ -251,7 +251,7 @@ jobs:
           body=$(jq -nc --arg c "$correlation" --arg base "$BASE_SHA" '{
             projectName:"Control Plane E2E Canary",
             repository:"Travelintrips/Core-AI-Foundation",
-            branch:"main",
+            branch:"develop",
             instruction:("Controlled E2E canary "+$c+" base-sha:"+$base+". Analyze and plan only bounded non-production changes. Do not commit, push, merge, access secrets, or modify production."),
             priority:10
           }')
