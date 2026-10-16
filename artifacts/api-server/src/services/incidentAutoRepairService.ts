@@ -45,7 +45,13 @@ export function classifyIncidentRisk(source: IncidentSource, kind: string): Inci
     return "OWNER_APPROVAL";
   }
   if (source === "system" && /(stale|timeout|retryable)/.test(normalized)) return "SAFE";
-  return "GUARDED";
+    if (source === "ai" && normalized === "provider_bad_request") {
+    // Record incident and schedule repair or notify orchestrator
+    publishSafe({ source, kind, title: kind, summary: "Provider bad request failure detected", riskClass: "SAFE", metadata: {} });
+    startCodingOrchestration();
+    return "SAFE";
+  }
+return "GUARDED";
 }
 
 const RISK_RANK: Record<IncidentRisk, number> = {
