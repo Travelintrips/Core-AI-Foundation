@@ -1,6 +1,6 @@
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
@@ -1034,9 +1034,15 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
   try {
     let payload: unknown;
     if (params.name === "handshake_ai_core") {
+      const handshakeId = randomUUID();
       payload = {
         protocol: "ai-core-communication/v1",
         authenticated: true,
+        handshakeId,
+        handshakeAck: { received: true, handshakeId, source: "ai_core_mcp_server" },
+        chatSessionId: null,
+        chatSessionIdVerified: false,
+        conversationAckVerified: false,
         capabilities: tools.filter((tool) => tool.name !== "get_profile").map((tool) => ({
           name: tool.name,
           description: tool.description,
