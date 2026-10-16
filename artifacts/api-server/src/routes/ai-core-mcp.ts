@@ -278,6 +278,7 @@ type McpIdentity =
       connectorKey: string;
       scopes: Set<string>;
       user: Awaited<ReturnType<typeof verifyMcpAccessToken>>["user"];
+      clientId: string;
     };
 
 async function authenticate(req: Request): Promise<McpIdentity | null> {
@@ -313,10 +314,27 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
       connectorKey,
       scopes: verified.scopes,
       user: verified.user,
+      clientId: verified.clientId,
     };
   } catch {
     return null;
   }
+}
+
+/** Server-derived OAuth user/client event channel; NOT a verified ChatGPT conversation ID. */
+function oauthEventChannel(identity: McpIdentity): string | null {
+  if (identity.kind !== "oauth" || !identity.user || !identity.clientId) return null;
+  const digest = createHash("sha256")
+    .update(JSON.stringify([oauthIssuer(), identity.user.id, identity.clientId]))
+    .digest("hex");
+  return "ai-engine-oauth:" + digest;
+}
+
+function eventChannelArgs<T extends { conversationId: string }>(identity: McpIdentity, args: T): T {
+  const channel = oauthEventChannel(identity);
+  if (!channel) return args;
+  // Prevent an authenticated OAuth client from reading/ACKing another caller's channel.
+  return { ...args, conversationId: channel };
 }
 
 function identityPrincipalId(identity: McpIdentity): string {
@@ -1327,20 +1345,20 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         };
       }
     } else if (params.name === "subscribe_ai_core_events") {
-      const parsed = SubscribeEventsArgs.parse(params.arguments ?? {});
+      const parsed = eventChannelArgs(identity, SubscribeEventsArgs.parse(params.arguments ?? {}));
       const subscription = await subscribeCodingBridgeConversation(parsed);
       payload = {
         subscribed: true,
         conversationId: parsed.conversationId,
         chatSessionIdVerified: false,
         conversationAckVerified: false,
-        bindingStatus: "UNVERIFIED_CLIENT_SUPPLIED_CONVERSATION_ID",
+        bindingStatus: identity.kind === "oauth" ? "OAUTH_PRINCIPAL_CLIENT_CHANNEL" : "UNVERIFIED_CLIENT_SUPPLIED_CONVERSATION_ID",
         eventTypes: parsed.eventTypes,
         leaseExpiresAt: subscription.leaseExpiresAt,
         clientId: subscription.clientId,
       };
     } else if (params.name === "read_ai_core_events") {
-      const parsed = ReadEventsArgs.parse(params.arguments ?? {});
+      const parsed = eventChannelArgs(identity, ReadEventsArgs.parse(params.arguments ?? {}));
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
       const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
@@ -1359,11 +1377,11 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           .filter((row) => row.eventType !== null),
       };
     } else if (params.name === "ack_ai_core_event") {
-      const parsed = AckEventArgs.parse(params.arguments ?? {});
+      const parsed = eventChannelArgs(identity, AckEventArgs.parse(params.arguments ?? {}));
       const acknowledged = await acknowledgeCodingBridgeResponseForConversation(parsed);
       payload = { acknowledged: Boolean(acknowledged), responseId: parsed.responseId };
     } else if (params.name === "unsubscribe_ai_core_events") {
-      const parsed = UnsubscribeEventsArgs.parse(params.arguments ?? {});
+      const parsed = eventChannelArgs(identity, UnsubscribeEventsArgs.parse(params.arguments ?? {}));
       const unsubscribed = await unsubscribeCodingBridgeConversation(parsed.conversationId);
       payload = { unsubscribed, conversationId: parsed.conversationId };
     } else {
