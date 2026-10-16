@@ -9,6 +9,7 @@ if(Buffer.byteLength(secret)<32)throw Error('DEV HMAC secret missing');
 const devices=path.join(directory,'device-registry.json');
 const grants=path.join(directory,'device-job-grants.json');
 const requests=path.join(directory,'pairing-requests.json');
+const fcmTokens=path.join(directory,'device-fcm-tokens.json');
 const uuid=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 const equal=(a,b)=>{if(typeof a!=='string'||typeof b!=='string')return false;const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&crypto.timingSafeEqual(x,y)};
@@ -18,7 +19,7 @@ const respond=(res,status,obj)=>{res.writeHead(status,{'content-type':'applicati
 const sign=raw=>crypto.createHmac('sha256',secret).update(raw).digest('base64url');
 fs.mkdirSync(directory,{recursive:true,mode:0o700});
 const broker=http.createServer((req,res)=>{
- if(req.method!=='POST'||!['/v1/android/token','/v1/android/pair/start','/v1/android/pair/status','/v1/android/jobs/next'].includes(req.url))return respond(res,404,{error:'not_found'});
+ if(req.method!=='POST'||!['/v1/android/token','/v1/android/pair/start','/v1/android/pair/status','/v1/android/jobs/next','/v1/android/fcm/register'].includes(req.url))return respond(res,404,{error:'not_found'});
  if(req.headers['content-type']?.split(';')[0]!=='application/json')return respond(res,415,{error:'content_type'});
  let raw='',oversize=false;req.on('data',b=>{raw+=b;if(raw.length>2048){oversize=true;req.destroy();}});
  req.on('end',()=>{
@@ -55,6 +56,14 @@ const broker=http.createServer((req,res)=>{
    const registry=load(devices),key=h.slice(7);
    const device=Object.entries(registry).find(([,v])=>v.active===true&&equal(v.hash,hash(key)));
    if(!device)return respond(res,401,{error:'device_not_paired'});
+   if(req.url==='/v1/android/fcm/register'){
+    const token=body.fcmToken;
+    if(typeof token!=='string'||token.length<32||token.length>4096||!/^[A-Za-z0-9_:\-]+$/.test(token))return respond(res,400,{error:'invalid_fcm_token'});
+    const records=load(fcmTokens);
+    records[device[0]]={token,updatedAt:new Date().toISOString()};
+    save(fcmTokens,records);
+    return respond(res,200,{registered:true,deviceId:device[0]});
+   }
    if(req.url==='/v1/android/jobs/next'){
     const eligible=Object.entries(load(grants))
       .filter(([id,g])=>uuid.test(id)&&g.active===true&&g.deviceId===device[0]
