@@ -16,6 +16,12 @@ import {
 } from "./aiCoreGitHubControlService.js";
 
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
+// [Subscription] Ensure event stream subscription before consuming events
+// TODO: Implement subscription registration here, e.g.:
+// const channel = config.eventChannel ?? DEFAULT_CHANNEL;
+// if (!channel) throw new Error("Event channel is not defined");
+// subscriptionService.subscribe(channel, handleEvent);
+
 
 export type AiCoreChatMode = "auto" | "ask" | "agent";
 export type AiCoreChatDispatchKind =
