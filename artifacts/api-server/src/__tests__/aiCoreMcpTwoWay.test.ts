@@ -63,6 +63,20 @@ describe("MCP command two-way routing", () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
+  it("provides a correlatable server handshake receipt without claiming ChatGPT session or event ACK", async () => {
+    const response = await callTool("handshake_ai_core", {});
+    const body = response.body.result.structuredContent;
+    expect(response.body.result.isError).toBeFalsy();
+    expect(body.authenticated).toBe(true);
+    expect(body.handshakeId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(body.handshakeAck).toEqual({
+      received: true, handshakeId: body.handshakeId, source: "ai_core_mcp_server",
+    });
+    expect(body.chatSessionId).toBeNull();
+    expect(body.chatSessionIdVerified).toBe(false);
+    expect(body.conversationAckVerified).toBe(false);
+  });
+
   it("answers MCP discovery from the live tool registry without falling through to chat or database routing", async () => {
     const response = await callTool("query_ai_core", {
       message: "cek discovery MCP AI Core yang aktif saat ini. Sebutkan jumlah tool dan nama semua tool yang terhubung",
