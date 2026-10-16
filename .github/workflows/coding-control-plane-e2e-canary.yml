@@ -291,24 +291,64 @@ jobs:
           echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
           echo "scope=coding-task:$task_id" >> "$GITHUB_OUTPUT"
 
-          stop_code=$(curl -sS -o /tmp/autonomous-stop.json -w "%{http_code}" \
-            --connect-timeout 10 --max-time 20 \
-            -X POST "$API_BASE_URL/ai/coding/tasks/$task_id/autonomous/stop" \
-            -H "Content-Type: application/json" \
-            -H "x-admin-api-key: $ADMIN_API_KEY" \
-            -d '{}' || true)
-          if [ "$stop_code" != "200" ]; then
+          stop_confirmed=false
+          stop_code=""
+          state_code=""
+          for attempt in $(seq 1 6); do
+            stop_accepted=false
+            rm -f /tmp/autonomous-stop.json /tmp/autonomous-state.json
+            stop_code=$(curl -sS -o /tmp/autonomous-stop.json -w "%{http_code}" \
+              --connect-timeout 10 --max-time 20 \
+              -X POST "$API_BASE_URL/ai/coding/tasks/$task_id/autonomous/stop" \
+              -H "Content-Type: application/json" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" \
+              -d '{}' || true)
+
+            if [ "$stop_code" = "200" ] &&
+               jq -e --arg task "$task_id" '.enabled == false and .taskId == $task' \
+                 /tmp/autonomous-stop.json >/dev/null 2>&1; then
+              stop_accepted=true
+            fi
+
+            # The POST may commit successfully even when the edge response times out.
+            # Probe the authoritative state before retrying to avoid treating an
+            # ambiguous transport failure as an operational failure.
+            state_code=$(curl -sS -o /tmp/autonomous-state.json -w "%{http_code}" \
+              --connect-timeout 10 --max-time 20 \
+              "$API_BASE_URL/ai/coding/tasks/$task_id/autonomous" \
+              -H "x-admin-api-key: $ADMIN_API_KEY" || true)
+            if [ "$state_code" = "200" ] &&
+               jq -e --arg task "$task_id" \
+                 '.task_id == $task and .enabled == false and .status == "DISABLED"' \
+                 /tmp/autonomous-state.json >/dev/null 2>&1; then
+              if [ "$stop_accepted" != "true" ]; then
+                echo "Autonomous stop returned HTTP ${stop_code:-curl-error}, but authoritative state is DISABLED; adopting server-side success."
+              fi
+              stop_confirmed=true
+              break
+            fi
+
+            if [ "$stop_accepted" = "true" ] ||
+               [[ "$stop_code" = "000" || "$stop_code" = "307" || "$stop_code" = "308" ||
+                  "$stop_code" = "500" || "$stop_code" = "502" || "$stop_code" = "503" ||
+                  "$stop_code" = "504" ]]; then
+              echo "Autonomous stop not yet confirmed (attempt $attempt/6, stop_http=${stop_code:-curl-error}, state_http=${state_code:-curl-error}); retrying in 5s..."
+              sleep 5
+              continue
+            fi
+
             echo "::error::Failed to place canary task in explicit manual-control mode (HTTP=$stop_code)"
             cat /tmp/autonomous-stop.json 2>/dev/null || true
+            cat /tmp/autonomous-state.json 2>/dev/null || true
+            exit 1
+          done
+
+          if [ "$stop_confirmed" != "true" ]; then
+            echo "::error::Canary task autonomous state did not converge to DISABLED after bounded retries"
+            cat /tmp/autonomous-stop.json 2>/dev/null || true
+            cat /tmp/autonomous-state.json 2>/dev/null || true
             exit 1
           fi
-          jq -e --arg task "$task_id" '.enabled == false and .taskId == $task' /tmp/autonomous-stop.json >/dev/null
-          state_code=$(curl -sS -o /tmp/autonomous-state.json -w "%{http_code}" \
-            --connect-timeout 10 --max-time 20 \
-            "$API_BASE_URL/ai/coding/tasks/$task_id/autonomous" \
-            -H "x-admin-api-key: $ADMIN_API_KEY" || true)
-          test "$state_code" = "200"
-          jq -e --arg task "$task_id" '.task_id == $task and .enabled == false and .status == "DISABLED"' /tmp/autonomous-state.json >/dev/null
           echo "Canary task $task_id is explicitly autonomous=DISABLED; workflow owns approval and dispatch."
 
       - name: Run repository analysis and wait for completion
