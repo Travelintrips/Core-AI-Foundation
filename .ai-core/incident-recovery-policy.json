@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "activation": "on_blocker_only",
+  "triggers": ["JOB_BLOCKED", "CONNECTOR_DISCONNECTED"],
+  "normalHandshakeSop": false,
+  "codingExecutor": "chatgpt-github-direct",
+  "recovery": {"requireAuthorizedResources": true, "requireVerifiedPass": true, "neverBypassSecurity": true}
+}
