@@ -222,11 +222,7 @@ describe("MCP command two-way routing", () => {
     const response = await send("Uji koneksi MCP");
     expect(response.body.result.isError).toBeFalsy();
 
-    expect(mocks.subscribe).toHaveBeenCalledWith({
-      conversationId: "conversation-a",
-      eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
-      leaseSeconds: 86_400,
-    });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
     expect(mocks.subscribe.mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(fetch).mock.invocationCallOrder[0]!,
     );
@@ -290,7 +286,7 @@ describe("MCP command two-way routing", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("renews the long conversation lease whenever events are read", async () => {
+  it("reads events without renewing or creating a subscription", async () => {
     const response = await callTool("read_ai_core_events", {
       conversationId: "conversation-a",
       limit: 25,
