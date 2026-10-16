@@ -3,6 +3,7 @@ import { createAiTaskLedgerReconciler } from "../aiTaskLedgerReconciliationServi
 
 vi.mock("@workspace/db", () => ({
   aiCodingTasksTable: {},
+  aiCodingWorkstreamsTable: {},
   db: {},
 }));
 
@@ -17,6 +18,16 @@ const task = {
   status: "COMPLETED",
   createdAt: new Date("2026-10-14T09:41:34Z"),
   updatedAt: new Date("2026-10-14T09:42:21Z"),
+};
+
+const workstream = {
+  id: "550e8400-e29b-41d4-a716-446655440010",
+  taskNumber: "WS-001",
+  status: "COMPLETED",
+  createdAt: new Date("2026-10-14T09:43:00Z"),
+  updatedAt: new Date("2026-10-14T09:44:00Z"),
+  sourceKind: "coding-workstream" as const,
+  sessionId: "550e8400-e29b-41d4-a716-446655440099",
 };
 
 describe("AI Task terminal reconciliation", () => {
@@ -54,6 +65,39 @@ describe("AI Task terminal reconciliation", () => {
     clock += 60_001;
     expect(await reconciler.tick()).toMatchObject({ attempted: 0 });
     expect(publish).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads and reconciles terminal workstreams independently from coding tasks", async () => {
+    const publish = vi.fn(async () => ({ synced: true, acknowledged: true }));
+    const loadTasks = vi.fn(async () => [task]);
+    const loadWorkstreams = vi.fn(async () => [
+      workstream,
+      {
+        ...workstream,
+        id: "550e8400-e29b-41d4-a716-446655440011",
+        taskNumber: "WS-002",
+        status: "FAILED",
+      },
+    ]);
+    const reconciler = createAiTaskLedgerReconciler({
+      enabled: () => true,
+      loadTasks,
+      loadWorkstreams,
+      publish,
+    });
+
+    expect(await reconciler.tick()).toMatchObject({
+      scanned: 3, attempted: 3, acknowledged: 3, pending: 0,
+    });
+    expect(loadTasks).toHaveBeenCalledOnce();
+    expect(loadWorkstreams).toHaveBeenCalledOnce();
+    expect(publish).toHaveBeenCalledWith({
+      externalId: "coding-workstream:" + workstream.id,
+      title: "AI Core workstream WS-001",
+      sessionId: workstream.sessionId,
+      status: "COMPLETED",
+      version: "terminal",
+    });
   });
 
   it("retries a receiver waiting for ACK, without inventing an ACK on HTTP acceptance", async () => {
