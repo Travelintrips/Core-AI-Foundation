@@ -203,7 +203,8 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
-            .addOnSuccessListener(fcm -> DevPushMessagingService.registerToken(getApplicationContext(), fcm));
+            .addOnSuccessListener(fcm -> DevPushMessagingService.registerToken(getApplicationContext(), fcm))
+            .addOnFailureListener(error -> android.util.Log.w("DevPushDEV", "FCM token unavailable: " + error.getClass().getSimpleName()));
         super.onResume();
         foreground = true;
         autoHandler.removeCallbacks(autoPoll);
