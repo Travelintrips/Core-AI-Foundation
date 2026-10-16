@@ -1,5 +1,28 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+describe("localCodingAutonomousRepairService - workflow_run events", () => {
+  it("returns early for cancelled workflow_run events", async () => {
+    const event = { workflow_run: { status: "cancelled" } } as any;
+    const result = await localCodingAutonomousRepairService.handleEvent(event);
+    expect(result).toBeUndefined();
+  });
+
+  it("processes completed workflow_run events", async () => {
+    const event = { workflow_run: { status: "completed" } } as any;
+    const result = await localCodingAutonomousRepairService.handleEvent(event);
+    // Replace with expected assertion for completed status
+    expect(result).toBeDefined();
+  });
+
+  it("processes in_progress workflow_run events", async () => {
+    const event = { workflow_run: { status: "in_progress" } } as any;
+    const result = await localCodingAutonomousRepairService.handleEvent(event);
+    // Replace with expected assertion for in_progress status
+    expect(result).toBeDefined();
+  });
+});
+
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
