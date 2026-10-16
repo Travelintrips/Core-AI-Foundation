@@ -8,7 +8,7 @@ import pinoHttp from "pino-http";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { adminAuthWithExceptions, optionalSessionAuth } from "./middleware/adminAuth.js";
-import { globalLimiter } from "./middleware/rateLimiter.js";
+import { globalLimiter, mcpLimiter } from "./middleware/rateLimiter.js";
 import {
   suspiciousRequestLogger,
   addSecurityContext,
@@ -192,6 +192,7 @@ app.use("/api", temporalCodingWorkerRouter);
 // Individual sensitive routes apply stricter per-route limits on top of this.
 // Session-authenticated admin requests are skipped by isAdminRequest above.
 app.use("/api", globalLimiter);
+app.use("/api", mcpLimiter);
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,
