@@ -1332,6 +1332,9 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       payload = {
         subscribed: true,
         conversationId: parsed.conversationId,
+        chatSessionIdVerified: false,
+        conversationAckVerified: false,
+        bindingStatus: "UNVERIFIED_CLIENT_SUPPLIED_CONVERSATION_ID",
         eventTypes: parsed.eventTypes,
         leaseExpiresAt: subscription.leaseExpiresAt,
         clientId: subscription.clientId,
