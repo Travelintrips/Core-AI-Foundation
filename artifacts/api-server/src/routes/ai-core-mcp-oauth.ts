@@ -222,7 +222,15 @@ router.post("/api/ai/core-chat/oauth/register", (req, res): void => {
 // MCP is hosted on a dedicated subdomain, without the normal app /login UI.
 // Reuse the existing rate-limited internal authentication endpoint on this origin;
 // its host-only session cookie is then visible to OAuth pairing approval.
-router.get("/api/ai/core-chat/oauth/login", (_req, res): void => {
+router.get("/api/ai/core-chat/oauth/login", async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  const user = await resolveSessionUser(req);
+  if (user) {
+    res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif. Kembali ke tab pairing ChatGPT, lalu buka kembali halaman persetujuan pairing. Jangan login ulang.</p><p><a href="/mcp-pair">Buka halaman pairing</a></p></body></html>`);
+    return;
+  }
   res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Core MCP</title>
 <style>body{font:16px system-ui;max-width:460px;margin:56px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:5px}input{padding:10px}button{padding:12px;font-weight:bold}.muted{color:#555}</style></head><body>
 <h1>Login AI Core MCP</h1><p>Masuk dengan akun internal AI Core untuk menyetujui koneksi ChatGPT.</p>
