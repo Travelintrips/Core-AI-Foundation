@@ -23,7 +23,10 @@ export function getProviderApiKey(providerSlug: string): string | null {
   const envVarName = PROVIDER_ENV_VARS[providerSlug.toLowerCase()];
   if (!envVarName) return null;
   const value = process.env[envVarName];
-  return value && value.trim() ? value.trim() : null;
+  if (value && value.trim()) {
+    return value.trim();
+  }
+  throw new Error(`Missing API key for provider ${providerSlug}`);
 }
 
 /**
