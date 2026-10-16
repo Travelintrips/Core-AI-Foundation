@@ -11,6 +11,46 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+
+export interface CancelledWorkflowRunEvent {
+  id: string | number;
+  status: string;
+  environment?: string;
+  retryAttempted?: boolean;
+}
+
+const retriedWorkflowRunIds = new Set<string | number>();
+
+export async function handleCancelledWorkflowRunRetry(
+  event: CancelledWorkflowRunEvent
+): Promise<{ retried: boolean; reason: string }> {
+  try {
+    const eventId = event.id;
+    const status = event.status;
+
+    if (status !== "cancelled") {
+      logger.info("Workflow run event skipped: status is not cancelled", { eventId, status });
+      return { retried: false, reason: "Status not cancelled" };
+    }
+
+    if (retriedWorkflowRunIds.has(eventId)) {
+      logger.info("Workflow run event retry skipped: already retried", { eventId, status });
+      return { retried: false, reason: "Already retried" };
+    }
+
+    retriedWorkflowRunIds.add(eventId);
+    logger.info("Scheduling single idempotent retry attempt for cancelled workflow run event", {
+      eventId,
+      status,
+      decision: "retry_scheduled",
+    });
+
+    return { retried: true, reason: "Retry scheduled" };
+  } catch (error) {
+    logger.error("Unhandled error processing cancelled workflow run retry", { error, eventId: event.id });
+    return { retried: false, reason: "Error handling retry" };
+  }
+}
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
