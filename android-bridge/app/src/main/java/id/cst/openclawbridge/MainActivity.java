@@ -202,6 +202,8 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onResume() {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+            .addOnSuccessListener(fcm -> DevPushMessagingService.registerToken(getApplicationContext(), fcm));
         super.onResume();
         foreground = true;
         autoHandler.removeCallbacks(autoPoll);
