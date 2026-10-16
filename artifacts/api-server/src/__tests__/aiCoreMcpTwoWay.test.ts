@@ -106,6 +106,18 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("does not report a verified conversation from an unverified subscription", async () => {
+    const response = await callTool("subscribe_ai_core_events", { conversationId: "conversation-a" });
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      subscribed: true,
+      conversationId: "conversation-a",
+      chatSessionIdVerified: false,
+      conversationAckVerified: false,
+      bindingStatus: "UNVERIFIED_CLIENT_SUPPLIED_CONVERSATION_ID",
+    });
+  });
+
   it("refuses event ACK without a matching conversation and passes scoped IDs to storage", async () => {
     const id = "11111111-1111-4111-8111-111111111111";
     const missing = await callTool("ack_ai_core_event", { responseId: id });
