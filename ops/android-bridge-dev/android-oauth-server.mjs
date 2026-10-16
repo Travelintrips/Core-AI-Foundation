@@ -22,7 +22,7 @@ function html(res,status,body){res.writeHead(status,{'content-type':'text/html; 
 function body(req){return new Promise((resolve,reject)=>{let s='';req.on('data',b=>{s+=b;if(s.length>8192){reject(Error('too_large'));req.destroy();}});req.on('end',()=>resolve(s));req.on('error',reject);});}
 function jwt(sub){const n=Math.floor(Date.now()/1000);const head=Buffer.from(JSON.stringify({alg:'RS256',typ:'at+jwt',kid:publicJwk.kid})).toString('base64url');const payload=Buffer.from(JSON.stringify({iss:origin,aud:resource,sub,scope,iat:n,exp:n+900})).toString('base64url');const data=head+'.'+payload;return data+'.'+crypto.sign('RSA-SHA256',Buffer.from(data),privateKey).toString('base64url');}
 function valid(q){return q.get('response_type')==='code'&&q.get('code_challenge_method')==='S256'&&/^[a-zA-Z0-9_-]{43,128}$/.test(q.get('code_challenge')||'')&&checkClient(q.get('client_id')||'',q.get('redirect_uri')||'')&&(q.get('resource')===resource||!q.get('resource'))&&(!q.get('scope')||q.get('scope')===scope);}
-function clean(){const n=Date.now();for(const [k,v] of pending)if(v.exp<n)pending.delete(k);}
+function clean(){const n=Date.now();let expiredConsent=0,expiredCodes=0;for(const [k,v] of pending){if(v.exp<n){pending.delete(k);if(v.approved)expiredCodes++;else expiredConsent++;}}if(expiredConsent||expiredCodes)console.info('[oauth-session] expired',JSON.stringify({expiredConsent,expiredCodes}));}
 http.createServer(async(req,res)=>{try{
  const u=new URL(req.url,'http://localhost'),p=u.pathname;clean();
  if(req.method==='GET'&&p==='/.well-known/oauth-authorization-server')return json(res,200,{issuer:origin,authorization_endpoint:origin+'/oauth/android-dev/authorize',token_endpoint:origin+'/oauth/android-dev/token',registration_endpoint:origin+'/oauth/android-dev/register',jwks_uri:origin+'/oauth/android-dev/jwks',response_types_supported:['code'],grant_types_supported:['authorization_code'],token_endpoint_auth_methods_supported:['none'],code_challenge_methods_supported:['S256'],scopes_supported:[scope]});
@@ -33,7 +33,7 @@ http.createServer(async(req,res)=>{try{
   if(!valid(u.searchParams))return json(res,400,{error:'invalid_request'});
   const csrf=crypto.randomBytes(24).toString('base64url'),nonce=crypto.randomBytes(24).toString('base64url');
   pending.set(nonce,{exp:Date.now()+300000,csrf,query:Object.fromEntries(u.searchParams),approved:false});
-  console.info('[oauth-authorize] GET consent issued');
+  console.info('[oauth-authorize] GET consent issued',JSON.stringify({pendingConsentCount:[...pending.values()].filter(x=>!x.approved).length}));
   res.setHeader('set-cookie','android_oauth_csrf='+csrf+'; HttpOnly; Secure; SameSite=Strict; Path=/oauth/android-dev/authorize; Max-Age=300');
   return html(res,200,'<!doctype html><meta charset="utf-8"><title>Android DEV access approval</title><h2>Izinkan ChatGPT mengakses Android DEV?</h2><p>Hanya perangkat DEV, cakupan android_dev.control. Tindakan sensitif tetap memerlukan izin perangkat.</p><form method="POST" action="/oauth/android-dev/authorize"><input type="hidden" name="nonce" value="'+nonce+'"><input type="hidden" name="csrf" value="'+csrf+'"><button name="decision" value="approve">Setujui akses DEV</button><button name="decision" value="deny">Tolak</button></form>');
  }
@@ -43,13 +43,13 @@ http.createServer(async(req,res)=>{try{
   // No raw form, nonce, CSRF, cookies or request identifiers in diagnostics.
   const nonceShape=typeof submittedNonce==='string'&&/^[A-Za-z0-9_-]{32}$/.test(submittedNonce);
   const hasPendingConsent=[...pending.values()].some(item=>!item.approved);
-  if(!v)console.warn('[oauth-authorize] POST nonce diagnostics',JSON.stringify({nonceFieldPresent:b.has('nonce'),nonceShapeValid:nonceShape,formFields:[...b.keys()].sort(),pendingConsentPresent:hasPendingConsent}));
+  if(!v)console.warn('[oauth-authorize] POST nonce diagnostics',JSON.stringify({nonceFieldPresent:b.has('nonce'),nonceShapeValid:nonceShape,formFields:[...b.keys()].sort(),pendingConsentPresent:hasPendingConsent,pendingConsentCount:[...pending.values()].filter(x=>!x.approved).length}));
   // Log failure category only: never record nonce, cookie, CSRF, authorization code, or PKCE values.
   const csrfCookiePresent=(req.headers.cookie||'').split(';').some(x=>x.trim().startsWith('android_oauth_csrf='));
   const csrfCookieMatches=!!v&&(req.headers.cookie||'').split(';').map(x=>x.trim()).includes('android_oauth_csrf='+v.csrf);
   const rejection=!v?'missing_or_expired_nonce':v.approved?'already_approved':v.csrf!==b.get('csrf')?'form_csrf_mismatch':!csrfCookiePresent?'missing_csrf_cookie':!csrfCookieMatches?'cookie_csrf_mismatch':null;
   if(rejection){console.warn('[oauth-authorize] POST rejected',JSON.stringify({reason:rejection}));return json(res,403,{error:'invalid_request'});}
-  pending.delete(b.get('nonce'));const q=new URLSearchParams(v.query),redirect=new URL(q.get('redirect_uri'));
+  pending.delete(b.get('nonce'));console.info('[oauth-session] consent consumed');const q=new URLSearchParams(v.query),redirect=new URL(q.get('redirect_uri'));
   if(b.get('decision')!=='approve'){redirect.searchParams.set('error','access_denied');}
   else{const code=crypto.randomBytes(32).toString('base64url');pending.set(code,{...v,approved:true,exp:Date.now()+120000});redirect.searchParams.set('code',code);}
   if(q.get('state'))redirect.searchParams.set('state',q.get('state'));res.writeHead(302,{location:redirect.href,'cache-control':'no-store'});return res.end();
