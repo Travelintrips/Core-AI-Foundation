@@ -205,6 +205,25 @@ describe("Coding Orchestrator canonical terminal lifecycle", () => {
     expect(completion).toContain('executionStatus: "COMPLETED"');
     expect(completion).toContain('status: "COMPLETED"');
     expect(completion).not.toContain('status: "READY_REVIEW"');
+    const notification = completion.indexOf("notifyAiTaskLedgerSourceState");
+    const commit = completion.indexOf("await db.transaction");
+    const gated = completion.indexOf("if (preservedAdvancedAiGate)");
+    expect(notification).toBeGreaterThan(commit);
+    expect(notification).toBeGreaterThan(gated);
+    expect(completion.slice(notification)).toContain('status: "COMPLETED"');
+  });
+
+  it("mirrors failed orchestration only after the canonical transaction", () => {
+    const source = readFileSync(
+      new URL("../codingOrchestratorService.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf("async function failOrchestration");
+    const end = source.indexOf("export async function continueCodingOrchestration", start);
+    const failure = source.slice(start, end);
+    expect(failure.indexOf("notifyAiTaskLedgerSourceState"))
+      .toBeGreaterThan(failure.indexOf("await db.transaction"));
+    expect(failure).toContain('status: "FAILED"');
   });
 });
 

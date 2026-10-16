@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { notifyAiTaskLedgerSourceState } from "./aiTaskLedgerBridgeService.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   aiCodingRunsTable,
@@ -354,6 +355,13 @@ export async function startCodingWorkstreamClaim(
       "LEASE_LOST",
     );
   }
+  void notifyAiTaskLedgerSourceState({
+    externalId: `coding-workstream:${updated.id}`,
+    title: `AI Core workstream ${updated.workstreamKey}`,
+    sessionId: updated.graphId,
+    status: "RUNNING",
+    version: updated.updatedAt,
+  }).catch(() => undefined);
   return updated;
 }
 
@@ -591,7 +599,7 @@ export async function markCodingWorkstreamReviewRequired(
   const baseSha =
     result.baseSha == null ? null : validateBaseSha(result.baseSha);
 
-  return db.transaction(async (tx) => {
+  const committed = await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(aiCodingWorkstreamsTable)
       .set({
@@ -650,6 +658,14 @@ export async function markCodingWorkstreamReviewRequired(
 
     return updated;
   });
+  void notifyAiTaskLedgerSourceState({
+    externalId: `coding-workstream:${committed.id}`,
+    title: `AI Core workstream ${committed.workstreamKey}`,
+    sessionId: committed.graphId,
+    status: "REVIEW_REQUIRED",
+    version: committed.updatedAt,
+  }).catch(() => undefined);
+  return committed;
 }
 
 export async function completeReviewedCodingWorkstream(
@@ -661,7 +677,7 @@ export async function completeReviewedCodingWorkstream(
 ): Promise<AiCodingWorkstream> {
   const now = new Date();
 
-  return db.transaction(async (tx) => {
+  const committed = await db.transaction(async (tx) => {
     const [current] = await tx
       .select()
       .from(aiCodingWorkstreamsTable)
@@ -778,6 +794,14 @@ export async function completeReviewedCodingWorkstream(
 
     return completed;
   });
+  void notifyAiTaskLedgerSourceState({
+    externalId: `coding-workstream:${committed.id}`,
+    title: `AI Core workstream ${committed.workstreamKey}`,
+    sessionId: committed.graphId,
+    status: "COMPLETED",
+    version: committed.updatedAt,
+  }).catch(() => undefined);
+  return committed;
 }
 
 export async function failCodingWorkstreamClaim(
