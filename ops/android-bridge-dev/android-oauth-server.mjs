@@ -33,6 +33,7 @@ http.createServer(async(req,res)=>{try{
   if(!valid(u.searchParams))return json(res,400,{error:'invalid_request'});
   const csrf=crypto.randomBytes(24).toString('base64url'),nonce=crypto.randomBytes(24).toString('base64url');
   pending.set(nonce,{exp:Date.now()+300000,csrf,query:Object.fromEntries(u.searchParams),approved:false});
+  console.info('[oauth-authorize] GET consent issued');
   res.setHeader('set-cookie','android_oauth_csrf='+csrf+'; HttpOnly; Secure; SameSite=Strict; Path=/oauth/android-dev/authorize; Max-Age=300');
   return html(res,200,'<!doctype html><meta charset="utf-8"><title>Android DEV access approval</title><h2>Izinkan ChatGPT mengakses Android DEV?</h2><p>Hanya perangkat DEV, cakupan android_dev.control. Tindakan sensitif tetap memerlukan izin perangkat.</p><form method="POST" action="/oauth/android-dev/authorize"><input type="hidden" name="nonce" value="'+nonce+'"><input type="hidden" name="csrf" value="'+csrf+'"><button name="decision" value="approve">Setujui akses DEV</button><button name="decision" value="deny">Tolak</button></form>');
  }
