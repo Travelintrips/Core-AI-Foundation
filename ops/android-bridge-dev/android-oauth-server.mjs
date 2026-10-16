@@ -52,15 +52,15 @@ http.createServer(async(req,res)=>{try{
   pending.delete(b.get('nonce'));console.info('[oauth-session] consent consumed');const q=new URLSearchParams(v.query),redirect=new URL(q.get('redirect_uri'));
   if(b.get('decision')!=='approve'){redirect.searchParams.set('error','access_denied');}
   else{const code=crypto.randomBytes(32).toString('base64url');pending.set(code,{...v,approved:true,exp:Date.now()+120000});redirect.searchParams.set('code',code);}
-  if(q.get('state'))redirect.searchParams.set('state',q.get('state'));res.writeHead(302,{location:redirect.href,'cache-control':'no-store'});return res.end();
+  if(q.get('state'))redirect.searchParams.set('state',q.get('state'));console.info('[oauth-authorize] redirect issued',JSON.stringify({decision:b.get('decision')==='approve'?'approve':'deny',codeIssued:b.get('decision')==='approve',redirectHost:redirect.hostname}));res.writeHead(303,{location:redirect.href,'cache-control':'no-store'});return res.end();
  }
  if(p==='/oauth/android-dev/token'&&req.method==='POST'){
   const b=new URLSearchParams(await body(req)),code=b.get('code'),v=pending.get(code);
-  if(!v||!v.approved||b.get('grant_type')!=='authorization_code')return json(res,400,{error:'invalid_grant'});
+  if(!v||!v.approved||b.get('grant_type')!=='authorization_code'){console.warn('[oauth-token] invalid grant',JSON.stringify({codePresent:!!code,codeFound:!!v,approved:!!v?.approved}));return json(res,400,{error:'invalid_grant'});}
   pending.delete(code);const q=new URLSearchParams(v.query),verifier=b.get('code_verifier')||'';
   const challenge=crypto.createHash('sha256').update(verifier).digest('base64url');
   if(verifier.length<43||verifier.length>128||challenge!==q.get('code_challenge')||b.get('client_id')!==q.get('client_id')||b.get('redirect_uri')!==q.get('redirect_uri'))return json(res,400,{error:'invalid_grant'});
-  return json(res,200,{access_token:jwt('android-dev-approved-admin'),token_type:'Bearer',expires_in:900,scope});
+  console.info('[oauth-token] token issued');return json(res,200,{access_token:jwt('android-dev-approved-admin'),token_type:'Bearer',expires_in:900,scope});
  }
  return json(res,404,{error:'not_found'});
  }catch{return json(res,400,{error:'invalid_request'});}
