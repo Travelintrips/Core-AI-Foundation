@@ -1,0 +1,22 @@
+[Unit]
+Description=AI Task Android MCP DEV (independent authenticated endpoint)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/openclaw-android-bridge-dev
+ExecStart=/usr/bin/node /opt/openclaw-android-bridge-dev/android-mcp-dev.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
