@@ -1,3 +1,18 @@
+/**
+ * Local Coding Autonomous Repair Service
+ *
+ * Root cause analysis for workflow_run cancellation exceptions:
+ * When a workflow_run is cancelled, asynchronous operations or promises executing in the repair loop
+ * (e.g., waiting for multi-worker handoff, sandbox verification, or bridge polling) may throw cancellation
+ * errors (such as AbortError or cancelled status from external orchestration). If these exceptions are not
+ * intercepted specifically, the autonomous repair cycle terminates abruptly without releasing held claims,
+ * marking the workstream state as cancelled or attempting a graceful retry/cleanup.
+ *
+ * Required code paths:
+ * 1. Catch AbortError / cancellation exceptions in the run loop and workflow_run execution tasks.
+ * 2. Revoke any pending AI handoffs (using revokeAiHandoff) and release claimed workstream resources.
+ * 3. Log the cancellation gracefully in aiAuditService and update task/workstream status to cancelled or queued for retry if applicable.
+ */
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
