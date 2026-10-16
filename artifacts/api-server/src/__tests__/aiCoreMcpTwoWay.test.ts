@@ -222,7 +222,11 @@ describe("MCP command two-way routing", () => {
     const response = await send("Uji koneksi MCP");
     expect(response.body.result.isError).toBeFalsy();
 
-    expect(mocks.subscribe).not.toHaveBeenCalled();
+    expect(mocks.subscribe).toHaveBeenCalledWith({
+      conversationId: "conversation-a",
+      eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
+      leaseSeconds: 86_400,
+    });
     expect(mocks.subscribe.mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(fetch).mock.invocationCallOrder[0]!,
     );
@@ -293,11 +297,7 @@ describe("MCP command two-way routing", () => {
     });
 
     expect(response.body.result.isError).toBeFalsy();
-    expect(mocks.subscribe).toHaveBeenCalledWith({
-      conversationId: "conversation-a",
-      eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
-      leaseSeconds: 86_400,
-    });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
     expect(mocks.list).toHaveBeenCalledWith({
       conversationId: "conversation-a",
       limit: 25,
