@@ -21,6 +21,7 @@ const PAGE_SIZE = 8;
 const MAX_PARALLEL = 2;
 const LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 15 * 60 * 1000;
+const RECONCILABLE_WORKSTREAM_STATUSES = ["COMPLETED", "FAILED", "REVIEW_REQUIRED"] as const;
 
 type TerminalLedgerSourceKind = "coding-task" | "coding-workstream";
 
@@ -84,7 +85,7 @@ async function loadTerminalWorkstreams(
   })
     .from(aiCodingWorkstreamsTable)
     .where(and(
-      inArray(aiCodingWorkstreamsTable.status, ["COMPLETED", "FAILED"]),
+      inArray(aiCodingWorkstreamsTable.status, [...RECONCILABLE_WORKSTREAM_STATUSES]),
       gte(aiCodingWorkstreamsTable.createdAt, since),
     ))
     .orderBy(desc(aiCodingWorkstreamsTable.createdAt), desc(aiCodingWorkstreamsTable.id))
@@ -101,7 +102,7 @@ type RetryState = {
   signature: string;
   attempts: number;
   nextAttemptAt: number;
-  acknowledged: boolean;
+  settled: boolean;
 };
 
 export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = {}) {
@@ -151,13 +152,18 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
       let acknowledged = 0;
       let pending = 0;
       const eligible = rows.filter((row) => {
-        if (row.status !== "COMPLETED" && row.status !== "FAILED") return false;
+        const allowed = row.sourceKind === "coding-workstream"
+          ? RECONCILABLE_WORKSTREAM_STATUSES.includes(
+            row.status as (typeof RECONCILABLE_WORKSTREAM_STATUSES)[number],
+          )
+          : row.status === "COMPLETED" || row.status === "FAILED";
+        if (!allowed) return false;
         const sourceKind = row.sourceKind ?? "coding-task";
         const key = sourceKind + ":" + row.id;
         const signature = [row.status, row.updatedAt.toISOString()].join(":");
         const previous = attempts.get(key);
         return !previous || previous.signature !== signature ||
-          (!previous.acknowledged && previous.nextAttemptAt <= now());
+          (!previous.settled && previous.nextAttemptAt <= now());
       });
 
       for (let i = 0; i < eligible.length; i += MAX_PARALLEL) {
@@ -180,12 +186,15 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
               status: row.status,
               // Stable across retries and restarts; the receiver verifies
               // the canonical record before accepting any state transition.
-              version: "terminal",
+              version: row.status === "REVIEW_REQUIRED" ? "review-required" : "terminal",
             });
-            if (receipt.acknowledged === true) {
-              acknowledged += 1;
+            const terminal = row.status === "COMPLETED" || row.status === "FAILED";
+            const settled = receipt.acknowledged === true ||
+              (!terminal && receipt.synced && receipt.observedStatus === row.status);
+            if (settled) {
+              if (receipt.acknowledged === true) acknowledged += 1;
               attempts.set(key, {
-                signature, attempts: attempt, nextAttemptAt: 0, acknowledged: true,
+                signature, attempts: attempt, nextAttemptAt: 0, settled: true,
               });
               return;
             }
@@ -196,7 +205,7 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
               nextAttemptAt: now() + (receipt.synced ? POLL_MS : Math.min(
                 MAX_BACKOFF_MS, POLL_MS * (2 ** Math.min(attempt - 1, 4)),
               )),
-              acknowledged: false,
+              settled: false,
             });
           } catch {
             pending += 1;
@@ -206,7 +215,7 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
               nextAttemptAt: now() + Math.min(
                 MAX_BACKOFF_MS, POLL_MS * (2 ** Math.min(attempt - 1, 4)),
               ),
-              acknowledged: false,
+              settled: false,
             });
           }
         }));

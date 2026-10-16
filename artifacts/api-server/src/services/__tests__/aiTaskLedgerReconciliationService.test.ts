@@ -100,6 +100,41 @@ describe("AI Task terminal reconciliation", () => {
     });
   });
 
+  it("reconciles REVIEW_REQUIRED without inventing a terminal ACK", async () => {
+    let clock = Date.parse("2026-10-14T12:00:00Z");
+    const reviewRequired = {
+      ...workstream,
+      status: "REVIEW_REQUIRED",
+      updatedAt: new Date("2026-10-14T10:00:00Z"),
+    };
+    const publish = vi.fn(async () => ({
+      synced: true,
+      observedStatus: "REVIEW_REQUIRED",
+      acknowledged: false,
+    }));
+    const reconciler = createAiTaskLedgerReconciler({
+      enabled: () => true,
+      now: () => clock,
+      loadTasks: async () => [],
+      loadWorkstreams: async () => [reviewRequired],
+      publish,
+    });
+
+    expect(await reconciler.tick()).toMatchObject({
+      scanned: 1, attempted: 1, acknowledged: 0, pending: 0,
+    });
+    expect(publish).toHaveBeenCalledWith({
+      externalId: "coding-workstream:" + reviewRequired.id,
+      title: "AI Core workstream WS-001",
+      sessionId: reviewRequired.sessionId,
+      status: "REVIEW_REQUIRED",
+      version: "review-required",
+    });
+    clock += 60_001;
+    expect(await reconciler.tick()).toMatchObject({ attempted: 0 });
+    expect(publish).toHaveBeenCalledTimes(1);
+  });
+
   it("retries a receiver waiting for ACK, without inventing an ACK on HTTP acceptance", async () => {
     let clock = Date.parse("2026-10-14T12:00:00Z");
     const publish = vi.fn()
