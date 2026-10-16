@@ -1,3 +1,4 @@
+// TODO: Wrap invoke_model calls in try/catch to handle PROVIDER_BAD_REQUEST and translate to internal error codes
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
