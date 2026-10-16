@@ -35,8 +35,12 @@ public final class DevPushMessagingService extends FirebaseMessagingService {
         super.onNewToken(token);
         // Registration must be bound to the paired device using an authenticated
         // DEV endpoint before enabling server-side FCM delivery. Never log tokens.
+        registerToken(getApplicationContext(), token);
+    }
+
+    public static void registerToken(Context context, String token) {
         new Thread(() -> {
-            String credential = getSharedPreferences("bridge-pairing-dev", Context.MODE_PRIVATE)
+            String credential = context.getSharedPreferences("bridge-pairing-dev", Context.MODE_PRIVATE)
                     .getString("credential", "");
             if (credential.length() < 32 || token == null || token.length() < 32) return;
             HttpURLConnection conn = null;
