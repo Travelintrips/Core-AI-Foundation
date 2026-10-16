@@ -1,6 +1,6 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
-import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
+import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";import { localCodingAiPreferredModelService } from "./localCodingAiPreferredModelService.js";
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -204,7 +204,11 @@ export async function resolveProductionCodingModel(
     let local;
     try {
       local = readZeroLlmLocalConfig();
-    } catch (error) {
+    } catch (error) {  if ((error as any).code === 'PROVIDER_BAD_REQUEST') {
+    console.warn('Primary model provider bad request, falling back to preferred model');
+    return await localCodingAiPreferredModelService(request);
+  }
+
       return failure(
         "LOCAL_PROVIDER_UNAVAILABLE",
         error instanceof Error ? error.message : String(error),
