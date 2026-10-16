@@ -19,7 +19,7 @@ const respond=(res,status,obj)=>{res.writeHead(status,{'content-type':'applicati
 const sign=raw=>crypto.createHmac('sha256',secret).update(raw).digest('base64url');
 fs.mkdirSync(directory,{recursive:true,mode:0o700});
 const broker=http.createServer((req,res)=>{
- if(req.method!=='POST'||!['/v1/android/token','/v1/android/pair/start','/v1/android/pair/status','/v1/android/jobs/next','/v1/android/fcm/register'].includes(req.url))return respond(res,404,{error:'not_found'});
+ if(req.method!=='POST'||!['/v1/android/token','/v1/android/pair/start','/v1/android/pair/status','/v1/android/jobs/next','/v1/android/jobs/peek','/v1/android/fcm/register'].includes(req.url))return respond(res,404,{error:'not_found'});
  if(req.headers['content-type']?.split(';')[0]!=='application/json')return respond(res,415,{error:'content_type'});
  let raw='',oversize=false;req.on('data',b=>{raw+=b;if(raw.length>2048){oversize=true;req.destroy();}});
  req.on('end',()=>{
@@ -63,6 +63,14 @@ const broker=http.createServer((req,res)=>{
     records[device[0]]={token,updatedAt:new Date().toISOString()};
     save(fcmTokens,records);
     return respond(res,200,{registered:true,deviceId:device[0]});
+   }
+   if(req.url==='/v1/android/jobs/peek'){
+    const eligible=Object.entries(load(grants))
+      .filter(([id,g])=>uuid.test(id)&&g.active===true&&g.deviceId===device[0]
+        &&Number.isSafeInteger(g.expiresAt)&&g.expiresAt>now)
+      .sort((a,b)=>b[1].expiresAt-a[1].expiresAt);
+    if(!eligible.length)return respond(res,204,{});
+    return respond(res,200,{jobId:eligible[0][0],expiresAt:eligible[0][1].expiresAt});
    }
    if(req.url==='/v1/android/jobs/next'){
     const eligible=Object.entries(load(grants))
