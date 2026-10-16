@@ -1,4 +1,5 @@
 import { logAudit } from "./aiAuditService.js";
+console.log('Investigating workflow failure for commit 23cbc331dea6aed2d3797e3e2c0c8c8e5b704cd3');
 import {
   createGitHubApiClient,
   parseGitHubRepository,
