@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { detectExplicitExternalAgentClientId } from "../externalAgentDispatchService.js";
 
 describe("Issue #980: explicit external-agent routing", () => {
+  it("routes each dedicated Dell agent by exact identity", () => {
+    for (const role of ["browser", "recovery", "verifier"]) {
+      expect(detectExplicitExternalAgentClientId(`gunakan dell-${role} untuk tugas read-only DEV`))
+        .toBe(`openclaw-pc-worker-dell-${role}`);
+    }
+  });
+
+  it("requires explicit delegation before selecting dedicated Dell agents", () => {
+    expect(detectExplicitExternalAgentClientId("dell-browser belum online")).toBeNull();
+  });
+
   it("routes a deliberate OpenClaw PC delegation to the PC worker", () => {
     expect(detectExplicitExternalAgentClientId("suruh OpenClaw PC cek deployment")).toBe("openclaw-pc-worker");
   });

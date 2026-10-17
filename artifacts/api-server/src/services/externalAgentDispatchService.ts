@@ -28,6 +28,9 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
+  "openclaw-pc-worker-dell-browser": "tools:bounded",
+  "openclaw-pc-worker-dell-recovery": "tools:bounded",
+  "openclaw-pc-worker-dell-verifier": "tools:bounded",
   [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
   [N8N_AGENT_CLIENT_ID]: "workflow:automation",
 };
@@ -37,6 +40,9 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   agent: RegExp;
 }> = [
   // Host-specific requests must take precedence over the generic OpenClaw alias.
+  { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
+  { clientId: "openclaw-pc-worker-dell-recovery", agent: /\b(?:openclaw-pc-worker-dell-recovery|dell-recovery)\b/i },
+  { clientId: "openclaw-pc-worker-dell-verifier", agent: /\b(?:openclaw-pc-worker-dell-verifier|dell-verifier)\b/i },
   { clientId: OPENCLAW_PC_DEV_CLIENT_ID, agent: /\bopenclaw-pc-worker-dev\b|\bopen\s*claw[\s-]*pc[\s-]*dev\b|\b(?:dell|pc\s+dell)\b/i },
   { clientId: OPENCLAW_PC_CLIENT_ID, agent: /\bopen\s*claw[\s-]*(?:pc|windows)\b|\b(?:pc|windows)[\s-]*open\s*claw\b/i },
   { clientId: OPENCLAW_VPS_CLIENT_ID, agent: /\bopen\s*claw[\s-]*vps\b|\bvps[\s-]*open\s*claw\b/i },
