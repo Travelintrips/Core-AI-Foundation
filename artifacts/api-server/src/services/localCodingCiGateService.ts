@@ -9,6 +9,7 @@ import {
 import { publishSafe } from "./aiEventBusService.js";
 import { appendCodingBridgeResponse } from "./localCodingControlBridgeService.js";
 import { scheduleCiSelfRepair } from "./localCodingCiSelfRepairService.js";
+import { decideSignedGithubCiGate } from "./localCodingCiGatePolicy.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -102,6 +103,7 @@ type CiPayload = {
 export async function handleCodingGithubCiEvent(event: {
   eventId: string;
   eventType: string;
+  sourceModule: string;
   payloadJson: unknown;
 }) {
   const p = (event.payloadJson ?? {}) as CiPayload;
@@ -141,20 +143,32 @@ export async function handleCodingGithubCiEvent(event: {
       continue;
     }
 
-    const completed = p.status === "completed";
-    const success = completed && p.conclusion === "success";
-    const failure =
-      completed &&
-      typeof p.conclusion === "string" &&
-      p.conclusion !== "success";
-    const state = success ? "GREEN" : failure ? "FAILED" : "WAITING";
-
     const priorCheckpoint =
       binding.lastCheckpointJson &&
       typeof binding.lastCheckpointJson === "object" &&
       !Array.isArray(binding.lastCheckpointJson)
         ? (binding.lastCheckpointJson as Record<string, unknown>)
         : {};
+
+    const verdict = decideSignedGithubCiGate({
+      sourceModule: event.sourceModule,
+      eventType: event.eventType,
+      eventId: event.eventId,
+      headSha: p.headSha,
+      bindingHeadSha: binding.headSha,
+      checkName: p.checkName,
+      status: p.status,
+      conclusion: p.conclusion,
+      requiredChecks: binding.requiredChecksJson,
+      previousCheckpoint: priorCheckpoint,
+      previousState: binding.state,
+    });
+    // Unknown check names, missing required checks, and unsigned/unrelated
+    // events must never promote, regress or trigger repairs on a binding.
+    if (!verdict.accepted) continue;
+    const state = verdict.state;
+    const success = state === "GREEN";
+    const failure = verdict.currentCheckFailed;
 
     await db
       .update(aiCodingCiBindingsTable)
@@ -169,6 +183,9 @@ export async function handleCodingGithubCiEvent(event: {
           pullRequestNumber: p.pullRequestNumber ?? null,
           headBranch: p.headBranch ?? null,
           checkName: p.checkName ?? null,
+          ciHeadSha: binding.headSha,
+          ciChecks: verdict.checkResults,
+          ciLastEventId: event.eventId,
         },
       })
       .where(eq(aiCodingCiBindingsTable.id, binding.id));
@@ -195,7 +212,7 @@ export async function handleCodingGithubCiEvent(event: {
       },
     });
 
-    if (success) {
+    if (verdict.newlyGreen) {
       const { continueAfterGreenCi, executeGreenCiNextAction } = await import(
         "./localCodingCiAutoContinueService.js"
       );
