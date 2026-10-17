@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir } from "node:os";import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { and, desc, eq } from "drizzle-orm";
 import {
