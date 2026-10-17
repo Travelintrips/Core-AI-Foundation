@@ -420,6 +420,46 @@ router.post(
       return;
     }
     const event = parsed.data;
+    const eventSummary = [
+      "CST infrastructure monitor event (diagnostic only).",
+      "Event ID: " + event.eventId,
+      "Source: " + event.source,
+      "Resource: " + event.resource,
+      "Status: " + event.status,
+      "Observed UTC: " + event.observedAt,
+      "Summary: " + event.summary,
+      ...(event.details ? ["Details: " + event.details] : []),
+    ].join("\n");
+    // GitHub CI does not own a ChatGPT session. Persist the diagnostic and
+    // defer browser delivery until a separate authenticated pairing supplies
+    // a verified conversation. Never send to a guessed/default chat tab.
+    if (!event.conversationId) {
+      const recorded = await submitCodingBridgeCommand({
+        externalCommandId: "monitor-unbound:" + event.eventId,
+        instruction: eventSummary,
+        source: "cst-vps-infrastructure-monitor",
+        commandType: "EVENT_BINDING",
+        metadata: {
+          monitor: true,
+          eventId: event.eventId,
+          source: event.source,
+          resource: event.resource,
+          monitorStatus: event.status,
+          observedAt: event.observedAt,
+          handoff: "PENDING_SESSION_BINDING",
+          manualApprovalRequiredForMutations: true,
+        },
+      });
+      res.status(recorded.created ? 202 : 200).json({
+        accepted: true,
+        created: recorded.created,
+        commandId: recorded.command.id,
+        communicator: null,
+        handoff: "PENDING_SESSION_BINDING",
+        browserConfirmed: false,
+      });
+      return;
+    }
     const activePcId = await chooseActivePc(await getExternalAgentRegistrySnapshot());
     if (!activePcId) {
       res.setHeader("Retry-After", "60");
@@ -431,16 +471,6 @@ router.post(
       res.status(503).json({ error: "Active communicator not registered" });
       return;
     }
-    const eventSummary = [
-      "CST infrastructure monitor event (diagnostic only).",
-      "Event ID: " + event.eventId,
-      "Source: " + event.source,
-      "Resource: " + event.resource,
-      "Status: " + event.status,
-      "Observed UTC: " + event.observedAt,
-      "Summary: " + event.summary,
-      ...(event.details ? ["Details: " + event.details] : []),
-    ].join("\n");
     const instruction = [
       "Open the existing authenticated ChatGPT conversation used for CST AI Core task handoff.",
       "Send exactly one concise message to ChatGPT containing the diagnostic event below,",
