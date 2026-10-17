@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+// TODO: Adjust request construction and serialization according to provider API schema: ensure headers, body fields, and metadata are correctly named, typed, and formatted.
+
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
