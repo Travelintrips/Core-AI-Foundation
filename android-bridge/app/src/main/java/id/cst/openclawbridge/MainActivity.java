@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.content.Context;
 import android.provider.Settings;
@@ -42,6 +43,19 @@ public class MainActivity extends Activity {
     private static final String DEV_NEXT_JOB_URL = "https://dev-ai-task.cstlogistic.co.id/v1/android/jobs/next";
     private CheckBox autoSubmit;
     private boolean submissionInFlight = false;
+    private boolean devOneTapLaunch = false;
+    private volatile boolean pairingInFlight = false;
+    private boolean foreground = false;
+    private boolean fetchInFlight = false;
+    private boolean foregroundAutoEnabled = false;
+    private final android.os.Handler autoHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable autoPoll = new Runnable() {
+        @Override public void run() {
+            if (!foreground || !foregroundAutoEnabled) return;
+            if (!fetchInFlight) fetchJobForDevice(true);
+            autoHandler.postDelayed(this, 20000);
+        }
+    };
     private EditText jobToken;
     private EditText deviceCredential;
     private TextView deliveryStatus;
@@ -49,6 +63,8 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        androidx.work.PeriodicWorkRequest backgroundCheck = new androidx.work.PeriodicWorkRequest.Builder(DevJobDiscoveryWorker.class, 15, java.util.concurrent.TimeUnit.MINUTES).build();
+        androidx.work.WorkManager.getInstance(getApplicationContext()).enqueueUniquePeriodicWork(DevJobDiscoveryWorker.UNIQUE, androidx.work.ExistingPeriodicWorkPolicy.KEEP, backgroundCheck);
         eventId = state == null ? UUID.randomUUID().toString() : state.getString("eventId", UUID.randomUUID().toString());
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -64,12 +80,46 @@ public class MainActivity extends Activity {
         root.addView(taskId);
         Button fetchAssignedJob = new Button(this);
         fetchAssignedJob.setText("AMBIL JOB DEV OTOMATIS");
-        fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice());
+        fetchAssignedJob.setOnClickListener(v -> fetchJobForDevice(false));
         root.addView(fetchAssignedJob);
         jobFetchStatus = new TextView(this);
         jobFetchStatus.setText("Tekan tombol untuk mengambil job yang ditugaskan ke Z Fold4.");
         jobFetchStatus.setTextSize(16);
         root.addView(jobFetchStatus);
+        Button oneTapTest = new Button(this);
+        oneTapTest.setText("UJI CHATGPT OTOMATIS DEV (SATU KETUKAN)");
+        oneTapTest.setOnClickListener(v -> fetchJobForDevice(true));
+        root.addView(oneTapTest);
+        CheckBox autoPolling = new CheckBox(this);
+        autoPolling.setText("AUTO JOB DEV saat Bridge terbuka (20 detik; boleh membuka ChatGPT)");
+        autoPolling.setChecked(getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).getBoolean("auto_enabled", true));
+        foregroundAutoEnabled = autoPolling.isChecked();
+        autoPolling.setOnCheckedChangeListener((button, checked) -> {
+            getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit().putBoolean("auto_enabled", checked).apply();
+            foregroundAutoEnabled = checked;
+            autoHandler.removeCallbacks(autoPoll);
+            if (checked && foreground) autoHandler.post(autoPoll);
+        });
+        root.addView(autoPolling);
+        TextView controlHeader=new TextView(this);
+        controlHeader.setText("Kendali Browser DEV (sekali jalan, Chrome/Samsung Internet)");
+        root.addView(controlHeader);
+        EditText controlValue=new EditText(this);
+        controlValue.setHint("Teks untuk diketik atau label tombol untuk tap");
+        controlValue.setSingleLine(true);
+        root.addView(controlValue);
+        Button tapControl=new Button(this);
+        tapControl.setText("ARM TAP LABEL DI BROWSER");
+        tapControl.setOnClickListener(v -> armScreenControl("tap",controlValue.getText().toString()));
+        root.addView(tapControl);
+        Button typeControl=new Button(this);
+        typeControl.setText("ARM KETIK PADA INPUT FOKUS");
+        typeControl.setOnClickListener(v -> armScreenControl("type",controlValue.getText().toString()));
+        root.addView(typeControl);
+        Button scrollControl=new Button(this);
+        scrollControl.setText("ARM SCROLL BROWSER");
+        scrollControl.setOnClickListener(v -> armScreenControl("scroll",""));
+        root.addView(scrollControl);
         prompt = new EditText(this);
         prompt.setHint("Prompt untuk ChatGPT");
         prompt.setMinLines(3);
@@ -152,9 +202,21 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onResume() {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+            .addOnSuccessListener(fcm -> DevPushMessagingService.registerToken(getApplicationContext(), fcm))
+            .addOnFailureListener(error -> android.util.Log.w("DevPushDEV", "FCM token unavailable: " + error.getClass().getSimpleName()));
         super.onResume();
+        foreground = true;
+        autoHandler.removeCallbacks(autoPoll);
+        if (foregroundAutoEnabled) autoHandler.post(autoPoll);
         if (autoSendStatus != null) showAutoSendStatus();
         loadCapturedReply();
+    }
+
+    @Override protected void onPause() {
+        foreground = false;
+        autoHandler.removeCallbacks(autoPoll);
+        super.onPause();
     }
 
     private void loadCapturedReply() {
@@ -165,7 +227,10 @@ public class MainActivity extends Activity {
             result.setText(captured);
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
                 .edit().remove(ChatSendService.CAPTURED_REPLY).apply();
-            if (autoSubmit != null && autoSubmit.isChecked()) deliverResult();
+            String delivery = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
+                    .getString(CapturedResultDelivery.STATUS, "");
+            if (autoSubmit != null && autoSubmit.isChecked() && !delivery.startsWith("AUTO_DELIVERY_"))
+                deliverResult();
         }
     }
 
@@ -174,7 +239,21 @@ public class MainActivity extends Activity {
         boolean enabled = accessibilityEnabled();
         String message = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
             .getString(ChatSendService.STATUS, "Belum ada uji Auto Kirim.");
-        autoSendStatus.setText("Aksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message);
+        android.content.SharedPreferences statusPrefs = getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE);
+        long sentAt = statusPrefs.getLong(ChatSendService.AUTO_SENT_AT, 0);
+        long capturedAt = statusPrefs.getLong(ChatSendService.AUTO_CAPTURED_AT, 0);
+        String evidence = "\nAUTO_SENT (klik Accessibility diterima): " + (sentAt > 0 ? new java.util.Date(sentAt).toString() : "BELUM") +
+                "\nAUTO_CAPTURED (jawaban bertanda): " + (capturedAt > 0 ? new java.util.Date(capturedAt).toString() : "BELUM");
+        String delivery = statusPrefs.getString(CapturedResultDelivery.STATUS, "");
+        android.content.SharedPreferences fcmPrefs = getSharedPreferences("bridge-fcm-dev", MODE_PRIVATE);
+        long fcmAttempt = fcmPrefs.getLong("lastAttemptAt", 0);
+        int fcmHttp = fcmPrefs.getInt("lastHttpStatus", 0);
+        String fcmError = fcmPrefs.getString("lastError", "");
+        String fcmState = fcmAttempt == 0 ? "BELUM MENCOBA" :
+                (fcmHttp == 200 ? "TERDAFTAR (HTTP 200)" :
+                ("GAGAL (HTTP " + fcmHttp + (fcmError.isEmpty() ? "" : ", " + fcmError) + ")"));
+        autoSendStatus.setText("FCM DEV: " + fcmState + "\nAksesibilitas: " + (enabled ? "AKTIF" : "TIDAK AKTIF") + "\n" + message + evidence +
+                (delivery.isEmpty() ? "" : "\n" + delivery));
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
@@ -201,6 +280,9 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Aktifkan Auto Kirim untuk mengambil jawaban bertanda.", Toast.LENGTH_LONG).show();
             return;
         }
+        boolean directDelivery = devOneTapLaunch && armed && capture && autoSubmit.isChecked() &&
+                taskId.getText().toString().trim().matches("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}");
+        devOneTapLaunch = false;
         eventId = UUID.randomUUID().toString(); // New logical request must never reuse result event identity.
         String nonce = capture ? UUID.randomUUID().toString().replace("-", "") : "";
         String transmitText = capture
@@ -217,7 +299,16 @@ public class MainActivity extends Activity {
         getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
             .edit().remove("text").remove("at")
             .remove(ChatSendService.REPLY_MARKER).remove(ChatSendService.REPLY_STARTED)
-            .remove(ChatSendService.CAPTURED_REPLY).commit();
+            .remove(ChatSendService.CAPTURED_REPLY)
+            .remove(ChatSendService.AUTO_SENT_AT).remove(ChatSendService.AUTO_CAPTURED_AT)
+            .putBoolean(CapturedResultDelivery.ARMED, false)
+            .remove(CapturedResultDelivery.STATUS).commit();
+        if (directDelivery) {
+            getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE).edit()
+                .putString(CapturedResultDelivery.JOB_ID, taskId.getText().toString().trim())
+                .putString(CapturedResultDelivery.EVENT_ID, eventId)
+                .putBoolean(CapturedResultDelivery.ARMED, true).commit();
+        }
         if (armed) {
             getSharedPreferences(ChatSendService.PREFS, MODE_PRIVATE)
                 .edit().putString("text", transmitText).putLong("at", System.currentTimeMillis())
@@ -368,9 +459,16 @@ public class MainActivity extends Activity {
         }finally{http.disconnect();}
     }
 
-    private void fetchJobForDevice() {
+    private void fetchJobForDevice(boolean startTest) {
+        if (fetchInFlight) return;
+        if (startTest && !accessibilityEnabled()) {
+            jobFetchStatus.setText("Aktifkan Accessibility OpenClaw Auto Kirim (DEV) terlebih dahulu.");
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            return;
+        }
         String credential=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE).getString("credential","");
         if(credential.length()<32){jobFetchStatus.setText("Pairing perangkat tidak ditemukan di aplikasi. Periksa pairing DEV.");return;}
+        fetchInFlight = true;
         jobFetchStatus.setText("Memeriksa job DEV untuk perangkat ini...");
         new Thread(()->{
             HttpURLConnection conn=null;
@@ -394,47 +492,229 @@ public class MainActivity extends Activity {
                 try(InputStream in=conn.getInputStream()){
                     response=new String(in.readNBytes(4096),StandardCharsets.UTF_8);
                 }
-                String id=new JSONObject(response).getString("jobId");
+                JSONObject assignment=new JSONObject(response);
+                String id=assignment.getString("jobId");
+                JSONObject assignedAction=assignment.optJSONObject("action");
                 if(!id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
                     throw new IllegalStateException("Invalid job");
-                runOnUiThread(()->{taskId.setText(id);jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");});
-            }catch(Exception ex){
-                runOnUiThread(()->jobFetchStatus.setText("Gagal mengambil job DEV ("+(ex instanceof IllegalStateException?ex.getMessage():"koneksi")+"). Periksa pairing dan jaringan."));
-            }finally{if(conn!=null)conn.disconnect();}
-        }).start();
-    }
-
-    private void beginPairing() {
-        deliveryStatus.setText("Meminta pairing DEV...");
-        new Thread(() -> {
-            try {
-                JSONObject start=callPairApi(DEV_PAIR_START_URL,new JSONObject());
-                String id=start.getString("requestId");
-                String proof=start.getString("proof");
-                String code=start.getString("code");
-                runOnUiThread(()->deliveryStatus.setText(
-                    "Kode pairing: "+code+". Konfirmasi kode ini kepada admin, lalu tunggu persetujuan (maks. 5 menit)."));
-                for(int i=0;i<55;i++) {
-                    Thread.sleep(4500);
-                    JSONObject body=new JSONObject();
-                    body.put("requestId",id);body.put("proof",proof);
-                    JSONObject state=callPairApi(DEV_PAIR_STATUS_URL,body);
-                    if("paired".equals(state.optString("status"))) {
-                        String credential=state.getString("credential");
-                        getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE)
-                            .edit().putString("credential",credential).apply();
-                        runOnUiThread(()->deliveryStatus.setText("PAIRING DEV BERHASIL. Token job diterbitkan otomatis."));
+                runOnUiThread(()->{
+                    if (startTest && id.equals(getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE)
+                            .getString("last_launched_job", ""))) {
+                        jobFetchStatus.setText("Job sama sudah dipicu; menunggu hasil, tanpa pengiriman ulang.");
                         return;
                     }
-                }
-                runOnUiThread(()->deliveryStatus.setText("Pairing belum disetujui. Tekan pairing lagi."));
-            }catch(Exception ignored){
-                runOnUiThread(()->deliveryStatus.setText("Pairing belum berhasil. Periksa jaringan DEV dan ulangi."));
+                    taskId.setText(id);
+                    jobFetchStatus.setText("Job DEV diterima: "+id+". Jalankan prompt untuk job ini.");
+                    if(startTest && assignedAction!=null){
+                        String kind=assignedAction.optString("kind","");
+                        String target=assignedAction.optString("target","");
+                        if("SCREEN_TAP".equals(kind) || "SCREEN_TYPE".equals(kind) || "SCREEN_SCROLL".equals(kind)){
+                            String command="SCREEN_TAP".equals(kind)?"tap":"SCREEN_TYPE".equals(kind)?"type":"scroll";
+                            if(!accessibilityEnabled() || target.length()>250 ||
+                                    (!"scroll".equals(command) && target.trim().isEmpty()) ||
+                                    ("scroll".equals(command) && !target.isEmpty())){
+                                jobFetchStatus.setText("Perintah layar DEV ditolak; periksa Accessibility atau parameter.");
+                                return;
+                            }
+                            if(!getSharedPreferences("bridge-autojob-dev",MODE_PRIVATE).edit()
+                                    .putString("last_launched_job",id).commit())return;
+                            armScreenControl(command,target);
+                            try{
+                                Intent browser=getPackageManager().getLaunchIntentForPackage("com.android.chrome");
+                                if(browser==null)throw new IllegalStateException("Chrome tidak tersedia");
+                                startActivity(browser);
+                                jobFetchStatus.setText("Kendali layar DEV dijadwalkan satu kali; hasil belum diverifikasi.");
+                            }catch(Exception ex){
+                                getSharedPreferences("screen_controls_dev",MODE_PRIVATE).edit().clear().apply();
+                                jobFetchStatus.setText("Tidak dapat beralih ke Chrome untuk kendali DEV.");
+                            }
+                            return;
+                        }
+                        if(!"OPEN_URL".equals(kind) || target.length()>600 || !target.startsWith("https://")){
+                            jobFetchStatus.setText("Aksi DEV tidak didukung.");
+                            return;
+                        }
+                        Uri uri=Uri.parse(target);
+                        if(!"https".equals(uri.getScheme()) || uri.getHost()==null ||
+                                uri.getUserInfo()!=null || uri.getPort()!=-1 ||
+                                uri.getHost().endsWith(".local") || uri.getHost().endsWith(".internal")){
+                            jobFetchStatus.setText("URL DEV ditolak.");
+                            return;
+                        }
+                        if (!getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
+                                .putString("last_launched_job",id).commit()) return;
+                        try {
+                            Intent intent=new Intent(Intent.ACTION_VIEW,uri);
+                            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                            startActivity(intent);
+                            jobFetchStatus.setText("Browser diluncurkan untuk "+id+"; halaman belum diverifikasi.");
+                            reportDispatchedAction(id,kind,target);
+                        } catch(Exception error) {
+                            getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
+                                    .remove("last_launched_job").apply();
+                            jobFetchStatus.setText("Gagal membuka browser DEV.");
+                        }
+                        return;
+                    }
+                    if(startTest){
+                        if (!getSharedPreferences("bridge-autojob-dev", MODE_PRIVATE).edit()
+                                .putString("last_launched_job", id).commit()) return;
+                        prompt.setText("Jawab singkat: Pengujian otomatis ChatGPT DEV berhasil.");
+                        autoSend.setChecked(true);
+                        captureReply.setChecked(true);
+                        autoSubmit.setChecked(true);
+                        devOneTapLaunch = true;
+                        launchChatGPT(); // Explicit one-tap DEV run; marked result can upload without UI return.
+                    }
+                });
+            }catch(Exception ex){
+                runOnUiThread(()->jobFetchStatus.setText("Gagal mengambil job DEV ("+(ex instanceof IllegalStateException?ex.getMessage():"koneksi")+"). Periksa pairing dan jaringan."));
+            }finally{
+                if(conn!=null)conn.disconnect();
+                runOnUiThread(() -> fetchInFlight = false);
             }
         }).start();
     }
 
-    private void shareResult() {
+    private void armScreenControl(String kind,String value) {
+        if(!accessibilityEnabled()){
+            Toast.makeText(this,"Aktifkan Accessibility DEV dahulu",Toast.LENGTH_LONG).show();
+            return;
+        }
+        if(!"scroll".equals(kind) && (value.trim().isEmpty() || value.length()>250)){
+            Toast.makeText(this,"Isi teks/label maksimal 250 karakter",Toast.LENGTH_LONG).show();
+            return;
+        }
+        boolean saved=getSharedPreferences("screen_controls_dev",MODE_PRIVATE).edit()
+                .putString("kind",kind).putString("value",value)
+                .putLong("at",System.currentTimeMillis()).commit();
+        Toast.makeText(this,saved?"Perintah DEV siap 15 detik. Pindah ke browser.":"Gagal menyimpan perintah",Toast.LENGTH_LONG).show();
+    }
+
+    private void reportDispatchedAction(String id,String kind,String target) {
+        new Thread(() -> {
+            try {
+                String paired=getSharedPreferences("bridge-pairing-dev",MODE_PRIVATE)
+                        .getString("credential","");
+                JSONObject request=new JSONObject();
+                request.put("jobId",id);
+                JSONObject auth=postAuthorized(DEV_TOKEN_URL,paired,request);
+                JSONObject body=new JSONObject();
+                body.put("protocol","openclaw-chat-bridge-dev-v1");
+                body.put("jobId",id);
+                body.put("eventId","android-result:"+id);
+                body.put("resultSummary","Android dispatched browser intent; page rendering not verified.");
+                body.put("source","device-intent-dispatched");
+                body.put("verifiedByAiCore",false);
+                body.put("deviceOutcome","ANDROID_INTENT_DISPATCHED");
+                JSONObject action=new JSONObject();
+                action.put("kind",kind);
+                action.put("target",target);
+                body.put("deviceAction",action);
+                JSONObject receipt=postAuthorized(DEV_INTAKE_URL,auth.getString("token"),body);
+                runOnUiThread(() -> jobFetchStatus.setText(receipt.optBoolean("accepted",false)
+                        ? "Intent browser diterima intake DEV; tunggu callback dan ACK."
+                        : "Intent dikirim, tetapi intake belum menerima laporan."));
+            }catch(Exception error){
+                runOnUiThread(() -> jobFetchStatus.setText(
+                        "Intent browser dikirim, laporan DEV gagal. Jangan ulangi job."));
+            }
+        },"android-dev-browser-receipt").start();
+    }
+
+    private JSONObject postAuthorized(String endpoint,String bearer,JSONObject payload) throws Exception {
+        HttpURLConnection conn=(HttpURLConnection)new URL(endpoint).openConnection();
+        try {
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(12000);
+            conn.setInstanceFollowRedirects(false);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type","application/json");
+            conn.setRequestProperty("Authorization","Bearer "+bearer);
+            try(OutputStream out=conn.getOutputStream()){
+                out.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            int code=conn.getResponseCode();
+            if(code!=200 && code!=202)throw new IllegalStateException("HTTP "+code);
+            try(InputStream in=conn.getInputStream()){
+                return new JSONObject(new String(in.readNBytes(4096),StandardCharsets.UTF_8));
+            }
+        }finally{conn.disconnect();}
+    }
+
+    private void beginPairing() {
+        if (pairingInFlight) {
+            deliveryStatus.setText("Pairing sedang berjalan. Tunggu proses sebelumnya.");
+            return;
+        }
+        pairingInFlight = true;
+        deliveryStatus.setText("Meminta pairing DEV...");
+        new Thread(() -> {
+            int consecutiveNetworkErrors = 0;
+            try {
+                JSONObject start = callPairApi(DEV_PAIR_START_URL, new JSONObject());
+                String id = start.getString("requestId");
+                String proof = start.getString("proof");
+                String code = start.getString("code");
+                long expiresAt = start.getLong("expiresAt");
+                runOnUiThread(() -> deliveryStatus.setText(
+                    "Kode pairing: " + code + ". Minta persetujuan admin (berlaku 5 menit)."));
+                while (System.currentTimeMillis() < expiresAt) {
+                    Thread.sleep(4500);
+                    JSONObject body = new JSONObject();
+                    body.put("requestId", id);
+                    body.put("proof", proof);
+                    try {
+                        JSONObject state = callPairApi(DEV_PAIR_STATUS_URL, body);
+                        consecutiveNetworkErrors = 0;
+                        if ("paired".equals(state.optString("status"))) {
+                            String credential = state.getString("credential");
+                            if (!getSharedPreferences("bridge-pairing-dev", MODE_PRIVATE)
+                                    .edit().putString("credential", credential).commit()) {
+                                throw new IllegalStateException("Credential tidak tersimpan");
+                            }
+                            com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+                                .addOnSuccessListener(fcm -> DevPushMessagingService.registerToken(getApplicationContext(), fcm));
+                            runOnUiThread(() -> deliveryStatus.setText(
+                                "PAIRING DEV BERHASIL. Credential tersimpan di HP."));
+                            return;
+                        }
+                        if (!"pending".equals(state.optString("status"))) {
+                            runOnUiThread(() -> deliveryStatus.setText(
+                                "Status pairing tak dikenal. Periksa VPS DEV."));
+                            return;
+                        }
+                    } catch (Exception error) {
+                        consecutiveNetworkErrors++;
+                        final String category = error instanceof IllegalStateException
+                            ? error.getMessage() : error.getClass().getSimpleName();
+                        final int count = consecutiveNetworkErrors;
+                        runOnUiThread(() -> deliveryStatus.setText(
+                            "Kode " + code + ": polling gagal (" + category +
+                            "), percobaan ulang " + count + "/5."));
+                        if (count >= 5) {
+                            runOnUiThread(() -> deliveryStatus.setText(
+                                "Pairing terhenti setelah 5 kegagalan koneksi (" +
+                                category + "). Minta kode baru setelah jaringan pulih."));
+                            return;
+                        }
+                    }
+                }
+                runOnUiThread(() -> deliveryStatus.setText(
+                    "Kode pairing kedaluwarsa (5 menit). Minta kode baru."));
+            } catch (Exception error) {
+                final String category = error instanceof IllegalStateException
+                    ? error.getMessage() : error.getClass().getSimpleName();
+                runOnUiThread(() -> deliveryStatus.setText(
+                    "Tidak bisa memulai pairing DEV (" + category + ")."));
+            } finally {
+                pairingInFlight = false;
+            }
+        }, "android-dev-pairing").start();
+    }
+
+        private void shareResult() {
         String envelope = resultEnvelope();
         if (envelope == null) return;
         Intent send = new Intent(Intent.ACTION_SEND);
