@@ -1,4 +1,17 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+// Wrapper for validate_proposal to handle zero replacement occurrences gracefully
+function safeValidateProposal(...args: any[]) {
+  try {
+    return validate_proposal(...args);
+  } catch (err) {
+    if ((err as any).message.includes('zero replacement')) {
+      logger.warn('validate_proposal had zero replacements, invoking fallback repair');
+      return startDeterministicLocalRecovery(...args);
+    }
+    throw err;
+  }
+}
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
