@@ -44,6 +44,18 @@ describe("Local Coding GitHub publisher", () => {
       .toThrow(/github\.com/i);
   });
 
+  it("handles explicit diagnostic codes for MCP binding", async () => {
+    const client: GitHubApiClient = {
+      request: vi.fn(async () => ({ sha: commitSha, html_url: "https://github.com/test/pr/1", number: 1 })),
+    };
+    const result = await publishVerifiedPatchToGitHub(client, {
+      ...input(),
+      includeDiagnosticCodes: true,
+    } as any);
+    expect(result).toHaveProperty("diagnosticCodes");
+    expect((result as any).diagnosticCodes).toContain("MCP_GITHUB_PUBLISHED");
+  });
+
   it("creates blobs, a commit, a task branch, and a pull request without touching base branch", async () => {
     const calls: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
     const client: GitHubApiClient = {
