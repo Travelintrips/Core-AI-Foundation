@@ -58,6 +58,14 @@ class ModelFreeExecutionTests(unittest.TestCase):
         self.assertFalse(worker.verified_server_callback_receipt(proof, "different", "COMPLETED"))
         self.assertFalse(worker.verified_server_callback_receipt(proof, command_id, "FAILED"))
 
+    @patch.object(worker, "CLIENT_ID", "openclaw-pc-worker-dev")
+    @patch.object(worker, "BASE", "https://aicore.cstlogistic.co.id/api")
+    @patch.object(worker.urllib.request, "urlopen", side_effect=AssertionError("must not contact production"))
+    def test_dev_identity_cannot_connect_to_production(self, urlopen):
+        with self.assertRaisesRegex(SystemExit, "canonical DEV endpoint"):
+            worker.main()
+        urlopen.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
