@@ -18,3 +18,32 @@ export const logger = pino({
         },
       }),
 });
+
+export interface CIWorkflowCancellationContext {
+  workflowRunId: string | number;
+  status?: string;
+  stepName?: string;
+  timestamp?: string;
+  errorMessage?: string;
+  timeoutMessage?: string;
+  commitSha?: string;
+  jobId?: string | number;
+  [key: string]: unknown;
+}
+
+export function logWorkflowCancelled(context: CIWorkflowCancellationContext): void {
+  logger.warn(
+    {
+      event: "ci_workflow_cancelled",
+      workflow_run_id: context.workflowRunId,
+      status: context.status ?? "cancelled",
+      step_name: context.stepName,
+      timestamp: context.timestamp ?? new Date().toISOString(),
+      error_message: context.errorMessage,
+      timeout_message: context.timeoutMessage,
+      commit_sha: context.commitSha,
+      job_id: context.jobId,
+    },
+    `CI workflow run ${context.workflowRunId} cancelled`
+  );
+}
