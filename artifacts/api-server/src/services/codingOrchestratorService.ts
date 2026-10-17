@@ -1,3 +1,4 @@
+// CI regression test verification trigger
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
