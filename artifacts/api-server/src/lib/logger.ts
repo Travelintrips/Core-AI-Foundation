@@ -1,3 +1,4 @@
+// Auto-repair placeholder: no functional change
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
