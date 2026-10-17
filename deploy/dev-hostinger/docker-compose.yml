@@ -13,8 +13,8 @@ services:
       SERVE_FRONTEND: "true"
       SERVE_STATIC_FRONTEND: "true"
       PORT: "8080"
-      PUBLIC_APP_URL: https://dev-aicore.cstlogistic.co.id
-      ALLOWED_ORIGINS: https://dev-aicore.cstlogistic.co.id
+      PUBLIC_APP_URL: https://dev.cstlogistic.co.id
+      ALLOWED_ORIGINS: https://dev.cstlogistic.co.id,https://dev-aicore.cstlogistic.co.id
       AI_PROVIDER_BILLING_MONITOR_ENABLED: "false"
       GCP_OLLAMA_AUTOSTART_ENABLED: "false"
       GCP_CODING_WORKER_AUTOSTART_ENABLED: "false"
