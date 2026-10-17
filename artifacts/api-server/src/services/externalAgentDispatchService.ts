@@ -37,6 +37,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   agent: RegExp;
 }> = [
   // Host-specific requests must take precedence over the generic OpenClaw alias.
+  { clientId: OPENCLAW_PC_DEV_CLIENT_ID, agent: /\bopenclaw-pc-worker-dev\b|\bopen\s*claw[\s-]*pc[\s-]*dev\b|\b(?:dell|pc\s+dell)\b/i },
   { clientId: OPENCLAW_PC_CLIENT_ID, agent: /\bopen\s*claw[\s-]*(?:pc|windows)\b|\b(?:pc|windows)[\s-]*open\s*claw\b/i },
   { clientId: OPENCLAW_VPS_CLIENT_ID, agent: /\bopen\s*claw[\s-]*vps\b|\bvps[\s-]*open\s*claw\b/i },
   { clientId: OPENCLAW_AGENT_CLIENT_ID, agent: /\bopen\s*claw\b|\bopenclaw\b/i },
@@ -137,7 +138,10 @@ export async function dispatchExternalAgentWork(input: {
     // A physical PC name identifies the destination machine, not a requirement
     // to use worker-1. When worker-1 is offline, an eligible sibling PC worker
     // must be allowed to execute the command on the same PC.
-    const targetPc = explicitPc ? input.clientId : null;
+    const explicitlyNamesDevPc = /\bopenclaw-pc-worker-dev\b|\bopen\s*claw[\s-]*pc[\s-]*dev\b|\b(?:dell|pc\s+dell)\b/i.test(input.instruction);
+    const targetPc = (explicitPc || explicitlyNamesDevPc) && (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)
+      ? input.clientId
+      : explicitlyNamesDevPc ? OPENCLAW_PC_DEV_CLIENT_ID : null;
     const preferred = serverMonitor
       ? selectOpenClawExecutor(registry, { preferServer: true })
       : targetPc && registry.some((worker) => worker.clientId === targetPc && worker.eligible)
