@@ -122,58 +122,61 @@ export async function handleCodingGithubCiEvent(event: {
     );
   if (rows.length === 0) return { ok: true, skipped: "unbound_sha" };
 
-  for (const binding of rows) {
-    const [ws] = await db
-      .select()
-      .from(aiCodingWorkstreamsTable)
-      .where(eq(aiCodingWorkstreamsTable.id, binding.workstreamId))
-      .limit(1);
+  for (const candidate of rows) {
+    // GitHub can deliver distinct required check completions concurrently.
+    // Serialize decisions for the same binding; otherwise each request can
+    // overwrite the other's ciChecks evidence and leave the job stuck WAITING.
+    // Side effects run only after this transaction commits.
+    const transition = await db.transaction(async (tx) => {
+      const [binding] = await tx
+        .select()
+        .from(aiCodingCiBindingsTable)
+        .where(eq(aiCodingCiBindingsTable.id, candidate.id))
+        .for("update")
+        .limit(1);
+      if (!binding) return null;
 
-    if (!ws || ws.headSha !== binding.headSha) {
-      await db
-        .update(aiCodingCiBindingsTable)
-        .set({
+      const [ws] = await tx
+        .select()
+        .from(aiCodingWorkstreamsTable)
+        .where(eq(aiCodingWorkstreamsTable.id, binding.workstreamId))
+        .limit(1);
+
+      if (!ws || ws.headSha !== binding.headSha) {
+        await tx.update(aiCodingCiBindingsTable).set({
           state: "STALE",
           lastCheckpointJson: {
             eventId: event.eventId,
             reason: "workstream_head_sha_mismatch",
           },
-        })
-        .where(eq(aiCodingCiBindingsTable.id, binding.id));
-      continue;
-    }
+        }).where(eq(aiCodingCiBindingsTable.id, binding.id));
+        return null;
+      }
 
-    const priorCheckpoint =
-      binding.lastCheckpointJson &&
-      typeof binding.lastCheckpointJson === "object" &&
-      !Array.isArray(binding.lastCheckpointJson)
-        ? (binding.lastCheckpointJson as Record<string, unknown>)
-        : {};
+      const priorCheckpoint =
+        binding.lastCheckpointJson &&
+        typeof binding.lastCheckpointJson === "object" &&
+        !Array.isArray(binding.lastCheckpointJson)
+          ? (binding.lastCheckpointJson as Record<string, unknown>)
+          : {};
 
-    const verdict = decideSignedGithubCiGate({
-      sourceModule: event.sourceModule,
-      eventType: event.eventType,
-      eventId: event.eventId,
-      headSha: p.headSha,
-      bindingHeadSha: binding.headSha,
-      checkName: p.checkName,
-      status: p.status,
-      conclusion: p.conclusion,
-      requiredChecks: binding.requiredChecksJson,
-      previousCheckpoint: priorCheckpoint,
-      previousState: binding.state,
-    });
-    // Unknown check names, missing required checks, and unsigned/unrelated
-    // events must never promote, regress or trigger repairs on a binding.
-    if (!verdict.accepted) continue;
-    const state = verdict.state;
-    const success = state === "GREEN";
-    const failure = verdict.currentCheckFailed;
+      const verdict = decideSignedGithubCiGate({
+        sourceModule: event.sourceModule,
+        eventType: event.eventType,
+        eventId: event.eventId,
+        headSha: p.headSha,
+        bindingHeadSha: binding.headSha,
+        checkName: p.checkName,
+        status: p.status,
+        conclusion: p.conclusion,
+        requiredChecks: binding.requiredChecksJson,
+        previousCheckpoint: priorCheckpoint,
+        previousState: binding.state,
+      });
+      if (!verdict.accepted) return null;
 
-    await db
-      .update(aiCodingCiBindingsTable)
-      .set({
-        state,
+      await tx.update(aiCodingCiBindingsTable).set({
+        state: verdict.state,
         lastCheckpointJson: {
           ...priorCheckpoint,
           eventId: event.eventId,
@@ -187,8 +190,15 @@ export async function handleCodingGithubCiEvent(event: {
           ciChecks: verdict.checkResults,
           ciLastEventId: event.eventId,
         },
-      })
-      .where(eq(aiCodingCiBindingsTable.id, binding.id));
+      }).where(eq(aiCodingCiBindingsTable.id, binding.id));
+
+      return { binding, verdict };
+    });
+
+    if (!transition) continue;
+    const { binding, verdict } = transition;
+    const success = verdict.state === "GREEN";
+    const failure = verdict.currentCheckFailed;
 
     publishSafe({
       eventType: success
@@ -226,7 +236,7 @@ export async function handleCodingGithubCiEvent(event: {
         checkpoint.continued &&
         shouldEmitGithubGreenConversationEvent({
           success,
-          previousState: binding.state,
+          previousState: "WAITING",
         })
       ) {
         await emitGithubGreenConversationEvent({
