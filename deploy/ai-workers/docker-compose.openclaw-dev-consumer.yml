@@ -12,7 +12,7 @@ services:
       AI_CORE_BASE_URL: http://core-ai-dev:3000/api
       AI_CORE_EXTERNAL_AGENT_CLIENT_ID: openclaw-vps-main
       AI_CORE_EXTERNAL_AGENT_RUNTIME: openclaw
-      AI_CORE_AGENT_WORK_POLL_SECONDS: "5"
+      AI_CORE_AGENT_RECONNECT_BASE_SECONDS: "5"
       AI_CORE_AGENT_WORK_LEASE_SECONDS: "300"
       AI_CORE_AGENT_WORK_TIMEOUT_SECONDS: "180"
       AI_CORE_AGENT_STATE_DIR: /var/lib/consumer-state

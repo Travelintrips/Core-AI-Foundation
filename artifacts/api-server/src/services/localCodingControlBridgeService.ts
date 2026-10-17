@@ -15,6 +15,7 @@ import {
 import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
+import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -183,7 +184,10 @@ export async function submitCodingBridgeCommand(input: {
       ),
     )
     .limit(1);
-  if (existing) return { command: existing, created: false };
+  if (existing) {
+    if (input.assignedClientId) await notifyExternalAgentWork(input.assignedClientId, existing.id);
+    return { command: existing, created: false };
+  }
 
   const metadataJson = {
     ...(input.metadata ?? {}),
@@ -230,6 +234,7 @@ export async function submitCodingBridgeCommand(input: {
   });
 
   if (input.assignedClientId) {
+    await notifyExternalAgentWork(input.assignedClientId, command.id);
     void ensureGcpCodingWorkerStarted().catch(() => undefined);
   }
 
