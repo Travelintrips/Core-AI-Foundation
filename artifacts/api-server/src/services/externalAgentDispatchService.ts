@@ -132,8 +132,19 @@ export async function dispatchExternalAgentWork(input: {
   // already claimed jobs require separate lease/idempotency handling.
   const registry = await getExternalAgentRegistrySnapshot();
   let resolvedClientId = input.clientId;
-  if (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
-      (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)) {
+  // MCP adapters may pass the generic OpenClaw alias even when the actual
+  // instruction names a concrete DEV executor. Respect that explicit target
+  // before any sticky-leader or failover selection. Never silently substitute
+  // an unrelated PC or legacy GCP worker.
+  const explicitlyNamesTravelintripsDev =
+    /\bopenclaw-travelintrips-dev\b|\bopenclaw[\s-]*travelintrips[\s-]*dev\b/i.test(input.instruction);
+  if (explicitlyNamesTravelintripsDev &&
+      (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
+       (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId))) {
+    resolvedClientId = OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID;
+  }
+  if (resolvedClientId === OPENCLAW_AGENT_CLIENT_ID ||
+      (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(resolvedClientId)) {
     const serverMonitor = input.clientId === OPENCLAW_AGENT_CLIENT_ID &&
       input.metadata?.openClawExecutionProfile === "monitor-direct";
     // A specifically requested, healthy PC must not be silently replaced by
