@@ -260,12 +260,12 @@ function AgentCredentialsPanel() {
       setRefreshing(false);
     }
   }
-  async function issue() {
+  async function issue(name: "openclaw-pc-worker-3" | "openclaw-vps-dev-consumer") {
     setLoading(true); setError(""); setIssued("");
     try {
       const response = await fetch("/api/ai/agent-runtime/credentials", {
         method: "POST", headers, credentials: "same-origin",
-        body: JSON.stringify({ name: "openclaw-pc-worker-3", scopes: ["agent:presence", "agent:work", "model:chat"] }),
+        body: JSON.stringify({ name, scopes: name === "openclaw-vps-dev-consumer" ? ["agent:presence", "agent:work"] : ["agent:presence", "agent:work", "model:chat"] }),
       });
       if (!response.ok) throw new Error("Issuing credential failed (" + response.status + ")");
       const body = await response.json();
@@ -288,9 +288,10 @@ function AgentCredentialsPanel() {
     <Card>
       <CardHeader><CardTitle>Agent Credentials</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">Issue a dedicated scoped credential for OpenClaw PC Worker 3. The secret is shown only once.</p>
+        <p className="text-sm text-muted-foreground">Issue a scoped credential for PC Worker 3 or the isolated VPS DEV consumer. Secrets are displayed only once; store in approved secret management.</p>
         <div className="flex gap-2">
-          <Button onClick={issue} disabled={loading || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
+          <Button onClick={() => void issue("openclaw-pc-worker-3")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
+          <Button onClick={() => void issue("openclaw-vps-dev-consumer")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-vps-dev-consumer" && item.isActive)}>Issue VPS DEV credential</Button>
           <Button variant="outline" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh credentials"}</Button>
         </div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
