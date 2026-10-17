@@ -1,4 +1,26 @@
 import { execFile } from "node:child_process";
+
+// Error thrown when model invocation payload is invalid
+class InvalidModelRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidModelRequestError";
+  }
+}
+
+// Validates model invocation payload
+function validateModelRequest(request: any): void {
+  const { modelId, prompt, options } = request;
+  if (!modelId || typeof modelId !== "string") {
+    throw new InvalidModelRequestError("modelId is required and must be a string");
+  }
+  if (!prompt || typeof prompt !== "string") {
+    throw new InvalidModelRequestError("prompt is required and must be a string");
+  }
+  if (options == null || typeof options !== "object") {
+    throw new InvalidModelRequestError("options is required and must be an object");
+  }
+}
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
