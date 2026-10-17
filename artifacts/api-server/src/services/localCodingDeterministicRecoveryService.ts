@@ -33,6 +33,13 @@ import {
 import { runSandboxedRepositoryVerification } from "./localCodingSandboxService.js";
 import { verifyChangedFilesStatically } from "./localCodingVerificationService.js";
 import { prepareRepositoryWorkspace } from "./repositoryAnalyzerService.js";
+// Helper to warn when no operations are applied during deterministic recovery
+function warnIfNoOps(count: number, context: string): void {
+  if (count === 0) {
+    console.warn(`[LocalCodingDeterministicRecoveryService] No operations applied for ${context}`);
+  }
+}
+
 
 const execFileAsync = promisify(execFile);
 
