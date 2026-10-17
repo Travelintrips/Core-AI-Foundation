@@ -5,6 +5,7 @@ import {
 } from "../localCodingGitHubPullRequestService.js";
 import type { GitHubApiClient } from "../localCodingGitHubPublisherService.js";
 
+// Investigation reproduction target
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
 
