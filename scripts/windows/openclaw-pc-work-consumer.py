@@ -15,7 +15,7 @@ import urllib.request
 import urllib.parse
 
 CLIENT_ID = os.environ.get("AI_CORE_OPENCLAW_CLIENT_ID", "openclaw-pc-worker").strip()
-ALLOWED_CLIENT_IDS = {"openclaw-pc-worker", "openclaw-pc-worker-2", "openclaw-pc-worker-3"}
+ALLOWED_CLIENT_IDS = {"openclaw-pc-worker", "openclaw-pc-worker-2", "openclaw-pc-worker-3", "openclaw-pc-worker-dev"}
 BASE = os.environ.get("AI_CORE_BASE_URL", "").rstrip("/")
 TOKEN = os.environ.get("AI_CORE_SCOPED_AGENT_TOKEN", "")
 
@@ -195,6 +195,8 @@ def verified_server_callback_receipt(receipt, command_id, expected_status):
 def main():
     if CLIENT_ID not in ALLOWED_CLIENT_IDS:
         raise SystemExit("Invalid AI_CORE_OPENCLAW_CLIENT_ID")
+    if CLIENT_ID == "openclaw-pc-worker-dev" and BASE != "https://dev.cstlogistic.co.id/api":
+        raise SystemExit("The isolated PC DEV identity requires the canonical DEV endpoint")
     if not BASE.startswith("https://") or not TOKEN:
         raise SystemExit("HTTPS AI_CORE_BASE_URL and AI_CORE_SCOPED_AGENT_TOKEN required")
     events = None
