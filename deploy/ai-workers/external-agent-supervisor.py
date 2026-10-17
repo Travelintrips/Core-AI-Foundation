@@ -6,12 +6,13 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 
 API_BASE = os.environ.get("AI_CORE_BASE_URL", "https://aicore.cstlogistic.co.id/api").rstrip("/")
 TOKEN = os.environ.get("AI_CORE_SCOPED_AGENT_TOKEN", "").strip()
 CLIENT_ID = os.environ["AI_CORE_EXTERNAL_AGENT_CLIENT_ID"].strip()
 RUNTIME = os.environ["AI_CORE_EXTERNAL_AGENT_RUNTIME"].strip().lower()
-POLL_SECONDS = max(2, min(60, int(os.environ.get("AI_CORE_AGENT_WORK_POLL_SECONDS", "5"))))
+RECONNECT_BASE_SECONDS = max(2, min(60, int(os.environ.get("AI_CORE_AGENT_RECONNECT_BASE_SECONDS", "5"))))
 LEASE_SECONDS = max(30, min(300, int(os.environ.get("AI_CORE_AGENT_WORK_LEASE_SECONDS", "120"))))
 TIMEOUT_SECONDS = max(10, min(300, int(os.environ.get("AI_CORE_AGENT_WORK_TIMEOUT_SECONDS", "120"))))
 OPENHANDS_URL = os.environ.get("OPENHANDS_INTERNAL_URL", "http://openhands:8000").rstrip("/")
@@ -74,6 +75,37 @@ def healthcheck():
 
 def mark_health(state):
     save_state("health.json", {"clientId": CLIENT_ID, "state": state, "updatedAt": time.time()})
+
+
+def work_events():
+    """Only ready/work_available wake the queue. Keepalives never cause claims."""
+    url = API_BASE + "/ai/agent-runtime/work/stream?" + urllib.parse.urlencode({"clientId": CLIENT_ID})
+    request = urllib.request.Request(url, headers={
+        "Authorization": "Bearer " + TOKEN, "Accept": "text/event-stream",
+    })
+    with urllib.request.urlopen(request, timeout=45) as response:
+        if "text/event-stream" not in response.headers.get("Content-Type", ""):
+            raise RuntimeError("Expected an authenticated work event stream")
+        event, data = "", []
+        for raw in response:
+            if len(raw) > 8192:
+                raise RuntimeError("Work event line too large")
+            line = raw.decode("utf-8").rstrip("\r\n")
+            mark_health("idle")
+            if not line:
+                if event in ("ready", "work_available"):
+                    payload = json.loads("\n".join(data))
+                    if payload.get("clientId") != CLIENT_ID:
+                        raise RuntimeError("Work event worker mismatch")
+                    yield payload
+                event, data = "", []
+            elif line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                data.append(line[5:].strip())
+                if sum(map(len, data)) > 16384:
+                    raise RuntimeError("Work event data too large")
+    raise ConnectionError("Work event stream disconnected; reconnect and reconcile")
 
 
 def _request(method, url, body=None, headers=None, timeout=None):
@@ -364,6 +396,8 @@ def main():
 
     idle_streak = 0
     pending = load_pending()
+    events = None
+    draining = False
     while True:
         work = None
         try:
@@ -373,12 +407,16 @@ def main():
                 pending = None
                 mark_health("ready")
                 continue
+            if not draining:
+                if events is None:
+                    events = work_events()
+                next(events)
+                draining = True
+                idle_streak = 0
             mark_health("idle")
             work = claim_work()
             if not work:
-                idle_streak = min(idle_streak + 1, 8)
-                delay = min(60, POLL_SECONDS * (2 ** min(idle_streak - 1, 4)))
-                time.sleep(delay * random.uniform(0.85, 1.15))
+                draining = False
                 continue
             idle_streak = 0
             print("claimed work client=" + CLIENT_ID + " command=" + str(work.get("commandId")), flush=True)
@@ -406,6 +444,10 @@ def main():
                 mark_health("outbox_write_failed")
                 raise SystemExit("Result outbox unavailable; stopping without a new claim")
         except Exception as exc:
+            if events is not None:
+                events.close()
+                events = None
+            draining = False
             print(
                 "external-agent worker error client="
                 + CLIENT_ID
@@ -417,7 +459,7 @@ def main():
             )
             mark_health("delivery_pending" if pending else "claim_error")
             idle_streak = min(idle_streak + 1, 8)
-            time.sleep(min(60, POLL_SECONDS * (2 ** min(idle_streak - 1, 4))) * random.uniform(0.85, 1.15))
+            time.sleep(min(60, RECONNECT_BASE_SECONDS * (2 ** min(idle_streak - 1, 4))) * random.uniform(0.85, 1.15))
 
 
 if __name__ == "__main__":
