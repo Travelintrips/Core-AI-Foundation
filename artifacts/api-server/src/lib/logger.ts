@@ -1,4 +1,5 @@
 import pino from "pino";
+process.on('unhandledRejection', (reason) => { logger.error({ err: reason }, 'Unhandled Rejection'); });
 
 const isProduction = process.env.NODE_ENV === "production";
 
