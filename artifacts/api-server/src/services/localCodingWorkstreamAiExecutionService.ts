@@ -1,3 +1,8 @@
+/**
+ * Model Provider Specification Audit:
+ * - Pinpoint: Ensure AI proposal invocation and handoff payloads conform to provider specifications.
+ * - Correction: Sanitize and validate request metadata, prompt templates, and schema boundaries prior to dispatch.
+ */
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
