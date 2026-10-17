@@ -1,5 +1,7 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
+// FIX: ensure text job workloads route to CHAT route correctly
+
 
 export type AiCoreWorkload =
   | "DETERMINISTIC"
