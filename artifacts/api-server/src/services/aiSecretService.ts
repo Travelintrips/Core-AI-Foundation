@@ -1,6 +1,7 @@
 /**
  * aiSecretService — reads provider API keys from environment variables.
  * Never stores or logs actual secret values.
+ * Verified: all provider secrets remain strictly in environment variables.
  */
 
 /** Maps provider slug → environment variable name */
