@@ -8,6 +8,19 @@ const MAX_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const MIN_OUTPUT_TOKENS = 128;
 const MAX_OUTPUT_TOKENS = 8_192;
+export const DEFAULT_MAX_PROMPT_LENGTH = 128_000;
+export const ALLOWED_PROMPT_CHARACTER_PATTERN = /[^\x09\x0A\x0D\x20-\x7E\u00A0-\uFFFF]/gu;
+
+export function sanitizePrompt(
+  prompt: string,
+  maxLength: number = DEFAULT_MAX_PROMPT_LENGTH,
+): string {
+  if (typeof prompt !== "string") {
+    return "";
+  }
+  const cleaned = prompt.replace(ALLOWED_PROMPT_CHARACTER_PATTERN, "");
+  return cleaned.length > maxLength ? cleaned.slice(0, maxLength) : cleaned;
+}
 
 export const DEFAULT_CODING_PROVIDER_ALLOWLIST = Object.freeze([
   "openai",
