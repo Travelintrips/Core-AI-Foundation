@@ -1,6 +1,5 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   aiCodingBridgeCommandsTable,
   aiCodingRunsTable,
