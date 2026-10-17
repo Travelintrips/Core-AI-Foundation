@@ -1,15 +1,18 @@
 import json
 import os
 import random
+import pathlib
+import sys
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 
 API_BASE = os.environ.get("AI_CORE_BASE_URL", "https://aicore.cstlogistic.co.id/api").rstrip("/")
 TOKEN = os.environ.get("AI_CORE_SCOPED_AGENT_TOKEN", "").strip()
 CLIENT_ID = os.environ["AI_CORE_EXTERNAL_AGENT_CLIENT_ID"].strip()
 RUNTIME = os.environ["AI_CORE_EXTERNAL_AGENT_RUNTIME"].strip().lower()
-POLL_SECONDS = max(2, min(60, int(os.environ.get("AI_CORE_AGENT_WORK_POLL_SECONDS", "5"))))
+RECONNECT_BASE_SECONDS = max(2, min(60, int(os.environ.get("AI_CORE_AGENT_RECONNECT_BASE_SECONDS", "5"))))
 LEASE_SECONDS = max(30, min(300, int(os.environ.get("AI_CORE_AGENT_WORK_LEASE_SECONDS", "120"))))
 TIMEOUT_SECONDS = max(10, min(300, int(os.environ.get("AI_CORE_AGENT_WORK_TIMEOUT_SECONDS", "120"))))
 OPENHANDS_URL = os.environ.get("OPENHANDS_INTERNAL_URL", "http://openhands:8000").rstrip("/")
@@ -23,6 +26,86 @@ OPENCLAW_URL = os.environ.get(
     "http://openclaw:18789",
 ).rstrip("/")
 OPENCLAW_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "").strip()
+STATE_DIR = os.environ.get("AI_CORE_AGENT_STATE_DIR", "").strip()
+
+
+def save_state(name, value):
+    if not STATE_DIR:
+        return
+    directory = pathlib.Path(STATE_DIR)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = directory / name
+    temporary = directory / (name + ".tmp")
+    with open(temporary, "w", encoding="utf-8", opener=lambda p, f: os.open(p, f, 0o600)) as handle:
+        json.dump(value, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, target)
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def load_pending():
+    if not STATE_DIR:
+        return None
+    path = pathlib.Path(STATE_DIR) / "pending-result.json"
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as handle:
+        pending = json.load(handle)
+    if pending.get("clientId") != CLIENT_ID or pending.get("runtime") != RUNTIME:
+        raise RuntimeError("Pending result belongs to a different worker; refusing new claims")
+    return pending
+
+
+def healthcheck():
+    if not STATE_DIR:
+        return 1
+    try:
+        with (pathlib.Path(STATE_DIR) / "health.json").open(encoding="utf-8") as handle:
+            health = json.load(handle)
+        fresh = 0 <= time.time() - health["updatedAt"] <= TIMEOUT_SECONDS + 120
+        return 0 if fresh and health["state"] in ("idle", "executing", "ready") else 1
+    except (OSError, ValueError, KeyError, TypeError):
+        return 1
+
+
+def mark_health(state):
+    save_state("health.json", {"clientId": CLIENT_ID, "state": state, "updatedAt": time.time()})
+
+
+def work_events():
+    """Only ready/work_available wake the queue. Keepalives never cause claims."""
+    url = API_BASE + "/ai/agent-runtime/work/stream?" + urllib.parse.urlencode({"clientId": CLIENT_ID})
+    request = urllib.request.Request(url, headers={
+        "Authorization": "Bearer " + TOKEN, "Accept": "text/event-stream",
+    })
+    with urllib.request.urlopen(request, timeout=45) as response:
+        if "text/event-stream" not in response.headers.get("Content-Type", ""):
+            raise RuntimeError("Expected an authenticated work event stream")
+        event, data = "", []
+        for raw in response:
+            if len(raw) > 8192:
+                raise RuntimeError("Work event line too large")
+            line = raw.decode("utf-8").rstrip("\r\n")
+            mark_health("idle")
+            if not line:
+                if event in ("ready", "work_available"):
+                    payload = json.loads("\n".join(data))
+                    if payload.get("clientId") != CLIENT_ID:
+                        raise RuntimeError("Work event worker mismatch")
+                    yield payload
+                event, data = "", []
+            elif line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                data.append(line[5:].strip())
+                if sum(map(len, data)) > 16384:
+                    raise RuntimeError("Work event data too large")
+    raise ConnectionError("Work event stream disconnected; reconnect and reconcile")
 
 
 def _request(method, url, body=None, headers=None, timeout=None):
@@ -68,7 +151,13 @@ def claim_work():
             "/ai/agent-runtime/work/claim",
             {"clientId": CLIENT_ID, "leaseSeconds": LEASE_SECONDS},
         )
-        return payload if status == 200 else None
+        if status == 204:
+            return None
+        if status != 200:
+            raise RuntimeError("AI Core claim rejected HTTP " + str(status))
+        if not isinstance(payload, dict) or not all(payload.get(k) for k in ("commandId", "claimToken", "instruction")):
+            raise RuntimeError("AI Core returned an invalid work claim")
+        return payload
     except urllib.error.HTTPError as exc:
         if int(exc.code) == 204:
             return None
@@ -82,7 +171,7 @@ class ExternalAgentExecutionError(RuntimeError):
 
 
 def report_result(work, ok, message, details):
-    _ai_core(
+    status, _ = _ai_core(
         "POST",
         "/ai/agent-runtime/work/" + str(work["commandId"]) + "/result",
         {
@@ -93,6 +182,15 @@ def report_result(work, ok, message, details):
             "details": details,
         },
     )
+    if not 200 <= status < 300:
+        raise RuntimeError("AI Core result not acknowledged HTTP " + str(status))
+
+
+def deliver_pending(pending):
+    report_result(pending["work"], pending["ok"], pending["message"], pending["details"])
+    if STATE_DIR:
+        (pathlib.Path(STATE_DIR) / "pending-result.json").unlink()
+    print("result accepted client=" + CLIENT_ID + " command=" + str(pending["work"]["commandId"]), flush=True)
 
 
 def _openhands_headers():
@@ -265,12 +363,20 @@ def run_openclaw(work):
                 "upstreamError": upstream_error,
             },
         )
+    response_status = result.get("status") if isinstance(result, dict) else None
     message = _openclaw_output_text(result)
-    if not message:
-        message = json.dumps(result, ensure_ascii=False)[:20000]
+    if response_status != "completed" or not message:
+        raise ExternalAgentExecutionError(
+            "OpenClaw did not return a completed text response",
+            {"runtime": "openclaw-responses", "responseStatus": response_status},
+        )
     return message[:20000], {
         "runtime": "openclaw-responses",
         "agentId": "main",
+        "responseId": result.get("id"),
+        "responseStatus": response_status,
+        "commandId": str(work["commandId"]),
+        "evidenceStage": "JOB_COMPLETED",
     }
 
 
@@ -289,21 +395,59 @@ def main():
         raise RuntimeError("AI_CORE_SCOPED_AGENT_TOKEN is required")
 
     idle_streak = 0
+    pending = load_pending()
+    events = None
+    draining = False
     while True:
         work = None
         try:
+            if pending:
+                mark_health("delivery_pending")
+                deliver_pending(pending)
+                pending = None
+                mark_health("ready")
+                continue
+            if not draining:
+                if events is None:
+                    events = work_events()
+                next(events)
+                draining = True
+                idle_streak = 0
+            mark_health("idle")
             work = claim_work()
             if not work:
-                idle_streak = min(idle_streak + 1, 8)
-                delay = min(60, POLL_SECONDS * (2 ** min(idle_streak - 1, 4)))
-                time.sleep(delay * random.uniform(0.85, 1.15))
+                draining = False
                 continue
             idle_streak = 0
             print("claimed work client=" + CLIENT_ID + " command=" + str(work.get("commandId")), flush=True)
-            message, details = execute(work)
-            report_result(work, True, message, details)
-            print("completed work client=" + CLIENT_ID + " command=" + str(work.get("commandId")), flush=True)
+            mark_health("executing")
+            try:
+                message, details = execute(work)
+                ok = True
+            except Exception as exc:
+                ok = False
+                message = "External agent execution failed: " + str(exc)[:3000]
+                details = {
+                    "runtime": RUNTIME,
+                    "errorType": exc.__class__.__name__,
+                    "errorMessage": str(exc)[:3000],
+                }
+                if isinstance(exc, ExternalAgentExecutionError):
+                    details.update(exc.details)
+            pending = {"clientId": CLIENT_ID, "runtime": RUNTIME, "work": work,
+                       "ok": ok, "message": message, "details": details}
+            # Do not claim more work or report success until this exact result is accepted.
+            # A crash during execution itself still requires server-side lease fencing.
+            try:
+                save_state("pending-result.json", pending)
+            except Exception:
+                mark_health("outbox_write_failed")
+                raise SystemExit("Result outbox unavailable; stopping without a new claim")
         except Exception as exc:
+            if events is not None:
+                events.close()
+                events = None
+            draining = False
             print(
                 "external-agent worker error client="
                 + CLIENT_ID
@@ -313,26 +457,12 @@ def main():
                 + str(exc)[:1000],
                 flush=True,
             )
-            if work:
-                try:
-                    details = {
-                        "runtime": RUNTIME,
-                        "errorType": exc.__class__.__name__,
-                        "errorMessage": str(exc)[:3000],
-                    }
-                    if isinstance(exc, ExternalAgentExecutionError):
-                        details.update(exc.details)
-                    report_result(
-                        work,
-                        False,
-                        "External agent execution failed: " + str(exc)[:3000],
-                        details,
-                    )
-                except Exception:
-                    pass
+            mark_health("delivery_pending" if pending else "claim_error")
             idle_streak = min(idle_streak + 1, 8)
-            time.sleep(min(60, POLL_SECONDS * (2 ** min(idle_streak - 1, 4))) * random.uniform(0.85, 1.15))
+            time.sleep(min(60, RECONNECT_BASE_SECONDS * (2 ** min(idle_streak - 1, 4))) * random.uniform(0.85, 1.15))
 
 
 if __name__ == "__main__":
+    if "--healthcheck" in sys.argv:
+        sys.exit(healthcheck())
     main()

@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { workEvents } from './work-event-stream.mjs';
 const workerId = 'openclaw-pc-worker-2';
 const home = os.homedir();
-const envFile = path.join(home, 'aicore-worker-bootstrap', 'ai-workers.env');
+const envFile = process.env.AI_CORE_WORKER_ENV_FILE || path.join(home, 'aicore-worker-bootstrap', 'ai-workers.env');
 const settings = Object.fromEntries(fs.readFileSync(envFile, 'utf8').split(/\r?\n/).filter(Boolean).map(line => { const n=line.indexOf('='); return [line.slice(0,n),line.slice(n+1).trim().replace(/^["']|["']$/g,'')]; }));
 if (settings.AI_CORE_OPENCLAW_CLIENT_ID !== workerId || !settings.AI_CORE_BASE_URL?.startsWith('https://') || !settings.AI_CORE_SCOPED_AGENT_TOKEN) throw Error('Worker config incomplete');
 const base = settings.AI_CORE_BASE_URL.replace(/\/$/,'');
@@ -100,9 +101,14 @@ if (message==='AI_CORE_CHATGPT_BROWSER_E2E') {
   details:{runtime:'openclaw-pc2',mode:'model-free',
     reason:'requires_ai_core_routing',workerId,modelInvoked:false,verified:false}};
 }
+let reconnectFailures = 0;
 while (true) {
  try {
+ for await (const _wake of workEvents(base, settings.AI_CORE_SCOPED_AGENT_TOKEN, workerId)) {
+  reconnectFailures = 0;
+  while (true) {
   const work=await request('/ai/agent-runtime/work/claim',{clientId:workerId,leaseSeconds:300});
+  if (!work) break;
   if (work?.commandId && work?.claimToken) {
    let answer;
    try { answer=execute(work); } catch(err) { answer={ok:false,message:'Worker execution failed',details:{errorType:err.name}}; }
@@ -117,9 +123,14 @@ while (true) {
        if(attempt<8) await new Promise(resolve=>setTimeout(resolve,Math.min(attempt*2500,15000)));
      }
    }
-   if(!delivered) console.log('UNDELIVERED '+work.commandId+' -- requires claim recovery; do not silently claim completed');
+   if(!delivered) throw Error('UNDELIVERED '+work.commandId+' -- requires claim recovery');
    console.log('reported command '+work.commandId);
   }
- } catch(err) { console.log('worker cycle error '+err.name+' '+String(err.message).slice(0,100)); }
- await new Promise(resolve=>setTimeout(resolve,5000));
+  }
+ }
+ } catch(err) {
+  console.log('worker event connection error '+err.name+' '+String(err.message).slice(0,100));
+  reconnectFailures = Math.min(6, reconnectFailures + 1);
+  await new Promise(resolve=>setTimeout(resolve, Math.min(60000, 1000 * 2 ** reconnectFailures)));
+ }
 }

@@ -14,6 +14,7 @@ import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionSer
 import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 import { getExternalAgentRule } from "../services/externalAgentRegistryService.js";
+import { subscribeExternalAgentWork } from "../services/externalAgentWorkEventService.js";
 
 const router = Router();
 
@@ -527,6 +528,50 @@ router.get(
       authority: "ai-core",
       agents,
     });
+  },
+);
+
+// SSE contains wake-up hints only. Claim/result endpoints remain authoritative.
+router.get(
+  "/ai/agent-runtime/work/stream",
+  requireAgentServiceScope("agent:work"),
+  async (req, res): Promise<void> => {
+    const clientId = typeof req.query["clientId"] === "string" ? req.query["clientId"] : "";
+    if (!getExternalAgentRule(clientId)) {
+      res.status(400).json({ error: "Unknown external agent client ID" });
+      return;
+    }
+    let unsubscribe: (() => void) | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let lifetime: ReturnType<typeof setTimeout> | undefined;
+    let closed = false;
+    const close = (): void => {
+      if (closed) return;
+      closed = true;
+      unsubscribe?.();
+      clearInterval(heartbeat);
+      clearTimeout(lifetime);
+      res.end();
+    };
+    res.on("close", close);
+    try {
+      // Subscribe BEFORE ready: ready makes the worker drain its durable backlog.
+      unsubscribe = await subscribeExternalAgentWork(clientId, (commandId) => {
+        if (!closed && !res.write(`event: work_available\nid: ${commandId}\ndata: ${JSON.stringify({ clientId, commandId })}\n\n`)) close();
+      }, close);
+      if (closed) { unsubscribe(); return; }
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+      res.write(`event: ready\ndata: ${JSON.stringify({ clientId, transport: "sse" })}\n\n`);
+      heartbeat = setInterval(() => { if (!res.write(": keepalive\n\n")) close(); }, 20_000);
+      // Reauthenticate and reconcile durable backlog every five minutes.
+      lifetime = setTimeout(close, 300_000);
+    } catch {
+      if (!closed && !res.headersSent) res.status(503).json({ error: "Work event stream unavailable" });
+      close();
+    }
   },
 );
 
