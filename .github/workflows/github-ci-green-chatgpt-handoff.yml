@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       upstream_run_id:
-        description: "Successful CI Verify run ID (manual replay)"
+        description: "Completed CI Verify run ID (read-only event replay)"
         required: true
         type: string
 
@@ -24,64 +24,83 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Validate trigger and current main SHA
+      - name: Checkout trusted GitHub event classification
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Classify terminal CI event (diagnostic only)
+        id: classify
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id || inputs.upstream_run_id }}
-        shell: bash
         run: |
           set -euo pipefail
-          test "$UPSTREAM_RUN_ID" -gt 0
-          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN_ID")"
-          if [ "$(jq -r '.name' <<<"$run")" != "CI Verify" ] ||
-             [ "$(jq -r '.conclusion' <<<"$run")" != "success" ] ||
-             [ "$(jq -r '.head_branch' <<<"$run")" != "main" ] ||
-             [ "$(jq -r '.event' <<<"$run")" != "push" ]; then
-            echo "::notice::Upstream run not an eligible successful main push; no handoff"
-            echo "is_current=false" >> "$GITHUB_ENV"
+          [[ "$UPSTREAM_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN_ID")"
+          decision="$(printf '%s' "$run_json" | node scripts/github-ci-handoff-decision.mjs)"
+          if [ "$(jq -r '.eligible' <<< "$decision")" != "true" ]; then
+            echo "::notice::CI event is not eligible: $(jq -r '.reason' <<< "$decision")"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          sha="$(jq -r '.head_sha' <<<"$run")"
-          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
-          # Successful historical main pushes still need a diagnostic receipt.
-          # Staleness must never authorize coding/merge/deploy, but must not
-          # silently discard the delivery needed for correlation and recovery.
-          if [ "$sha" != "$main_sha" ]; then
-            echo "::notice::Eligible successful main push is stale; send diagnostic-only handoff"
-            echo "upstream_stale=true" >> "$GITHUB_ENV"
-          else
-            echo "upstream_stale=false" >> "$GITHUB_ENV"
+          branch="$(jq -r '.branch' <<< "$decision")"
+          scope="$(jq -r '.scope' <<< "$decision")"
+          sha="$(jq -r '.headSha' <<< "$decision")"
+          stale="not_applicable"
+          if [ "$scope" = "branch_push" ]; then
+            current="$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --jq '.commit.sha')"
+            if [ "$current" = "$sha" ]; then
+              stale="false"
+            else
+              stale="true"
+              echo "::notice::Historical CI SHA is stale. Emit audit event; never authorize resume/deploy from it."
+            fi
           fi
-          echo "is_current=true" >> "$GITHUB_ENV"
-          echo "upstream_run_id=$UPSTREAM_RUN_ID" >> "$GITHUB_ENV"
-          echo "upstream_sha=$sha" >> "$GITHUB_ENV"
-      - name: Send bounded diagnostic event to AI Core
-        if: env.is_current == 'true'
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+          echo "event_id=$(jq -r '.eventId' <<< "$decision")" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "stale=$stale" >> "$GITHUB_OUTPUT"
+          echo "result=$(jq -r '.status' <<< "$decision")" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$(jq -r '.conclusion' <<< "$decision")" >> "$GITHUB_OUTPUT"
+
+      - name: Persist bounded lifecycle event in AI Core (no guessed ChatGPT session)
+        if: steps.classify.outputs.eligible == 'true'
+        shell: bash
         env:
           AGENT_TOKEN: ${{ secrets.AI_CORE_SCOPED_AGENT_TOKEN }}
-          CONVERSATION_ID: ${{ vars.CHATGPT_HANDOFF_CONVERSATION_ID || '6ac8d2eb-db50-83ec-b53e-3c4a0f87ba2b' }}
           API_BASE_URL: https://aicore.cstlogistic.co.id/api
-        shell: bash
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.upstream_run_id }}
+          EVENT_ID: ${{ steps.classify.outputs.event_id }}
+          HEAD_SHA: ${{ steps.classify.outputs.upstream_sha }}
+          BRANCH: ${{ steps.classify.outputs.branch }}
+          SCOPE: ${{ steps.classify.outputs.scope }}
+          STALE: ${{ steps.classify.outputs.stale }}
+          STATUS: ${{ steps.classify.outputs.result }}
+          CONCLUSION: ${{ steps.classify.outputs.conclusion }}
         run: |
           set -euo pipefail
-          if [ -z "$AGENT_TOKEN" ] || [ -z "$CONVERSATION_ID" ]; then
-            echo "::error::Required handoff secrets are missing; no event submitted"
-            exit 1
-          fi
-          [[ "$CONVERSATION_ID" =~ ^[a-zA-Z0-9-]{30,64}$ ]]
-          event_id="githubci-${upstream_run_id}-1"
+          test -n "$AGENT_TOKEN"
+          details="CI Verify conclusion=$CONCLUSION; scope=$SCOPE; branch=$BRANCH; stale=$STALE; diagnostic_only=true"
           payload="$(jq -cn \
-            --arg eventId "$event_id" \
-            --arg resource "$GITHUB_REPOSITORY/actions/runs/$upstream_run_id@${upstream_sha}" \
+            --arg eventId "$EVENT_ID" \
+            --arg resource "$GITHUB_REPOSITORY/actions/runs/$RUN_ID$HEAD_SHA" \
+            --arg status "$STATUS" \
+            --arg details "$details" \
             --arg observedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg conversationId "$CONVERSATION_ID" \
-            --arg stale "${upstream_stale}" \
-            '{eventId:$eventId,source:"github",resource:$resource,status:"COMPLETED",details:("stale_main_sha="+$stale),summary:"CI Verify for a main push succeeded. Diagnostic-only handoff, possibly stale; verify current required checks before any action. Never authorize changes based on this event.",observedAt:$observedAt,conversationId:$conversationId}')"
-          response="$(curl --fail-with-body -sS --connect-timeout 10 --max-time 30 \
-            --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 150 \
+            '{eventId:$eventId,source:"github",resource:$resource,status:$status,details:$details,observedAt:$observedAt,summary:"Terminal CI Verify event recorded. No ChatGPT session is implied. Resume, merge or deploy requires a separately authenticated job binding and applicable CI/security gates."}')"
+          response="$(curl --fail-with-body -sS \
+            --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors \
             -H "Authorization: Bearer $AGENT_TOKEN" \
             -H "Content-Type: application/json" \
             --data "$payload" \
             "$API_BASE_URL/ai/agent-runtime/monitor/events")"
-          echo "$response" | jq -e '.accepted == true and (.commandId | type == "string")'
-          echo "Command accepted; lifecycle verified separately through AI Core monitor command status."
+          echo "$response" | jq -e '.accepted == true and (.commandId | type == "string") and .handoff == "PENDING_SESSION_BINDING"' > /dev/null
+          command_id="$(jq -r '.commandId' <<< "$response")"
+          echo "AI Core persisted event $EVENT_ID (command $command_id); browser and ChatGPT ACK remain unverified."
+          echo "### CI event handoff" >> "$GITHUB_STEP_SUMMARY"
+          echo "AI Core accepted diagnostic event $EVENT_ID with command $command_id." >> "$GITHUB_STEP_SUMMARY"
+          echo "No browser/session delivery or autonomous job completion was asserted." >> "$GITHUB_STEP_SUMMARY"
