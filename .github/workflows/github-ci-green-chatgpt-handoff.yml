@@ -87,7 +87,7 @@ jobs:
           details="CI Verify conclusion=$CONCLUSION; scope=$SCOPE; branch=$BRANCH; stale=$STALE; diagnostic_only=true"
           payload="$(jq -cn \
             --arg eventId "$EVENT_ID" \
-            --arg resource "$GITHUB_REPOSITORY/actions/runs/$RUN_ID$HEAD_SHA" \
+            --arg resource "$GITHUB_REPOSITORY/actions/runs/${RUN_ID}@${HEAD_SHA}" \
             --arg status "$STATUS" \
             --arg details "$details" \
             --arg observedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
