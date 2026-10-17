@@ -355,6 +355,10 @@ describe("MCP command two-way routing", () => {
     expect(channel).not.toBe("client-injected");
     expect(subscribed.body.result.structuredContent.bindingStatus).toBe("OAUTH_PRINCIPAL_CLIENT_CHANNEL");
     expect(subscribed.body.result.structuredContent.chatSessionIdVerified).toBe(false);
+    expect(subscribed.body.result.structuredContent.requestedConversationId).toBe("client-injected");
+    expect(subscribed.body.result.structuredContent.effectiveEventChannel).toBe(channel);
+    expect(subscribed.body.result.structuredContent.pairingRequired).toBe(true);
+    expect(subscribed.body.result.structuredContent.conversationAckVerified).toBe(false);
     expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
     // OAuth command auto-subscription and job forwarding must use the SAME server channel.
     vi.mocked(verifyMcpAccessToken).mockResolvedValue({

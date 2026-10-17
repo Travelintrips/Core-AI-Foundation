@@ -1347,7 +1347,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         };
       }
     } else if (params.name === "subscribe_ai_core_events") {
-      const parsed = eventChannelArgs(identity, SubscribeEventsArgs.parse(params.arguments ?? {}));
+      const request = SubscribeEventsArgs.parse(params.arguments ?? {});
+      const parsed = eventChannelArgs(identity, request);
       const subscription = await subscribeCodingBridgeConversation(parsed);
       payload = {
         subscribed: true,
@@ -1355,6 +1356,11 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         chatSessionIdVerified: false,
         conversationAckVerified: false,
         bindingStatus: identity.kind === "oauth" ? "OAUTH_PRINCIPAL_CLIENT_CHANNEL" : "UNVERIFIED_CLIENT_SUPPLIED_CONVERSATION_ID",
+        // An OAuth principal/client channel isolates events but does not attest to ownership
+        // of the browser ChatGPT session, even when the caller supplied a plausible URL ID.
+        requestedConversationId: request.conversationId,
+        effectiveEventChannel: parsed.conversationId,
+        pairingRequired: true,
         eventTypes: parsed.eventTypes,
         leaseExpiresAt: subscription.leaseExpiresAt,
         clientId: subscription.clientId,
