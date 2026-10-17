@@ -1,3 +1,4 @@
+// TODO: Wrap model provider invocation in try/catch catching PROVIDER_BAD_REQUEST, log context (request ID, model name), map to non-retryable error, and rethrow or return
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
