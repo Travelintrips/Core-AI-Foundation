@@ -1,11 +1,12 @@
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
+export const OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID = "openclaw-travelintrips-dev" as const;
 export const OPENCLAW_PC_DEV_CLIENT_ID = "openclaw-pc-worker-dev" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
 export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
 export const OPENCLAW_PC3_CLIENT_ID = "openclaw-pc-worker-3" as const;
 export const OPENCLAW_LEGACY_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_PC_CLIENT_IDS = [
-  OPENCLAW_PC_DEV_CLIENT_ID, OPENCLAW_PC_CLIENT_ID, OPENCLAW_PC2_CLIENT_ID, OPENCLAW_PC3_CLIENT_ID,
+  OPENCLAW_PC_DEV_CLIENT_ID, OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, OPENCLAW_PC_CLIENT_ID, OPENCLAW_PC2_CLIENT_ID, OPENCLAW_PC3_CLIENT_ID,
 ] as const;
 
 type ExecutorPresence = {
