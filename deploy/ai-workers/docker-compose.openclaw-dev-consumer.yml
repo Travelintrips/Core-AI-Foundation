@@ -1,0 +1,45 @@
+# DEV-only external work consumer. Never deploy with production credentials.
+# Provision /etc/cst-secrets/openclaw-dev-consumer.env via approved secret management:
+# AI_CORE_SCOPED_AGENT_TOKEN and OPENCLAW_GATEWAY_TOKEN.
+# This compose file does NOT start or reconfigure the existing PROD registrar or OpenClaw.
+services:
+  dev-openclaw-work-consumer:
+    image: python:3.13-slim
+    restart: unless-stopped
+    env_file:
+      - /etc/cst-secrets/openclaw-dev-consumer.env
+    environment:
+      AI_CORE_BASE_URL: http://core-ai-dev:3000/api
+      AI_CORE_EXTERNAL_AGENT_CLIENT_ID: openclaw-vps-main
+      AI_CORE_EXTERNAL_AGENT_RUNTIME: openclaw
+      AI_CORE_AGENT_RECONNECT_BASE_SECONDS: "5"
+      AI_CORE_AGENT_WORK_LEASE_SECONDS: "300"
+      AI_CORE_AGENT_WORK_TIMEOUT_SECONDS: "180"
+      AI_CORE_AGENT_STATE_DIR: /var/lib/consumer-state
+      OPENCLAW_INTERNAL_URL: http://ai-core-workers-openclaw-1:18789
+    volumes:
+      - ./external-agent-supervisor.py:/app/external-agent-supervisor.py:ro
+      - openclaw-dev-consumer-state:/var/lib/consumer-state
+    command: ["python", "/app/external-agent-supervisor.py"]
+    healthcheck:
+      test: ["CMD", "python", "/app/external-agent-supervisor.py", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - control
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 96m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  openclaw-dev-consumer-state:
+networks:
+  control:
+    external: true
+    name: ai-core-workers_control

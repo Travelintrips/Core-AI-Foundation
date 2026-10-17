@@ -1,0 +1,32 @@
+name: OpenClaw Consumer Recovery
+on:
+  pull_request:
+    paths:
+      - 'deploy/ai-workers/**'
+      - 'scripts/windows/**'
+      - '.github/workflows/openclaw-consumer-tests.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'deploy/ai-workers/**'
+      - 'scripts/windows/**'
+      - '.github/workflows/openclaw-consumer-tests.yml'
+permissions:
+  contents: read
+jobs:
+  consumer-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m unittest discover -s deploy/ai-workers -p 'test_*.py' -v
+      - run: python -m py_compile deploy/ai-workers/external-agent-supervisor.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/windows/ai-core/work-event-stream.test.mjs
+      - run: python -m unittest discover -s scripts/windows -p 'test_openclaw_pc_model_free.py' -v

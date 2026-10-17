@@ -12,12 +12,39 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 
 CLIENT_ID = os.environ.get("AI_CORE_OPENCLAW_CLIENT_ID", "openclaw-pc-worker").strip()
-ALLOWED_CLIENT_IDS = {"openclaw-pc-worker", "openclaw-pc-worker-2", "openclaw-pc-worker-3"}
+ALLOWED_CLIENT_IDS = {"openclaw-pc-worker", "openclaw-pc-worker-2", "openclaw-pc-worker-3", "openclaw-pc-worker-dev"}
 BASE = os.environ.get("AI_CORE_BASE_URL", "").rstrip("/")
 TOKEN = os.environ.get("AI_CORE_SCOPED_AGENT_TOKEN", "")
-POLL = 5
+
+
+def work_events():
+    url = BASE + "/ai/agent-runtime/work/stream?" + urllib.parse.urlencode({"clientId": CLIENT_ID})
+    req = urllib.request.Request(url, headers={"Authorization": "Bearer " + TOKEN, "Accept": "text/event-stream"})
+    with urllib.request.urlopen(req, timeout=45) as response:
+        if "text/event-stream" not in response.headers.get("Content-Type", ""):
+            raise RuntimeError("Expected a work event stream")
+        event, data = "", []
+        for raw in response:
+            if len(raw) > 8192:
+                raise RuntimeError("Work event line too large")
+            line = raw.decode("utf-8").rstrip("\r\n")
+            if not line:
+                if event in ("ready", "work_available"):
+                    payload = json.loads("\n".join(data))
+                    if payload.get("clientId") != CLIENT_ID:
+                        raise RuntimeError("Work event worker mismatch")
+                    yield payload
+                event, data = "", []
+            elif line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                data.append(line[5:].strip())
+                if sum(map(len, data)) > 16384:
+                    raise RuntimeError("Work event data too large")
+    raise ConnectionError("Work event stream disconnected")
 
 
 def api(path, body):
@@ -168,12 +195,26 @@ def verified_server_callback_receipt(receipt, command_id, expected_status):
 def main():
     if CLIENT_ID not in ALLOWED_CLIENT_IDS:
         raise SystemExit("Invalid AI_CORE_OPENCLAW_CLIENT_ID")
+    if CLIENT_ID == "openclaw-pc-worker-dev" and BASE != "https://dev.cstlogistic.co.id/api":
+        raise SystemExit("The isolated PC DEV identity requires the canonical DEV endpoint")
     if not BASE.startswith("https://") or not TOKEN:
         raise SystemExit("HTTPS AI_CORE_BASE_URL and AI_CORE_SCOPED_AGENT_TOKEN required")
+    events = None
+    draining = False
+    failures = 0
     while True:
         work = None
         try:
+            if not draining:
+                if events is None:
+                    events = work_events()
+                next(events)
+                draining = True
+                failures = 0
             work = api("/ai/agent-runtime/work/claim", {"clientId": CLIENT_ID, "leaseSeconds": 120})
+            if not work:
+                draining = False
+                continue
             if work and work.get("commandId") and work.get("claimToken"):
                 try:
                     ok, message, details = execute(work)
@@ -190,8 +231,13 @@ def main():
                 print("callback persisted command " + str(work["commandId"]) +
                       " response " + receipt["response"]["id"], flush=True)
         except Exception as exc:
+            if events is not None:
+                events.close()
+                events = None
+            draining = False
             print("worker cycle error: " + type(exc).__name__, flush=True)
-        time.sleep(POLL)
+            failures = min(failures + 1, 6)
+            time.sleep(min(60, 2 ** failures))
 
 
 if __name__ == "__main__":
