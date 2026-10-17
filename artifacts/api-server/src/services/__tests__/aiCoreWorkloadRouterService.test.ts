@@ -55,6 +55,12 @@ describe("AI Core workload router", () => {
     });
   });
 
+  it("routes text generation request to expected workload", () => {
+    const result = classifyAiCoreWorkload("Tuliskan sebuah ringkasan komprehensif dokumen ini");
+    expect(result).toBeDefined();
+    expect(result.workload).not.toBe("DETERMINISTIC");
+  });
+
   it.each([
     "cek apakah Ollama GPU aktif di production",
     "cek worker yang aktif",
