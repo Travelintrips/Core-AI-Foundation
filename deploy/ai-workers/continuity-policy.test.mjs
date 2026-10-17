@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {workerHealth,recoveryDecision,terminalGate,sopDecision,inboxRecord,canDeliverToConversation} from './continuity-policy.mjs';
+const now = 500000;
+const dead={workerId:'dell',environment:'DEV',lastHeartbeatAt:now-200000};
+const live={workerId:'travel',environment:'DEV',lastHeartbeatAt:now-1000,authorized:true,capabilities:['browser']};
+const job={jobId:'job-1',capability:'browser',checkpointVerified:true,checkpointSha:'abc',commitSha:'abc'};
+test('detects genuine disconnect',()=>assert.equal(workerHealth(dead,now),'DISCONNECTED'));
+test('does not recover PROD',()=>assert.equal(workerHealth({...dead,environment:'PROD'},now),'OUT_OF_SCOPE'));
+test('picks authorized healthy DEV peer with lease fencing',()=>assert.deepEqual(recoveryDecision({worker:dead,candidates:[live],job,now}),{action:'RECOVER',targetWorkerId:'travel',jobId:'job-1',requireLease:true,verifyCallback:true}));
+test('rejects unauthorized candidate',()=>assert.equal(recoveryDecision({worker:dead,candidates:[{...live,authorized:false}],job,now}).action,'WAIT'));
+test('blocks unverified checkpoint',()=>assert.equal(recoveryDecision({worker:dead,candidates:[live],job:{...job,checkpointSha:'bad'},now}).action,'BLOCKED'));
+test('blocks critical approval',()=>assert.equal(recoveryDecision({worker:dead,candidates:[live],job:{...job,criticalAction:true},now}).action,'BLOCKED'));
+test('gate rejects unverified evidence',()=>assert.equal(terminalGate({...job,criteria:[{id:'x',pass:true,evidenceId:'e',verifier:'self'}],callbackVerified:true,leaseFinalized:true}).allowed,false));
+test('gate accepts verified evidence and callback',()=>assert.equal(terminalGate({...job,criteria:[{id:'x',pass:true,evidenceId:'e',verifier:'trusted'}],callbackVerified:true,leaseFinalized:true}).allowed,true));
+test('SOP only for DEV blocker',()=>assert.equal(sopDecision({type:'BLOCKER',blockerId:'b1',environment:'DEV'}).send,true));
+test('dedupe terminal inbox key',()=>{const a=inboxRecord({environment:'DEV',jobId:'j',eventId:'e1',status:'COMPLETED'});const b=inboxRecord({environment:'DEV',jobId:'j',eventId:'e2',status:'COMPLETED'});assert.equal(a.key,b.key);});
+test('requires trusted session attestation',()=>{const rec=inboxRecord({environment:'DEV',jobId:'j',eventId:'e1',status:'COMPLETED'});assert.equal(canDeliverToConversation(rec,{verified:true,attestationVerified:false,environment:'DEV'}),false);assert.equal(canDeliverToConversation(rec,{verified:true,attestationVerified:true,environment:'DEV'}),true);});
