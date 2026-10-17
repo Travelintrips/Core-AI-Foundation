@@ -89,7 +89,7 @@ async function sendMagicLoginEmailForUser(
   const sent = await sendEmail({
     to: user.email,
     subject: "Link login Portal AI Internal",
-    html: `<p>Klik link berikut untuk login tanpa password:</p><p><a href="${magicUrl}">Login ke Portal AI</a></p><p>Link berlaku 10 menit.</p>`,
+    html: `<p>Klik link berikut untuk login tanpa password:</p><p><a href="${magicUrl}">Login ke Portal AI</a></p><p>Link berlaku 30 menit.</p>`,
     module: "internal_auth",
     action: "magic_login_email",
     resourceId: String(user.id),
@@ -255,7 +255,7 @@ router.post("/internal/auth/request-magic-link", loginLimiter, async (req, res):
   const sent = await sendEmail({
     to: user.email,
     subject: "Link login Portal AI Internal",
-    html: `<p>Klik link berikut untuk login tanpa password:</p><p><a href="${magicUrl}">Login ke Portal AI</a></p><p>Link berlaku 10 menit.</p>`,
+    html: `<p>Klik link berikut untuk login tanpa password:</p><p><a href="${magicUrl}">Login ke Portal AI</a></p><p>Link berlaku 30 menit.</p>`,
     module: "internal_auth", action: "magic_login_email", resourceId: String(user.id),
   });
 
