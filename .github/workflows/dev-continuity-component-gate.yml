@@ -1,0 +1,38 @@
+name: DEV Continuity Component Gate
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/dev-continuity-component-gate.yml'
+      - 'deploy/ai-workers/continuity-*.mjs'
+      - 'deploy/ai-workers/callback-correlation-gate*.mjs'
+      - 'deploy/ai-workers/session-binding-coordinator*.mjs'
+      - 'deploy/ai-workers/connection-watchdog*.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  continuity-component-tests:
+    name: Verify DEV continuity components (not live FULL E2E)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout checked commit
+        uses: actions/checkout@v4
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run continuity and correlation tests
+        run: |
+          node --test \
+            deploy/ai-workers/continuity-policy.test.mjs \
+            deploy/ai-workers/continuity-runtime.test.mjs \
+            deploy/ai-workers/callback-correlation-gate.test.mjs \
+            deploy/ai-workers/session-binding-coordinator.test.mjs \
+            deploy/ai-workers/connection-watchdog.test.mjs
+      - name: Declare verified scope
+        run: |
+          echo "COMPONENT_GATE=PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "LIVE_FULL_E2E=NOT_TESTED" >> "$GITHUB_STEP_SUMMARY"
+          echo "This workflow does not disconnect ChatGPT, DC, or workers; it does not inject CI wait or prove browser attestation." >> "$GITHUB_STEP_SUMMARY"
