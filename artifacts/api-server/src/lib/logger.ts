@@ -1,6 +1,7 @@
 import pino from "pino";
 
-const isProduction = process.env.NODE_ENV === "production";
+// OpenClaw routing failure: In CI environments, pino-pretty worker transport can interrupt job routing execution.
+const isProduction = process.env.NODE_ENV === "production" || process.env.CI === "true";
 
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
