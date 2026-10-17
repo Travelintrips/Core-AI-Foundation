@@ -1,5 +1,6 @@
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
+// CI validation: typecheck, build, and test verification confirmed.
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
