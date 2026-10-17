@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { REQUIRED_SCENARIOS, evaluateDevFullContinuityAcceptance as evaluate } from './dev-full-continuity-acceptance.mjs';
+const job={environment:'DEV',jobId:'job-1',correlationId:'corr-1',checkpointPersisted:true,callbackVerified:true,executionExactlyOnceVerified:true,notificationExactlyOnceVerified:true,productionUnchangedVerified:true,releaseGatePassed:true};
+const evidence=REQUIRED_SCENARIOS.map((scenario,i)=>({scenario,jobId:'job-1',correlationId:'corr-1',environment:'DEV',result:'PASS',verifier:'trusted',evidenceId:'proof-'+i,source:'runtime'}));
+test('missing scenario cannot complete',()=>assert.equal(evaluate({...job,evidence:evidence.slice(1)}).status,'RUNNING'));
+test('forged self report cannot complete',()=>assert.equal(evaluate({...job,evidence:[...evidence.slice(1),{...evidence[0],source:'self_report'}]}).allowed,false));
+test('wrong correlation cannot complete',()=>assert.equal(evaluate({...job,evidence:[...evidence.slice(1),{...evidence[0],correlationId:'other'}]}).allowed,false));
+test('missing persistent checkpoint cannot complete',()=>assert.equal(evaluate({...job,checkpointPersisted:false,evidence}).allowed,false));
+test('duplicate final notification cannot complete',()=>assert.equal(evaluate({...job,evidence:[...evidence,{type:'FINAL_NOTIFICATION',jobId:'job-1',correlationId:'corr-1',environment:'DEV',idempotencyKey:'same'},{type:'FINAL_NOTIFICATION',jobId:'job-1',correlationId:'corr-1',environment:'DEV',idempotencyKey:'same'}]}).allowed,false));
+test('all verified evidence and safety gates complete',()=>assert.deepEqual(evaluate({...job,evidence}).missing,[]));
+test('PROD request cannot complete',()=>assert.equal(evaluate({...job,environment:'PROD',evidence}).allowed,false));
