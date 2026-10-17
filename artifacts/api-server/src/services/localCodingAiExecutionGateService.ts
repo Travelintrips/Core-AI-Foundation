@@ -1,4 +1,17 @@
 import { execFile } from "node:child_process";
+const DEFAULT_EXEC_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+async function execFileWithTimeout(
+  file: string,
+  args: string[] = [],
+  options: import('child_process').ExecFileOptions = {}
+): Promise<{ stdout: string; stderr: string }> {
+  const execPromise = promisify(execFile);
+  return Promise.race([
+    execPromise(file, args, options) as Promise<{ stdout: string; stderr: string }>,
+    new Promise((_res, reject) => setTimeout(() => reject(new Error('Execution timed out')), DEFAULT_EXEC_TIMEOUT_MS))
+  ]);
+}
+
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { promisify } from "node:util";
