@@ -46,6 +46,8 @@ import {
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
+// TODO: Catch 400-level errors (PROVIDER_BAD_REQUEST) from provider call and fallback to default model.
+
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
 import {
