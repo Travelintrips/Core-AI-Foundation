@@ -1,5 +1,27 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";import { vi } from "vitest";
+import { localCodingAiProductionModelService } from "../localCodingAiProductionModelService.js";
+import localCodingWorkstreamAiExecutionService from "../localCodingWorkstreamAiExecutionService.js";
+
+describe("localCodingWorkstreamAiExecutionService.invokeModel error handling", () => {
+  it("throws a descriptive error when provider returns bad request", async () => {
+    vi.spyOn(localCodingAiProductionModelService, "invokeModel").mockRejectedValueOnce(
+      Object.assign(new Error("Bad request"), { code: "PROVIDER_BAD_REQUEST" })
+    );
+    await expect(
+      localCodingWorkstreamAiExecutionService.invokeModel({} as any)
+    ).rejects.toThrowError("Model invocation failed: bad request.");
+  });
+
+  it("propagates non-bad-request errors", async () => {
+    const originalError = new Error("Some other error");
+    (originalError as any).code = "OTHER_CODE";
+    vi.spyOn(localCodingAiProductionModelService, "invokeModel").mockRejectedValueOnce(originalError);
+    await expect(
+      localCodingWorkstreamAiExecutionService.invokeModel({} as any)
+    ).rejects.toBe(originalError);
+  });
+});
 import {
   decideWorkstreamAiAutoRepair,
   LocalCodingWorkstreamAiExecutionError,
