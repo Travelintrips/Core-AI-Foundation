@@ -31,7 +31,7 @@ function requireSameOrigin(req: import("express").Request, res: import("express"
 }
 const credentialAdmin = [requireAuth, requireInternalRole("owner", "admin")];
 const CredentialCreate = z.object({
-  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-vps-dev-consumer)$/).max(100),
+  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-pc-worker-dell-(?:browser|recovery|verifier)|openclaw-vps-dev-consumer)$/).max(100),
   scopes: z.array(z.enum(["agent:presence", "agent:work", "model:chat"])).min(1).max(3),
 }).strict();
 
