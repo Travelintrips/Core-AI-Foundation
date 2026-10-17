@@ -1,5 +1,27 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Octokit } from "@octokit/rest";
+import { cancelWorkflowIfNeeded } from "../localCodingAutonomousRepairService";
+
+describe("GitHub workflow cancellation", () => {
+  beforeEach(() => {
+    const octokitMock = {
+      actions: { cancelWorkflowRun: vi.fn() }
+    };
+    (Octokit as unknown as vi.Mock).mockReturnValue(octokitMock);
+  });
+
+  it("does not call cancelWorkflowRun when run IDs match", async () => {
+    await cancelWorkflowIfNeeded("currentRunId", "currentRunId");
+    expect((new Octokit() as any).actions.cancelWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it("calls cancelWorkflowRun when run IDs differ", async () => {
+    await cancelWorkflowIfNeeded("currentRunId", "differentRunId");
+    expect((new Octokit() as any).actions.cancelWorkflowRun).toHaveBeenCalled();
+  });
+});
+
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
