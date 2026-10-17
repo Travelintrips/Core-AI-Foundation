@@ -7,6 +7,10 @@ import {
 } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 type GreenCiContinuationResult =
   | {
       continued: false;
@@ -87,7 +91,14 @@ export async function continueAfterGreenCi(input: {
 
     await tx
       .update(aiCodingCiBindingsTable)
-      .set({ lastCheckpointJson: checkpoint })
+      .set({
+        // Preserve signed per-check evidence so duplicate/late webhook events
+        // cannot erase the all-required-checks green gate after dispatch.
+        lastCheckpointJson: {
+          ...(isRecord(binding.lastCheckpointJson) ? binding.lastCheckpointJson : {}),
+          ...checkpoint,
+        },
+      })
       .where(eq(aiCodingCiBindingsTable.id, binding.id));
 
     publishSafe({
