@@ -14,6 +14,7 @@ import {
 
 export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
+export const OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID = "openclaw-travelintrips-dev" as const;
 export const OPENCLAW_PC_DEV_CLIENT_ID = "openclaw-pc-worker-dev" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
 export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
@@ -25,6 +26,7 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_VPS_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_DEV_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
@@ -40,6 +42,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   agent: RegExp;
 }> = [
   // Host-specific requests must take precedence over the generic OpenClaw alias.
+  { clientId: OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, agent: /openclaw-travelintrips-dev|openclaw[\s-]*travelintrips[\s-]*dev|travelintrips[\s-]*dev/i },
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
   { clientId: "openclaw-pc-worker-dell-recovery", agent: /\b(?:openclaw-pc-worker-dell-recovery|dell-recovery)\b/i },
   { clientId: "openclaw-pc-worker-dell-verifier", agent: /\b(?:openclaw-pc-worker-dell-verifier|dell-verifier)\b/i },
