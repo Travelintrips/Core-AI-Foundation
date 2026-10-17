@@ -38,6 +38,12 @@ const execFileAsync = promisify(execFile);
 
 const MAX_RECOVERY_OPERATIONS = 8;
 const MAX_RECOVERY_ATTEMPTS = 2;
+// Enhanced diagnostic for zero matches
+function handleZeroMatches(pattern: string) {
+  console.error(`DeterministicRecovery: no matches found for pattern '${pattern}'`);
+  throw new LocalDeterministicRecoveryError(`No matches for pattern: ${pattern}`, 'NOT_FOUND');
+}
+
 const MAX_PATCH_BYTES = 160_000;
 const MAX_CHANGED_FILES = 40;
 const GIT_TIMEOUT_MS = 30_000;
