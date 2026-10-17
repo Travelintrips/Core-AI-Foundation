@@ -73,6 +73,39 @@ export const EXTERNAL_AGENT_RULES = {
       productionDeploy: false,
     },
   },
+  "openclaw-pc-worker-dell-browser": {
+    source: "openclaw",
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
+  "openclaw-pc-worker-dell-recovery": {
+    source: "openclaw",
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
+  "openclaw-pc-worker-dell-verifier": {
+    source: "openclaw",
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname"],
+    permissions: {
+      codingWorkspaceWrite: false,
+      gitCommit: false,
+      gitPush: false,
+      productionDeploy: false,
+    },
+  },
   "gcp-openhands-coder": {
     source: "openhands",
     role: "coding_executor",
