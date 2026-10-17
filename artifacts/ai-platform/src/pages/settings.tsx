@@ -238,14 +238,27 @@ function AgentCredentialsPanel() {
   const [issued, setIssued] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  useEffect(() => { void refresh().catch(err => setError(String(err))); }, []);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  useEffect(() => { void refresh(); }, []);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (ADMIN_KEY) headers["x-admin-api-key"] = ADMIN_KEY;
   async function refresh() {
-    const response = await fetch("/api/ai/agent-runtime/credentials", { headers, credentials: "same-origin", cache: "no-store" });
-    if (!response.ok) throw new Error("Cannot load agent credentials (" + response.status + ")");
-    const body = await response.json();
-    setItems(body.credentials ?? []);
+    setRefreshing(true);
+    setError("");
+    setLastRefresh(null);
+    try {
+      const response = await fetch("/api/ai/agent-runtime/credentials", { headers, credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) throw new Error("Cannot load agent credentials (" + response.status + ")");
+      const body = await response.json();
+      if (!Array.isArray(body.credentials)) throw new Error("Invalid credentials response");
+      setItems(body.credentials);
+      setLastRefresh(new Date().toLocaleTimeString());
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setRefreshing(false);
+    }
   }
   async function issue() {
     setLoading(true); setError(""); setIssued("");
@@ -278,9 +291,10 @@ function AgentCredentialsPanel() {
         <p className="text-sm text-muted-foreground">Issue a dedicated scoped credential for OpenClaw PC Worker 3. The secret is shown only once.</p>
         <div className="flex gap-2">
           <Button onClick={issue} disabled={loading || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
-          <Button variant="outline" onClick={() => { setError(""); void refresh().catch(err => setError(String(err))); }}>Refresh credentials</Button>
+          <Button variant="outline" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh credentials"}</Button>
         </div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {lastRefresh && !error && <p role="status" className="text-sm text-muted-foreground">Credentials refreshed at {lastRefresh}. {items.length} credential(s) found.</p>}
         {issued && <div className="space-y-2"><Label htmlFor="issued-worker-token">One-time token (store securely; do not send via chat)</Label><Input id="issued-worker-token" value={issued} readOnly autoComplete="off" /><Button variant="outline" onClick={() => setIssued("")}>Hide token</Button></div>}
         {items.map(item => <div key={item.id} className="flex items-center justify-between gap-3 border-b py-2 text-sm">
           <span>{item.name} — {item.isActive ? "Active" : "Revoked"} ({item.scopes.join(", ")})</span>
