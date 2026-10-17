@@ -9,6 +9,7 @@ import {
 import {
   detectExplicitExternalAgentClientId,
   OPENCLAW_AGENT_CLIENT_ID,
+  OPENCLAW_VPS_CLIENT_ID,
 } from "./externalAgentDispatchService.js";
 import {
   detectAiCoreGitHubOperation,
@@ -221,6 +222,28 @@ export function classifyAiCoreChatDispatch(
       externalAgentClientId: null,
       executionLane: "CODING",
       reason: "Explicit TEST_ONLY coding job must enter the control plane; an ACK requires a verified external round trip.",
+    };
+  }
+  // An explicit no-tool reply job is agent work, not a diagnostic of a past failure.
+  // Restrict this path to the named VPS agent, an exact reply, and a no-tool scope.
+  // Source changes and privileged operations continue through existing gates.
+  const explicitVpsTextReply =
+    /\bopenclaw\b/i.test(message) &&
+    /\bvps\b/i.test(message) &&
+    /\b(?:return|reply|balas|kembalikan)\b/i.test(message) &&
+    /\b(?:exact|tepat|persis)\b/i.test(message) &&
+    /\b(?:without tools?|no[ -]?tools?|tanpa tools?)\b/i.test(message) &&
+    !hasExplicitSourceChange(message) &&
+    !/\b(?:deploy|restart|reboot|shutdown|delete|hapus|install|uninstall|credential|secret|password|token|shell|terminal|ssh)\b/i.test(
+      message.replace(/\b(?:jangan|tanpa|without|do not|don't)\b[^.!?;\n]{0,160}/gi, ""),
+    );
+  if (explicitVpsTextReply) {
+    return {
+      kind: "EXTERNAL_AGENT", workload, preset: null,
+      infrastructureOperation: null, githubOperation: null,
+      externalAgentClientId: OPENCLAW_VPS_CLIENT_ID,
+      executionLane: "TARGETED",
+      reason: "Explicit no-tool VPS reply uses the agent queue, not infrastructure diagnostics.",
     };
   }
   const infrastructureOperation = detectAiCoreInfrastructureOperation(message);
