@@ -17,6 +17,16 @@ describe("external agent registry policy", () => {
     });
   });
 
+  it("registers three bounded Dell workers without production permissions", () => {
+    for (const role of ["browser", "recovery", "verifier"]) {
+      expect(getExternalAgentRule(`openclaw-pc-worker-dell-${role}`)).toMatchObject({
+        source: "openclaw",
+        role: "bounded_device_executor",
+        permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
+      });
+    }
+  });
+
   it("fails closed for unknown agents", () => {
     expect(getExternalAgentRule("untrusted-agent")).toBeNull();
   });
