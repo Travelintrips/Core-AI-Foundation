@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// TODO: Test prompt sanitization for overly long and invalid characters
+
 
 const mocks = vi.hoisted(() => ({
   models: [] as any[],
