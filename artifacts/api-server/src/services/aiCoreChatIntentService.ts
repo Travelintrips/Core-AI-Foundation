@@ -228,14 +228,14 @@ export function classifyAiCoreChatDispatch(
   // Restrict this path to the named VPS agent, an exact reply, and a no-tool scope.
   // Source changes and privileged operations continue through existing gates.
   const explicitVpsTextReply =
-    /\\bopenclaw\\b/i.test(message) &&
-    /\\bvps\\b/i.test(message) &&
-    /\\b(?:return|reply|balas|kembalikan)\\b/i.test(message) &&
-    /\\b(?:exact|tepat|persis)\\b/i.test(message) &&
-    /\\b(?:without tools?|no[ -]?tools?|tanpa tools?)\\b/i.test(message) &&
+    /\bopenclaw\b/i.test(message) &&
+    /\bvps\b/i.test(message) &&
+    /\b(?:return|reply|balas|kembalikan)\b/i.test(message) &&
+    /\b(?:exact|tepat|persis)\b/i.test(message) &&
+    /\b(?:without tools?|no[ -]?tools?|tanpa tools?)\b/i.test(message) &&
     !hasExplicitSourceChange(message) &&
-    !/\\b(?:deploy|restart|reboot|shutdown|delete|hapus|install|uninstall|credential|secret|password|token|shell|terminal|ssh)\\b/i.test(
-      message.replace(/\\b(?:jangan|tanpa|without|do not|don't)\\b[^.!?;\\n]{0,160}/gi, ""),
+    !/\b(?:deploy|restart|reboot|shutdown|delete|hapus|install|uninstall|credential|secret|password|token|shell|terminal|ssh)\b/i.test(
+      message.replace(/\b(?:jangan|tanpa|without|do not|don't)\b[^.!?;\n]{0,160}/gi, ""),
     );
   if (explicitVpsTextReply) {
     return {
