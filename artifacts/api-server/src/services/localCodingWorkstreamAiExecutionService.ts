@@ -18,6 +18,48 @@ import {
   type AiJob,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
+
+/**
+ * Structured logging around model provider HTTP exchanges during the invoke_model phase.
+ * Captures request payload, sanitized headers (excluding secrets/keys/tokens), status code,
+ * provider response body, execution ID, and timestamp.
+ *
+ * Exact conditions triggering PROVIDER_BAD_REQUEST:
+ * - Provider API responds with HTTP 400 Bad Request.
+ * - Request payload fails model validation schema (e.g. malformed JSON, invalid parameters).
+ * - Context window or max prompt token limits are exceeded for the selected provider/model.
+ */
+export function logModelProviderHttpExchange(params: {
+  executionId: string;
+  url?: string;
+  headers?: Record<string, string | undefined>;
+  requestPayload?: unknown;
+  status?: number;
+  responseBody?: unknown;
+  error?: unknown;
+}): void {
+  const sanitizedHeaders: Record<string, string | undefined> = {};
+  if (params.headers) {
+    for (const [key, value] of Object.entries(params.headers)) {
+      sanitizedHeaders[key] = /auth|token|secret|key|cookie/i.test(key)
+        ? "[REDACTED]"
+        : value;
+    }
+  }
+  console.info(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      phase: "invoke_model",
+      executionId: params.executionId,
+      url: params.url,
+      headers: sanitizedHeaders,
+      requestPayload: params.requestPayload,
+      statusCode: params.status,
+      responseBody: params.responseBody,
+      error: params.error ? String(params.error) : undefined,
+    })
+  );
+}
 import { computePriorityScore } from "./priorityEngine.js";
 import {
   type AiHandoffPackage,
