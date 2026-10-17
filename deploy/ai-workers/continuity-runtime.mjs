@@ -1,5 +1,6 @@
 import { recoveryDecision, terminalGate, sopDecision, inboxRecord } from './continuity-policy.mjs';
 import { RecoveryInbox } from './recovery-inbox.mjs';
+import { evaluateDevFullContinuityAcceptance } from './dev-full-continuity-acceptance.mjs';
 // Adapter connects authenticated registry and dispatcher ports. All effects are injected;
 // never invents a ChatGPT conversation binding or acknowledges on behalf of ChatGPT.
 export class DevContinuityRuntime {
@@ -29,6 +30,10 @@ export class DevContinuityRuntime {
   if(event.status==='COMPLETED') {
    const gate=terminalGate(job);
    if(!gate.allowed)return {accepted:false,reason:gate.reason};
+   if(job.acceptanceContract==='DEV_FULL_CONTINUITY_V1') {
+    const full=evaluateDevFullContinuityAcceptance(job);
+    if(!full.allowed)return {accepted:false,reason:full.reason,missing:full.missing,status:'RUNNING'};
+   }
   }
   const item=inboxRecord(event);
   if(!item)return {accepted:false,reason:'invalid_terminal_event'};
