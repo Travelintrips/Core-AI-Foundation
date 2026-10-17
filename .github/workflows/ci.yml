@@ -37,7 +37,7 @@ jobs:
       - name: Verify fail-closed DEV-first production promotion
         run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
       - name: Verify GitHub event correlation contract
-        run: node --test scripts/github-event-correlation.test.mjs
+        run: node --test scripts/github-event-correlation.test.mjs scripts/github-ci-handoff-decision.test.mjs
       - name: Verify bounded PostgreSQL pool cap
         run: node --test scripts/pg-pool-max.test.mjs
       - name: Verify isolated DEV database pooler credentials
