@@ -1,3 +1,4 @@
+// TODO: Detect and handle GitHub Actions workflow run cancellation errors gracefully here
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
