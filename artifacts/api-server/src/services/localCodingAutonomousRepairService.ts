@@ -39,6 +39,9 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+// Maximum number of automated repair attempts
+const DEFAULT_RETRY_LIMIT = 3;
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
