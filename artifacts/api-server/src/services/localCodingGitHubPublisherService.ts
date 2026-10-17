@@ -1,6 +1,11 @@
 const GITHUB_API_ORIGIN = "https://api.github.com";
 const MAX_PUBLISH_FILES = 40;
 const MAX_TOTAL_CONTENT_BYTES = 1_500_000;
+export enum DiagnosticCode {
+  MCP_BINDING_ERROR = "MCP_BINDING_ERROR",
+  MCP_BINDING_WARNING = "MCP_BINDING_WARNING",
+}
+
 
 export class GitHubPublisherError extends Error {
   constructor(
