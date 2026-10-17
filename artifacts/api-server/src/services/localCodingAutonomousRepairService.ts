@@ -11,6 +11,44 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+
+export interface WorkflowRunEventPayload {
+  repository?: { full_name?: string };
+  workflow_run?: {
+    id: number | string;
+    workflow_id?: number | string;
+    conclusion?: string | null;
+    actor?: { login?: string };
+    triggering_actor?: { login?: string };
+    updated_at?: string;
+  };
+  sender?: { login?: string };
+}
+
+export function logWorkflowRunCancelledEvent(event: WorkflowRunEventPayload): boolean {
+  if (event?.workflow_run?.conclusion === "cancelled") {
+    const repository = event.repository?.full_name ?? "unknown";
+    const workflowId = event.workflow_run.workflow_id ?? "unknown";
+    const runId = event.workflow_run.id;
+    const user =
+      event.workflow_run.triggering_actor?.login ??
+      event.workflow_run.actor?.login ??
+      event.sender?.login ??
+      "unknown";
+    const timestamp = event.workflow_run.updated_at ?? new Date().toISOString();
+
+    logger.info("GitHub workflow_run cancelled", {
+      repository,
+      workflowId,
+      runId,
+      user,
+      timestamp,
+      conclusion: "cancelled",
+    });
+    return true;
+  }
+  return false;
+}
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
