@@ -39,6 +39,10 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+// TODO: Wrap subsequent external service calls in try/catch
+// to ensure exceptions are logged via logger and
+// do not terminate the overall repair workflow prematurely.
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
