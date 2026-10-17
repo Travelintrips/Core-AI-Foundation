@@ -9,6 +9,37 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const MIN_OUTPUT_TOKENS = 128;
 const MAX_OUTPUT_TOKENS = 8_192;
 
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+export interface CodingRequestValidationInput {
+  prompt?: string;
+  maxOutputTokens?: number;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export function validateCodingRequestInput(input: CodingRequestValidationInput): void {
+  if (!input || typeof input !== "object") {
+    throw new ValidationError("Request payload must be a non-null object.");
+  }
+  if (typeof input.prompt !== "string" || input.prompt.trim().length === 0) {
+    throw new ValidationError("Prompt is required and must be a non-empty string.");
+  }
+  if (input.maxOutputTokens !== undefined) {
+    if (typeof input.maxOutputTokens !== "number" || Number.isNaN(input.maxOutputTokens) || input.maxOutputTokens < MIN_OUTPUT_TOKENS || input.maxOutputTokens > MAX_OUTPUT_TOKENS) {
+      throw new ValidationError(`maxOutputTokens must be a number between ${MIN_OUTPUT_TOKENS} and ${MAX_OUTPUT_TOKENS}.`);
+    }
+  }
+  if (input.metadata !== undefined && (typeof input.metadata !== "object" || input.metadata === null || Array.isArray(input.metadata))) {
+    throw new ValidationError("metadata must be a valid key-value object when provided.");
+  }
+}
+
 export const DEFAULT_CODING_PROVIDER_ALLOWLIST = Object.freeze([
   "openai",
   "anthropic",
