@@ -458,7 +458,9 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
   await ensureCodingControlBridgeTables();
   // A receiver-side MCP ACK is durable evidence of delivery to the subscribed
   // conversation. It is not proof of browser automation or other external E2E paths.
-  const result = await db.execute(sql`
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${input.conversationId}, true)`);
+    return tx.execute(sql`
     WITH acknowledged AS (
       UPDATE ai_platform.ai_coding_bridge_responses AS response
       SET acknowledged_at = NOW()
@@ -485,7 +487,8 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
       RETURNING command.id
     )
     SELECT id FROM marked
-  `);
+    `);
+  });
   return (result.rows ?? []).length > 0;
 }
 
@@ -495,7 +498,9 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
 }) {
   await ensureCodingControlBridgeTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 50));
-  const result = await db.execute(sql`
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${input.conversationId}, true)`);
+    return tx.execute(sql`
     SELECT
       response.id,
       response.command_id,
@@ -512,7 +517,8 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
       AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
     ORDER BY response.created_at ASC
     LIMIT ${limit}::integer
-  `);
+    `);
+  });
 
   return (result.rows ?? []).map((row) => ({
     id: String(row["id"]),
