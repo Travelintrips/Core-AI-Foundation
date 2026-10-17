@@ -373,6 +373,18 @@ describe("MCP command two-way routing", () => {
     } as never);
     const other = await invoke("subscribe_ai_core_events", { conversationId: "client-injected" });
     expect(other.body.result.structuredContent.conversationId).not.toBe(channel);
+    mocks.list.mockClear();
+    mocks.ack.mockClear();
+    await invoke("read_ai_core_events", { conversationId: channel });
+    expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: other.body.result.structuredContent.conversationId,
+    }));
+    expect(mocks.list).not.toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
+    await invoke("ack_ai_core_event", { conversationId: channel, responseId });
+    expect(mocks.ack).toHaveBeenCalledWith({
+      conversationId: other.body.result.structuredContent.conversationId, responseId,
+    });
+    expect(mocks.ack).not.toHaveBeenCalledWith({ conversationId: channel, responseId });
   });
 
 });
