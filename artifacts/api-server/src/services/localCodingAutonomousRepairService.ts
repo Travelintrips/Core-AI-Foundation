@@ -1,4 +1,7 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+// Timeout guard configurable
+const DEFAULT_ASYNC_TIMEOUT_MS = Number(process.env.ASYNC_OP_TIMEOUT_MS) || 5 * 60 * 1000;
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {

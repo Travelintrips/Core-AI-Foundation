@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+// Timeout guard configurable
+const DEFAULT_ASYNC_TIMEOUT_MS = Number(process.env.ASYNC_OP_TIMEOUT_MS) || 5 * 60 * 1000;
+
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { promisify } from "node:util";
