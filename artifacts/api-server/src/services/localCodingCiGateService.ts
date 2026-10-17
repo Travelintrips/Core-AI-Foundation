@@ -164,7 +164,9 @@ export async function handleCodingGithubCiEvent(event: {
         sourceModule: event.sourceModule,
         eventType: event.eventType,
         eventId: event.eventId,
-        headSha: p.headSha,
+        // Runtime validation above guarantees a string; nested transaction
+        // callbacks do not retain narrowing of properties on object payloads.
+        headSha: String(p.headSha),
         bindingHeadSha: binding.headSha,
         checkName: p.checkName,
         status: p.status,
