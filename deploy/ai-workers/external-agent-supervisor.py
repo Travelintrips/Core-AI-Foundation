@@ -389,7 +389,11 @@ def main():
             except Exception as exc:
                 ok = False
                 message = "External agent execution failed: " + str(exc)[:3000]
-                details = {"runtime": RUNTIME, "errorType": exc.__class__.__name__}
+                details = {
+                    "runtime": RUNTIME,
+                    "errorType": exc.__class__.__name__,
+                    "errorMessage": str(exc)[:3000],
+                }
                 if isinstance(exc, ExternalAgentExecutionError):
                     details.update(exc.details)
             pending = {"clientId": CLIENT_ID, "runtime": RUNTIME, "work": work,
