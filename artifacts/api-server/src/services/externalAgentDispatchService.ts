@@ -209,7 +209,7 @@ export async function dispatchExternalAgentWork(input: {
   if (resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID &&
       (!isTravelintripsWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||
-       !rule.capabilities.includes("chatgpt:wake"))) {
+       !rule.capabilities.some((capability: string) => capability === "chatgpt:wake"))) {
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
       "DEV_CHATGPT_WAKE_PREFLIGHT_REQUIRED: issue a server-authorized challenge-bound DEV_CHATGPT_WAKE_V1 command; do not queue natural language on a model-free worker.",
