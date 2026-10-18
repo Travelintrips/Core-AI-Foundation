@@ -1,0 +1,45 @@
+services:
+  dev-bridge-fanout-replay:
+    image: ${AI_CORE_DEV_IMAGE:?Set the verified immutable active DEV image}
+    container_name: cst-dev-bridge-fanout-replay-1
+    user: node
+    working_dir: /app/artifacts/api-server
+    command: ["./node_modules/.bin/tsx", "src/scripts/devBridgeFanoutReplayWorker.ts"]
+    init: true
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.25
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    env_file:
+      - /opt/core-ai-dev/.env.dev
+    environment:
+      APP_ENV: development
+      NODE_ENV: development
+      AI_DEV_BRIDGE_FANOUT_REPLAY_ENABLED: 'true'
+      PG_POOL_MAX: '2'
+      LOG_LEVEL: info
+    tmpfs:
+      - /tmp:size=16777216,mode=1777
+    volumes:
+      - ../../artifacts/api-server/src/services/devBridgeFanoutReplayStore.ts:/app/artifacts/api-server/src/services/devBridgeFanoutReplayStore.ts:ro
+      - ../../artifacts/api-server/src/scripts/devBridgeFanoutReplayWorker.ts:/app/artifacts/api-server/src/scripts/devBridgeFanoutReplayWorker.ts:ro
+    networks: [control]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18096').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+networks:
+  control:
+    name: ai-core-workers_control
+    external: true
