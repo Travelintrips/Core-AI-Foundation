@@ -1,0 +1,17 @@
+# Use the already CI-verified DEV runtime only as a dependency snapshot.
+ARG BASE_IMAGE=core-ai-dev:vps-887bd78e377f
+FROM ${BASE_IMAGE}
+USER root
+WORKDIR /app/artifacts/api-server
+COPY artifacts/api-server/src/middleware/devOnlyMcpGateway.ts ./src/middleware/devOnlyMcpGateway.ts
+COPY artifacts/api-server/src/devOnlyMcpServer.ts ./src/devOnlyMcpServer.ts
+ARG BUILD_SHA
+ENV AI_CORE_MCP_TARGET_ENV=DEV \
+    AI_CORE_INTERNAL_BASE_URL=http://core-ai-dev:3000 \
+    DEV_GATEWAY_BUILD_SHA=${BUILD_SHA} \
+    PORT=3000
+LABEL cst.role="dev-only-mcp-gateway" cst.dev.commit=${BUILD_SHA}
+# No generic application entrypoint, worker, controller or scheduler startup.
+ENTRYPOINT []
+CMD ["node", "--import", "tsx", "src/devOnlyMcpServer.ts"]
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/healthz').then(async r=>{const h=await r.json();process.exit(r.ok&&h.executionEnvironment==='DEV'&&h.backgroundControllers===false?0:1)}).catch(()=>process.exit(1))"
