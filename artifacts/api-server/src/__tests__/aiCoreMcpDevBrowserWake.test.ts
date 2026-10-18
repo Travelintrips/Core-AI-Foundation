@@ -43,11 +43,14 @@ vi.mock("../services/localCodingControlBridgeService.js", () => ({
   unsubscribeCodingBridgeConversation: vi.fn(),
 }));
 import router from "../routes/ai-core-mcp.js";
+import { deriveDevAssistantChallenge } from "../services/devAssistantAttestation.js";
 
 const conversation = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649";
 const channel = "ai-engine-oauth:" + "a".repeat(64);
 const eventId = "b".repeat(64);
 const message = "DEV_CHATGPT_WAKE_V1 conversation=" + conversation + " event=" + eventId;
+const challenge = deriveDevAssistantChallenge({ ownerChannel: channel, targetConversationId: conversation, eventId });
+const workerInstruction = message + " challenge=" + challenge;
 const jobId = "22222222-2222-4222-8222-222222222222";
 const checkpointSha = "c".repeat(40);
 const watchMessage = "DEV_CHATGPT_WATCH_V1 conversation=" + conversation + " job=" + jobId +
@@ -101,9 +104,9 @@ describe("DEV chatgpt:wake permission boundary", () => {
     expect(mocks.dispatch).toHaveBeenCalledOnce();
     expect(mocks.dispatch.mock.calls[0][0]).toMatchObject({
       clientId: "openclaw-travelintrips-dev",
-      source: "ai-core", instruction: message,
+      source: "ai-core", instruction: workerInstruction,
       metadata: { capability: "chatgpt:wake", conversationId: channel,
-        targetConversationId: conversation, eventId, explicitWorkerTarget: true },
+        targetConversationId: conversation, eventId, assistantAttestationChallenge: challenge, explicitWorkerTarget: true },
     });
   });
 
