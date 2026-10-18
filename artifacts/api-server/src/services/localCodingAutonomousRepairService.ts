@@ -1,3 +1,4 @@
+// TODO: wrap GitHub workflow invocation logic with try/catch to handle cancelled workflow_run responses and ensure safe recovery without throwing
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
