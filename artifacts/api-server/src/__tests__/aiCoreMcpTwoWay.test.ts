@@ -15,7 +15,7 @@ vi.mock("../services/aiCoreChatLearningService.js", () => ({ recordChatLearningE
 vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
   oauthIssuer: () => "https://example.test", oauthResource: () => "https://example.test/api", verifyMcpAccessToken: vi.fn(),
 }));
-vi.mock("../services/aiCoreWhatsappChatService.js", () => ({ resolveAiCoreInternalBaseUrl: () => "http://localhost:8080/api" }));
+vi.mock("../services/aiCoreWhatsappChatService.js", () => ({ resolveAiCoreInternalBaseUrl: () => process.env["TEST_AI_CORE_INTERNAL_BASE_URL"] || "http://localhost:8080/api" }));
 vi.mock("../services/localCodingControlBridgeService.js", () => ({
   acknowledgeCodingBridgeResponseForConversation: mocks.ack,
   listPendingCodingBridgeResponsesForConversation: mocks.list,
@@ -390,6 +390,54 @@ describe("MCP command two-way routing", () => {
       conversationId: other.body.result.structuredContent.conversationId, responseId,
     });
     expect(mocks.ack).not.toHaveBeenCalledWith({ conversationId: channel, responseId });
+  });
+
+  it("limits the DEV relay service token to explicitly named bounded read-only worker jobs", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("AI_CORE_DEV_RELAY_KEY", "scoped-dev-relay-".padEnd(64, "x"));
+    const instance = express();
+    instance.use(express.json());
+    instance.use("/api", router);
+    const sendRelay = (message: string) => request(instance)
+      .post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer " + process.env["AI_CORE_DEV_RELAY_KEY"])
+      .send({ jsonrpc: "2.0", id: 91, method: "tools/call",
+        params: { name: "send_ai_core_command", arguments: { message, confirmed: true,
+          conversationId: "ai-engine-oauth:relay-principal-only" } } });
+    const blocked = await sendRelay("Delegasikan ke openclaw-travelintrips-dev lalu hapus file");
+    expect(blocked.body.result.structuredContent).toMatchObject({
+      blocked: true, reason: "SCOPED_DEV_RELAY_DENIED", dispatched: false,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    const passed = await sendRelay("Delegasikan ke openclaw-travelintrips-dev; jalankan hostname pada pc travelintrips");
+    expect(passed.status).toBe(200);
+    expect(passed.body.result.isError).toBeFalsy();
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toMatchObject({
+      mode: "auto", conversationId: "ai-engine-oauth:relay-principal-only",
+    });
+    const profile = await request(instance).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer " + process.env["AI_CORE_DEV_RELAY_KEY"])
+      .send({ jsonrpc: "2.0", id: 92, method: "tools/call",
+        params: { name: "get_profile", arguments: {} } });
+    expect(profile.status).toBe(401);
+  });
+
+  it("never passes a named DEV worker request to PROD when scoped relay is unconfigured", async () => {
+    vi.stubEnv("TEST_AI_CORE_INTERNAL_BASE_URL", "http://ai-core-prod-api:3000");
+    const instance = express();
+    instance.use(express.json());
+    instance.use("/api", router);
+    const response = await request(instance).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer test-connector-key")
+      .send({ jsonrpc: "2.0", id: 93, method: "tools/call",
+        params: { name: "send_ai_core_command",
+          arguments: { message: "Delegasikan ke openclaw-travelintrips-dev; jalankan hostname pada pc travelintrips",
+            confirmed: true, conversationId: "test-session" } } });
+    expect(response.body.result.structuredContent).toMatchObject({
+      blocked: true, dispatched: false, reason: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION",
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
 });
