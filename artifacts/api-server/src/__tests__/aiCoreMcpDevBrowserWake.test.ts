@@ -73,7 +73,7 @@ describe("DEV chatgpt:wake permission boundary", () => {
     expect(mocks.dispatch).toHaveBeenCalledOnce();
     expect(mocks.dispatch.mock.calls[0][0]).toMatchObject({
       clientId: "openclaw-travelintrips-dev",
-      source: "ai-core-dev-chatgpt-wake", instruction: message,
+      source: "ai-core", instruction: message,
       metadata: { capability: "chatgpt:wake", conversationId: channel,
         targetConversationId: conversation, eventId },
     });
