@@ -1,3 +1,4 @@
+import { ApplicationError } from "../errors/ApplicationError.js";
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
@@ -68,6 +69,19 @@ export interface ProductionCodingModelFailure {
   ok: false;
   reason: ProductionCodingModelUnavailableReason;
   message: string;
+}
+
+
+function validateModelInvocationParams(params: { prompt: string; modelId: string; options?: Record<string, unknown> }): void {
+  if (!params.prompt || typeof params.prompt !== 'string') {
+    throw new ApplicationError('AI_INVALID_PARAMETERS', 'Missing or invalid prompt');
+  }
+  if (!params.modelId || typeof params.modelId !== 'string') {
+    throw new ApplicationError('AI_INVALID_PARAMETERS', 'Missing or invalid model identifier');
+  }
+  if (params.options !== undefined && typeof params.options !== 'object') {
+    throw new ApplicationError('AI_INVALID_PARAMETERS', 'Invalid options parameter');
+  }
 }
 
 function normalizeSlug(value: string): string {
