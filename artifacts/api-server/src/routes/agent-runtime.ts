@@ -83,7 +83,7 @@ router.post("/ai/agent-runtime/credentials/:id/revoke", ...credentialAdmin, requ
   const id = z.string().uuid().safeParse(req.params["id"]);
   if (!id.success) { res.status(400).json({ error: "Invalid credential ID" }); return; }
   const [candidate] = await db.select({ name: aiAgentServiceTokensTable.name }).from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.id, id.data)).limit(1);
-  if (!(candidate?.name.startsWith("openclaw-pc-worker-") || candidate?.name === "openclaw-vps-dev-consumer")) { res.status(404).json({ error: "Worker credential not found" }); return; }
+  if (!(candidate?.name.startsWith("openclaw-pc-worker-") || candidate?.name === "openclaw-vps-dev-consumer" || candidate?.name === "openclaw-dell-chatgpt-wake-dev")) { res.status(404).json({ error: "Worker credential not found" }); return; }
   const [row] = await db.update(aiAgentServiceTokensTable)
     .set({ isActive: false, updatedAt: new Date() })
     .where(and(eq(aiAgentServiceTokensTable.id, id.data), eq(aiAgentServiceTokensTable.isActive, true)))
