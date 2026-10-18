@@ -1125,10 +1125,10 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // must never be dispatched using PROD's connector credential or sticky
       // fallback. Until scoped cross-environment delegation is configured,
       // reject the request rather than silently running it in PROD.
-      const targetsIsolatedDevWorker = /\\b(?:openclaw-travelintrips-dev|openclaw-pc-worker-dev|openclaw-vps-dev-consumer)\\b/i
+      const targetsIsolatedDevWorker = /\b(?:openclaw-travelintrips-dev|openclaw-pc-worker-dev|openclaw-vps-dev-consumer)\b/i
         .test(command.instruction);
       const routedInternalUrl = resolveAiCoreInternalBaseUrl();
-      if (targetsIsolatedDevWorker && /(?:^|\\/\\/)ai-core-prod-api(?::|\\/|$)/i.test(routedInternalUrl)) {
+      if (targetsIsolatedDevWorker && /(?:^|\/\/)ai-core-prod-api(?::|\/|$)/i.test(routedInternalUrl)) {
         res.status(200).json(rpcResult(body.id ?? null, {
           content: [{ type: "text", text: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION: Gateway OAuth is authenticated, but the current PROD backend is not permitted to execute work for the named DEV agent. No work was dispatched." }],
           structuredContent: { blocked: true, reason: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION", dispatched: false, deliveryVerified: false },
