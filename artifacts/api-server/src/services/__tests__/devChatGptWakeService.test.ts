@@ -9,6 +9,7 @@ vi.mock("@workspace/db", () => ({
     commandType: "command_type", metadataJson: "metadata_json" },
 }));
 import { isDevBrowserWakeAllowed, queueDevBrowserWake } from "../devChatGptWakeService.js";
+import { deriveDevAssistantChallenge } from "../devAssistantAttestation.js";
 
 const ownerChannel = "ai-engine-oauth:" + "a".repeat(64);
 const targetConversationId = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649";
@@ -19,12 +20,14 @@ const childId = "33333333-3333-4333-8333-333333333333";
 const expiresAt = "2099-01-01T00:00:00.000Z";
 const worker = "openclaw-travelintrips-dev";
 const input = { ownerChannel, targetConversationId, eventId, watchCommandId, jobId, checkpointRevision: 2, expiresAt };
-const instruction = `DEV_CHATGPT_WAKE_V1 conversation=${targetConversationId} event=${eventId}`;
+const challenge = deriveDevAssistantChallenge(input);
+const instruction = `DEV_CHATGPT_WAKE_V1 conversation=${targetConversationId} event=${eventId} challenge=${challenge}`;
 function existingCommand() {
   return { id: childId, source: "ai-core", commandType: "EXTERNAL_AGENT_WORK", instruction,
     metadataJson: { assignedClientId: worker, conversationId: ownerChannel, targetConversationId,
-      eventId, capability: "chatgpt:wake", explicitWorkerTarget: true,
-      devContinuity: { parentWatchCommandId: watchCommandId, ownerChannel, jobId, eventId, checkpointRevision: 2, expiresAt } } };
+      eventId, assistantAttestationChallenge: challenge, capability: "chatgpt:wake", explicitWorkerTarget: true,
+      devContinuity: { parentWatchCommandId: watchCommandId, ownerChannel, jobId, eventId,
+        assistantAttestationChallenge: challenge, checkpointRevision: 2, expiresAt } } };
 }
 
 beforeEach(() => {
@@ -47,8 +50,9 @@ describe("shared DEV browser wake queue", () => {
       externalCommandId: "dev-chatgpt-wake:" + createHash("sha256")
         .update(ownerChannel + "|" + targetConversationId + "|" + eventId).digest("hex"),
       metadata: expect.objectContaining({ conversationId: ownerChannel, targetConversationId, eventId,
-        explicitWorkerTarget: true, capability: "chatgpt:wake", devOnly: true,
-        devContinuity: { parentWatchCommandId: watchCommandId, ownerChannel, jobId, eventId, checkpointRevision: 2, expiresAt } }),
+        assistantAttestationChallenge: challenge, explicitWorkerTarget: true, capability: "chatgpt:wake", devOnly: true,
+        devContinuity: { parentWatchCommandId: watchCommandId, ownerChannel, jobId, eventId,
+          assistantAttestationChallenge: challenge, checkpointRevision: 2, expiresAt } }),
     });
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
