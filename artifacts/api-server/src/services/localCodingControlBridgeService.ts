@@ -376,6 +376,15 @@ export async function appendCodingBridgeResponse(input: {
 
   if (!created) return response;
 
+  return publishPersistedCodingBridgeResponse(response,input);
+}
+
+// Publish after transactional persistence. The durable response remains queryable
+// for reconciliation even if a process exits before this fan-out finishes.
+async function publishPersistedCodingBridgeResponse(response: typeof aiCodingBridgeResponsesTable.$inferSelect,input: {
+  commandId:string; taskId?:string|null; kind:"ACK"|"PROGRESS"|"CHECKPOINT"|"BLOCKER"|"COMPLETED"|"FAILED";
+  message:string; checkpoint?:Record<string,unknown>; metadata?:Record<string,unknown>;
+}) {
   publishSafe({
     eventType: "coding.bridge.response.created",
     sourceModule: "coding-control-bridge",
@@ -773,7 +782,10 @@ export async function completeCodingBridgeCommand(input: {
     throw new Error("Bridge command result details exceed 64000 bytes");
   }
 
-  const result = await db.execute(sql`
+  // Command terminal status and durable response must commit together.
+  // If insert fails, the PROCESSING claim remains retryable after rollback.
+  const persisted = await db.transaction(async (tx) => {
+  const result = await tx.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_commands
     SET status = ${verifiedStatus},
         processed_at = NOW(),
@@ -793,23 +805,22 @@ export async function completeCodingBridgeCommand(input: {
       AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
     RETURNING id, task_id
   `);
-
-  const row = result.rows?.[0] as Record<string, unknown> | undefined;
-  if (!row) return null;
-
-  const response = await appendCodingBridgeResponse({
-    commandId: input.commandId,
-    taskId: row["task_id"] ? String(row["task_id"]) : null,
-    kind: verifiedStatus,
-    message: input.message,
-    checkpoint: {
-      status: verifiedStatus,
-      statusCode: evidence.statusCode,
-      deliveryCode: evidence.deliveryCode,
-      e2eCode: evidence.e2eCode,
-      clientId: input.clientId,
-    },
-    metadata: { ...details, ...evidence },
+    const row = result.rows?.[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const taskId=row["task_id"] ? String(row["task_id"]) : null;
+    const [response]=await tx.insert(aiCodingBridgeResponsesTable).values({
+      commandId:input.commandId,taskId,kind:verifiedStatus,message:input.message,
+      checkpointJson:{status:verifiedStatus,statusCode:evidence.statusCode,deliveryCode:evidence.deliveryCode,e2eCode:evidence.e2eCode,clientId:input.clientId},
+      metadataJson:{...details,...evidence},
+    }).returning();
+    if(!response)throw new Error("Failed to persist terminal bridge response");
+    return {response,taskId};
+  });
+  if(!persisted)return null;
+  const response=await publishPersistedCodingBridgeResponse(persisted.response,{
+    commandId:input.commandId,taskId:persisted.taskId,kind:verifiedStatus,message:input.message,
+    checkpoint:{status:verifiedStatus,statusCode:evidence.statusCode,deliveryCode:evidence.deliveryCode,e2eCode:evidence.e2eCode,clientId:input.clientId},
+    metadata:{...details,...evidence},
   });
 
   return { commandId: input.commandId, status: verifiedStatus, ...evidence, response };
