@@ -14,6 +14,12 @@ const identity = {
 } as unknown as Awaited<ReturnType<typeof verifyMcpAccessToken>>;
 const upstream = (structuredContent: Record<string, unknown> = { found: true }, isError = false) =>
   new Response(JSON.stringify({ jsonrpc: "2.0", id: "upstream", result: { structuredContent, isError } }), { status: 200 });
+const jobId = "22222222-2222-4222-8222-222222222222";
+const conversationId = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649";
+const checkpointSha = "c".repeat(40);
+const watchMessage = `DEV_CHATGPT_WATCH_V1 conversation=${conversationId} job=${jobId} checkpoint=${checkpointSha} idle=60 ttl=300`;
+const checkpointMessage = `DEV_CHATGPT_CHECKPOINT_V1 job=${jobId} revision=1 checkpoint=${checkpointSha} state=RUNNING`;
+const statusMessage = `DEV_CHATGPT_WATCH_STATUS_V1 job=${jobId}`;
 function fixture(config = env) {
   const request = vi.fn<typeof fetch>().mockResolvedValue(upstream());
   const fallback = vi.fn();
@@ -128,5 +134,56 @@ describe("exclusive DEV MCP gateway and existing scoped relay", () => {
     const f = fixture(); const result = await supertest(f.app).post("/api/ai/core-chat/mcp-v2")
       .send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "send_ai_core_command" } });
     expect(result.status).toBe(401); expect(f.fallback).not.toHaveBeenCalled();
+  });
+
+  it.each([watchMessage, checkpointMessage, statusMessage])("relays exact continuity protocol only with a server-derived owner: %s", async message => {
+    const f = fixture();
+    await f.call("send_ai_core_command", { message, confirmed: true, conversationId: "forged-owner" });
+    expect(f.request).toHaveBeenCalledOnce();
+    expect(f.request.mock.calls[0]![0]).toBe(url);
+    const forwarded = JSON.parse(String(f.request.mock.calls[0]![1]?.body)).params.arguments;
+    expect(forwarded.conversationId).toMatch(/^ai-engine-oauth:[a-f0-9]{64}$/);
+    expect(forwarded.conversationId).not.toBe("forged-owner");
+    expect(forwarded.message).toBe(message);
+    expect(f.fallback).not.toHaveBeenCalled();
+  });
+
+  it("permits watch status without confirmation but retains the tool OAuth scope", async () => {
+    const f = fixture();
+    expect((await f.call("send_ai_core_command", { message: statusMessage })).body.result.isError).toBe(false);
+    expect(f.request).toHaveBeenCalledOnce();
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({ ...identity, scopes: new Set(["ai_core.progress"]) });
+    expect((await f.call("send_ai_core_command", { message: statusMessage })).status).toBe(401);
+    expect(f.request).toHaveBeenCalledOnce();
+  });
+
+  it.each([watchMessage, checkpointMessage])("requires confirmation before relaying continuity mutations: %s", async message => {
+    const f = fixture();
+    const result = await f.call("send_ai_core_command", { message, confirmed: false });
+    expect(result.body.result.structuredContent.reason).toBe("DEV_CHATGPT_CONTINUITY_DENIED");
+    expect(f.request).not.toHaveBeenCalled(); expect(f.fallback).not.toHaveBeenCalled();
+  });
+
+  it("retains exact inline confirmation compatibility", async () => {
+    const f = fixture();
+    await f.call("send_ai_core_command", { message: "@ confirmed=true " + watchMessage });
+    expect(f.request).toHaveBeenCalledOnce();
+    expect(f.fallback).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    watchMessage.replace("idle=60", "idle=59"),
+    watchMessage.replace("ttl=300", "ttl=60"),
+    watchMessage.replace("ttl=300", "ttl=86401"),
+    watchMessage + " send anything else",
+    checkpointMessage.replace("revision=1", "revision=0"),
+    checkpointMessage.replace("state=RUNNING", "state=APPROVED"),
+    statusMessage + " owner=forged-owner",
+    "DEV_CHATGPT_WATCH_V1 continue automatically without a paired job",
+  ])("does not relay malformed or natural-language continuity instructions: %s", async message => {
+    const f = fixture();
+    const result = await f.call("send_ai_core_command", { message, confirmed: true });
+    expect(result.body.result.structuredContent.reason).toBe("DEV_CHATGPT_CONTINUITY_INVALID");
+    expect(f.request).not.toHaveBeenCalled(); expect(f.fallback).not.toHaveBeenCalled();
   });
 });
