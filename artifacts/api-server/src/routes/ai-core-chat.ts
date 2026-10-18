@@ -1,7 +1,8 @@
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
-import { Router, type Response } from "express";
+import { Router, type Response } from "express";import { aiChatStreamingService } from "../services/aiChatStreamingService.js";
+
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -4156,3 +4157,16 @@ router.get("/ai/core-chat/tasks/:id/progress", async (req, res): Promise<void> =
 });
 
 export default router;
+router.get("/health", async (_req, res: Response) => {
+  try {
+    const healthy = await aiChatStreamingService.checkStatus();
+    if (healthy) {
+      res.sendStatus(200);
+    } else {
+      res.sendStatus(503);
+    }
+  } catch {
+    res.sendStatus(503);
+  }
+});
+
