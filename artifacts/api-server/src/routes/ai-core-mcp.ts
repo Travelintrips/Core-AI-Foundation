@@ -927,7 +927,9 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       },
     });
     const identity = await authenticate(req);
-    if (!identity || !identity.scopes.has("ai_core.events")) {
+    // A scoped DEV relay must never register native webhook delivery URLs.
+    // It may only use the authenticated, conversation-bound tools/call path.
+    if (!identity || identity.kind === "dev_relay" || !identity.scopes.has("ai_core.events")) {
       await logAudit({
         module: "mcp-events",
         action: "native_event_auth_denied",
