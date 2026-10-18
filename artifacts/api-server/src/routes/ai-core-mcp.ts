@@ -1273,7 +1273,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       if (/^DEV_CHATGPT_WAKE_V1(?:\s|$)/i.test(command.instruction)) {
         const wake = /^DEV_CHATGPT_WAKE_V1 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) event=([0-9a-f]{64})$/i.exec(command.instruction);
         const principalChannel = parsed.conversationId ?? "";
-        const allowed = identity.kind === "dev_relay" && effectiveConfirmed && !!wake &&
+        const allowed = (identity.kind === "dev_relay" || identity.kind === "oauth") && effectiveConfirmed && !!wake &&
           isDevBrowserWakeAllowed({ ownerChannel: principalChannel, targetConversationId: wake[1]! });
         if (!allowed || !wake) {
           res.status(200).json(rpcResult(body.id ?? null, {
