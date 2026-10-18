@@ -11,6 +11,11 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+
+// Global handler for unhandled promise rejections to avoid silent cancellations
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
