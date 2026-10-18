@@ -11,6 +11,27 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+// Retry wrapper for auto-repair operations to handle transient cancellation and timeout errors
+async function performAutoRepairWithRetry<T>(repairFn: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  const maxAttempts = 3;
+  while (true) {
+    try {
+      return await repairFn();
+    } catch (err: any) {
+      const isTransientCancel = err?.message?.includes('Cancellation') || err?.message?.includes('Timeout');
+      if (isTransientCancel && attempt < maxAttempts - 1) {
+        const backoff = 1000 * Math.pow(2, attempt);
+        logger.warn(`Auto-repair transient error detected, retrying in ${backoff}ms (attempt ${attempt + 2}/${maxAttempts})`, err);
+        await new Promise(res => setTimeout(res, backoff));
+        attempt++;
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
