@@ -1,4 +1,8 @@
 import { execFile } from "node:child_process";
+// Constraint constants for model validation
+const MAX_PROMPT_LENGTH = 20000;
+const ALLOWED_MODEL_PATTERN = /^gpt-[0-9]+$/;
+
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
