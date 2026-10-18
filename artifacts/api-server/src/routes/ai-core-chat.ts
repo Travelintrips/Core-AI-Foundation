@@ -1277,6 +1277,24 @@ async function openAiFirstReadOnlyIntent(
   conversationalMessage: string,
 ): Promise<Record<string, unknown> | null> {
   const trimmed = message.trim();
+  // An explicitly requested blocker-recovery SOP is deterministic operational guidance,
+  // not an LLM classification. Never use this shortcut for arbitrary prompts.
+  if (/^\/sop[ \t]+blocker(?:[ \t]+(?:resource-first|human-last))?[.!?]?[ \t]*$/i.test(trimmed)) {
+    return {
+      kind: "answer", route: "DETERMINISTIC_BLOCKER_SOP", provider: null, model: null,
+      workload: "REVIEW", costClass: "ZERO",
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, estimatedCostUsd: 0,
+      reply: [
+        "Resource-First, Human-Last — SOP pemulihan blocker:",
+        "1. Catat blocker, correlation ID, resource yang gagal, dan dampaknya.",
+        "2. Gunakan jalur resmi yang tersedia: GitHub, AI Core, OpenClaw atau Desktop Commander pada perangkat terotorisasi.",
+        "3. Pulihkan koneksi dengan retry terbatas dan backoff; jangan melewati autentikasi atau pembatasan keamanan.",
+        "4. Verifikasi hasil tindakan melalui sumber status resmi, callback, dan ACK terautentikasi; jangan klaim PASS sebelum bukti lengkap.",
+        "5. Eskalasi hanya bila perlu persetujuan keamanan, operasi destruktif, perubahan PROD berisiko, atau semua jalur sah gagal.",
+        "SOP ini hanya respons baca-saja; tidak membuat job, tidak membuktikan delivery ke sesi ChatGPT, dan tidak memberikan persetujuan baru.",
+      ].join("\n"),
+    };
+  }
   if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
   // Classifier-derived workload must not choose or bypass the semantic brain.
   const cloud = await resolveCloudSelection("REASONING");
