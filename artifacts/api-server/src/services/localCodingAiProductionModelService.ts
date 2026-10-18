@@ -1,6 +1,8 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
+// TODO: Wrap the model provider invocation in a try/catch block to handle HTTP 400 and PROVIDER_BAD_REQUEST errors,
+// map them to internal errors or fallback paths, and avoid leaking raw error details or secrets.
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
