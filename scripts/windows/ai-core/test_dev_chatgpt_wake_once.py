@@ -13,7 +13,8 @@ spec.loader.exec_module(wake)
 
 CHAT = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649"
 EVENT = "b" * 64
-COMMAND = f"DEV_CHATGPT_WAKE_V1 conversation={CHAT} event={EVENT}"
+CHALLENGE = "c" * 64
+COMMAND = f"DEV_CHATGPT_WAKE_V1 conversation={CHAT} event={EVENT} challenge={CHALLENGE}"
 URL = f"https://chatgpt.com/c/{CHAT}"
 TABS = json.dumps({"tabs": [{"type": "page", "url": URL, "targetId": "t12"}]})
 COMPOSER = '- textbox "Ask ChatGPT" [ref=e1] value="\\n"'

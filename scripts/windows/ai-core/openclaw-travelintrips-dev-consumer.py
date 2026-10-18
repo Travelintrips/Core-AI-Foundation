@@ -241,7 +241,7 @@ def execute(work):
     # The helper performs authenticated browser tab verification and local
     # idempotency BEFORE any typing. No fallback to a generic agent.
     if instruction.startswith("DEV_CHATGPT_WAKE_V1 "):
-        valid = re.fullmatch(r"DEV_CHATGPT_WAKE_V1 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) event=([a-f0-9]{64})", instruction, re.I)
+        valid = re.fullmatch(r"DEV_CHATGPT_WAKE_V1 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) event=([a-f0-9]{64}) challenge=([a-f0-9]{64})", instruction, re.I)
         if (CLIENT_ID != "openclaw-travelintrips-dev" or not valid or
             not BASE.startswith("https://dev.cstlogistic.co.id/api")):
             return False, "DEV browser wake command denied", {
@@ -265,13 +265,17 @@ def execute(work):
         verified = (process.returncode == 0 and receipt.get("ok") is True and
                     receipt.get("browserConfirmed") is True and receipt.get("chatgptSubmitted") is True and
                     receipt.get("conversationId") == valid.group(1).lower() and
-                    receipt.get("eventId") == valid.group(2).lower())
+                    receipt.get("eventId") == valid.group(2).lower() and
+                    receipt.get("challenge") == valid.group(3).lower())
         details = {
             "runtime": "openclaw-pc", "mode": "chatgpt-browser-wake-dev", "workerId": CLIENT_ID,
             "capability": "chatgpt:wake", "modelInvoked": False,
             "browserConfirmed": verified, "chatgptSubmitted": verified,
-            "browserPairingVerified": verified, "verifiedAssistantReply": False,
+            "browserPairingVerified": verified,
+            "verifiedAssistantReply": bool(verified and receipt.get("verifiedAssistantReply") is True),
+            "attestation": receipt.get("attestation") if verified else None,
             "conversationId": valid.group(1).lower(), "eventId": valid.group(2).lower(),
+            "challenge": valid.group(3).lower(),
             "verified": verified, "exitCode": process.returncode,
             "alreadyVisible": bool(receipt.get("alreadyVisible")),
             "evidenceFingerprint": receipt.get("evidenceFingerprint") if verified else None,

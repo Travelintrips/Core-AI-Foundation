@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { dispatchExternalAgentWork } from "./externalAgentDispatchService.js";
+import { deriveDevAssistantChallenge } from "./devAssistantAttestation.js";
 
 const WORKER = "openclaw-travelintrips-dev";
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
@@ -51,11 +52,13 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, co
 }): boolean {
   const metadata = command.metadataJson !== null && typeof command.metadataJson === "object"
     ? command.metadataJson as Record<string, unknown> : undefined;
+  const challenge = deriveDevAssistantChallenge(input);
   if (!metadata || command.source !== "ai-core" || command.commandType !== "EXTERNAL_AGENT_WORK" ||
       command.instruction !== instruction || metadata["assignedClientId"] !== WORKER ||
       metadata["conversationId"] !== input.ownerChannel || metadata["capability"] !== "chatgpt:wake" ||
       metadata["targetConversationId"] !== input.targetConversationId.toLowerCase() ||
-      metadata["eventId"] !== input.eventId.toLowerCase()) return false;
+      metadata["eventId"] !== input.eventId.toLowerCase() ||
+      metadata["assistantAttestationChallenge"] !== challenge) return false;
   if (input.watchCommandId !== undefined) {
     if (metadata["explicitWorkerTarget"] !== true) return false;
     const association = metadata["devContinuity"];
@@ -119,11 +122,12 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   }
   const targetConversationId = input.targetConversationId.toLowerCase();
   const eventId = input.eventId.toLowerCase();
-  const instruction = "DEV_CHATGPT_WAKE_V1 conversation=" + targetConversationId + " event=" + eventId;
+  const challenge = deriveDevAssistantChallenge({ ...input, targetConversationId, eventId });
+  const instruction = "DEV_CHATGPT_WAKE_V1 conversation=" + targetConversationId + " event=" + eventId + " challenge=" + challenge;
   const externalCommandId = "dev-chatgpt-wake:" + createHash("sha256")
     .update(input.ownerChannel + "|" + targetConversationId + "|" + eventId).digest("hex");
   const metadata: Record<string, unknown> = {
-    conversationId: input.ownerChannel, targetConversationId, eventId,
+    conversationId: input.ownerChannel, targetConversationId, eventId, assistantAttestationChallenge: challenge,
     capability: "chatgpt:wake", explicitWorkerTarget: true,
     browserPairing: "worker_must_verify_authenticated_exact_tab",
     source: "authorized-dev-browser-wake", devOnly: true,
@@ -134,7 +138,7 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
     ...(input.watchCommandId !== undefined && input.jobId !== undefined ? {
       devContinuity: {
         parentWatchCommandId: input.watchCommandId, ownerChannel: input.ownerChannel,
-        jobId: input.jobId, eventId, expiresAt: input.expiresAt,
+        jobId: input.jobId, eventId, assistantAttestationChallenge: challenge, expiresAt: input.expiresAt,
         ...(input.checkpointRevision !== undefined ? { checkpointRevision: input.checkpointRevision } : {}),
       },
     } : {}),
