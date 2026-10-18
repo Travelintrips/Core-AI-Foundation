@@ -201,6 +201,16 @@ export async function dispatchExternalAgentWork(input: {
     );
   }
 
+  // A browser-write capability must be explicitly granted to the isolated
+  // Travelintrips DEV worker. Generic bounded tools never imply typing rights.
+  if (input.metadata?.["capability"] === "chatgpt:wake" && (
+      resolvedClientId !== OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
+      input.source !== "ai-core" ||
+      !rule.capabilities.some(capability => capability === "chatgpt:wake") ||
+      !/^DEV_CHATGPT_WAKE_V1 conversation=[a-f0-9-]{36} event=[a-f0-9]{64}$/i.test(input.instruction))) {
+    throw new ExternalAgentDispatchError("CAPABILITY_DENIED", "DEV browser wake permission denied");
+  }
+
   const agent = registry.find((item) => item.clientId === resolvedClientId);
   const selectedIsPc = (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(resolvedClientId);
   if (rule.source === "openclaw" && (!agent?.eligible ||
