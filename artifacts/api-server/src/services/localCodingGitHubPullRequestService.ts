@@ -4,6 +4,9 @@ import {
   type GitHubApiClient,
 } from "./localCodingGitHubPublisherService.js";
 
+// TODO: Wrap GitHub API calls that create or update pull requests in a try/catch block
+// to catch cancellation-related errors and apply retry logic with exponential backoff.
+
 const MAX_PR_FILES = 100;
 const MAX_CHECK_RUNS = 100;
 
