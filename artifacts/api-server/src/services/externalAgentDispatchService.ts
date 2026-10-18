@@ -126,6 +126,8 @@ export async function dispatchExternalAgentWork(input: {
   taskId?: string | null;
   source?: string;
   metadata?: Record<string, unknown>;
+  /** Stable server-derived ID; ensures each browser wake event is queued at most once. */
+  externalCommandId?: string;
 }) {
   // Preserve the public legacy OpenClaw alias while routing new work to a
   // healthy, host-specific executor. Only new jobs are redirected here;
@@ -207,7 +209,7 @@ export async function dispatchExternalAgentWork(input: {
   }
   const coldStart = !agent?.eligible;
 
-  const externalCommandId = `ai-core-agent-${randomUUID()}`;
+  const externalCommandId = input.externalCommandId ?? `ai-core-agent-${randomUUID()}`;
   const submitted = await submitCodingBridgeCommand({
     externalCommandId,
     instruction: input.instruction,
