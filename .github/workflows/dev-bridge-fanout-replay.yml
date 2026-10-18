@@ -53,8 +53,8 @@ jobs:
         env:
           AI_CORE_DEV_IMAGE: core-ai-dev:vps-ci-fixture
         run: |
-          mkdir -p /opt/core-ai-dev
-          touch /opt/core-ai-dev/.env.dev
+          sudo mkdir -p /opt/core-ai-dev
+          sudo touch /opt/core-ai-dev/.env.dev
           docker compose -f deploy/ai-workers/docker-compose.dev-bridge-fanout-replay.yml config --quiet
       - name: Record exact verification scope
         run: |
