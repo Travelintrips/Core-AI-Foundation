@@ -1235,13 +1235,14 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           return;
         }
         try {
-          payload = await callDevMcpTool("send_ai_core_command", {
+          const relayPayload = await callDevMcpTool("send_ai_core_command", {
             ...parsed, message: command.instruction, confirmed: true, conversationId: channel,
           });
+          payload = relayPayload;
           res.status(200).json(rpcResult(body.id ?? null, {
-            content: [{ type: "text", text: JSON.stringify(payload) }],
-            structuredContent: payload,
-            isError: payload["isError"] === true,
+            content: [{ type: "text", text: JSON.stringify(relayPayload) }],
+            structuredContent: relayPayload,
+            isError: relayPayload["isError"] === true,
           }));
         } catch {
           res.status(200).json(rpcResult(body.id ?? null, {
