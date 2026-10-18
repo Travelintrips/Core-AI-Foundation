@@ -5,6 +5,7 @@ import {
   DEV_CONTINUITY_WORKER, devContinuityResultFromCommittedCommand,
   type DevContinuityWakeResult,
 } from "./devContinuityWakeEvents.js";
+import { verifyDevAssistantAttestation } from "./devAssistantAttestation.js";
 
 export const DEV_CONTINUITY_WATCH_TYPE = "DEV_CONTINUITY_WATCH";
 export const DEV_CONTINUITY_MAX_ACTIVE = 32;
@@ -297,11 +298,29 @@ export class DevContinuityWatchRepository {
       details["chatgptSubmitted"] === true && details["browserPairingVerified"] === true && details["exitCode"] === 0 &&
       details["eventId"] === current.wakeEventId && details["conversationId"] === current.targetConversationId &&
       typeof details["evidenceFingerprint"] === "string" && digest.test(details["evidenceFingerprint"]);
+    const callbackReceivedAt = new Date(at).toISOString();
+    const attestation = confirmed ? verifyDevAssistantAttestation({
+      details,
+      expected: {
+        ownerChannel: current.ownerChannel,
+        targetConversationId: current.targetConversationId,
+        eventId: current.wakeEventId!,
+        watchCommandId: current.commandId,
+        jobId: current.jobId,
+        checkpointRevision: current.revision,
+        workerId: DEV_CONTINUITY_WORKER,
+      },
+      notBefore: current.triggeredAt ?? String(current.evidence["detectedAt"] ?? current.lastProgressAt),
+      receivedAt: callbackReceivedAt,
+      publicKeyDerBase64: process.env["AI_CORE_DEV_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"],
+    }) : { verified: false as const, reason: "BROWSER_DELIVERY_UNVERIFIED" };
     const evidence: Record<string, unknown> = { ...current.evidence, childCommandId: result.childCommandId, eventId: result.eventId,
-      workerId: result.workerId, callbackReceivedAt: new Date(at).toISOString(), workerStatus: result.status,
+      workerId: result.workerId, callbackReceivedAt, workerStatus: result.status,
       browserConfirmed: details["browserConfirmed"] === true, chatgptSubmitted: details["chatgptSubmitted"] === true,
       browserPairingVerified: details["browserPairingVerified"] === true,
-      verifiedAssistantReply: confirmed && details["verifiedAssistantReply"] === true,
+      verifiedAssistantReply: attestation.verified,
+      assistantAttestationStatus: attestation.verified ? "VERIFIED" : attestation.reason,
+      ...(attestation.verified ? { assistantAttestation: attestation.evidence } : {}),
       resultCode: confirmed ? "DELIVERY_CONFIRMED" : "UNKNOWN_UNVERIFIED" };
     if (!confirmed) evidence["failureReason"] = result.status === "FAILED" ? "WORKER_REPORTED_FAILURE" : "BROWSER_EVIDENCE_INCOMPLETE";
     if (typeof details["evidenceFingerprint"] === "string" && digest.test(details["evidenceFingerprint"])) evidence["evidenceFingerprint"] = details["evidenceFingerprint"];
