@@ -2,6 +2,13 @@ import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
+import type { Request, NextFunction } from "express";
+const executionGate = createConstrainedCodingProviderAdapter();
+
+router.use(async (req: Request, res: Response, next: NextFunction) => {
+  await executionGate.guardSession(req);
+  next();
+});
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
