@@ -23,7 +23,7 @@ import {
   verifyMcpAccessToken,
 } from "../services/aiCoreMcpOAuthService.js";
 import { logAudit } from "../services/aiAuditService.js";
-import { getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
+import { dispatchExternalAgentWork, getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
 import {
   acknowledgeCodingBridgeResponseForConversation,
   listPendingCodingBridgeResponsesForConversation,
@@ -1209,6 +1209,69 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           command.instruction = cleanCommand.instruction;
           command.gatedMessage = cleanCommand.gatedMessage;
         }
+      }
+      // Explicit DEV-only browser wake capability. An OAuth channel is an owner
+      // fence, NOT proof of a ChatGPT session. The paired worker must verify
+      // the logged-in browser and exact allowlisted tab before any keypress.
+      // Never open this exception to natural language, legacy credentials or PROD.
+      if (/^DEV_CHATGPT_WAKE_V1(?:\s|$)/i.test(command.instruction)) {
+        const wake = /^DEV_CHATGPT_WAKE_V1 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) event=([0-9a-f]{64})$/i.exec(command.instruction);
+        const principalChannel = parsed.conversationId ?? "";
+        const allowedChannels = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "").split(",").map(v => v.trim()).filter(Boolean));
+        const allowedChats = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS"] ?? "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean));
+        const allowed = identity.kind === "dev_relay" &&
+          process.env["APP_ENV"] === "development" &&
+          process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] === "true" &&
+          effectiveConfirmed &&
+          /^ai-engine-oauth:[a-f0-9]{64}$/.test(principalChannel) &&
+          allowedChannels.has(principalChannel) &&
+          !!wake && allowedChats.has(wake[1]!.toLowerCase());
+        if (!allowed || !wake) {
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "DEV_CHATGPT_WAKE_DENIED: only confirmed, paired, allowlisted DEV wake events are permitted." }],
+            structuredContent: { blocked: true, reason: "DEV_CHATGPT_WAKE_DENIED", dispatched: false, browserWakeVerified: false },
+            isError: true,
+          }));
+          return;
+        }
+        // Stable per owner+event ID, so a repeated MCP call cannot create a
+        // second work command. The worker also checks marker visibility.
+        const wakeEventId = wake[2]!.toLowerCase();
+        const destinationConversationId = wake[1]!.toLowerCase();
+        const externalCommandId = "dev-chatgpt-wake:" + createHash("sha256")
+          .update(principalChannel + "|" + destinationConversationId + "|" + wakeEventId).digest("hex");
+        try {
+          const queued = await dispatchExternalAgentWork({
+            clientId: "openclaw-travelintrips-dev",
+            instruction: "DEV_CHATGPT_WAKE_V1 conversation=" + destinationConversationId + " event=" + wakeEventId,
+            source: "ai-core-dev-chatgpt-wake",
+            externalCommandId,
+            metadata: {
+              conversationId: principalChannel, targetConversationId: destinationConversationId,
+              eventId: wakeEventId, capability: "chatgpt:wake",
+              browserPairing: "worker_must_verify_authenticated_exact_tab",
+              source: "authorized-dev-browser-wake", devOnly: true,
+            },
+          });
+          const result = {
+            kind: "chatgpt_wake", status: queued.created ? "RECEIVED" : "ALREADY_QUEUED",
+            commandId: queued.command.id, clientId: queued.clientId,
+            created: queued.created, executionEnvironment: "DEV",
+            browserWakeVerified: false, deliveryVerified: false,
+            reply: "DEV wake queued. Verify worker browser callback; queue ACK is not a ChatGPT reply.",
+          };
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result, isError: false,
+          }));
+        } catch {
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "DEV_CHATGPT_WAKE_WORKER_UNAVAILABLE: no browser wake was confirmed." }],
+            structuredContent: { blocked: true, reason: "DEV_CHATGPT_WAKE_WORKER_UNAVAILABLE", browserWakeVerified: false },
+            isError: true,
+          }));
+        }
+        return;
       }
       if (identity.kind === "dev_relay" && (
         namedDevWorkers.length !== 1 ||
