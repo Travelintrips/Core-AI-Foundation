@@ -18,3 +18,5 @@ export const logger = pino({
         },
       }),
 });
+// Debug GPT job session guard state
+logger.debug({ session: process.env.GPT_JOB_SESSION_GUARD }, 'GPT job session guard state');
