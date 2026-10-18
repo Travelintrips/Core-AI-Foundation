@@ -42,6 +42,25 @@ vi.mock("../aiSecretService.js", () => ({
 const execFileAsync = promisify(execFile);
 const cleanup: string[] = [];
 
+describe('Session Guard Logic', () => {
+  it('should allow valid sessions', async () => {
+    // Setup a valid session context
+    const result = await invokeConstrainedAiProposal({ sessionExpiresAt: Date.now() + 10000 });
+    expect(result).toBeDefined();
+  });
+
+  it('should handle expired sessions', async () => {
+    // Simulate an expired session
+    await expect(invokeConstrainedAiProposal({ sessionExpiresAt: Date.now() - 1000 })).rejects.toThrow(/session expired/i);
+  });
+
+  it('should exit early on guard trigger', async () => {
+    // Simulate guard condition triggering early exit
+    const guardResult = await validateAndApplyAiProposal({ guardTriggered: true } as any);
+    expect(guardResult).toEqual({ exitedEarly: true });
+  });
+});
+
 async function git(root: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", args, {
     cwd: root,
