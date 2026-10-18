@@ -16,6 +16,7 @@ import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
+import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult } from "./devContinuityWakeEvents.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -597,6 +598,15 @@ export async function claimCodingBridgeCommand(input: {
       SELECT id, metadata_json ->> 'assignedClientId' AS assigned_client_id
       FROM ai_platform.ai_coding_bridge_commands
       WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+        AND command_type <> 'DEV_CONTINUITY_WATCH'
+        AND CASE WHEN command_type = 'EXTERNAL_AGENT_WORK'
+          AND metadata_json ->> 'capability' = 'chatgpt:wake'
+          AND metadata_json ? 'devContinuity'
+          THEN COALESCE(
+            (metadata_json #>> '{devContinuity,expiresAt}') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$'
+            AND (metadata_json #>> '{devContinuity,expiresAt}') >
+              to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), false)
+          ELSE true END
         AND (
           status = 'RECEIVED'
           OR (
@@ -680,6 +690,7 @@ export async function renewCodingBridgeCommandClaim(input: {
         updated_at = NOW()
     WHERE id = ${input.commandId}::uuid
       AND status = 'PROCESSING'
+      AND command_type <> 'DEV_CONTINUITY_WATCH'
       AND metadata_json ->> 'assignedClientId' = ${input.clientId}::text
       AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
     RETURNING id
@@ -801,9 +812,10 @@ export async function completeCodingBridgeCommand(input: {
         updated_at = NOW()
     WHERE id = ${input.commandId}::uuid
       AND status = 'PROCESSING'
+      AND command_type <> 'DEV_CONTINUITY_WATCH'
       AND metadata_json ->> 'assignedClientId' = ${input.clientId}::text
       AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
-    RETURNING id, task_id
+    RETURNING id, task_id, source, command_type, metadata_json
   `);
     const row = result.rows?.[0] as Record<string, unknown> | undefined;
     if (!row) return null;
@@ -814,9 +826,15 @@ export async function completeCodingBridgeCommand(input: {
       metadataJson:{...details,...evidence},
     }).returning();
     if(!response)throw new Error("Failed to persist terminal bridge response");
-    return {response,taskId};
+    return {response,taskId,command:row};
   });
   if(!persisted)return null;
+  const continuityResult = devContinuityResultFromCommittedCommand({
+    id: persisted.command["id"], source: persisted.command["source"],
+    commandType: persisted.command["command_type"], metadata: persisted.command["metadata_json"],
+    authenticatedWorkerId: input.clientId, status: verifiedStatus, details,
+  });
+  if (continuityResult) await emitDevContinuityWakeResult(continuityResult);
   const response=await publishPersistedCodingBridgeResponse(persisted.response,{
     commandId:input.commandId,taskId:persisted.taskId,kind:verifiedStatus,message:input.message,
     checkpoint:{status:verifiedStatus,statusCode:evidence.statusCode,deliveryCode:evidence.deliveryCode,e2eCode:evidence.e2eCode,clientId:input.clientId},

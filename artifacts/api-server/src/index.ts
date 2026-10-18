@@ -78,6 +78,8 @@ const ledgerReconciliation =
   await import("./services/aiTaskLedgerReconciliationService.js");
 const providerBilling =
   await import("./services/aiProviderBillingService.js");
+const devContinuity =
+  await import("./services/devContinuityWatchService.js");
 const { pool, isDatabaseAuthenticationError } = await import("@workspace/db");
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
@@ -119,6 +121,10 @@ async function initializeRuntimeServices(): Promise<void> {
   if (devBackgroundRuntimeDisabled) {
     try {
       await pool.query("SELECT 1");
+      // This narrowly authorized DEV deadline service has its own explicit
+      // feature gate; it does not enable coding workers or general schedulers.
+      await runStartupStep("[dev-continuity] Restore deadlines", () =>
+        devContinuity.startDevContinuityWatchRuntime());
       logger.info(
         "[startup] DEV background runtime disabled; HTTP/API remains available without autonomous workers or schedulers",
       );
@@ -167,6 +173,8 @@ async function initializeRuntimeServices(): Promise<void> {
   await runStartupStep("[observability] Table init", () => ensureObservabilityTables());
   await runStartupStep("[submit-idempotency] Table init", () => ensureSubmitIdempotencyTable());
   await runStartupStep("[coding-bridge] Table init", () => ensureCodingControlBridgeTables());
+  await runStartupStep("[dev-continuity] Restore deadlines", () =>
+    devContinuity.startDevContinuityWatchRuntime());
   await runStartupStep("[ai-core-chat-inbox] Table init", () => ensureAiCoreChatInboxTable());
   await runStartupStep("[mcp-events] Table init", () => mcpEvents.ensureAiCoreMcpEventTables());
   await runStartupStep("[agent-runtime] Scoped token bootstrap", () => ensureAgentServiceTokenBootstrap());
@@ -306,6 +314,7 @@ function shutdown(signal: string): void {
   healthAlerts.shutdown();
   incidentWatcher.shutdown();
   providerBilling.stopAiProviderBillingMonitor();
+  devContinuity.stopDevContinuityWatchRuntime();
   Promise.all([
     scheduler.shutdown(),
     jobDispatcher.shutdown(),

@@ -24,6 +24,13 @@ import {
 } from "../services/aiCoreMcpOAuthService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { dispatchExternalAgentWork, getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
+import { isDevBrowserWakeAllowed, queueDevBrowserWake } from "../services/devChatGptWakeService.js";
+import {
+  isDevChatGptContinuityMessage, parseDevChatGptContinuityCommand,
+} from "../services/devChatGptContinuityProtocol.js";
+import {
+  registerDevContinuityWatch, updateDevContinuityWatch, getDevContinuityWatchStatus,
+} from "../services/devContinuityWatchService.js";
 import {
   acknowledgeCodingBridgeResponseForConversation,
   listPendingCodingBridgeResponsesForConversation,
@@ -1210,6 +1217,55 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           command.gatedMessage = cleanCommand.gatedMessage;
         }
       }
+      // Only strict, owner-bound DEV control records enter the deadline service.
+      // Registration arms a passive watch; it never dispatches browser work here.
+      if (isDevChatGptContinuityMessage(command.instruction)) {
+        const continuity = parseDevChatGptContinuityCommand(command.instruction);
+        const ownerChannel = parsed.conversationId ?? "";
+        const allowedChannels = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "")
+          .split(",").map(value => value.trim()).filter(Boolean));
+        const authorized = identity.kind === "dev_relay" && process.env["APP_ENV"] === "development" &&
+          /^ai-engine-oauth:[a-f0-9]{64}$/.test(ownerChannel) && allowedChannels.has(ownerChannel) &&
+          !!continuity && (continuity.kind === "status" || effectiveConfirmed) &&
+          (continuity.kind !== "register" || isDevBrowserWakeAllowed({
+            ownerChannel, targetConversationId: continuity.targetConversationId,
+          }));
+        if (!continuity || !authorized) {
+          const reason = !continuity ? "DEV_CHATGPT_CONTINUITY_INVALID" : "DEV_CHATGPT_CONTINUITY_DENIED";
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: reason }],
+            structuredContent: { blocked: true, reason, dispatched: false, executionEnvironment: "DEV" },
+            isError: true,
+          }));
+          return;
+        }
+        try {
+          const result = continuity.kind === "register"
+            ? await registerDevContinuityWatch({ ownerChannel,
+              targetConversationId: continuity.targetConversationId, jobId: continuity.jobId,
+              checkpointSha: continuity.checkpointSha, idleSeconds: continuity.idleSeconds, ttlSeconds: continuity.ttlSeconds })
+            : continuity.kind === "checkpoint"
+              ? await updateDevContinuityWatch({ ownerChannel, jobId: continuity.jobId,
+                expectedRevision: continuity.expectedRevision, checkpointSha: continuity.checkpointSha, state: continuity.state })
+              : await getDevContinuityWatchStatus({ ownerChannel, jobId: continuity.jobId });
+          const response = { ...result, executionEnvironment: "DEV" };
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: JSON.stringify(response) }],
+            structuredContent: response, isError: "blocked" in result && result.blocked === true,
+          }));
+        } catch (error) {
+          // Do not expose SQL, credentials, checkpoints or arbitrary service error text.
+          const message = error instanceof Error ? error.message : "";
+          const reason = /^DEV_(?:CHATGPT_)?CONTINUITY_[A-Z0-9_]{1,80}$/.test(message)
+            ? message : "DEV_CHATGPT_CONTINUITY_UNAVAILABLE";
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: reason }],
+            structuredContent: { blocked: true, reason, executionEnvironment: "DEV" },
+            isError: true,
+          }));
+        }
+        return;
+      }
       // Explicit DEV-only browser wake capability. An OAuth channel is an owner
       // fence, NOT proof of a ChatGPT session. The paired worker must verify
       // the logged-in browser and exact allowlisted tab before any keypress.
@@ -1217,15 +1273,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       if (/^DEV_CHATGPT_WAKE_V1(?:\s|$)/i.test(command.instruction)) {
         const wake = /^DEV_CHATGPT_WAKE_V1 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) event=([0-9a-f]{64})$/i.exec(command.instruction);
         const principalChannel = parsed.conversationId ?? "";
-        const allowedChannels = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "").split(",").map(v => v.trim()).filter(Boolean));
-        const allowedChats = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS"] ?? "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean));
-        const allowed = identity.kind === "dev_relay" &&
-          process.env["APP_ENV"] === "development" &&
-          process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] === "true" &&
-          effectiveConfirmed &&
-          /^ai-engine-oauth:[a-f0-9]{64}$/.test(principalChannel) &&
-          allowedChannels.has(principalChannel) &&
-          !!wake && allowedChats.has(wake[1]!.toLowerCase());
+        const allowed = identity.kind === "dev_relay" && effectiveConfirmed && !!wake &&
+          isDevBrowserWakeAllowed({ ownerChannel: principalChannel, targetConversationId: wake[1]! });
         if (!allowed || !wake) {
           res.status(200).json(rpcResult(body.id ?? null, {
             content: [{ type: "text", text: "DEV_CHATGPT_WAKE_DENIED: only confirmed, paired, allowlisted DEV wake events are permitted." }],
@@ -1238,25 +1287,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         // second work command. The worker also checks marker visibility.
         const wakeEventId = wake[2]!.toLowerCase();
         const destinationConversationId = wake[1]!.toLowerCase();
-        const externalCommandId = "dev-chatgpt-wake:" + createHash("sha256")
-          .update(principalChannel + "|" + destinationConversationId + "|" + wakeEventId).digest("hex");
         try {
-          const queued = await dispatchExternalAgentWork({
-            clientId: "openclaw-travelintrips-dev",
-            instruction: "DEV_CHATGPT_WAKE_V1 conversation=" + destinationConversationId + " event=" + wakeEventId,
-            // Reuse DEV RLS-approved queue source; wake isolation stays in typed instruction + metadata.
-            source: "ai-core",
-            externalCommandId,
-            metadata: {
-              conversationId: principalChannel, targetConversationId: destinationConversationId,
-              eventId: wakeEventId, capability: "chatgpt:wake",
-              browserPairing: "worker_must_verify_authenticated_exact_tab",
-              source: "authorized-dev-browser-wake", devOnly: true,
-            },
-          });
+          const queued = await queueDevBrowserWake({ ownerChannel: principalChannel,
+            targetConversationId: destinationConversationId, eventId: wakeEventId });
           const result = {
             kind: "chatgpt_wake", status: queued.created ? "RECEIVED" : "ALREADY_QUEUED",
-            commandId: queued.command.id, clientId: queued.clientId,
+            commandId: queued.commandId, clientId: queued.clientId,
             created: queued.created, executionEnvironment: "DEV",
             browserWakeVerified: false, deliveryVerified: false,
             reply: "DEV wake queued. Verify worker browser callback; queue ACK is not a ChatGPT reply.",

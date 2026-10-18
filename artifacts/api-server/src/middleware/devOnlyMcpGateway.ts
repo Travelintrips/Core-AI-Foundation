@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { oauthIssuer, verifyMcpAccessToken } from "../services/aiCoreMcpOAuthService.js";
+import { isDevChatGptContinuityMessage, parseDevChatGptContinuityCommand } from "../services/devChatGptContinuityProtocol.js";
 
 const SCOPES: Readonly<Record<string, string>> = Object.freeze({
   handshake_ai_core: "ai_core.progress", query_ai_core: "ai_core.progress",
@@ -101,7 +102,7 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
         eventChannelBinding: "OAUTH_PRINCIPAL_CLIENT_CHANNEL", executionEnvironment: "DEV",
         routePolicy: "DEV_ONLY_NO_PROD_FALLBACK", backendProbeVerified,
         backendProbe: backendProbeVerified ? "authorized_private_inbox_read" : null,
-        relayTools: [...RELAY_TOOLS], relayScope: "existing_bounded_read_only_dev_workers",
+        relayTools: [...RELAY_TOOLS], relayScope: "bounded_dev_workers_and_owner_authorized_chatgpt_continuity",
         unavailableTools: ["query_ai_core", "get_ai_core_task_progress"],
         chatSessionId: null, chatSessionIdVerified: false, conversationAckVerified: false,
         browserWakeVerified: false, conversationBindingStatus: "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
@@ -117,6 +118,20 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
     if (BOUND.has(name)) args.conversationId = channel;
     if (name === "get_external_agent_command_progress") args.ownerConversationId = channel;
     if (name === "send_ai_core_command" && args.branch === undefined) args.branch = "develop";
+    if (name === "send_ai_core_command" && typeof args.message === "string") {
+      // Parse without importing any business service into this isolated gateway.
+      // The backend separately enforces its current DEV flags and paired destination allowlists.
+      const inlineConfirmation = /^@?\s*confirmed=true\b[\s:,-]*/i.test(args.message.trim());
+      const cleaned = args.message.trim().replace(/^(@?\s*)confirmed=true\b[\s:,-]*/i, "$1");
+      const instruction = cleaned.startsWith("@") ? cleaned.slice(1).trim() : cleaned.trim();
+      if (isDevChatGptContinuityMessage(instruction)) {
+        const continuity = parseDevChatGptContinuityCommand(instruction);
+        if (!continuity) { error("DEV_CHATGPT_CONTINUITY_INVALID"); return; }
+        if (continuity.kind !== "status" && args.confirmed !== true && !inlineConfirmation) {
+          error("DEV_CHATGPT_CONTINUITY_DENIED"); return;
+        }
+      }
+    }
     try {
       const upstream = await request(config.url, {
         method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json, text/event-stream", Authorization: "Bearer " + config.key },
