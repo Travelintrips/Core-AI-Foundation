@@ -1,4 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
+
+it('retries on cancellation and succeeds', async () => {
+  const cancelError = new Error('Request cancelled');
+  cancelError.name = 'AbortError';
+  const mockRequest = vi.fn()
+    .mockRejectedValueOnce(cancelError)
+    .mockResolvedValue({ number: 77, state: 'open', merged: true, draft: false, mergeable: true, mergeable_state: 'clean', html_url: 'https://github.com/Travelintrips/Core-AI-Foundation/pull/77', head: { sha: headSha }, base: { ref: 'main', sha: baseSha } });
+  const client = passingClient();
+  client.request = mockRequest;
+  const result = await mergeVerifiedPullRequest(input(), client);
+  expect(mockRequest).toHaveBeenCalledTimes(2);
+  expect(result.merged).toBe(true);
+});
 import {
   mergeVerifiedPullRequest,
   verifyPublishedPullRequest,
