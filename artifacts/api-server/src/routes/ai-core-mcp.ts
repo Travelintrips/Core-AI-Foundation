@@ -110,6 +110,7 @@ const TaskProgressArgs = z.object({
 }).strict();
 const ExternalCommandProgressArgs = z.object({
   commandId: z.string().uuid(),
+  ownerConversationId: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
 const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]);
@@ -1096,6 +1097,14 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     return;
   }
 
+  // Scoped relay cannot access profile, infrastructure or other generic MCP tools.
+  if (identity.kind === "dev_relay" &&
+      !["send_ai_core_command", "get_external_agent_command_progress",
+        "subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event",
+        "unsubscribe_ai_core_events"].includes(params.name)) {
+    res.status(403).json(rpcError(body.id ?? null, -32603, "SCOPED_DEV_RELAY_DENIED"));
+    return;
+  }
   try {
     let payload: unknown;
     if (params.name === "handshake_ai_core") {
@@ -1404,8 +1413,35 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       );
     } else if (params.name === "get_external_agent_command_progress") {
       const parsed = ExternalCommandProgressArgs.parse(params.arguments ?? {});
-      const state = await getExternalAgentWorkState(parsed.commandId);
-      if (!state) {
+      let state = await getExternalAgentWorkState(parsed.commandId);
+      // The DEV gateway may only expose a command belonging to the signed
+      // principal's conversation channel, never another user's UUID.
+      if (identity.kind === "dev_relay") {
+        const meta = state?.command.metadataJson as Record<string, unknown> | null | undefined;
+        if (!parsed.ownerConversationId || meta?.["conversationId"] !== parsed.ownerConversationId ||
+            !ISOLATED_DEV_WORKERS.includes(meta?.["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number])) {
+          state = null;
+        }
+      }
+      if (identity.kind === "oauth" && devRelayEnabled()) {
+        const ownerConversationId = oauthEventChannel(identity);
+        if (ownerConversationId) {
+          try {
+            const devProgress = await callDevMcpTool("get_external_agent_command_progress",
+              { commandId: parsed.commandId, ownerConversationId });
+            if (devProgress["found"] === true && devProgress["assignedClientId"] &&
+                ISOLATED_DEV_WORKERS.includes(devProgress["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number])) {
+              payload = devProgress;
+              state = null;
+            }
+          } catch {
+            // PROD progress is still available. A DEV-only UUID remains NOT_FOUND.
+          }
+        }
+      }
+      if (payload) {
+        // Matched and ownership-verified DEV progress above.
+      } else if (!state) {
         payload = {
           found: false,
           commandId: parsed.commandId,
@@ -1466,9 +1502,18 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
       const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
+      let devEvents: unknown[] = [];
+      if (identity.kind === "oauth" && devRelayEnabled()) {
+        try {
+          const fromDev = await callDevMcpTool("read_ai_core_events", parsed);
+          if (Array.isArray(fromDev["events"])) devEvents = fromDev["events"];
+        } catch {
+          // Do not claim DEV delivery when DEV is unavailable.
+        }
+      }
       payload = {
         conversationId: parsed.conversationId,
-        events: rows
+        events: [...rows
           .map((row) => ({
             ...row,
             eventType: classifyLifecycleEvent({
@@ -1478,12 +1523,21 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
               metadata: row.metadata,
             }),
           }))
-          .filter((row) => row.eventType !== null),
+          .filter((row) => row.eventType !== null), ...devEvents].slice(0, parsed.limit),
       };
     } else if (params.name === "ack_ai_core_event") {
       const parsed = eventChannelArgs(identity, AckEventArgs.parse(params.arguments ?? {}));
-      const acknowledged = await acknowledgeCodingBridgeResponseForConversation(parsed);
-      payload = { acknowledged: Boolean(acknowledged), responseId: parsed.responseId };
+      let acknowledged = false;
+      if (identity.kind === "oauth" && devRelayEnabled()) {
+        try {
+          const fromDev = await callDevMcpTool("ack_ai_core_event", parsed);
+          acknowledged = fromDev["acknowledged"] === true;
+        } catch {
+          // An unavailable DEV relay never authorizes an ACK.
+        }
+      }
+      if (!acknowledged) acknowledged = Boolean(await acknowledgeCodingBridgeResponseForConversation(parsed));
+      payload = { acknowledged, responseId: parsed.responseId };
     } else if (params.name === "unsubscribe_ai_core_events") {
       const parsed = eventChannelArgs(identity, UnsubscribeEventsArgs.parse(params.arguments ?? {}));
       const unsubscribed = await unsubscribeCodingBridgeConversation(parsed.conversationId);
