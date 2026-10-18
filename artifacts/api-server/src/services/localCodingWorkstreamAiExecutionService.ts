@@ -46,6 +46,9 @@ import {
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
+// TODO: Wrap the constrained model provider invocation in try/catch.
+// In catch, if error.statusCode === 400 or error.code === "PROVIDER_BAD_REQUEST", throw new ApplicationError("AI_INVOKE_BAD_REQUEST", "Model invocation failed with bad request");
+
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
 import {
