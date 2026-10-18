@@ -1227,7 +1227,17 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         // only a separate dedicated relay credential, never the PROD OAuth JWT.
         // The conversation channel is derived from the authenticated principal.
         const channel = oauthEventChannel(identity);
-        if (identity.kind !== "oauth" || namedDevWorkers.length !== 1 ||
+        // Public OAuth authentication is not sufficient to authorize access
+        // to a separate DEV environment. An explicit admin allowlist is
+        // required and defaults to deny-all when unconfigured.
+        const allowedDevPrincipals = new Set(
+          (process.env["AI_CORE_DEV_RELAY_ALLOWED_USER_IDS"] ?? "")
+            .split(",").map((id) => id.trim()).filter(Boolean),
+        );
+        const principalAllowed = identity.kind === "oauth" &&
+          Boolean(identity.user) &&
+          allowedDevPrincipals.has(String(identity.user?.id));
+        if (!principalAllowed || identity.kind !== "oauth" || namedDevWorkers.length !== 1 ||
             !channel || !effectiveConfirmed || !devRelayEnabled()) {
           res.status(200).json(rpcResult(body.id ?? null, {
             content: [{ type: "text", text: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION: no DEV job was dispatched." }],

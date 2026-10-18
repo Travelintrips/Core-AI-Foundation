@@ -445,6 +445,7 @@ describe("MCP command two-way routing", () => {
     vi.stubEnv("TEST_AI_CORE_INTERNAL_BASE_URL", "http://ai-core-prod-api:3000");
     vi.stubEnv("AI_CORE_DEV_RELAY_KEY", "scoped-dev-relay-".padEnd(64, "x"));
     vi.stubEnv("AI_CORE_DEV_RELAY_URL", "https://dev-aicore.cstlogistic.co.id/api/ai/core-chat/mcp");
+    vi.stubEnv("AI_CORE_DEV_RELAY_ALLOWED_USER_IDS", "user-2");
     vi.mocked(verifyMcpAccessToken).mockResolvedValue({
       user: { id: "user-2" }, scopes: new Set(["ai_core.command", "ai_core.progress", "ai_core.events"]),
       clientId: "chatgpt-v2-client",
@@ -491,6 +492,29 @@ describe("MCP command two-way routing", () => {
     const ack = JSON.parse(String(vi.mocked(fetch).mock.calls[2]?.[1]?.body));
     expect(ack.params.arguments.conversationId).toBe(channel);
     expect(ack.params.name).toBe("ack_ai_core_event");
+  });
+
+  it("fails closed when a valid OAuth principal lacks explicit DEV environment authorization", async () => {
+    const { verifyMcpAccessToken } = await import("../services/aiCoreMcpOAuthService.js");
+    vi.stubEnv("TEST_AI_CORE_INTERNAL_BASE_URL", "http://ai-core-prod-api:3000");
+    vi.stubEnv("AI_CORE_DEV_RELAY_KEY", "scoped-dev-relay-".padEnd(64, "x"));
+    vi.stubEnv("AI_CORE_DEV_RELAY_URL", "https://dev-aicore.cstlogistic.co.id/api/ai/core-chat/mcp");
+    vi.stubEnv("AI_CORE_DEV_RELAY_ALLOWED_USER_IDS", "allowed-admin-id");
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "not-authorized" }, scopes: new Set(["ai_core.command"]),
+      clientId: "chatgpt-v2-client",
+    } as never);
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const response = await request(app).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer oauth-other-user")
+      .send({ jsonrpc: "2.0", id: 72, method: "tools/call",
+        params: { name: "send_ai_core_command", arguments: {
+          message: "Delegasikan ke openclaw-travelintrips-dev; jalankan hostname pada pc travelintrips",
+          confirmed: true, conversationId: "attempted-forged-conversation" } } });
+    expect(response.body.result.structuredContent).toMatchObject({
+      blocked: true, dispatched: false, reason: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION",
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
 });
