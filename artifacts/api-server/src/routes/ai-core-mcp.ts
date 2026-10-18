@@ -1244,7 +1244,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           const queued = await dispatchExternalAgentWork({
             clientId: "openclaw-travelintrips-dev",
             instruction: "DEV_CHATGPT_WAKE_V1 conversation=" + destinationConversationId + " event=" + wakeEventId,
-            source: "ai-core-dev-chatgpt-wake",
+            // Reuse DEV RLS-approved queue source; wake isolation stays in typed instruction + metadata.
+            source: "ai-core",
             externalCommandId,
             metadata: {
               conversationId: principalChannel, targetConversationId: destinationConversationId,
