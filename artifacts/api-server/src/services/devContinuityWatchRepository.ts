@@ -236,11 +236,15 @@ export class DevContinuityWatchRepository {
       if (at >= Date.parse(current.expiresAt)) return this.save(tx, current, { ...current, state: "EXPIRED", active: false,
         evidence: { ...current.evidence, failureReason: "WATCH_TTL_EXPIRED" } }, at);
       const state = input.state ?? "RUNNING";
+      const closing = state === "COMPLETED" || state === "CANCELLED";
       return this.save(tx, current, { ...current, revision: current.revision + 1, state,
         active: !terminalStates.has(state), checkpointSha: input.checkpointSha?.toLowerCase() ?? current.checkpointSha,
         lastProgressAt: new Date(at).toISOString(), deadlineAt: new Date(Math.min(at + current.idleSeconds * 1000, Date.parse(current.expiresAt))).toISOString(),
-        claimToken: null, claimLeaseUntil: null, wakeEventId: null, wakeCommandId: null, triggeredAt: null,
-        evidence: { progressRecordedAt: new Date(at).toISOString() } }, at);
+        claimToken: null, claimLeaseUntil: null,
+        wakeEventId: closing ? current.wakeEventId : null,
+        wakeCommandId: closing ? current.wakeCommandId : null,
+        triggeredAt: closing ? current.triggeredAt : null,
+        evidence: { ...(closing ? current.evidence : {}), progressRecordedAt: new Date(at).toISOString() } }, at);
     });
   }
 

@@ -173,6 +173,20 @@ describe("passive DEV continuity persistence", () => {
       eventId: claimed.wakeEventId!, wakeCommandId: childId }, initial + 60_300)).toEqual(result);
   });
 
+  it.each(["COMPLETED", "CANCELLED"] as const)("retains the validated current wake evidence when closing as %s", async state => {
+    const { repository } = store(); await repository.register(input, initial);
+    const claimed = (await repository.claim(owner, input.jobId, 1, initial + 60_000))!;
+    const confirmed = (await repository.recordResult(callback(claimed), initial + 60_200))!;
+    const closed = await repository.update({ ownerChannel: owner, jobId: input.jobId,
+      expectedRevision: confirmed.revision, state }, initial + 60_300);
+    expect(closed).toMatchObject({ state, active: false, wakeEventId: confirmed.wakeEventId,
+      wakeCommandId: childId, triggeredAt: confirmed.triggeredAt, wakeCount: 1,
+      evidence: { ...confirmed.evidence, evidenceFingerprint: "f".repeat(64),
+        progressRecordedAt: new Date(initial + 60_300).toISOString() } });
+    expect(await repository.get(owner, input.jobId)).toEqual(closed);
+    expect(await repository.claim(owner, input.jobId, closed.revision, initial + 180_000)).toBeNull();
+  });
+
   it("preserves the three-wake lifetime budget across authenticated progress revisions", async () => {
     const { repository } = store(); let watch = await repository.register(input, initial);
     for (let cycle = 0; cycle < 3; cycle++) {
