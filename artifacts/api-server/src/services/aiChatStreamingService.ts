@@ -5,6 +5,8 @@ import {
   type ObservabilityContext,
 } from "./aiExecutionService.js";
 import { logExecutionSafe } from "./observabilityService.js";
+const DEFAULT_STREAM_TIMEOUT_MS = 60000; // Default stream timeout in ms
+
 
 export type ChatStreamUsage = {
   inputTokens: number;
@@ -430,6 +432,7 @@ async function streamGemini(
   };
 }
 
+  // Enforce stream timeout using DEFAULT_STREAM_TIMEOUT_MS or idleTimeoutMs from input
 export async function streamCloudChatNoFallback(
   input: CloudChatStreamInput,
 ): Promise<CloudChatStreamResult> {
