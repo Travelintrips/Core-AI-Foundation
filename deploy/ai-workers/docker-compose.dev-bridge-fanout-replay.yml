@@ -25,8 +25,10 @@ services:
     tmpfs:
       - /tmp:size=16777216,mode=1777
     volumes:
-      - ../../artifacts/api-server/src/services/devBridgeFanoutReplayStore.ts:/app/artifacts/api-server/src/services/devBridgeFanoutReplayStore.ts:ro
-      - ../../artifacts/api-server/src/scripts/devBridgeFanoutReplayWorker.ts:/app/artifacts/api-server/src/scripts/devBridgeFanoutReplayWorker.ts:ro
+      # Use a clean git-archive of the CI-verified commit, never the mutable API
+      # checkout or secrets. Some build images package source as root-only 0600;
+      # a separate read-only code snapshot preserves the non-root worker policy.
+      - ../../artifacts/api-server/src:/app/artifacts/api-server/src:ro
     networks: [control]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18096').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
