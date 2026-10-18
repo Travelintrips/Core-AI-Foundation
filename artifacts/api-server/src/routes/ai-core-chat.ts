@@ -2,6 +2,7 @@ import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
+import { registerDellWakeAgent } from "../services/dellWakeAgentService.js";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
