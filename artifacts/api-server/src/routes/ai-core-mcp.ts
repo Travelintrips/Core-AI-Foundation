@@ -110,6 +110,7 @@ const TaskProgressArgs = z.object({
 }).strict();
 const ExternalCommandProgressArgs = z.object({
   commandId: z.string().uuid(),
+  ownerConversationId: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
 const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]);
@@ -272,6 +273,7 @@ function bearerToken(req: Request): string {
 }
 
 type McpIdentity =
+  | { kind: "dev_relay"; connectorKey: string; scopes: Set<string>; user: null }
   | { kind: "legacy"; connectorKey: string; scopes: Set<string>; user: null }
   | {
       kind: "oauth";
@@ -286,6 +288,14 @@ async function authenticate(req: Request): Promise<McpIdentity | null> {
   if (!supplied) return null;
 
   const connectorKey = process.env["AI_CORE_CHAT_CONNECTOR_KEY"]?.trim() ?? "";
+  // Separate server-to-server DEV relay credential. This token is deliberately
+  // not an OAuth token, never authorizes PROD, and cannot be used for profile.
+  const relayKey = process.env["AI_CORE_DEV_RELAY_KEY"]?.trim() ?? "";
+  if (process.env["APP_ENV"] === "development" && relayKey &&
+      connectorKey && safeEqualSecret(supplied, relayKey)) {
+    return { kind: "dev_relay", connectorKey,
+      scopes: new Set(["ai_core.command", "ai_core.progress", "ai_core.events"]), user: null };
+  }
   if (connectorKey && safeEqualSecret(supplied, connectorKey)) {
     return {
       kind: "legacy",
@@ -743,6 +753,44 @@ function buildMcpDiscoveryPayload() {
   };
 }
 
+const ISOLATED_DEV_WORKERS = [
+  "openclaw-travelintrips-dev",
+  "openclaw-pc-worker-dev",
+  "openclaw-vps-dev-consumer",
+] as const;
+function explicitIsolatedDevWorkers(message: string): string[] {
+  return ISOLATED_DEV_WORKERS.filter((worker) => new RegExp("\\b" + worker + "\\b", "i").test(message));
+}
+function devRelayEnabled(): boolean {
+  return Boolean(process.env["AI_CORE_DEV_RELAY_KEY"]?.trim() && process.env["AI_CORE_DEV_RELAY_URL"]?.trim());
+}
+async function callDevMcpTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const key = process.env["AI_CORE_DEV_RELAY_KEY"]?.trim() ?? "";
+  const url = process.env["AI_CORE_DEV_RELAY_URL"]?.trim() ?? "";
+  // Never let deployment configuration turn the DEV relay into an arbitrary
+  // URL fetcher or accidentally route to the shared PROD endpoint.
+  if (key.length < 32 || !/^https:\/\/dev(?:-aicore)?\.cstlogistic\.co\.id\/api\/ai\/core-chat\/mcp$/.test(url)) {
+    throw new Error("SCOPED_DEV_RELAY_UNAVAILABLE");
+  }
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+    body: JSON.stringify({ jsonrpc: "2.0", id: randomUUID(), method: "tools/call", params: { name, arguments: args } }),
+    redirect: "error",
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!response.ok) throw new Error("SCOPED_DEV_RELAY_HTTP_" + response.status);
+  const envelope = await response.json() as { error?: { code?: number }; result?: { isError?: boolean; structuredContent?: unknown } };
+  const payload = envelope.result?.structuredContent;
+  if (envelope.error || !payload || typeof payload !== "object") {
+    throw new Error("SCOPED_DEV_RELAY_INVALID_RESPONSE");
+  }
+  if (envelope.result?.isError) {
+    return { ...(payload as Record<string, unknown>), isError: true };
+  }
+  return payload as Record<string, unknown>;
+}
+
 async function callAiCore(path: string, init: RequestInit, key: string) {
   const baseUrl = resolveAiCoreInternalBaseUrl().replace(/\/$/, "");
   const response = await fetch(`${baseUrl}/api${path}`, {
@@ -879,7 +927,9 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       },
     });
     const identity = await authenticate(req);
-    if (!identity || !identity.scopes.has("ai_core.events")) {
+    // A scoped DEV relay must never register native webhook delivery URLs.
+    // It may only use the authenticated, conversation-bound tools/call path.
+    if (!identity || identity.kind === "dev_relay" || !identity.scopes.has("ai_core.events")) {
       await logAudit({
         module: "mcp-events",
         action: "native_event_auth_denied",
@@ -1049,6 +1099,14 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     return;
   }
 
+  // Scoped relay cannot access profile, infrastructure or other generic MCP tools.
+  if (identity.kind === "dev_relay" &&
+      !["send_ai_core_command", "get_external_agent_command_progress",
+        "subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event",
+        "unsubscribe_ai_core_events"].includes(params.name)) {
+    res.status(403).json(rpcError(body.id ?? null, -32603, "SCOPED_DEV_RELAY_DENIED"));
+    return;
+  }
   try {
     let payload: unknown;
     if (params.name === "handshake_ai_core") {
@@ -1121,21 +1179,11 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         );
         return;
       }
-      // The public OAuth resource is shared with PROD. A named DEV executor
-      // must never be dispatched using PROD's connector credential or sticky
-      // fallback. Until scoped cross-environment delegation is configured,
-      // reject the request rather than silently running it in PROD.
-      const targetsIsolatedDevWorker = /\b(?:openclaw-travelintrips-dev|openclaw-pc-worker-dev|openclaw-vps-dev-consumer)\b/i
-        .test(command.instruction);
+      const namedDevWorkers = explicitIsolatedDevWorkers(command.instruction);
+      const targetsIsolatedDevWorker = namedDevWorkers.length > 0;
       const routedInternalUrl = resolveAiCoreInternalBaseUrl();
-      if (targetsIsolatedDevWorker && /(?:^|\/\/)ai-core-prod-api(?::|\/|$)/i.test(routedInternalUrl)) {
-        res.status(200).json(rpcResult(body.id ?? null, {
-          content: [{ type: "text", text: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION: Gateway OAuth is authenticated, but the current PROD backend is not permitted to execute work for the named DEV agent. No work was dispatched." }],
-          structuredContent: { blocked: true, reason: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION", dispatched: false, deliveryVerified: false },
-          isError: true,
-        }));
-        return;
-      }
+      const prodGatewayToDev = targetsIsolatedDevWorker &&
+        /(?:^|\/\/)ai-core-prod-api(?::|\/|$)/i.test(routedInternalUrl);
       // A callback to the originating ChatGPT session cannot be verified without
       // an explicit conversation binding. Do not enqueue a job that promises an
       // ACK or delivery to an unknown session.
@@ -1161,6 +1209,51 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           command.instruction = cleanCommand.instruction;
           command.gatedMessage = cleanCommand.gatedMessage;
         }
+      }
+      if (identity.kind === "dev_relay" && (
+        namedDevWorkers.length !== 1 ||
+        !/\b(?:hostname|host name|cek status|read.only)\b/i.test(command.instruction) ||
+        /\b(?:delete|hapus|deploy|merge|password|secret|token|restart|shell|terminal|ssh|powershell)\b/i.test(command.instruction)
+      )) {
+        res.status(200).json(rpcResult(body.id ?? null, {
+          content: [{ type: "text", text: "SCOPED_DEV_RELAY_DENIED: only an explicitly named, bounded read-only DEV task is permitted." }],
+          structuredContent: { blocked: true, reason: "SCOPED_DEV_RELAY_DENIED", dispatched: false },
+          isError: true,
+        }));
+        return;
+      }
+      if (prodGatewayToDev) {
+        // OAuth is verified on the public issuer first. The DEV backend accepts
+        // only a separate dedicated relay credential, never the PROD OAuth JWT.
+        // The conversation channel is derived from the authenticated principal.
+        const channel = oauthEventChannel(identity);
+        if (identity.kind !== "oauth" || namedDevWorkers.length !== 1 ||
+            !channel || !effectiveConfirmed || !devRelayEnabled()) {
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION: no DEV job was dispatched." }],
+            structuredContent: { blocked: true, reason: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION", dispatched: false },
+            isError: true,
+          }));
+          return;
+        }
+        try {
+          const relayPayload = await callDevMcpTool("send_ai_core_command", {
+            ...parsed, message: command.instruction, confirmed: true, conversationId: channel,
+          });
+          payload = relayPayload;
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: JSON.stringify(relayPayload) }],
+            structuredContent: relayPayload,
+            isError: relayPayload["isError"] === true,
+          }));
+        } catch {
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "SCOPED_DEV_RELAY_UNAVAILABLE: failed closed; no PROD fallback." }],
+            structuredContent: { blocked: true, reason: "SCOPED_DEV_RELAY_UNAVAILABLE", dispatched: false },
+            isError: true,
+          }));
+        }
+        return;
       }
       // Deny prohibited coding immediately, even before MCP intent confirmation:
       // a policy prohibition must never be described as missing workers.
@@ -1323,8 +1416,35 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       );
     } else if (params.name === "get_external_agent_command_progress") {
       const parsed = ExternalCommandProgressArgs.parse(params.arguments ?? {});
-      const state = await getExternalAgentWorkState(parsed.commandId);
-      if (!state) {
+      let state = await getExternalAgentWorkState(parsed.commandId);
+      // The DEV gateway may only expose a command belonging to the signed
+      // principal's conversation channel, never another user's UUID.
+      if (identity.kind === "dev_relay") {
+        const meta = state?.command.metadataJson as Record<string, unknown> | null | undefined;
+        if (!parsed.ownerConversationId || meta?.["conversationId"] !== parsed.ownerConversationId ||
+            !ISOLATED_DEV_WORKERS.includes(meta?.["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number])) {
+          state = null;
+        }
+      }
+      if (identity.kind === "oauth" && devRelayEnabled()) {
+        const ownerConversationId = oauthEventChannel(identity);
+        if (ownerConversationId) {
+          try {
+            const devProgress = await callDevMcpTool("get_external_agent_command_progress",
+              { commandId: parsed.commandId, ownerConversationId });
+            if (devProgress["found"] === true && devProgress["assignedClientId"] &&
+                ISOLATED_DEV_WORKERS.includes(devProgress["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number])) {
+              payload = devProgress;
+              state = null;
+            }
+          } catch {
+            // PROD progress is still available. A DEV-only UUID remains NOT_FOUND.
+          }
+        }
+      }
+      if (payload) {
+        // Matched and ownership-verified DEV progress above.
+      } else if (!state) {
         payload = {
           found: false,
           commandId: parsed.commandId,
@@ -1385,9 +1505,18 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
       const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
+      let devEvents: unknown[] = [];
+      if (identity.kind === "oauth" && devRelayEnabled()) {
+        try {
+          const fromDev = await callDevMcpTool("read_ai_core_events", parsed);
+          if (Array.isArray(fromDev["events"])) devEvents = fromDev["events"];
+        } catch {
+          // Do not claim DEV delivery when DEV is unavailable.
+        }
+      }
       payload = {
         conversationId: parsed.conversationId,
-        events: rows
+        events: [...rows
           .map((row) => ({
             ...row,
             eventType: classifyLifecycleEvent({
@@ -1397,12 +1526,21 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
               metadata: row.metadata,
             }),
           }))
-          .filter((row) => row.eventType !== null),
+          .filter((row) => row.eventType !== null), ...devEvents].slice(0, parsed.limit),
       };
     } else if (params.name === "ack_ai_core_event") {
       const parsed = eventChannelArgs(identity, AckEventArgs.parse(params.arguments ?? {}));
-      const acknowledged = await acknowledgeCodingBridgeResponseForConversation(parsed);
-      payload = { acknowledged: Boolean(acknowledged), responseId: parsed.responseId };
+      let acknowledged = false;
+      if (identity.kind === "oauth" && devRelayEnabled()) {
+        try {
+          const fromDev = await callDevMcpTool("ack_ai_core_event", parsed);
+          acknowledged = fromDev["acknowledged"] === true;
+        } catch {
+          // An unavailable DEV relay never authorizes an ACK.
+        }
+      }
+      if (!acknowledged) acknowledged = Boolean(await acknowledgeCodingBridgeResponseForConversation(parsed));
+      payload = { acknowledged, responseId: parsed.responseId };
     } else if (params.name === "unsubscribe_ai_core_events") {
       const parsed = eventChannelArgs(identity, UnsubscribeEventsArgs.parse(params.arguments ?? {}));
       const unsubscribed = await unsubscribeCodingBridgeConversation(parsed.conversationId);

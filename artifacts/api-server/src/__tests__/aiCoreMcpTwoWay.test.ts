@@ -15,7 +15,7 @@ vi.mock("../services/aiCoreChatLearningService.js", () => ({ recordChatLearningE
 vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
   oauthIssuer: () => "https://example.test", oauthResource: () => "https://example.test/api", verifyMcpAccessToken: vi.fn(),
 }));
-vi.mock("../services/aiCoreWhatsappChatService.js", () => ({ resolveAiCoreInternalBaseUrl: () => "http://localhost:8080/api" }));
+vi.mock("../services/aiCoreWhatsappChatService.js", () => ({ resolveAiCoreInternalBaseUrl: () => process.env["TEST_AI_CORE_INTERNAL_BASE_URL"] || "http://localhost:8080/api" }));
 vi.mock("../services/localCodingControlBridgeService.js", () => ({
   acknowledgeCodingBridgeResponseForConversation: mocks.ack,
   listPendingCodingBridgeResponsesForConversation: mocks.list,
@@ -390,6 +390,107 @@ describe("MCP command two-way routing", () => {
       conversationId: other.body.result.structuredContent.conversationId, responseId,
     });
     expect(mocks.ack).not.toHaveBeenCalledWith({ conversationId: channel, responseId });
+  });
+
+  it("limits the DEV relay service token to explicitly named bounded read-only worker jobs", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("AI_CORE_DEV_RELAY_KEY", "scoped-dev-relay-".padEnd(64, "x"));
+    const instance = express();
+    instance.use(express.json());
+    instance.use("/api", router);
+    const sendRelay = (message: string) => request(instance)
+      .post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer " + process.env["AI_CORE_DEV_RELAY_KEY"])
+      .send({ jsonrpc: "2.0", id: 91, method: "tools/call",
+        params: { name: "send_ai_core_command", arguments: { message, confirmed: true,
+          conversationId: "ai-engine-oauth:relay-principal-only" } } });
+    const blocked = await sendRelay("Delegasikan ke openclaw-travelintrips-dev lalu hapus file");
+    expect(blocked.body.result.structuredContent).toMatchObject({
+      blocked: true, reason: "SCOPED_DEV_RELAY_DENIED", dispatched: false,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    const passed = await sendRelay("Delegasikan ke openclaw-travelintrips-dev; jalankan hostname pada pc travelintrips");
+    expect(passed.status).toBe(200);
+    expect(passed.body.result.isError).toBeFalsy();
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toMatchObject({
+      mode: "auto", conversationId: "ai-engine-oauth:relay-principal-only",
+    });
+    const profile = await request(instance).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer " + process.env["AI_CORE_DEV_RELAY_KEY"])
+      .send({ jsonrpc: "2.0", id: 92, method: "tools/call",
+        params: { name: "get_profile", arguments: {} } });
+    expect(profile.status).toBe(401);
+  });
+
+  it("never passes a named DEV worker request to PROD when scoped relay is unconfigured", async () => {
+    vi.stubEnv("TEST_AI_CORE_INTERNAL_BASE_URL", "http://ai-core-prod-api:3000");
+    const instance = express();
+    instance.use(express.json());
+    instance.use("/api", router);
+    const response = await request(instance).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer test-connector-key")
+      .send({ jsonrpc: "2.0", id: 93, method: "tools/call",
+        params: { name: "send_ai_core_command",
+          arguments: { message: "Delegasikan ke openclaw-travelintrips-dev; jalankan hostname pada pc travelintrips",
+            confirmed: true, conversationId: "test-session" } } });
+    expect(response.body.result.structuredContent).toMatchObject({
+      blocked: true, dispatched: false, reason: "DEV_TARGET_REQUIRES_SCOPED_DELEGATION",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("routes an OAuth-authenticated named DEV task through the scoped relay without PROD fallback", async () => {
+    const { verifyMcpAccessToken } = await import("../services/aiCoreMcpOAuthService.js");
+    vi.stubEnv("TEST_AI_CORE_INTERNAL_BASE_URL", "http://ai-core-prod-api:3000");
+    vi.stubEnv("AI_CORE_DEV_RELAY_KEY", "scoped-dev-relay-".padEnd(64, "x"));
+    vi.stubEnv("AI_CORE_DEV_RELAY_URL", "https://dev-aicore.cstlogistic.co.id/api/ai/core-chat/mcp");
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "user-2" }, scopes: new Set(["ai_core.command", "ai_core.progress", "ai_core.events"]),
+      clientId: "chatgpt-v2-client",
+    } as never);
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      const sent = JSON.parse(String(init.body));
+      const name = sent.params.name;
+      const answer = name === "send_ai_core_command"
+        ? { commandId: "d4ae8e4e-7788-4bfc-82ec-606acd0e1bf2",
+            status: "RECEIVED", clientId: "openclaw-travelintrips-dev" }
+        : name === "read_ai_core_events"
+          ? { events: [{ id: "61b611e4-3fe1-4df6-a7fd-40678b5d50cd", commandId: "d4ae8e4e-7788-4bfc-82ec-606acd0e1bf2", kind: "COMPLETED" }] }
+          : { acknowledged: true, responseId: sent.params.arguments.responseId };
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: sent.id,
+        result: { content: [], structuredContent: answer, isError: false } }), { status: 200 });
+    }));
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const invoke = (name: string, args: Record<string, unknown>) => request(app)
+      .post("/api/ai/core-chat/mcp").set("Authorization", "Bearer oauth-v2-test-token")
+      .send({ jsonrpc: "2.0", id: 71, method: "tools/call", params: { name, arguments: args } });
+    const sent = await invoke("send_ai_core_command", {
+      message: "Delegasikan KHUSUS ke openclaw-travelintrips-dev; jalankan hostname pada pc travelintrips",
+      confirmed: true, conversationId: "forged-channel",
+    });
+    expect(sent.body.result.structuredContent).toMatchObject({
+      clientId: "openclaw-travelintrips-dev", status: "RECEIVED",
+    });
+    const firstCall = vi.mocked(fetch).mock.calls[0]!;
+    expect(firstCall[0]).toBe("https://dev-aicore.cstlogistic.co.id/api/ai/core-chat/mcp");
+    expect(firstCall[1]?.headers).toMatchObject({
+      Authorization: "Bearer " + process.env["AI_CORE_DEV_RELAY_KEY"],
+    });
+    const outbound = JSON.parse(String(firstCall[1]?.body));
+    const channel = outbound.params.arguments.conversationId;
+    expect(channel).toMatch(/^ai-engine-oauth:[0-9a-f]{64}$/);
+    expect(channel).not.toBe("forged-channel");
+    await invoke("read_ai_core_events", { conversationId: "forged-channel", limit: 20 });
+    const read = JSON.parse(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body));
+    expect(read.params.arguments.conversationId).toBe(channel);
+    await invoke("ack_ai_core_event", {
+      conversationId: "forged-channel",
+      responseId: "61b611e4-3fe1-4df6-a7fd-40678b5d50cd",
+    });
+    const ack = JSON.parse(String(vi.mocked(fetch).mock.calls[2]?.[1]?.body));
+    expect(ack.params.arguments.conversationId).toBe(channel);
+    expect(ack.params.name).toBe("ack_ai_core_event");
   });
 
 });
