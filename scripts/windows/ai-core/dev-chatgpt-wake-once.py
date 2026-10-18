@@ -191,9 +191,12 @@ def submit_once(instruction, worker_id, base=None):
     receipt_dir.mkdir(parents=True, exist_ok=True)
     receipt = receipt_dir / (event + ".json")
     if state["markerVisible"]:
+        # Reconcile an existing wake without submitting a duplicate message.
+        attestation = wait_for_assistant_attestation(root, tab, url, conversation, event, challenge)
         return {"chatgptSubmitted": True, "browserConfirmed": True,
                 "alreadyVisible": True, "browserPairingVerified": True,
-                "verifiedAssistantReply": False, "conversationId": conversation,
+                "verifiedAssistantReply": attestation is not None,
+                "attestation": attestation, "conversationId": conversation,
                 "eventId": event, "challenge": challenge}
     try:
         with receipt.open("x", encoding="utf-8") as f:
