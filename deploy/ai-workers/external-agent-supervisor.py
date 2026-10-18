@@ -77,6 +77,10 @@ def mark_health(state):
     save_state("health.json", {"clientId": CLIENT_ID, "state": state, "updatedAt": time.time()})
 
 
+class WorkStreamEnded(ConnectionError):
+    """Normal server-side SSE EOF; the caller should reconnect without claiming work."""
+
+
 def work_events():
     """Only ready/work_available wake the queue. Keepalives never cause claims."""
     url = API_BASE + "/ai/agent-runtime/work/stream?" + urllib.parse.urlencode({"clientId": CLIENT_ID})
@@ -105,7 +109,7 @@ def work_events():
                 data.append(line[5:].strip())
                 if sum(map(len, data)) > 16384:
                     raise RuntimeError("Work event data too large")
-    raise ConnectionError("Work event stream disconnected; reconnect and reconcile")
+    raise WorkStreamEnded("Work event stream ended; reconnecting")
 
 
 def _request(method, url, body=None, headers=None, timeout=None):
@@ -443,6 +447,14 @@ def main():
             except Exception:
                 mark_health("outbox_write_failed")
                 raise SystemExit("Result outbox unavailable; stopping without a new claim")
+        except WorkStreamEnded:
+            if events is not None:
+                events.close()
+                events = None
+            draining = False
+            mark_health("idle")
+            idle_streak = min(idle_streak + 1, 8)
+            time.sleep(min(60, RECONNECT_BASE_SECONDS * (2 ** min(idle_streak - 1, 4))) * random.uniform(0.85, 1.15))
         except Exception as exc:
             if events is not None:
                 events.close()
