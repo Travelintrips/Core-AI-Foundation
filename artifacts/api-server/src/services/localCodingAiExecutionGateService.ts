@@ -36,6 +36,23 @@ import {
   assertApprovedAiHandoffFresh,
   type ApprovedAiHandoffLease,
 } from "./localCodingAiHandoffService.js";
+
+export const EXECUTION_GATE_SESSION_TIMEOUT_MS = 300_000;
+
+export interface SessionGuardCheckOptions {
+  timeoutMs?: number;
+  abortSignal?: AbortSignal;
+}
+
+export function assertExecutionSessionGuard(
+  lease: ApprovedAiHandoffLease,
+  options?: SessionGuardCheckOptions,
+): void {
+  assertApprovedAiHandoffFresh(lease);
+  if (options?.abortSignal?.aborted) {
+    throw new LocalAiHandoffError("AI execution session was cancelled or timed out.");
+  }
+}
 import {
   parseLocalCodingAiProposalV1,
   validateLocalCodingAiProposalV1,
