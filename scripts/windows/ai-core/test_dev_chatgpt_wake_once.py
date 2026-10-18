@@ -98,6 +98,27 @@ class BrowserWakeTests(unittest.TestCase):
             wake.submit_once(COMMAND, wake.WORKER, self.root)
         self.assertFalse(any(c.args[0] == "type" for c in control.call_args_list))
 
+    def test_existing_marker_reconciles_signed_assistant_without_duplicate(self):
+        signed = {"version": 1, "algorithm": "Ed25519", "signature": "signed-test-fixture"}
+        with patch.object(wake, "browser", side_effect=[
+            TABS, COMPOSER, json.dumps({"url": URL, "markerVisible": True, "responding": False}),
+        ]) as control, patch.object(wake, "wait_for_assistant_attestation", return_value=signed) as attest:
+            proof = wake.submit_once(COMMAND, wake.WORKER, self.root)
+        self.assertTrue(proof["alreadyVisible"])
+        self.assertTrue(proof["verifiedAssistantReply"])
+        self.assertEqual(proof["attestation"], signed)
+        attest.assert_called_once()
+        self.assertFalse(any(c.args[0] == "type" for c in control.call_args_list))
+
+    def test_existing_marker_without_signed_receipt_stays_unverified(self):
+        with patch.object(wake, "browser", side_effect=[
+            TABS, COMPOSER, json.dumps({"url": URL, "markerVisible": True, "responding": False}),
+        ]) as control, patch.object(wake, "wait_for_assistant_attestation", return_value=None):
+            proof = wake.submit_once(COMMAND, wake.WORKER, self.root)
+        self.assertFalse(proof["verifiedAssistantReply"])
+        self.assertIsNone(proof["attestation"])
+        self.assertFalse(any(c.args[0] == "type" for c in control.call_args_list))
+
     def test_existing_marker_does_not_send_duplicate(self):
         with patch.object(wake, "browser", side_effect=[
             TABS, COMPOSER, json.dumps({"url": URL, "markerVisible": True, "responding": False}),
