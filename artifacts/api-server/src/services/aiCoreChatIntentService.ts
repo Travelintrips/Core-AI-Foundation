@@ -15,6 +15,12 @@ import {
   detectAiCoreGitHubOperation,
   type AiCoreGitHubOperation,
 } from "./aiCoreGitHubControlService.js";
+// Support for Dell ChatGPT Wake Agent intent
+export const DELL_CHATGPT_WAKE_AGENT_INTENT = 'dell-chatgpt-wake-agent' as const;
+export function detectDellChatgptWakeAgentIntent(message: string): boolean {
+  return message.trim() === DELL_CHATGPT_WAKE_AGENT_INTENT;
+}
+
 
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
 
