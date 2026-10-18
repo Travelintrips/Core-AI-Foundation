@@ -22,7 +22,7 @@ describe("AI Core Chat automatic dispatch", () => {
 
   it("does not allow semantic read-only intent to intercept explicit external-agent commands", () => {
     const routeSource = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
-    expect(routeSource).toContain('preflightDispatch.kind === "ANSWER"');
+    expect(routeSource).toContain('preflightDispatch.kind === "DISPATCH"');
     expect(classifyAiCoreChatDispatch("OpenClaw kirim pesan teks ke sesi ChatGPT via UI")).toMatchObject({
       kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
     });
