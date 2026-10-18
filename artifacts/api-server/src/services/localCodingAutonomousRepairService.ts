@@ -39,6 +39,15 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+const DEFAULT_RETRY_COUNT = 3;
+
+/**
+ * Helper to retry async operations using transient DB retry logic.
+ */
+function withRetries<T>(fn: () => Promise<T>, retries = DEFAULT_RETRY_COUNT): Promise<T> {
+  return withTransientDatabaseRetry(fn, { maxRetries: retries });
+}
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
