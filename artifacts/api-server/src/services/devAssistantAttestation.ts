@@ -13,9 +13,9 @@ type ChallengeInput = {
   ownerChannel: string;
   targetConversationId: string;
   eventId: string;
-  watchCommandId: string;
-  jobId: string;
-  checkpointRevision: number;
+  watchCommandId?: string;
+  jobId?: string;
+  checkpointRevision?: number;
 };
 
 export type DevAssistantAttestation = {
@@ -37,9 +37,11 @@ export type DevAssistantAttestationVerification =
   | { verified: false; reason: string };
 
 function validChallengeInput(input: ChallengeInput): boolean {
-  return OWNER.test(input.ownerChannel) && UUID.test(input.targetConversationId) &&
-    DIGEST.test(input.eventId) && UUID.test(input.watchCommandId) && UUID.test(input.jobId) &&
-    Number.isSafeInteger(input.checkpointRevision) && input.checkpointRevision >= 1;
+  const hasWatch = input.watchCommandId !== undefined || input.jobId !== undefined || input.checkpointRevision !== undefined;
+  return OWNER.test(input.ownerChannel) && UUID.test(input.targetConversationId) && DIGEST.test(input.eventId) &&
+    (!hasWatch || (typeof input.watchCommandId === "string" && UUID.test(input.watchCommandId) &&
+      typeof input.jobId === "string" && UUID.test(input.jobId) &&
+      Number.isSafeInteger(input.checkpointRevision) && Number(input.checkpointRevision) >= 1));
 }
 
 export function deriveDevAssistantChallenge(input: ChallengeInput): string {
@@ -49,9 +51,9 @@ export function deriveDevAssistantChallenge(input: ChallengeInput): string {
     input.ownerChannel,
     input.targetConversationId.toLowerCase(),
     input.eventId.toLowerCase(),
-    input.watchCommandId.toLowerCase(),
-    input.jobId.toLowerCase(),
-    String(input.checkpointRevision),
+    input.watchCommandId?.toLowerCase() ?? "",
+    input.jobId?.toLowerCase() ?? "",
+    input.checkpointRevision === undefined ? "" : String(input.checkpointRevision),
   ].join("|")).digest("hex");
 }
 
