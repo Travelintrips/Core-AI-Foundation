@@ -46,9 +46,11 @@ def find_tab(url):
     return matching[0]["targetId"]
 
 
-def inspect(tab, marker):
-    # Native browser accessibility snapshot. Nothing is typed or evaluated here.
-    snapshot = browser("snapshot", "--target-id", tab, "--interactive", "--limit", "280", timeout=65)
+def inspect(tab, marker, expected_url):
+    # Scope accessibility lookup to composer, avoiding huge chat transcript
+    # snapshots that time out on long-lived ChatGPT conversations.
+    snapshot = browser("snapshot", "--target-id", tab, "--selector",
+                       "[contenteditable]", "--limit", "16", timeout=25)
     m = re.search(r'textbox "Ask ChatGPT" \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
     if not m:
         raise RuntimeError("Authenticated ChatGPT composer not available")
@@ -62,11 +64,22 @@ def inspect(tab, marker):
         draft = ""
     if not isinstance(draft, str):
         raise RuntimeError("ChatGPT composer state invalid")
+    # Read-only DOM check: same exact page, no duplicate wake marker, and not
+    # generating an assistant reply. The marker is regex-validated upstream.
+    probe = (
+        "() => ({url:location.href,markerVisible:document.body.innerText.includes("
+        + json.dumps(marker) +
+        "),responding:Array.from(document.querySelectorAll('button')).some(b=>"
+        "/^(Stop|Stop generating)$/i.test((b.getAttribute('aria-label')||b.innerText||'').trim()))})"
+    )
+    observed = json.loads(browser("evaluate", "--target-id", tab, "--fn",
+                                  probe, timeout=30))
+    if not isinstance(observed, dict) or observed.get("url") != expected_url or not isinstance(observed.get("markerVisible"), bool) or not isinstance(observed.get("responding"), bool):
+        raise RuntimeError("Exact authenticated browser pairing cannot be verified")
     return {
-        "ref": m.group(1),
-        "empty": draft.strip() == "",
-        "responding": bool(re.search(r'button "(?:Stop|Stop generating)"(?: \[ref=|\b)', snapshot)),
-        "markerVisible": marker in snapshot,
+        "ref": m.group(1), "empty": draft.strip() == "",
+        "responding": observed["responding"],
+        "markerVisible": observed["markerVisible"],
     }
 
 
@@ -81,7 +94,7 @@ def submit_once(instruction, worker_id, base=None):
     url = "https://chatgpt.com/c/" + conversation
     marker = "AI_CORE_WAKE:" + event
     tab = find_tab(url)
-    state = inspect(tab, marker)
+    state = inspect(tab, marker, url)
     if not state["empty"]:
         raise RuntimeError("ChatGPT has a draft; preserving it")
     if state["responding"]:
@@ -114,7 +127,7 @@ def submit_once(instruction, worker_id, base=None):
     visible = False
     for _ in range(3):
         time.sleep(2)
-        checked = inspect(tab, marker)
+        checked = inspect(tab, marker, url)
         if checked["markerVisible"] and checked["empty"]:
             visible = True
             break
