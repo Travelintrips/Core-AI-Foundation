@@ -31,7 +31,7 @@ function requireSameOrigin(req: import("express").Request, res: import("express"
 }
 const credentialAdmin = [requireAuth, requireInternalRole("owner", "admin")];
 const CredentialCreate = z.object({
-  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-travelintrips-dev|openclaw-pc-worker-dell-(?:browser|recovery|verifier)|openclaw-vps-dev-consumer)$/).max(100),
+  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-travelintrips-dev|openclaw-pc-worker-dell-(?:browser|recovery|verifier)|openclaw-vps-dev-consumer|openclaw-dell-chatgpt-wake-dev)$/).max(100),
   scopes: z.array(z.enum(["agent:presence", "agent:work", "model:chat"])).min(1).max(3),
 }).strict();
 
@@ -45,7 +45,7 @@ router.get("/ai/agent-runtime/credentials", ...credentialAdmin, async (_req, res
     lastUsedAt: aiAgentServiceTokensTable.lastUsedAt,
   }).from(aiAgentServiceTokensTable).orderBy(desc(aiAgentServiceTokensTable.createdAt));
   res.setHeader("Cache-Control", "no-store");
-  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-") || row.name === "openclaw-vps-dev-consumer") });
+  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-") || row.name === "openclaw-vps-dev-consumer" || row.name === "openclaw-dell-chatgpt-wake-dev") });
 });
 
 router.post("/ai/agent-runtime/credentials", ...credentialAdmin, requireSameOrigin, async (req, res): Promise<void> => {
