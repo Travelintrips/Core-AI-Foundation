@@ -1279,7 +1279,7 @@ async function openAiFirstReadOnlyIntent(
   const trimmed = message.trim();
   // An explicitly requested blocker-recovery SOP is deterministic operational guidance,
   // not an LLM classification. Never use this shortcut for arbitrary prompts.
-  if (/^\\/sop[ \\t]+blocker(?:[ \\t]+(?:resource-first|human-last))?[.!?]?[ \\t]*$/i.test(trimmed)) {
+  if (/^\/sop[ \t]+blocker(?:[ \t]+(?:resource-first|human-last))?[.!?]?[ \t]*$/i.test(trimmed)) {
     return {
       kind: "answer", route: "DETERMINISTIC_BLOCKER_SOP", provider: null, model: null,
       workload: "REVIEW", costClass: "ZERO",
@@ -1292,7 +1292,7 @@ async function openAiFirstReadOnlyIntent(
         "4. Verifikasi hasil tindakan melalui sumber status resmi, callback, dan ACK terautentikasi; jangan klaim PASS sebelum bukti lengkap.",
         "5. Eskalasi hanya bila perlu persetujuan keamanan, operasi destruktif, perubahan PROD berisiko, atau semua jalur sah gagal.",
         "SOP ini hanya respons baca-saja; tidak membuat job, tidak membuktikan delivery ke sesi ChatGPT, dan tidak memberikan persetujuan baru.",
-      ].join("\\n"),
+      ].join("\n"),
     };
   }
   if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
