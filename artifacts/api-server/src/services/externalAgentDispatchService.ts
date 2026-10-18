@@ -30,6 +30,7 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
+  "openclaw-dell-chatgpt-wake-dev": "tools:bounded",
   "openclaw-pc-worker-dell-browser": "tools:bounded",
   "openclaw-pc-worker-dell-recovery": "tools:bounded",
   "openclaw-pc-worker-dell-verifier": "tools:bounded",
