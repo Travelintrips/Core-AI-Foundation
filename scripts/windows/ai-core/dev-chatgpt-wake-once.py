@@ -193,11 +193,15 @@ def submit_once(instruction, worker_id, base=None):
     if state["markerVisible"]:
         # Reconcile an existing wake without submitting a duplicate message.
         attestation = wait_for_assistant_attestation(root, tab, url, conversation, event, challenge)
+        fingerprint = hashlib.sha256((conversation + "|" + event + "|" + challenge + "|" + tab).encode()).hexdigest()
+        with receipt.open("w", encoding="utf-8") as f:
+            json.dump({"status": "ASSISTANT_ATTESTED" if attestation else "BROWSER_CONFIRMED",
+                       "evidenceFingerprint": fingerprint, "attestation": attestation}, f)
         return {"chatgptSubmitted": True, "browserConfirmed": True,
                 "alreadyVisible": True, "browserPairingVerified": True,
                 "verifiedAssistantReply": attestation is not None,
-                "attestation": attestation, "conversationId": conversation,
-                "eventId": event, "challenge": challenge}
+                "attestation": attestation, "evidenceFingerprint": fingerprint,
+                "conversationId": conversation, "eventId": event, "challenge": challenge}
     try:
         with receipt.open("x", encoding="utf-8") as f:
             json.dump({"status": "ATTEMPTING", "conversationId": conversation, "challenge": challenge}, f)
