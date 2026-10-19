@@ -45,14 +45,19 @@ def config(base=None):
 def find_tab(url):
     value = json.loads(browser("tabs", "--json"))
     matching = [t for t in value.get("tabs", []) if t.get("type") == "page" and t.get("url") == url]
-    if len(matching) != 1 or not matching[0].get("targetId"):
+    if len(matching) != 1:
         raise RuntimeError("Expected exactly one paired ChatGPT browser tab")
-    return matching[0]["targetId"]
+    stable = matching[0].get("suggestedTargetId") or matching[0].get("tabId")
+    if not stable:
+        raise RuntimeError("Paired ChatGPT tab has no stable OpenClaw handle")
+    return stable
 
 
 def inspect(tab, marker, expected_url):
-    snapshot = browser("snapshot", "--target-id", tab, "--selector",
-                       "[contenteditable]", "--limit", "16", timeout=25)
+    # OpenClaw stable tab handles are supported by snapshots and actions.
+    # Avoid selector/limit here because current browser CLI builds can stall
+    # that legacy snapshot combination even though a scoped snapshot works.
+    snapshot = browser("snapshot", "--target-id", tab, timeout=55)
     m = re.search(r'textbox "Ask ChatGPT" \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
     if not m:
         raise RuntimeError("Authenticated ChatGPT composer not available")
