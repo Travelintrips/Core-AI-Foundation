@@ -9,6 +9,17 @@ export function devAttestationKeyId(workerId: DevAttestationWorker) {
   return workerId === "openclaw-travelintrips-dev" ? DEV_ASSISTANT_ATTESTATION_KEY_ID : DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID;
 }
 
+/** Fail closed: public keys are selected only from the authenticated DEV worker identity. */
+export function devAssistantPublicKeyForWorker(workerId: string): string | undefined {
+  if (workerId === "openclaw-travelintrips-dev") {
+    return process.env["AI_CORE_DEV_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"];
+  }
+  if (workerId === "openclaw-dell-chatgpt-wake-dev") {
+    return process.env["AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"];
+  }
+  return undefined;
+}
+
 const DIGEST = /^[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
