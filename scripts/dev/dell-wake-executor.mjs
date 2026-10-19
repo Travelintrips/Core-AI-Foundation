@@ -51,6 +51,7 @@ function execute(work) {
     AI_CORE_DEV_WAKE_ALLOWLIST_FILE: "dell-chatgpt-wake-allowlist.json",
     AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE: "dell-chatgpt-wake-attestation-ed25519.pem",
     AI_CORE_OPENCLAW_CMD: path.join(process.env.LOCALAPPDATA, "OpenClaw", "deps", "portable-node", "openclaw.cmd"),
+    AI_CORE_DEV_WAKE_BROWSER_PROFILE: "openclaw",
   };
   const run = spawnSync("python", [helper], {
     input: JSON.stringify({ instruction, workerId }),
