@@ -93,25 +93,53 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
     let config: ReturnType<typeof devOnlyRelayConfiguration>;
     try { config = devOnlyRelayConfiguration(env); }
     catch { error("DEV_ONLY_RELAY_CONFIGURATION_INVALID", 503); return; }
-    const handshake = (backendProbeVerified: boolean) => {
+    const handshake = (backend: Record<string, unknown> | null) => {
       const handshakeId = randomUUID();
+      const evidence = backend ? object(backend["handshakeEvidence"]) : null;
+      const verified = Boolean(
+        backend &&
+        backend["conversationId"] === channel &&
+        evidence &&
+        evidence["ownerChannel"] === channel &&
+        evidence["conversationAckVerified"] === true &&
+        evidence["browserWakeVerified"] === true &&
+        typeof evidence["targetConversationId"] === "string" &&
+        /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(evidence["targetConversationId"]) &&
+        (evidence["workerId"] === "openclaw-travelintrips-dev" ||
+          evidence["workerId"] === "openclaw-dell-chatgpt-wake-dev")
+      );
       return {
         protocol: "ai-core-communication/v1", authenticated: true, handshakeId,
         handshakeAck: { received: true, handshakeId, source: "dev_only_mcp_gateway" },
         aiEngineSessionId: channel, aiEngineSessionVerified: true,
         eventChannelBinding: "OAUTH_PRINCIPAL_CLIENT_CHANNEL", executionEnvironment: "DEV",
-        routePolicy: "DEV_ONLY_NO_PROD_FALLBACK", backendProbeVerified,
-        backendProbe: backendProbeVerified ? "authorized_private_inbox_read" : null,
+        routePolicy: "DEV_ONLY_NO_PROD_FALLBACK", backendProbeVerified: backend !== null,
+        backendProbe: backend !== null ? "authorized_private_inbox_read" : null,
         relayTools: [...RELAY_TOOLS], relayScope: "bounded_dev_workers_and_owner_authorized_chatgpt_continuity",
         unavailableTools: ["get_ai_core_task_progress"],
-        chatSessionId: null, chatSessionIdVerified: false, conversationAckVerified: false,
-        browserWakeVerified: false, conversationBindingStatus: "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
-        notes: "Gateway ACK is not ChatGPT browser/SOP delivery. Restricted DEV relay permissions are unchanged.",
+        chatSessionId: verified ? evidence!["targetConversationId"] : null,
+        chatSessionIdVerified: verified,
+        conversationAckVerified: verified,
+        browserWakeVerified: verified,
+        conversationBindingStatus: verified
+          ? "VERIFIED_DURABLE_E2E_ATTESTATION"
+          : "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
+        ...(verified ? {
+          verifiedConversationId: evidence!["targetConversationId"],
+          verifiedWorkerId: evidence!["workerId"],
+          verifiedEventId: evidence!["eventId"],
+          verifiedCommandId: evidence!["commandId"],
+          verifiedResponseId: evidence!["responseId"],
+          verifiedAcknowledgedAt: evidence!["acknowledgedAt"],
+        } : {}),
+        notes: verified
+          ? "Gateway surfaced backend-verified owner-bound MCP ACK plus Ed25519 browser evidence."
+          : "Gateway ACK is not ChatGPT browser/SOP delivery. Restricted DEV relay permissions are unchanged.",
       };
     };
-    // A caller with only progress permission gets gateway authentication evidence,
-    // not an implicit grant to read events. Never bypass the relay's handshake denial.
-    if (name === "handshake_ai_core" && !identity.scopes.has("ai_core.events")) { respond(handshake(false)); return; }
+    // Preserve the existing scope boundary: handshake proof is obtained only
+    // through the already-authorized owner-bound event read.
+    if (name === "handshake_ai_core" && !identity.scopes.has("ai_core.events")) { respond(handshake(null)); return; }
     const args: Record<string, unknown> = name === "handshake_ai_core"
       ? { conversationId: channel, limit: 1 } : { ...rawArgs };
     const relayName = name === "handshake_ai_core" ? "read_ai_core_events" : name;
@@ -156,7 +184,7 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
       const result = object(envelope?.result);
       const payload = object(result?.structuredContent);
       if (envelope?.error || !result || !payload) { error("DEV_RELAY_INVALID_RESPONSE", 502, "unknown"); return; }
-      if (name === "handshake_ai_core" && result.isError !== true) { respond(handshake(true)); return; }
+      if (name === "handshake_ai_core" && result.isError !== true) { respond(handshake(payload)); return; }
       respond({ ...payload, executionEnvironment: "DEV", routePolicy: "DEV_ONLY_NO_PROD_FALLBACK" }, result.isError === true);
     } catch {
       // May already have committed upstream. Reconcile; do not retry or reroute.
