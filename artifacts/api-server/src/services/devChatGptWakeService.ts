@@ -22,6 +22,87 @@ function isDevWakeRuntime(requestHost?: string): boolean {
   return process.env["APP_ENV"] === "development" || isTrustedDevRequestHost(requestHost);
 }
 
+const CENTRAL_KEYS = {
+  enabled: "dev.chatgpt_wake.enabled",
+  ownerChannel: "dev.chatgpt_wake.owner_channel",
+  conversationId: "dev.chatgpt_wake.gpt01_conversation_id",
+  workerId: "dev.chatgpt_wake.worker_id",
+  attestationPublicKey: "dev.chatgpt_wake.dell_attestation_public_key_der_b64",
+} as const;
+
+type DevWakeRuntimeConfig = {
+  enabled: boolean;
+  channels: string[];
+  conversations: string[];
+  workerId: DevWakeWorker;
+  attestationPublicKeyDerB64?: string;
+};
+
+async function loadCentralDevWakeSettings(requestHost?: string): Promise<Record<string, string>> {
+  if (!isTrustedDevRequestHost(requestHost)) return {};
+  try {
+    const { db } = await import("@workspace/db");
+    const { sql } = await import("drizzle-orm");
+    const result = await db.execute(sql`
+      SELECT key, value
+      FROM ai_platform.ai_settings
+      WHERE is_secret IS FALSE
+        AND category = 'guardrail'
+        AND key IN (
+          'dev.chatgpt_wake.enabled',
+          'dev.chatgpt_wake.owner_channel',
+          'dev.chatgpt_wake.gpt01_conversation_id',
+          'dev.chatgpt_wake.worker_id',
+          'dev.chatgpt_wake.dell_attestation_public_key_der_b64'
+        )
+    `);
+    const settings: Record<string, string> = {};
+    for (const raw of result.rows ?? []) {
+      const row = raw as Record<string, unknown>;
+      if (typeof row["key"] === "string" && typeof row["value"] === "string") {
+        settings[row["key"]] = row["value"];
+      }
+    }
+    return settings;
+  } catch {
+    return {};
+  }
+}
+
+function splitUnique(value: string, transform: (value: string) => string = value => value): string[] {
+  return [...new Set(value.split(",").map(item => transform(item.trim())).filter(Boolean))];
+}
+
+function resolveWakeWorker(configuredValue?: string): DevWakeWorker {
+  const configured = configuredValue?.trim();
+  if (!configured || configured === DEFAULT_WORKER) return DEFAULT_WORKER;
+  if (configured === DELL_WORKER) return DELL_WORKER;
+  throw new Error("DEV_CHATGPT_WAKE_WORKER_INVALID");
+}
+
+async function loadDevWakeRuntimeConfig(requestHost?: string): Promise<DevWakeRuntimeConfig> {
+  const central = await loadCentralDevWakeSettings(requestHost);
+  const enabled = process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] === "true" ||
+    central[CENTRAL_KEYS.enabled] === "true";
+  const channelSource = process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"]?.trim() ||
+    central[CENTRAL_KEYS.ownerChannel] || "";
+  const conversationSource = process.env["AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS"]?.trim() ||
+    central[CENTRAL_KEYS.conversationId] || "";
+  const workerSource = process.env["AI_CORE_DEV_BROWSER_WAKE_WORKER_ID"]?.trim() ||
+    central[CENTRAL_KEYS.workerId];
+  const attestationPublicKeyDerB64 =
+    process.env["AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"]?.trim() ||
+    central[CENTRAL_KEYS.attestationPublicKey]?.trim() ||
+    undefined;
+  return {
+    enabled,
+    channels: splitUnique(channelSource).filter(value => /^ai-engine-oauth:[a-f0-9]{64}$/.test(value)),
+    conversations: splitUnique(conversationSource, value => value.toLowerCase()).filter(value => UUID.test(value)),
+    workerId: resolveWakeWorker(workerSource),
+    attestationPublicKeyDerB64,
+  };
+}
+
 function normalizeDevWakeAccountAlias(accountAlias: string): string {
   const normalized = accountAlias.trim().toUpperCase();
   if (normalized === "GPT01") return normalized;
@@ -46,34 +127,30 @@ export async function resolveVerifiedDevWakeTarget(
   if (!isDevWakeRuntime(requestHost)) {
     throw new Error("DEV_CHATGPT_DEV_HOST_REQUIRED");
   }
-  if (process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] !== "true") {
+  const config = await loadDevWakeRuntimeConfig(requestHost);
+  if (!config.enabled) {
     throw new Error("DEV_CHATGPT_WAKE_DISABLED");
   }
-  const configuredTarget = process.env["AI_CORE_DEV_CHATGPT_ALIAS_GPT01_CONVERSATION_ID"]?.trim().toLowerCase();
-  const allowedChats = [...new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS"] ?? "")
-    .split(",").map(value => value.trim().toLowerCase()).filter(Boolean))];
-  const targetConversationId = configuredTarget || (allowedChats.length === 1 ? allowedChats[0] : "");
-  if (!targetConversationId || !UUID.test(targetConversationId) || !allowedChats.includes(targetConversationId)) {
+  const configuredTarget =
+    process.env["AI_CORE_DEV_CHATGPT_ALIAS_GPT01_CONVERSATION_ID"]?.trim().toLowerCase() ||
+    config.conversations[0] || "";
+  const targetConversationId = configuredTarget ||
+    (config.conversations.length === 1 ? config.conversations[0]! : "");
+  if (!targetConversationId || !UUID.test(targetConversationId) ||
+      !config.conversations.includes(targetConversationId)) {
     throw new Error("DEV_CHATGPT_ALIAS_TARGET_UNVERIFIED");
   }
-  const channels = [...new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "")
-    .split(",").map(value => value.trim()).filter(value => /^ai-engine-oauth:[a-f0-9]{64}$/.test(value)))];
   const verified = [];
-  for (const ownerChannel of channels) {
-    const evidence = await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel).catch(() => null);
+  for (const ownerChannel of config.channels) {
+    const evidence = await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel, {
+      requestHost,
+      publicKeyDerBase64: config.attestationPublicKeyDerB64,
+    }).catch(() => null);
     if (evidence?.targetConversationId.toLowerCase() === targetConversationId) verified.push(evidence);
   }
   if (verified.length !== 1) throw new Error("DEV_CHATGPT_ALIAS_OWNER_AMBIGUOUS");
-  const workerId = resolveWakeWorker();
-  if (verified[0]!.workerId !== workerId) throw new Error("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
-  return { ownerChannel: verified[0]!.ownerChannel, targetConversationId, workerId };
-}
-
-function resolveWakeWorker(): DevWakeWorker {
-  const configured = process.env["AI_CORE_DEV_BROWSER_WAKE_WORKER_ID"]?.trim();
-  if (!configured || configured === DEFAULT_WORKER) return DEFAULT_WORKER;
-  if (configured === DELL_WORKER) return DELL_WORKER;
-  throw new Error("DEV_CHATGPT_WAKE_WORKER_INVALID");
+  if (verified[0]!.workerId !== config.workerId) throw new Error("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
+  return { ownerChannel: verified[0]!.ownerChannel, targetConversationId, workerId: config.workerId };
 }
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
@@ -174,12 +251,22 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   clientId: string;
   created: boolean;
 }> {
-  const worker = resolveWakeWorker();
-  if (worker === DELL_WORKER && (process.env["APP_ENV"] !== "development" ||
-      !process.env["AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"])) {
+  const config = await loadDevWakeRuntimeConfig(input.requestHost);
+  const worker = config.workerId;
+  if (worker === DELL_WORKER && !config.attestationPublicKeyDerB64) {
     throw new Error("DEV_CHATGPT_WAKE_DELL_ATTESTATION_NOT_CONFIGURED");
   }
-  if (!isDevBrowserWakeAllowed(input) || typeof input.eventId !== "string" ||
+  const allowedByConfig =
+    isDevWakeRuntime(input.requestHost) &&
+    config.enabled &&
+    typeof input.ownerChannel === "string" &&
+    /^ai-engine-oauth:[a-f0-9]{64}$/.test(input.ownerChannel) &&
+    config.channels.includes(input.ownerChannel) &&
+    typeof input.targetConversationId === "string" &&
+    input.targetConversationId.length === 36 &&
+    UUID.test(input.targetConversationId) &&
+    config.conversations.includes(input.targetConversationId.toLowerCase());
+  if (!allowedByConfig || typeof input.eventId !== "string" ||
       input.eventId.length !== 64 || !/^[a-f0-9]{64}$/i.test(input.eventId)) {
     throw new Error("DEV_CHATGPT_WAKE_DENIED");
   }

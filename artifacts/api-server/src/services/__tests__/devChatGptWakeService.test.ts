@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), transaction: vi.fn(), execu
 vi.mock("../externalAgentDispatchService.js", () => ({ dispatchExternalAgentWork: mocks.dispatch }));
 vi.mock("../localCodingControlBridgeService.js", () => ({ getVerifiedMcpHandshakeEvidenceForConversation: mocks.handshakeEvidence }));
 vi.mock("@workspace/db", () => ({
-  db: { transaction: mocks.transaction },
+  db: { transaction: mocks.transaction, execute: mocks.execute },
   aiCodingBridgeCommandsTable: { source: "source", externalCommandId: "external_command_id",
     commandType: "command_type", metadataJson: "metadata_json" },
 }));
@@ -40,6 +40,7 @@ beforeEach(() => {
   vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
   mocks.dispatch.mockResolvedValue({ clientId: worker, command: existingCommand(), created: true });
   mocks.handshakeEvidence.mockResolvedValue(null);
+  mocks.execute.mockResolvedValue({ rows: [] });
   mocks.rows.mockResolvedValue([existingCommand()]);
   mocks.transaction.mockImplementation(async callback => callback({ execute: mocks.execute,
     select: () => ({ from: () => ({ where: () => ({ limit: mocks.rows }) }) }) }));
@@ -150,6 +151,34 @@ describe("shared DEV browser wake queue", () => {
       targetConversationId,
       requestHost: "dev-aicore.cstlogistic.co.id",
     })).toBe(true);
+  });
+
+  it("uses central non-secret CST-DEV wake config when Hostinger env keys are absent", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ENABLED", "");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", "");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", "");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "");
+    vi.stubEnv("AI_CORE_DEV_CHATGPT_ALIAS_GPT01_CONVERSATION_ID", "");
+    vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "");
+    mocks.execute.mockResolvedValueOnce({ rows: [
+      { key: "dev.chatgpt_wake.enabled", value: "true" },
+      { key: "dev.chatgpt_wake.owner_channel", value: ownerChannel },
+      { key: "dev.chatgpt_wake.gpt01_conversation_id", value: targetConversationId },
+      { key: "dev.chatgpt_wake.worker_id", value: "openclaw-dell-chatgpt-wake-dev" },
+      { key: "dev.chatgpt_wake.dell_attestation_public_key_der_b64", value: "test-public-key" },
+    ] });
+    mocks.handshakeEvidence.mockResolvedValue({
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    });
+    await expect(resolveVerifiedDevWakeTarget("gpt01", "dev-aicore.cstlogistic.co.id")).resolves.toEqual({
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    });
   });
 
   it("does not let an arbitrary host bypass the DEV runtime boundary", async () => {
