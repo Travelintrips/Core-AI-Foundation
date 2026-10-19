@@ -1,0 +1,238 @@
+name: Hostinger DEV Console Deploy
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostinger-dev-console-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy DEV console (dev-aicore)
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    timeout-minutes: 25
+    env:
+      HOSTINGER_API_BASE: https://developers.hostinger.com/api
+      HOSTINGER_DOMAIN: dev-aicore.cstlogistic.co.id
+      EXPECTED_SHA: ${{ github.sha }}
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+
+      - name: Require current develop SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote origin refs/heads/develop | awk '{print $1}')"
+          test "$current" = "$EXPECTED_SHA" || {
+            echo "::notice::Develop advanced; skipping stale DEV console deploy."
+            exit 0
+          }
+
+      - name: Validate DEV-only deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${HOSTINGER_API_TOKEN:-}" || {
+            echo "::error::HOSTINGER_API_TOKEN is not configured for the development environment."
+            exit 1
+          }
+
+      - name: Skip if exact release is already live
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/live.headers /tmp/live.body
+          curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10             -D /tmp/live.headers -o /tmp/live.body             -H "Accept: application/json"             "https://$HOSTINGER_DOMAIN/api/healthz" || true
+          live_sha="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/live.headers | tail -n1)"
+          if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/live.body; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "DEV_CONSOLE_ALREADY_CURRENT=PASS sha=$live_sha"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "DEV_CONSOLE_DEPLOY_REQUIRED current_sha=${live_sha:-missing} expected_sha=$EXPECTED_SHA"
+          fi
+
+      - name: Resolve Hostinger DEV website
+        if: steps.live.outputs.ready != 'true'
+        id: website
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100"             -o /tmp/websites.json
+          username="$(jq -r --arg domain "$HOSTINGER_DOMAIN"             '.data[] | select(.domain == $domain and .website_type == "nodejs" and .is_enabled == true) | .username'             /tmp/websites.json | head -n1)"
+          test -n "$username" && test "$username" != "null" || {
+            echo "::error::Enabled DEV Node.js website not found for $HOSTINGER_DOMAIN."
+            exit 1
+          }
+          echo "username=$username" >> "$GITHUB_OUTPUT"
+
+      - name: Create DEV source archive
+        if: steps.live.outputs.ready != 'true'
+        id: archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_name="aicore-dev-${EXPECTED_SHA}.zip"
+          archive_path="/tmp/$archive_name"
+          git archive --format=zip --output="$archive_path" HEAD
+          printf '%s\n' "$EXPECTED_SHA" > /tmp/.cst-build-sha
+          zip -q -j "$archive_path" /tmp/.cst-build-sha
+          echo "name=$archive_name" >> "$GITHUB_OUTPUT"
+          echo "path=$archive_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DEV source archive
+        if: steps.live.outputs.ready != 'true'
+        id: upload
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+          ARCHIVE_PATH: ${{ steps.archive.outputs.path }}
+        run: |
+          set -euo pipefail
+          jq -n --arg username "$HOSTINGER_USERNAME" --arg domain "$HOSTINGER_DOMAIN"             '{username:$username,domain:$domain}' > /tmp/upload-url-request.json
+          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/upload-url-request.json             "$HOSTINGER_API_BASE/hosting/v1/files/upload-urls"             -o /tmp/upload-url.json
+          upload_base="$(jq -r '.url' /tmp/upload-url.json)"
+          auth_key="$(jq -r '.auth_key' /tmp/upload-url.json)"
+          rest_auth_key="$(jq -r '.rest_auth_key' /tmp/upload-url.json)"
+          test -n "$upload_base" && test "$upload_base" != "null"
+          echo "::add-mask::$auth_key"
+          echo "::add-mask::$rest_auth_key"
+          size="$(stat -c%s "$ARCHIVE_PATH")"
+          target="${upload_base%/}/$ARCHIVE_NAME?override=true"
+          create_code="$(curl --http1.1 --connect-timeout 15 --max-time 120 --silent --show-error             -o /tmp/tus-create.body -D /tmp/tus-create.headers -w "%{http_code}"             -X POST -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0" -H "Upload-Length: $size" -H "Upload-Offset: 0" "$target")"
+          test "$create_code" = "201" || {
+            cat /tmp/tus-create.body || true
+            echo "::error::Hostinger TUS create returned HTTP $create_code."
+            exit 1
+          }
+          offset=0
+          chunk_size=$((4 * 1024 * 1024))
+          while [ "$offset" -lt "$size" ]; do
+            bytes=$((size - offset))
+            [ "$bytes" -le "$chunk_size" ] || bytes="$chunk_size"
+            python3 - "$ARCHIVE_PATH" "$offset" "$bytes" /tmp/tus-chunk.bin <<'PY'
+import sys
+source, offset, size, target = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+with open(source, "rb") as src, open(target, "wb") as dst:
+    src.seek(offset)
+    data = src.read(size)
+    if len(data) != size:
+        raise SystemExit("short archive read")
+    dst.write(data)
+PY
+            patch_code="$(curl --connect-timeout 10 --max-time 90 --silent --show-error               -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"               -X PATCH -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"               -H "Tus-Resumable: 1.0.0" -H "Content-Type: application/offset+octet-stream"               -H "Upload-Offset: $offset" --data-binary @/tmp/tus-chunk.bin "$target")"
+            test "$patch_code" = "204" || {
+              cat /tmp/tus-patch.body || true
+              echo "::error::Hostinger TUS PATCH returned HTTP $patch_code."
+              exit 1
+            }
+            next_offset="$(awk -F': ' 'tolower($1)=="upload-offset" {gsub("\r","",$2); print $2}' /tmp/tus-patch.headers | tail -n1)"
+            test "$next_offset" = "$((offset + bytes))" || {
+              echo "::error::Unexpected TUS offset."
+              exit 1
+            }
+            offset="$next_offset"
+          done
+
+      - name: Resolve DEV Node.js build settings
+        if: steps.live.outputs.ready != 'true'
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+        run: |
+          set -euo pipefail
+          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds"
+          code="$(curl --silent --show-error -o /tmp/build-settings.json -w "%{http_code}"             -H "Authorization: Bearer $HOSTINGER_API_TOKEN" "$base/settings")"
+          if [ "$code" != "200" ]; then
+            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$base/settings/from-archive?archive_path=$ARCHIVE_NAME"               -o /tmp/build-settings.json
+          fi
+          jq '{
+            node_version,
+            app_type,
+            root_directory,
+            output_directory,
+            build_script,
+            entry_file,
+            package_manager
+          }' /tmp/build-settings.json > /tmp/build-settings.normalized.json
+          jq -e '.node_version != null and .app_type != null and .package_manager != null'             /tmp/build-settings.normalized.json >/dev/null
+
+      - name: Start DEV Node.js build
+        if: steps.live.outputs.ready != 'true'
+        id: build
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+        run: |
+          set -euo pipefail
+          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds"
+          jq --arg archive "$ARCHIVE_NAME"             '. + {source_type:"archive",source_options:{archive_path:$archive}}'             /tmp/build-settings.normalized.json > /tmp/build-request.json
+          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/build-request.json "$base"             -o /tmp/build-start.json
+          uuid="$(jq -r '.uuid' /tmp/build-start.json)"
+          test -n "$uuid" && test "$uuid" != "null"
+          echo "uuid=$uuid" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for DEV Node.js build
+        if: steps.live.outputs.ready != 'true'
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+          BUILD_UUID: ${{ steps.build.outputs.uuid }}
+        run: |
+          set -euo pipefail
+          base="$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/builds"
+          for attempt in $(seq 1 90); do
+            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$base/$BUILD_UUID" -o /tmp/build-status.json
+            state="$(jq -r '.state' /tmp/build-status.json)"
+            echo "build_attempt=$attempt state=$state"
+            [ "$state" != "failed" ] || exit 1
+            [ "$state" != "completed" ] || exit 0
+            sleep 10
+          done
+          echo "::error::DEV Node.js build timed out."
+          exit 1
+
+      - name: Restart DEV Node.js app
+        if: steps.live.outputs.ready != 'true'
+        shell: bash
+        env:
+          HOSTINGER_USERNAME: ${{ steps.website.outputs.username }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error             -X POST -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/accounts/$HOSTINGER_USERNAME/websites/$HOSTINGER_DOMAIN/nodejs/server/restart"
+
+      - name: Verify exact DEV console release
+        if: always() && (steps.live.outputs.ready == 'true' || steps.build.outcome == 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            rm -f /tmp/verify.headers /tmp/verify.body
+            curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10               -D /tmp/verify.headers -o /tmp/verify.body               -H "Accept: application/json"               "https://$HOSTINGER_DOMAIN/api/healthz" || true
+            live_sha="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2); print $2}' /tmp/verify.headers | tail -n1)"
+            if [ "$live_sha" = "$EXPECTED_SHA" ] && grep -q '"status":"ok"' /tmp/verify.body; then
+              echo "DEV_AICORE_EXACT_RELEASE=PASS sha=$live_sha"
+              exit 0
+            fi
+            echo "verify_attempt=$attempt live_sha=${live_sha:-missing}"
+            sleep 10
+          done
+          echo "::error::dev-aicore did not expose the expected develop SHA."
+          exit 1
