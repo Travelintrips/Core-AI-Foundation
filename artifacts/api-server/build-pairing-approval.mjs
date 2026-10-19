@@ -29,8 +29,12 @@ const result = await build({
   logLevel: "warning",
 });
 const inputs = Object.keys(result.metafile.inputs).sort();
+const applicationEntrypoints = new Set([
+  path.resolve(root, "src/app.ts"),
+  path.resolve(root, "src/index.ts"),
+]);
 const forbidden = inputs.filter((input) =>
-  /(?:^|\/)src\/(?:app|index)\.ts$/.test(input) ||
+  applicationEntrypoints.has(path.resolve(root, input)) ||
   /(?:^|\/)src\/services\/(?:jobDispatcherService|aiSchedulerService|localCodingAutonomousRepairService|codingOrchestratorService|aiTaskLedgerReconciliationService|devContinuityWatchService)\.ts$/.test(input));
 if (forbidden.length) {
   throw new Error("Pairing-only build imported a forbidden application runtime");
