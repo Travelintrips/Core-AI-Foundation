@@ -25,12 +25,7 @@ import {
   describePreferredCodingModelConfig,
   resolveConfiguredCodingFallbackModel,
 } from "../services/localCodingAiPreferredModelService.js";
-import {
-  readProductionCodingModelConfig,
-  resolveAlternativeCloudCodingModels,
-  resolveProductionCodingModel,
-  type ProductionCodingModelSelection,
-} from "../services/localCodingAiProductionModelService.js";
+
 import { createScheduledOllamaProviderAdapter } from "../services/localCodingOllamaWorkerProviderService.js";
 import {
   disableAutonomousCodingTask,
