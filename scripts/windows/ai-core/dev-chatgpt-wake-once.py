@@ -17,8 +17,10 @@ PATTERN = re.compile(
     r"\ADEV_CHATGPT_WAKE_V1 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) "
     r"event=([0-9a-f]{64}) challenge=([0-9a-f]{64})\Z", re.I)
 CLI = ["openclaw.cmd" if os.name == "nt" else "openclaw", "browser", "--browser-profile", "chrome"]
-WORKER = "openclaw-travelintrips-dev"
-KEY_ID = "openclaw-travelintrips-dev-ed25519-v1"
+WORKER = os.environ.get("AI_CORE_DEV_WAKE_WORKER_ID", "openclaw-travelintrips-dev")
+KEY_ID = os.environ.get("AI_CORE_DEV_WAKE_KEY_ID", "openclaw-travelintrips-dev-ed25519-v1")
+ALLOWLIST_FILE = os.environ.get("AI_CORE_DEV_WAKE_ALLOWLIST_FILE", "chatgpt-wake-dev-allowlist.json")
+PRIVATE_KEY_FILE = os.environ.get("AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE", "dev-assistant-attestation-ed25519.pem")
 
 
 def browser(*args, timeout=55):
@@ -30,7 +32,7 @@ def browser(*args, timeout=55):
 
 def config(base=None):
     root = Path(base or (Path(os.environ["LOCALAPPDATA"]) / "AI-Core"))
-    p = root / "chatgpt-wake-dev-allowlist.json"
+    p = root / ALLOWLIST_FILE
     data = json.loads(p.read_text(encoding="utf-8"))
     allowed = data.get("allowedConversationIds")
     if data.get("enabled") is not True or not isinstance(allowed, list):
@@ -84,7 +86,7 @@ def _iso_now():
 
 
 def _private_key(root):
-    path = root / "dev-assistant-attestation-ed25519.pem"
+    path = root / PRIVATE_KEY_FILE
     if not path.is_file():
         return None
     key = serialization.load_pem_private_key(path.read_bytes(), password=None)
