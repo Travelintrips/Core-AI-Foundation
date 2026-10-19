@@ -172,7 +172,7 @@ def main(sha):
         if subprocess.run(["docker", "image", "inspect", image],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
             command("docker", "buildx", "build", "--builder", "cst-dev-build-limited",
-                    "--progress", "plain", "--load",
+                    "--progress", "plain", "--network", "host", "--allow", "network.host", "--load",
                     "--build-arg", "GITHUB_SHA=" + sha,
                     "-t", image, "-f", "deploy/hostinger-dev/Dockerfile", ".", cwd=SRC)
         embedded = command("docker", "run", "--rm", "--network", "none",
