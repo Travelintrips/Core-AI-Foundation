@@ -321,10 +321,10 @@ export class DevContinuityWatchRepository {
       verifiedAssistantReply: attestation.verified,
       assistantAttestationStatus: attestation.verified ? "VERIFIED" : attestation.reason,
       ...(attestation.verified ? { assistantAttestation: attestation.evidence } : {}),
-      resultCode: confirmed ? "DELIVERY_CONFIRMED" : "UNKNOWN_UNVERIFIED" };
+      resultCode: confirmed && attestation.verified ? "DELIVERY_CONFIRMED" : "UNKNOWN_UNVERIFIED" };
     if (!confirmed) evidence["failureReason"] = result.status === "FAILED" ? "WORKER_REPORTED_FAILURE" : "BROWSER_EVIDENCE_INCOMPLETE";
     if (typeof details["evidenceFingerprint"] === "string" && digest.test(details["evidenceFingerprint"])) evidence["evidenceFingerprint"] = details["evidenceFingerprint"];
-    return { ...current, state: confirmed ? "WAKE_CONFIRMED" : "BLOCKED", active: confirmed,
+    return { ...current, state: confirmed && attestation.verified ? "WAKE_CONFIRMED" : "BLOCKED", active: confirmed && attestation.verified,
       wakeCommandId: result.childCommandId, claimToken: null, claimLeaseUntil: null, evidence };
   }
 
