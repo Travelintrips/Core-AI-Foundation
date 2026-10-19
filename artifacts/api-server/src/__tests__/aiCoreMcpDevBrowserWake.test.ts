@@ -92,6 +92,24 @@ describe("DEV chatgpt:wake permission boundary", () => {
   });
   afterEach(() => { vi.unstubAllEnvs(); });
 
+  it("REST wake rejects unauthenticated job creation without dispatch", async () => {
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const response = await request(app).post("/api/ai/dev/chatgpt-wake/jobs")
+      .send({ conversationId: conversation, eventId, correlationId: "dev-corr-001", confirmed: true });
+    expect(response.status).toBe(401);
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("REST wake is absent outside DEV even with a token", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const response = await request(app).post("/api/ai/dev/chatgpt-wake/jobs")
+      .set("Authorization", "Bearer dev-relay-test-key")
+      .send({ conversationId: conversation, eventId, correlationId: "dev-corr-001", confirmed: true });
+    expect(response.status).toBe(404);
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
   it("authorizes only one confirmed, exact, allowlisted DEV browser wake", async () => {
     const response = await call(message);
     expect(response.body.result.isError).toBe(false);
