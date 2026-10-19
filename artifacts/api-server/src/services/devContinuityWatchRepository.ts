@@ -2,10 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
-  DEV_CONTINUITY_WORKER, devContinuityResultFromCommittedCommand,
+  DEV_CONTINUITY_WORKER, DEV_DELL_CONTINUITY_WORKER, isDevContinuityWakeWorker, devContinuityResultFromCommittedCommand,
   type DevContinuityWakeResult,
 } from "./devContinuityWakeEvents.js";
-import { verifyDevAssistantAttestation } from "./devAssistantAttestation.js";
+import { devAssistantPublicKeyForWorker, verifyDevAssistantAttestation } from "./devAssistantAttestation.js";
 
 export const DEV_CONTINUITY_WATCH_TYPE = "DEV_CONTINUITY_WATCH";
 export const DEV_CONTINUITY_MAX_ACTIVE = 32;
@@ -290,7 +290,7 @@ export class DevContinuityWatchRepository {
 
   private resultState(current: DevContinuityWatch, result: DevContinuityWakeResult, at: number): DevContinuityWatch | null {
     if (current.commandId !== result.parentWatchCommandId || current.ownerChannel !== result.ownerChannel ||
-        current.jobId !== result.jobId || current.wakeEventId !== result.eventId || result.workerId !== DEV_CONTINUITY_WORKER ||
+        current.jobId !== result.jobId || current.wakeEventId !== result.eventId || !isDevContinuityWakeWorker(result.workerId) ||
         (current.wakeCommandId !== null && current.wakeCommandId !== result.childCommandId) ||
         !["FIRING", "WAKE_QUEUED"].includes(current.state)) return null;
     const details = result.details;
@@ -308,11 +308,11 @@ export class DevContinuityWatchRepository {
         watchCommandId: current.commandId,
         jobId: current.jobId,
         checkpointRevision: current.revision,
-        workerId: DEV_CONTINUITY_WORKER,
+        workerId: result.workerId,
       },
       notBefore: current.triggeredAt ?? String(current.evidence["detectedAt"] ?? current.lastProgressAt),
       receivedAt: callbackReceivedAt,
-      publicKeyDerBase64: process.env["AI_CORE_DEV_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"],
+      publicKeyDerBase64: devAssistantPublicKeyForWorker(result.workerId),
     }) : { verified: false as const, reason: "BROWSER_DELIVERY_UNVERIFIED" };
     const evidence: Record<string, unknown> = { ...current.evidence, childCommandId: result.childCommandId, eventId: result.eventId,
       workerId: result.workerId, callbackReceivedAt, workerStatus: result.status,
@@ -348,8 +348,8 @@ export class DevContinuityWatchRepository {
         JOIN ai_platform.ai_coding_bridge_responses response ON response.command_id = child.id AND response.kind = child.status
         WHERE child.source = 'ai-core' AND child.command_type = 'EXTERNAL_AGENT_WORK'
           AND child.metadata_json ->> 'conversationId' = ${current.ownerChannel}::text
-          AND child.metadata_json ->> 'assignedClientId' = ${DEV_CONTINUITY_WORKER}::text
-          AND child.metadata_json ->> 'completedBy' = ${DEV_CONTINUITY_WORKER}::text
+          AND child.metadata_json ->> 'assignedClientId' IN (${DEV_CONTINUITY_WORKER}::text, ${DEV_DELL_CONTINUITY_WORKER}::text)
+          AND child.metadata_json ->> 'completedBy' = child.metadata_json ->> 'assignedClientId'
           AND child.metadata_json #>> '{devContinuity,parentWatchCommandId}' = ${current.commandId}::text
           AND child.metadata_json #>> '{devContinuity,jobId}' = ${current.jobId}::text
           AND child.metadata_json #>> '{devContinuity,eventId}' = ${current.wakeEventId}::text
@@ -359,7 +359,7 @@ export class DevContinuityWatchRepository {
       const child = persisted.rows[0];
       if (record(child) && (child["status"] === "COMPLETED" || child["status"] === "FAILED") && record(child["result_details"])) {
         const event = devContinuityResultFromCommittedCommand({ id: child["id"], source: child["source"], commandType: child["command_type"],
-          metadata: child["metadata_json"], authenticatedWorkerId: DEV_CONTINUITY_WORKER, status: child["status"], details: child["result_details"] });
+          metadata: child["metadata_json"], authenticatedWorkerId: record(child["metadata_json"]) && typeof child["metadata_json"]["completedBy"] === "string" ? child["metadata_json"]["completedBy"] : "", status: child["status"], details: child["result_details"] });
         const next = event ? this.resultState(current, event, at) : null;
         if (next) current = await this.save(tx, current, next, at);
       }
