@@ -1,3 +1,9 @@
+/**
+ * Diagnostic Notes for Workflow Run Cancellation (branch fix/dev-dell-chatgpt-wake-e2e-20261019 @ 7a41ca2d651bcb8469a49bb8141d0af93a123564):
+ * Environment: Node.js, pnpm.
+ * Reproduction steps: `pnpm build && pnpm --filter @workspace/api-server test`.
+ * Failure point: Long-running asynchronous calls or unhandled promise hang in workflow steps without bounded timeouts.
+ */
 import { logAudit } from "./aiAuditService.js";
 import {
   createGitHubApiClient,
