@@ -212,10 +212,13 @@ export async function dispatchExternalAgentWork(input: {
   // This model-free worker only accepts a server-authorized, challenge-bound
   // browser wake. Reject freeform requests before queueing them: otherwise the
   // worker inevitably reports requires_ai_core_routing after claiming the job.
-  const isTravelintripsWake =
+  const isDevChatGptWake =
     /^DEV_CHATGPT_WAKE_V1 conversation=[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12} event=[a-f0-9]{64} challenge=[a-f0-9]{64}$/i.test(input.instruction);
-  if (resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID &&
-      (!isTravelintripsWake || input.source !== "ai-core" ||
+  const isDedicatedDevWakeWorker =
+    resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
+    resolvedClientId === "openclaw-dell-chatgpt-wake-dev";
+  if (isDedicatedDevWakeWorker &&
+      (!isDevChatGptWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||
        !rule.capabilities.some((capability: string) => capability === "chatgpt:wake"))) {
     throw new ExternalAgentDispatchError(
@@ -224,13 +227,13 @@ export async function dispatchExternalAgentWork(input: {
     );
   }
 
-  // A browser-write capability must be explicitly granted to the isolated
-  // Travelintrips DEV worker. Generic bounded tools never imply typing rights.
+  // A browser-write capability must be explicitly granted to one of the isolated
+  // DEV wake workers. Generic bounded tools never imply typing rights.
   if (input.metadata?.["capability"] === "chatgpt:wake" && (
-      resolvedClientId !== OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
+      !isDedicatedDevWakeWorker ||
       input.source !== "ai-core" ||
       !rule.capabilities.some(capability => capability === "chatgpt:wake") ||
-      !isTravelintripsWake)) {
+      !isDevChatGptWake)) {
     throw new ExternalAgentDispatchError("CAPABILITY_DENIED", "DEV browser wake permission denied");
   }
 
