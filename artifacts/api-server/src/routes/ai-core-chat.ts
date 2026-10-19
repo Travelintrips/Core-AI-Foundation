@@ -621,6 +621,7 @@ async function invokeChatModel(
 async function resolveCloudFallbackSelections(
   primary: ProductionCodingModelSelection,
 ): Promise<ProductionCodingModelSelection[]> {
+  if (isDevInternalOnly()) return [];
   const alternatives = await resolveAlternativeCloudCodingModels({
     excludeTargets: [{
       provider: String(primary.provider.slug),
@@ -741,10 +742,18 @@ function configuredCloudSelectionFallback(
   };
 }
 
+function isDevInternalOnly(): boolean {
+  return process.env["NODE_ENV"] !== "production" &&
+    process.env["AI_CORE_DEV_EXECUTION_MODE"] === "internal-only";
+}
+
 async function resolveCloudSelection(workload: AiCoreWorkload): Promise<
   | { ok: true; selection: ProductionCodingModelSelection }
   | { ok: false; message: string }
 > {
+  if (isDevInternalOnly()) {
+    return { ok: false, message: "DEV_INTERNAL_ONLY_CLOUD_PROVIDER_DISABLED" };
+  }
   const base = readProductionCodingModelConfig();
   const primaryProvider = configuredChatPrimaryProvider();
   const primaryModel = configuredChatPrimaryModel();
