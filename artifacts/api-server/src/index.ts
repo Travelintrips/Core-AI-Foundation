@@ -201,7 +201,10 @@ async function initializeRuntimeServices(): Promise<void> {
 
   const isProduction = process.env["NODE_ENV"] === "production";
 
-  if (process.env["OLLAMA_WORKER_RUNTIME_ENABLED"] === "true") {
+  // The embedded Ollama runtime must only run on hosts that actually expose Ollama.
+  // LiteSpeed/Passenger sets LSNODE_CONSOLE_LOG on Hostinger web workers; starting
+  // a local Ollama runtime there creates endless health-check/reconnect traffic.
+  if (process.env["OLLAMA_WORKER_RUNTIME_ENABLED"] === "true" && !process.env["LSNODE_CONSOLE_LOG"]) {
     await runStartupStep(
       "[ollama-worker] Runtime start",
       () => ollamaWorkerRuntime.startOllamaWorkerRuntime(),
