@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   ack: vi.fn(),
   unsubscribe: vi.fn(),
+  handshakeEvidence: vi.fn(),
   learning: vi.fn(),
 }));
 vi.mock("../services/aiCoreMcpResultEventService.js", () => ({ recordAiCoreMcpTerminalResult: mocks.record }));
@@ -21,6 +22,7 @@ vi.mock("../services/localCodingControlBridgeService.js", () => ({
   listPendingCodingBridgeResponsesForConversation: mocks.list,
   subscribeCodingBridgeConversation: mocks.subscribe,
   unsubscribeCodingBridgeConversation: mocks.unsubscribe,
+  getVerifiedMcpHandshakeEvidenceForConversation: mocks.handshakeEvidence,
 }));
 import router from "../routes/ai-core-mcp.js";
 
@@ -30,6 +32,7 @@ describe("MCP command two-way routing", () => {
     vi.stubEnv("AI_CORE_CHAT_CONNECTOR_KEY", "test-connector-key");
     mocks.record.mockResolvedValue(undefined);
     mocks.learning.mockResolvedValue(undefined);
+    mocks.handshakeEvidence.mockResolvedValue(null);
     mocks.subscribe.mockResolvedValue({
       clientId: "chatgpt:conversation-a",
       leaseExpiresAt: new Date("2026-10-07T16:00:00.000Z"),
@@ -75,6 +78,41 @@ describe("MCP command two-way routing", () => {
     expect(body.chatSessionId).toBeNull();
     expect(body.chatSessionIdVerified).toBe(false);
     expect(body.conversationAckVerified).toBe(false);
+  });
+
+  it("surfaces owner-bound durable E2E evidence in OAuth handshake without trusting an unverified session", async () => {
+    const { verifyMcpAccessToken } = await import("../services/aiCoreMcpOAuthService.js");
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "user-verified" },
+      scopes: new Set(["ai_core.progress"]),
+      clientId: "chatgpt-client-verified",
+    } as never);
+    mocks.handshakeEvidence.mockResolvedValueOnce({
+      commandId: "11111111-1111-4111-8111-111111111111",
+      responseId: "22222222-2222-4222-8222-222222222222",
+      ownerChannel: "server-derived",
+      targetConversationId: "6ad4e0a7-9964-83ec-81a6-9db5eb8457ae",
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+      eventId: "a".repeat(64),
+      acknowledgedAt: "2026-10-20T00:00:00.000Z",
+      browserWakeVerified: true,
+      conversationAckVerified: true,
+    });
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const response = await request(app).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer oauth-unit-token")
+      .send({ jsonrpc: "2.0", id: 1, method: "tools/call",
+        params: { name: "handshake_ai_core", arguments: {} } });
+    const body = response.body.result.structuredContent;
+    expect(body).toMatchObject({
+      chatSessionId: "6ad4e0a7-9964-83ec-81a6-9db5eb8457ae",
+      chatSessionIdVerified: true,
+      conversationAckVerified: true,
+      browserWakeVerified: true,
+      conversationBindingStatus: "VERIFIED_DURABLE_E2E_ATTESTATION",
+      verifiedWorkerId: "openclaw-dell-chatgpt-wake-dev",
+    });
+    expect(mocks.handshakeEvidence).toHaveBeenCalledWith(expect.stringMatching(/^ai-engine-oauth:[a-f0-9]{64}$/));
   });
 
   it("answers MCP discovery from the live tool registry without falling through to chat or database routing", async () => {
