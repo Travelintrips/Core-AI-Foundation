@@ -37,6 +37,19 @@ jobs:
           }
           echo "dev_target_sha=$EXPECTED_SHA"
 
+      - name: Capture production health and SHA baseline (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 12 \
+            -D /tmp/prod-before.headers -o /tmp/prod-before.json "https://$PROD_DOMAIN/api/healthz"
+          jq -e '.status == "ok"' /tmp/prod-before.json >/dev/null
+          prod_sha="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
+            /tmp/prod-before.headers | tail -n1)"
+          [[ "$prod_sha" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::PROD baseline SHA unavailable"; exit 1; }
+          echo "PROD_BASELINE_SHA=$prod_sha" >> "$GITHUB_ENV"
+          echo "PROD_BASELINE=PASS"
+
       - name: Wait for CI-gated VPS DEV build and exact release
         shell: bash
         run: |
@@ -85,9 +98,8 @@ jobs:
           jq -e '.status == "ok"' /tmp/prod.json >/dev/null
           prod_sha="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
             /tmp/prod.headers | tail -n1)"
-          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
-          test "$prod_sha" = "$current_main" ||
-            { echo "::error::PROD no longer runs exact main; DNS switch blocked"; exit 1; }
+          test "$prod_sha" = "$PROD_BASELINE_SHA" ||
+            { echo "::error::PROD SHA changed during DEV deployment; refusing promotion"; exit 1; }
           echo "DEV_ISOLATION_SMOKE=PASS asset=200 anonymous=$anon prod_sha=$prod_sha"
 
       - name: Verify canonical combined DEV DNS (read-only)
