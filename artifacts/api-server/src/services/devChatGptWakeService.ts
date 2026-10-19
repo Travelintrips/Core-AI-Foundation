@@ -81,6 +81,7 @@ export type DevBrowserWakeInput = {
 export function isDevBrowserWakeAllowed(input: {
   ownerChannel: string;
   targetConversationId: string;
+  requestHost?: string;
 }): boolean {
   const allowedChannels = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "")
     .split(",").map(value => value.trim()).filter(Boolean));
