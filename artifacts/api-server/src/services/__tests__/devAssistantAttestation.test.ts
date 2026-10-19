@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEV_ASSISTANT_ATTESTATION_ALGORITHM,
   DEV_ASSISTANT_ATTESTATION_KEY_ID,
+  DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID,
   DEV_ASSISTANT_ATTESTATION_VERSION,
   deriveDevAssistantChallenge,
   devAssistantAttestationPayload,
@@ -42,6 +43,33 @@ function signed(overrides: Partial<DevAssistantAttestation> = {}) {
     publicKeyDerBase64: publicKey.export({ format: "der", type: "spki" }).toString("base64"),
   };
 }
+
+describe("DELL DEV assistant attestation isolation", () => {
+  it("accepts DELL's own key and rejects worker/key substitution", () => {
+    const dell = { ...expected, workerId: "openclaw-dell-chatgpt-wake-dev" as const };
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const unsigned = {
+      version: DEV_ASSISTANT_ATTESTATION_VERSION,
+      algorithm: DEV_ASSISTANT_ATTESTATION_ALGORITHM,
+      keyId: DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID,
+      workerId: dell.workerId,
+      conversationId: dell.targetConversationId,
+      eventId: dell.eventId,
+      challenge: deriveDevAssistantChallenge(dell),
+      assistantMessageId: "44444444-4444-4444-8444-444444444444",
+      assistantResponseHash: "c".repeat(64),
+      observedAt,
+    } as const;
+    const attestation = { ...unsigned, signature: sign(null, Buffer.from(devAssistantAttestationPayload(unsigned), "utf8"), privateKey).toString("base64") };
+    const publicKeyDerBase64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    const args = { details: { attestation }, expected: dell,
+      notBefore: "2026-10-18T12:00:00.000Z", receivedAt: "2026-10-18T12:00:40.000Z", publicKeyDerBase64 };
+    expect(verifyDevAssistantAttestation(args).verified).toBe(true);
+    expect(verifyDevAssistantAttestation({ ...args, expected }).verified).toBe(false);
+    expect(verifyDevAssistantAttestation({ ...args, expected: { ...dell, eventId: "d".repeat(64) } }).verified).toBe(false);
+    expect(verifyDevAssistantAttestation({ ...args, details: { attestation: { ...attestation, keyId: DEV_ASSISTANT_ATTESTATION_KEY_ID } } }).verified).toBe(false);
+  });
+});
 
 describe("DEV assistant response attestation", () => {
   it("derives a stable event-bound challenge and verifies a signed assistant receipt", () => {
