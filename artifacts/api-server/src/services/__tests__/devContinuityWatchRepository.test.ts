@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign } from "node:crypto";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
@@ -7,13 +8,16 @@ import {
   type DevContinuityTransactionRunner, type DevContinuityWatch,
 } from "../devContinuityWatchRepository.js";
 import { DEV_CONTINUITY_WORKER, type DevContinuityWakeResult } from "../devContinuityWakeEvents.js";
+import { DEV_ASSISTANT_ATTESTATION_ALGORITHM, DEV_ASSISTANT_ATTESTATION_KEY_ID, DEV_ASSISTANT_ATTESTATION_VERSION, deriveDevAssistantChallenge, devAssistantAttestationPayload, type DevAssistantAttestation } from "../devAssistantAttestation.js";
 
 const owner = "ai-engine-oauth:" + "a".repeat(64);
 const other = "ai-engine-oauth:" + "b".repeat(64);
 const target = "11111111-1111-4111-8111-111111111111";
 const childId = "22222222-2222-4222-8222-222222222222";
 const initial = Date.parse("2026-10-18T12:00:00.000Z");
-const input = { ownerChannel: owner, targetConversationId: target, jobId: "job-1", checkpointSha: "c".repeat(40), idleSeconds: 60, ttlSeconds: 3600 };
+const input = { ownerChannel: owner, targetConversationId: target, jobId: "33333333-3333-4333-8333-333333333333", checkpointSha: "c".repeat(40), idleSeconds: 60, ttlSeconds: 3600 };
+const attestationKey = generateKeyPairSync("ed25519");
+const attestationPublicKeyDerBase64 = attestationKey.publicKey.export({ format: "der", type: "spki" }).toString("base64");
 type Row = { id: string; external_command_id: string; source: string; command_type: string;
   metadata_json: { conversationId: string; assignedClientId: string; devContinuity: DevContinuityWatch; [key: string]: unknown }; status: string };
 
@@ -69,7 +73,8 @@ function store() {
             const meta = value["metadata_json"] as Row["metadata_json"];
             const bind = meta.devContinuity as unknown as Record<string, unknown>;
             return value["source"] === "ai-core" && value["command_type"] === "EXTERNAL_AGENT_WORK" &&
-              meta.conversationId === params[0] && meta.assignedClientId === params[1] && meta["completedBy"] === params[2] &&
+              meta.conversationId === params[0] && (meta.assignedClientId === params[1] || meta.assignedClientId === params[2]) &&
+              meta["completedBy"] === meta.assignedClientId &&
               bind["parentWatchCommandId"] === params[3] && bind["jobId"] === params[4] && bind["eventId"] === params[5];
           });
           return { rows: structuredClone(found.slice(0, 1)) };
@@ -91,14 +96,30 @@ function store() {
 }
 
 function callback(watch: DevContinuityWatch, overrides: Partial<DevContinuityWakeResult> = {}): DevContinuityWakeResult {
+  const expected = { ownerChannel: owner, targetConversationId: target, eventId: watch.wakeEventId!,
+    watchCommandId: watch.commandId, jobId: watch.jobId, checkpointRevision: watch.revision, workerId: DEV_CONTINUITY_WORKER };
+  const unsigned = {
+    version: DEV_ASSISTANT_ATTESTATION_VERSION,
+    algorithm: DEV_ASSISTANT_ATTESTATION_ALGORITHM,
+    keyId: DEV_ASSISTANT_ATTESTATION_KEY_ID,
+    workerId: DEV_CONTINUITY_WORKER,
+    conversationId: target,
+    eventId: watch.wakeEventId!,
+    challenge: deriveDevAssistantChallenge(expected),
+    assistantMessageId: "44444444-4444-4444-8444-444444444444",
+    assistantResponseHash: "c".repeat(64),
+    observedAt: new Date(Date.parse(watch.triggeredAt ?? watch.lastProgressAt) + 100).toISOString(),
+  } as Omit<DevAssistantAttestation, "signature">;
+  const attestation = { ...unsigned,
+    signature: sign(null, Buffer.from(devAssistantAttestationPayload(unsigned), "utf8"), attestationKey.privateKey).toString("base64") };
   return { parentWatchCommandId: watch.commandId, ownerChannel: owner, eventId: watch.wakeEventId!, jobId: watch.jobId,
     childCommandId: childId, workerId: DEV_CONTINUITY_WORKER, status: "COMPLETED",
-    details: { browserConfirmed: true, browserPairingVerified: true, chatgptSubmitted: true, verifiedAssistantReply: false,
-      exitCode: 0, conversationId: target, eventId: watch.wakeEventId, evidenceFingerprint: "f".repeat(64) }, ...overrides };
+    details: { browserConfirmed: true, browserPairingVerified: true, chatgptSubmitted: true, verifiedAssistantReply: true,
+      exitCode: 0, conversationId: target, eventId: watch.wakeEventId, evidenceFingerprint: "f".repeat(64), attestation }, ...overrides };
 }
 
 describe("passive DEV continuity persistence", () => {
-  beforeEach(() => { vi.stubEnv("APP_ENV", "development"); vi.stubEnv("NODE_ENV", "test"); });
+  beforeEach(() => { vi.stubEnv("APP_ENV", "development"); vi.stubEnv("NODE_ENV", "test"); vi.stubEnv("AI_CORE_DEV_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", attestationPublicKeyDerBase64); });
   afterEach(() => { vi.unstubAllEnvs(); });
 
   it("registers concurrently once without resetting expiry, revision or progress", async () => {
@@ -168,7 +189,7 @@ describe("passive DEV continuity persistence", () => {
     expect(await repository.recordResult(callback(claimed, { parentWatchCommandId: target }), initial + 60_100)).toBeNull();
     const result = await repository.recordResult(callback(claimed), initial + 60_200);
     expect(result).toMatchObject({ state: "WAKE_CONFIRMED", wakeCount: 1,
-      evidence: { resultCode: "DELIVERY_CONFIRMED", verifiedAssistantReply: false } });
+      evidence: { resultCode: "DELIVERY_CONFIRMED", verifiedAssistantReply: true } });
     expect(await repository.recordQueued({ ownerChannel: owner, jobId: input.jobId, claimToken: claimed.claimToken!,
       eventId: claimed.wakeEventId!, wakeCommandId: childId }, initial + 60_300)).toEqual(result);
   });

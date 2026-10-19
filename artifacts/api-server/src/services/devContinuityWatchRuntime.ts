@@ -1,3 +1,4 @@
+import type { DevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 /**
  * Per-job progress deadlines. Registration is passive: only a due, durable CAS
  * claim may enqueue a wake. Browser idle/draft checks remain the worker's job.
@@ -41,7 +42,7 @@ export interface ContinuityResult {
   eventId: string;
   jobId: string;
   childCommandId: string;
-  workerId: "openclaw-travelintrips-dev";
+  workerId: DevContinuityWakeWorker;
   status: "COMPLETED" | "FAILED";
   details: Record<string, unknown>;
 }
