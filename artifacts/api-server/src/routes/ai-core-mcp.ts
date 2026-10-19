@@ -36,6 +36,7 @@ import {
   listPendingCodingBridgeResponsesForConversation,
   subscribeCodingBridgeConversation,
   unsubscribeCodingBridgeConversation,
+  getVerifiedMcpHandshakeEvidenceForConversation,
 } from "../services/localCodingControlBridgeService.js";
 
 const router = Router();
@@ -1159,28 +1160,44 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     let payload: unknown;
     if (params.name === "handshake_ai_core") {
       const handshakeId = randomUUID();
+      const ownerChannel = oauthEventChannel(identity);
+      const verifiedEvidence = ownerChannel
+        ? await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel).catch(() => null)
+        : null;
       payload = {
         protocol: "ai-core-communication/v1",
         authenticated: true,
         handshakeId,
         handshakeAck: { received: true, handshakeId, source: "ai_core_mcp_server" },
-        chatSessionId: null,
-        chatSessionIdVerified: false,
-        aiEngineSessionId: oauthEventChannel(identity),
-        aiEngineSessionVerified: oauthEventChannel(identity) !== null,
-        conversationAckVerified: false,
+        chatSessionId: verifiedEvidence?.targetConversationId ?? null,
+        chatSessionIdVerified: Boolean(verifiedEvidence),
+        aiEngineSessionId: ownerChannel,
+        aiEngineSessionVerified: ownerChannel !== null,
+        conversationAckVerified: verifiedEvidence?.conversationAckVerified ?? false,
         capabilities: tools.filter((tool) => tool.name !== "get_profile").map((tool) => ({
           name: tool.name,
           description: tool.description,
           scope: tool.securitySchemes?.[0]?.scopes?.[0] ?? null,
         })),
         conversationBinding: "requires_verified_explicit_conversation_id",
-        conversationBindingStatus: "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
+        conversationBindingStatus: verifiedEvidence
+          ? "VERIFIED_DURABLE_E2E_ATTESTATION"
+          : "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
         eventChannelBinding: "OAUTH_PRINCIPAL_CLIENT_CHANNEL",
         browserPairingRequired: true,
         conversationUrlKnown: false,
-        browserWakeVerified: false,
-        notes: "MCP does not expose the current ChatGPT conversation URL automatically. Never dispatch a session callback without verified pairing.",
+        browserWakeVerified: verifiedEvidence?.browserWakeVerified ?? false,
+        ...(verifiedEvidence ? {
+          verifiedConversationId: verifiedEvidence.targetConversationId,
+          verifiedWorkerId: verifiedEvidence.workerId,
+          verifiedEventId: verifiedEvidence.eventId,
+          verifiedCommandId: verifiedEvidence.commandId,
+          verifiedResponseId: verifiedEvidence.responseId,
+          verifiedAcknowledgedAt: verifiedEvidence.acknowledgedAt,
+        } : {}),
+        notes: verifiedEvidence
+          ? "Handshake verification is derived from durable owner-bound MCP ACK plus revalidated Ed25519 browser evidence."
+          : "MCP does not expose the current ChatGPT conversation URL automatically. Never dispatch a session callback without verified pairing.",
       };
     } else if (params.name === "query_ai_core") {
       const parsed = ReadOnlyQueryArgs.parse(params.arguments ?? {});
