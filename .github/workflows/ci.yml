@@ -65,7 +65,7 @@ jobs:
           python3 -m py_compile scripts/windows/ai-core/dev-chatgpt-wake-once.py
           grep -q '^PATTERN_V1 = re.compile' scripts/windows/ai-core/dev-chatgpt-wake-once.py
           grep -q '^PATTERN_V2 = re.compile' scripts/windows/ai-core/dev-chatgpt-wake-once.py
-          grep -q 'DEV_CHATGPT_WAKE_V2' scripts/dev/dell-wake-executor.mjs
+          grep -q 'DEV_CHATGPT_WAKE_V' scripts/dev/dell-wake-executor.mjs
       - name: Verify E2E-gated VPS Docker image retention (offline)
         run: |
           python3 scripts/vps/test_docker_image_retention.py -q
