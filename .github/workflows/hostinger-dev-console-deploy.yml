@@ -125,7 +125,7 @@ jobs:
           while [ "$offset" -lt "$size" ]; do
             bytes=$((size - offset))
             [ "$bytes" -le "$chunk_size" ] || bytes="$chunk_size"
-            tail -c "+$((offset + 1))" "$ARCHIVE_PATH" | head -c "$bytes" > /tmp/tus-chunk.bin
+            dd if="$ARCHIVE_PATH" of=/tmp/tus-chunk.bin iflag=skip_bytes,count_bytes skip="$offset" count="$bytes" status=none
             test "$(stat -c%s /tmp/tus-chunk.bin)" = "$bytes" || {
               echo "::error::Short archive read."
               exit 1
