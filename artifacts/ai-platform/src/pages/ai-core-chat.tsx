@@ -82,6 +82,23 @@ type ChatResponse = {
   workspaceUrl?: string;
   warning?: string;
   imageUrl?: string | null;
+  commandId?: string;
+};
+
+type ExternalWorkState = {
+  command: {
+    id: string;
+    status: string;
+    metadataJson?: Record<string, unknown>;
+  };
+  latestResponse: {
+    id: string;
+    kind: string;
+    message: string;
+    metadataJson?: Record<string, unknown>;
+    acknowledgedAt?: string | null;
+  } | null;
+  callbackProcessingState: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
 };
 
 type CoreConfig = {
@@ -433,6 +450,7 @@ export default function AiCoreChat() {
   const speechQueueRef = useRef<string[]>([]);
   const speechQueueActiveRef = useRef(false);
   const resumeListeningAfterSpeechRef = useRef(false);
+  const externalPollTimersRef = useRef<Set<number>>(new Set());
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredPwaInstallPrompt());
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -550,6 +568,10 @@ export default function AiCoreChat() {
         voicePlaybackAudioRef.current.src = "";
         voicePlaybackAudioRef.current = null;
       }
+      for (const timer of externalPollTimersRef.current) {
+        window.clearTimeout(timer);
+      }
+      externalPollTimersRef.current.clear();
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -1373,6 +1395,58 @@ export default function AiCoreChat() {
     );
   }
 
+  function cleanExternalReply(text: string): string {
+    return text
+      .replace(/\[AI_CORE_ATTEST_ACK:[a-f0-9]{64}\]\s*/gi, "")
+      .trim();
+  }
+
+  function watchExternalWork(commandId: string, assistantId: string) {
+    let attempts = 0;
+    const maxAttempts = 150;
+
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const state = await apiFetch<ExternalWorkState>(
+          "/api/ai/core-chat/external-work/" + encodeURIComponent(commandId),
+        );
+        const terminal =
+          state.callbackProcessingState === "COMPLETED" ||
+          state.callbackProcessingState === "FAILED";
+
+        if (terminal && state.latestResponse) {
+          const resultText = cleanExternalReply(state.latestResponse.message || "");
+          updateMessage(assistantId, (message) => ({
+            ...message,
+            text:
+              resultText ||
+              (state.callbackProcessingState === "FAILED"
+                ? "Job gagal tanpa detail hasil."
+                : "Job selesai."),
+            error: state.callbackProcessingState === "FAILED",
+            meta: {
+              ...message.meta,
+              route: "CHATGPT_DEV_WAKE",
+            },
+          }));
+          return;
+        }
+      } catch {
+        // Keep polling transient read failures; the original routing ACK remains visible.
+      }
+
+      if (attempts >= maxAttempts) return;
+      const timer = window.setTimeout(() => {
+        externalPollTimersRef.current.delete(timer);
+        void poll();
+      }, 2_000);
+      externalPollTimersRef.current.add(timer);
+    };
+
+    void poll();
+  }
+
   async function submit(
     event?: FormEvent,
     overrideText?: string,
@@ -1570,6 +1644,9 @@ export default function AiCoreChat() {
               if (typeof value.taskId === "string" && value.taskId) {
                 setActiveTaskId(value.taskId);
                 setProgress(null);
+              }
+              if (typeof value.commandId === "string" && value.commandId) {
+                watchExternalWork(value.commandId, assistantId);
               }
             }
           },

@@ -1831,6 +1831,12 @@ function writeBufferedChatStream(
     imageUrl: result["imageUrl"] ?? null,
     promptId: result["promptId"] ?? null,
     latencyMs: result["latencyMs"] ?? null,
+    commandId: result["commandId"] ?? null,
+    externalCommandId: result["externalCommandId"] ?? null,
+    workerId: result["workerId"] ?? null,
+    eventId: result["eventId"] ?? null,
+    correlationId: result["correlationId"] ?? null,
+    targetConversationId: result["targetConversationId"] ?? null,
     incomplete: false,
   });
 }
