@@ -9,6 +9,12 @@ describe("Issue #980: explicit external-agent routing", () => {
     }
   });
 
+
+  it("routes the dedicated DELL ChatGPT wake worker by exact identity", () => {
+    expect(detectExplicitExternalAgentClientId("gunakan openclaw-dell-chatgpt-wake-dev untuk wake DEV"))
+      .toBe("openclaw-dell-chatgpt-wake-dev");
+  });
+
   it("requires explicit delegation before selecting dedicated Dell agents", () => {
     expect(detectExplicitExternalAgentClientId("dell-browser belum online")).toBeNull();
   });

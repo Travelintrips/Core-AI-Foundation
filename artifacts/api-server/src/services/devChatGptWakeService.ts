@@ -2,17 +2,15 @@ import { createHash } from "node:crypto";
 import { dispatchExternalAgentWork } from "./externalAgentDispatchService.js";
 import { deriveDevAssistantChallenge } from "./devAssistantAttestation.js";
 
-const WORKER = "openclaw-travelintrips-dev";
-const DELL_WORKER = "openclaw-dell-chatgpt-wake-dev";
-/** Explicit DEV opt-in only; an unknown target fails closed. */
-function wakeWorker(): string {
-  const selected = process.env["AI_CORE_DEV_BROWSER_WAKE_WORKER"] ?? WORKER;
-  if (selected !== WORKER && selected !== DELL_WORKER) throw new Error("DEV_CHATGPT_WAKE_WORKER_DENIED");
-  if (selected === DELL_WORKER && (process.env["APP_ENV"] !== "development" ||
-      !process.env["AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"])) {
-    throw new Error("DEV_CHATGPT_WAKE_DELL_ATTESTATION_NOT_CONFIGURED");
-  }
-  return selected;
+const DEFAULT_WORKER = "openclaw-travelintrips-dev" as const;
+const DELL_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
+type DevWakeWorker = typeof DEFAULT_WORKER | typeof DELL_WORKER;
+
+function resolveWakeWorker(): DevWakeWorker {
+  const configured = process.env["AI_CORE_DEV_BROWSER_WAKE_WORKER_ID"]?.trim();
+  if (!configured || configured === DEFAULT_WORKER) return DEFAULT_WORKER;
+  if (configured === DELL_WORKER) return DELL_WORKER;
+  throw new Error("DEV_CHATGPT_WAKE_WORKER_INVALID");
 }
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
@@ -55,7 +53,7 @@ function isDuplicateCommandKey(error: unknown): boolean {
   return false;
 }
 
-function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, worker: string, command: {
+function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, worker: DevWakeWorker, command: {
   source: string;
   commandType: string;
   instruction: string;
@@ -84,7 +82,7 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, wo
 }
 
 /** Reconcile only the known uniqueness race. Never retry an ambiguous network or authorization error. */
-async function reconcileDuplicateWake(input: DevBrowserWakeInput, externalCommandId: string, instruction: string, worker: string) {
+async function reconcileDuplicateWake(input: DevBrowserWakeInput, externalCommandId: string, instruction: string, worker: DevWakeWorker) {
   const { db, aiCodingBridgeCommandsTable } = await import("@workspace/db");
   const { and, eq, sql } = await import("drizzle-orm");
   return db.transaction(async transaction => {
@@ -109,6 +107,11 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   clientId: string;
   created: boolean;
 }> {
+  const worker = resolveWakeWorker();
+  if (worker === DELL_WORKER && (process.env["APP_ENV"] !== "development" ||
+      !process.env["AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"])) {
+    throw new Error("DEV_CHATGPT_WAKE_DELL_ATTESTATION_NOT_CONFIGURED");
+  }
   if (!isDevBrowserWakeAllowed(input) || typeof input.eventId !== "string" ||
       input.eventId.length !== 64 || !/^[a-f0-9]{64}$/i.test(input.eventId)) {
     throw new Error("DEV_CHATGPT_WAKE_DENIED");
@@ -131,7 +134,6 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
     // Its existing command can still be inspected through the status path.
     if (expiry <= Date.now()) throw new Error("DEV_CHATGPT_WAKE_EXPIRED");
   }
-  const worker = wakeWorker();
   const targetConversationId = input.targetConversationId.toLowerCase();
   const eventId = input.eventId.toLowerCase();
   const challenge = deriveDevAssistantChallenge({ ...input, targetConversationId, eventId });
