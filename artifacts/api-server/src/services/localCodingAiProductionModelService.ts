@@ -1,6 +1,8 @@
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
+// TODO: Validate request payload fields (provider, model, timeoutMs, maxOutputTokens, allowlists) before calling external model provider
+
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
