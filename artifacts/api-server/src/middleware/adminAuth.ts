@@ -271,6 +271,14 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
+  // This exact DEV-only route authenticates OAuth and enforces owner/allowlist
+  // inside its handler. Never let the global admin API-key gate consume its
+  // Bearer OAuth token; do not relax any other admin-protected endpoint.
+  if (process.env["APP_ENV"] === "development" &&
+      req.method === "POST" && req.path === "/ai/dev/chatgpt-wake/jobs") {
+    next();
+    return;
+  }
   // Fast-path: all /public/* routes bypass admin key (they use their own token-based auth).
   // Explicit check avoids any array-iteration ordering issue in the loop below.
   if (req.path === "/public" || req.path.startsWith("/public/")) {
