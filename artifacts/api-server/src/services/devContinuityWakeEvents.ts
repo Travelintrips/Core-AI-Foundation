@@ -1,5 +1,10 @@
 /** In-process signal only. The authenticated bridge response is the durable source. */
 export const DEV_CONTINUITY_WORKER = "openclaw-travelintrips-dev" as const;
+export const DEV_DELL_CONTINUITY_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
+export type DevContinuityWakeWorker = typeof DEV_CONTINUITY_WORKER | typeof DEV_DELL_CONTINUITY_WORKER;
+export function isDevContinuityWakeWorker(value: unknown): value is DevContinuityWakeWorker {
+  return value === DEV_CONTINUITY_WORKER || value === DEV_DELL_CONTINUITY_WORKER;
+}
 
 export interface DevContinuityWakeResult {
   parentWatchCommandId: string;
@@ -7,7 +12,7 @@ export interface DevContinuityWakeResult {
   eventId: string;
   jobId: string;
   childCommandId: string;
-  workerId: typeof DEV_CONTINUITY_WORKER;
+  workerId: DevContinuityWakeWorker;
   status: "COMPLETED" | "FAILED";
   details: Record<string, unknown>;
 }
@@ -36,11 +41,11 @@ export function devContinuityResultFromCommittedCommand(input: {
   details: Record<string, unknown>;
 }): DevContinuityWakeResult | null {
   if (input.source !== "ai-core" || input.commandType !== "EXTERNAL_AGENT_WORK" ||
-      input.authenticatedWorkerId !== DEV_CONTINUITY_WORKER || !record(input.metadata)) return null;
+      !isDevContinuityWakeWorker(input.authenticatedWorkerId) || !record(input.metadata)) return null;
   const metadata = input.metadata;
   const binding = metadata["devContinuity"];
-  if (!record(binding) || metadata["assignedClientId"] !== DEV_CONTINUITY_WORKER ||
-      metadata["completedBy"] !== DEV_CONTINUITY_WORKER ||
+  if (!record(binding) || metadata["assignedClientId"] !== input.authenticatedWorkerId ||
+      metadata["completedBy"] !== input.authenticatedWorkerId ||
       metadata["capability"] !== "chatgpt:wake" || metadata["explicitWorkerTarget"] !== true) return null;
   const parent = binding["parentWatchCommandId"];
   const owner = binding["ownerChannel"];
@@ -52,7 +57,7 @@ export function devContinuityResultFromCommittedCommand(input: {
       typeof eventId !== "string" || !event.test(eventId) || metadata["eventId"] !== eventId ||
       typeof jobId !== "string" || !job.test(jobId)) return null;
   return { parentWatchCommandId: parent, ownerChannel: owner, eventId, jobId,
-    childCommandId: input.id, workerId: DEV_CONTINUITY_WORKER,
+    childCommandId: input.id, workerId: input.authenticatedWorkerId,
     status: input.status, details: input.details };
 }
 
