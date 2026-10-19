@@ -2540,8 +2540,9 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
 
 async function startSimpleChatGptWake(
   command: ChatGptWakeCommand,
+  requestHost?: string,
 ): Promise<Record<string, unknown>> {
-  const target = await resolveVerifiedDevWakeTarget(command.accountAlias);
+  const target = await resolveVerifiedDevWakeTarget(command.accountAlias, requestHost);
   const eventId = randomBytes(32).toString("hex");
   const jobLabel = command.jobAlias ?? "JOB";
   const correlationId =
@@ -2554,6 +2555,7 @@ async function startSimpleChatGptWake(
     correlationId,
     instruction: command.instruction,
     jobAlias: command.jobAlias,
+    requestHost,
   });
   return {
     kind: "external_agent",
@@ -3783,7 +3785,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       ? parseChatGptWakeCommand(parsed.data.message)
       : null;
     if (simpleWakeCommand) {
-      writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand));
+      writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand, req.hostname));
       return;
     }
 
@@ -4005,7 +4007,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         : null;
     const result =
       simpleWakeCommand
-        ? await startSimpleChatGptWake(simpleWakeCommand)
+        ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname)
         : directOpenClawPcCommand
         ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)
         : directConversationEvent
