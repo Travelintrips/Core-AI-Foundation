@@ -1682,8 +1682,10 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           // Do not claim DEV delivery when DEV is unavailable.
         }
       }
+      const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId).catch(() => null);
       payload = {
         conversationId: parsed.conversationId,
+        handshakeEvidence,
         events: [...rows
           .map((row) => ({
             ...row,
