@@ -16,6 +16,18 @@ if (settings.AI_CORE_OPENCLAW_CLIENT_ID !== workerId ||
 if (!fs.existsSync(helper)) throw new Error("Wake helper missing");
 
 const base = settings.AI_CORE_BASE_URL.replace(/\/$/, "");
+const python = settings.AI_CORE_PYTHON?.trim() || (() => {
+  const programs = path.join(process.env.LOCALAPPDATA || "", "Programs", "Python");
+  if (fs.existsSync(programs)) {
+    const candidates = fs.readdirSync(programs, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && /^Python\d+$/i.test(entry.name))
+      .map(entry => path.join(programs, entry.name, "python.exe"))
+      .filter(candidate => fs.existsSync(candidate))
+      .sort().reverse();
+    if (candidates[0]) return candidates[0];
+  }
+  return "python";
+})();
 async function request(route, payload) {
   const response = await fetch(base + route, {
     method: "POST",
@@ -53,7 +65,7 @@ function execute(work) {
     AI_CORE_OPENCLAW_CMD: path.join(process.env.LOCALAPPDATA, "OpenClaw", "deps", "portable-node", "openclaw.cmd"),
     AI_CORE_DEV_WAKE_BROWSER_PROFILE: "openclaw",
   };
-  const run = spawnSync("python", [helper], {
+  const run = spawnSync(python, [helper], {
     input: JSON.stringify({ instruction, workerId }),
     encoding: "utf8",
     windowsHide: true,
