@@ -45,11 +45,28 @@ describe("exclusive DEV MCP gateway and existing scoped relay", () => {
     expect(result.body.result.structuredContent.executionEnvironment).toBe("DEV");
     expect(f.fallback).not.toHaveBeenCalled();
   });
-  it.each(["query_ai_core", "get_ai_core_task_progress"])("%s is explicitly unavailable, never serviced by PROD", async (name) => {
+  it.each(["get_ai_core_task_progress"])("%s is explicitly unavailable, never serviced by PROD", async (name) => {
     const f = fixture(); const result = await f.call(name, { taskId: "prod-task-fixture" });
     expect(result.body.result.isError).toBe(true);
     expect(result.body.result.structuredContent.reason).toBe("DEV_RELAY_SCOPE_UNSUPPORTED");
     expect(f.request).not.toHaveBeenCalled(); expect(f.fallback).not.toHaveBeenCalled();
+  });
+  it("relays read-only query to DEV with server-enforced branch and ownership", async () => {
+    const f = fixture();
+    const result = await f.call("query_ai_core", { message: "Check DEV health", branch: "main", repository: "other/repo", modelPolicy: "cloud", conversationId: "forged" });
+    expect(result.body.result.isError).toBe(false);
+    expect(f.request.mock.calls[0]![0]).toBe(url);
+    const forwarded = JSON.parse(String(f.request.mock.calls[0]![1]?.body)).params;
+    expect(forwarded.name).toBe("query_ai_core");
+    expect(forwarded.arguments).toMatchObject({ branch: "develop", repository: "Travelintrips/Core-AI-Foundation", modelPolicy: "economy" });
+    expect(forwarded.arguments.conversationId).toMatch(/^ai-engine-oauth:[0-9a-f]{64}$/);
+    expect(f.fallback).not.toHaveBeenCalled();
+  });
+  it("rejects invalid read queries before dispatch", async () => {
+    const f = fixture();
+    const result = await f.call("query_ai_core", { message: "" });
+    expect(result.body.result.structuredContent.reason).toBe("DEV_READ_QUERY_INVALID");
+    expect(f.request).not.toHaveBeenCalled();
   });
   it("uses a consistent server-derived OAuth channel", async () => {
     const f = fixture();

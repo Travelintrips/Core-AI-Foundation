@@ -15,7 +15,7 @@ const DISCOVERY = new Set(["initialize", "notifications/initialized", "ping", "t
 const BOUND = new Set(["send_ai_core_command", "subscribe_ai_core_events",
   "read_ai_core_events", "ack_ai_core_event", "unsubscribe_ai_core_events"]);
 // This is the existing DEV relay authorization boundary, not an extension of it.
-const RELAY_TOOLS = new Set([...BOUND, "get_external_agent_command_progress"]);
+const RELAY_TOOLS = new Set([...BOUND, "get_external_agent_command_progress", "query_ai_core"]);
 
 type VerifiedIdentity = Awaited<ReturnType<typeof verifyMcpAccessToken>>;
 type Dependencies = {
@@ -103,7 +103,7 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
         routePolicy: "DEV_ONLY_NO_PROD_FALLBACK", backendProbeVerified,
         backendProbe: backendProbeVerified ? "authorized_private_inbox_read" : null,
         relayTools: [...RELAY_TOOLS], relayScope: "bounded_dev_workers_and_owner_authorized_chatgpt_continuity",
-        unavailableTools: ["query_ai_core", "get_ai_core_task_progress"],
+        unavailableTools: ["get_ai_core_task_progress"],
         chatSessionId: null, chatSessionIdVerified: false, conversationAckVerified: false,
         browserWakeVerified: false, conversationBindingStatus: "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
         notes: "Gateway ACK is not ChatGPT browser/SOP delivery. Restricted DEV relay permissions are unchanged.",
@@ -116,6 +116,17 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
       ? { conversationId: channel, limit: 1 } : { ...rawArgs };
     const relayName = name === "handshake_ai_core" ? "read_ai_core_events" : name;
     if (BOUND.has(name)) args.conversationId = channel;
+    if (name === "query_ai_core") {
+      // A read-only DEV query must not select another branch, repository, or execution policy.
+      if (typeof args.message !== "string" || !args.message.trim() || args.message.length > 5000) {
+        error("DEV_READ_QUERY_INVALID"); return;
+      }
+      args.branch = "develop";
+      args.repository = "Travelintrips/Core-AI-Foundation";
+      args.projectName = "Core AI Foundation";
+      args.modelPolicy = "economy";
+      args.conversationId = channel;
+    }
     if (name === "get_external_agent_command_progress") args.ownerConversationId = channel;
     if (name === "send_ai_core_command" && args.branch === undefined) args.branch = "develop";
     if (name === "send_ai_core_command" && typeof args.message === "string") {
