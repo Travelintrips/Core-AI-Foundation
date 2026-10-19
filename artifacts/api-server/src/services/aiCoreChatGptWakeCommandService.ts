@@ -10,17 +10,31 @@ export type ChatGptWakeCommand = {
 };
 
 const WAKE_COMMAND = /^\*(GPT[0-9]{2,4})(?:-(JOB[0-9]{3,12}))?\s+([^\r\n]+)$/i;
+const SIMPLE_WAKE_COMMAND = /^(GPT[0-9]{2,4})(?:\s+JOB\s*0*([0-9]{1,12}))?\s*[,;:\-]?\s+([^\r\n]+)$/i;
 const FORBIDDEN_INSTRUCTION = /[\u0000-\u001f\u007f]/;
+
+function normalizeJobAlias(value: string | undefined): string | null {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (!Number.isSafeInteger(numeric) || numeric < 1) return null;
+  return "JOB" + String(numeric).padStart(3, "0");
+}
 
 export function parseChatGptWakeCommand(message: string): ChatGptWakeCommand | null {
   const input = message.trim();
-  const match = WAKE_COMMAND.exec(input);
+  const legacy = WAKE_COMMAND.exec(input);
+  const simple = legacy ? null : SIMPLE_WAKE_COMMAND.exec(input);
+  const match = legacy ?? simple;
   if (!match) return null;
   const instruction = match[3]?.trim() ?? "";
   if (!instruction || instruction.length > 2000 || FORBIDDEN_INSTRUCTION.test(instruction)) return null;
+  const jobAlias = legacy
+    ? match[2]?.toUpperCase() ?? null
+    : normalizeJobAlias(match[2]);
+  if (!legacy && match[2] && !jobAlias) return null;
   return {
     accountAlias: match[1]!.toUpperCase(),
-    jobAlias: match[2]?.toUpperCase() ?? null,
+    jobAlias,
     instruction,
   };
 }
