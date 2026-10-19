@@ -22,11 +22,25 @@ function isDevWakeRuntime(requestHost?: string): boolean {
   return process.env["APP_ENV"] === "development" || isTrustedDevRequestHost(requestHost);
 }
 
+function normalizeDevWakeAccountAlias(accountAlias: string): string {
+  const normalized = accountAlias.trim().toUpperCase();
+  if (normalized === "GPT01") return normalized;
+
+  // Compatibility for older/simple chat parsers that may pass the alias together
+  // with the job label. Keep this intentionally narrow and fail-closed.
+  const simple = /^GPT01\s+JOB\s*[0-9]{1,12}$/.exec(normalized);
+  if (simple) return "GPT01";
+  const legacy = /^\*GPT01(?:-JOB[0-9]{3,12})?$/.exec(normalized);
+  if (legacy) return "GPT01";
+
+  return normalized;
+}
+
 export async function resolveVerifiedDevWakeTarget(
   accountAlias: string,
   requestHost?: string,
 ): Promise<DevWakeTarget> {
-  if (accountAlias.toUpperCase() !== "GPT01") {
+  if (normalizeDevWakeAccountAlias(accountAlias) !== "GPT01") {
     throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
   }
   if (!isDevWakeRuntime(requestHost)) {
