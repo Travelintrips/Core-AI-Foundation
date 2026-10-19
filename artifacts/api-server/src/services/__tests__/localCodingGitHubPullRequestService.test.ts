@@ -5,6 +5,19 @@ import {
 } from "../localCodingGitHubPullRequestService.js";
 import type { GitHubApiClient } from "../localCodingGitHubPublisherService.js";
 
+describe("timeout scenarios", () => {
+  it("should throw an error when GitHub API request times out", async () => {
+    vi.useFakeTimers();
+    const timeoutClient = passingClient();
+    timeoutClient.request = vi.fn(() => new Promise(resolve => setTimeout(() => resolve({}), 10000)));
+    const promise = mergeVerifiedPullRequest(input(), timeoutClient);
+    vi.advanceTimersByTime(10000);
+    await expect(promise).rejects.toThrow(/(timeout|timed out)/);
+    vi.useRealTimers();
+  });
+});
+
+
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
 
