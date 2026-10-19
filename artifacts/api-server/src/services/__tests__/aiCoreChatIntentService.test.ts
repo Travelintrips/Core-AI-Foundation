@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
@@ -11,6 +11,14 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("calls wake-agent handler for dell-chatgpt-wake-agent intent", () => {
+    const handler = vi.fn();
+    const dispatch = classifyAiCoreChatDispatch("dell-chatgpt-wake-agent");
+    if (dispatch.kind === "WAKE_AGENT") {
+      handler();
+    }
+    expect(handler).toHaveBeenCalled();
+  });
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
     expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
       kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
