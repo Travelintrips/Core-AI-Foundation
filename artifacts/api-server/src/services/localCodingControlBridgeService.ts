@@ -16,7 +16,8 @@ import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
-import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult } from "./devContinuityWakeEvents.js";
+import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
+import { devAssistantPublicKeyForWorker, verifyDevAssistantAttestation } from "./devAssistantAttestation.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -507,6 +508,166 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
   return (result.rows ?? []).length > 0;
 }
 
+export type VerifiedMcpHandshakeEvidence = {
+  commandId: string;
+  responseId: string;
+  ownerChannel: string;
+  targetConversationId: string;
+  workerId: string;
+  eventId: string;
+  acknowledgedAt: string;
+  browserWakeVerified: true;
+  conversationAckVerified: true;
+};
+
+type McpHandshakeEvidenceRow = {
+  commandId: unknown;
+  commandReceivedAt: unknown;
+  commandMetadata: unknown;
+  responseId: unknown;
+  responseMetadata: unknown;
+  responseCreatedAt: unknown;
+  acknowledgedAt: unknown;
+};
+
+/**
+ * Revalidates the durable browser receipt before surfacing global handshake state.
+ * The MCP ACK marker alone is insufficient: the same row must still carry a
+ * trusted worker identity, exact owner/target/event bindings and a valid
+ * Ed25519 assistant attestation.
+ */
+export function verifyMcpHandshakeEvidenceRow(
+  ownerChannel: string,
+  row: McpHandshakeEvidenceRow,
+): VerifiedMcpHandshakeEvidence | null {
+  if (!/^ai-engine-oauth:[a-f0-9]{64}$/.test(ownerChannel) ||
+      !isRecord(row.commandMetadata) || !isRecord(row.responseMetadata)) return null;
+  const command = row.commandMetadata;
+  const response = row.responseMetadata;
+  const workerId = command["assignedClientId"];
+  const targetConversationId = command["targetConversationId"];
+  const eventId = command["eventId"];
+  if (!isDevContinuityWakeWorker(workerId) ||
+      command["completedBy"] !== workerId ||
+      command["conversationId"] !== ownerChannel ||
+      command["mcpAckConversationId"] !== ownerChannel ||
+      command["capability"] !== "chatgpt:wake" ||
+      command["explicitWorkerTarget"] !== true ||
+      command["deliveryCode"] !== "DELIVERY_CONFIRMED" ||
+      command["e2eCode"] !== "MCP_ACK_VERIFIED" ||
+      typeof targetConversationId !== "string" ||
+      !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(targetConversationId) ||
+      typeof eventId !== "string" || !/^[a-f0-9]{64}$/.test(eventId) ||
+      response["deliveryCode"] !== "DELIVERY_CONFIRMED" ||
+      response["e2eCode"] !== "E2E_VERIFIED" ||
+      response["browserConfirmed"] !== true ||
+      response["browserPairingVerified"] !== true ||
+      response["chatgptSubmitted"] !== true ||
+      response["verifiedAssistantReply"] !== true ||
+      response["conversationId"] !== targetConversationId ||
+      response["eventId"] !== eventId ||
+      response["exitCode"] !== 0 ||
+      typeof row.commandId !== "string" ||
+      typeof row.responseId !== "string" ||
+      command["mcpAckResponseId"] !== row.responseId) return null;
+
+  const commandReceivedAt = row.commandReceivedAt instanceof Date
+    ? row.commandReceivedAt.toISOString() : String(row.commandReceivedAt ?? "");
+  const responseCreatedAt = row.responseCreatedAt instanceof Date
+    ? row.responseCreatedAt.toISOString() : String(row.responseCreatedAt ?? "");
+  const acknowledgedAt = row.acknowledgedAt instanceof Date
+    ? row.acknowledgedAt.toISOString() : String(row.acknowledgedAt ?? "");
+  if (!Number.isFinite(Date.parse(commandReceivedAt)) ||
+      !Number.isFinite(Date.parse(responseCreatedAt)) ||
+      !Number.isFinite(Date.parse(acknowledgedAt))) return null;
+
+  const continuity = isRecord(command["devContinuity"]) ? command["devContinuity"] : null;
+  const expected = continuity ? {
+    ownerChannel,
+    targetConversationId,
+    eventId,
+    watchCommandId: continuity["parentWatchCommandId"],
+    jobId: continuity["jobId"],
+    checkpointRevision: continuity["checkpointRevision"],
+    workerId,
+  } : {
+    ownerChannel, targetConversationId, eventId, workerId,
+  };
+  if (continuity && (
+      typeof expected.watchCommandId !== "string" ||
+      typeof expected.jobId !== "string" ||
+      !Number.isSafeInteger(expected.checkpointRevision))) return null;
+
+  const attestation = verifyDevAssistantAttestation({
+    details: response,
+    expected: expected as Parameters<typeof verifyDevAssistantAttestation>[0]["expected"],
+    notBefore: commandReceivedAt,
+    receivedAt: responseCreatedAt,
+    publicKeyDerBase64: devAssistantPublicKeyForWorker(workerId),
+  });
+  if (!attestation.verified) return null;
+
+  return {
+    commandId: row.commandId,
+    responseId: row.responseId,
+    ownerChannel,
+    targetConversationId,
+    workerId,
+    eventId,
+    acknowledgedAt,
+    browserWakeVerified: true,
+    conversationAckVerified: true,
+  };
+}
+
+export async function getVerifiedMcpHandshakeEvidenceForConversation(
+  ownerChannel: string,
+): Promise<VerifiedMcpHandshakeEvidence | null> {
+  if (process.env["APP_ENV"] !== "development" ||
+      process.env["NODE_ENV"] === "production" ||
+      !/^ai-engine-oauth:[a-f0-9]{64}$/.test(ownerChannel)) return null;
+  await ensureCodingControlBridgeTables();
+  const result = await db.transaction(async tx => {
+    await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${ownerChannel}, true)`);
+    return tx.execute(sql`
+      SELECT
+        command.id AS command_id,
+        command.received_at AS command_received_at,
+        command.metadata_json AS command_metadata_json,
+        response.id AS response_id,
+        response.metadata_json AS response_metadata_json,
+        response.created_at AS response_created_at,
+        response.acknowledged_at AS acknowledged_at
+      FROM ai_platform.ai_coding_bridge_commands AS command
+      JOIN ai_platform.ai_coding_bridge_responses AS response
+        ON response.command_id = command.id
+       AND response.id::text = command.metadata_json ->> 'mcpAckResponseId'
+      WHERE command.source = 'ai-core'
+        AND command.command_type = 'EXTERNAL_AGENT_WORK'
+        AND command.status = 'COMPLETED'
+        AND command.metadata_json ->> 'conversationId' = ${ownerChannel}::text
+        AND command.metadata_json ->> 'mcpAckConversationId' = ${ownerChannel}::text
+        AND command.metadata_json ->> 'e2eCode' = 'MCP_ACK_VERIFIED'
+        AND response.acknowledged_at IS NOT NULL
+      ORDER BY response.acknowledged_at DESC
+      LIMIT 5
+    `);
+  });
+  for (const raw of result.rows ?? []) {
+    const row = raw as Record<string, unknown>;
+    const verified = verifyMcpHandshakeEvidenceRow(ownerChannel, {
+      commandId: row["command_id"],
+      commandReceivedAt: row["command_received_at"],
+      commandMetadata: row["command_metadata_json"],
+      responseId: row["response_id"],
+      responseMetadata: row["response_metadata_json"],
+      responseCreatedAt: row["response_created_at"],
+      acknowledgedAt: row["acknowledged_at"],
+    });
+    if (verified) return verified;
+  }
+  return null;
+}
 export async function listPendingCodingBridgeResponsesForConversation(input: {
   conversationId: string;
   limit?: number;
