@@ -64,6 +64,28 @@ function row(
 }
 
 describe("Production constrained coding model resolution", () => {
+  it("retries on PROVIDER_BAD_REQUEST and falls back to alternative model", async () => {
+    const primaryInvoke = vi.fn()
+      .mockRejectedValueOnce({ code: "PROVIDER_BAD_REQUEST" })
+      .mockRejectedValueOnce({ code: "PROVIDER_BAD_REQUEST" })
+      .mockResolvedValue({ data: "primary response" });
+    const fallbackInvoke = vi.fn().mockResolvedValue({ data: "fallback response" });
+    vi.mocked(resolveProductionCodingModel).mockReturnValue({ invoke_model: primaryInvoke });
+    vi.mocked(resolveAlternativeCloudCodingModel).mockReturnValue({ invoke_model: fallbackInvoke });
+    const result = await resolveProductionCodingModel().invoke_model("test prompt");
+    expect(primaryInvoke).toHaveBeenCalledTimes(3);
+    expect(fallbackInvoke).toHaveBeenCalledTimes(1);
+    expect(result.data).toEqual("fallback response");
+  });
+
+  it("invokes primary model successfully without errors", async () => {
+    const primaryInvoke = vi.fn().mockResolvedValue({ data: "success response" });
+    vi.mocked(resolveProductionCodingModel).mockReturnValue({ invoke_model: primaryInvoke });
+    const result = await resolveProductionCodingModel().invoke_model("another prompt");
+    expect(primaryInvoke).toHaveBeenCalledTimes(1);
+    expect(result.data).toEqual("success response");
+  });
+
   beforeEach(() => {
     mocks.models.length = 0;
     mocks.keys.clear();
