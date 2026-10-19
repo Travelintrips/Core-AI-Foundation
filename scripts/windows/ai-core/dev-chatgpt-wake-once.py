@@ -24,10 +24,25 @@ PRIVATE_KEY_FILE = os.environ.get("AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE", "dev-assi
 
 
 def browser(*args, timeout=55):
-    result = subprocess.run(CLI + list(args), capture_output=True, text=True, shell=False, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError("Browser controller failed (" + args[0] + ")")
-    return result.stdout
+    read_only = bool(args) and args[0] in {"tabs", "snapshot", "evaluate"}
+    attempts = 3 if read_only else 1
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            result = subprocess.run(CLI + list(args), capture_output=True, text=True, shell=False, timeout=timeout)
+        except subprocess.TimeoutExpired as err:
+            last_error = err
+            if attempt + 1 < attempts:
+                time.sleep(2)
+                continue
+            raise
+        if result.returncode == 0:
+            return result.stdout
+        last_error = RuntimeError("Browser controller failed (" + args[0] + ")")
+        if attempt + 1 < attempts:
+            time.sleep(2)
+            continue
+    raise last_error or RuntimeError("Browser controller failed")
 
 
 def config(base=None):
@@ -77,7 +92,7 @@ def inspect(tab, marker, expected_url):
         "),responding:Array.from(document.querySelectorAll('button')).some(b=>"
         "/^(Stop|Stop generating)$/i.test((b.getAttribute('aria-label')||b.innerText||'').trim()))})"
     )
-    observed = json.loads(browser("evaluate", "--target-id", tab, "--fn", probe, timeout=30))
+    observed = json.loads(browser("evaluate", "--target-id", tab, "--fn", probe, timeout=60))
     if (not isinstance(observed, dict) or observed.get("url") != expected_url or
         not isinstance(observed.get("markerVisible"), bool) or
         not isinstance(observed.get("responding"), bool)):
@@ -132,7 +147,7 @@ def _assistant_probe(tab, expected_url, marker, challenge):
         assistantMessageId:idMatch ? idMatch[0].toLowerCase() : null,
         assistantText:text, ackVisible:text.includes('[' + ack + ']') || text.includes(ack)};
     }""" % (json.dumps(expected_url), json.dumps(marker), json.dumps(ack))
-    value = json.loads(browser("evaluate", "--target-id", tab, "--fn", fn, timeout=25))
+    value = json.loads(browser("evaluate", "--target-id", tab, "--fn", fn, timeout=70))
     if not isinstance(value, dict) or value.get("url") != expected_url:
         raise RuntimeError("Assistant attestation browser pairing lost")
     return value
