@@ -16,6 +16,20 @@ import {
   type AiCoreGitHubOperation,
 } from "./aiCoreGitHubControlService.js";
 
+// Wrap upstream e2e handshake calls to handle CancelledError with retry
+const handleCancelledWorkflow = async <T>(fn: () => Promise<T>, requestId: string): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err: any) {
+    if (err.name === 'CancelledError') {
+      console.warn(`Request ${requestId}: workflow run cancelled, retrying`);
+      return await fn();
+    }
+    throw err;
+  }
+};
+
+
 export const DEFAULT_AI_CORE_CHAT_MODE = "auto" as const;
 
 export type AiCoreChatMode = "auto" | "ask" | "agent";
