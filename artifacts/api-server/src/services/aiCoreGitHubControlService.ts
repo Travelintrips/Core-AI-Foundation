@@ -14,6 +14,9 @@ export type AiCoreGitHubOperation =
   | "GITHUB_PR_STATUS"
   | "GITHUB_PR_MERGE";
 
+/**
+ * Represents the outcome of an AI Core GitHub operation.
+ */
 export interface AiCoreGitHubOperationResult {
   operation: AiCoreGitHubOperation;
   mutating: boolean;
