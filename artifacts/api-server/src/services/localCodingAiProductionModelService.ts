@@ -2,6 +2,9 @@ import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js"
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
+const RETRY_BASE_DELAY_MS = 500;
+const RETRY_MAX_RETRIES = 3;
+
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 60_000;
