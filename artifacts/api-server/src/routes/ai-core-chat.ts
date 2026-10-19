@@ -621,6 +621,7 @@ async function invokeChatModel(
 async function resolveCloudFallbackSelections(
   primary: ProductionCodingModelSelection,
 ): Promise<ProductionCodingModelSelection[]> {
+  if (isDevInternalOnly()) return [];
   const alternatives = await resolveAlternativeCloudCodingModels({
     excludeTargets: [{
       provider: String(primary.provider.slug),
