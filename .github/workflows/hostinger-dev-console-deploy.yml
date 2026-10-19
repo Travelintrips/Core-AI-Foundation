@@ -125,16 +125,11 @@ jobs:
           while [ "$offset" -lt "$size" ]; do
             bytes=$((size - offset))
             [ "$bytes" -le "$chunk_size" ] || bytes="$chunk_size"
-            python3 - "$ARCHIVE_PATH" "$offset" "$bytes" /tmp/tus-chunk.bin <<'PY'
-import sys
-source, offset, size, target = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
-with open(source, "rb") as src, open(target, "wb") as dst:
-    src.seek(offset)
-    data = src.read(size)
-    if len(data) != size:
-        raise SystemExit("short archive read")
-    dst.write(data)
-PY
+            tail -c "+$((offset + 1))" "$ARCHIVE_PATH" | head -c "$bytes" > /tmp/tus-chunk.bin
+            test "$(stat -c%s /tmp/tus-chunk.bin)" = "$bytes" || {
+              echo "::error::Short archive read."
+              exit 1
+            }
             patch_code="$(curl --connect-timeout 10 --max-time 90 --silent --show-error               -o /tmp/tus-patch.body -D /tmp/tus-patch.headers -w "%{http_code}"               -X PATCH -H "X-Auth: $auth_key" -H "X-Auth-Rest: $rest_auth_key"               -H "Tus-Resumable: 1.0.0" -H "Content-Type: application/offset+octet-stream"               -H "Upload-Offset: $offset" --data-binary @/tmp/tus-chunk.bin "$target")"
             test "$patch_code" = "204" || {
               cat /tmp/tus-patch.body || true
