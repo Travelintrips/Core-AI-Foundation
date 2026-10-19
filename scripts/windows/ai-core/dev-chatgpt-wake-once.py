@@ -69,9 +69,11 @@ def find_tab(url):
 
 
 def inspect(tab, marker, expected_url):
-    # OpenClaw stable tab handles are supported by snapshots and actions.
-    # Avoid selector/limit here because current browser CLI builds can stall
-    # that legacy snapshot combination even though a scoped snapshot works.
+    # Stable OpenClaw handles are resolved from the exact allowlisted URL.
+    # Use the accessibility snapshot for composer state and delivery state;
+    # this avoids a second page.evaluate during the browser preflight.
+    if find_tab(expected_url) != tab:
+        raise RuntimeError("Exact authenticated browser pairing cannot be verified")
     snapshot = browser("snapshot", "--target-id", tab, timeout=55)
     m = re.search(r'textbox "Ask ChatGPT"(?: \[[^\]]+\])* \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
     if not m:
@@ -86,20 +88,9 @@ def inspect(tab, marker, expected_url):
         draft = ""
     if not isinstance(draft, str):
         raise RuntimeError("ChatGPT composer state invalid")
-    probe = (
-        "() => ({url:location.href,markerVisible:document.body.innerText.includes("
-        + json.dumps(marker) +
-        "),responding:Array.from(document.querySelectorAll('button')).some(b=>"
-        "/^(Stop|Stop generating)$/i.test((b.getAttribute('aria-label')||b.innerText||'').trim()))})"
-    )
-    observed = json.loads(browser("evaluate", "--target-id", tab, "--fn", probe, timeout=60))
-    if (not isinstance(observed, dict) or observed.get("url") != expected_url or
-        not isinstance(observed.get("markerVisible"), bool) or
-        not isinstance(observed.get("responding"), bool)):
-        raise RuntimeError("Exact authenticated browser pairing cannot be verified")
+    responding = bool(re.search(r'button "Stop(?: generating)?"', snapshot, re.I))
     return {"ref": m.group(1), "empty": draft.strip() == "",
-            "responding": observed["responding"], "markerVisible": observed["markerVisible"]}
-
+            "responding": responding, "markerVisible": marker in snapshot}
 
 def _iso_now():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -117,41 +108,37 @@ def _private_key(root):
 
 def _assistant_probe(tab, expected_url, marker, challenge):
     ack = "AI_CORE_ATTEST_ACK:" + challenge
-    fn = """() => {
-      const expectedUrl = %s;
-      const marker = %s;
-      const ack = %s;
-      const units = Array.from(document.querySelectorAll('[data-chatgpt-search-unit-key]'));
-      const user = units.find(e => {
-        const key = e.getAttribute('data-chatgpt-search-unit-key') || '';
-        const text = e.innerText || '';
-        return key.endsWith(':user') && text.includes(marker) && text.includes(ack.replace('_ACK',''));
-      });
-      const responding = Array.from(document.querySelectorAll('button')).some(b =>
-        /^(Stop|Stop generating)$/i.test((b.getAttribute('aria-label') || b.innerText || '').trim()));
-      if (!user) return {url:location.href, responding, userFound:false, assistantFound:false};
-      const key = user.getAttribute('data-chatgpt-search-unit-key') || '';
-      const match = /^(.*):0:user$/.exec(key);
-      let assistant = match ? document.querySelector('[data-chatgpt-search-unit-key="' + match[1] + ':2:assistant"]') : null;
-      if (!assistant) {
-        const index = units.indexOf(user);
-        assistant = units.slice(index + 1).find(e => (e.getAttribute('data-chatgpt-search-unit-key') || '').endsWith(':assistant')) || null;
-      }
-      if (!assistant) return {url:location.href, responding, userFound:true, assistantFound:false};
-      const textNode = assistant.querySelector('[data-markdown-text-style="assistant-message"]');
-      const text = (textNode ? textNode.innerText : assistant.innerText || '').trim();
-      const ids = (assistant.getAttribute('data-chatgpt-search-message-ids') || '') + ' ' +
-        (assistant.querySelector('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id') || '');
-      const idMatch = ids.match(/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/i);
-      return {url:location.href, responding, userFound:true, assistantFound:Boolean(text && idMatch),
-        assistantMessageId:idMatch ? idMatch[0].toLowerCase() : null,
-        assistantText:text, ackVisible:text.includes('[' + ack + ']') || text.includes(ack)};
-    }""" % (json.dumps(expected_url), json.dumps(marker), json.dumps(ack))
-    value = json.loads(browser("evaluate", "--target-id", tab, "--fn", fn, timeout=70))
+    snapshot = browser("snapshot", "--target-id", tab, timeout=55)
+    responding = bool(re.search(r'button "Stop(?: generating)?"', snapshot, re.I))
+    user_found = marker in snapshot and ("AI_CORE_ATTEST:" + challenge) in snapshot
+    ack_visible = ack in snapshot
+    if not user_found or not ack_visible:
+        return {"url": expected_url, "responding": responding,
+                "userFound": user_found, "assistantFound": False,
+                "ackVisible": ack_visible}
+    fn = (
+        "() => { const ack=" + json.dumps(ack) + "; "
+        "const units=Array.from(document.querySelectorAll('[data-chatgpt-search-unit-key]')); "
+        "const assistant=units.find(e=>{const key=e.getAttribute('data-chatgpt-search-unit-key')||'';"
+        "const text=e.innerText||'';return key.endsWith(':assistant')&&text.includes(ack);}); "
+        "if(!assistant)return {url:location.href,found:false}; "
+        "const selected=assistant.querySelector('[data-chatgpt-selection-message-id]'); "
+        "const selectionId=selected?(selected.getAttribute('data-chatgpt-selection-message-id')||''):''; "
+        "const ids=(assistant.getAttribute('data-chatgpt-search-message-ids')||'')+' '+selectionId; "
+        "const textNode=assistant.querySelector('[data-markdown-text-style]'); "
+        "const text=(textNode?textNode.innerText:(assistant.innerText||'')).trim(); "
+        "return {url:location.href,found:true,ids:ids,text:text}; }"
+    )
+    value = json.loads(browser("evaluate", "--target-id", tab, "--fn", fn, timeout=45))
     if not isinstance(value, dict) or value.get("url") != expected_url:
         raise RuntimeError("Assistant attestation browser pairing lost")
-    return value
-
+    ids = str(value.get("ids") or "")
+    id_match = re.search(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", ids, re.I)
+    text = str(value.get("text") or "").strip()
+    return {"url": expected_url, "responding": responding, "userFound": True,
+            "assistantFound": bool(value.get("found") and id_match and text),
+            "assistantMessageId": id_match.group(0).lower() if id_match else None,
+            "assistantText": text, "ackVisible": ack_visible}
 
 def _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at):
     return "\n".join([
