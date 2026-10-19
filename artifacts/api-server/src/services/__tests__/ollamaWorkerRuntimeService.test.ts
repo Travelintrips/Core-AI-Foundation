@@ -44,6 +44,24 @@ describe("Ollama worker runtime configuration", () => {
     });
   });
 
+  it("fails closed when runtime is enabled without an explicit local endpoint", () => {
+    const config = readOllamaWorkerRuntimeConfig({
+      OLLAMA_WORKER_RUNTIME_ENABLED: "true",
+    } as NodeJS.ProcessEnv);
+
+    expect(config.enabled).toBe(false);
+    expect(config.localBaseUrl).toBe("http://127.0.0.1:11434/v1");
+  });
+
+  it("allows the runtime when an explicit local endpoint is configured", () => {
+    const config = readOllamaWorkerRuntimeConfig({
+      OLLAMA_WORKER_RUNTIME_ENABLED: "true",
+      OLLAMA_WORKER_LOCAL_URL: "http://127.0.0.1:11434/v1",
+    } as NodeJS.ProcessEnv);
+
+    expect(config.enabled).toBe(true);
+  });
+
   it("clamps concurrency and heartbeat values", () => {
     const high = readOllamaWorkerRuntimeConfig({
       OLLAMA_WORKER_MAX_CONCURRENCY: "999",
