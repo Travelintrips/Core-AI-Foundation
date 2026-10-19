@@ -58,7 +58,7 @@ def inspect(tab, marker, expected_url):
     # Avoid selector/limit here because current browser CLI builds can stall
     # that legacy snapshot combination even though a scoped snapshot works.
     snapshot = browser("snapshot", "--target-id", tab, timeout=55)
-    m = re.search(r'textbox "Ask ChatGPT" \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
+    m = re.search(r'textbox "Ask ChatGPT"(?: \[[^\]]+\])* \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
     if not m:
         raise RuntimeError("Authenticated ChatGPT composer not available")
     raw_draft = m.group(2)
