@@ -539,6 +539,7 @@ type McpHandshakeEvidenceRow = {
 export function verifyMcpHandshakeEvidenceRow(
   ownerChannel: string,
   row: McpHandshakeEvidenceRow,
+  publicKeyDerBase64?: string,
 ): VerifiedMcpHandshakeEvidence | null {
   if (!/^ai-engine-oauth:[a-f0-9]{64}$/.test(ownerChannel) ||
       !isRecord(row.commandMetadata) || !isRecord(row.responseMetadata)) return null;
@@ -600,7 +601,7 @@ export function verifyMcpHandshakeEvidenceRow(
     expected,
     notBefore: commandReceivedAt,
     receivedAt: responseCreatedAt,
-    publicKeyDerBase64: devAssistantPublicKeyForWorker(workerId),
+    publicKeyDerBase64: publicKeyDerBase64 ?? devAssistantPublicKeyForWorker(workerId),
   });
   if (!attestation.verified) return null;
 
@@ -619,9 +620,12 @@ export function verifyMcpHandshakeEvidenceRow(
 
 export async function getVerifiedMcpHandshakeEvidenceForConversation(
   ownerChannel: string,
+  options?: { requestHost?: string; publicKeyDerBase64?: string },
 ): Promise<VerifiedMcpHandshakeEvidence | null> {
-  if (process.env["APP_ENV"] !== "development" ||
-      process.env["NODE_ENV"] === "production" ||
+  const requestHost = options?.requestHost?.trim().toLowerCase().replace(/:\\d+$/, "") ?? "";
+  const trustedDevHost = requestHost === "dev-aicore.cstlogistic.co.id" || requestHost === "dev.cstlogistic.co.id";
+  const localDevRuntime = process.env["APP_ENV"] === "development" && process.env["NODE_ENV"] !== "production";
+  if ((!localDevRuntime && !trustedDevHost) ||
       !/^ai-engine-oauth:[a-f0-9]{64}$/.test(ownerChannel)) return null;
   await ensureCodingControlBridgeTables();
   const result = await db.transaction(async tx => {
@@ -660,7 +664,7 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
       responseMetadata: row["response_metadata_json"],
       responseCreatedAt: row["response_created_at"],
       acknowledgedAt: row["acknowledged_at"],
-    });
+    }, options?.publicKeyDerBase64);
     if (verified) return verified;
   }
   return null;
