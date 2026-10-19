@@ -14,6 +14,18 @@ export function oauthNavigationCors(apiCors: RequestHandler): RequestHandler {
       next();
       return;
     }
+    // The pairing approval is a signed-session browser form submission.
+    // Opaque Origin is acceptable only for an actual same-origin navigation;
+    // never grant cross-origin response access or bypass CSRF protections.
+    if (req.path === "/api/ai/core-chat/oauth/pair/approve" &&
+        req.method === "POST" && req.headers.origin === "null" &&
+        req.headers["sec-fetch-site"] === "same-origin" &&
+        req.headers["sec-fetch-mode"] === "navigate" &&
+        req.headers["sec-fetch-dest"] === "document" &&
+        req.is("application/x-www-form-urlencoded")) {
+      next();
+      return;
+    }
     // Allow only same-origin opaque navigation to the anonymous, rate-limited
     // magic-link form. Do not grant cross-origin response access.
     if (req.path === "/api/internal/auth/request-magic-link" &&
