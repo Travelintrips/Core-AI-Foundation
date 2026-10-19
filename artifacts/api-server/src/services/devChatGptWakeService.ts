@@ -13,11 +13,27 @@ export type DevWakeTarget = {
   workerId: DevWakeWorker;
 };
 
-export async function resolveVerifiedDevWakeTarget(accountAlias: string): Promise<DevWakeTarget> {
-  if (accountAlias.toUpperCase() !== "GPT01" ||
-      process.env["APP_ENV"] !== "development" ||
-      process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] !== "true") {
+function isTrustedDevRequestHost(requestHost?: string): boolean {
+  const host = requestHost?.trim().toLowerCase().replace(/:\d+$/, "") ?? "";
+  return host === "dev-aicore.cstlogistic.co.id" || host === "dev.cstlogistic.co.id";
+}
+
+function isDevWakeRuntime(requestHost?: string): boolean {
+  return process.env["APP_ENV"] === "development" || isTrustedDevRequestHost(requestHost);
+}
+
+export async function resolveVerifiedDevWakeTarget(
+  accountAlias: string,
+  requestHost?: string,
+): Promise<DevWakeTarget> {
+  if (accountAlias.toUpperCase() !== "GPT01") {
     throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
+  }
+  if (!isDevWakeRuntime(requestHost)) {
+    throw new Error("DEV_CHATGPT_DEV_HOST_REQUIRED");
+  }
+  if (process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] !== "true") {
+    throw new Error("DEV_CHATGPT_WAKE_DISABLED");
   }
   const configuredTarget = process.env["AI_CORE_DEV_CHATGPT_ALIAS_GPT01_CONVERSATION_ID"]?.trim().toLowerCase();
   const allowedChats = [...new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS"] ?? "")
@@ -58,18 +74,20 @@ export type DevBrowserWakeInput = {
   expiresAt?: string;
   instruction?: string;
   jobAlias?: string | null;
+  requestHost?: string;
 };
 
 /** The owner fence is not proof of ChatGPT session ownership; the worker checks the exact tab. */
 export function isDevBrowserWakeAllowed(input: {
   ownerChannel: string;
   targetConversationId: string;
+  requestHost?: string;
 }): boolean {
   const allowedChannels = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "")
     .split(",").map(value => value.trim()).filter(Boolean));
   const allowedChats = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS"] ?? "")
     .split(",").map(value => value.trim().toLowerCase()).filter(Boolean));
-  return process.env["APP_ENV"] === "development" &&
+  return isDevWakeRuntime(input.requestHost) &&
     process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] === "true" &&
     typeof input.ownerChannel === "string" &&
     /^ai-engine-oauth:[a-f0-9]{64}$/.test(input.ownerChannel) &&

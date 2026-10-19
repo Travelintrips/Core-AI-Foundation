@@ -104,6 +104,37 @@ describe("shared DEV browser wake queue", () => {
     });
   });
 
+  it("accepts the trusted dev-aicore host when Hostinger runtime APP_ENV is production", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-dell-chatgpt-wake-dev");
+    mocks.handshakeEvidence.mockResolvedValue({
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    });
+    await expect(resolveVerifiedDevWakeTarget("gpt01", "dev-aicore.cstlogistic.co.id")).resolves.toEqual({
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    });
+    expect(isDevBrowserWakeAllowed({
+      ownerChannel,
+      targetConversationId,
+      requestHost: "dev-aicore.cstlogistic.co.id",
+    })).toBe(true);
+  });
+
+  it("does not let an arbitrary host bypass the DEV runtime boundary", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    await expect(resolveVerifiedDevWakeTarget("gpt01", "aicore.cstlogistic.co.id"))
+      .rejects.toThrow("DEV_CHATGPT_DEV_HOST_REQUIRED");
+    expect(isDevBrowserWakeAllowed({
+      ownerChannel,
+      targetConversationId,
+      requestHost: "aicore.cstlogistic.co.id",
+    })).toBe(false);
+  });
+
   it("fails closed for an unknown configured wake worker", async () => {
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-untrusted-dev");
     await expect(queueDevBrowserWake(input)).rejects.toThrow("DEV_CHATGPT_WAKE_WORKER_INVALID");
