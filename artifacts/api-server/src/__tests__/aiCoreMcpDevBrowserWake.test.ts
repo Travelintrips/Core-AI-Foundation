@@ -43,6 +43,7 @@ vi.mock("../services/localCodingControlBridgeService.js", () => ({
   unsubscribeCodingBridgeConversation: vi.fn(),
 }));
 import router from "../routes/ai-core-mcp.js";
+import { adminAuthWithExceptions } from "../middleware/adminAuth.js";
 import { deriveDevAssistantChallenge } from "../services/devAssistantAttestation.js";
 
 const conversation = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649";
@@ -91,6 +92,27 @@ describe("DEV chatgpt:wake permission boundary", () => {
     mocks.watchStatus.mockResolvedValue({ jobId, state: "ARMED", revision: 1, browserWakeVerified: false });
   });
   afterEach(() => { vi.unstubAllEnvs(); });
+
+  it("exact DEV REST path bypasses admin key but still requires OAuth", async () => {
+    vi.stubEnv("ADMIN_API_KEY", "test-admin-key");
+    const app = express(); app.use(express.json()); app.use("/api", adminAuthWithExceptions, router);
+    const response = await request(app).post("/api/ai/dev/chatgpt-wake/jobs")
+      .send({ conversationId: conversation, eventId, correlationId: "dev-corr-001", confirmed: true });
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe("DEV_WAKE_OAUTH_REQUIRED");
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("REST route does not bypass global admin key outside DEV", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    vi.stubEnv("ADMIN_API_KEY", "test-admin-key");
+    const app = express(); app.use(express.json()); app.use("/api", adminAuthWithExceptions, router);
+    const response = await request(app).post("/api/ai/dev/chatgpt-wake/jobs")
+      .send({ conversationId: conversation, eventId, correlationId: "dev-corr-001", confirmed: true });
+    expect(response.status).toBe(401);
+    expect(response.body.error).toMatch(/admin API key/);
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
 
   it("REST wake rejects unauthenticated job creation without dispatch", async () => {
     const app = express(); app.use(express.json()); app.use("/api", router);
