@@ -104,6 +104,34 @@ describe("shared DEV browser wake queue", () => {
     });
   });
 
+  it.each([
+    "GPT01 JOB005",
+    "gpt01 job 5",
+    "*GPT01-JOB005",
+  ])("normalizes a bounded legacy/simple GPT01 alias form: %s", async alias => {
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-dell-chatgpt-wake-dev");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel);
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", targetConversationId);
+    mocks.handshakeEvidence.mockResolvedValue({
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    });
+    await expect(resolveVerifiedDevWakeTarget(alias)).resolves.toEqual({
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    });
+  });
+
+  it.each([
+    "GPT02 JOB005",
+    "GPT01 JOBABC",
+    "GPT01 arbitrary",
+  ])("still fails closed for an untrusted alias form: %s", async alias => {
+    await expect(resolveVerifiedDevWakeTarget(alias)).rejects.toThrow("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
+  });
+
   it("accepts the trusted dev-aicore host when Hostinger runtime APP_ENV is production", async () => {
     vi.stubEnv("APP_ENV", "production");
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-dell-chatgpt-wake-dev");
