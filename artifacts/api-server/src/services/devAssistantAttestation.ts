@@ -3,6 +3,11 @@ import { createHash, createPublicKey, verify as verifySignature } from "node:cry
 export const DEV_ASSISTANT_ATTESTATION_VERSION = 1 as const;
 export const DEV_ASSISTANT_ATTESTATION_ALGORITHM = "Ed25519" as const;
 export const DEV_ASSISTANT_ATTESTATION_KEY_ID = "openclaw-travelintrips-dev-ed25519-v1" as const;
+export const DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID = "openclaw-dell-chatgpt-wake-dev-ed25519-v1" as const;
+export type DevAttestationWorker = "openclaw-travelintrips-dev" | "openclaw-dell-chatgpt-wake-dev";
+export function devAttestationKeyId(workerId: DevAttestationWorker) {
+  return workerId === "openclaw-travelintrips-dev" ? DEV_ASSISTANT_ATTESTATION_KEY_ID : DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID;
+}
 
 const DIGEST = /^[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -21,8 +26,8 @@ type ChallengeInput = {
 export type DevAssistantAttestation = {
   version: 1;
   algorithm: "Ed25519";
-  keyId: typeof DEV_ASSISTANT_ATTESTATION_KEY_ID;
-  workerId: "openclaw-travelintrips-dev";
+  keyId: typeof DEV_ASSISTANT_ATTESTATION_KEY_ID | typeof DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID;
+  workerId: DevAttestationWorker;
   conversationId: string;
   eventId: string;
   challenge: string;
@@ -78,7 +83,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 export function verifyDevAssistantAttestation(input: {
   details: Record<string, unknown>;
-  expected: ChallengeInput & { workerId: "openclaw-travelintrips-dev" };
+  expected: ChallengeInput & { workerId: DevAttestationWorker };
   notBefore: string;
   receivedAt: string;
   publicKeyDerBase64?: string;
@@ -103,7 +108,7 @@ export function verifyDevAssistantAttestation(input: {
   };
   if (candidate.version !== DEV_ASSISTANT_ATTESTATION_VERSION ||
       candidate.algorithm !== DEV_ASSISTANT_ATTESTATION_ALGORITHM ||
-      candidate.keyId !== DEV_ASSISTANT_ATTESTATION_KEY_ID ||
+      candidate.keyId !== devAttestationKeyId(input.expected.workerId) ||
       candidate.workerId !== input.expected.workerId ||
       candidate.conversationId !== input.expected.targetConversationId.toLowerCase() ||
       candidate.eventId !== input.expected.eventId.toLowerCase() ||
@@ -143,7 +148,7 @@ export function verifyDevAssistantAttestation(input: {
   const unsigned: Omit<DevAssistantAttestation, "signature"> = {
     version: DEV_ASSISTANT_ATTESTATION_VERSION,
     algorithm: DEV_ASSISTANT_ATTESTATION_ALGORITHM,
-    keyId: DEV_ASSISTANT_ATTESTATION_KEY_ID,
+    keyId: devAttestationKeyId(input.expected.workerId),
     workerId: input.expected.workerId,
     conversationId: candidate.conversationId,
     eventId: candidate.eventId,
