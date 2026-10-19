@@ -1,6 +1,6 @@
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -159,6 +159,14 @@ import {
   generateAndPersistImageViaRouter,
   isImageRouterConfigured,
 } from "../services/imageRouterService.js";
+import {
+  parseChatGptWakeCommand,
+  type ChatGptWakeCommand,
+} from "../services/aiCoreChatGptWakeCommandService.js";
+import {
+  queueDevBrowserWake,
+  resolveVerifiedDevWakeTarget,
+} from "../services/devChatGptWakeService.js";
 
 const router = Router();
 const AI_CORE_VOICE_ENABLED = process.env["AI_CORE_VOICE_ENABLED"] !== "false";
@@ -2524,6 +2532,45 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
   };
 }
 
+async function startSimpleChatGptWake(
+  command: ChatGptWakeCommand,
+): Promise<Record<string, unknown>> {
+  const target = await resolveVerifiedDevWakeTarget(command.accountAlias);
+  const eventId = randomBytes(32).toString("hex");
+  const jobLabel = command.jobAlias ?? "JOB";
+  const correlationId =
+    command.accountAlias.toLowerCase() + ":" +
+    jobLabel.toLowerCase() + ":" + randomUUID();
+  const queued = await queueDevBrowserWake({
+    ownerChannel: target.ownerChannel,
+    targetConversationId: target.targetConversationId,
+    eventId,
+    correlationId,
+    instruction: command.instruction,
+    jobAlias: command.jobAlias,
+  });
+  return {
+    kind: "external_agent",
+    route: "CHATGPT_DEV_WAKE",
+    provider: "openclaw",
+    model: null,
+    usage: null,
+    estimatedCostUsd: null,
+    reply:
+      command.accountAlias + " " + jobLabel +
+      " diteruskan ke ChatGPT melalui OpenClaw DELL. Hasil terverifikasi akan kembali ke AI Core.",
+    commandId: queued.commandId,
+    status: queued.created ? "RECEIVED" : "ALREADY_QUEUED",
+    accountAlias: command.accountAlias,
+    jobAlias: command.jobAlias,
+    targetConversationId: target.targetConversationId,
+    workerId: queued.clientId,
+    eventId,
+    correlationId,
+    executionLane: "TARGETED",
+  };
+}
+
 async function startExternalAgentWork(
   input: z.infer<typeof ChatRequest>,
   clientId: string,
@@ -3726,6 +3773,14 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
   res.once("close", abort);
 
   try {
+    const simpleWakeCommand = !parsed.data.image
+      ? parseChatGptWakeCommand(parsed.data.message)
+      : null;
+    if (simpleWakeCommand) {
+      writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand));
+      return;
+    }
+
     // Explicit coding in AI Core Chat streams is delegated to the authenticated
     // controlled task lane; never streamed as an unverified LLM coding answer.
     const streamCoding = classifyAiCoreChatDispatch(parsed.data.message);
@@ -3856,6 +3911,10 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     return;
   }
 
+  const simpleWakeCommand = !parsed.data.image
+    ? parseChatGptWakeCommand(parsed.data.message)
+    : null;
+
   // Refuse source-changing coding at the chat boundary in every mode,
   // rather than returning the ambiguous internal NO_WORKER routing lane.
 
@@ -3881,7 +3940,7 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     }
   }
 
-  if (parsed.data.mode === "agent" && !parsed.data.message.trim().startsWith("@")) {
+  if (parsed.data.mode === "agent" && !simpleWakeCommand && !parsed.data.message.trim().startsWith("@")) {
     res.status(403).json({
       error: "Execution blocked: commands must begin with @.",
       blocked: true,
@@ -3939,7 +3998,9 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         ? (parseOpenClawPcCodingRequest(rawInput.message) ?? parseDirectOpenClawPcCommand(rawInput.message))
         : null;
     const result =
-      directOpenClawPcCommand
+      simpleWakeCommand
+        ? await startSimpleChatGptWake(simpleWakeCommand)
+        : directOpenClawPcCommand
         ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)
         : directConversationEvent
         ? await executeDirectConversationEvent(directConversationEvent)
