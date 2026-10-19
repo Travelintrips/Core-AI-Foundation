@@ -122,6 +122,11 @@ export function requiredCapabilityForExternalAgent(
   return REQUIRED_CAPABILITY[clientId];
 }
 
+export function isDevChatGptWakeInstruction(instruction: string): boolean {
+  return /^DEV_CHATGPT_WAKE_V1 conversation=[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12} event=[a-f0-9]{64} challenge=[a-f0-9]{64}$/i.test(instruction)
+    || /^DEV_CHATGPT_WAKE_V2 conversation=[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12} event=[a-f0-9]{64} challenge=[a-f0-9]{64} task=[A-Za-z0-9_-]{1,4096}$/i.test(instruction);
+}
+
 export async function dispatchExternalAgentWork(input: {
   clientId: string;
   instruction: string;
@@ -210,10 +215,9 @@ export async function dispatchExternalAgentWork(input: {
   }
 
   // This model-free worker only accepts a server-authorized, challenge-bound
-  // browser wake. Reject freeform requests before queueing them: otherwise the
-  // worker inevitably reports requires_ai_core_routing after claiming the job.
-  const isDevChatGptWake =
-    /^DEV_CHATGPT_WAKE_V1 conversation=[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12} event=[a-f0-9]{64} challenge=[a-f0-9]{64}$/i.test(input.instruction);
+  // browser wake. V2 may carry a base64url-encoded operator task, but it remains
+  // structurally bound to the exact conversation, event and server challenge.
+  const isDevChatGptWake = isDevChatGptWakeInstruction(input.instruction);
   const isDedicatedDevWakeWorker =
     resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
     resolvedClientId === "openclaw-dell-chatgpt-wake-dev";
@@ -223,7 +227,7 @@ export async function dispatchExternalAgentWork(input: {
        !rule.capabilities.some((capability: string) => capability === "chatgpt:wake"))) {
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
-      "DEV_CHATGPT_WAKE_PREFLIGHT_REQUIRED: issue a server-authorized challenge-bound DEV_CHATGPT_WAKE_V1 command; do not queue natural language on a model-free worker.",
+      "DEV_CHATGPT_WAKE_PREFLIGHT_REQUIRED: issue a server-authorized challenge-bound DEV_CHATGPT_WAKE_V1/V2 command; do not queue natural language on a model-free worker.",
     );
   }
 
