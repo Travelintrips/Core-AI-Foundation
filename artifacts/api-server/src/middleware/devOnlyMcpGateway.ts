@@ -95,19 +95,18 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
     catch { error("DEV_ONLY_RELAY_CONFIGURATION_INVALID", 503); return; }
     const handshake = (backend: Record<string, unknown> | null) => {
       const handshakeId = randomUUID();
+      const evidence = backend ? object(backend["handshakeEvidence"]) : null;
       const verified = Boolean(
         backend &&
-        backend["authenticated"] === true &&
-        backend["aiEngineSessionId"] === channel &&
-        backend["aiEngineSessionVerified"] === true &&
-        backend["chatSessionIdVerified"] === true &&
-        backend["conversationAckVerified"] === true &&
-        backend["browserWakeVerified"] === true &&
-        backend["conversationBindingStatus"] === "VERIFIED_DURABLE_E2E_ATTESTATION" &&
-        typeof backend["verifiedConversationId"] === "string" &&
-        /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(backend["verifiedConversationId"]) &&
-        (backend["verifiedWorkerId"] === "openclaw-travelintrips-dev" ||
-          backend["verifiedWorkerId"] === "openclaw-dell-chatgpt-wake-dev")
+        backend["conversationId"] === channel &&
+        evidence &&
+        evidence["ownerChannel"] === channel &&
+        evidence["conversationAckVerified"] === true &&
+        evidence["browserWakeVerified"] === true &&
+        typeof evidence["targetConversationId"] === "string" &&
+        /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(evidence["targetConversationId"]) &&
+        (evidence["workerId"] === "openclaw-travelintrips-dev" ||
+          evidence["workerId"] === "openclaw-dell-chatgpt-wake-dev")
       );
       return {
         protocol: "ai-core-communication/v1", authenticated: true, handshakeId,
@@ -115,10 +114,10 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
         aiEngineSessionId: channel, aiEngineSessionVerified: true,
         eventChannelBinding: "OAUTH_PRINCIPAL_CLIENT_CHANNEL", executionEnvironment: "DEV",
         routePolicy: "DEV_ONLY_NO_PROD_FALLBACK", backendProbeVerified: backend !== null,
-        backendProbe: backend !== null ? "authorized_verified_handshake_read" : null,
+        backendProbe: backend !== null ? "authorized_private_inbox_read" : null,
         relayTools: [...RELAY_TOOLS], relayScope: "bounded_dev_workers_and_owner_authorized_chatgpt_continuity",
         unavailableTools: ["get_ai_core_task_progress"],
-        chatSessionId: verified ? backend!["verifiedConversationId"] : null,
+        chatSessionId: verified ? evidence!["targetConversationId"] : null,
         chatSessionIdVerified: verified,
         conversationAckVerified: verified,
         browserWakeVerified: verified,
@@ -126,21 +125,24 @@ export function createDevOnlyMcpGateway(deps: Dependencies = {}) {
           ? "VERIFIED_DURABLE_E2E_ATTESTATION"
           : "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
         ...(verified ? {
-          verifiedConversationId: backend!["verifiedConversationId"],
-          verifiedWorkerId: backend!["verifiedWorkerId"],
-          verifiedEventId: backend!["verifiedEventId"],
-          verifiedCommandId: backend!["verifiedCommandId"],
-          verifiedResponseId: backend!["verifiedResponseId"],
-          verifiedAcknowledgedAt: backend!["verifiedAcknowledgedAt"],
+          verifiedConversationId: evidence!["targetConversationId"],
+          verifiedWorkerId: evidence!["workerId"],
+          verifiedEventId: evidence!["eventId"],
+          verifiedCommandId: evidence!["commandId"],
+          verifiedResponseId: evidence!["responseId"],
+          verifiedAcknowledgedAt: evidence!["acknowledgedAt"],
         } : {}),
         notes: verified
           ? "Gateway surfaced backend-verified owner-bound MCP ACK plus Ed25519 browser evidence."
           : "Gateway ACK is not ChatGPT browser/SOP delivery. Restricted DEV relay permissions are unchanged.",
       };
     };
+    // Preserve the existing scope boundary: handshake proof is obtained only
+    // through the already-authorized owner-bound event read.
+    if (name === "handshake_ai_core" && !identity.scopes.has("ai_core.events")) { respond(handshake(null)); return; }
     const args: Record<string, unknown> = name === "handshake_ai_core"
-      ? { conversationId: channel } : { ...rawArgs };
-    const relayName = name;
+      ? { conversationId: channel, limit: 1 } : { ...rawArgs };
+    const relayName = name === "handshake_ai_core" ? "read_ai_core_events" : name;
     if (BOUND.has(name)) args.conversationId = channel;
     if (name === "query_ai_core") {
       // A read-only DEV query must not select another branch, repository, or execution policy.
