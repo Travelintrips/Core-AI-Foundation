@@ -24,10 +24,25 @@ PRIVATE_KEY_FILE = os.environ.get("AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE", "dev-assi
 
 
 def browser(*args, timeout=55):
-    result = subprocess.run(CLI + list(args), capture_output=True, text=True, shell=False, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError("Browser controller failed (" + args[0] + ")")
-    return result.stdout
+    read_only = bool(args) and args[0] in {"tabs", "snapshot", "evaluate"}
+    attempts = 3 if read_only else 1
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            result = subprocess.run(CLI + list(args), capture_output=True, text=True, shell=False, timeout=timeout)
+        except subprocess.TimeoutExpired as err:
+            last_error = err
+            if attempt + 1 < attempts:
+                time.sleep(2)
+                continue
+            raise
+        if result.returncode == 0:
+            return result.stdout
+        last_error = RuntimeError("Browser controller failed (" + args[0] + ")")
+        if attempt + 1 < attempts:
+            time.sleep(2)
+            continue
+    raise last_error or RuntimeError("Browser controller failed")
 
 
 def config(base=None):
@@ -45,15 +60,20 @@ def config(base=None):
 def find_tab(url):
     value = json.loads(browser("tabs", "--json"))
     matching = [t for t in value.get("tabs", []) if t.get("type") == "page" and t.get("url") == url]
-    if len(matching) != 1 or not matching[0].get("targetId"):
+    if len(matching) != 1:
         raise RuntimeError("Expected exactly one paired ChatGPT browser tab")
-    return matching[0]["targetId"]
+    stable = matching[0].get("suggestedTargetId") or matching[0].get("tabId")
+    if not stable:
+        raise RuntimeError("Paired ChatGPT tab has no stable OpenClaw handle")
+    return stable
 
 
 def inspect(tab, marker, expected_url):
-    snapshot = browser("snapshot", "--target-id", tab, "--selector",
-                       "[contenteditable]", "--limit", "16", timeout=25)
-    m = re.search(r'textbox "Ask ChatGPT" \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
+    # OpenClaw stable tab handles are supported by snapshots and actions.
+    # Avoid selector/limit here because current browser CLI builds can stall
+    # that legacy snapshot combination even though a scoped snapshot works.
+    snapshot = browser("snapshot", "--target-id", tab, timeout=55)
+    m = re.search(r'textbox "Ask ChatGPT"(?: \[[^\]]+\])* \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
     if not m:
         raise RuntimeError("Authenticated ChatGPT composer not available")
     raw_draft = m.group(2)
@@ -72,7 +92,7 @@ def inspect(tab, marker, expected_url):
         "),responding:Array.from(document.querySelectorAll('button')).some(b=>"
         "/^(Stop|Stop generating)$/i.test((b.getAttribute('aria-label')||b.innerText||'').trim()))})"
     )
-    observed = json.loads(browser("evaluate", "--target-id", tab, "--fn", probe, timeout=30))
+    observed = json.loads(browser("evaluate", "--target-id", tab, "--fn", probe, timeout=60))
     if (not isinstance(observed, dict) or observed.get("url") != expected_url or
         not isinstance(observed.get("markerVisible"), bool) or
         not isinstance(observed.get("responding"), bool)):
@@ -127,7 +147,7 @@ def _assistant_probe(tab, expected_url, marker, challenge):
         assistantMessageId:idMatch ? idMatch[0].toLowerCase() : null,
         assistantText:text, ackVisible:text.includes('[' + ack + ']') || text.includes(ack)};
     }""" % (json.dumps(expected_url), json.dumps(marker), json.dumps(ack))
-    value = json.loads(browser("evaluate", "--target-id", tab, "--fn", fn, timeout=25))
+    value = json.loads(browser("evaluate", "--target-id", tab, "--fn", fn, timeout=70))
     if not isinstance(value, dict) or value.get("url") != expected_url:
         raise RuntimeError("Assistant attestation browser pairing lost")
     return value
