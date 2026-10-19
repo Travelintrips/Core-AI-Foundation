@@ -2,7 +2,16 @@ import { createHash } from "node:crypto";
 import { dispatchExternalAgentWork } from "./externalAgentDispatchService.js";
 import { deriveDevAssistantChallenge } from "./devAssistantAttestation.js";
 
-const WORKER = "openclaw-travelintrips-dev";
+const DEFAULT_WORKER = "openclaw-travelintrips-dev" as const;
+const DELL_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
+type DevWakeWorker = typeof DEFAULT_WORKER | typeof DELL_WORKER;
+
+function resolveWakeWorker(): DevWakeWorker {
+  const configured = process.env["AI_CORE_DEV_BROWSER_WAKE_WORKER_ID"]?.trim();
+  if (!configured || configured === DEFAULT_WORKER) return DEFAULT_WORKER;
+  if (configured === DELL_WORKER) return DELL_WORKER;
+  throw new Error("DEV_CHATGPT_WAKE_WORKER_INVALID");
+}
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
 export type DevBrowserWakeInput = {
@@ -44,7 +53,7 @@ function isDuplicateCommandKey(error: unknown): boolean {
   return false;
 }
 
-function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, command: {
+function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, worker: DevWakeWorker, command: {
   source: string;
   commandType: string;
   instruction: string;
@@ -54,7 +63,7 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, co
     ? command.metadataJson as Record<string, unknown> : undefined;
   const challenge = deriveDevAssistantChallenge(input);
   if (!metadata || command.source !== "ai-core" || command.commandType !== "EXTERNAL_AGENT_WORK" ||
-      command.instruction !== instruction || metadata["assignedClientId"] !== WORKER ||
+      command.instruction !== instruction || metadata["assignedClientId"] !== worker ||
       metadata["conversationId"] !== input.ownerChannel || metadata["capability"] !== "chatgpt:wake" ||
       metadata["targetConversationId"] !== input.targetConversationId.toLowerCase() ||
       metadata["eventId"] !== input.eventId.toLowerCase() ||
@@ -73,7 +82,7 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, co
 }
 
 /** Reconcile only the known uniqueness race. Never retry an ambiguous network or authorization error. */
-async function reconcileDuplicateWake(input: DevBrowserWakeInput, externalCommandId: string, instruction: string) {
+async function reconcileDuplicateWake(input: DevBrowserWakeInput, externalCommandId: string, instruction: string, worker: DevWakeWorker) {
   const { db, aiCodingBridgeCommandsTable } = await import("@workspace/db");
   const { and, eq, sql } = await import("drizzle-orm");
   return db.transaction(async transaction => {
@@ -83,12 +92,12 @@ async function reconcileDuplicateWake(input: DevBrowserWakeInput, externalComman
       eq(aiCodingBridgeCommandsTable.externalCommandId, externalCommandId),
       eq(aiCodingBridgeCommandsTable.commandType, "EXTERNAL_AGENT_WORK"),
       sql`${aiCodingBridgeCommandsTable.metadataJson} ->> 'conversationId' = ${input.ownerChannel}::text`,
-      sql`${aiCodingBridgeCommandsTable.metadataJson} ->> 'assignedClientId' = ${WORKER}::text`,
+      sql`${aiCodingBridgeCommandsTable.metadataJson} ->> 'assignedClientId' = ${worker}::text`,
     )).limit(1);
-    if (!existing || !matchesExistingWake(input, instruction, existing)) {
+    if (!existing || !matchesExistingWake(input, instruction, worker, existing)) {
       throw new Error("DEV_CHATGPT_WAKE_RECONCILIATION_UNVERIFIED");
     }
-    return { commandId: existing.id, clientId: WORKER, created: false };
+    return { commandId: existing.id, clientId: worker, created: false };
   });
 }
 
@@ -98,6 +107,7 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   clientId: string;
   created: boolean;
 }> {
+  const worker = resolveWakeWorker();
   if (!isDevBrowserWakeAllowed(input) || typeof input.eventId !== "string" ||
       input.eventId.length !== 64 || !/^[a-f0-9]{64}$/i.test(input.eventId)) {
     throw new Error("DEV_CHATGPT_WAKE_DENIED");
@@ -144,15 +154,15 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
     } : {}),
   };
   try {
-    const queued = await dispatchExternalAgentWork({ clientId: WORKER, instruction,
+    const queued = await dispatchExternalAgentWork({ clientId: worker, instruction,
       source: "ai-core", externalCommandId, metadata });
-    if (queued.clientId !== WORKER) throw new Error("DEV_CHATGPT_WAKE_WORKER_MISMATCH");
-    if (!queued.created && !matchesExistingWake(input, instruction, queued.command)) {
+    if (queued.clientId !== worker) throw new Error("DEV_CHATGPT_WAKE_WORKER_MISMATCH");
+    if (!queued.created && !matchesExistingWake(input, instruction, worker, queued.command)) {
       throw new Error("DEV_CHATGPT_WAKE_RECONCILIATION_UNVERIFIED");
     }
     return { commandId: queued.command.id, clientId: queued.clientId, created: queued.created };
   } catch (error) {
     if (!isDuplicateCommandKey(error)) throw error;
-    return reconcileDuplicateWake(input, externalCommandId, instruction);
+    return reconcileDuplicateWake(input, externalCommandId, instruction, worker);
   }
 }
