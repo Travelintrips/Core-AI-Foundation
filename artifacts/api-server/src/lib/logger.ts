@@ -18,3 +18,12 @@ export const logger = pino({
         },
       }),
 });
+
+/**
+ * Logs the incoming intent payload and the matched handler name at debug level.
+ * Useful for CI debugging of chat intent routing.
+ */
+export function logIntent(intentPayload: unknown, handlerName: string): void {
+  logger.debug({ intentPayload, handlerName }, 'Intent routed');
+}
+
