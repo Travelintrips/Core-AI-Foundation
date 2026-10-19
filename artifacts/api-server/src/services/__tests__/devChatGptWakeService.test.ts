@@ -57,6 +57,23 @@ describe("shared DEV browser wake queue", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
+
+  it("selects the dedicated DELL worker only when explicitly configured", async () => {
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-dell-chatgpt-wake-dev");
+    const dell = "openclaw-dell-chatgpt-wake-dev";
+    const command = existingCommand();
+    command.metadataJson.assignedClientId = dell;
+    mocks.dispatch.mockResolvedValueOnce({ clientId: dell, command, created: true });
+    expect(await queueDevBrowserWake(input)).toEqual({ commandId: childId, clientId: dell, created: true });
+    expect(mocks.dispatch.mock.calls[0]![0]).toMatchObject({ clientId: dell, instruction, source: "ai-core" });
+  });
+
+  it("fails closed for an unknown configured wake worker", async () => {
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-untrusted-dev");
+    await expect(queueDevBrowserWake(input)).rejects.toThrow("DEV_CHATGPT_WAKE_WORKER_INVALID");
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
   it("keeps manual wake compatibility without inventing a continuity association", async () => {
     await queueDevBrowserWake({ ownerChannel, targetConversationId, eventId });
     expect(mocks.dispatch.mock.calls[0]![0].metadata.devContinuity).toBeUndefined();
