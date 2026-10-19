@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectExplicitExternalAgentClientId } from "../externalAgentDispatchService.js";
+import { detectExplicitExternalAgentClientId, isDevChatGptWakeInstruction } from "../externalAgentDispatchService.js";
 
 describe("Issue #980: explicit external-agent routing", () => {
   it("routes each dedicated Dell agent by exact identity", () => {
@@ -47,5 +47,30 @@ describe("Issue #980: explicit external-agent routing", () => {
     // A named physical PC is not a hard pin to the worker-1 process.
     // Worker selection is performed by chooseActivePc when worker-1 is offline.
     expect(detectExplicitExternalAgentClientId("suruh OpenClaw PC Travelintrips gerakkan mouse")).toBe("openclaw-pc-worker");
+  });
+});
+
+describe("DEV ChatGPT wake preflight contract", () => {
+  const conversation = "6ad4e0a7-9964-83ec-81a6-9db5eb8457ae";
+  const event = "a".repeat(64);
+  const challenge = "b".repeat(64);
+
+  it("accepts V1 and bounded V2 task payloads", () => {
+    expect(isDevChatGptWakeInstruction(
+      `DEV_CHATGPT_WAKE_V1 conversation=${conversation} event=${event} challenge=${challenge}`,
+    )).toBe(true);
+    expect(isDevChatGptWakeInstruction(
+      `DEV_CHATGPT_WAKE_V2 conversation=${conversation} event=${event} challenge=${challenge} task=Y2VrIHBhZGEgZGVsbA`,
+    )).toBe(true);
+  });
+
+  it("rejects freeform, malformed, or unbound V2 instructions", () => {
+    expect(isDevChatGptWakeInstruction("cek pada dell ada berapa worker")).toBe(false);
+    expect(isDevChatGptWakeInstruction(
+      `DEV_CHATGPT_WAKE_V2 conversation=${conversation} event=${event} challenge=${challenge} task=not valid base64url!`,
+    )).toBe(false);
+    expect(isDevChatGptWakeInstruction(
+      `DEV_CHATGPT_WAKE_V2 conversation=${conversation} event=${event} task=Y2Vr`,
+    )).toBe(false);
   });
 });
