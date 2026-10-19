@@ -189,7 +189,7 @@ describe("passive DEV continuity persistence", () => {
     expect(await repository.recordResult(callback(claimed, { parentWatchCommandId: target }), initial + 60_100)).toBeNull();
     const result = await repository.recordResult(callback(claimed), initial + 60_200);
     expect(result).toMatchObject({ state: "WAKE_CONFIRMED", wakeCount: 1,
-      evidence: { resultCode: "DELIVERY_CONFIRMED", verifiedAssistantReply: false } });
+      evidence: { resultCode: "DELIVERY_CONFIRMED", verifiedAssistantReply: true } });
     expect(await repository.recordQueued({ ownerChannel: owner, jobId: input.jobId, claimToken: claimed.claimToken!,
       eventId: claimed.wakeEventId!, wakeCommandId: childId }, initial + 60_300)).toEqual(result);
   });
