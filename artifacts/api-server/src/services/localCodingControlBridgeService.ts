@@ -582,25 +582,22 @@ export function verifyMcpHandshakeEvidenceRow(
       !Number.isFinite(Date.parse(acknowledgedAt))) return null;
 
   const continuity = isRecord(command["devContinuity"]) ? command["devContinuity"] : null;
-  const expected = continuity ? {
-    ownerChannel,
-    targetConversationId,
-    eventId,
-    watchCommandId: continuity["parentWatchCommandId"],
-    jobId: continuity["jobId"],
-    checkpointRevision: continuity["checkpointRevision"],
-    workerId,
-  } : {
+  const expected: Parameters<typeof verifyDevAssistantAttestation>[0]["expected"] = {
     ownerChannel, targetConversationId, eventId, workerId,
+    ...(continuity ? {
+      watchCommandId: continuity["parentWatchCommandId"] as string,
+      jobId: continuity["jobId"] as string,
+      checkpointRevision: continuity["checkpointRevision"] as number,
+    } : {}),
   };
   if (continuity && (
-      typeof expected.watchCommandId !== "string" ||
-      typeof expected.jobId !== "string" ||
-      !Number.isSafeInteger(expected.checkpointRevision))) return null;
+      typeof continuity["parentWatchCommandId"] !== "string" ||
+      typeof continuity["jobId"] !== "string" ||
+      !Number.isSafeInteger(continuity["checkpointRevision"]))) return null;
 
   const attestation = verifyDevAssistantAttestation({
     details: response,
-    expected: expected as Parameters<typeof verifyDevAssistantAttestation>[0]["expected"],
+    expected,
     notBefore: commandReceivedAt,
     receivedAt: responseCreatedAt,
     publicKeyDerBase64: devAssistantPublicKeyForWorker(workerId),
