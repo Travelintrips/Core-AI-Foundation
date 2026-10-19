@@ -152,8 +152,16 @@ export function readOllamaWorkerRuntimeConfig(
     ),
   );
 
+  const explicitLocalEndpoint = (
+    env["OLLAMA_WORKER_LOCAL_URL"] ||
+    env["OLLAMA_BASE_URL"] ||
+    ""
+  ).trim();
+
   return {
-    enabled: envTrue(env["OLLAMA_WORKER_RUNTIME_ENABLED"]),
+    enabled:
+      envTrue(env["OLLAMA_WORKER_RUNTIME_ENABLED"]) &&
+      explicitLocalEndpoint.length > 0,
     workerName,
     nodeId,
     modelId,
