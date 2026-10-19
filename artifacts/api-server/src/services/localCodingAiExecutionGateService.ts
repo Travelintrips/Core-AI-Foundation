@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile } from "node:child_process";const ENABLE_NEW_CANCELLATION_LOGIC = process.env.ENABLE_NEW_CANCELLATION_LOGIC === 'true';
+
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { promisify } from "node:util";

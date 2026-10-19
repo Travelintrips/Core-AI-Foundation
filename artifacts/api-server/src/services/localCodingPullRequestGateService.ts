@@ -6,7 +6,8 @@ import {
   type AiCodingRun,
   type AiCodingTask,
 } from "@workspace/db";
-import { logAudit } from "./aiAuditService.js";
+import { logAudit } from "./aiAuditService.js";const ENABLE_NEW_CANCELLATION_LOGIC = process.env.ENABLE_NEW_CANCELLATION_LOGIC === 'true';
+
 import {
   createGitHubApiClient,
   GitHubPublisherError,
