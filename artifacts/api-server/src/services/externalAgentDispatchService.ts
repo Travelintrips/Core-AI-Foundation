@@ -43,6 +43,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   agent: RegExp;
 }> = [
   // Host-specific requests must take precedence over the generic OpenClaw alias.
+  { clientId: "openclaw-dell-chatgpt-wake-dev", agent: /\bopenclaw-dell-chatgpt-wake-dev\b/i },
   { clientId: OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, agent: /openclaw-travelintrips-dev|openclaw[\s-]*travelintrips[\s-]*dev|travelintrips[\s-]*dev/i },
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
   { clientId: "openclaw-pc-worker-dell-recovery", agent: /\b(?:openclaw-pc-worker-dell-recovery|dell-recovery)\b/i },
@@ -139,6 +140,12 @@ export async function dispatchExternalAgentWork(input: {
   // instruction names a concrete DEV executor. Respect that explicit target
   // before any sticky-leader or failover selection. Never silently substitute
   // an unrelated PC or legacy GCP worker.
+  const explicitlyNamesDellWakeDev = /\bopenclaw-dell-chatgpt-wake-dev\b/i.test(input.instruction);
+  if (explicitlyNamesDellWakeDev &&
+      (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
+       (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId))) {
+    resolvedClientId = "openclaw-dell-chatgpt-wake-dev";
+  }
   const explicitlyNamesTravelintripsDev =
     /\bopenclaw-travelintrips-dev\b|\bopenclaw[\s-]*travelintrips[\s-]*dev\b/i.test(input.instruction);
   if (explicitlyNamesTravelintripsDev &&
