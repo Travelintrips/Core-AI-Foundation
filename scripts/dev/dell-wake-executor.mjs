@@ -69,7 +69,7 @@ function execute(work) {
     input: JSON.stringify({ instruction, workerId }),
     encoding: "utf8",
     windowsHide: true,
-    timeout: 180_000,
+    timeout: 600_000,
     maxBuffer: 2 * 1024 * 1024,
     env,
   });
