@@ -178,3 +178,73 @@ describe("callback PROCESSING visibility", () => {
     expect(classifyCallbackProcessingState({ status: "CANCELLED" })).toBe("FAILED");
   });
 });
+
+
+describe("verified MCP handshake evidence", () => {
+  it("requires owner-bound MCP ACK and a valid Ed25519 assistant receipt", async () => {
+    const { generateKeyPairSync, sign } = await import("node:crypto");
+    const bridge = await import("../localCodingControlBridgeService.js");
+    const attestationModule = await import("../devAssistantAttestation.js");
+    const ownerChannel = "ai-engine-oauth:" + "a".repeat(64);
+    const targetConversationId = "6ad4e0a7-9964-83ec-81a6-9db5eb8457ae";
+    const eventId = "b".repeat(64);
+    const workerId = "openclaw-dell-chatgpt-wake-dev" as const;
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64",
+      publicKey.export({ format: "der", type: "spki" }).toString("base64"));
+    const commandReceivedAt = "2026-10-20T00:00:00.000Z";
+    const responseCreatedAt = "2026-10-20T00:00:30.000Z";
+    const responseId = "22222222-2222-4222-8222-222222222222";
+    const expected = { ownerChannel, targetConversationId, eventId, workerId };
+    const unsigned = {
+      version: attestationModule.DEV_ASSISTANT_ATTESTATION_VERSION,
+      algorithm: attestationModule.DEV_ASSISTANT_ATTESTATION_ALGORITHM,
+      keyId: attestationModule.DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID,
+      workerId,
+      conversationId: targetConversationId,
+      eventId,
+      challenge: attestationModule.deriveDevAssistantChallenge(expected),
+      assistantMessageId: "33333333-3333-4333-8333-333333333333",
+      assistantResponseHash: "c".repeat(64),
+      observedAt: "2026-10-20T00:00:20.000Z",
+    } as const;
+    const attestation = {
+      ...unsigned,
+      signature: sign(null, Buffer.from(attestationModule.devAssistantAttestationPayload(unsigned), "utf8"), privateKey).toString("base64"),
+    };
+    const base = {
+      commandId: "11111111-1111-4111-8111-111111111111",
+      commandReceivedAt,
+      commandMetadata: {
+        assignedClientId: workerId, completedBy: workerId,
+        conversationId: ownerChannel, mcpAckConversationId: ownerChannel,
+        targetConversationId, eventId, capability: "chatgpt:wake",
+        explicitWorkerTarget: true, deliveryCode: "DELIVERY_CONFIRMED",
+        e2eCode: "MCP_ACK_VERIFIED", mcpAckResponseId: responseId,
+      },
+      responseId,
+      responseMetadata: {
+        deliveryCode: "DELIVERY_CONFIRMED", e2eCode: "E2E_VERIFIED",
+        browserConfirmed: true, browserPairingVerified: true,
+        chatgptSubmitted: true, verifiedAssistantReply: true, exitCode: 0,
+        conversationId: targetConversationId, eventId, attestation,
+      },
+      responseCreatedAt,
+      acknowledgedAt: "2026-10-20T00:00:31.000Z",
+    };
+    expect(bridge.verifyMcpHandshakeEvidenceRow(ownerChannel, base)).toMatchObject({
+      browserWakeVerified: true, conversationAckVerified: true,
+      targetConversationId, workerId, eventId,
+    });
+    expect(bridge.verifyMcpHandshakeEvidenceRow(ownerChannel, {
+      ...base, responseMetadata: { ...base.responseMetadata, eventId: "d".repeat(64) },
+    })).toBeNull();
+    expect(bridge.verifyMcpHandshakeEvidenceRow(ownerChannel, {
+      ...base, commandMetadata: { ...base.commandMetadata, mcpAckConversationId: "ai-engine-oauth:" + "f".repeat(64) },
+    })).toBeNull();
+    expect(bridge.verifyMcpHandshakeEvidenceRow(ownerChannel, {
+      ...base, responseMetadata: { ...base.responseMetadata, attestation: { ...attestation, signature: "A".repeat(88) } },
+    })).toBeNull();
+    vi.unstubAllEnvs();
+  });
+});
