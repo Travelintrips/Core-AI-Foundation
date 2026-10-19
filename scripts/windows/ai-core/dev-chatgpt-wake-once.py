@@ -174,6 +174,7 @@ def wait_for_assistant_attestation(root, tab, expected_url, conversation, event,
                 "version": 1, "algorithm": "Ed25519", "keyId": KEY_ID, "workerId": WORKER,
                 "conversationId": conversation, "eventId": event, "challenge": challenge,
                 "assistantMessageId": message_id, "assistantResponseHash": response_hash,
+                "assistantResponseText": text[:4000],
                 "observedAt": observed_at, "signature": signature,
             }
         time.sleep(2)
@@ -181,7 +182,20 @@ def wait_for_assistant_attestation(root, tab, expected_url, conversation, event,
 
 
 def submit_once(instruction, worker_id, base=None):
-    match = PATTERN.fullmatch(str(instruction).strip())
+    raw = str(instruction).strip()
+    match = PATTERN_V2.fullmatch(raw)
+    task_instruction = None
+    if match:
+        encoded = match.group(4)
+        try:
+            padding = "=" * ((4 - len(encoded) % 4) % 4)
+            task_instruction = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            raise RuntimeError("Invalid DEV wake task encoding") from None
+        if not task_instruction or len(task_instruction) > 2000 or any(ord(ch) < 32 or ord(ch) == 127 for ch in task_instruction):
+            raise RuntimeError("Invalid DEV wake task instruction")
+    else:
+        match = PATTERN_V1.fullmatch(raw)
     if not match or worker_id != WORKER:
         raise RuntimeError("Unauthorized DEV browser wake command or worker")
     conversation, event, challenge = (match.group(1).lower(), match.group(2).lower(), match.group(3).lower())
@@ -220,9 +234,13 @@ def submit_once(instruction, worker_id, base=None):
         raise RuntimeError("Wake event already attempted; reconciliation required") from None
     attest_marker = "AI_CORE_ATTEST:" + challenge
     ack_marker = "AI_CORE_ATTEST_ACK:" + challenge
+    job_text = (
+        "Kerjakan job AI Core berikut: " + task_instruction + ". "
+        if task_instruction else
+        "Lanjutkan pekerjaan sebelumnya. Periksa checkpoint AI Core DEV dan kerjakan sampai hasil terverifikasi. "
+    )
     message = (
-        "[" + marker + "] [" + attest_marker + "] Lanjutkan pekerjaan sebelumnya. "
-        "Periksa checkpoint AI Core DEV dan kerjakan sampai hasil terverifikasi. "
+        "[" + marker + "] [" + attest_marker + "] " + job_text +
         "Jangan melewati persetujuan keamanan, jangan mengubah PROD. "
         "Pada balasan pertama setelah wake ini, sertakan token [" + ack_marker + "] satu kali."
     )
@@ -245,6 +263,7 @@ def submit_once(instruction, worker_id, base=None):
             "alreadyVisible": False, "browserPairingVerified": True,
             "verifiedAssistantReply": attestation is not None,
             "attestation": attestation, "evidenceFingerprint": fingerprint,
+            "assistantResponseText": attestation.get("assistantResponseText") if isinstance(attestation, dict) else None,
             "conversationId": conversation, "eventId": event, "challenge": challenge}
 
 
