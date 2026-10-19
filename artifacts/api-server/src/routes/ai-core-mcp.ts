@@ -824,6 +824,47 @@ async function callAiCore(path: string, init: RequestInit, key: string) {
   return payload;
 }
 
+// Dedicated REST intake for an explicitly authorized DEV browser wake.
+// It reuses the same allowlist, deterministic event key, and DELL attestation
+// pipeline as MCP, without accepting client-supplied ownership or challenges.
+router.post("/ai/dev/chatgpt-wake/jobs", async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store");
+  if (process.env["APP_ENV"] !== "development") {
+    res.status(404).json({ error: "DEV_ONLY" }); return;
+  }
+  const identity = await authenticate(req);
+  if (!identity || identity.kind !== "oauth" || !identity.scopes.has("ai_core.command")) {
+    res.status(401).json({ error: "DEV_WAKE_OAUTH_REQUIRED" }); return;
+  }
+  const channel = oauthEventChannel(identity);
+  const schema = z.object({
+    conversationId: z.string().uuid(),
+    eventId: z.string().regex(/^[a-f0-9]{64}$/i),
+    correlationId: z.string().regex(/^[a-zA-Z0-9:_-]{1,160}$/),
+    confirmed: z.literal(true),
+  }).strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success || !channel ||
+      !isDevBrowserWakeAllowed({ ownerChannel: channel, targetConversationId: parsed.data.conversationId })) {
+    res.status(403).json({ error: "DEV_WAKE_NOT_AUTHORIZED" }); return;
+  }
+  try {
+    const job = await queueDevBrowserWake({
+      ownerChannel: channel,
+      targetConversationId: parsed.data.conversationId,
+      eventId: parsed.data.eventId,
+      correlationId: parsed.data.correlationId,
+    });
+    res.status(job.created ? 202 : 200).json({
+      commandId: job.commandId, correlationId: parsed.data.correlationId,
+      workerId: job.clientId, status: job.created ? "QUEUED" : "ALREADY_QUEUED",
+      executionEnvironment: "DEV", callbackVerified: false, finalAckVerified: false,
+    });
+  } catch {
+    res.status(503).json({ error: "DEV_WAKE_UNAVAILABLE", callbackVerified: false, finalAckVerified: false });
+  }
+});
+
 router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Promise<void> => {
   const body = req.body as {
     jsonrpc?: unknown;
