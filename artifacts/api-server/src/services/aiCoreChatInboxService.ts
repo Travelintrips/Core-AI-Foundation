@@ -70,40 +70,67 @@ export function classifyAiCoreInboxEvent(input: {
   return "COMPLETED";
 }
 
+async function ensureAiCoreChatInboxTableInternal(): Promise<void> {
+  // Schema ownership stays with migrations. Restricted DEV runtime must never
+  // attempt CREATE/ALTER merely to use an already-provisioned inbox.
+  const state = await db.execute(sql`
+    SELECT (
+      to_regclass('ai_platform.ai_core_chat_inbox_messages') IS NOT NULL
+      AND to_regclass('ai_platform.idx_ai_core_chat_inbox_unread') IS NOT NULL
+      AND to_regclass('ai_platform.idx_ai_core_chat_inbox_task') IS NOT NULL
+      AND to_regclass('ai_platform.idx_ai_core_chat_inbox_source_key') IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'ai_platform'
+          AND table_name = 'ai_core_chat_inbox_messages'
+          AND column_name = 'source_key'
+      )
+    ) AS ready,
+    has_schema_privilege(current_user, 'ai_platform', 'CREATE') AS can_create
+  `);
+  if (state.rows[0]?.["ready"] === true) return;
+  if (state.rows[0]?.["can_create"] !== true) {
+    throw new Error(
+      "AI Core inbox schema is incomplete; apply the managed database migration instead of granting runtime DDL.",
+    );
+  }
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ai_platform.ai_core_chat_inbox_messages (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      response_id uuid NOT NULL UNIQUE,
+      command_id uuid NOT NULL,
+      task_id uuid,
+      event_type text NOT NULL,
+      title text NOT NULL,
+      message text NOT NULL,
+      read_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_unread
+    ON ai_platform.ai_core_chat_inbox_messages (read_at, created_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_task
+    ON ai_platform.ai_core_chat_inbox_messages (task_id, created_at DESC)
+  `);
+  await db.execute(sql`
+    ALTER TABLE ai_platform.ai_core_chat_inbox_messages
+    ADD COLUMN IF NOT EXISTS source_key text
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_source_key
+    ON ai_platform.ai_core_chat_inbox_messages (source_key)
+    WHERE source_key IS NOT NULL
+  `);
+}
+
 export async function ensureAiCoreChatInboxTable(): Promise<void> {
   if (!ensurePromise) {
-    ensurePromise = (async () => {
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS ai_platform.ai_core_chat_inbox_messages (
-          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          response_id uuid NOT NULL UNIQUE,
-          command_id uuid NOT NULL,
-          task_id uuid,
-          event_type text NOT NULL,
-          title text NOT NULL,
-          message text NOT NULL,
-          read_at timestamptz,
-          created_at timestamptz NOT NULL DEFAULT NOW()
-        )
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_unread
-        ON ai_platform.ai_core_chat_inbox_messages (read_at, created_at DESC)
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_task
-        ON ai_platform.ai_core_chat_inbox_messages (task_id, created_at DESC)
-      `);
-      await db.execute(sql`
-        ALTER TABLE ai_platform.ai_core_chat_inbox_messages
-        ADD COLUMN IF NOT EXISTS source_key text
-      `);
-      await db.execute(sql`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_core_chat_inbox_source_key
-        ON ai_platform.ai_core_chat_inbox_messages (source_key)
-        WHERE source_key IS NOT NULL
-      `);
-    })().catch((error) => {
+    ensurePromise = ensureAiCoreChatInboxTableInternal().catch((error) => {
       ensurePromise = null;
       throw error;
     });
