@@ -10,7 +10,8 @@ export type ChatGptWakeCommand = {
 };
 
 const WAKE_COMMAND = /^\*(GPT[0-9]{2,4})(?:-(JOB[0-9]{3,12}))?\s+([^\r\n]+)$/i;
-const SIMPLE_WAKE_WITH_JOB = /^(GPT[0-9]{2,4})\s+JOB\s*([0-9]{1,12})\s*[,;:\-]?\s+([^\r\n]+)$/i;\nconst SIMPLE_WAKE_NO_JOB = /^(GPT[0-9]{2,4})\s*[,;:\-]?\s+([^\r\n]+)$/i;
+const SIMPLE_WAKE_WITH_JOB = /^(GPT[0-9]{2,4})\s+JOB\s*([0-9]{1,12})\s*[,;:\-]?\s+([^\r\n]+)$/i;
+const SIMPLE_WAKE_NO_JOB = /^(GPT[0-9]{2,4})\s*[,;:\-]?\s+([^\r\n]+)$/i;
 const FORBIDDEN_INSTRUCTION = /[\u0000-\u001f\u007f]/;
 
 function normalizeJobAlias(value: string | undefined): string | null {
