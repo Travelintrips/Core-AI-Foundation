@@ -1,3 +1,12 @@
+const AUTONOMOUS_REPAIR_TIMEOUT_MS = parseInt(process.env.AUTONOMOUS_REPAIR_TIMEOUT_MS ?? "300000", 10);
+
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMessage)), ms)),
+  ]);
+}
+
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
