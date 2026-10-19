@@ -1,10 +1,43 @@
 import { createHash } from "node:crypto";
 import { dispatchExternalAgentWork } from "./externalAgentDispatchService.js";
 import { deriveDevAssistantChallenge } from "./devAssistantAttestation.js";
+import { getVerifiedMcpHandshakeEvidenceForConversation } from "./localCodingControlBridgeService.js";
 
 const DEFAULT_WORKER = "openclaw-travelintrips-dev" as const;
 const DELL_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
 type DevWakeWorker = typeof DEFAULT_WORKER | typeof DELL_WORKER;
+
+export type DevWakeTarget = {
+  ownerChannel: string;
+  targetConversationId: string;
+  workerId: DevWakeWorker;
+};
+
+export async function resolveVerifiedDevWakeTarget(accountAlias: string): Promise<DevWakeTarget> {
+  if (accountAlias.toUpperCase() !== "GPT01" ||
+      process.env["APP_ENV"] !== "development" ||
+      process.env["AI_CORE_DEV_BROWSER_WAKE_ENABLED"] !== "true") {
+    throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
+  }
+  const configuredTarget = process.env["AI_CORE_DEV_CHATGPT_ALIAS_GPT01_CONVERSATION_ID"]?.trim().toLowerCase();
+  const allowedChats = [...new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS"] ?? "")
+    .split(",").map(value => value.trim().toLowerCase()).filter(Boolean))];
+  const targetConversationId = configuredTarget || (allowedChats.length === 1 ? allowedChats[0] : "");
+  if (!targetConversationId || !UUID.test(targetConversationId) || !allowedChats.includes(targetConversationId)) {
+    throw new Error("DEV_CHATGPT_ALIAS_TARGET_UNVERIFIED");
+  }
+  const channels = [...new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "")
+    .split(",").map(value => value.trim()).filter(value => /^ai-engine-oauth:[a-f0-9]{64}$/.test(value)))];
+  const verified = [];
+  for (const ownerChannel of channels) {
+    const evidence = await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel).catch(() => null);
+    if (evidence?.targetConversationId.toLowerCase() === targetConversationId) verified.push(evidence);
+  }
+  if (verified.length !== 1) throw new Error("DEV_CHATGPT_ALIAS_OWNER_AMBIGUOUS");
+  const workerId = resolveWakeWorker();
+  if (verified[0]!.workerId !== workerId) throw new Error("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
+  return { ownerChannel: verified[0]!.ownerChannel, targetConversationId, workerId };
+}
 
 function resolveWakeWorker(): DevWakeWorker {
   const configured = process.env["AI_CORE_DEV_BROWSER_WAKE_WORKER_ID"]?.trim();
@@ -23,6 +56,8 @@ export type DevBrowserWakeInput = {
   correlationId?: string;
   checkpointRevision?: number;
   expiresAt?: string;
+  instruction?: string;
+  jobAlias?: string | null;
 };
 
 /** The owner fence is not proof of ChatGPT session ownership; the worker checks the exact tab. */
@@ -137,7 +172,17 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   const targetConversationId = input.targetConversationId.toLowerCase();
   const eventId = input.eventId.toLowerCase();
   const challenge = deriveDevAssistantChallenge({ ...input, targetConversationId, eventId });
-  const instruction = "DEV_CHATGPT_WAKE_V1 conversation=" + targetConversationId + " event=" + eventId + " challenge=" + challenge;
+  const userInstruction = input.instruction?.trim() ?? "";
+  if (userInstruction && (userInstruction.length > 2000 || /[\u0000-\u001f\u007f]/.test(userInstruction))) {
+    throw new Error("DEV_CHATGPT_WAKE_INSTRUCTION_INVALID");
+  }
+  const encodedInstruction = userInstruction
+    ? Buffer.from(userInstruction, "utf8").toString("base64url")
+    : "";
+  const instruction = userInstruction
+    ? "DEV_CHATGPT_WAKE_V2 conversation=" + targetConversationId + " event=" + eventId +
+      " challenge=" + challenge + " task=" + encodedInstruction
+    : "DEV_CHATGPT_WAKE_V1 conversation=" + targetConversationId + " event=" + eventId + " challenge=" + challenge;
   const externalCommandId = "dev-chatgpt-wake:" + createHash("sha256")
     .update(input.ownerChannel + "|" + targetConversationId + "|" + eventId).digest("hex");
   const metadata: Record<string, unknown> = {
@@ -149,6 +194,8 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
     ...(input.jobId !== undefined ? { jobId: input.jobId } : {}),
     ...(input.correlationId !== undefined ? { correlationId: input.correlationId } : {}),
     ...(input.checkpointRevision !== undefined ? { checkpointRevision: input.checkpointRevision } : {}),
+    ...(userInstruction ? { requestedInstructionHash: createHash("sha256").update(userInstruction).digest("hex") } : {}),
+    ...(input.jobAlias ? { jobAlias: input.jobAlias } : {}),
     ...(input.watchCommandId !== undefined && input.jobId !== undefined ? {
       devContinuity: {
         parentWatchCommandId: input.watchCommandId, ownerChannel: input.ownerChannel,

@@ -9,9 +9,15 @@ describe("ChatGPT wake command parser", () => {
     expect(parseChatGptWakeCommand("*GPT02 cek")).toEqual({
       accountAlias: "GPT02", jobAlias: null, instruction: "cek",
     });
+    expect(parseChatGptWakeCommand("gpt01 job 1,cek pada dell ada berapa worker")).toEqual({
+      accountAlias: "GPT01", jobAlias: "JOB001", instruction: "cek pada dell ada berapa worker",
+    });
+    expect(parseChatGptWakeCommand("GPT01 job12 periksa status")).toEqual({
+      accountAlias: "GPT01", jobAlias: "JOB012", instruction: "periksa status",
+    });
   });
   it("rejects malformed or multiline instructions", () => {
-    for (const text of ["*GPT01", "*GPT1 cek", "*GPT01-JOB5 cek", "*GPT01 cek\nother", "*GPT01 \u0000"]) {
+    for (const text of ["*GPT01", "*GPT1 cek", "*GPT01-JOB5 cek", "*GPT01 cek\nother", "*GPT01 \u0000", "gpt01 job 0, cek", "gpt1 job 1, cek"]) {
       expect(parseChatGptWakeCommand(text)).toBeNull();
     }
   });

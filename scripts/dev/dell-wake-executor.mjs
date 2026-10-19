@@ -41,7 +41,7 @@ async function request(route, payload) {
 }
 function execute(work) {
   const instruction = String(work.instruction || "").trim();
-  const match = /^DEV_CHATGPT_WAKE_V1 conversation=([0-9a-f-]{36}) event=([a-f0-9]{64}) challenge=([a-f0-9]{64})$/i.exec(instruction);
+  const match = /^DEV_CHATGPT_WAKE_V(?:1|2) conversation=([0-9a-f-]{36}) event=([a-f0-9]{64}) challenge=([a-f0-9]{64})(?: task=([A-Za-z0-9_-]{1,4096}))?$/i.exec(instruction);
   if (work.commandType !== "EXTERNAL_AGENT_WORK" || !match) {
     return { ok: false, message: "Dedicated DELL worker rejects non-wake job", details: { reason: "scope_denied" } };
   }
@@ -84,10 +84,14 @@ function execute(work) {
     receipt?.challenge === challenge &&
     receipt?.attestation?.workerId === workerId &&
     receipt?.attestation?.keyId === "openclaw-dell-chatgpt-wake-dev-ed25519-v1";
+  const assistantResponseText = verified && typeof receipt?.assistantResponseText === "string"
+    ? receipt.assistantResponseText.trim().slice(0, 4000)
+    : "";
   return {
     ok: verified,
-    message: verified ? "ChatGPT assistant reply attested by DELL" :
-      String(receipt?.message || run.stderr || run.error?.message || "Browser verification failed").slice(-400),
+    message: verified
+      ? (assistantResponseText || "ChatGPT assistant reply attested by DELL")
+      : String(receipt?.message || run.stderr || run.error?.message || "Browser verification failed").slice(-400),
     details: verified ? {
       mode: "chatgpt-browser-wake-dev",
       runtime: "openclaw-pc",
@@ -103,6 +107,7 @@ function execute(work) {
       challenge,
       evidenceFingerprint: receipt.evidenceFingerprint,
       attestation: receipt.attestation,
+      assistantResponseText: assistantResponseText || null,
       exitCode: 0,
       verifiedAt: receipt.attestation?.observedAt,
     } : {

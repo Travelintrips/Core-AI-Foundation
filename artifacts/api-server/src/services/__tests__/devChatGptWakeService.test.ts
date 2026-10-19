@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), transaction: vi.fn(), execute: vi.fn(), rows: vi.fn() }));
+const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), transaction: vi.fn(), execute: vi.fn(), rows: vi.fn(), handshakeEvidence: vi.fn() }));
 vi.mock("../externalAgentDispatchService.js", () => ({ dispatchExternalAgentWork: mocks.dispatch }));
+vi.mock("../localCodingControlBridgeService.js", () => ({ getVerifiedMcpHandshakeEvidenceForConversation: mocks.handshakeEvidence }));
 vi.mock("@workspace/db", () => ({
   db: { transaction: mocks.transaction },
   aiCodingBridgeCommandsTable: { source: "source", externalCommandId: "external_command_id",
     commandType: "command_type", metadataJson: "metadata_json" },
 }));
-import { isDevBrowserWakeAllowed, queueDevBrowserWake } from "../devChatGptWakeService.js";
+import { isDevBrowserWakeAllowed, queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../devChatGptWakeService.js";
 import { deriveDevAssistantChallenge } from "../devAssistantAttestation.js";
 
 const ownerChannel = "ai-engine-oauth:" + "a".repeat(64);
@@ -38,6 +39,7 @@ beforeEach(() => {
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", targetConversationId);
   vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
   mocks.dispatch.mockResolvedValue({ clientId: worker, command: existingCommand(), created: true });
+  mocks.handshakeEvidence.mockResolvedValue(null);
   mocks.rows.mockResolvedValue([existingCommand()]);
   mocks.transaction.mockImplementation(async callback => callback({ execute: mocks.execute,
     select: () => ({ from: () => ({ where: () => ({ limit: mocks.rows }) }) }) }));
@@ -67,6 +69,39 @@ describe("shared DEV browser wake queue", () => {
     mocks.dispatch.mockResolvedValueOnce({ clientId: dell, command, created: true });
     expect(await queueDevBrowserWake(input)).toEqual({ commandId: childId, clientId: dell, created: true });
     expect(mocks.dispatch.mock.calls[0]![0]).toMatchObject({ clientId: dell, instruction, source: "ai-core" });
+  });
+
+  it("encodes a bounded operator instruction for the dedicated browser worker", async () => {
+    const task = "cek pada dell ada berapa worker";
+    const encoded = Buffer.from(task, "utf8").toString("base64url");
+    const v2Instruction = `DEV_CHATGPT_WAKE_V2 conversation=${targetConversationId} event=${eventId} challenge=${challenge} task=${encoded}`;
+    const command = existingCommand();
+    command.instruction = v2Instruction;
+    mocks.dispatch.mockResolvedValueOnce({ clientId: worker, command, created: true });
+    await queueDevBrowserWake({ ...input, instruction: task, jobAlias: "JOB001" });
+    expect(mocks.dispatch.mock.calls[0]![0]).toMatchObject({
+      instruction: v2Instruction,
+      metadata: expect.objectContaining({
+        jobAlias: "JOB001",
+        requestedInstructionHash: createHash("sha256").update(task).digest("hex"),
+      }),
+    });
+  });
+
+  it("resolves GPT01 only from one currently verified owner/session binding", async () => {
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-dell-chatgpt-wake-dev");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel + ",ai-engine-oauth:" + "c".repeat(64));
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", targetConversationId);
+    mocks.handshakeEvidence.mockImplementation(async channel => channel === ownerChannel ? {
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    } : null);
+    await expect(resolveVerifiedDevWakeTarget("gpt01")).resolves.toEqual({
+      ownerChannel,
+      targetConversationId,
+      workerId: "openclaw-dell-chatgpt-wake-dev",
+    });
   });
 
   it("fails closed for an unknown configured wake worker", async () => {

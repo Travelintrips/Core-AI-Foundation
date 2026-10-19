@@ -15,6 +15,9 @@ CHAT = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649"
 EVENT = "b" * 64
 CHALLENGE = "c" * 64
 COMMAND = f"DEV_CHATGPT_WAKE_V1 conversation={CHAT} event={EVENT} challenge={CHALLENGE}"
+TASK_TEXT = "cek pada dell ada berapa worker"
+TASK_B64 = wake.base64.urlsafe_b64encode(TASK_TEXT.encode("utf-8")).decode("ascii").rstrip("=")
+COMMAND_V2 = f"DEV_CHATGPT_WAKE_V2 conversation={CHAT} event={EVENT} challenge={CHALLENGE} task={TASK_B64}"
 URL = f"https://chatgpt.com/c/{CHAT}"
 TABS = json.dumps({"tabs": [{"type": "page", "url": URL, "targetId": "t12"}]})
 COMPOSER = '- textbox "Ask ChatGPT" [ref=e1] value="\\n"'
@@ -45,6 +48,17 @@ class BrowserWakeTests(unittest.TestCase):
         self.assertEqual(sum(x.args[0] == "type" for x in calls.call_args_list), 1)
         receipt = json.loads((self.root / "chatgpt-wake-dev-receipts" / (EVENT + ".json")).read_text())
         self.assertEqual(receipt["status"], "BROWSER_CONFIRMED")
+
+    def test_v2_delivers_operator_job_text_to_chatgpt(self):
+        initial = {"url": URL, "markerVisible": False, "responding": False}
+        after = {"url": URL, "markerVisible": True, "responding": False}
+        side_effect = [TABS, COMPOSER, json.dumps(initial), "typed", COMPOSER, json.dumps(after)]
+        with patch.object(wake, "browser", side_effect=side_effect) as control, patch.object(wake.time, "sleep"):
+            proof = wake.submit_once(COMMAND_V2, wake.WORKER, self.root)
+        typed = [call for call in control.call_args_list if call.args and call.args[0] == "type"]
+        self.assertEqual(len(typed), 1)
+        self.assertIn(TASK_TEXT, typed[0].args[-1])
+        self.assertTrue(proof["browserConfirmed"])
 
     def test_wrong_target_and_worker_never_touch_browser(self):
         with patch.object(wake, "browser") as control:

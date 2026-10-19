@@ -10,17 +10,53 @@ export type ChatGptWakeCommand = {
 };
 
 const WAKE_COMMAND = /^\*(GPT[0-9]{2,4})(?:-(JOB[0-9]{3,12}))?\s+([^\r\n]+)$/i;
+const SIMPLE_WAKE_WITH_JOB = /^(GPT[0-9]{2,4})\s+JOB\s*([0-9]{1,12})\s*[,;:\-]?\s*([^\r\n]+)$/i;
+const SIMPLE_WAKE_NO_JOB = /^(GPT[0-9]{2,4})\s*[,;:\-]?\s+([^\r\n]+)$/i;
 const FORBIDDEN_INSTRUCTION = /[\u0000-\u001f\u007f]/;
+
+function normalizeJobAlias(value: string | undefined): string | null {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (!Number.isSafeInteger(numeric) || numeric < 1) return null;
+  return "JOB" + String(numeric).padStart(3, "0");
+}
 
 export function parseChatGptWakeCommand(message: string): ChatGptWakeCommand | null {
   const input = message.trim();
-  const match = WAKE_COMMAND.exec(input);
-  if (!match) return null;
-  const instruction = match[3]?.trim() ?? "";
+  const legacy = WAKE_COMMAND.exec(input);
+  if (legacy) {
+    const instruction = legacy[3]?.trim() ?? "";
+    if (!instruction || instruction.length > 2000 || FORBIDDEN_INSTRUCTION.test(instruction)) return null;
+    return {
+      accountAlias: legacy[1]!.toUpperCase(),
+      jobAlias: legacy[2]?.toUpperCase() ?? null,
+      instruction,
+    };
+  }
+
+  const simpleWithJob = SIMPLE_WAKE_WITH_JOB.exec(input);
+  if (simpleWithJob) {
+    const instruction = simpleWithJob[3]?.trim() ?? "";
+    const jobAlias = normalizeJobAlias(simpleWithJob[2]);
+    if (!jobAlias || !instruction || instruction.length > 2000 || FORBIDDEN_INSTRUCTION.test(instruction)) return null;
+    return {
+      accountAlias: simpleWithJob[1]!.toUpperCase(),
+      jobAlias,
+      instruction,
+    };
+  }
+
+  // A malformed explicit JOB prefix must fail closed instead of being reinterpreted
+  // as ordinary instruction text.
+  if (/^GPT[0-9]{2,4}\s+JOB\b/i.test(input)) return null;
+
+  const simple = SIMPLE_WAKE_NO_JOB.exec(input);
+  if (!simple) return null;
+  const instruction = simple[2]?.trim() ?? "";
   if (!instruction || instruction.length > 2000 || FORBIDDEN_INSTRUCTION.test(instruction)) return null;
   return {
-    accountAlias: match[1]!.toUpperCase(),
-    jobAlias: match[2]?.toUpperCase() ?? null,
+    accountAlias: simple[1]!.toUpperCase(),
+    jobAlias: null,
     instruction,
   };
 }
