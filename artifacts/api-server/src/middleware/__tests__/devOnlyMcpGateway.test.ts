@@ -84,22 +84,81 @@ describe("exclusive DEV MCP gateway and existing scoped relay", () => {
     expect(args.ownerConversationId).toMatch(/^ai-engine-oauth:[0-9a-f]{64}$/);
     expect(args.ownerConversationId).not.toBe("forged");
   });
-  it("handshake uses an authorized read probe, never the relay-denied handshake method", async () => {
-    const f = fixture(); f.request.mockResolvedValue(upstream({ events: [], conversationId: "fixture" }));
+  it("handshake relays only the server-derived owner channel and surfaces verified backend evidence", async () => {
+    const verifiedConversationId = "6ad4e0a7-9964-83ec-81a6-9db5eb8457ae";
+    const f = fixture();
+    f.request.mockImplementation(async (_url, init) => {
+      const forwarded = JSON.parse(String(init?.body));
+      const owner = forwarded.params.arguments.conversationId;
+      return upstream({
+        authenticated: true,
+        aiEngineSessionId: owner,
+        aiEngineSessionVerified: true,
+        chatSessionIdVerified: true,
+        conversationAckVerified: true,
+        browserWakeVerified: true,
+        conversationBindingStatus: "VERIFIED_DURABLE_E2E_ATTESTATION",
+        verifiedConversationId,
+        verifiedWorkerId: "openclaw-dell-chatgpt-wake-dev",
+        verifiedEventId: "a".repeat(64),
+        verifiedCommandId: "11111111-1111-4111-8111-111111111111",
+        verifiedResponseId: "22222222-2222-4222-8222-222222222222",
+        verifiedAcknowledgedAt: "2026-10-20T00:00:00.000Z",
+      });
+    });
     const result = await f.call("handshake_ai_core");
     const request = JSON.parse(String(f.request.mock.calls[0]![1]?.body));
-    expect(request.params.name).toBe("read_ai_core_events"); expect(request.params.arguments.limit).toBe(1);
-    expect(result.body.result.structuredContent).toMatchObject({ authenticated: true, aiEngineSessionVerified: true,
-      backendProbeVerified: true, backendProbe: "authorized_private_inbox_read", chatSessionId: null,
-      chatSessionIdVerified: false, conversationAckVerified: false, browserWakeVerified: false,
-      handshakeAck: { received: true, source: "dev_only_mcp_gateway" } });
+    expect(request.params.name).toBe("handshake_ai_core");
+    expect(request.params.arguments.conversationId).toMatch(/^ai-engine-oauth:[0-9a-f]{64}$/);
+    expect(result.body.result.structuredContent).toMatchObject({
+      authenticated: true, aiEngineSessionVerified: true,
+      backendProbeVerified: true, backendProbe: "authorized_verified_handshake_read",
+      chatSessionId: verifiedConversationId, chatSessionIdVerified: true,
+      conversationAckVerified: true, browserWakeVerified: true,
+      conversationBindingStatus: "VERIFIED_DURABLE_E2E_ATTESTATION",
+      verifiedWorkerId: "openclaw-dell-chatgpt-wake-dev",
+      handshakeAck: { received: true, source: "dev_only_mcp_gateway" },
+    });
     expect(f.fallback).not.toHaveBeenCalled();
   });
-  it("does not read events for a progress-only OAuth caller", async () => {
+  it("keeps handshake fail-closed when backend evidence is absent or mismatched", async () => {
+    const f = fixture();
+    f.request.mockResolvedValue(upstream({
+      authenticated: true,
+      aiEngineSessionId: "ai-engine-oauth:" + "f".repeat(64),
+      aiEngineSessionVerified: true,
+      chatSessionIdVerified: true,
+      conversationAckVerified: true,
+      browserWakeVerified: true,
+      conversationBindingStatus: "VERIFIED_DURABLE_E2E_ATTESTATION",
+      verifiedConversationId: conversationId,
+      verifiedWorkerId: "openclaw-dell-chatgpt-wake-dev",
+    }));
+    const result = await f.call("handshake_ai_core");
+    expect(result.body.result.structuredContent).toMatchObject({
+      backendProbeVerified: true, chatSessionId: null,
+      chatSessionIdVerified: false, conversationAckVerified: false,
+      browserWakeVerified: false,
+      conversationBindingStatus: "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
+    });
+  });
+  it("allows a progress-only OAuth caller to obtain only the bounded handshake proof", async () => {
     vi.mocked(verifyMcpAccessToken).mockResolvedValue({ ...identity, scopes: new Set(["ai_core.progress"]) });
-    const f = fixture(); const result = await f.call("handshake_ai_core");
-    expect(result.body.result.structuredContent.backendProbeVerified).toBe(false);
-    expect(f.request).not.toHaveBeenCalled();
+    const f = fixture();
+    f.request.mockResolvedValue(upstream({
+      authenticated: true,
+      aiEngineSessionId: "ai-engine-oauth:" + "0".repeat(64),
+      aiEngineSessionVerified: true,
+      chatSessionIdVerified: false,
+      conversationAckVerified: false,
+      browserWakeVerified: false,
+      conversationBindingStatus: "UNVERIFIED_NO_TRUSTED_CHATGPT_ATTESTATION",
+    }));
+    const result = await f.call("handshake_ai_core");
+    expect(result.status).toBe(200);
+    expect(f.request).toHaveBeenCalledOnce();
+    const forwarded = JSON.parse(String(f.request.mock.calls[0]![1]?.body));
+    expect(forwarded.params.name).toBe("handshake_ai_core");
   });
   it("rejects unauthenticated callers before relay", async () => {
     const f = fixture(); expect((await f.call("send_ai_core_command", {}, false)).status).toBe(401);
