@@ -3,6 +3,14 @@ import {
   parseGitHubRepository,
   type GitHubApiClient,
 } from "./localCodingGitHubPublisherService.js";
+/*
+Steps to reproduce cancelled workflow_run scenario in pairing-approval routines:
+1. Create or label a pull request as pairing-approved.
+2. Trigger the associated GitHub Actions workflow_run event.
+3. Observe that pending workflows are cancelled when approval event is processed.
+4. Trace cancellation flow in processPullRequestCheckRuns and cancelPendingWorkflows branches.
+*/
+
 
 const MAX_PR_FILES = 100;
 const MAX_CHECK_RUNS = 100;
