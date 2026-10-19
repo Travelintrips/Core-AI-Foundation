@@ -7,6 +7,29 @@ import {
 const MAX_PR_FILES = 100;
 const MAX_CHECK_RUNS = 100;
 
+export const DEFAULT_GITHUB_API_TIMEOUT_MS = 30000;
+
+export async function withGitHubTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = DEFAULT_GITHUB_API_TIMEOUT_MS,
+  operationName = "GitHub API request"
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export interface PullRequestCheckSummary {
   name: string;
   status: string;
