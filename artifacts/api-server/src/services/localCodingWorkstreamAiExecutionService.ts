@@ -45,6 +45,16 @@ import {
   LocalCodingAiExecutionGateError,
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
+// Custom error type for recoverable model service errors
+class RecoverableModelError extends Error {
+  originalError: Error;
+  constructor(message: string, originalError: Error) {
+    super(message);
+    this.name = "RecoverableModelError";
+    this.originalError = originalError;
+  }
+}
+
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
