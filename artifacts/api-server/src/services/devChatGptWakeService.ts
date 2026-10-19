@@ -108,6 +108,10 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   created: boolean;
 }> {
   const worker = resolveWakeWorker();
+  if (worker === DELL_WORKER && (process.env["APP_ENV"] !== "development" ||
+      !process.env["AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"])) {
+    throw new Error("DEV_CHATGPT_WAKE_DELL_ATTESTATION_NOT_CONFIGURED");
+  }
   if (!isDevBrowserWakeAllowed(input) || typeof input.eventId !== "string" ||
       input.eventId.length !== 64 || !/^[a-f0-9]{64}$/i.test(input.eventId)) {
     throw new Error("DEV_CHATGPT_WAKE_DENIED");

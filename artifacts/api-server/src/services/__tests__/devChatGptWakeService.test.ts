@@ -36,6 +36,7 @@ beforeEach(() => {
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ENABLED", "true");
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel);
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", targetConversationId);
+  vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
   mocks.dispatch.mockResolvedValue({ clientId: worker, command: existingCommand(), created: true });
   mocks.rows.mockResolvedValue([existingCommand()]);
   mocks.transaction.mockImplementation(async callback => callback({ execute: mocks.execute,
