@@ -1,0 +1,19 @@
+# Supply a previously validated local image explicitly; build with --pull=false.
+# No dependency installation, package download, broad application startup or
+# production credentials belong in this image build.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+WORKDIR /app/artifacts/api-server
+COPY artifacts/api-server/src/middleware/oauthNavigationCors.ts ./src/middleware/oauthNavigationCors.ts
+COPY artifacts/api-server/src/pairingApprovalApp.ts ./src/pairingApprovalApp.ts
+COPY artifacts/api-server/src/pairingApprovalServer.ts ./src/pairingApprovalServer.ts
+COPY artifacts/api-server/build-pairing-approval.mjs ./build-pairing-approval.mjs
+ARG SOURCE_SHA
+ENV PAIRING_APPROVAL_BUILD_SHA=${SOURCE_SHA} PORT=3000
+RUN --network=none node ./build-pairing-approval.mjs
+LABEL cst.role="pairing-approval-only" cst.pairing.overlay-sha=${SOURCE_SHA}
+# Deployment must explicitly supply PAIRING_APPROVAL_ENABLED and identity env.
+# Do not inherit a broad bootstrap-entry or hostinger-start entrypoint.
+ENTRYPOINT []
+CMD ["node", "dist-pairing/pairing-approval.mjs"]
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/healthz').then(async r=>{const h=await r.json();process.exit(r.ok&&h.service==='mcp-pairing-approval'&&h.scope==='PAIRING_APPROVAL_ONLY'&&h.backgroundControllers===false?0:1)}).catch(()=>process.exit(1))"
