@@ -1150,7 +1150,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
 
   // Scoped relay cannot access profile, infrastructure or other generic MCP tools.
   if (identity.kind === "dev_relay" &&
-      !["handshake_ai_core", "send_ai_core_command", "get_external_agent_command_progress",
+      !["send_ai_core_command", "get_external_agent_command_progress",
         "subscribe_ai_core_events", "read_ai_core_events", "ack_ai_core_event",
         "unsubscribe_ai_core_events"].includes(params.name)) {
     res.status(403).json(rpcError(body.id ?? null, -32603, "SCOPED_DEV_RELAY_DENIED"));
@@ -1160,13 +1160,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
     let payload: unknown;
     if (params.name === "handshake_ai_core") {
       const handshakeId = randomUUID();
-      const relayRequestedChannel = identity.kind === "dev_relay" &&
-        typeof (params.arguments as { conversationId?: unknown } | undefined)?.conversationId === "string"
-        ? (params.arguments as { conversationId: string }).conversationId
-        : null;
-      const ownerChannel = oauthEventChannel(identity) ??
-        (relayRequestedChannel && /^ai-engine-oauth:[a-f0-9]{64}$/.test(relayRequestedChannel)
-          ? relayRequestedChannel : null);
+      const ownerChannel = oauthEventChannel(identity);
       const verifiedEvidence = ownerChannel
         ? await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel).catch(() => null)
         : null;
@@ -1688,8 +1682,10 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           // Do not claim DEV delivery when DEV is unavailable.
         }
       }
+      const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId).catch(() => null);
       payload = {
         conversationId: parsed.conversationId,
+        handshakeEvidence,
         events: [...rows
           .map((row) => ({
             ...row,
