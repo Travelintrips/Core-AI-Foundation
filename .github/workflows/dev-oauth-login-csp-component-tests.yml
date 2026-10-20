@@ -1,0 +1,63 @@
+name: DEV OAuth login CSP component tests
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/routes/ai-core-mcp-oauth*.ts"
+      - "artifacts/api-server/src/routes/__tests__/aiCoreMcpOAuthLogin.test.ts"
+      - "artifacts/api-server/src/middleware/oauthNavigationCors.ts"
+      - "artifacts/api-server/package.json"
+      - "pnpm-lock.yaml"
+      - "scripts/dev/test-oauth-login-csp.mjs"
+      - ".github/workflows/dev-oauth-login-csp-component-tests.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/routes/ai-core-mcp-oauth*.ts"
+      - "artifacts/api-server/src/routes/__tests__/aiCoreMcpOAuthLogin.test.ts"
+      - "artifacts/api-server/src/middleware/oauthNavigationCors.ts"
+      - "artifacts/api-server/package.json"
+      - "pnpm-lock.yaml"
+      - "scripts/dev/test-oauth-login-csp.mjs"
+      - ".github/workflows/dev-oauth-login-csp-component-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oauth-login-csp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Strict CSP OAuth login browser regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      # Test-only packages live outside the workspace. No runtime dependency,
+      # live account, provider, database or deployment is used by this gate.
+      - name: Install pinned browser test packages
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/oauth-login-csp-browser" \
+            --cache "$RUNNER_TEMP/oauth-login-csp-npm" \
+            --ignore-scripts --no-audit --no-fund --save-exact \
+            playwright@1.64.1 @sparticuz/chromium@153.0.0
+      - name: Verify login with production Helmet and CORS in Chromium
+        env:
+          AI_CORE_TEST_BROWSER_PACKAGES: ${{ runner.temp }}/oauth-login-csp-browser
+        run: node --experimental-strip-types scripts/dev/test-oauth-login-csp.mjs
+
