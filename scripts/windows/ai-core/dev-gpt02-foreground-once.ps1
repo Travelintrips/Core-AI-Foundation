@@ -43,6 +43,7 @@ $record=@{
     wrapperSha256=$wrapperSha;composerSha256=$composerSha;trialReceiptSha256=$trialReceiptSha;
     pinnedSourcesVerified=$false;trialReceiptInitiallyVerified=$false;trialReceiptUnchanged=$null;
     nativeLockAcquired=$false;sessionBeforeVerified=$false;sessionAfterVerified=$false;
+    initialDraftSha256=$null;initialDraftLength=$null;
     rawFocusAttempted=$false;rawFocusReturned=$false;snapshotIdleVerified=$false;
     snapshotTrialEventAbsent=$null;snapshotExactPromptAbsent=$null;
     firstComposerFocusAttempted=$false;firstComposerFocusReturned=$false;firstStrictFocusedReadPassed=$false;
@@ -115,7 +116,7 @@ function Add-DiagnosticFailure($ErrorRecord,[string]$Operation){
         'DIAG_WRAPPER_DEFINITION_INVALID','DIAG_MODULE_IMPORT_AMBIGUOUS','DIAG_RUNTIME_LOCK_EMPTY','DIAG_RAW_FOCUS_FAILED',
         'DIAG_SNAPSHOT_NOT_IDLE','DIAG_TRIAL_CONTENT_VISIBLE','DIAG_UNSAFE_DRAFT','DIAG_FOREGROUND_ONLY_CONDITION_FAILED',
         'DIAG_FINAL_FOCUS_NOT_ESTABLISHED','DIAG_RESULT_PATH_INVALID','DIAG_TRIAL_RECEIPT_PATH_INVALID',
-        'DIAG_HANDOFF_HASH_MISMATCH','DIAG_HANDOFF_INVALID','DIAG_PRIOR_EXECUTION_ACTIVE','DIAG_WINDOW_NOT_VISIBLE',
+        'DIAG_HANDOFF_HASH_MISMATCH','DIAG_HANDOFF_INVALID','DIAG_PRIOR_EXECUTION_ACTIVE','DIAG_WINDOW_NOT_VISIBLE','DIAG_DRAFT_CHANGED',
         'FOREGROUND_ACTIVATION_DENIED','FOREGROUND_ACTIVATION_NOT_OBSERVED')){$known[$code]=$code}
     $code='UNCLASSIFIED_NATIVE_OR_GUARD_EXCEPTION';$chain=@();$exception=$ErrorRecord.Exception
     for($i=0;$null -ne $exception -and $i -lt 3;$i++){
@@ -135,6 +136,13 @@ function Observe-DiagnosticNative([string]$Label){
     & $composer {param($State,$Name) Assert-AiCoreNativeInsertableDraft $State $Name} $state $ComposerName
     $draftClass=if($state.Draft -ceq ''){'EXPLICIT_EMPTY'}elseif($state.Draft -ceq ($ComposerName+"`n")){'UNKNOWN_NAME_PLUS_LF'}else{'OTHER'}
     Need-Diagnostic ($draftClass -cne 'OTHER' -and -not $state.Draft.Contains($trialEvent) -and -not $state.Draft.Contains($ownerPrompt)) 'DIAG_UNSAFE_DRAFT'
+    $draftHash=Hash-DiagnosticBytes ($utf8.GetBytes($state.Draft))
+    if($Label -ceq 'NATIVE_INITIAL'){
+        $record.initialDraftSha256=$draftHash;$record.initialDraftLength=$state.Draft.Length
+    }else{
+        Need-Diagnostic ($draftHash -ceq $record.initialDraftSha256 -and
+            $state.Draft.Length -eq $record.initialDraftLength) 'DIAG_DRAFT_CHANGED'
+    }
     $foreground=& $composer {[long][AiCoreNativeComposerWindow]::GetForegroundWindow()}
     $observation=@{operation=$Label;windowAndAddressVerified=$true;nativeIdleVerified=$true;draftClass=$draftClass;
         foregroundMatches=($foreground -eq $ExpectedWindowHandle);composerHasKeyboardFocus=[bool]$state.Composer.Current.HasKeyboardFocus;
@@ -150,6 +158,8 @@ function Test-DiagnosticStrictFocus([string]$Operation){
         $state=& $composer {param($Target) Get-AiCoreNativeState $Target $true} $ownerTarget
         Assert-OwnerNativeIdle $state
         & $composer {param($State,$Name) Assert-AiCoreNativeInsertableDraft $State $Name} $state $ComposerName
+        Need-Diagnostic ((Hash-DiagnosticBytes ($utf8.GetBytes($state.Draft))) -ceq $record.initialDraftSha256 -and
+            $state.Draft.Length -eq $record.initialDraftLength) 'DIAG_DRAFT_CHANGED'
         return $true
     }catch{
         $code=Add-DiagnosticFailure $_ $Operation;Write-Diagnostic $Operation
@@ -200,7 +210,7 @@ try{
     }
     $taskChildren=@(Get-CimInstance Win32_Process -Filter 'ParentProcessId=24424'|
         Where-Object {-not($_.Name -ceq 'conhost.exe' -and $_.ProcessId -eq 16788 -and
-            $_.CreationDate.ToUniversalTime() -lt [datetime]'2026-10-20T13:42:01Z')})
+            $_.CreationDate.ToUniversalTime() -lt ([DateTimeOffset]'2026-10-20T13:42:01Z').UtcDateTime)})
     Need-Diagnostic ($taskChildren.Count -eq 0) 'DIAG_PRIOR_EXECUTION_ACTIVE'
     $coordinatorLeasePath=Join-Path ([IO.Path]::GetDirectoryName($TrialReceiptPath)) 'gpt02_trial2_20261020T1516.owner-ui-coordinator.lease.json'
     $coordinatorLeasePath=Assert-DiagnosticTempPath $coordinatorLeasePath $false
@@ -303,9 +313,20 @@ public static class AiCoreOwnerForegroundV1 {
         }catch{$null=Add-DiagnosticFailure $_ 'VERIFY_TRIAL_RECEIPT_UNCHANGED';$record.status='FAILED_FOCUS_ONLY_PRESERVE_ATTEMPT';$exitCode=1}
     }
     try{Write-Diagnostic $record.operation}catch{$exitCode=1}
-    if($null -ne $nativeLock){try{if($nativeLocked){$nativeLock.Unlock(0,1)}}finally{$nativeLock.Dispose()}}
-    try{Write-CoordinatorLease $true}catch{$exitCode=1}
-    foreach($stream in @($handoffStream,$coordinatorLeaseStream,$trialStream,$promptStream,$composerStream,$wrapperStream,$resultStream)){if($null -ne $stream){$stream.Dispose()}}
+    try{
+        if($null -ne $nativeLock){
+            try{if($nativeLocked){$nativeLock.Unlock(0,1)}}finally{$nativeLock.Dispose()}
+        }
+    }catch{
+        $record.status='FAILED_FOCUS_ONLY_PRESERVE_ATTEMPT';$exitCode=1
+        $record.failures+=,@{operation='RELEASE_NATIVE_LOCK';code='DIAG_NATIVE_LOCK_CLEANUP_FAILED';exceptions=@()}
+        try{Write-Diagnostic $record.operation}catch{}
+    }finally{
+        try{Write-CoordinatorLease $true}catch{$exitCode=1}
+        foreach($stream in @($handoffStream,$coordinatorLeaseStream,$trialStream,$promptStream,$composerStream,$wrapperStream,$resultStream)){
+            if($null -ne $stream){try{$stream.Dispose()}catch{$exitCode=1}}
+        }
+    }
 }
 $record|ConvertTo-Json -Depth 8 -Compress
 exit $exitCode
