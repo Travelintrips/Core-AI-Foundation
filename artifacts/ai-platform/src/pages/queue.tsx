@@ -52,6 +52,7 @@ import {
   Ban,
   Bot,
   Boxes,
+  Boxes,
   CheckCircle2,
   CircleDot,
   Clock,
