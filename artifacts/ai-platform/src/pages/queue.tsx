@@ -73,6 +73,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { selectPoolCandidate, summarizePool } from "./aiTaskWorkerPool";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
@@ -635,6 +636,113 @@ function ClusterPanel({
   );
 }
 
+// ── AI Task worker pool (read-only; backend remains the assignment authority) ──
+
+function AiTaskWorkerPool({
+  workers,
+  loading,
+  queued,
+  waiting,
+  running,
+}: {
+  workers: WorkerCapacityItem[];
+  loading: boolean;
+  queued: number | undefined;
+  waiting: number | undefined;
+  running: number | undefined;
+}) {
+  const pool = summarizePool(workers);
+  const codingCandidate = selectPoolCandidate(workers, "coding_workstream");
+
+  const stateStyle: Record<string, string> = {
+    available: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+    busy: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
+    unavailable: "bg-zinc-500/10 text-zinc-400 border-zinc-500/30",
+    unverified: "bg-orange-500/10 text-orange-400 border-orange-500/30",
+  };
+
+  return (
+    <section aria-label="AI Task Worker Pool" className="border border-border/50 rounded-lg bg-card/40 p-4 space-y-3">
+      <div className="flex flex-wrap justify-between items-start gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <Boxes className="size-4 text-primary" />
+            <h2 className="font-mono text-sm font-semibold">AI Task · Dynamic Worker Pool</h2>
+            <Badge variant="outline" className="text-[9px] font-mono">Live registry / read-only</Badge>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            GPT-02 busy → GPT-03 may take the next coding job only when independently verified, idle, and coding-capable.
+          </p>
+        </div>
+        <Badge variant="outline" className="text-[10px] font-mono">Allocation controlled by AI Core</Badge>
+      </div>
+
+      {loading ? (
+        <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground py-4">
+          <Loader2 className="size-4 animate-spin" /> Verifying worker registry...
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {[
+              { label: "Ready", value: pool.available, tone: "text-emerald-400" },
+              { label: "Busy", value: pool.busy, tone: "text-yellow-400" },
+              { label: "Unavailable", value: pool.unavailable, tone: "text-zinc-400" },
+              { label: "Unverified", value: pool.unverified, tone: "text-orange-400" },
+              { label: "Queued / Waiting", value: queued == null || waiting == null ? "—" : queued + waiting, tone: "text-blue-400" },
+              { label: "Running jobs", value: running ?? "—", tone: "text-primary" },
+            ].map(({ label, value, tone }) => (
+              <div key={label} className="rounded-md border border-border/40 bg-muted/10 px-3 py-2">
+                <p className="font-mono text-[10px] text-muted-foreground">{label}</p>
+                <p className={cn("font-mono text-xl font-semibold mt-1", tone)}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-md border border-border/40 bg-muted/10 px-3 py-2 space-y-1">
+            <p className="text-xs font-semibold">Next coding candidate (read-only preview)</p>
+            <p className="font-mono text-xs break-all">
+              {codingCandidate ? codingCandidate.worker.workerName : "No verified idle coding worker"}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Preview is not a reservation or job assignment. Server must recheck capability, account binding,
+              lease and project/file locks atomically before dispatch.
+            </p>
+          </div>
+
+          {pool.assessed.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No workers returned by the live registry. GPT account sessions are not assumed to be connected.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+              {pool.assessed.map(({ worker, state, reason }) => (
+                <div key={worker.workerName} className="rounded-md border border-border/40 p-3 space-y-1 min-w-0">
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="font-mono text-xs font-semibold truncate" title={worker.workerName}>{worker.workerName}</span>
+                    <Badge variant="outline" className={cn("text-[9px] capitalize shrink-0", stateStyle[state])}>{state}</Badge>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {worker.runningJobs}/{worker.maxConcurrentJobs} jobs · {worker.availableSlots} reported free · lease {worker.leaseValid ? "valid" : "not verified"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{reason}</p>
+                  <p className="font-mono text-[9px] text-muted-foreground truncate" title={worker.capabilities.join(", ")}>
+                    {worker.capabilities.length ? worker.capabilities.join(", ") : "No advertised capabilities"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="text-[10px] text-muted-foreground border-t border-border/30 pt-2">
+            Worker IDs come from AI Core, not from ChatGPT logins. GPT-02 and travelincars01@gmail.com
+            must have their exact authenticated account/profile bindings verified before automatic dispatch.
+            A completed process is not a QA PASS or verified callback.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES = ["queued","waiting","running","retrying","completed","failed","cancelled","blocked"];
@@ -811,10 +919,10 @@ export default function QueuePage() {
         <div>
           <div className="flex items-center gap-2">
             <ListOrdered className="size-5 text-primary" />
-            <h1 className="font-bold text-lg font-mono">AI Queue Center</h1>
+            <h1 className="font-bold text-lg font-mono">AI Task & Queue Center</h1>
           </div>
           <p className="text-xs text-muted-foreground font-mono mt-0.5">
-            Job queue, worker pool, and priority engine — Phase 5
+            Job queue, dynamic worker availability, and verified execution evidence
           </p>
         </div>
         <Button
@@ -863,6 +971,14 @@ export default function QueuePage() {
             onStop={() => stopDispatcher.mutate()}
             onTick={() => runTick.mutate()}
             isMutating={isDispatcherMutating}
+          />
+
+          <AiTaskWorkerPool
+            workers={clusterWorkers}
+            loading={clusterWorkersLoading}
+            queued={stats?.jobs["queued"]}
+            waiting={stats?.jobs["waiting"]}
+            running={stats?.jobs["running"]}
           />
 
           {/* Worker Cluster Panel — Phase 5.2 */}
