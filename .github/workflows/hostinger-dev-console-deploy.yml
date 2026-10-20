@@ -72,7 +72,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error             -H "Authorization: Bearer $HOSTINGER_API_TOKEN"             "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100"             -o /tmp/websites.json
+          # Hostinger sometimes returns transient HTTP 5xx. Retry only this safe GET
+          # with a hard cap; do not retry uploads/builds/restarts or print API responses.
+          http_code="$(curl --fail-with-body --silent --show-error \
+            --connect-timeout 8 --max-time 15 --retry 2 --retry-delay 3 --retry-max-time 25 --retry-all-errors \
+            -o /tmp/websites.json -w '%{http_code}' \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100" || true)"
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Hostinger DEV website discovery returned HTTP ${http_code:-unknown}; no upload/build/restart attempted."
+            exit 1
+          fi
+          jq -e '.data | type == "array"' /tmp/websites.json >/dev/null || {
+            echo "::error::Hostinger DEV discovery response is not a website list."
+            exit 1
+          }
           username="$(jq -r --arg domain "$HOSTINGER_DOMAIN"             '.data[] | select(.domain == $domain and .website_type == "nodejs" and .is_enabled == true) | .username'             /tmp/websites.json | head -n1)"
           test -n "$username" && test "$username" != "null" || {
             echo "::error::Enabled DEV Node.js website not found for $HOSTINGER_DOMAIN."
