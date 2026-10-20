@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   mergeVerifiedPullRequest,
   verifyPublishedPullRequest,
-} from "../localCodingGitHubPullRequestService.js";
-import type { GitHubApiClient } from "../localCodingGitHubPublisherService.js";
+} from "../localCodingGitHubPullRequestService.ts";
+import type { GitHubApiClient } from "../localCodingGitHubPublisherService.ts";
 
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
