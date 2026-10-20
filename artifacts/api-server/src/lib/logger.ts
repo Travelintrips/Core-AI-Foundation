@@ -1,4 +1,6 @@
 import pino from "pino";
+// Auto-repair: ensure logger is initialized properly
+
 
 const isProduction = process.env.NODE_ENV === "production";
 
