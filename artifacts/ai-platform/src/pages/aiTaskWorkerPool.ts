@@ -89,3 +89,45 @@ export function summarizePool(workers: readonly WorkerPoolRecord[], nowMs = Date
     unverified: assessed.filter(w => w.state === "unverified").length,
   };
 }
+
+
+/** Coding dashboard overview has a different, coarser worker contract than the queue registry.
+ * Never infer skill or authenticated ChatGPT account from this health snapshot.
+ */
+export type CodingDashboardWorkerRecord = {
+  status: string;
+  healthy: boolean;
+  runningJobs: number;
+  capacity: number;
+  lastHeartbeat: string;
+  leaseExpiresAt: string | null;
+};
+
+export function assessCodingDashboardWorker(
+  worker: CodingDashboardWorkerRecord,
+  nowMs = Date.now(),
+): { state: WorkerPoolState; reason: string } {
+  if (["offline", "stale", "maintenance"].includes(worker.status.toLowerCase())) {
+    return { state: "unavailable", reason: `Worker status: ${worker.status}` };
+  }
+  const heartbeatMs = Date.parse(worker.lastHeartbeat);
+  const leaseMs = worker.leaseExpiresAt ? Date.parse(worker.leaseExpiresAt) : Number.NaN;
+  if (!worker.healthy || !Number.isFinite(heartbeatMs) ||
+      heartbeatMs > nowMs + FUTURE_CLOCK_SKEW_MS ||
+      nowMs - heartbeatMs > HEARTBEAT_MAX_AGE_MS ||
+      !Number.isFinite(leaseMs) || leaseMs <= nowMs) {
+    return { state: "unverified", reason: "Healthy heartbeat and active lease not confirmed" };
+  }
+  if (!Number.isSafeInteger(worker.capacity) || worker.capacity <= 0 ||
+      !Number.isSafeInteger(worker.runningJobs) || worker.runningJobs < 0 ||
+      worker.runningJobs > worker.capacity) {
+    return { state: "unverified", reason: "Inconsistent worker capacity" };
+  }
+  if (worker.runningJobs > 0 || worker.status.toLowerCase() === "busy") {
+    return { state: "busy", reason: "Processing another job" };
+  }
+  if (!["idle", "online", "active"].includes(worker.status.toLowerCase())) {
+    return { state: "unverified", reason: "Unsupported worker status" };
+  }
+  return { state: "available", reason: "Healthy lease and a free slot (skills not shown here)" };
+}
