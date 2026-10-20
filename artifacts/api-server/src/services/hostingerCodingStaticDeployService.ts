@@ -1,5 +1,10 @@
 import JSZip from "jszip";
 
+// Validate required environment variables
+const HOSTINGER_API_KEY = process.env.HOSTINGER_API_KEY;
+if (!HOSTINGER_API_KEY) {
+  throw new Error("Missing environment variable: HOSTINGER_API_KEY");
+}
 const HOSTINGER_API_BASE = "https://developers.hostinger.com/api";
 const GITHUB_API_BASE = "https://api.github.com";
 const CODING_DOMAIN = "coding.cstlogistic.co.id";
