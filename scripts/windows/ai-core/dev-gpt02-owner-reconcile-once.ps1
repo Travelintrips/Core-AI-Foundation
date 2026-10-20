@@ -31,6 +31,10 @@ $reconcileHandoffSha = '3effead9795e45c824c367a6a01c74ce32d12a7784a7548021906ea9
 $reconcilePromptSha = '42f2d03e2e6375a1f6576005eb0459120a0b9377c1203c1d278db111451543e3'
 $reconcileModuleSha = '1c83bce21a937bc32bf26cc1086af8466c2061514ba3f1a880a167c5d040f816'
 $reconcileDraftSha = 'c0fae6a6c1582f13454101d3c2da4f5d951c84a31cff3f6206f6585b2ae6b747'
+$reconcileEmptyDraftSha = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+$reconcileHistoricalRawTargetId = '59AA1F162AC14EDC94078CDC18EE54B9'
+$reconcileHistoricalBrowserProcessId = 12056
+$reconcileHistoricalWindowHandle = [long]3147448
 $reconcilePriorInputStartedAt = '2026-10-20T15:18:45.8052018Z'
 $reconcilePriorUpdatedAt = '2026-10-20T15:18:46.3283691Z'
 $reconcileSupervisorTerminalAt = '2026-10-20T15:18:46.4155554Z'
@@ -39,9 +43,10 @@ $reconcileSupervisorTerminalAt = '2026-10-20T15:18:46.4155554Z'
 $ownerProfile = 'travelincars-dev'
 $ownerConversationId = '6ad74b05-0580-83ec-956a-80aaf4587985'
 $ownerPageUrl = 'https://chatgpt.com/c/' + $ownerConversationId
-$ownerRawTargetId = '59AA1F162AC14EDC94078CDC18EE54B9'
-$ExpectedBrowserProcessId = 12056
-$ExpectedWindowHandle = [long]3147448
+$ownerRawTargetId = '422144A861A73A19161672AEA8D3645F'
+$ExpectedBrowserProcessId = 11688
+$ExpectedBrowserProcessStartedAt = '2026-10-20T16:05:02.2898512Z'
+$ExpectedWindowHandle = [long]658098
 $ComposerName = 'Ask ChatGPT'
 $AllowProviderLf = $true
 $ownerClock = [Diagnostics.Stopwatch]::StartNew()
@@ -69,6 +74,10 @@ $reconcileMarkerStream = $null
 $reconcileRecord = $null
 $reconcileLastWritePersisted = $false
 $reconcileDatabase = $null
+$reconcileInitialDraftClass = $null
+$reconcileInitialDraftValue = $null
+$reconcileInitialDraftSha = $null
+$reconcileInitialDraftLength = $null
 $reconcileStage = 'VALIDATING_FIXED_INPUTS'
 $reconcileStatus = 'REFUSED_BEFORE_CONTINUATION'
 $reconcileFailureCode = $null
@@ -172,6 +181,20 @@ function ConvertFrom-ReconcileUtc {
     $date = [DateTimeOffset]::Parse($Value,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
     if ($date.Offset -ne [TimeSpan]::Zero) { throw 'OWNER_RECONCILE_UTC_TIMESTAMP_REQUIRED' }
     return $date
+}
+
+function Assert-ReconcileCurrentBrowserGeneration {
+    $reconcileBrowser = $null
+    try {
+        $reconcileBrowser = [Diagnostics.Process]::GetProcessById($ExpectedBrowserProcessId)
+        $expectedStarted = (ConvertFrom-ReconcileUtc $ExpectedBrowserProcessStartedAt).UtcDateTime
+        if ($reconcileBrowser.HasExited -or
+            $reconcileBrowser.StartTime.ToUniversalTime().Ticks -ne $expectedStarted.Ticks) {
+            throw 'OWNER_RECONCILE_CURRENT_BROWSER_GENERATION_CHANGED'
+        }
+    } finally {
+        if ($null -ne $reconcileBrowser) { $reconcileBrowser.Dispose() }
+    }
 }
 
 function Assert-ReconcileDatabaseFresh {
@@ -297,14 +320,17 @@ function Write-ReconcileReceipt {
     $script:reconcileLastWritePersisted = $true
 }
 
-function Assert-ReconcileUnchangedPlaceholder {
+function Assert-ReconcileUnchangedInitialDraft {
     param($State)
+    Assert-ReconcileCurrentBrowserGeneration
     Assert-OwnerNativeIdle $State
     & $ownerModule { param($Value,$Name) Assert-AiCoreNativeInsertableDraft $Value $Name } $State $ComposerName
-    # The provider's name+LF is UNKNOWN. Accept only its exact previously
-    # observed bytes for this continuation; never relabel it as empty.
-    if ($State.Draft -cne ($ComposerName + [char]10) -or
-        (Get-ReconcileSha256 ([Text.Encoding]::UTF8.GetBytes($State.Draft))) -cne $reconcileDraftSha) {
+    # Bind one current native observation to the successful focus receipt.
+    # Name+LF remains UNKNOWN; explicit empty is a separate exact value.
+    # Neither a missing provider value nor a later class change is accepted.
+    if ($State.Draft -isnot [string] -or $State.Draft -cne $reconcileInitialDraftValue -or
+        $State.Draft.Length -ne $reconcileInitialDraftLength -or
+        (Get-ReconcileSha256 ([Text.Encoding]::UTF8.GetBytes($State.Draft))) -cne $reconcileInitialDraftSha) {
         throw 'OWNER_RECONCILE_DRAFT_CHANGED_PRESERVE_NO_INPUT'
     }
 }
@@ -347,8 +373,8 @@ try {
         $prior.promptSha256 -cne $reconcilePromptSha -or $prior.promptBytes -ne 1126 -or
         $prior.composerModuleSha256 -cne $reconcileModuleSha -or
         $prior.browserProfile -cne $ownerProfile -or $prior.conversationId -cne $ownerConversationId -or
-        $prior.pageUrl -cne $ownerPageUrl -or $prior.rawTargetId -cne $ownerRawTargetId -or
-        $prior.browserProcessId -ne $ExpectedBrowserProcessId -or $prior.windowHandle -ne $ExpectedWindowHandle -or
+        $prior.pageUrl -cne $ownerPageUrl -or $prior.rawTargetId -cne $reconcileHistoricalRawTargetId -or
+        $prior.browserProcessId -ne $reconcileHistoricalBrowserProcessId -or $prior.windowHandle -ne $reconcileHistoricalWindowHandle -or
         $prior.composerName -cne $ComposerName -or
         -not ([string]$prior.receiptPath).Equals($reconcilePriorPath,[StringComparison]::OrdinalIgnoreCase)) {
         throw 'OWNER_RECONCILE_PRIOR_NO_SEND_PROOF_INVALID'
@@ -373,12 +399,42 @@ try {
     Assert-ReconcileBoolean $handoff.inputReplayAuthorized $false
     Assert-ReconcileBoolean $handoff.realE2eVerified $false
     if ($focusEvidence.schema -cne 'ai-core-owner-native-foreground-recovery/v1' -or
+        $focusEvidence.purpose -cne 'FOREGROUND_ONLY_RECOVERY' -or
         $focusEvidence.status -cne 'FOREGROUND_ONLY_VERIFIED_NO_INPUT' -or
+        $focusEvidence.operationId -cne $reconcileOperation -or $focusEvidence.eventId -cne $reconcileEvent -or
+        $focusEvidence.browserProfile -cne $ownerProfile -or $focusEvidence.conversationId -cne $ownerConversationId -or
+        $focusEvidence.pageUrl -cne $ownerPageUrl -or $focusEvidence.rawTargetId -cne $ownerRawTargetId -or
+        ($focusEvidence.browserProcessId -isnot [int] -and $focusEvidence.browserProcessId -isnot [long]) -or
+        $focusEvidence.browserProcessId -ne $ExpectedBrowserProcessId -or
+        $focusEvidence.browserProcessStartedAt -cne $ExpectedBrowserProcessStartedAt -or
+        ($focusEvidence.windowHandle -isnot [int] -and $focusEvidence.windowHandle -isnot [long]) -or
+        $focusEvidence.windowHandle -ne $ExpectedWindowHandle -or $focusEvidence.composerName -cne $ComposerName -or
         $focusEvidence.coordinatorFence -cne $reconcileFence -or $focusEvidence.handoffSha256 -cne $reconcileHandoffSha) {
         throw 'OWNER_RECONCILE_FOCUS_EVIDENCE_INVALID'
     }
-    foreach ($field in @('finalStrictFocusedReadPassed','trialReceiptUnchanged')) { Assert-ReconcileBoolean $focusEvidence.$field $true }
+    foreach ($field in @('browserGenerationVerified','finalStrictFocusedReadPassed','trialReceiptUnchanged')) { Assert-ReconcileBoolean $focusEvidence.$field $true }
     foreach ($field in @('keyboardInputInvoked','sendInvoked','inputReplayAttempted','realE2eVerified')) { Assert-ReconcileBoolean $focusEvidence.$field $false }
+    if ($focusEvidence.initialDraftClass -isnot [string]) { throw 'OWNER_RECONCILE_FOCUS_DRAFT_CLASS_INVALID' }
+    switch -CaseSensitive ($focusEvidence.initialDraftClass) {
+        'EXPLICIT_EMPTY' {
+            $reconcileInitialDraftClass = 'EXPLICIT_EMPTY'
+            $reconcileInitialDraftValue = ''
+            $reconcileInitialDraftSha = $reconcileEmptyDraftSha
+            $reconcileInitialDraftLength = 0
+        }
+        'UNKNOWN_NAME_PLUS_LF' {
+            $reconcileInitialDraftClass = 'UNKNOWN_NAME_PLUS_LF'
+            $reconcileInitialDraftValue = $ComposerName + [char]10
+            $reconcileInitialDraftSha = $reconcileDraftSha
+            $reconcileInitialDraftLength = $reconcileInitialDraftValue.Length
+        }
+        default { throw 'OWNER_RECONCILE_FOCUS_DRAFT_CLASS_INVALID' }
+    }
+    if ($focusEvidence.initialDraftSha256 -cne $reconcileInitialDraftSha -or
+        ($focusEvidence.initialDraftLength -isnot [int] -and $focusEvidence.initialDraftLength -isnot [long]) -or
+        $focusEvidence.initialDraftLength -ne $reconcileInitialDraftLength) {
+        throw 'OWNER_RECONCILE_FOCUS_DRAFT_BINDING_INVALID'
+    }
     Assert-ReconcileDatabaseFresh
     Assert-ReconcileOldExecutorsAbsent
 
@@ -470,6 +526,7 @@ try {
         throw 'OWNER_RECONCILE_CONTINUATION_ALREADY_RESERVED'
     }
     Assert-ReconcileOldExecutorsAbsent
+    Assert-ReconcileCurrentBrowserGeneration
     Assert-ReconcileBudget ($ownerSubmitMilliseconds + $ownerNativeGuardMilliseconds)
 
     # Identity/snapshot reads only. Focus repair belongs to the completed
@@ -486,9 +543,9 @@ try {
     }
     Assert-ReconcileBudget ($ownerSubmitMilliseconds + $ownerNativeGuardMilliseconds)
     $ownerNativeDeadlineMilliseconds = $ownerClock.ElapsedMilliseconds + $ownerSubmitMilliseconds + $ownerNativeGuardMilliseconds
-    $reconcileStage = 'NATIVE_UNCHANGED_PLACEHOLDER_READ'
+    $reconcileStage = 'NATIVE_UNCHANGED_INITIAL_DRAFT_READ'
     $state = & $ownerModule { param($Target) Get-AiCoreNativeState $Target $true } $ownerTarget
-    Assert-ReconcileUnchangedPlaceholder $state
+    Assert-ReconcileUnchangedInitialDraft $state
     Assert-ReconcileDatabaseFresh
     Assert-ReconcileOldExecutorsAbsent
     Assert-ReconcileBudget 5000
@@ -507,12 +564,16 @@ try {
         priorChildProcessId=$supervisionTerminal.childProcessId; priorChildExitCode=$supervisionTerminal.exitCode;
         priorChildTerminationConfirmed=$supervisionTerminal.terminationConfirmed; priorChildStreamsClosed=$supervisionTerminal.streamsClosed;
         priorStatus=$prior.status; priorStage=$prior.stage; priorUpdatedAt=$prior.updatedAt;
+        priorRawTargetId=$prior.rawTargetId; priorBrowserProcessId=$prior.browserProcessId; priorWindowHandle=$prior.windowHandle;
+        priorInitialDraftClass=$prior.initialDraftClass;
         inputStartedAt=$prior.inputStartedAt; continuationInputStartedAt=$null;
         promptSha256=$reconcilePromptSha; promptBytes=$promptFile.Bytes.Length; composerModuleSha256=$reconcileModuleSha;
         browserProfile=$ownerProfile; conversationId=$ownerConversationId; pageUrl=$ownerPageUrl;
         rawTargetId=$ownerRawTargetId; browserProcessId=$ExpectedBrowserProcessId; windowHandle=$ExpectedWindowHandle;
+        browserProcessStartedAt=$ExpectedBrowserProcessStartedAt;
         composerName=$ComposerName; allowProviderLf=$AllowProviderLf;
-        initialDraftClass='UNKNOWN_NAME_PLUS_LF_APPEND_ONLY'; initialDraftSha256=$reconcileDraftSha;
+        initialDraftClass=$(if ($reconcileInitialDraftClass -ceq 'EXPLICIT_EMPTY') {'EXPLICIT_EMPTY'} else {'UNKNOWN_NAME_PLUS_LF_APPEND_ONLY'});
+        initialDraftSha256=$reconcileInitialDraftSha; initialDraftLength=$reconcileInitialDraftLength; focusDraftClass=$reconcileInitialDraftClass;
         focusReceiptPath=$focusFile.Path; focusReceiptSha256=$ExpectedFocusReceiptSha256;
         databaseEvidencePath=$databaseFile.Path; databaseEvidenceSha256=$ExpectedDatabaseEvidenceSha256;
         databaseObservedAt=$reconcileDatabase.observedAt; leaseExpiresAt=$reconcileLease.expiresAt;
@@ -532,7 +593,8 @@ try {
     Write-ReconcileReceipt 'INPUT_ATTEMPTING'
     Assert-ReconcileBudget 5000
     $beforeEnd = & $ownerModule { param($Target) Get-AiCoreNativeState $Target $true } $ownerTarget
-    Assert-ReconcileUnchangedPlaceholder $beforeEnd
+    Assert-ReconcileUnchangedInitialDraft $beforeEnd
+    Assert-ReconcileCurrentBrowserGeneration
     Assert-ReconcileBudget 5000
     Assert-ReconcileDatabaseFresh
     & $ownerModule { Send-AiCoreNativeKeys '^{END}' }
@@ -547,7 +609,8 @@ try {
     Write-ReconcileReceipt 'INPUT_ATTEMPTING'
     Assert-ReconcileBudget 5000
     $beforeLiteral = & $ownerModule { param($Target) Get-AiCoreNativeState $Target $true } $ownerTarget
-    Assert-ReconcileUnchangedPlaceholder $beforeLiteral
+    Assert-ReconcileUnchangedInitialDraft $beforeLiteral
+    Assert-ReconcileCurrentBrowserGeneration
     Assert-ReconcileBudget 5000
     Assert-ReconcileDatabaseFresh
     & $ownerModule { param($Keys) Send-AiCoreNativeKeys $Keys } $literal
@@ -578,6 +641,7 @@ try {
     $reconcileStage = 'NATIVE_SECOND_WHOLE_READBACK_VERIFIED'
     Write-ReconcileReceipt 'SEND_ATTEMPTING'
     $send = & $ownerModule { param($State) Get-AiCoreNativeSendControl $State } $second
+    Assert-ReconcileCurrentBrowserGeneration
     Assert-ReconcileBudget 5000
     Assert-ReconcileDatabaseFresh
     & $ownerModule { param($Pattern) Invoke-AiCoreNativeSend $Pattern } $send

@@ -1,6 +1,7 @@
-# DEV GPT02 ordinary foreground recovery after the owner's explicit handoff.
+# DEV GPT02 one bounded resume of foreground preflight after a CLI failure.
 # No keys, text, Send, worker context or attestation. Preserve trial2 evidence.
 # Run in a no-window child with a 420-second outer bound.
+# The coordinator must separately fence competing controllers before launch.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$OwnerWrapperPath,
@@ -8,8 +9,8 @@ param(
     [Parameter(Mandatory)][string]$TrialPromptFile,
     [Parameter(Mandatory)][string]$TrialReceiptPath,
     [Parameter(Mandatory)][string]$ResultPath,
-    [ValidateSet(12056)][int]$ExpectedBrowserProcessId=12056,
-    [ValidateSet(3147448)][long]$ExpectedWindowHandle=3147448,
+    [ValidateSet(11688)][int]$ExpectedBrowserProcessId=11688,
+    [ValidateSet(658098)][long]$ExpectedWindowHandle=658098,
     [ValidateSet('Ask ChatGPT')][string]$ComposerName='Ask ChatGPT'
 )
 $ErrorActionPreference='Stop'
@@ -24,7 +25,8 @@ $trialEvent='e8f45ed286cb3845d76311b10f72460aa585a9682a4f0a9f8fb864bfa974a645'
 $ownerProfile='travelincars-dev'
 $ownerConversationId='6ad74b05-0580-83ec-956a-80aaf4587985'
 $ownerPageUrl='https://chatgpt.com/c/'+$ownerConversationId
-$ownerRawTargetId='59AA1F162AC14EDC94078CDC18EE54B9'
+$ownerRawTargetId='422144A861A73A19161672AEA8D3645F'
+$ExpectedBrowserProcessStartedAt='2026-10-20T16:05:02.2898512Z'
 $ownerClock=[Diagnostics.Stopwatch]::StartNew()
 $ownerMaximumMilliseconds=400000
 $ownerCliMaximumMilliseconds=75000
@@ -33,17 +35,27 @@ $ownerNode=$null;$ownerOcEntry=$null;$ownerUserData=$null
 $wrapperStream=$null;$composerStream=$null;$promptStream=$null;$trialStream=$null
 $resultStream=$null;$nativeLock=$null;$nativeLocked=$false;$composer=$null
 $handoffStream=$null;$coordinatorLeaseStream=$null;$coordinatorLeaseRecord=$null
+$previousFocusStream=$null;$previousSupervisorStream=$null;$previousLeaseEvidenceStream=$null
 $handoffSha='3effead9795e45c824c367a6a01c74ce32d12a7784a7548021906ea91b2fd4fd'
 $fenceToken='gpt02-takeover-20261020T153448Z-88837a97c333'
+$previousFocusSha='b6de73e6f3a242f978540c26c76820bd718565551a08990b5665b6ebc0fafa3e'
+$previousSupervisorSha='29e47a469aa43547ecce1c7e176d2c8826fb2cd6daa393a8126cb89ba3b4fa42'
+$previousLeaseSha='e80a7d677d149a705dae302249c1d4c8c5a0eb2875a12fe7fdfab21f45a6dc3e'
 $exitCode=1
 $record=@{
     schema='ai-core-owner-native-foreground-recovery/v1';purpose='FOREGROUND_ONLY_RECOVERY';status='PREPARING';operation='VALIDATE_INPUTS';
+    operationId='gpt02_trial2_20261020T1516';eventId=$trialEvent;
+    browserProfile=$ownerProfile;conversationId=$ownerConversationId;pageUrl=$ownerPageUrl;rawTargetId=$ownerRawTargetId;
+    browserProcessId=$ExpectedBrowserProcessId;browserProcessStartedAt=$ExpectedBrowserProcessStartedAt;windowHandle=$ExpectedWindowHandle;
+    composerName=$ComposerName;browserGenerationVerified=$false;
+    focusAttempt=2;previousFocusSha256=$previousFocusSha;previousSupervisorSha256=$previousSupervisorSha;previousLeaseSha256=$previousLeaseSha;
+    preflightResumeVerified=$false;sessionVerificationMode='SINGLE_FRESH_STATUS_TABS_AND_NATIVE_ADDRESS';
     coordinatorFence=$fenceToken;handoffSha256=$handoffSha;coordinatorLeaseAcquired=$false;nativeActivationAccepted=$null;foregroundSettleMs=$null;
     startedAt=[DateTime]::UtcNow.ToString('o');updatedAt=$null;totalLimitMs=400000;cliLimitMs=75000;
     wrapperSha256=$wrapperSha;composerSha256=$composerSha;trialReceiptSha256=$trialReceiptSha;
     pinnedSourcesVerified=$false;trialReceiptInitiallyVerified=$false;trialReceiptUnchanged=$null;
     nativeLockAcquired=$false;sessionBeforeVerified=$false;sessionAfterVerified=$false;
-    initialDraftSha256=$null;initialDraftLength=$null;
+    initialDraftClass=$null;initialDraftSha256=$null;initialDraftLength=$null;
     rawFocusAttempted=$false;rawFocusReturned=$false;snapshotIdleVerified=$false;
     snapshotTrialEventAbsent=$null;snapshotExactPromptAbsent=$null;
     firstComposerFocusAttempted=$false;firstComposerFocusReturned=$false;firstStrictFocusedReadPassed=$false;
@@ -55,6 +67,16 @@ $record=@{
 
 function Need-Diagnostic([bool]$Condition,[string]$Code){if(-not $Condition){throw $Code}}
 function Hash-DiagnosticBytes([byte[]]$Bytes){$h=[Security.Cryptography.SHA256]::Create();try{return ([BitConverter]::ToString($h.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}}
+function Assert-DiagnosticBrowserGeneration {
+    $diagnosticBrowser=$null
+    try{
+        $diagnosticBrowser=[Diagnostics.Process]::GetProcessById($ExpectedBrowserProcessId)
+        $expectedStarted=[DateTimeOffset]::Parse($ExpectedBrowserProcessStartedAt,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+        Need-Diagnostic (-not $diagnosticBrowser.HasExited -and
+            $diagnosticBrowser.StartTime.ToUniversalTime().Ticks -eq $expectedStarted.UtcDateTime.Ticks) 'DIAG_CURRENT_BROWSER_GENERATION_CHANGED'
+        $record.browserGenerationVerified=$true
+    }finally{if($null -ne $diagnosticBrowser){$diagnosticBrowser.Dispose()}}
+}
 function Assert-DiagnosticNoReparse([string]$Path){
     $item=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
     while($null -ne $item){
@@ -83,7 +105,7 @@ function Write-Diagnostic([string]$Operation){
     }
 }
 function Write-CoordinatorLease([bool]$Released){
-    if($null -eq $coordinatorLeaseStream){return}
+    if($null -eq $coordinatorLeaseStream -or $null -eq $coordinatorLeaseRecord){return}
     $coordinatorLeaseRecord.released=$Released
     $coordinatorLeaseRecord.updatedAt=[DateTime]::UtcNow.ToString('o')
     $coordinatorLeaseRecord.terminalStatus=if($Released){$record.status}else{$null}
@@ -110,13 +132,16 @@ function Add-DiagnosticFailure($ErrorRecord,[string]$Operation){
         'OWNER_RAW_TARGET_INVENTORY_AMBIGUOUS','OWNER_EXACT_RAW_DESTINATION_NOT_UNIQUE','OWNER_NATIVE_GENERATION_ACTIVE',
         'OWNER_EXISTING_RUNTIME_LOCK_UNAVAILABLE','OWNER_RUNTIME_LOCK_PATH_INVALID','OWNER_RUNTIME_LOCK_REPARSE_PATH_DENIED',
         'OWNER_RUNTIME_LOCK_ANCESTRY_INVALID','DIAG_WINDOWS_PS51_DELL_REQUIRED','DIAG_TEMP_PATH_REQUIRED','DIAG_RESULT_ALREADY_EXISTS',
-        'DIAG_REPARSE_PATH_DENIED','DIAG_FILE_SIZE_INVALID','DIAG_FILE_READ_INCOMPLETE','DIAG_FILE_SIZE_CHANGED',
+        'DIAG_REPARSE_PATH_DENIED','DIAG_FILE_SIZE_INVALID','DIAG_FILE_READ_INCOMPLETE','DIAG_FILE_SIZE_CHANGED','DIAG_CURRENT_BROWSER_GENERATION_CHANGED',
         'DIAG_COMPOSER_PATH_INVALID','DIAG_WRAPPER_HASH_MISMATCH','DIAG_COMPOSER_HASH_MISMATCH','DIAG_PROMPT_HASH_MISMATCH',
         'DIAG_TRIAL_RECEIPT_HASH_MISMATCH','DIAG_TRIAL_RECEIPT_CHANGED','DIAG_PROMPT_INVALID','DIAG_PARSE_FAILED',
         'DIAG_WRAPPER_DEFINITION_INVALID','DIAG_MODULE_IMPORT_AMBIGUOUS','DIAG_RUNTIME_LOCK_EMPTY','DIAG_RAW_FOCUS_FAILED',
         'DIAG_SNAPSHOT_NOT_IDLE','DIAG_TRIAL_CONTENT_VISIBLE','DIAG_UNSAFE_DRAFT','DIAG_FOREGROUND_ONLY_CONDITION_FAILED',
         'DIAG_FINAL_FOCUS_NOT_ESTABLISHED','DIAG_RESULT_PATH_INVALID','DIAG_TRIAL_RECEIPT_PATH_INVALID',
         'DIAG_HANDOFF_HASH_MISMATCH','DIAG_HANDOFF_INVALID','DIAG_PRIOR_EXECUTION_ACTIVE','DIAG_WINDOW_NOT_VISIBLE','DIAG_DRAFT_CHANGED',
+        'DIAG_RESUME_RESULT_PATH_INVALID','DIAG_PREVIOUS_FOCUS_HASH_MISMATCH','DIAG_PREVIOUS_FOCUS_UNSAFE',
+        'DIAG_PREVIOUS_SUPERVISOR_HASH_MISMATCH','DIAG_PREVIOUS_SUPERVISOR_UNSAFE',
+        'DIAG_PREVIOUS_LEASE_HASH_MISMATCH','DIAG_PREVIOUS_LEASE_INVALID','DIAG_PREVIOUS_LEASE_COPY_MISMATCH',
         'FOREGROUND_ACTIVATION_DENIED','FOREGROUND_ACTIVATION_NOT_OBSERVED')){$known[$code]=$code}
     $code='UNCLASSIFIED_NATIVE_OR_GUARD_EXCEPTION';$chain=@();$exception=$ErrorRecord.Exception
     for($i=0;$null -ne $exception -and $i -lt 3;$i++){
@@ -132,15 +157,16 @@ function Add-DiagnosticFailure($ErrorRecord,[string]$Operation){
 function Observe-DiagnosticNative([string]$Label){
     Assert-OwnerTimeBudget 1000
     $state=& $composer {param($Target) Get-AiCoreNativeState $Target} $ownerTarget
+    Assert-DiagnosticBrowserGeneration
     Assert-OwnerNativeIdle $state
     & $composer {param($State,$Name) Assert-AiCoreNativeInsertableDraft $State $Name} $state $ComposerName
     $draftClass=if($state.Draft -ceq ''){'EXPLICIT_EMPTY'}elseif($state.Draft -ceq ($ComposerName+"`n")){'UNKNOWN_NAME_PLUS_LF'}else{'OTHER'}
     Need-Diagnostic ($draftClass -cne 'OTHER' -and -not $state.Draft.Contains($trialEvent) -and -not $state.Draft.Contains($ownerPrompt)) 'DIAG_UNSAFE_DRAFT'
     $draftHash=Hash-DiagnosticBytes ($utf8.GetBytes($state.Draft))
     if($Label -ceq 'NATIVE_INITIAL'){
-        $record.initialDraftSha256=$draftHash;$record.initialDraftLength=$state.Draft.Length
+        $record.initialDraftClass=$draftClass;$record.initialDraftSha256=$draftHash;$record.initialDraftLength=$state.Draft.Length
     }else{
-        Need-Diagnostic ($draftHash -ceq $record.initialDraftSha256 -and
+        Need-Diagnostic ($draftClass -ceq $record.initialDraftClass -and $draftHash -ceq $record.initialDraftSha256 -and
             $state.Draft.Length -eq $record.initialDraftLength) 'DIAG_DRAFT_CHANGED'
     }
     $foreground=& $composer {[long][AiCoreNativeComposerWindow]::GetForegroundWindow()}
@@ -156,9 +182,12 @@ function Test-DiagnosticStrictFocus([string]$Operation){
     Write-Diagnostic $Operation;Assert-OwnerTimeBudget 1000
     try{
         $state=& $composer {param($Target) Get-AiCoreNativeState $Target $true} $ownerTarget
+        Assert-DiagnosticBrowserGeneration
         Assert-OwnerNativeIdle $state
         & $composer {param($State,$Name) Assert-AiCoreNativeInsertableDraft $State $Name} $state $ComposerName
-        Need-Diagnostic ((Hash-DiagnosticBytes ($utf8.GetBytes($state.Draft))) -ceq $record.initialDraftSha256 -and
+        $draftClass=if($state.Draft -ceq ''){'EXPLICIT_EMPTY'}else{'UNKNOWN_NAME_PLUS_LF'}
+        Need-Diagnostic ($draftClass -ceq $record.initialDraftClass -and
+            (Hash-DiagnosticBytes ($utf8.GetBytes($state.Draft))) -ceq $record.initialDraftSha256 -and
             $state.Draft.Length -eq $record.initialDraftLength) 'DIAG_DRAFT_CHANGED'
         return $true
     }catch{
@@ -177,6 +206,9 @@ try{
     Need-Diagnostic ([IO.Path]::GetFileName($TrialReceiptPath) -ceq 'gpt02_trial2_20261020T1516.owner-ui-prompt.json') 'DIAG_TRIAL_RECEIPT_PATH_INVALID'
     $ResultPath=Assert-DiagnosticTempPath $ResultPath $false
     Need-Diagnostic ([IO.Path]::GetExtension($ResultPath) -ieq '.json') 'DIAG_RESULT_PATH_INVALID'
+    $receiptParent=[IO.Path]::GetDirectoryName($TrialReceiptPath)
+    $expectedResultPath=Join-Path $receiptParent 'gpt02-trial2-foreground-recovery-result-20261020T1555.json'
+    Need-Diagnostic ($ResultPath.Equals($expectedResultPath,[StringComparison]::OrdinalIgnoreCase)) 'DIAG_RESUME_RESULT_PATH_INVALID'
     $ComposerModulePath=[IO.Path]::GetFullPath($ComposerModulePath)
     $expectedComposer=Join-Path $env:LOCALAPPDATA 'AI-Core\dev-chatgpt-native-composer.psm1'
     Need-Diagnostic ($ComposerModulePath.Equals($expectedComposer,[StringComparison]::OrdinalIgnoreCase)) 'DIAG_COMPOSER_PATH_INVALID'
@@ -205,7 +237,32 @@ try{
     Need-Diagnostic ($handoff.fenceToken -ceq $fenceToken -and $handoff.eventId -ceq $trialEvent -and
         $handoff.coordinatorId -ceq 'chatgpt-root-88837a97c333' -and
         $handoff.priorReceiptSha256 -ceq $trialReceiptSha) 'DIAG_HANDOFF_INVALID'
-    foreach($priorPid in @(8412,18316,10816)){
+    $previousFocusPath=Assert-DiagnosticTempPath (Join-Path $receiptParent 'gpt02-trial2-foreground-recovery-result-20261020T1541.json')
+    $previousSupervisorPath=Assert-DiagnosticTempPath (Join-Path $receiptParent 'gpt02-trial2-foreground-recovery-supervision-20261020T1541.json')
+    $previousFocusStream=[IO.File]::Open($previousFocusPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+    $previousSupervisorStream=[IO.File]::Open($previousSupervisorPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+    $previousFocusBytes=Read-DiagnosticLocked $previousFocusStream 32768
+    $previousSupervisorBytes=Read-DiagnosticLocked $previousSupervisorStream 16384
+    Need-Diagnostic ((Hash-DiagnosticBytes $previousFocusBytes) -ceq $previousFocusSha) 'DIAG_PREVIOUS_FOCUS_HASH_MISMATCH'
+    Need-Diagnostic ((Hash-DiagnosticBytes $previousSupervisorBytes) -ceq $previousSupervisorSha) 'DIAG_PREVIOUS_SUPERVISOR_HASH_MISMATCH'
+    $previousFocus=$utf8.GetString($previousFocusBytes)|ConvertFrom-Json
+    $previousSupervisor=$utf8.GetString($previousSupervisorBytes)|ConvertFrom-Json
+    Need-Diagnostic ($previousFocus.schema -ceq 'ai-core-owner-native-foreground-recovery/v1' -and
+        $previousFocus.status -ceq 'FAILED_FOCUS_ONLY_PRESERVE_ATTEMPT' -and
+        $previousFocus.operation -ceq 'OC_SESSION_AFTER' -and $previousFocus.coordinatorFence -ceq $fenceToken -and
+        $previousFocus.trialReceiptSha256 -ceq $trialReceiptSha -and $previousFocus.trialReceiptUnchanged -eq $true -and
+        $previousFocus.firstComposerFocusAttempted -eq $false -and $previousFocus.secondComposerFocusAttempted -eq $false -and
+        $previousFocus.windowFocusAttempted -eq $false -and $null -eq $previousFocus.nativeActivationAccepted -and
+        $previousFocus.keyboardInputInvoked -eq $false -and $previousFocus.sendInvoked -eq $false -and
+        $previousFocus.inputReplayAttempted -eq $false -and $previousFocus.workerAttestationCreated -eq $false -and
+        $previousFocus.failures.Count -eq 1 -and $previousFocus.failures[0].code -ceq 'OWNER_OC_RESULT_INVALID' -and
+        $previousFocus.failures[0].operation -ceq 'OC_SESSION_AFTER') 'DIAG_PREVIOUS_FOCUS_UNSAFE'
+    Need-Diagnostic ($previousSupervisor.schema -ceq 'ai-core-focus-only-supervision/v1' -and
+        $previousSupervisor.status -ceq 'CHILD_EXITED' -and $previousSupervisor.childProcessId -eq 20988 -and
+        $previousSupervisor.terminationConfirmed -eq $true -and $previousSupervisor.streamsClosed -eq $true -and
+        $previousSupervisor.exitCode -eq 1 -and $previousSupervisor.keyboardInputInvoked -eq $false -and
+        $previousSupervisor.scriptSha256 -ceq '28e3f1ff502290910dc56eb294b392325dafcd38160056139e2de01b3da38d8d') 'DIAG_PREVIOUS_SUPERVISOR_UNSAFE'
+    foreach($priorPid in @(8412,18316,10816,20988)){
         Need-Diagnostic ($null -eq (Get-Process -Id $priorPid -ErrorAction SilentlyContinue)) 'DIAG_PRIOR_EXECUTION_ACTIVE'
     }
     $taskChildren=@(Get-CimInstance Win32_Process -Filter 'ParentProcessId=24424'|
@@ -213,14 +270,31 @@ try{
             $_.CreationDate.ToUniversalTime() -lt ([DateTimeOffset]'2026-10-20T13:42:01Z').UtcDateTime)})
     Need-Diagnostic ($taskChildren.Count -eq 0) 'DIAG_PRIOR_EXECUTION_ACTIVE'
     $coordinatorLeasePath=Join-Path ([IO.Path]::GetDirectoryName($TrialReceiptPath)) 'gpt02_trial2_20261020T1516.owner-ui-coordinator.lease.json'
-    $coordinatorLeasePath=Assert-DiagnosticTempPath $coordinatorLeasePath $false
-    $coordinatorLeaseStream=[IO.File]::Open($coordinatorLeasePath,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::Read)
+    $coordinatorLeasePath=Assert-DiagnosticTempPath $coordinatorLeasePath
+    # Resume the same released lease under an exclusive writer. Preserve its
+    # original values and exact UTF-8 JSON; never remove or replace the file.
+    $coordinatorLeaseStream=[IO.File]::Open($coordinatorLeasePath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::Read)
+    $previousLeaseBytes=Read-DiagnosticLocked $coordinatorLeaseStream 16384
+    Need-Diagnostic ((Hash-DiagnosticBytes $previousLeaseBytes) -ceq $previousLeaseSha) 'DIAG_PREVIOUS_LEASE_HASH_MISMATCH'
+    $previousLeaseJson=$utf8.GetString($previousLeaseBytes)
+    $previousLease=$previousLeaseJson|ConvertFrom-Json
+    Need-Diagnostic ($previousLease.schema -ceq 'ai-core-owner-coordinator-lease/v1' -and
+        $previousLease.fenceToken -ceq $fenceToken -and $previousLease.eventId -ceq $trialEvent -and
+        $previousLease.coordinatorId -ceq 'chatgpt-root-88837a97c333' -and $previousLease.ownerPid -eq 20988 -and
+        $previousLease.phase -ceq 'FOCUS_ONLY' -and $previousLease.released -eq $true -and
+        $previousLease.terminalStatus -ceq 'FAILED_FOCUS_ONLY_PRESERVE_ATTEMPT') 'DIAG_PREVIOUS_LEASE_INVALID'
+    $previousLeaseEvidencePath=Assert-DiagnosticTempPath (Join-Path $receiptParent 'gpt02_trial2_20261020T1516.owner-ui-coordinator.focus-attempt1.lease.json') $false
+    $previousLeaseEvidenceStream=[IO.File]::Open($previousLeaseEvidencePath,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::Read)
+    $previousLeaseEvidenceStream.Write($previousLeaseBytes,0,$previousLeaseBytes.Length);$previousLeaseEvidenceStream.Flush($true)
+    Need-Diagnostic ((Hash-DiagnosticBytes (Read-DiagnosticLocked $previousLeaseEvidenceStream 16384)) -ceq $previousLeaseSha) 'DIAG_PREVIOUS_LEASE_COPY_MISMATCH'
     $coordinatorLeaseRecord=@{schema='ai-core-owner-coordinator-lease/v1';fenceToken=$fenceToken;
         coordinatorId='chatgpt-root-88837a97c333';eventId=$trialEvent;ownerPid=$PID;
         acquiredAt=[DateTime]::UtcNow.ToString('o');expiresAt=[DateTime]::UtcNow.AddSeconds(400).ToString('o');
+        focusAttempt=2;previousLeaseSha256=$previousLeaseSha;previousLeasePath=$previousLeaseEvidencePath;previousLease=$previousLease;previousLeaseJson=$previousLeaseJson;
+        previousFocusSha256=$previousFocusSha;previousSupervisorSha256=$previousSupervisorSha;
         phase='FOCUS_ONLY';released=$false;terminalStatus=$null;updatedAt=$null}
     Write-CoordinatorLease $false
-    $record.coordinatorLeaseAcquired=$true
+    $record.coordinatorLeaseAcquired=$true;$record.preflightResumeVerified=$true
     $tokens=$null;$errors=$null
     $ast=[Management.Automation.Language.Parser]::ParseInput($utf8.GetString($wrapperBytes),$OwnerWrapperPath,[ref]$tokens,[ref]$errors)
     Need-Diagnostic (@($errors).Count -eq 0) 'DIAG_PARSE_FAILED'
@@ -241,6 +315,7 @@ try{
     $nativeLock=[IO.File]::Open($lockPath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::ReadWrite)
     Assert-OwnerRuntimeLockPath $lockPath;Need-Diagnostic ($nativeLock.Length -ge 1) 'DIAG_RUNTIME_LOCK_EMPTY'
     $nativeLock.Lock(0,1);$nativeLocked=$true;$record.nativeLockAcquired=$true
+    Assert-DiagnosticBrowserGeneration
     $composer=Import-Module -Name $ComposerModulePath -Force -PassThru -ErrorAction Stop
     Need-Diagnostic ($composer -is [Management.Automation.PSModuleInfo]) 'DIAG_MODULE_IMPORT_AMBIGUOUS'
     Add-Type -TypeDefinition @'
@@ -256,10 +331,10 @@ public static class AiCoreOwnerForegroundV1 {
 '@ -ErrorAction Stop
     $ownerTarget=@{ConversationId=$ownerConversationId;PageUrl=$ownerPageUrl;ComposerName=$ComposerName;
         WindowHandle=$ExpectedWindowHandle;BrowserProcessId=$ExpectedBrowserProcessId}
-    Write-Diagnostic 'OC_SESSION_BEFORE';Assert-OwnerSession;$record.sessionBeforeVerified=$true
-    $record.rawFocusAttempted=$true;Write-Diagnostic 'OC_EXACT_RAW_FOCUS';Assert-OwnerTimeBudget 1000
-    $focus=Invoke-OwnerOpenClaw 'focus';Need-Diagnostic ($focus.ok -is [bool] -and $focus.ok) 'DIAG_RAW_FOCUS_FAILED';$record.rawFocusReturned=$true
-    Write-Diagnostic 'OC_SESSION_AFTER';Assert-OwnerSession;$record.sessionAfterVerified=$true
+    # Three serial read-only CLI calls: status, tabs, snapshot. Native address
+    # verification below establishes the selected exact destination; no OC
+    # focus call or duplicated session inventory is needed for this resume.
+    Write-Diagnostic 'OC_SESSION_FRESH';Assert-OwnerSession;$record.sessionBeforeVerified=$true
     Write-Diagnostic 'OC_SNAPSHOT';$snapshot=Invoke-OwnerOpenClaw 'snapshot'
     $names=[regex]::Matches($snapshot,'(?m)^[ \t]*- textbox "(Ask ChatGPT|Tanya ChatGPT)"[^\r\n]*$')
     $record.snapshotTrialEventAbsent=-not $snapshot.Contains($trialEvent);$record.snapshotExactPromptAbsent=-not $snapshot.Contains($ownerPrompt)
@@ -269,6 +344,7 @@ public static class AiCoreOwnerForegroundV1 {
     $record.snapshotIdleVerified=$true;$snapshot=$null
     $observation=Observe-DiagnosticNative 'NATIVE_INITIAL'
     $record.firstComposerFocusAttempted=$true;Write-Diagnostic 'FIRST_COMPOSER_FOCUS';Assert-OwnerTimeBudget 1000
+    Assert-DiagnosticBrowserGeneration
     & $composer {param($State) Set-AiCoreNativeFocus $State} $observation.state
     $record.firstComposerFocusReturned=$true
     $observation=Observe-DiagnosticNative 'AFTER_FIRST_COMPOSER_FOCUS'
@@ -281,6 +357,7 @@ public static class AiCoreOwnerForegroundV1 {
             $observation.safe.composerIsKeyboardFocusable) 'DIAG_FOREGROUND_ONLY_CONDITION_FAILED'
         $record.windowFocusAttempted=$true;Write-Diagnostic 'WINDOW_FOCUS_ONCE';Assert-OwnerTimeBudget 1000
         Need-Diagnostic ($observation.state.Window.Current.IsEnabled -and -not $observation.state.Window.Current.IsOffscreen) 'DIAG_WINDOW_NOT_VISIBLE'
+        Assert-DiagnosticBrowserGeneration
         $record.nativeActivationAccepted=[AiCoreOwnerForegroundV1]::SetForegroundWindow([IntPtr]$ExpectedWindowHandle)
         $record.windowFocusReturned=$true
         Write-Diagnostic 'WINDOW_FOCUS_RETURNED'
@@ -294,6 +371,7 @@ public static class AiCoreOwnerForegroundV1 {
         Need-Diagnostic (([long][AiCoreOwnerForegroundV1]::GetForegroundWindow()) -eq $ExpectedWindowHandle) 'FOREGROUND_ACTIVATION_NOT_OBSERVED'
         $observation=Observe-DiagnosticNative 'AFTER_WINDOW_FOCUS'
         $record.secondComposerFocusAttempted=$true;Write-Diagnostic 'SECOND_COMPOSER_FOCUS';Assert-OwnerTimeBudget 1000
+        Assert-DiagnosticBrowserGeneration
         & $composer {param($State) Set-AiCoreNativeFocus $State} $observation.state
         $record.secondComposerFocusReturned=$true
         $observation=Observe-DiagnosticNative 'AFTER_SECOND_COMPOSER_FOCUS'
@@ -323,7 +401,7 @@ public static class AiCoreOwnerForegroundV1 {
         try{Write-Diagnostic $record.operation}catch{}
     }finally{
         try{Write-CoordinatorLease $true}catch{$exitCode=1}
-        foreach($stream in @($handoffStream,$coordinatorLeaseStream,$trialStream,$promptStream,$composerStream,$wrapperStream,$resultStream)){
+        foreach($stream in @($previousFocusStream,$previousSupervisorStream,$previousLeaseEvidenceStream,$handoffStream,$coordinatorLeaseStream,$trialStream,$promptStream,$composerStream,$wrapperStream,$resultStream)){
             if($null -ne $stream){try{$stream.Dispose()}catch{$exitCode=1}}
         }
     }
