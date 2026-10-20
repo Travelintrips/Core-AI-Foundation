@@ -8,7 +8,7 @@ import {
   isSafeDirectOpenClawPcCommand,
   parseDirectOpenClawPcCommand,
   parseOpenClawPcCodingRequest,
-} from "../aiCoreChatIntentService.js";
+} from "../aiCoreChatIntentService.ts";
 
 describe("AI Core Chat automatic dispatch", () => {
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
