@@ -80,6 +80,9 @@ export type StageDevChatGptAccountResult = {
 
 export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput, rawRegistry: string | undefined, legacyTargets: DevWakeTarget[]): StageDevChatGptAccountResult {
   const registry = parseRegistry(rawRegistry);
+  // Validate the entire stored registry before any idempotent early return.
+  // Disabled rows are still authorization data and must fail closed if malformed.
+  parseDevWakeAccountBindings(JSON.stringify(registry), legacyTargets);
   const ownerChannel = input.ownerChannel.trim();
   const targetConversationId = input.targetConversationId.trim().toLowerCase();
   if (!OWNER.test(ownerChannel)) throw new Error("DEV_CHATGPT_PROVISIONING_OWNER_INVALID");
