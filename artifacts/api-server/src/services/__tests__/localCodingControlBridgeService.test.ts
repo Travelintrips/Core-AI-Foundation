@@ -219,6 +219,7 @@ describe("verified MCP handshake evidence", () => {
         assignedClientId: workerId, completedBy: workerId,
         conversationId: ownerChannel, mcpAckConversationId: ownerChannel,
         targetConversationId, eventId, capability: "chatgpt:wake",
+        assistantAttestationChallenge: attestationModule.deriveDevAssistantChallenge(expected),
         explicitWorkerTarget: true, deliveryCode: "DELIVERY_CONFIRMED",
         e2eCode: "MCP_ACK_VERIFIED", mcpAckResponseId: responseId,
       },

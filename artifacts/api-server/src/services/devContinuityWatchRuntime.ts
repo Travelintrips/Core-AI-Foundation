@@ -1,4 +1,5 @@
 import type { DevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
+import type { DevWakeBinding } from "./devChatGptWakeBindingService.js";
 /**
  * Per-job progress deadlines. Registration is passive: only a due, durable CAS
  * claim may enqueue a wake. Browser idle/draft checks remain the worker's job.
@@ -45,6 +46,7 @@ export interface ContinuityResult {
   workerId: DevContinuityWakeWorker;
   status: "COMPLETED" | "FAILED";
   details: Record<string, unknown>;
+  wakeBinding?: DevWakeBinding;
 }
 
 type Repository<W extends ContinuityWatch> = {
@@ -61,8 +63,8 @@ type Repository<W extends ContinuityWatch> = {
 type Dependencies<W extends ContinuityWatch> = {
   repository: Repository<W>;
   enabled: () => boolean;
-  allowed: (watch: { ownerChannel: string; targetConversationId: string }) => boolean;
-  owners: () => string[];
+  allowed: (watch: { ownerChannel: string; targetConversationId: string }) => boolean | Promise<boolean>;
+  owners: () => string[] | Promise<string[]>;
   queue: (input: { ownerChannel: string; targetConversationId: string; eventId: string; watchCommandId: string; jobId: string; correlationId: string; checkpointRevision: number; expiresAt: string }) => Promise<{ commandId: string }>;
   subscribe: (listener: (result: ContinuityResult) => void | Promise<void>) => () => void;
   onError: (code: string, error: unknown) => void;
@@ -80,6 +82,8 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly callbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly errors = new Map<string, number>();
+  private readonly arming = new Map<string, number>();
+  private armSequence = 0;
   private readonly now: () => number;
   private readonly setTimer: NonNullable<Dependencies<W>["setTimer"]>;
   private readonly clearTimer: NonNullable<Dependencies<W>["clearTimer"]>;
@@ -102,8 +106,8 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
     return `${watch.ownerChannel}|${watch.jobId}`;
   }
 
-  private assertAllowed(watch: { ownerChannel: string; targetConversationId: string }): void {
-    if (!this.deps.enabled() || !this.deps.allowed(watch)) {
+  private async assertAllowed(watch: { ownerChannel: string; targetConversationId: string }): Promise<void> {
+    if (!this.deps.enabled() || !await this.deps.allowed(watch)) {
       throw new Error("DEV_CONTINUITY_DENIED");
     }
   }
@@ -115,11 +119,11 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
     const generation = this.generation;
     this.starting = (async () => {
       this.unsubscribe = this.deps.subscribe((event) => this.receiveResult(event));
-      for (const owner of [...new Set(this.deps.owners())].slice(0, MAX_OWNERS)) {
+      for (const owner of [...new Set(await this.deps.owners())].slice(0, MAX_OWNERS)) {
         if (generation !== this.generation) return;
         const watches = await this.deps.repository.restore(owner, new Date(this.now()), MAX_WATCHES_PER_OWNER);
         if (generation !== this.generation) return;
-        for (const watch of watches) this.arm(watch);
+        for (const watch of watches) await this.arm(watch);
       }
       if (generation === this.generation) this.started = true;
     })();
@@ -143,39 +147,46 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
     this.timers.clear();
     this.callbackTimers.clear();
     this.errors.clear();
+    this.arming.clear();
   }
 
   async register(input: ContinuityRegistration): Promise<W> {
-    this.assertAllowed(input);
+    await this.assertAllowed(input);
     await this.start();
     const watch = await this.deps.repository.register(input, new Date(this.now()));
-    this.arm(watch);
+    await this.arm(watch);
     return watch;
   }
 
   async update(input: ContinuityCheckpoint): Promise<W> {
     const current = await this.deps.repository.reconcile(input.ownerChannel, input.jobId, new Date(this.now()));
     if (!current) throw new Error("DEV_CONTINUITY_NOT_FOUND");
-    this.assertAllowed(current);
+    await this.assertAllowed(current);
     await this.start();
     const watch = await this.deps.repository.update(input, new Date(this.now()));
-    this.arm(watch);
+    await this.arm(watch);
     return watch;
   }
 
   async get(ownerChannel: string, jobId: string): Promise<W | null> {
     if (!this.deps.enabled()) throw new Error("DEV_CONTINUITY_DENIED");
     const watch = await this.deps.repository.reconcile(ownerChannel, jobId, new Date(this.now()));
-    if (watch) { this.assertAllowed(watch); this.arm(watch); }
+    if (watch) { await this.assertAllowed(watch); await this.arm(watch); }
     return watch;
   }
 
-  private arm(watch: W, retryAt?: number): void {
+  private async arm(watch: W, retryAt?: number): Promise<void> {
     const key = this.key(watch);
     const previous = this.timers.get(key);
     if (previous) this.clearTimer(previous);
     this.timers.delete(key);
-    if (!this.deps.enabled() || !this.deps.allowed(watch)) return;
+    const armSequence = ++this.armSequence;
+    this.arming.set(key, armSequence);
+    const generation = this.generation;
+    const allowed = this.deps.enabled() && await this.deps.allowed(watch);
+    if (generation !== this.generation || this.arming.get(key) !== armSequence) return;
+    this.arming.delete(key);
+    if (!allowed || !this.deps.enabled()) return;
     const expires = Date.parse(watch.expiresAt);
     let due: number;
     if (watch.state === "RUNNING") due = Math.min(Date.parse(watch.deadlineAt), expires);
@@ -184,7 +195,6 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
     else return;
     if (retryAt !== undefined) due = Math.max(due, retryAt);
     if (!Number.isFinite(due)) { this.deps.onError("DEV_CONTINUITY_INVALID_DEADLINE", null); return; }
-    const generation = this.generation;
     const timer = this.setTimer(() => {
       if (this.timers.get(key) !== timer || generation !== this.generation) return;
       this.timers.delete(key);
@@ -194,13 +204,13 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
   }
 
   private async onDeadline(watch: W, generation: number): Promise<void> {
-    if (generation !== this.generation || !this.deps.enabled() || !this.deps.allowed(watch)) return;
     const key = this.key(watch);
     try {
+      if (generation !== this.generation || !this.deps.enabled() || !await this.deps.allowed(watch) || generation !== this.generation) return;
       if (watch.state === "WAKE_QUEUED") {
         const reconciled = await this.deps.repository.reconcile(watch.ownerChannel, watch.jobId, new Date(this.now()));
         if (reconciled && reconciled.state !== "WAKE_QUEUED") {
-          if (generation === this.generation) this.arm(reconciled);
+          if (generation === this.generation) await this.arm(reconciled);
           return;
         }
       }
@@ -210,10 +220,11 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
         // A newer checkpoint or another replica won. Re-read once and schedule
         // its own deadline, never issue a second command for a stale revision.
         const latest = claim ?? await this.deps.repository.get(watch.ownerChannel, watch.jobId);
-        if (latest && generation === this.generation) this.arm(latest);
+        if (latest && generation === this.generation) await this.arm(latest);
         return;
       }
-      this.assertAllowed(claim);
+      await this.assertAllowed(claim);
+      if (generation !== this.generation || !this.deps.enabled()) return;
       if (!claim.claimToken || !claim.wakeEventId) throw new Error("DEV_CONTINUITY_INVALID_CLAIM");
       const queued = await this.deps.queue({
         ownerChannel: claim.ownerChannel, targetConversationId: claim.targetConversationId,
@@ -226,7 +237,7 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
         eventId: claim.wakeEventId, wakeCommandId: queued.commandId,
       }, new Date(this.now()));
       this.errors.delete(key);
-      if (recorded && generation === this.generation) this.arm(recorded);
+      if (recorded && generation === this.generation) await this.arm(recorded);
     } catch (error) {
       this.deps.onError("DEV_CONTINUITY_DEADLINE_FAILED", error);
       if (generation !== this.generation) return;
@@ -237,10 +248,10 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
         // An uncertain queue response is reconciled using the SAME persisted
         // event after its lease. Never derive a replacement wake event here.
         const current = await this.deps.repository.get(watch.ownerChannel, watch.jobId);
-        if (current && generation === this.generation) this.arm(current, this.now() + RETRY_DELAY_MS);
+        if (current && generation === this.generation) await this.arm(current, this.now() + RETRY_DELAY_MS);
       } catch (readError) {
         this.deps.onError("DEV_CONTINUITY_RECONCILE_FAILED", readError);
-        if (generation === this.generation) this.arm(watch, this.now() + RETRY_DELAY_MS);
+        if (generation === this.generation) await this.arm(watch, this.now() + RETRY_DELAY_MS);
       }
     }
   }
@@ -254,9 +265,9 @@ export class DevContinuityWatchRuntime<W extends ContinuityWatch> {
     this.callbackTimers.delete(key);
     try {
       const current = await this.deps.repository.get(event.ownerChannel, event.jobId);
-      if (!current || !this.deps.allowed(current)) return;
+      if (!current || !await this.deps.allowed(current) || generation !== this.generation) return;
       const watch = await this.deps.repository.recordResult(event, new Date(this.now()));
-      if (watch && generation === this.generation) this.arm(watch);
+      if (watch && generation === this.generation) await this.arm(watch);
     } catch (error) {
       // The worker response is already durable. Startup reconciliation reads
       // the exact child response if this listener loses its connection.

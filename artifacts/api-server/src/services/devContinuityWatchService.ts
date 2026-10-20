@@ -1,6 +1,7 @@
 import { DevContinuityWatchRuntime, type ContinuityCheckpoint, type ContinuityRegistration } from "./devContinuityWatchRuntime.js";
 import { devContinuityWatchRepository, DevContinuityWatchError, type DevContinuityWatch } from "./devContinuityWatchRepository.js";
 import { isDevBrowserWakeAllowed, queueDevBrowserWake } from "./devChatGptWakeService.js";
+import { allowedDevWakeOwners } from "./devChatGptWakeBindingService.js";
 import { subscribeDevContinuityWakeResults } from "./devContinuityWakeEvents.js";
 
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
@@ -17,8 +18,7 @@ const runtime = new DevContinuityWatchRuntime({
   repository: devContinuityWatchRepository,
   enabled: isDevContinuityEnabled,
   allowed: isDevBrowserWakeAllowed,
-  owners: () => (process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "")
-    .split(",").map(value => value.trim()).filter(value => OWNER.test(value)),
+  owners: allowedDevWakeOwners,
   queue: queueDevBrowserWake,
   subscribe: subscribeDevContinuityWakeResults,
   onError: (code, error) => {

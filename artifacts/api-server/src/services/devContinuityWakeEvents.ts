@@ -1,4 +1,6 @@
 /** In-process signal only. The authenticated bridge response is the durable source. */
+import { readDevWakeBinding, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
+import { devWakeAttestationExpected } from "./devChatGptWakeEvidenceService.js";
 export const DEV_CONTINUITY_WORKER = "openclaw-travelintrips-dev" as const;
 export const DEV_DELL_CONTINUITY_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
 export type DevContinuityWakeWorker = typeof DEV_CONTINUITY_WORKER | typeof DEV_DELL_CONTINUITY_WORKER;
@@ -15,6 +17,7 @@ export interface DevContinuityWakeResult {
   workerId: DevContinuityWakeWorker;
   status: "COMPLETED" | "FAILED";
   details: Record<string, unknown>;
+  wakeBinding?: DevWakeBinding;
 }
 
 type Listener = (result: DevContinuityWakeResult) => void | Promise<void>;
@@ -43,6 +46,12 @@ export function devContinuityResultFromCommittedCommand(input: {
   if (input.source !== "ai-core" || input.commandType !== "EXTERNAL_AGENT_WORK" ||
       !isDevContinuityWakeWorker(input.authenticatedWorkerId) || !record(input.metadata)) return null;
   const metadata = input.metadata;
+  if (input.authenticatedWorkerId === DEV_DELL_CONTINUITY_WORKER && !devWakeAttestationExpected(metadata)) return null;
+  const wakeBinding = readDevWakeBinding(metadata["wakeBinding"]);
+  if (metadata["wakeBinding"] !== undefined && (!wakeBinding ||
+      wakeBinding.ownerChannel !== metadata["conversationId"] ||
+      wakeBinding.targetConversationId !== metadata["targetConversationId"] ||
+      wakeBinding.workerId !== input.authenticatedWorkerId)) return null;
   const binding = metadata["devContinuity"];
   if (!record(binding) || metadata["assignedClientId"] !== input.authenticatedWorkerId ||
       metadata["completedBy"] !== input.authenticatedWorkerId ||
@@ -58,7 +67,7 @@ export function devContinuityResultFromCommittedCommand(input: {
       typeof jobId !== "string" || !job.test(jobId)) return null;
   return { parentWatchCommandId: parent, ownerChannel: owner, eventId, jobId,
     childCommandId: input.id, workerId: input.authenticatedWorkerId,
-    status: input.status, details: input.details };
+    status: input.status, details: input.details, ...(wakeBinding ? { wakeBinding } : {}) };
 }
 
 export function subscribeDevContinuityWakeResults(listener: Listener): () => void {

@@ -25,6 +25,7 @@ import {
 import { logAudit } from "../services/aiAuditService.js";
 import { dispatchExternalAgentWork, getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
 import { isDevBrowserWakeAllowed, queueDevBrowserWake } from "../services/devChatGptWakeService.js";
+import { allowedDevWakeOwners, DEV_WAKE_DELL_WORKER, isOwnedDevWakeProgressCommand } from "../services/devChatGptWakeBindingService.js";
 import {
   isDevChatGptContinuityMessage, parseDevChatGptContinuityCommand,
 } from "../services/devChatGptContinuityProtocol.js";
@@ -846,7 +847,7 @@ router.post("/ai/dev/chatgpt-wake/jobs", async (req, res): Promise<void> => {
   }).strict();
   const parsed = schema.safeParse(req.body);
   if (!parsed.success || !channel ||
-      !isDevBrowserWakeAllowed({ ownerChannel: channel, targetConversationId: parsed.data.conversationId })) {
+      !await isDevBrowserWakeAllowed({ ownerChannel: channel, targetConversationId: parsed.data.conversationId, requestHost: req.hostname })) {
     res.status(403).json({ error: "DEV_WAKE_NOT_AUTHORIZED" }); return;
   }
   try {
@@ -855,6 +856,7 @@ router.post("/ai/dev/chatgpt-wake/jobs", async (req, res): Promise<void> => {
       targetConversationId: parsed.data.conversationId,
       eventId: parsed.data.eventId,
       correlationId: parsed.data.correlationId,
+      requestHost: req.hostname,
     });
     res.status(job.created ? 202 : 200).json({
       commandId: job.commandId, correlationId: parsed.data.correlationId,
@@ -1280,13 +1282,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       if (isDevChatGptContinuityMessage(command.instruction)) {
         const continuity = parseDevChatGptContinuityCommand(command.instruction);
         const ownerChannel = parsed.conversationId ?? "";
-        const allowedChannels = new Set((process.env["AI_CORE_DEV_BROWSER_WAKE_CHANNELS"] ?? "")
-          .split(",").map(value => value.trim()).filter(Boolean));
+        const allowedChannels = new Set(await allowedDevWakeOwners(req.hostname));
         const authorized = identity.kind === "dev_relay" && process.env["APP_ENV"] === "development" &&
           /^ai-engine-oauth:[a-f0-9]{64}$/.test(ownerChannel) && allowedChannels.has(ownerChannel) &&
           !!continuity && (continuity.kind === "status" || effectiveConfirmed) &&
-          (continuity.kind !== "register" || isDevBrowserWakeAllowed({
-            ownerChannel, targetConversationId: continuity.targetConversationId,
+          (continuity.kind !== "register" || await isDevBrowserWakeAllowed({
+            ownerChannel, targetConversationId: continuity.targetConversationId, requestHost: req.hostname,
           }));
         if (!continuity || !authorized) {
           const reason = !continuity ? "DEV_CHATGPT_CONTINUITY_INVALID" : "DEV_CHATGPT_CONTINUITY_DENIED";
@@ -1332,7 +1333,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         const wake = /^DEV_CHATGPT_WAKE_V1 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) event=([0-9a-f]{64})$/i.exec(command.instruction);
         const principalChannel = parsed.conversationId ?? "";
         const allowed = (identity.kind === "dev_relay" || identity.kind === "oauth") && effectiveConfirmed && !!wake &&
-          isDevBrowserWakeAllowed({ ownerChannel: principalChannel, targetConversationId: wake[1]! });
+          await isDevBrowserWakeAllowed({ ownerChannel: principalChannel, targetConversationId: wake[1]!, requestHost: req.hostname });
         if (!allowed || !wake) {
           res.status(200).json(rpcResult(body.id ?? null, {
             content: [{ type: "text", text: "DEV_CHATGPT_WAKE_DENIED: only confirmed, paired, allowlisted DEV wake events are permitted." }],
@@ -1347,7 +1348,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         const destinationConversationId = wake[1]!.toLowerCase();
         try {
           const queued = await queueDevBrowserWake({ ownerChannel: principalChannel,
-            targetConversationId: destinationConversationId, eventId: wakeEventId });
+            targetConversationId: destinationConversationId, eventId: wakeEventId, requestHost: req.hostname });
           const result = {
             kind: "chatgpt_wake", status: queued.created ? "RECEIVED" : "ALREADY_QUEUED",
             commandId: queued.commandId, clientId: queued.clientId,
@@ -1590,10 +1591,15 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       if (identity.kind === "dev_relay") {
         const meta = state?.command.metadataJson as Record<string, unknown> | null | undefined;
         if (!parsed.ownerConversationId || meta?.["conversationId"] !== parsed.ownerConversationId ||
-            !ISOLATED_DEV_WORKERS.includes(meta?.["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number])) {
+            (!ISOLATED_DEV_WORKERS.includes(meta?.["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number]) &&
+             !(state && isOwnedDevWakeProgressCommand(state.command, parsed.ownerConversationId)))) {
           state = null;
         }
       }
+      // The dedicated browser worker is readable only through its authenticated owner.
+      if (identity.kind === "oauth" && state &&
+          (state.command.metadataJson as Record<string, unknown> | null)?.["assignedClientId"] === DEV_WAKE_DELL_WORKER &&
+          !isOwnedDevWakeProgressCommand(state.command, oauthEventChannel(identity) ?? "")) state = null;
       if (identity.kind === "oauth" && devRelayEnabled()) {
         const ownerConversationId = oauthEventChannel(identity);
         if (ownerConversationId) {
@@ -1601,7 +1607,9 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
             const devProgress = await callDevMcpTool("get_external_agent_command_progress",
               { commandId: parsed.commandId, ownerConversationId });
             if (devProgress["found"] === true && devProgress["assignedClientId"] &&
-                ISOLATED_DEV_WORKERS.includes(devProgress["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number])) {
+                (ISOLATED_DEV_WORKERS.includes(devProgress["assignedClientId"] as typeof ISOLATED_DEV_WORKERS[number]) ||
+                 (devProgress["assignedClientId"] === DEV_WAKE_DELL_WORKER && devProgress["devWakeOwnerVerified"] === true &&
+                  devProgress["ownerConversationId"] === ownerConversationId))) {
               payload = devProgress;
               state = null;
             }
@@ -1622,6 +1630,9 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       } else {
         payload = {
           found: true,
+          ...(identity.kind === "dev_relay" && parsed.ownerConversationId &&
+              isOwnedDevWakeProgressCommand(state.command, parsed.ownerConversationId)
+            ? { devWakeOwnerVerified: true, ownerConversationId: parsed.ownerConversationId } : {}),
           commandId: parsed.commandId,
           status: state.command.status,
           statusCode: (state.command.metadataJson as Record<string, unknown> | null)?.["statusCode"] ??

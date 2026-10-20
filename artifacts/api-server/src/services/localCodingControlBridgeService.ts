@@ -17,7 +17,9 @@ import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaServ
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
-import { devAssistantPublicKeyForWorker, verifyDevAssistantAttestation } from "./devAssistantAttestation.js";
+import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
+import { commandMatchesDevWakeTarget, DEV_WAKE_DELL_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
+import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -518,6 +520,7 @@ export type VerifiedMcpHandshakeEvidence = {
   acknowledgedAt: string;
   browserWakeVerified: true;
   conversationAckVerified: true;
+  wakeBinding?: DevWakeBinding;
 };
 
 type McpHandshakeEvidenceRow = {
@@ -582,23 +585,9 @@ export function verifyMcpHandshakeEvidenceRow(
       !Number.isFinite(Date.parse(responseCreatedAt)) ||
       !Number.isFinite(Date.parse(acknowledgedAt))) return null;
 
-  const continuity = isRecord(command["devContinuity"]) ? command["devContinuity"] : null;
-  const expected: Parameters<typeof verifyDevAssistantAttestation>[0]["expected"] = {
-    ownerChannel, targetConversationId, eventId, workerId,
-    ...(continuity ? {
-      watchCommandId: continuity["parentWatchCommandId"] as string,
-      jobId: continuity["jobId"] as string,
-      checkpointRevision: continuity["checkpointRevision"] as number,
-    } : {}),
-  };
-  if (continuity && (
-      typeof continuity["parentWatchCommandId"] !== "string" ||
-      typeof continuity["jobId"] !== "string" ||
-      !Number.isSafeInteger(continuity["checkpointRevision"]))) return null;
-
-  const attestation = verifyDevAssistantAttestation({
+  const attestation = verifyDevWakeCommandReceipt({
+    metadata: command,
     details: response,
-    expected,
     notBefore: commandReceivedAt,
     receivedAt: responseCreatedAt,
     publicKeyDerBase64: publicKeyDerBase64 ?? devAssistantPublicKeyForWorker(workerId),
@@ -615,6 +604,7 @@ export function verifyMcpHandshakeEvidenceRow(
     acknowledgedAt,
     browserWakeVerified: true,
     conversationAckVerified: true,
+    ...(readDevWakeBinding(command["wakeBinding"]) ? { wakeBinding: readDevWakeBinding(command["wakeBinding"])! } : {}),
   };
 }
 
@@ -622,11 +612,13 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
   ownerChannel: string,
   options?: { requestHost?: string; publicKeyDerBase64?: string },
 ): Promise<VerifiedMcpHandshakeEvidence | null> {
-  const requestHost = options?.requestHost?.trim().toLowerCase().replace(/:\\d+$/, "") ?? "";
+  const requestHost = options?.requestHost?.trim().toLowerCase().replace(/:\d+$/, "") ?? "";
   const trustedDevHost = requestHost === "dev-aicore.cstlogistic.co.id" || requestHost === "dev.cstlogistic.co.id";
   const localDevRuntime = process.env["APP_ENV"] === "development" && process.env["NODE_ENV"] !== "production";
   if ((!localDevRuntime && !trustedDevHost) ||
       !/^ai-engine-oauth:[a-f0-9]{64}$/.test(ownerChannel)) return null;
+  const config = await loadDevWakeRuntimeConfig(options?.requestHost).catch(() => null);
+  if (!config?.enabled) return null;
   await ensureCodingControlBridgeTables();
   const result = await db.transaction(async tx => {
     await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${ownerChannel}, true)`);
@@ -656,6 +648,10 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
   });
   for (const raw of result.rows ?? []) {
     const row = raw as Record<string, unknown>;
+    const metadata = row["command_metadata_json"];
+    if (!isRecord(metadata) || typeof metadata["targetConversationId"] !== "string") continue;
+    const target = resolveConfiguredDevWakeTarget(config, { ownerChannel, targetConversationId: metadata["targetConversationId"] });
+    if (!target || !commandMatchesDevWakeTarget(metadata, target)) continue;
     const verified = verifyMcpHandshakeEvidenceRow(ownerChannel, {
       commandId: row["command_id"],
       commandReceivedAt: row["command_received_at"],
@@ -664,7 +660,7 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
       responseMetadata: row["response_metadata_json"],
       responseCreatedAt: row["response_created_at"],
       acknowledgedAt: row["acknowledged_at"],
-    }, options?.publicKeyDerBase64);
+    }, options?.publicKeyDerBase64 ?? (target.workerId === DEV_WAKE_DELL_WORKER ? config.attestationPublicKeyDerB64 : undefined));
     if (verified) return verified;
   }
   return null;
@@ -941,6 +937,7 @@ export async function completeCodingBridgeCommand(input: {
   status: "COMPLETED" | "FAILED";
   message: string;
   details?: Record<string, unknown>;
+  requestHost?: string;
 }) {
   await ensureCodingControlBridgeTables();
   const details = input.details ?? {};
@@ -954,6 +951,8 @@ export async function completeCodingBridgeCommand(input: {
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
   }
+  const wakeConfig = input.clientId === DEV_WAKE_DELL_WORKER
+    ? await loadDevWakeRuntimeConfig(input.requestHost).catch(() => null) : null;
 
   // Command terminal status and durable response must commit together.
   // If insert fails, the PROCESSING claim remains retryable after rollback.
@@ -977,10 +976,25 @@ export async function completeCodingBridgeCommand(input: {
       AND command_type <> 'DEV_CONTINUITY_WATCH'
       AND metadata_json ->> 'assignedClientId' = ${input.clientId}::text
       AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
-    RETURNING id, task_id, source, command_type, metadata_json
+    RETURNING id, task_id, source, command_type, metadata_json, received_at
   `);
     const row = result.rows?.[0] as Record<string, unknown> | undefined;
     if (!row) return null;
+    // The terminal UPDATE holds the claim row lock. Reject a forged or downgraded
+    // browser receipt inside this transaction, before either completion can commit.
+    if (input.clientId === DEV_WAKE_DELL_WORKER && input.status === "COMPLETED") {
+      const metadata = row["metadata_json"];
+      const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
+      const owner = isRecord(metadata) ? metadata["conversationId"] : null;
+      const target = wakeConfig && typeof targetId === "string" && typeof owner === "string"
+        ? resolveConfiguredDevWakeTarget(wakeConfig, { ownerChannel: owner, targetConversationId: targetId }) : null;
+      if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
+          !target || !commandMatchesDevWakeTarget(metadata, target)) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_BINDING_INVALID");
+      const receivedAt = row["received_at"] instanceof Date ? row["received_at"].toISOString() : String(row["received_at"] ?? "");
+      const receipt = verifyDevWakeCommandReceipt({ metadata, details, notBefore: receivedAt,
+        receivedAt: new Date().toISOString(), publicKeyDerBase64: wakeConfig?.attestationPublicKeyDerB64 });
+      if (!receipt.verified) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_ATTESTATION_INVALID");
+    }
     const taskId=row["task_id"] ? String(row["task_id"]) : null;
     const [response]=await tx.insert(aiCodingBridgeResponsesTable).values({
       commandId:input.commandId,taskId,kind:verifiedStatus,message:input.message,

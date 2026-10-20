@@ -6,6 +6,7 @@ import {
   type DevContinuityWakeResult,
 } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker, verifyDevAssistantAttestation } from "./devAssistantAttestation.js";
+import { loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget } from "./devChatGptWakeBindingService.js";
 
 export const DEV_CONTINUITY_WATCH_TYPE = "DEV_CONTINUITY_WATCH";
 export const DEV_CONTINUITY_MAX_ACTIVE = 32;
@@ -288,18 +289,31 @@ export class DevContinuityWatchRepository {
     });
   }
 
-  private resultState(current: DevContinuityWatch, result: DevContinuityWakeResult, at: number): DevContinuityWatch | null {
+  private async resultState(current: DevContinuityWatch, result: DevContinuityWakeResult, at: number): Promise<DevContinuityWatch | null> {
     if (current.commandId !== result.parentWatchCommandId || current.ownerChannel !== result.ownerChannel ||
         current.jobId !== result.jobId || current.wakeEventId !== result.eventId || !isDevContinuityWakeWorker(result.workerId) ||
         (current.wakeCommandId !== null && current.wakeCommandId !== result.childCommandId) ||
         !["FIRING", "WAKE_QUEUED"].includes(current.state)) return null;
     const details = result.details;
+    const wakeBinding = readDevWakeBinding(result.wakeBinding);
+    let bindingAllowed = result.wakeBinding === undefined;
+    let boundPublicKey: string | undefined;
+    if (result.workerId === "openclaw-dell-chatgpt-wake-dev" || wakeBinding) {
+      const config = await loadDevWakeRuntimeConfig().catch(() => null);
+      const target = config ? resolveConfiguredDevWakeTarget(config, current) : null;
+      bindingAllowed = !!target && target.workerId === result.workerId && (target.wakeBinding
+        ? !!wakeBinding && target.wakeBinding.bindingFingerprint === wakeBinding.bindingFingerprint &&
+          wakeBinding.ownerChannel === current.ownerChannel && wakeBinding.targetConversationId === current.targetConversationId &&
+          wakeBinding.workerId === result.workerId
+        : result.wakeBinding === undefined);
+      boundPublicKey = config?.attestationPublicKeyDerB64;
+    }
     const confirmed = result.status === "COMPLETED" && details["browserConfirmed"] === true &&
       details["chatgptSubmitted"] === true && details["browserPairingVerified"] === true && details["exitCode"] === 0 &&
       details["eventId"] === current.wakeEventId && details["conversationId"] === current.targetConversationId &&
       typeof details["evidenceFingerprint"] === "string" && digest.test(details["evidenceFingerprint"]);
     const callbackReceivedAt = new Date(at).toISOString();
-    const attestation = confirmed ? verifyDevAssistantAttestation({
+    const attestation = confirmed && bindingAllowed ? verifyDevAssistantAttestation({
       details,
       expected: {
         ownerChannel: current.ownerChannel,
@@ -309,10 +323,11 @@ export class DevContinuityWatchRepository {
         jobId: current.jobId,
         checkpointRevision: current.revision,
         workerId: result.workerId,
+        ...(wakeBinding ? { bindingFingerprint: wakeBinding.bindingFingerprint, browserProfile: wakeBinding.browserProfile } : {}),
       },
       notBefore: current.triggeredAt ?? String(current.evidence["detectedAt"] ?? current.lastProgressAt),
       receivedAt: callbackReceivedAt,
-      publicKeyDerBase64: devAssistantPublicKeyForWorker(result.workerId),
+      publicKeyDerBase64: boundPublicKey ?? devAssistantPublicKeyForWorker(result.workerId),
     }) : { verified: false as const, reason: "BROWSER_DELIVERY_UNVERIFIED" };
     const evidence: Record<string, unknown> = { ...current.evidence, childCommandId: result.childCommandId, eventId: result.eventId,
       workerId: result.workerId, callbackReceivedAt, workerStatus: result.status,
@@ -334,7 +349,7 @@ export class DevContinuityWatchRepository {
     return this.withOwner(input.ownerChannel, async tx => {
       const current = await this.select(tx, input.ownerChannel, input.jobId, true);
       if (!current) return null;
-      const next = this.resultState(current, input, at);
+      const next = await this.resultState(current, input, at);
       return next ? this.save(tx, current, next, at) : null;
     });
   }
@@ -360,7 +375,7 @@ export class DevContinuityWatchRepository {
       if (record(child) && (child["status"] === "COMPLETED" || child["status"] === "FAILED") && record(child["result_details"])) {
         const event = devContinuityResultFromCommittedCommand({ id: child["id"], source: child["source"], commandType: child["command_type"],
           metadata: child["metadata_json"], authenticatedWorkerId: record(child["metadata_json"]) && typeof child["metadata_json"]["completedBy"] === "string" ? child["metadata_json"]["completedBy"] : "", status: child["status"], details: child["result_details"] });
-        const next = event ? this.resultState(current, event, at) : null;
+        const next = event ? await this.resultState(current, event, at) : null;
         if (next) current = await this.save(tx, current, next, at);
       }
     }
