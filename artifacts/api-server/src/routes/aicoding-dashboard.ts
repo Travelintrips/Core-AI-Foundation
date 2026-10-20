@@ -12,6 +12,8 @@ import { executeAdminWhatsappDeviceStatusQuery } from "../services/aiCoreAdminDb
 import { getExternalAgentRegistrySnapshot } from "../services/externalAgentRegistryService.js";
 import { executeAiCoreInfrastructureOperation } from "../services/aiCoreInfrastructureControlService.js";
 import { codingDashboardTaskPresentationStatus } from "../services/codingTaskPresentationService.js";
+import { isDevWakeRuntime, loadDevWakeRuntimeConfig } from "../services/devChatGptWakeBindingService.js";
+import { describeDevGptReadiness, type DevGptReadiness } from "../services/devChatGptPoolReadinessService.js";
 
 const router = Router();
 const REFRESH_MS = 5_000;
@@ -20,6 +22,24 @@ const EXTERNAL_CACHE_MS = 30_000;
 type Probe = { ok: boolean; latencyMs: number | null; detail?: string; data?: unknown };
 let externalCache: { expiresAt: number; hostinger: Probe; github: Probe } | null = null;
 let waCache: { expiresAt: number; rows: Array<Record<string, unknown>>; error: string | null } | null = null;
+let devAccountCache: { expiresAt: number; config: Awaited<ReturnType<typeof loadDevWakeRuntimeConfig>> | null } | null = null;
+
+/** The overview already refreshes frequently; the extra DEV settings read is bounded to once per 30 seconds.
+ * Not an activation gate: dispatch always reloads its revocable binding settings.
+ */
+async function dashboardDevAccountReadiness(
+  agents: ReadonlyArray<{ clientId: string; eligible: boolean }>,
+): Promise<DevGptReadiness[]> {
+  if (!isDevWakeRuntime()) return [];
+  const now = Date.now();
+  if (!devAccountCache || devAccountCache.expiresAt <= now) {
+    const config = await loadDevWakeRuntimeConfig().catch(() => null);
+    devAccountCache = { expiresAt: now + 30_000, config };
+  }
+  const eligible = new Set(agents.filter(item => item.eligible).map(item => item.clientId));
+  return describeDevGptReadiness(devAccountCache.config, eligible);
+}
+
 
 function elapsedMs(started: number): number {
   return Math.max(0, Date.now() - started);
@@ -443,6 +463,12 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
   ];
   const overallHealth = Math.round((overallChecks.filter(Boolean).length / overallChecks.length) * 100);
 
+  // No emails, OAuth owner channels, conversation UUIDs, browser profiles or secrets
+  // are included in the dashboard. "Configured" deliberately never means "Ready".
+  const devChatGptAccounts = await dashboardDevAccountReadiness(agents).catch(() =>
+    isDevWakeRuntime() ? describeDevGptReadiness(null, new Set<string>()) : [],
+  );
+
   res.json({
     generatedAt: generatedAt.toISOString(),
     refreshMs: REFRESH_MS,
@@ -460,6 +486,7 @@ router.get("/ai/aicoding/overview", async (_req, res): Promise<void> => {
     },
     infrastructure: { services, resources },
     coding: { tasks },
+    devChatGptAccounts,
     workers: workerRows.map((worker) => ({
       id: worker.id,
       name: worker.workerName,
