@@ -90,6 +90,14 @@ type DashboardOverview = {
       updatedAt: string;
     }>;
   };
+  devChatGptAccounts?: Array<{
+    alias: "GPT02" | "GPT03";
+    state: "NOT_CONFIGURED" | "DISABLED" | "CONFIGURED_UNVERIFIED";
+    executor: "DELL" | "OTHER_UNVERIFIED" | null;
+    executorOnline: boolean;
+    dispatchReady: false;
+    reason: string;
+  }>;
   workers: Array<{
     id: number;
     name: string;
@@ -677,6 +685,32 @@ export default function AicodingDashboard() {
                     kemampuan coding, worker lease, dan lock proyek. Dashboard ini tidak mengeksekusi dispatch.
                   </p>
                 </div>
+                {data?.devChatGptAccounts && data.devChatGptAccounts.length > 0 && (
+                  <div className="border-b border-slate-800 px-4 py-3 space-y-2" aria-label="Akun ChatGPT coding DEV">
+                    <p className="text-xs font-semibold text-slate-300">Akun GPT coding · kesiapan autentikasi DEV</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {data.devChatGptAccounts.map(account => (
+                        <div key={account.alias} className="rounded-md border border-orange-900/40 bg-orange-950/10 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs font-medium text-slate-200">{account.alias}</span>
+                            <span className="rounded-full border border-orange-800/60 px-2 py-0.5 text-[9px] font-medium text-orange-300">
+                              {account.state === "CONFIGURED_UNVERIFIED" ? "Binding ada · belum verified" :
+                                account.state === "NOT_CONFIGURED" ? "Belum terdaftar" : "Nonaktif / konfigurasi tidak valid"}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-[10px] text-slate-500">
+                            Executor: {account.executor ?? "Belum ada"} · heartbeat {account.executorOnline ? "terlihat" : "belum terverifikasi"}
+                          </p>
+                          <p className="mt-1 text-[10px] leading-4 text-slate-500">{account.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-600">
+                      Kesiapan akun tidak sama dengan kesiapan generic worker. Tidak ada akun otomatis mendapat job tanpa verifikasi sesi,
+                      executor independen, claim transaksional dan callback bertanda tangan.
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
                   {codingWorkerStates.slice(0, 8).map(({ worker, state, reason }) => {
                     const utilization = worker.capacity > 0 ? Math.round((worker.runningJobs / worker.capacity) * 100) : 0;
