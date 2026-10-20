@@ -75,6 +75,7 @@ using System.Runtime.InteropServices;
 public static class AiCoreNativeComposerWindow {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("kernel32.dll")] public static extern ulong GetTickCount64();
 }
 '@ -ErrorAction Stop
     }
@@ -157,6 +158,32 @@ function Resolve-AiCoreNativeWindow {
     return $resolved
 }
 
+function Get-AiCoreNativeTickCount64 {
+    Initialize-AiCoreNativeUia
+    return [long][AiCoreNativeComposerWindow]::GetTickCount64()
+}
+
+function Assert-AiCoreNativeLeaseDeadline {
+    param([long]$LeaseExpiresTickCount64)
+    # Direct owner bootstrap is an independently authorized UI action and has
+    # no claimed worker job. The worker bridge requires a positive deadline.
+    if ($LeaseExpiresTickCount64 -eq 0) { return }
+    $tickNow = Get-AiCoreNativeTickCount64
+    if ($LeaseExpiresTickCount64 -le $tickNow -or $LeaseExpiresTickCount64 - $tickNow -gt 300000) {
+        throw 'Native worker lease is expired or invalid; preserve the attempt'
+    }
+}
+
+function Get-AiCoreNativeUnixSeconds {
+    return [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+}
+
+function Assert-AiCoreNativeBlankProofFresh {
+    param([hashtable]$Record)
+    $age = (Get-AiCoreNativeUnixSeconds) - [double]$Record.blankVerifiedAt
+    if ($age -lt 0 -or $age -gt 30) { throw 'Owned blank inventory proof is stale' }
+}
+
 function Set-AiCoreNativeFocus { param($State) $State.Composer.SetFocus() }
 function Send-AiCoreNativeKeys { param([string]$Keys) [System.Windows.Forms.SendKeys]::SendWait($Keys) }
 function Get-AiCoreNativeSendControl {
@@ -202,9 +229,11 @@ function Invoke-AiCoreNativeComposerOnce {
         [Parameter(Mandatory)][hashtable]$Target,
         [Parameter(Mandatory)][string]$Message,
         [Parameter(Mandatory)][string]$ReceiptDirectory,
-        [switch]$AllowProviderLf
+        [switch]$AllowProviderLf,
+        [long]$LeaseExpiresTickCount64 = 0
     )
     Assert-AiCoreNativeTarget $Target
+    Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
     $literal = ConvertTo-AiCoreLiteralKeys $Message
     if (-not [IO.Directory]::Exists($ReceiptDirectory)) { throw 'Native receipt directory must already exist' }
     $path = Join-Path $ReceiptDirectory ($Target.BindingFingerprint + '-' + $Target.EventId + '.native-input.json')
@@ -226,12 +255,15 @@ function Invoke-AiCoreNativeComposerOnce {
     $attempt = [IO.File]::Open($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
     try {
         Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Set-AiCoreNativeFocus $state
         $focused = Get-AiCoreNativeState $Target $true
         Assert-AiCoreNativeInsertableDraft $focused $Target.ComposerName
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Send-AiCoreNativeKeys '^{END}'
         $atEnd = Get-AiCoreNativeState $Target $true
         Assert-AiCoreNativeInsertableDraft $atEnd $Target.ComposerName
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Send-AiCoreNativeKeys $literal
         $readback = Get-AiCoreNativeState $Target $true
         Assert-AiCoreNativeReadback $readback $Message ([bool]$AllowProviderLf)
@@ -240,6 +272,7 @@ function Invoke-AiCoreNativeComposerOnce {
         $fresh = Get-AiCoreNativeState $Target $true
         Assert-AiCoreNativeReadback $fresh $Message ([bool]$AllowProviderLf)
         $send = Get-AiCoreNativeSendControl $fresh
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Invoke-AiCoreNativeSend $send
         Write-AiCoreNativeAttempt $attempt $record 'SEND_INVOKED'
         return @{ sendInvoked = $true; deliveryVerified = $false; verifiedAssistantReply = $false;
@@ -253,9 +286,11 @@ function Invoke-AiCoreNativeRefreshOnce {
     param(
         [Parameter(Mandatory)][hashtable]$Target,
         [Parameter(Mandatory)][string]$MessageHash,
-        [Parameter(Mandatory)][string]$ReceiptDirectory
+        [Parameter(Mandatory)][string]$ReceiptDirectory,
+        [long]$LeaseExpiresTickCount64 = 0
     )
     Assert-AiCoreNativeTarget $Target
+    Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
     if ($MessageHash -cnotmatch '\A[a-f0-9]{64}\z') { throw 'Native refresh message context is invalid' }
     $path = Join-Path $ReceiptDirectory ($Target.BindingFingerprint + '-' + $Target.EventId + '.native-input.json')
     # Only the original attempt may be inspected. No marker creation, replay,
@@ -291,6 +326,7 @@ function Invoke-AiCoreNativeRefreshOnce {
         # placeholder-shaped text is insufficient: require an explicit empty
         # ValuePattern value both before and after focus.
         if ($state.Draft -isnot [string] -or $state.Draft -cne '') { throw 'Native refresh requires an explicitly empty draft' }
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Set-AiCoreNativeFocus $state
         $fresh = Get-AiCoreNativeState $Target $true
         if ($fresh.Draft -isnot [string] -or $fresh.Draft -cne '') { throw 'Native refresh requires an explicitly empty draft' }
@@ -298,6 +334,7 @@ function Invoke-AiCoreNativeRefreshOnce {
         Write-AiCoreNativeAttempt $stream $record 'REFRESH_ATTEMPTING'
         $immediate = Get-AiCoreNativeState $Target $true
         if ($immediate.Draft -isnot [string] -or $immediate.Draft -cne '') { throw 'Native refresh requires an explicitly empty draft' }
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Send-AiCoreNativeKeys '{F5}'
         Write-AiCoreNativeAttempt $stream $record 'REFRESH_INVOKED'
         return @{ refreshInvoked = $true; eventId = $Target.EventId; bindingFingerprint = $Target.BindingFingerprint }
@@ -380,8 +417,10 @@ function Set-AiCoreNativeReaderAddress {
 function Invoke-AiCoreNativeReaderNavigationOnce {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Target, [Parameter(Mandatory)][hashtable]$Reader,
-        [Parameter(Mandatory)][string]$MessageHash, [Parameter(Mandatory)][string]$ReceiptDirectory)
+        [Parameter(Mandatory)][string]$MessageHash, [Parameter(Mandatory)][string]$ReceiptDirectory,
+        [long]$LeaseExpiresTickCount64 = 0)
     Assert-AiCoreNativeReader $Target $Reader
+    Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
     if ($MessageHash -cnotmatch '\A[a-f0-9]{64}\z') { throw 'Native message hash is invalid' }
     $path = Join-Path $ReceiptDirectory ($Target.BindingFingerprint + '-' + $Target.EventId + '.native-reader.json')
     # The caller has persisted a new raw ID and sole-blank inventory proof.
@@ -409,7 +448,7 @@ function Invoke-AiCoreNativeReaderNavigationOnce {
         if ($record.preopenTargetIds -isnot [array] -or $record.preopenTargetIds.Count -lt 1 -or
             $record.preopenTargetIds.Count -gt 128 -or $record.preopenTargetIds -contains $Reader.RawTargetId -or
             $record.preopenTargetIds -cnotcontains $Target.RawTargetId) { throw 'Owned reader was not a new tab' }
-        $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+        $now = Get-AiCoreNativeUnixSeconds
         foreach ($field in @('blankVerifiedAt', 'sendAttemptedAt')) {
             if (-not $record.ContainsKey($field) -or
                 ($record[$field] -isnot [double] -and $record[$field] -isnot [decimal] -and
@@ -421,13 +460,18 @@ function Invoke-AiCoreNativeReaderNavigationOnce {
             throw 'Owned blank inventory proof is stale'
         }
         $state = Get-AiCoreNativeReaderState $Target $Reader 'about:blank'
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Set-AiCoreNativeReaderFocus $state
         $null = Get-AiCoreNativeReaderState $Target $Reader 'about:blank' $true
         $record.navigationAttemptedAt = $now
         Write-AiCoreNativeAttempt $stream $record 'NAVIGATION_ATTEMPTING'
         $fresh = Get-AiCoreNativeReaderState $Target $Reader 'about:blank' $true
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
+        Assert-AiCoreNativeBlankProofFresh $record
         Set-AiCoreNativeReaderAddress $fresh $Target.PageUrl
         $null = Get-AiCoreNativeReaderState $Target $Reader $Target.PageUrl $true
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
+        Assert-AiCoreNativeBlankProofFresh $record
         Send-AiCoreNativeKeys '{ENTER}'
         Write-AiCoreNativeAttempt $stream $record 'NAVIGATION_INVOKED'
         return @{ navigationInvoked = $true; rawTargetId = $Reader.RawTargetId; pageUrl = $Target.PageUrl }

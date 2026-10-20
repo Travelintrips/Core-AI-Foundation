@@ -267,7 +267,7 @@ def _wake_message(event, challenge, task_instruction):
             "Pada balasan pertama setelah wake ini, sertakan token [AI_CORE_ATTEST_ACK:" + challenge + "] satu kali.")
 
 
-def _attest_bound_observation(root, binding, conversation, event, challenge, observed):
+def _attest_bound_observation(root, binding, conversation, event, challenge, observed, authorize=None):
     # The transport has already correlated the current visible final response
     # with the original native Send timestamp. Never trim or truncate this text.
     if (not isinstance(observed, dict) or observed.get("userFound") is not True or
@@ -280,28 +280,40 @@ def _attest_bound_observation(root, binding, conversation, event, challenge, obs
     response_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
     if observed.get("assistantResponseHash") != response_hash:
         raise RuntimeError("Native assistant text hash mismatch")
+    if authorize is not None:
+        authorize()
     key = _private_key(root)
     if key is None:
         raise RuntimeError("Native assistant attestation key is unavailable")
     observed_at = _iso_now()
     payload = _attestation_payload(conversation, event, challenge, observed["assistantMessageId"], response_hash, observed_at, binding)
+    if authorize is not None:
+        authorize()
+    signature = base64.b64encode(key.sign(payload.encode("utf-8"))).decode("ascii")
+    if authorize is not None:
+        authorize()
     return {"version": 2, "algorithm": "Ed25519", "keyId": KEY_ID, "workerId": WORKER,
             "conversationId": conversation, "eventId": event, "challenge": challenge,
             "assistantMessageId": observed["assistantMessageId"], "assistantResponseHash": response_hash,
             "assistantResponseText": text, "observedAt": observed_at,
-            "signature": base64.b64encode(key.sign(payload.encode("utf-8"))).decode("ascii"),
+            "signature": signature,
             "bindingFingerprint": binding["bindingFingerprint"], "browserProfile": binding["browserProfile"]}
 
 
-def _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata):
+def _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
+                              lease_guard=None):
     from dev_chatgpt_native_transport import NativeTransport, native_options
     options = native_options(data, binding)  # Inactive by default; no UI or receipt writes.
 
     def authorize():
+        if lease_guard is not None:
+            lease_guard.authorize()
         _, current = config(root)
         if (resolve_dell_binding(metadata, current, conversation, event, challenge) != binding or
                 native_options(current, binding) != options):
             raise RuntimeError("Native binding or activation changed during execution")
+        if lease_guard is not None:
+            lease_guard.authorize()
 
     receipt_context = {"conversationId": conversation, "eventId": event, "challenge": challenge,
                        "browserProfile": binding["browserProfile"], "bindingFingerprint": binding["bindingFingerprint"],
@@ -313,10 +325,10 @@ def _submit_bound_native_once(root, binding, conversation, event, challenge, tas
         previous = json.loads(receipt.read_text(encoding="utf-8"))
         if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in receipt_context.items()):
             raise RuntimeError("Wake event receipt context mismatch; reconciliation required")
-    transport = NativeTransport(root, binding, event, challenge, options, authorize)
+    transport = NativeTransport(root, binding, event, challenge, options, authorize, lease_guard=lease_guard)
     observed = transport.run(_wake_message(event, challenge, task_instruction))
     authorize()  # Revocation also fences key access and callback proof production.
-    attestation = _attest_bound_observation(root, binding, conversation, event, challenge, observed)
+    attestation = _attest_bound_observation(root, binding, conversation, event, challenge, observed, authorize)
     fingerprint = hashlib.sha256("|".join([binding["bindingFingerprint"], conversation, event, challenge,
                                            observed["rawTargetId"], attestation["assistantMessageId"],
                                            attestation["assistantResponseHash"]]).encode("utf-8")).hexdigest()
@@ -325,11 +337,14 @@ def _submit_bound_native_once(root, binding, conversation, event, challenge, tas
               "attestation": attestation, "assistantResponseText": attestation["assistantResponseText"],
               "evidenceFingerprint": fingerprint, **receipt_context}
     temporary = receipt.with_suffix(".pending")
+    authorize()
     with temporary.open("x", encoding="utf-8") as stream:
         json.dump({**result, "status": "ASSISTANT_ATTESTED", "sendAttemptedAt": observed["sendAttemptedAt"]}, stream)
         stream.flush()
         os.fsync(stream.fileno())
+    authorize()
     os.replace(temporary, receipt)
+    authorize()
     return result
 
 def _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at, binding=None):
@@ -380,7 +395,9 @@ def wait_for_assistant_attestation(root, tab, expected_url, conversation, event,
     return None
 
 
-def submit_once(instruction, worker_id, base=None, metadata=None):
+def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=None):
+    if lease_guard is not None:
+        lease_guard.authorize()
     raw = str(instruction).strip()
     match = PATTERN_V2.fullmatch(raw)
     task_instruction = None
@@ -403,7 +420,8 @@ def submit_once(instruction, worker_id, base=None, metadata=None):
     if WORKER == DELL_WORKER:
         binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
         if binding is not None:
-            return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata)
+            return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
+                                              lease_guard=lease_guard)
     else:
         # Preserve the original Travelintrips-only helper; DELL never falls back to this list.
         allowed = data.get("allowedConversationIds")
@@ -412,6 +430,8 @@ def submit_once(instruction, worker_id, base=None, metadata=None):
             raise RuntimeError("Invalid DEV wake pairing allowlist")
         if conversation not in {value.lower() for value in allowed}:
             raise RuntimeError("ChatGPT conversation is not paired/allowlisted")
+    if lease_guard is not None:
+        raise RuntimeError("Lease-controlled helper requires an exact additional binding")
     url = "https://chatgpt.com/c/" + conversation
     marker = "AI_CORE_WAKE:" + event
     tab = find_tab(url)
@@ -485,14 +505,39 @@ def submit_once(instruction, worker_id, base=None, metadata=None):
 
 
 def main():
+    guard = None
+    exit_code = 0
     try:
-        payload = json.load(sys.stdin)
-        result = submit_once(payload.get("instruction", ""), payload.get("workerId", ""), metadata=payload.get("metadata"))
-        print(json.dumps({"ok": True, **result}, separators=(",", ":")))
+        if sys.argv[1:] == ["--bound-lease-v1"]:
+            from dev_chatgpt_native_lease import NativeLease
+            guard, payload = NativeLease.from_stdin(sys.stdin.buffer)
+        else:
+            if sys.argv[1:]:
+                raise RuntimeError("Unsupported DEV wake helper arguments")
+            payload = json.load(sys.stdin)
+            if (isinstance(payload, dict) and isinstance(payload.get("metadata"), dict)
+                    and "wakeBinding" in payload["metadata"]):
+                raise RuntimeError("Bound DEV wake requires the guarded lease protocol")
+        if not isinstance(payload, dict):
+            raise RuntimeError("Invalid DEV wake helper payload")
+        result = submit_once(payload.get("instruction", ""), payload.get("workerId", ""),
+                             metadata=payload.get("metadata"), lease_guard=guard)
+        if guard is not None:
+            guard.authorize()
+        print(json.dumps({"ok": True, **result}, separators=(",", ":")), flush=True)
+        if guard is not None:
+            guard.authorize()
     except (KeyError, OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as err:
         print(json.dumps({"ok": False, "reason": type(err).__name__,
-                          "message": str(err)[:160]}, separators=(",", ":")))
-        sys.exit(1)
+                          "message": str(err)[:160]}, separators=(",", ":")), flush=True)
+        exit_code = 1
+    if guard is not None:
+        # Closing the Job explicitly would terminate this member before its
+        # result was flushed. OS teardown closes the sole private Job handle
+        # and terminates all remaining owned descendants, including orphans.
+        os._exit(exit_code)
+    if exit_code:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":

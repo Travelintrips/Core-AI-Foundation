@@ -9,7 +9,10 @@ import time
 import unittest
 from unittest.mock import patch
 
-from dev_chatgpt_native_transport import NativeTransport, native_options
+from dev_chatgpt_native_transport import (NativeTransport, native_options, native_submit_seconds,
+                                         TRANSPORT_SECONDS, LISTENER_STARTUP_SECONDS,
+                                         READER_AFTER_GUARD_SECONDS, POST_READINESS_SECONDS,
+                                         READINESS_SECONDS, CLI_SECONDS, NATIVE_SECONDS)
 
 
 CHAT = "22222222-2222-4222-8222-222222222222"
@@ -424,8 +427,8 @@ class NativeTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Insufficient"):
             self.transport.run(MESSAGE)
         self.assertEqual((self.transport.submissions, self.transport.opens), (0, 0))
-        self.transport.deadline = time.monotonic() + 225
-        self.transport.budget_after_requests = 130
+        self.transport.deadline = time.monotonic() + TRANSPORT_SECONDS
+        self.transport.budget_after_requests = READER_AFTER_GUARD_SECONDS - 5
         with self.assertRaisesRegex(RuntimeError, "Insufficient"):
             self.transport.run(MESSAGE)
         self.assertEqual((self.transport.submissions, self.transport.opens), (1, 0))
@@ -453,7 +456,90 @@ class NativeTransportTests(unittest.TestCase):
         argv = transport.calls[start][1]
         self.assertEqual(argv[argv.index("--target-id") + 1], READER)
         self.assertEqual(argv[argv.index("responsebody") + 1], REQUEST)
-        self.assertEqual(transport.calls[start + 1][1], 12)
+        self.assertEqual(transport.calls[start + 1][1], LISTENER_STARTUP_SECONDS)
+        self.assertLess(LISTENER_STARTUP_SECONDS, 30)
+        self.assertEqual(argv[argv.index("--timeout-ms") + 1], "180000")
+        self.assertEqual(argv[argv.index("--timeout") + 1], "210000")
+
+    def test_same_profile_identity_reads_are_serial_and_do_not_overlap(self):
+        import threading
+        transport = self.transport
+        original = transport._cli
+        active = 0
+        order = []
+        lock = threading.Lock()
+        def checked(action, *args, **kwargs):
+            nonlocal active
+            with lock:
+                self.assertEqual(active, 0, "same-profile subprocesses overlapped")
+                active += 1
+                order.append(action + ":start")
+            time.sleep(0.01)
+            result = original(action, *args, **kwargs)
+            with lock:
+                order.append(action + ":end")
+                active -= 1
+            return result
+        transport._runtime()
+        with patch.object(transport, "_cli", side_effect=checked):
+            context = transport._session()
+        self.assertEqual(context["rawTargetId"], RAW)
+        self.assertEqual(order, ["status:start", "status:end", "tabs:start", "tabs:end"])
+
+    def test_full_plan_reserve_uses_total_budget_but_calls_use_live_lease(self):
+        class Guard:
+            def total_remaining(self): return 1800
+            def remaining(self, cap): return min(cap, 80)
+        self.transport.lease_guard = Guard()
+        self.transport._reserve(1000)
+        self.assertEqual(self.transport._remaining(120), 80)
+        self.transport.phase_deadline = time.monotonic() + 4
+        self.assertLessEqual(self.transport._remaining(120), 4)
+        self.transport.phase_deadline = time.monotonic() - 1
+        with self.assertRaisesRegex(RuntimeError, "deadline"):
+            self.transport._remaining(120)
+
+    def test_worst_admitted_input_and_all_phase_caps_fit_fixed_transport(self):
+        self.assertEqual(native_submit_seconds("x" * 476), 60)
+        self.assertEqual(native_submit_seconds("x" * 4096), 240)
+        maximum = (6 * CLI_SECONDS + NATIVE_SECONDS + native_submit_seconds("x" * 4096)
+                   + READINESS_SECONDS + POST_READINESS_SECONDS)
+        self.assertLessEqual(maximum, TRANSPORT_SECONDS)
+        self.assertLess(TRANSPORT_SECONDS, 1980)
+
+    def test_revocation_during_listener_lead_prevents_navigation_and_keeps_marker(self):
+        transport = self.transport
+        transport.use_real_listener = True
+        class Listener:
+            def __init__(self, argv): pass
+            def close(self): pass
+            def finish(self, timeout): raise AssertionError("revoked listener must not finish proof")
+        def revoke(_seconds): transport.allowed = False
+        with patch("dev_chatgpt_native_transport._Capture", Listener), \
+                patch("dev_chatgpt_native_transport.time.sleep", side_effect=revoke):
+            with self.assertRaisesRegex(RuntimeError, "revoked"):
+                transport.run(MESSAGE)
+        self.assertEqual((transport.submissions, transport.opens, transport.navigations), (1, 1, 0))
+        self.assertEqual(json.loads(transport.reader_marker.read_text())["status"], "BLANK_VERIFIED")
+
+    def test_slow_native_resolution_cannot_redate_the_sole_blank_inventory(self):
+        transport = self.transport
+        original = transport._bridge
+        observation = []
+        def slow_resolve(action, **data):
+            result = original(action, **data)
+            if action == "reader-resolve":
+                transport.last_tabs_observed_at -= 31
+                observation.append(transport.last_tabs_observed_at)
+            return result
+        with patch.object(transport, "_bridge", side_effect=slow_resolve), \
+                patch.object(transport, "_listen_reader", side_effect=RuntimeError("stop before listener")):
+            with self.assertRaisesRegex(RuntimeError, "stop before listener"):
+                transport.run(MESSAGE)
+        record = json.loads(transport.reader_marker.read_text())
+        self.assertEqual(record["blankVerifiedAt"], observation[0])
+        self.assertGreaterEqual(record["blankNativeVerifiedAt"] - record["blankVerifiedAt"], 30)
+        self.assertEqual(transport.navigations, 0)
 
 
 if __name__ == "__main__":

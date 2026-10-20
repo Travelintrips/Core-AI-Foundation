@@ -55,7 +55,7 @@ jobs:
           node scripts/dev/test-dell-wake-executor.mjs
       - name: Validate helper routing, idempotency and signatures
         run: |
-          "$RUNNER_TEMP/dell-wake-tests/bin/python" -m py_compile scripts/windows/ai-core/dev-chatgpt-wake-once.py scripts/windows/ai-core/dev_chatgpt_native_reader.py scripts/windows/ai-core/dev_chatgpt_native_transport.py
+          "$RUNNER_TEMP/dell-wake-tests/bin/python" -m py_compile scripts/windows/ai-core/dev-chatgpt-wake-once.py scripts/windows/ai-core/dev_chatgpt_native_reader.py scripts/windows/ai-core/dev_chatgpt_native_transport.py scripts/windows/ai-core/dev_chatgpt_native_lease.py
           "$RUNNER_TEMP/dell-wake-tests/bin/python" -m unittest discover -s scripts/windows/ai-core -p 'test_dev_chatgpt_*.py' -v
   native-composer-components:
     runs-on: windows-latest
