@@ -1,4 +1,18 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+const DEFAULT_HANDSHAKE_RETRIES = 3;
+async function retryHandshake<T>(fn: () => Promise<T>, retries = DEFAULT_HANDSHAKE_RETRIES, delay = 500): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: any) {
+    const isTransient = err?.code === 'ECONNRESET' || err?.code === 'ETIMEDOUT' || err?.message?.includes('Transient');
+    if (retries > 0 && isTransient) {
+      await new Promise(res => setTimeout(res, delay));
+      return retryHandshake(fn, retries - 1, delay * 2);
+    }
+    throw err;
+  }
+}
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
