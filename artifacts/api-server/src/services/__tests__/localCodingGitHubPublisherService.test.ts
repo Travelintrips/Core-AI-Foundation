@@ -6,6 +6,8 @@ import {
   publishVerifiedPatchToGitHub,
   type GitHubApiClient,
 } from "../localCodingGitHubPublisherService.js";
+import { localCodingAutonomousRepairService } from "../localCodingAutonomousRepairService.js";
+
 
 const baseSha = "a".repeat(40);
 const movedSha = "b".repeat(40);
@@ -29,6 +31,15 @@ function input() {
 }
 
 describe("Local Coding GitHub publisher", () => {
+  describe("localCodingAutonomousRepairService", () => {
+    it("handles null input gracefully", async () => {
+      await expect(localCodingAutonomousRepairService(null)).rejects.toThrow();
+    });
+    it("handles undefined input gracefully", async () => {
+      await expect(localCodingAutonomousRepairService(undefined)).rejects.toThrow();
+    });
+  });
+
   it("normalizes GitHub repository coordinates and deterministic task branches", () => {
     expect(parseGitHubRepository("Travelintrips/Core-AI-Foundation")).toEqual({
       owner: "Travelintrips",
