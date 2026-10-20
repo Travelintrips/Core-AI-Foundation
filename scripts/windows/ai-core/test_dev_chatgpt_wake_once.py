@@ -44,12 +44,14 @@ wake = load_wake()
 
 
 class FakeBrowser:
-    """Observable browser state, independent of how many read checks the helper makes."""
-    def __init__(self, conversation=CHAT):
+    """Synthetic accessibility state; this is not a captured OpenClaw snapshot."""
+    def __init__(self, conversation=CHAT, composer_name="Ask ChatGPT"):
         self.url = "https://chatgpt.com/c/" + conversation
         self.handle = "t12"
         self.marker = False
         self.draft = ""
+        self.composer_name = composer_name
+        self.composer_override = None
         self.responding = False
         self.duplicate = False
         self.fail_submit = False
@@ -65,7 +67,8 @@ class FakeBrowser:
             tab = {"type": "page", "url": url, "targetId": "raw-target", "suggestedTargetId": self.handle}
             return json.dumps({"tabs": [tab, dict(tab)] if self.duplicate else [tab]})
         if command == "snapshot":
-            snapshot = '- textbox "Ask ChatGPT" [ref=e1] value=' + json.dumps(self.draft)
+            snapshot = (self.composer_override if self.composer_override is not None else
+                        '- textbox ' + json.dumps(self.composer_name) + ' [ref=e1] value=' + json.dumps(self.draft))
             if self.responding:
                 snapshot += '\n- button "Stop generating" [ref=e2]'
             if self.marker:
@@ -137,12 +140,47 @@ class BrowserWakeTests(WakeTestCase):
         browser.assert_not_called()
 
     def test_active_generation_and_draft_are_preserved(self):
-        for attr, value, expected in [("responding", True, "still responding"), ("draft", "my draft", "draft")]:
+        for name in ("Ask ChatGPT", "Tanya ChatGPT"):
+            for attr, value, expected in [("responding", True, "still responding"), ("draft", "my draft", "draft")]:
+                browser = FakeBrowser(composer_name=name)
+                setattr(browser, attr, value)
+                with self.subTest(name=name, attr=attr), self.assertRaisesRegex(RuntimeError, expected):
+                    self.run_browser(browser)
+                self.assertEqual(browser.submissions, [])
+
+    def test_composer_role_and_name_must_match_exactly(self):
+        for row in [
+            '- textbox "Search" [ref=e1] value=""',
+            '- textbox "Tanya ChatGPT tentang perjalanan" [ref=e1] value=""',
+            '- textbox "Ask ChatGPT elsewhere" [ref=e1] value=""',
+            '- button "Tanya ChatGPT" [ref=e1]',
+            '- paragraph: textbox "Tanya ChatGPT" [ref=e1] value=""',
+            '- paragraph: textbox "Ask ChatGPT" [ref=e1] value=""',
+        ]:
             browser = FakeBrowser()
-            setattr(browser, attr, value)
-            with self.subTest(attr=attr), self.assertRaisesRegex(RuntimeError, expected):
+            browser.composer_override = row
+            with self.subTest(row=row), self.assertRaisesRegex(RuntimeError, "composer"):
                 self.run_browser(browser)
             self.assertEqual(browser.submissions, [])
+
+    def test_multiple_recognized_composers_never_choose_the_first(self):
+        for second_name in ("Ask ChatGPT", "Tanya ChatGPT"):
+            browser = FakeBrowser()
+            browser.composer_override = ('- textbox "Ask ChatGPT" [ref=e1] value=""\n'
+                                         '- textbox ' + json.dumps(second_name) + ' [ref=e2] value="my draft"')
+            with self.subTest(name=second_name), self.assertRaisesRegex(RuntimeError, "composer"):
+                self.run_browser(browser)
+            self.assertEqual(browser.submissions, [])
+
+    def test_unverifiable_draft_never_becomes_an_empty_composer(self):
+        for name in ("Ask ChatGPT", "Tanya ChatGPT"):
+            for suffix in [' value=null', ' value=42', ' value="unfinished',
+                           ' value="\\q"', ':\n  - paragraph: existing draft']:
+                browser = FakeBrowser(composer_name=name)
+                browser.composer_override = '- textbox ' + json.dumps(name) + ' [ref=e1]' + suffix
+                with self.subTest(name=name, suffix=suffix), self.assertRaisesRegex(RuntimeError, "composer"):
+                    self.run_browser(browser)
+                self.assertEqual(browser.submissions, [])
 
     def test_lost_pairing_or_duplicate_tabs_block_submission(self):
         for attr in ("lose_pairing", "duplicate"):
@@ -260,6 +298,28 @@ class DellBindingTests(WakeTestCase):
         self.assertFalse(proof["verifiedAssistantReply"])
         self.assertEqual(len(browser.submissions), 1)
         self.assertIn("travelincars-dev", self.wake.CLI)
+
+    def test_indonesian_composer_uses_the_bound_gpt02_destination(self):
+        metadata = self.metadata()
+        browser = FakeBrowser(CHAT_TWO, composer_name="Tanya ChatGPT")
+        proof = self.run_browser(browser, self.command(metadata), self.wake, metadata)
+        self.assertEqual(proof["conversationId"], CHAT_TWO)
+        self.assertEqual(proof["browserProfile"], self.binding["browserProfile"])
+        self.assertEqual(proof["bindingFingerprint"], self.binding["bindingFingerprint"])
+        self.assertFalse(proof["verifiedAssistantReply"])
+        self.assertEqual(len(browser.submissions), 1)
+        self.assertEqual(browser.submissions[0][0:4], ("--target-id", "t12", "--submit", "e1"))
+
+    def test_indonesian_composer_preserves_drafts_and_exact_tab_pairing(self):
+        metadata = self.metadata()
+        for attr, value in [("draft", 'Pesan saya: "jangan hapus"\nbaris kedua'),
+                            ("lose_pairing", True), ("duplicate", True)]:
+            browser = FakeBrowser(CHAT_TWO, composer_name="Tanya ChatGPT")
+            setattr(browser, attr, value)
+            with self.subTest(attr=attr), self.assertRaises(RuntimeError):
+                self.run_browser(browser, self.command(metadata), self.wake, metadata)
+            self.assertEqual(browser.submissions, [])
+            self.assertEqual(getattr(browser, attr), value)
 
     def test_legacy_gpt01_requires_explicit_owner_tuple(self):
         legacy_wake = load_wake(DELL, "openclaw")

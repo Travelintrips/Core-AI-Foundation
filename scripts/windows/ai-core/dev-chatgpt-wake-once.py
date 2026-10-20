@@ -172,9 +172,17 @@ def inspect(tab, marker, expected_url):
     if find_tab(expected_url) != tab:
         raise RuntimeError("Exact authenticated browser pairing cannot be verified")
     snapshot = browser("snapshot", "--target-id", tab, timeout=55)
-    m = re.search(r'textbox "Ask ChatGPT"(?: \[[^\]]+\])* \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', snapshot)
-    if not m:
+    # Match an exact accessibility role/name, never arbitrary textboxes or a
+    # mention of a composer inside conversation text. Both locales share the
+    # same pairing and draft checks; ambiguous rows cannot select a first match.
+    composers = re.findall(r'^[ \t]*- textbox "(?:Ask ChatGPT|Tanya ChatGPT)"([^\r\n]*)$', snapshot, re.M)
+    if not composers:
         raise RuntimeError("Authenticated ChatGPT composer not available")
+    if len(composers) != 1:
+        raise RuntimeError("Authenticated ChatGPT composer is ambiguous")
+    m = re.fullmatch(r'(?: \[(?!ref=)[^\]\r\n]+\])* \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', composers[0])
+    if not m:
+        raise RuntimeError("ChatGPT composer state cannot be verified")
     raw_draft = m.group(2)
     if raw_draft:
         try:
