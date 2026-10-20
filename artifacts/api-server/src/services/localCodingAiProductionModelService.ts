@@ -2,6 +2,19 @@ import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js"
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
+function validateProductionRequestPayload(payload: { prompt: string; modelId: string; temperature: number; }): void {
+  if (typeof payload.prompt !== 'string' || payload.prompt.trim() === '') {
+    throw new Error('Invalid request: "prompt" must be a non-empty string.');
+  }
+  if (typeof payload.modelId !== 'string' || payload.modelId.trim() === '') {
+    throw new Error('Invalid request: "model identifier" must be a non-empty string.');
+  }
+  if (typeof payload.temperature !== 'number') {
+    throw new Error('Invalid request: "temperature" must be a number.');
+  }
+}
+
+
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 60_000;
