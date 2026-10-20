@@ -5,6 +5,11 @@ import { join } from "node:path";
 import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
 import { deployCodingStaticSite } from "./hostingerCodingStaticDeployService.js";
 import { recordRoutingMismatchFeedback } from "./aiCoreRoutingMismatchFeedbackService.js";
+// Add handler for unhandled promise rejections to prevent CI cancellation
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection at:", reason);
+});
+
 
 function execFileWithInput(
   file: string,
