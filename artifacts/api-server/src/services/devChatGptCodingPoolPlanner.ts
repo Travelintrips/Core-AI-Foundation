@@ -75,8 +75,11 @@ export function planDevChatGptCodingWorker(input: {
 
   const busyExecutors = new Set(occupiedExecutors);
   for (const w of workers) {
-    // An active job occupies the whole executor even if a second browser profile exists.
-    if (Number.isSafeInteger(w.activeJobs) && w.activeJobs > 0) busyExecutors.add(w.executorId);
+    // A sibling with unknown utilization cannot prove its shared serial executor is idle.
+    // Fail closed for that executor rather than choosing another profile under it.
+    if (!Number.isSafeInteger(w.activeJobs) || w.activeJobs !== 0) {
+      busyExecutors.add(w.executorId);
+    }
   }
 
   const ready = workers.filter(w => {
