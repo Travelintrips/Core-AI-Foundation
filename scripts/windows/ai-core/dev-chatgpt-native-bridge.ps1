@@ -1,5 +1,5 @@
 # Fixed native adapter entry point. JSON is data on stdin, never command text.
-param([ValidateSet('resolve', 'submit', 'refresh')][string]$Action)
+param([ValidateSet('resolve', 'submit', 'refresh', 'reader-resolve', 'reader-navigate')][string]$Action)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
@@ -15,6 +15,13 @@ try {
         if ($null -ne $property) { $target[$field] = $property.Value }
     }
     Import-Module (Join-Path $PSScriptRoot 'dev-chatgpt-native-composer.psm1') -Force -ErrorAction Stop
+    if ($Action -cin @('reader-resolve', 'reader-navigate')) {
+        $reader = @{}
+        foreach ($field in @('RawTargetId', 'WindowHandle')) {
+            $property = $request.reader.PSObject.Properties[$field]
+            if ($null -ne $property) { $reader[$field] = $property.Value }
+        }
+    }
     switch ($Action) {
         'resolve' {
             $resolved = Resolve-AiCoreNativeWindow -Target $target
@@ -30,6 +37,16 @@ try {
         'refresh' {
             if ($request.messageHash -isnot [string] -or $request.receiptDirectory -isnot [string]) { throw 'Native request is invalid' }
             $result = Invoke-AiCoreNativeRefreshOnce -Target $target -MessageHash $request.messageHash `
+                -ReceiptDirectory $request.receiptDirectory
+        }
+        'reader-resolve' {
+            $resolved = Resolve-AiCoreNativeReaderWindow -Target $target -Reader $reader
+            $result = @{ windowHandle = $resolved.WindowHandle; browserProcessId = $target.BrowserProcessId;
+                rawTargetId = $resolved.RawTargetId; address = 'about:blank' }
+        }
+        'reader-navigate' {
+            if ($request.messageHash -isnot [string] -or $request.receiptDirectory -isnot [string]) { throw 'Native request is invalid' }
+            $result = Invoke-AiCoreNativeReaderNavigationOnce -Target $target -Reader $reader -MessageHash $request.messageHash `
                 -ReceiptDirectory $request.receiptDirectory
         }
         default { throw 'Native action is invalid' }
