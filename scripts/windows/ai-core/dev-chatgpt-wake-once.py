@@ -167,8 +167,8 @@ def find_tab(url):
 
 def inspect(tab, marker, expected_url):
     # Stable OpenClaw handles are resolved from the exact allowlisted URL.
-    # Use the accessibility snapshot for composer state and delivery state;
-    # this avoids a second page.evaluate during the browser preflight.
+    # A snapshot may omit the composer value. Omission and a placeholder are
+    # unknown state, never proof that the draft is empty.
     if find_tab(expected_url) != tab:
         raise RuntimeError("Exact authenticated browser pairing cannot be verified")
     snapshot = browser("snapshot", "--target-id", tab, timeout=55)
@@ -180,21 +180,21 @@ def inspect(tab, marker, expected_url):
         raise RuntimeError("Authenticated ChatGPT composer not available")
     if len(composers) != 1:
         raise RuntimeError("Authenticated ChatGPT composer is ambiguous")
-    m = re.fullmatch(r'(?: \[(?!ref=)[^\]\r\n]+\])* \[ref=(e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?', composers[0])
+    m = re.fullmatch(r'(?: \[(?!ref=)[^\]\r\n]+\])* \[ref=((?:f\d+)?e\d+)\](?: value=("(?:[^"\\]|\\.)*"))?:?', composers[0])
     if not m:
         raise RuntimeError("ChatGPT composer state cannot be verified")
     raw_draft = m.group(2)
-    if raw_draft:
+    if raw_draft is not None:
         try:
             draft = json.loads(raw_draft)
         except ValueError:
             raise RuntimeError("ChatGPT composer draft cannot be verified") from None
     else:
-        draft = ""
+        raise RuntimeError("ChatGPT composer draft value is unavailable")
     if not isinstance(draft, str):
         raise RuntimeError("ChatGPT composer state invalid")
     responding = bool(re.search(r'button "Stop(?: generating)?"', snapshot, re.I))
-    return {"ref": m.group(1), "empty": draft.strip() == "",
+    return {"ref": m.group(1), "empty": draft == "",
             "responding": responding, "markerVisible": marker in snapshot}
 
 def _iso_now():

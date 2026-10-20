@@ -148,6 +148,45 @@ class BrowserWakeTests(WakeTestCase):
                     self.run_browser(browser)
                 self.assertEqual(browser.submissions, [])
 
+    def test_whitespace_draft_is_preserved_exactly(self):
+        for name in ("Ask ChatGPT", "Tanya ChatGPT"):
+            for draft in (" ", "\t", "\n", "\r\n", "\u00a0"):
+                browser = FakeBrowser(composer_name=name)
+                browser.draft = draft
+                with self.subTest(name=name, draft=repr(draft)), self.assertRaisesRegex(RuntimeError, "draft"):
+                    self.run_browser(browser)
+                self.assertEqual(browser.draft, draft)
+                self.assertEqual(browser.submissions, [])
+
+    def test_role_and_frame_refs_require_an_explicit_empty_value(self):
+        # Ref shapes were observed in OpenClaw. The explicit value below is
+        # synthetic; the observed native frame snapshot did not expose it.
+        for ref in ("e1", "e430", "f239e430", "f244e12"):
+            browser = FakeBrowser()
+            browser.composer_override = '- textbox "Ask ChatGPT" [active] [ref=' + ref + '] value=""'
+            with self.subTest(ref=ref):
+                self.run_browser(browser)
+            self.assertEqual(len(browser.submissions), 1)
+            self.assertEqual(browser.submissions[0][3], ref)
+            # Each subcase represents a separate one-shot event.
+            (self.root / "chatgpt-wake-dev-receipts" / (EVENT + ".json")).unlink()
+
+    def test_observed_native_placeholder_does_not_prove_an_empty_draft(self):
+        browser = FakeBrowser()
+        browser.composer_override = ('- textbox "Ask ChatGPT" [active] [ref=f239e430]:\n'
+                                     '  - paragraph: Ask ChatGPT')
+        with self.assertRaisesRegex(RuntimeError, "composer"):
+            self.run_browser(browser)
+        self.assertEqual(browser.submissions, [])
+
+    def test_malformed_or_duplicate_reference_never_selects_a_composer(self):
+        for ref in ("f239", "f239e", "f-1e2", "f239e430e2", "e1] [ref=e2"):
+            browser = FakeBrowser()
+            browser.composer_override = '- textbox "Ask ChatGPT" [ref=' + ref + '] value=""'
+            with self.subTest(ref=ref), self.assertRaisesRegex(RuntimeError, "composer"):
+                self.run_browser(browser)
+            self.assertEqual(browser.submissions, [])
+
     def test_composer_role_and_name_must_match_exactly(self):
         for row in [
             '- textbox "Search" [ref=e1] value=""',
@@ -174,7 +213,7 @@ class BrowserWakeTests(WakeTestCase):
 
     def test_unverifiable_draft_never_becomes_an_empty_composer(self):
         for name in ("Ask ChatGPT", "Tanya ChatGPT"):
-            for suffix in [' value=null', ' value=42', ' value="unfinished',
+            for suffix in ['', ':', ' value=null', ' value=42', ' value="unfinished',
                            ' value="\\q"', ':\n  - paragraph: existing draft']:
                 browser = FakeBrowser(composer_name=name)
                 browser.composer_override = '- textbox ' + json.dumps(name) + ' [ref=e1]' + suffix
