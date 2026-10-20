@@ -29,6 +29,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
+import { assessCodingDashboardWorker } from "./aiTaskWorkerPool";
 
 type ManagedInternalUser = {
   id: number;
@@ -401,6 +402,14 @@ export default function AicodingDashboard() {
   }, [canManageUsers, loadUsers]);
 
   const codingTasks = useMemo(() => data?.coding.tasks.slice(0, 9) ?? [], [data]);
+  const codingWorkerStates = useMemo(
+    () => data?.workers.map((worker) => ({ worker, ...assessCodingDashboardWorker(worker) })) ?? [],
+    [data],
+  );
+  const readyWorkers = codingWorkerStates.filter(({ state }) => state === "available").length;
+  const busyWorkers = codingWorkerStates.filter(({ state }) => state === "busy").length;
+  const unverifiedWorkers = codingWorkerStates.filter(({ state }) => state === "unverified").length;
+
   const incidents = useMemo(() => data?.incidents.filter((item) => item.status !== "RESOLVED").slice(0, 8) ?? [], [data]);
   const healthy = (data?.kpis.overallHealth ?? 0) >= 80;
 
@@ -655,21 +664,39 @@ export default function AicodingDashboard() {
             </div>
 
             <div className="grid gap-4 2xl:grid-cols-12">
-              <Panel id="workers" title="Health Worker & Model" subtitle="Hanya lease dan heartbeat sehat yang dihitung sebagai worker aktif." icon={Boxes} className="2xl:col-span-8">
+              <Panel id="workers" title="AI Task · Dynamic Worker Pool" subtitle="Status kesiapan berdasarkan heartbeat, lease, kapasitas, dan pekerjaan aktif — bukan sekadar online." icon={Boxes} className="2xl:col-span-8">
+                <div className="border-b border-slate-800 px-4 py-3">
+                  <div className="flex flex-wrap gap-2 text-[10px]">
+                    <span className="rounded-md border border-emerald-800/50 bg-emerald-950/40 px-2 py-1 text-emerald-300">{readyWorkers} Ready</span>
+                    <span className="rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-amber-300">{busyWorkers} Busy</span>
+                    <span className="rounded-md border border-orange-800/50 bg-orange-950/30 px-2 py-1 text-orange-300">{unverifiedWorkers} Unverified</span>
+                    <span className="rounded-md border border-slate-700 px-2 py-1 text-slate-400">{data?.kpis.waiting ?? 0} Waiting Tasks</span>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-slate-500">
+                    Coding GPT-02 yang sibuk dapat dialihkan ke GPT-03 hanya setelah AI Core membuktikan sesi akun,
+                    kemampuan coding, worker lease, dan lock proyek. Dashboard ini tidak mengeksekusi dispatch.
+                  </p>
+                </div>
                 <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {data?.workers.slice(0, 8).map((worker) => {
+                  {codingWorkerStates.slice(0, 8).map(({ worker, state, reason }) => {
                     const utilization = worker.capacity > 0 ? Math.round((worker.runningJobs / worker.capacity) * 100) : 0;
+                    const badgeTone =
+                      state === "available" ? "border-emerald-700/50 bg-emerald-950/40 text-emerald-300" :
+                      state === "busy" ? "border-amber-700/50 bg-amber-950/30 text-amber-300" :
+                      state === "unavailable" ? "border-slate-700 text-slate-400" :
+                      "border-orange-700/50 bg-orange-950/30 text-orange-300";
                     return (
                       <div key={worker.id} className="rounded-xl border border-slate-800 bg-slate-900/35 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-xs font-semibold text-slate-300">{worker.name}</p>
-                          <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${statusTone(worker.healthy ? "ONLINE" : "OFFLINE")}`}>{worker.healthy ? "HEALTHY" : "UNAVAILABLE"}</span>
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[9px] uppercase ${badgeTone}`}>{state}</span>
                         </div>
                         <p className="mt-1 truncate text-[10px] text-slate-600">{worker.provider ?? worker.type}{worker.model ? ` · ${worker.model}` : ""}</p>
                         <div className="mt-4">
-                          <div className="flex justify-between text-[10px] text-slate-500"><span>Queue / Capacity</span><span>{worker.runningJobs}/{worker.capacity}</span></div>
+                          <div className="flex justify-between text-[10px] text-slate-500"><span>Running / Capacity</span><span>{worker.runningJobs}/{worker.capacity}</span></div>
                           <div className="mt-1"><ProgressBar value={utilization} tone={utilization >= 90 ? "rose" : utilization >= 70 ? "amber" : "sky"} /></div>
                         </div>
+                        <p className="mt-2 text-[10px] leading-4 text-slate-500">{reason}</p>
                         <div className="mt-3 flex items-center justify-between text-[10px] text-slate-600">
                           <span>Latency {worker.averageLatencyMs == null ? "—" : `${Math.round(worker.averageLatencyMs)}ms`}</span>
                           <span>{fmtTime(worker.lastHeartbeat)}</span>
@@ -677,6 +704,9 @@ export default function AicodingDashboard() {
                       </div>
                     );
                   })}
+                  {codingWorkerStates.length === 0 && (
+                    <p className="text-xs text-slate-500">Belum ada worker terverifikasi dari AI Core.</p>
+                  )}
                 </div>
               </Panel>
 
