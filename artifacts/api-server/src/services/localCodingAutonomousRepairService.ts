@@ -39,6 +39,26 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+// Handle workflow_run cancellation with a single retry and exponential backoff
+async function handleWorkflowRunCancellation(event) {
+  if (event.action !== 'workflow_run' || event.workflow_run.status !== 'cancelled') {
+    return;
+  }
+  const retryCount = event.workflow_run.conclusion_details?.retryCount || 0;
+  if (retryCount >= 1) {
+    logger.info(`No retry for workflow ${event.workflow_run.id} after ${retryCount} attempts.`);
+    return;
+  }
+  const delayMs = Math.pow(2, retryCount) * 1000;
+  logger.info(`Scheduling retry #${retryCount + 1} for workflow ${event.workflow_run.id} after ${delayMs}ms`);
+  await new Promise(resolve => setTimeout(resolve, delayMs));
+  // Enqueue retry for the same workflow
+  await enqueueWorkstreamAiExecution(event.workflow_run);
+}
+
+// Register the cancellation handler
+workflowEvents.on('workflow_run', handleWorkflowRunCancellation);
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
