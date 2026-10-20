@@ -2,6 +2,11 @@ import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
+// Pairing Approval Isolation:
+// * Flag: ENABLE_PAIRING_APPROVAL_ISOLATION
+// * When enabled, each chat pairing session is restricted to approved user-model pairings.
+// Rationale: Enforces security boundaries and audit compliance.
+
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
