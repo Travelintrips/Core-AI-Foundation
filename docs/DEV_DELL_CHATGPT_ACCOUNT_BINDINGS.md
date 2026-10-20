@@ -2,7 +2,7 @@
 
 The dedicated DELL executor can serve separate ChatGPT accounts sequentially with the existing worker ID and Ed25519 key. Each new account requires one exact binding of its AI Core OAuth owner channel, ChatGPT conversation, worker and OpenClaw browser profile. This change supplies the worker protocol and component tests. It does not install code, authorize another account, change local configuration or establish an E2E PASS.
 
-The server must supply the matching `metadata.wakeBinding` protocol before a new account can be dispatched. GPT01 retains its v1 server metadata and signature format. The upgraded worker requires an explicit local GPT01 tuple, so prepare that tuple before upgrading the running executor.
+The server must supply the matching `metadata.wakeBinding` protocol before a new account can be dispatched. GPT01 retains its v1 server metadata and signature format. The upgraded worker requires an explicit local GPT01 tuple for every already-authorized owner, so prepare those tuples before upgrading the running executor.
 
 ## Local registry
 
@@ -37,7 +37,9 @@ The existing file remains `%LOCALAPPDATA%\AI-Core\dell-chatgpt-wake-allowlist.js
 
 The global `enabled` value and the selected entry's `enabled` value must both be `true`. Each entry must contain a Boolean `enabled` field. A legacy conversation list by itself never authorizes the upgraded DELL worker. If `legacyBinding` is present, `allowedConversationIds` must contain exactly its conversation; the legacy alias and profile must remain `GPT01` and `openclaw`.
 
-The registry validates all entries before selecting one, including disabled entries. Duplicate aliases, owner channels, conversations or browser profiles invalidate the registry. Profile conflicts are checked without case to avoid collisions on Windows; command selection still requires the exact configured case. The worker ID can be shared because one existing executor processes claims sequentially. Do not start a second consumer using that worker ID.
+When the existing GPT01 destination has several authorized owner channels, replace the singular `legacyBinding` field with a nonempty `legacyBindings` array of those exact tuples. Both fields together are rejected. Each tuple keeps alias `GPT01`, worker `openclaw-dell-chatgpt-wake-dev`, profile `openclaw` and the same single conversation in `allowedConversationIds`; only its exact owner channel and Boolean enabled state differ. Preserve every verified existing owner during migration. This does not authorize extra conversations or combinations of owners and targets. Revoking one tuple does not revoke the others.
+
+The registry validates all entries before selecting one, including disabled entries. Owner channels must be unique everywhere. Repeated aliases, conversations and profiles are permitted only within the validated legacy group above; an additional account cannot collide with that destination or any legacy owner. Profile conflicts are checked without case to avoid collisions on Windows; command selection still requires the exact configured case. The worker ID can be shared because one existing executor processes claims sequentially. Do not start a second consumer using that worker ID.
 
 Additional aliases match `GPT[0-9]{2,4}` in uppercase and cannot be `GPT01`. Owner channels contain the `ai-engine-oauth:` prefix followed by 64 lowercase hex digits; conversation IDs are lowercase UUIDs. Profile names match `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`. A native Chrome profile label is not sufficient evidence of the OpenClaw profile that the worker controls.
 
@@ -45,7 +47,7 @@ An optional `bindingFingerprint` in a local entry must equal the computed finger
 
 ## Coordinated activation sequence
 
-1. Record the currently verified GPT01 owner, conversation and `openclaw` profile. Prepare `legacyBinding` using those exact values and keep the existing legacy conversation list unchanged. An authorized runtime configuration change is required before replacing the worker; deploying code alone will otherwise reject legacy work.
+1. Record every currently verified GPT01 owner, its single conversation and `openclaw` profile. Prepare `legacyBinding` for one owner or `legacyBindings` for several owners, using every exact existing owner and keeping the legacy conversation list unchanged. An authorized runtime configuration change is required before replacing the worker; deploying code alone will otherwise reject legacy work. A dormant new-account entry must not remove an existing owner.
 2. Verify the second account through its supported login and AI Core OAuth connection. Obtain its actual owner channel, exact destination conversation and separately authenticated OpenClaw profile. Keep its new registry entry disabled until these agree with the server's authorized mapping. An email address or an account visible in an unrelated Chrome profile does not establish this mapping.
 3. Review and apply the corresponding server and worker changes through the normal DEV workflow. Preserve the existing worker identity, scoped credential and attestation key. Any live authorization or security configuration change follows the applicable approval gate in `AGENTS.md` and the communication SOP.
 4. Enable the exact second-account tuple only after the mapping and browser state are verified. Confirm there is exactly one matching conversation tab and no draft or active response before a live wake test.
@@ -139,7 +141,7 @@ Live OpenClaw inspection of the managed `travelincars-dev` profile reported this
   - paragraph: Ask ChatGPT
 ```
 
-This is an observed fragment, separate from the synthetic locale fixtures. The current parser rejects the frame-scoped reference and paragraph shape before typing. A paragraph matching the placeholder does not prove that the draft is empty. Widening the reference pattern alone, treating a missing value as empty, or clearing a draft is not an activation fix.
+This is an observed fragment, separate from the synthetic locale fixtures. The parser recognizes `eN` and frame-scoped `fNeN` references but rejects this fragment before typing because it does not provide a draft value. A paragraph matching the placeholder does not prove that the draft is empty. Missing values remain unknown, and a whitespace-only value remains a draft. Widening the reference pattern alone or clearing a draft is not an activation fix.
 
 Pinned OpenClaw v2026.9.9 supports `snapshot --format aria` with browser-level `--json`, but its [ARIA formatter](https://github.com/openclaw/openclaw/blob/bcfc88812a35243893585dbeca87ca41b48272ca/extensions/browser/src/browser/cdp.ts) omits the value field both for an empty string and for an unavailable value. Its native `axN` references identify nodes; they do not resolve that ambiguity. A supported read must establish the exact draft value and target identity before automated submission can be enabled.
 

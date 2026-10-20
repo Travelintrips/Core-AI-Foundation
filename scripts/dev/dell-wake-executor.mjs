@@ -43,8 +43,14 @@ export function localBindings(config) {
     throw new Error("DEV wake pairing disabled or malformed");
   }
   const entries = [];
-  if (config.legacyBinding !== undefined) {
-    const legacy = config.legacyBinding;
+  const singularLegacy = Object.hasOwn(config, "legacyBinding");
+  const pluralLegacy = Object.hasOwn(config, "legacyBindings");
+  if (singularLegacy && pluralLegacy) throw new Error("Ambiguous GPT01 legacy registry");
+  const legacyEntries = singularLegacy ? [config.legacyBinding] : (pluralLegacy ? config.legacyBindings : []);
+  if (!Array.isArray(legacyEntries) || (pluralLegacy && legacyEntries.length === 0)) {
+    throw new Error("Explicit GPT01 legacy pairing required");
+  }
+  for (const legacy of legacyEntries) {
     if (!validBinding(legacy) || typeof legacy.enabled !== "boolean" ||
         legacy.accountAlias !== "GPT01" || legacy.browserProfile !== "openclaw" ||
         !Array.isArray(config.allowedConversationIds) ||
@@ -60,8 +66,13 @@ export function localBindings(config) {
     }
     entries.push({ ...value, legacy: false });
   }
+  // Several already-authorized owners may share the single legacy GPT01
+  // destination. Only that group can repeat alias/target/profile; owners never
+  // repeat, and an additional binding cannot collide with any legacy owner.
+  const destinations = [...entries.filter(entry => entry.legacy).slice(0, 1), ...entries.filter(entry => !entry.legacy)];
   for (const field of ["accountAlias", "ownerChannel", "targetConversationId", "browserProfile"]) {
-    const values = entries.map(entry => field === "browserProfile" ? entry[field].toLowerCase() : entry[field]);
+    const values = (field === "ownerChannel" ? entries : destinations)
+      .map(entry => field === "browserProfile" ? entry[field].toLowerCase() : entry[field]);
     if (new Set(values).size !== values.length) throw new Error("Conflicting DEV wake bindings");
   }
   return entries;

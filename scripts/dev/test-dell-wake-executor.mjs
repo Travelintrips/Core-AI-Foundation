@@ -82,6 +82,46 @@ test("GPT01 keeps its explicit legacy tuple and v1 attestation", () => {
   assert.equal(result.wakeBinding, undefined);
 });
 
+test("two explicit legacy owners retain one GPT01 destination while GPT02 is disabled", () => {
+  const secondLegacy = { ...legacy, ownerChannel: "ai-engine-oauth:" + "e".repeat(64) };
+  const config = pairings();
+  delete config.legacyBinding;
+  config.legacyBindings = [structuredClone(legacy), secondLegacy];
+  config.bindings[0].enabled = false;
+  for (const target of [legacy, secondLegacy]) {
+    const job = work(target);
+    const selected = resolveWorkBinding(job, config);
+    assert.equal(selected.metadata.conversationId, target.ownerChannel);
+    assert.equal(selected.browserProfile, "openclaw");
+    assert.equal(selected.conversationId, conversation);
+    assert.equal(selected.attestationVersion, 1);
+    assert.equal(selected.wakeBinding, undefined);
+  }
+  assert.notEqual(work(legacy).metadata.assistantAttestationChallenge,
+    work(secondLegacy).metadata.assistantAttestationChallenge);
+  assert.throws(() => resolveWorkBinding(work(), config), /not enabled/);
+  assert.throws(() => resolveWorkBinding(work({ ...legacy, ownerChannel: ownerTwo }), config), /not enabled/);
+  config.legacyBindings[1].enabled = false;
+  assert.throws(() => resolveWorkBinding(work(secondLegacy), config), /not enabled/);
+  assert.equal(resolveWorkBinding(work(legacy), config).browserProfile, "openclaw");
+});
+
+test("plural legacy registry rejects ambiguity, duplicate owners and multiple destinations", () => {
+  const second = { ...legacy, ownerChannel: "ai-engine-oauth:" + "e".repeat(64) };
+  for (const entries of [[], null, {}, [legacy, legacy], [legacy, { ...second, targetConversationId: conversationTwo }],
+    [legacy, { ...second, browserProfile: "another-profile" }], [legacy, { ...second, accountAlias: "GPT02" }]]) {
+    const config = pairings();
+    delete config.legacyBinding;
+    config.legacyBindings = entries;
+    assert.throws(() => localBindings(config));
+  }
+  assert.throws(() => localBindings({ ...pairings(), legacyBindings: [second] }), /Ambiguous/);
+  const collision = pairings();
+  delete collision.legacyBinding;
+  collision.legacyBindings = [legacy, { ...second, ownerChannel: ownerTwo }];
+  assert.throws(() => localBindings(collision), /Conflicting/);
+});
+
 test("legacy allowlist alone cannot authorize any DELL account", () => {
   for (const job of [work(legacy), work()]) {
     assert.throws(() => resolveWorkBinding(job, { enabled: true,

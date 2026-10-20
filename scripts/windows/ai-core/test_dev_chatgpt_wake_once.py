@@ -368,6 +368,44 @@ class DellBindingTests(WakeTestCase):
         self.assertNotIn("bindingFingerprint", proof)
         self.assert_denied_before_browser(metadata, {"enabled": True, "allowedConversationIds": [CHAT]}, legacy_wake)
 
+    def test_two_legacy_owners_keep_one_destination_with_gpt02_dormant(self):
+        legacy_wake = load_wake(DELL, "openclaw")
+        second = {**self.legacy, "ownerChannel": "ai-engine-oauth:" + "e" * 64}
+        config = copy.deepcopy(self.config)
+        del config["legacyBinding"]
+        config["legacyBindings"] = [dict(self.legacy), second]
+        config["bindings"][0]["enabled"] = False
+        challenges = []
+        for target in (self.legacy, second):
+            metadata = self.metadata(target)
+            challenge = metadata["assistantAttestationChallenge"]
+            challenges.append(challenge)
+            self.assertIsNone(legacy_wake.resolve_dell_binding(metadata, config, CHAT, EVENT, challenge))
+        self.assertNotEqual(*challenges)
+        unknown = self.metadata({**self.legacy, "ownerChannel": OWNER_TWO})
+        self.assert_denied_before_browser(unknown, config, legacy_wake)
+        self.assert_denied_before_browser(self.metadata(), config)
+        config["legacyBindings"][1]["enabled"] = False
+        self.assert_denied_before_browser(self.metadata(second), config, legacy_wake)
+        metadata = self.metadata(self.legacy)
+        self.assertIsNone(legacy_wake.resolve_dell_binding(
+            metadata, config, CHAT, EVENT, metadata["assistantAttestationChallenge"]))
+
+    def test_plural_legacy_registry_rejects_ambiguity_and_cross_account_collisions(self):
+        second = {**self.legacy, "ownerChannel": "ai-engine-oauth:" + "e" * 64}
+        for entries in ([], None, {}, [self.legacy, self.legacy],
+                        [self.legacy, {**second, "targetConversationId": CHAT_TWO}],
+                        [self.legacy, {**second, "browserProfile": "another-profile"}],
+                        [self.legacy, {**second, "accountAlias": "GPT02"}],
+                        [self.legacy, {**second, "ownerChannel": OWNER_TWO}]):
+            config = copy.deepcopy(self.config)
+            del config["legacyBinding"]
+            config["legacyBindings"] = entries
+            with self.subTest(entries=entries), self.assertRaises(RuntimeError):
+                self.wake.local_bindings(config)
+        with self.assertRaisesRegex(RuntimeError, "Ambiguous"):
+            self.wake.local_bindings({**self.config, "legacyBindings": [second]})
+
     def test_legacy_list_never_authorizes_second_account(self):
         metadata = self.metadata()
         del metadata["wakeBinding"]

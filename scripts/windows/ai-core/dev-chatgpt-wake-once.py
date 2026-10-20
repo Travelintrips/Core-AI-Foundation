@@ -56,8 +56,13 @@ def local_bindings(data):
     if not isinstance(data, dict) or data.get("enabled") is not True or not isinstance(data.get("bindings", []), list):
         raise RuntimeError("DEV wake pairing disabled or malformed")
     entries = []
-    if "legacyBinding" in data:
-        legacy = data["legacyBinding"]
+    singular_legacy, plural_legacy = "legacyBinding" in data, "legacyBindings" in data
+    if singular_legacy and plural_legacy:
+        raise RuntimeError("Ambiguous GPT01 legacy registry")
+    legacy_entries = [data["legacyBinding"]] if singular_legacy else data.get("legacyBindings", [])
+    if not isinstance(legacy_entries, list) or (plural_legacy and not legacy_entries):
+        raise RuntimeError("Explicit GPT01 legacy pairing required")
+    for legacy in legacy_entries:
         if (not _valid_binding(legacy) or type(legacy.get("enabled")) is not bool or
                 legacy["accountAlias"] != "GPT01" or legacy["browserProfile"] != "openclaw" or
                 data.get("allowedConversationIds") != [legacy["targetConversationId"]]):
@@ -67,8 +72,12 @@ def local_bindings(data):
         if not _valid_binding(value) or type(value.get("enabled")) is not bool or value["accountAlias"] == "GPT01":
             raise RuntimeError("Invalid additional DEV wake binding")
         entries.append({**value, "legacy": False})
+    # Multiple explicit owners can share only the single legacy destination.
+    # Additional accounts remain distinct from every legacy owner and profile.
+    destinations = [entry for entry in entries if entry["legacy"]][:1] + [entry for entry in entries if not entry["legacy"]]
     for field in ("accountAlias", "ownerChannel", "targetConversationId", "browserProfile"):
-        values = [entry[field].lower() if field == "browserProfile" else entry[field] for entry in entries]
+        checked = entries if field == "ownerChannel" else destinations
+        values = [entry[field].lower() if field == "browserProfile" else entry[field] for entry in checked]
         if len(set(values)) != len(values):
             raise RuntimeError("Conflicting DEV wake bindings")
     return entries
