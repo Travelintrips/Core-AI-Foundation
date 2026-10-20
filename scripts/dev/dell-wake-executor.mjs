@@ -206,7 +206,10 @@ export function execute(work, runtime) {
     input: JSON.stringify({ instruction, workerId, metadata }),
     encoding: "utf8",
     windowsHide: true,
-    timeout: 180_000,
+    // Native bound observation includes one passive capture; preserve GPT01's
+    // existing cap. The nominal 60s margin within a 300s claim is reduced by
+    // claim-response and preparation overhead; callback acceptance is separate.
+    timeout: wakeBinding ? 240_000 : 180_000,
     maxBuffer: 2 * 1024 * 1024,
     env,
   });
@@ -231,11 +234,15 @@ export function execute(work, runtime) {
     (wakeBinding ? (
       receipt?.bindingFingerprint === wakeBinding.bindingFingerprint &&
       receipt?.attestation?.bindingFingerprint === wakeBinding.bindingFingerprint &&
-      receipt?.attestation?.browserProfile === browserProfile
+      receipt?.attestation?.browserProfile === browserProfile &&
+      typeof receipt?.assistantResponseText === "string" && receipt.assistantResponseText.length > 0 &&
+      receipt.assistantResponseText.length <= 4000 &&
+      receipt.assistantResponseText === receipt?.attestation?.assistantResponseText &&
+      createHash("sha256").update(receipt.assistantResponseText, "utf8").digest("hex") === receipt.attestation.assistantResponseHash
     ) : (receipt?.bindingFingerprint === undefined && receipt?.attestation?.bindingFingerprint === undefined &&
       receipt?.attestation?.browserProfile === undefined));
   const assistantResponseText = verified && typeof receipt?.assistantResponseText === "string"
-    ? receipt.assistantResponseText.trim().slice(0, 4000)
+    ? (wakeBinding ? receipt.assistantResponseText : receipt.assistantResponseText.trim().slice(0, 4000))
     : "";
   return {
     ok: verified,

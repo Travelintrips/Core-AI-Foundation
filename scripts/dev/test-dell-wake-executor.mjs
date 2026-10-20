@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { bindingFingerprint, assistantChallenge, localBindings, resolveWorkBinding, execute, workerId } from "./dell-wake-executor.mjs";
 
 const owner = "ai-engine-oauth:" + "a".repeat(64);
@@ -54,7 +55,8 @@ function receiptFor(job) {
       conversationId: metadata.targetConversationId, eventId,
       challenge: metadata.assistantAttestationChallenge,
       assistantMessageId: "44444444-4444-4444-8444-444444444444",
-      assistantResponseHash: "f".repeat(64), observedAt: "2026-10-20T00:00:00.000Z",
+      assistantResponseHash: createHash("sha256").update("Unit-test-only assistant receipt").digest("hex"),
+      assistantResponseText: "Unit-test-only assistant receipt", observedAt: "2026-10-20T00:00:00.000Z",
       signature: Buffer.alloc(64).toString("base64"),
       ...(bound ? { bindingFingerprint: bound.bindingFingerprint, browserProfile: profile } : {}),
     },
@@ -201,6 +203,7 @@ test("helper receives the exact selected profile and full metadata", () => {
     }));
     assert.equal(result.ok, true);
     assert.equal(observed.options.env.AI_CORE_DEV_WAKE_BROWSER_PROFILE, target.browserProfile);
+    assert.equal(observed.options.timeout, target.accountAlias === "GPT01" ? 180_000 : 240_000);
     assert.deepEqual(JSON.parse(observed.options.input).metadata, job.metadata);
     assert.equal(result.details.browserProfile, target.browserProfile);
   }
@@ -241,5 +244,33 @@ test("challenge tampering and incomplete continuity context are rejected before 
   changed.metadata.assistantAttestationChallenge = "c".repeat(64);
   changed.instruction = changed.instruction.replace(/challenge=[a-f0-9]{64}/, "challenge=" + "c".repeat(64));
   assert.throws(() => resolveWorkBinding(changed, pairings()), /challenge/);
+});
+
+test("bound receipts preserve exact text and reject truncated or mismatched display text", () => {
+  const job = work();
+  const receipt = receiptFor(job);
+  const exact = "  Native final text\n";
+  receipt.assistantResponseText = exact;
+  receipt.attestation.assistantResponseText = exact;
+  receipt.attestation.assistantResponseHash = createHash("sha256").update(exact).digest("hex");
+  const accepted = execute(job, runtime(() => ({ status: 0, stdout: JSON.stringify(receipt) })));
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.message, exact);
+  assert.equal(accepted.details.assistantResponseText, exact);
+  for (const change of [
+    r => { r.assistantResponseText = exact.trim(); },
+    r => { r.attestation.assistantResponseText = exact.trim(); },
+    r => { r.attestation.assistantResponseHash = "0".repeat(64); },
+    r => { r.assistantResponseText = r.attestation.assistantResponseText = "a".repeat(4001); },
+    r => { r.assistantResponseText = r.attestation.assistantResponseText = "\u{1f680}".repeat(2001); },
+  ]) {
+    const altered = structuredClone(receipt);
+    change(altered);
+    assert.equal(execute(job, runtime(() => ({ status: 0, stdout: JSON.stringify(altered) }))).ok, false);
+  }
+  const legacyJob = work(legacy);
+  const legacyReceipt = receiptFor(legacyJob);
+  legacyReceipt.assistantResponseText = exact;
+  assert.equal(execute(legacyJob, runtime(() => ({ status: 0, stdout: JSON.stringify(legacyReceipt) }))).message, exact.trim());
 });
 

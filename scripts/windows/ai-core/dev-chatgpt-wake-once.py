@@ -221,6 +221,10 @@ def _private_key(root):
 
 
 def _assistant_probe(tab, expected_url, marker, challenge):
+    # Legacy implementation only. Bound accounts must never inherit this page
+    # script probe, even if a caller reaches this helper directly by mistake.
+    if WORKER == DELL_WORKER and BROWSER_PROFILE != "openclaw":
+        raise RuntimeError("Legacy assistant probe is not permitted for this DELL profile")
     ack = "AI_CORE_ATTEST_ACK:" + challenge
     snapshot = browser("snapshot", "--target-id", tab, timeout=55)
     responding = bool(re.search(r'button "Stop(?: generating)?"', snapshot, re.I))
@@ -254,6 +258,80 @@ def _assistant_probe(tab, expected_url, marker, challenge):
             "assistantMessageId": id_match.group(0).lower() if id_match else None,
             "assistantText": text, "ackVisible": ack_visible}
 
+
+def _wake_message(event, challenge, task_instruction):
+    job_text = ("Kerjakan job AI Core berikut: " + task_instruction + ". " if task_instruction else
+                "Lanjutkan pekerjaan sebelumnya. Periksa checkpoint AI Core DEV dan kerjakan sampai hasil terverifikasi. ")
+    return ("[AI_CORE_WAKE:" + event + "] [AI_CORE_ATTEST:" + challenge + "] " + job_text +
+            "Jangan melewati persetujuan keamanan, jangan mengubah PROD. "
+            "Pada balasan pertama setelah wake ini, sertakan token [AI_CORE_ATTEST_ACK:" + challenge + "] satu kali.")
+
+
+def _attest_bound_observation(root, binding, conversation, event, challenge, observed):
+    # The transport has already correlated the current visible final response
+    # with the original native Send timestamp. Never trim or truncate this text.
+    if (not isinstance(observed, dict) or observed.get("userFound") is not True or
+            observed.get("assistantFound") is not True or observed.get("ackVisible") is not True or
+            observed.get("responding") is not False or not _matches(UUID, observed.get("assistantMessageId"))):
+        raise RuntimeError("Native assistant proof is incomplete")
+    text = observed.get("assistantText")
+    if not isinstance(text, str) or not text or len(text.encode("utf-16-le")) // 2 > 4000:
+        raise RuntimeError("Native assistant text exceeds the exact receipt contract")
+    response_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if observed.get("assistantResponseHash") != response_hash:
+        raise RuntimeError("Native assistant text hash mismatch")
+    key = _private_key(root)
+    if key is None:
+        raise RuntimeError("Native assistant attestation key is unavailable")
+    observed_at = _iso_now()
+    payload = _attestation_payload(conversation, event, challenge, observed["assistantMessageId"], response_hash, observed_at, binding)
+    return {"version": 2, "algorithm": "Ed25519", "keyId": KEY_ID, "workerId": WORKER,
+            "conversationId": conversation, "eventId": event, "challenge": challenge,
+            "assistantMessageId": observed["assistantMessageId"], "assistantResponseHash": response_hash,
+            "assistantResponseText": text, "observedAt": observed_at,
+            "signature": base64.b64encode(key.sign(payload.encode("utf-8"))).decode("ascii"),
+            "bindingFingerprint": binding["bindingFingerprint"], "browserProfile": binding["browserProfile"]}
+
+
+def _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata):
+    from dev_chatgpt_native_transport import NativeTransport, native_options
+    options = native_options(data, binding)  # Inactive by default; no UI or receipt writes.
+
+    def authorize():
+        _, current = config(root)
+        if (resolve_dell_binding(metadata, current, conversation, event, challenge) != binding or
+                native_options(current, binding) != options):
+            raise RuntimeError("Native binding or activation changed during execution")
+
+    receipt_context = {"conversationId": conversation, "eventId": event, "challenge": challenge,
+                       "browserProfile": binding["browserProfile"], "bindingFingerprint": binding["bindingFingerprint"],
+                       "ownerChannel": binding["ownerChannel"], "accountAlias": binding["accountAlias"]}
+    receipt = root / "chatgpt-wake-dev-receipts" / (binding["bindingFingerprint"] + "-" + event + ".json")
+    if receipt.exists():
+        if receipt.stat().st_size > 64000:
+            raise RuntimeError("Wake receipt exceeds the context limit")
+        previous = json.loads(receipt.read_text(encoding="utf-8"))
+        if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in receipt_context.items()):
+            raise RuntimeError("Wake event receipt context mismatch; reconciliation required")
+    transport = NativeTransport(root, binding, event, challenge, options, authorize)
+    observed = transport.run(_wake_message(event, challenge, task_instruction))
+    authorize()  # Revocation also fences key access and callback proof production.
+    attestation = _attest_bound_observation(root, binding, conversation, event, challenge, observed)
+    fingerprint = hashlib.sha256("|".join([binding["bindingFingerprint"], conversation, event, challenge,
+                                           observed["rawTargetId"], attestation["assistantMessageId"],
+                                           attestation["assistantResponseHash"]]).encode("utf-8")).hexdigest()
+    result = {"chatgptSubmitted": True, "browserConfirmed": True, "browserPairingVerified": True,
+              "verifiedAssistantReply": True, "alreadyVisible": observed["alreadyVisible"],
+              "attestation": attestation, "assistantResponseText": attestation["assistantResponseText"],
+              "evidenceFingerprint": fingerprint, **receipt_context}
+    temporary = receipt.with_suffix(".pending")
+    with temporary.open("x", encoding="utf-8") as stream:
+        json.dump({**result, "status": "ASSISTANT_ATTESTED", "sendAttemptedAt": observed["sendAttemptedAt"]}, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, receipt)
+    return result
+
 def _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at, binding=None):
     fields = [
         "dev-chatgpt-assistant-attestation/v" + ("2" if binding else "1"),
@@ -272,6 +350,10 @@ def _attestation_payload(conversation, event, challenge, message_id, response_ha
 
 
 def wait_for_assistant_attestation(root, tab, expected_url, conversation, event, challenge, binding=None):
+    if binding is not None:
+        raise RuntimeError("Native assistant identity reader requires the bound transport context")
+    # This polling loop is legacy only. Native transport performs one bounded
+    # passive capture and never falls back to the page-script probe.
     key = _private_key(root)
     if key is None:
         return None
@@ -285,15 +367,14 @@ def wait_for_assistant_attestation(root, tab, expected_url, conversation, event,
                 raise RuntimeError("Assistant response identity invalid")
             response_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
             observed_at = _iso_now()
-            payload = _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at, binding)
+            payload = _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at)
             signature = base64.b64encode(key.sign(payload.encode("utf-8"))).decode("ascii")
             return {
-                "version": 2 if binding else 1, "algorithm": "Ed25519", "keyId": KEY_ID, "workerId": WORKER,
+                "version": 1, "algorithm": "Ed25519", "keyId": KEY_ID, "workerId": WORKER,
                 "conversationId": conversation, "eventId": event, "challenge": challenge,
                 "assistantMessageId": message_id, "assistantResponseHash": response_hash,
                 "assistantResponseText": text[:4000],
                 "observedAt": observed_at, "signature": signature,
-                **({"bindingFingerprint": binding["bindingFingerprint"], "browserProfile": binding["browserProfile"]} if binding else {}),
             }
         time.sleep(2)
     return None
@@ -321,6 +402,8 @@ def submit_once(instruction, worker_id, base=None, metadata=None):
     binding = None
     if WORKER == DELL_WORKER:
         binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
+        if binding is not None:
+            return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata)
     else:
         # Preserve the original Travelintrips-only helper; DELL never falls back to this list.
         allowed = data.get("allowedConversationIds")

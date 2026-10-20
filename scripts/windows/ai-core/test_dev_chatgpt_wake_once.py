@@ -328,35 +328,46 @@ class DellBindingTests(WakeTestCase):
         with self.assertRaisesRegex(RuntimeError, "challenge context"):
             self.wake.assistant_challenge(metadata, fingerprint)
 
-    def test_new_binding_routes_only_its_local_profile(self):
+    def test_new_binding_resolves_its_profile_but_transport_stays_inactive(self):
         metadata = self.metadata()
-        browser = FakeBrowser(CHAT_TWO)
-        proof = self.run_browser(browser, self.command(metadata), self.wake, metadata)
-        self.assertEqual(proof["browserProfile"], "travelincars-dev")
-        self.assertEqual(proof["bindingFingerprint"], self.binding["bindingFingerprint"])
-        self.assertFalse(proof["verifiedAssistantReply"])
-        self.assertEqual(len(browser.submissions), 1)
+        selected = self.wake.resolve_dell_binding(
+            metadata, self.config, CHAT_TWO, EVENT, metadata["assistantAttestationChallenge"])
+        self.assertEqual(selected, self.binding)
         self.assertIn("travelincars-dev", self.wake.CLI)
+        with patch.object(self.wake, "browser") as browser, patch.object(self.wake, "_private_key") as key:
+            with self.assertRaisesRegex(RuntimeError, "Native bound ChatGPT transport is not activated"):
+                self.wake.submit_once(self.command(metadata), DELL, self.root, metadata=metadata)
+        browser.assert_not_called()
+        key.assert_not_called()
+        self.assertFalse((self.root / "chatgpt-wake-dev-receipts").exists())
 
-    def test_indonesian_composer_uses_the_bound_gpt02_destination(self):
+    def test_indonesian_snapshot_uses_only_the_exact_bound_destination(self):
         metadata = self.metadata()
+        self.assertEqual(self.wake.resolve_dell_binding(
+            metadata, self.config, CHAT_TWO, EVENT, metadata["assistantAttestationChallenge"]), self.binding)
         browser = FakeBrowser(CHAT_TWO, composer_name="Tanya ChatGPT")
-        proof = self.run_browser(browser, self.command(metadata), self.wake, metadata)
-        self.assertEqual(proof["conversationId"], CHAT_TWO)
-        self.assertEqual(proof["browserProfile"], self.binding["browserProfile"])
-        self.assertEqual(proof["bindingFingerprint"], self.binding["bindingFingerprint"])
-        self.assertFalse(proof["verifiedAssistantReply"])
-        self.assertEqual(len(browser.submissions), 1)
-        self.assertEqual(browser.submissions[0][0:4], ("--target-id", "t12", "--submit", "e1"))
+        # Parser component only: no native transport or submission is enabled.
+        with patch.object(self.wake, "browser", side_effect=browser):
+            tab = self.wake.find_tab(browser.url)
+            state = self.wake.inspect(tab, "AI_CORE_WAKE:" + EVENT, browser.url)
+        self.assertEqual(tab, browser.handle)
+        self.assertEqual(state["ref"], "e1")
+        self.assertTrue(state["empty"])
+        self.assertEqual(browser.submissions, [])
 
     def test_indonesian_composer_preserves_drafts_and_exact_tab_pairing(self):
-        metadata = self.metadata()
         for attr, value in [("draft", 'Pesan saya: "jangan hapus"\nbaris kedua'),
                             ("lose_pairing", True), ("duplicate", True)]:
             browser = FakeBrowser(CHAT_TWO, composer_name="Tanya ChatGPT")
             setattr(browser, attr, value)
-            with self.subTest(attr=attr), self.assertRaises(RuntimeError):
-                self.run_browser(browser, self.command(metadata), self.wake, metadata)
+            with self.subTest(attr=attr), patch.object(self.wake, "browser", side_effect=browser):
+                if attr == "draft":
+                    tab = self.wake.find_tab(browser.url)
+                    self.assertFalse(self.wake.inspect(tab, "AI_CORE_WAKE:" + EVENT, browser.url)["empty"])
+                else:
+                    with self.assertRaises(RuntimeError):
+                        tab = self.wake.find_tab(browser.url)
+                        self.wake.inspect(tab, "AI_CORE_WAKE:" + EVENT, browser.url)
             self.assertEqual(browser.submissions, [])
             self.assertEqual(getattr(browser, attr), value)
 
@@ -450,7 +461,7 @@ class DellBindingTests(WakeTestCase):
         wrong_profile = load_wake(DELL, "openclaw")
         self.assert_denied_before_browser(self.metadata(), module=wrong_profile)
 
-    def test_bound_receipt_cannot_reconcile_different_challenge_context(self):
+    def test_bound_receipt_is_untouched_while_native_transport_is_inactive(self):
         metadata = self.metadata()
         directory = self.root / "chatgpt-wake-dev-receipts"
         directory.mkdir()
@@ -458,24 +469,45 @@ class DellBindingTests(WakeTestCase):
         receipt.write_text(json.dumps({"conversationId": CHAT_TWO, "eventId": EVENT, "challenge": "f" * 64,
                                      "browserProfile": "travelincars-dev",
                                      "bindingFingerprint": self.binding["bindingFingerprint"]}))
+        previous = receipt.read_bytes()
         browser = FakeBrowser(CHAT_TWO)
         browser.marker = True
-        with self.assertRaisesRegex(RuntimeError, "receipt context mismatch"):
+        with self.assertRaisesRegex(RuntimeError, "Native bound ChatGPT transport is not activated"):
             self.run_browser(browser, self.command(metadata), self.wake, metadata)
+        self.assertEqual(receipt.read_bytes(), previous)
+        self.assertEqual(browser.calls, [])
         self.assertEqual(browser.submissions, [])
+
+    def test_bound_attestation_never_falls_back_to_page_script(self):
+        key = Ed25519PrivateKey.generate()
+        with patch.object(self.wake, "_private_key", return_value=key) as private_key, \
+             patch.object(self.wake, "browser") as browser, \
+             patch.object(self.wake, "_assistant_probe") as legacy:
+            with self.assertRaisesRegex(RuntimeError, "Native assistant identity reader requires the bound transport context"):
+                self.wake.wait_for_assistant_attestation(
+                    self.root, "t12", "https://chatgpt.com/c/" + CHAT_TWO, CHAT_TWO, EVENT, CHALLENGE, self.binding)
+        browser.assert_not_called()
+        legacy.assert_not_called()
+        private_key.assert_not_called()
+
+    def test_direct_legacy_probe_is_blocked_for_the_gpt02_profile(self):
+        with patch.object(self.wake, "browser") as browser:
+            with self.assertRaisesRegex(RuntimeError, "Legacy assistant probe is not permitted"):
+                self.wake._assistant_probe("t12", "https://chatgpt.com/c/" + CHAT_TWO, "AI_CORE_WAKE:" + EVENT, CHALLENGE)
+        browser.assert_not_called()
 
     def test_signature_covers_profile_and_binding_fingerprint(self):
         metadata = self.metadata()
         challenge = metadata["assistantAttestationChallenge"]
         key = Ed25519PrivateKey.generate()
-        observed = {"assistantFound": True, "ackVisible": True, "responding": False,
+        observed = {"userFound": True, "assistantFound": True, "ackVisible": True, "responding": False,
                     "assistantMessageId": "44444444-4444-4444-8444-444444444444",
                     "assistantText": "Test fixture AI_CORE_ATTEST_ACK:" + challenge}
+        observed["assistantResponseHash"] = hashlib.sha256(observed["assistantText"].encode()).hexdigest()
         with patch.object(self.wake, "_private_key", return_value=key), \
-             patch.object(self.wake, "_assistant_probe", return_value=observed), \
              patch.object(self.wake, "_iso_now", return_value="2026-10-20T00:00:00.000Z"):
-            attestation = self.wake.wait_for_assistant_attestation(
-                self.root, "t12", "https://chatgpt.com/c/" + CHAT_TWO, CHAT_TWO, EVENT, challenge, self.binding)
+            attestation = self.wake._attest_bound_observation(
+                self.root, self.binding, CHAT_TWO, EVENT, challenge, observed)
         self.assertEqual(attestation["version"], 2)
         expected = "\n".join([
             "dev-chatgpt-assistant-attestation/v2", "keyId=" + DELL + "-ed25519-v1", "workerId=" + DELL,
@@ -491,6 +523,41 @@ class DellBindingTests(WakeTestCase):
                         expected.replace(self.binding["bindingFingerprint"], "0" * 64)]:
             with self.assertRaises(InvalidSignature):
                 key.public_key().verify(signature, altered.encode())
+
+    def test_native_signing_preserves_exact_text_and_rejects_invalid_evidence_before_key(self):
+        text = "  Exact final text\n"
+        observed = {"userFound": True, "assistantFound": True, "ackVisible": True, "responding": False,
+                    "assistantMessageId": "44444444-4444-4444-8444-444444444444", "assistantText": text,
+                    "assistantResponseHash": hashlib.sha256(text.encode()).hexdigest()}
+        with patch.object(self.wake, "_private_key", return_value=Ed25519PrivateKey.generate()):
+            signed = self.wake._attest_bound_observation(self.root, self.binding, CHAT_TWO, EVENT, CHALLENGE, observed)
+        self.assertEqual(signed["assistantResponseText"], text)
+        self.assertEqual(signed["assistantResponseHash"], hashlib.sha256(text.encode()).hexdigest())
+        for change in ({"assistantResponseHash": "0" * 64}, {"userFound": False}, {"responding": True},
+                       {"assistantMessageId": "e123"}, {"assistantText": "a" * 4001}, {"assistantText": "🚀" * 2001}):
+            with self.subTest(change=change), patch.object(self.wake, "_private_key") as key:
+                with self.assertRaises(RuntimeError):
+                    self.wake._attest_bound_observation(self.root, self.binding, CHAT_TWO, EVENT, CHALLENGE, {**observed, **change})
+                key.assert_not_called()
+
+    def test_local_revocation_after_native_observation_fences_signing(self):
+        import dev_chatgpt_native_transport as native
+        self.config["bindings"][0]["nativeTransport"] = {
+            "version": 1, "enabled": True, "composerName": "Ask ChatGPT", "allowProviderLf": False}
+        self.write_config(self.config)
+        metadata = self.metadata()
+
+        def revoke(_message):
+            self.config["bindings"][0]["enabled"] = False
+            self.write_config(self.config)
+            return {}
+
+        with patch.object(native.NativeTransport, "run", side_effect=revoke), \
+             patch.object(self.wake, "_private_key") as key, patch.object(self.wake, "browser") as legacy:
+            with self.assertRaisesRegex(RuntimeError, "not enabled"):
+                self.wake.submit_once(self.command(metadata), DELL, self.root, metadata)
+        key.assert_not_called()
+        legacy.assert_not_called()
 
     def test_v1_payload_stays_compatible_and_has_no_profile_fields(self):
         payload = self.wake._attestation_payload(CHAT, EVENT, CHALLENGE, CHAT_TWO, "f" * 64, "2026-10-20T00:00:00.000Z")
