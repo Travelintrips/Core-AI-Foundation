@@ -1,8 +1,9 @@
-name: Hostinger DEV Console Deploy
+# LEGACY manual fallback only. AI Task DEV canonical release target is VPS:
+# https://dev.cstlogistic.co.id/aicoding
+# The separate shared-hosting DEV console must not deploy automatically from develop.
+name: Legacy Hostinger DEV Console Deploy (manual only)
 
 on:
-  push:
-    branches: [develop]
   workflow_dispatch:
 
 permissions:
