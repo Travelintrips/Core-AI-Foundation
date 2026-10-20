@@ -1,3 +1,4 @@
+// TODO: Investigate CI failure: reproduce locally and identify root cause before modifying logic
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
