@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { codingBridgeCommandSchema } from "./coding-bridge-command-schema.js";
@@ -18,12 +19,13 @@ import {
   recoverAutonomousCodingRuntimeIfDatabaseReady,
   runAutonomousCodingCycle,
 } from "../services/localCodingAutonomousRepairService.js";
-import { getAiTaskBridgeTimeline } from "../services/localCodingControlBridgeService.js";
+import { getAiTaskBridgeTimeline, getAiTaskChatGptBridgeTimeline } from "../services/localCodingControlBridgeService.js";
 import {
   dispatchExternalAgentWork,
   ExternalAgentDispatchError,
   OPENCLAW_AGENT_CLIENT_ID,
 } from "../services/externalAgentDispatchService.js";
+import { queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../services/devChatGptWakeService.js";
 const router=Router(); const Uuid=z.string().uuid();
 router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  const externalCommandId=String(req.query["externalCommandId"]??"");
@@ -33,6 +35,57 @@ router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  res.json(timeline);
 });
 router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{const p=codingBridgeCommandSchema.safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await submitCodingBridgeCommand(p.data);res.status(x.created?201:200).json(x);});
+
+router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<void>=>{
+ const p=z.object({
+  accountAlias:z.string().regex(/^GPT[0-9]{2,4}$/),
+  instruction:z.string().trim().min(1).max(2000),
+  jobAlias:z.string().trim().regex(/^[A-Za-z0-9_-]{1,80}$/).optional(),
+  correlationId:z.string().regex(/^ai-task:[A-Za-z0-9_-]{1,100}:[1-9][0-9]*:[A-Za-z0-9_-]{8,80}$/)
+ }).strict().safeParse(req.body);
+ if(!p.success){res.status(400).json({error:p.error.message});return;}
+ try{
+  const target=await resolveVerifiedDevWakeTarget(p.data.accountAlias,req.hostname);
+  const eventId=randomBytes(32).toString("hex");
+  const queued=await queueDevBrowserWake({
+   ownerChannel:target.ownerChannel,
+   targetConversationId:target.targetConversationId,
+   eventId,
+   correlationId:p.data.correlationId,
+   instruction:p.data.instruction,
+   jobAlias:p.data.jobAlias??null,
+   requestHost:req.hostname,
+   expectedWorkerId:target.workerId,
+   ...(target.wakeBinding?{expectedBindingFingerprint:target.wakeBinding.bindingFingerprint}:{})
+  });
+  res.status(queued.created?202:200).json({
+   created:queued.created,
+   commandId:queued.commandId,
+   clientId:queued.clientId,
+   eventId,
+   correlationId:p.data.correlationId,
+   accountAlias:p.data.accountAlias,
+   status:queued.created?"QUEUED":"ALREADY_QUEUED"
+  });
+ }catch(error){
+  const code=error instanceof Error?error.message:"DEV_CHATGPT_WAKE_UNAVAILABLE";
+  res.status(code.includes("UNVERIFIED")||code.includes("DENIED")||code.includes("MISMATCH")?403:503).json({
+   error:code,
+   executed:false
+  });
+ }
+});
+router.get("/ai/coding/bridge/ai-task-chatgpt-timeline",async(req,res):Promise<void>=>{
+ const commandId=String(req.query["commandId"]??"");
+ const correlationId=String(req.query["correlationId"]??"");
+ if(!Uuid.safeParse(commandId).success||
+    !/^ai-task:[A-Za-z0-9_-]{1,100}:[1-9][0-9]*:[A-Za-z0-9_-]{8,80}$/.test(correlationId)){
+  res.status(400).json({error:"INVALID_CHATGPT_TIMELINE_KEY"});return;
+ }
+ const timeline=await getAiTaskChatGptBridgeTimeline(commandId,correlationId);
+ if(!timeline){res.status(404).json({error:"COMMAND_NOT_FOUND"});return;}
+ res.json(timeline);
+});
 router.post("/ai/coding/bridge/ai-task-dispatch",async(req,res):Promise<void>=>{
  const p=z.object({
   externalCommandId:z.string().regex(/^ai-task:[a-zA-Z0-9_-]{1,100}:[1-9][0-9]*$/),
