@@ -8,6 +8,11 @@ vi.mock("node:child_process", () => ({
 vi.mock("../aiAuditService.js", () => ({
   logAudit: vi.fn().mockResolvedValue(undefined),
 }));
+afterEach(() => {
+  execFileMock.mockReset();
+  vi.clearAllMocks();
+});
+
 
 import {
   detectAiCoreInfrastructureOperation,
