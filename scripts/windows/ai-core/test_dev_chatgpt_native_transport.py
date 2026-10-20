@@ -57,6 +57,8 @@ class FakeTransport(NativeTransport):
         self.focus_ok = True
         self.drift_after_focus = False
         self.drift_after_snapshot = False
+        self.truncate_snapshot = False
+        self.omit_composer_without_truncation = False
         self.bad_response = False
         self.revoke_after_capture = False
         self.send_fails = False
@@ -113,7 +115,12 @@ class FakeTransport(NativeTransport):
                 self.wrong_pid = True
             return {"ok": self.focus_ok}
         if action == "snapshot":
-            text = '- textbox "Ask ChatGPT" [active] [ref=f239e430]:\n  - paragraph: Ask ChatGPT'
+            if self.omit_composer_without_truncation:
+                text = "- paragraph: synthetic conversation"
+            elif self.truncate_snapshot:
+                text = "- paragraph: synthetic long conversation\n[...TRUNCATED - page too large]"
+            else:
+                text = '- textbox "Ask ChatGPT" [active] [ref=f239e430]:\n  - paragraph: Ask ChatGPT'
             if self.visible:
                 text += "\n- paragraph: " + MESSAGE + "\n- paragraph: " + FINAL
             if self.drift_after_snapshot:
@@ -257,6 +264,16 @@ class NativeTransportTests(unittest.TestCase):
                     transport.run(MESSAGE)
                 self.assertFalse(any(action.startswith("native:") for action, _ in transport.calls))
                 self.assertEqual(transport.submissions, 0)
+
+    def test_explicit_truncated_snapshot_can_defer_composer_check_to_native_resolver(self):
+        self.transport.truncate_snapshot = True
+        snapshot = self.transport._snapshot()
+        self.assertTrue(snapshot.rstrip().endswith("[...TRUNCATED - page too large]"))
+
+    def test_missing_composer_without_truncation_remains_fail_closed(self):
+        self.transport.omit_composer_without_truncation = True
+        with self.assertRaisesRegex(RuntimeError, "composer role or locale"):
+            self.transport._snapshot()
 
     def test_visible_marker_without_owned_attempt_never_authorizes_replay(self):
         self.transport.visible = True
