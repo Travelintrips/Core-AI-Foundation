@@ -1369,7 +1369,15 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         }
         return;
       }
-      if (identity.kind === "dev_relay" && (
+      // Narrow, opt-in DEV delegation for diagnostic jobs only. No arbitrary
+      // instructions, production actions, credentials, shell or deployments.
+      // Confirmation, named worker and owner-bound event channel remain required.
+      const scopedDevDiagnostic = process.env["AI_CORE_DEV_SCOPED_DIAGNOSTICS_ENABLED"] === "true" &&
+        process.env["APP_ENV"] === "development" && effectiveConfirmed &&
+        /^ai-engine-oauth:[a-f0-9]{64}$/.test(parsed.conversationId ?? "") &&
+        /^(?:delegasikan|delegate) openclaw-dell-(?:chatgpt-wake|admcst001)-dev (?:audit callback|verifikasi heartbeat|periksa checkpoint) DEV$/i.test(command.instruction) &&
+        namedDevWorkers.length === 1;
+      if (identity.kind === "dev_relay" && !scopedDevDiagnostic && (
         namedDevWorkers.length !== 1 ||
         !/\b(?:hostname|host name|cek status|read.only)\b/i.test(command.instruction) ||
         /\b(?:delete|hapus|deploy|merge|password|secret|token|restart|shell|terminal|ssh|powershell)\b/i.test(command.instruction)
