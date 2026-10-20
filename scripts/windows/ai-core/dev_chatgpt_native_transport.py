@@ -306,7 +306,7 @@ class NativeTransport:
         # native resolver still requires the configured exact Edit role/name
         # before any input, and any visible wrong/duplicate locale remains a
         # hard failure.
-        if (names and names != [self.options["composerName"]]) or (not names and not truncated):
+        if (names and any(name != self.options["composerName"] for name in names)) or (not names and not truncated):
             raise RuntimeError("Native ChatGPT composer role or locale is ambiguous")
         return snapshot
 
