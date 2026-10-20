@@ -128,3 +128,21 @@ Python tests require `cryptography`; the dedicated component workflow installs a
 The browser parser recognizes exactly one accessibility `textbox` named `Ask ChatGPT` or `Tanya ChatGPT`. Other names or roles, multiple recognized composers and malformed draft state fail before typing. The Indonesian name has been observed in native Chrome UI; the tests use synthetic snapshot rows, not a captured OpenClaw snapshot. English GPT01 uses the same pairing, draft and duplicate-delivery checks as before.
 
 Stop-button recognition still covers English `Stop` / `Stop generating` only. Before activating any new profile, inspect its actual OpenClaw snapshot and verify both idle and active-generation state, draft preservation and the expected assistant-response identity. A native-browser screenshot or synthetic localized fixture does not prove this integration or an assistant reply. Unsupported snapshot shapes remain an activation blocker; do not add an arbitrary textbox fallback or enable the worker on name recognition alone.
+
+
+### Live managed-profile activation blockers (2026-10-20)
+
+Live OpenClaw inspection of the managed `travelincars-dev` profile reported this composer fragment:
+
+```text
+- textbox "Ask ChatGPT" [active] [ref=f13e409]:
+  - paragraph: Ask ChatGPT
+```
+
+This is an observed fragment, separate from the synthetic locale fixtures. The current parser rejects the frame-scoped reference and paragraph shape before typing. A paragraph matching the placeholder does not prove that the draft is empty. Widening the reference pattern alone, treating a missing value as empty, or clearing a draft is not an activation fix.
+
+Pinned OpenClaw v2026.9.9 supports `snapshot --format aria` with browser-level `--json`, but its [ARIA formatter](https://github.com/openclaw/openclaw/blob/bcfc88812a35243893585dbeca87ca41b48272ca/extensions/browser/src/browser/cdp.ts) omits the value field both for an empty string and for an unavailable value. Its native `axN` references identify nodes; they do not resolve that ambiguity. A supported read must establish the exact draft value and target identity before automated submission can be enabled.
+
+The existing `_assistant_probe()` invokes `browser evaluate --fn` to obtain the assistant message UUID and text for the signed receipt. This conflicts with the [communication SOP](SOP_AI_CORE_CHATGPT_OPENCLAW_COMMUNICATION.md) restriction on JavaScript snippets in the ChatGPT page. Do not run that probe until a supported read without page-script injection supplies the required message identity and text. Visible ACK text alone cannot replace the signed proof.
+
+These are unresolved runtime activation gates. Component tests and CI success cover the implemented protocol and synthetic browser fixtures; they are not evidence of a working live composer, a permitted assistant probe, or E2E completion.
