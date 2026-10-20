@@ -266,11 +266,13 @@ class NativeTransportTests(unittest.TestCase):
                 self.assertEqual(transport.submissions, 0)
 
     def test_explicit_truncated_snapshot_can_defer_composer_check_to_native_resolver(self):
+        self.transport.context = {"rawTargetId": RAW}
         self.transport.truncate_snapshot = True
         snapshot = self.transport._snapshot()
         self.assertTrue(snapshot.rstrip().endswith("[...TRUNCATED - page too large]"))
 
     def test_missing_composer_without_truncation_remains_fail_closed(self):
+        self.transport.context = {"rawTargetId": RAW}
         self.transport.omit_composer_without_truncation = True
         with self.assertRaisesRegex(RuntimeError, "composer role or locale"):
             self.transport._snapshot()
