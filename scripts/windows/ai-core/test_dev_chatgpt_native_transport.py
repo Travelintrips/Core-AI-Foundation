@@ -59,6 +59,8 @@ class FakeTransport(NativeTransport):
         self.drift_after_snapshot = False
         self.truncate_snapshot = False
         self.omit_composer_without_truncation = False
+        self.duplicate_composer = False
+        self.mixed_locale_composer = False
         self.bad_response = False
         self.revoke_after_capture = False
         self.send_fails = False
@@ -121,6 +123,10 @@ class FakeTransport(NativeTransport):
                 text = "- paragraph: synthetic long conversation\n[...TRUNCATED - page too large]"
             else:
                 text = '- textbox "Ask ChatGPT" [active] [ref=f239e430]:\n  - paragraph: Ask ChatGPT'
+                if self.duplicate_composer:
+                    text += '\n- textbox "Ask ChatGPT" [ref=f239e431]:\n  - paragraph: Ask ChatGPT'
+                if self.mixed_locale_composer:
+                    text += '\n- textbox "Tanya ChatGPT" [ref=f239e432]:\n  - paragraph: Tanya ChatGPT'
             if self.visible:
                 text += "\n- paragraph: " + MESSAGE + "\n- paragraph: " + FINAL
             if self.drift_after_snapshot:
@@ -274,6 +280,18 @@ class NativeTransportTests(unittest.TestCase):
     def test_missing_composer_without_truncation_remains_fail_closed(self):
         self.transport.context = {"rawTargetId": RAW}
         self.transport.omit_composer_without_truncation = True
+        with self.assertRaisesRegex(RuntimeError, "composer role or locale"):
+            self.transport._snapshot()
+
+    def test_duplicate_same_locale_composer_rows_are_allowed(self):
+        self.transport.context = {"rawTargetId": RAW}
+        self.transport.duplicate_composer = True
+        snapshot = self.transport._snapshot()
+        self.assertEqual(snapshot.count('textbox "Ask ChatGPT"'), 2)
+
+    def test_mixed_locale_composer_rows_remain_fail_closed(self):
+        self.transport.context = {"rawTargetId": RAW}
+        self.transport.mixed_locale_composer = True
         with self.assertRaisesRegex(RuntimeError, "composer role or locale"):
             self.transport._snapshot()
 
