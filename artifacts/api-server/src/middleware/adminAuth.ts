@@ -38,6 +38,7 @@ function isAiCoreConnectorRoute(req: Request): boolean {
 // Do not allow this token to authorize any other admin API route.
 const AI_TASK_BRIDGE_ROUTES = [
   { method: "POST", pattern: /^\/ai\/coding\/bridge\/commands$/ },
+  { method: "POST", pattern: /^\/ai\/coding\/bridge\/ai-task-dispatch$/ },
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/runtime-status$/ },
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/ai-task-timeline$/ },
 ] as const;
