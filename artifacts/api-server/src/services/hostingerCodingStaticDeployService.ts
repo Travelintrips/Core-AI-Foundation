@@ -27,6 +27,7 @@ type GitHubArtifact = {
   expired?: boolean;
 };
 
+// Root cause: the HOSTINGER_API_TOKEN environment variable was not set, causing authentication failures during static deployment.
 export type CodingStaticDeployResult = {
   domain: string;
   sourceSha: string;
