@@ -82,6 +82,13 @@ describe("DEV ChatGPT coding worker-pool admission", () => {
     }
   });
 
+  it("fails closed if another profile on the same executor has unknown load", () => {
+    expect(plan([
+      worker("GPT02", "shared-dell-worker", { activeJobs: Number.NaN }),
+      worker("GPT03", "shared-dell-worker"),
+    ])).toEqual({ outcome: "WAIT", reason: "NO_VERIFIED_IDLE_WORKER" });
+  });
+
   it("does not cross another active executor or a held project lock", () => {
     expect(plan([worker("GPT03", "worker3")], {}, ["worker3"])).toEqual({
       outcome: "WAIT", reason: "NO_VERIFIED_IDLE_WORKER",
