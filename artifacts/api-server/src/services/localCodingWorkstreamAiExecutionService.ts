@@ -1,3 +1,4 @@
+// TODO: Wrap model provider invocation in try/catch to handle PROVIDER_BAD_REQUEST and retry once with LocalCodingAiPreferredModelService
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
