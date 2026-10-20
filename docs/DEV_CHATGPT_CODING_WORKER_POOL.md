@@ -73,6 +73,39 @@ DELL worker ID simultaneously across two consumer processes.
 6. Deploy only on the canonical VPS DEV domain `dev.cstlogistic.co.id`
    after green CI and exact live SHA verification. PROD stays unchanged.
 
+
+## DELL-only assignment (operator decision 20 October 2026)
+
+The chosen DEV hardware location for **both GPT-02 and GPT-03** is the
+**DELL** PC. Do not fail over this browser-account coding pool to the
+Travelintrips PC or VPS. AI Core VPS manages queues and evidence only.
+
+Read-only inventory on DELL showed two existing OpenClaw browser profiles,
+`travelincars-dev` and `admcst001-dev`. The existing GPT-02 local binding
+uses `travelincars-dev`. The administrative `admcst001-dev` profile
+and legacy `openclaw` profile are **reserved** and must not be reused for
+GPT-03. GPT-03 still needs its own authenticated profile, owner channel,
+conversation, independent worker identity and separately scoped attestation.
+Merely creating a profile, having Chrome open or observing a process is **not**
+proof of an authenticated GPT-03 coding slot.
+
+The DEV policy `planDevDellOnlyCodingWorker()` only considers
+host-attested DELL workers with isolated browser-session proof, a **distinct**
+executor identity, a signed account-specific receipt and an active lease.
+It caps browser-account execution on DELL at **two independently verified
+executors**. GPT-02 and GPT-03 may share a physical DELL host but may **not**
+share one serial executor when claiming simultaneous jobs. The caller must
+authenticate these facts; the planner is not an attestor, credential manager,
+database claim or live dispatch.
+
+**Present runtime constraint:** the existing
+`openclaw-dell-chatgpt-wake-dev` consumer is serial, and DEV additional
+bindings currently require that exact worker ID. A separate GPT-03 process
+using the *same* worker ID is prohibited. Implementing independent worker IDs,
+RLS/owner grants, browser profile isolation, transaction fencing and E2E
+callbacks requires coordinated DEV review and testing. Until then the
+second job stays `WAITING_FOR_WORKER`, preserving GPT-02.
+
 ## Status boundary
 
 **Component unit-test PASS != autonomous multi-account dispatch PASS.**
