@@ -75,6 +75,10 @@ using System.Runtime.InteropServices;
 public static class AiCoreNativeComposerWindow {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint sourceThread, uint targetThread, bool attach);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("kernel32.dll")] public static extern ulong GetTickCount64();
 }
 '@ -ErrorAction Stop
@@ -184,7 +188,60 @@ function Assert-AiCoreNativeBlankProofFresh {
     if ($age -lt 0 -or $age -gt 30) { throw 'Owned blank inventory proof is stale' }
 }
 
-function Set-AiCoreNativeFocus { param($State) $State.Composer.SetFocus() }
+function Set-AiCoreNativeWindowForeground {
+    param($Window, $Control)
+    Initialize-AiCoreNativeUia
+    if ($null -eq $Window -or $null -eq $Control -or $Window.Current.NativeWindowHandle -le 0 -or
+        $Window.Current.IsOffscreen -or -not $Window.Current.IsEnabled) {
+        throw 'Native foreground target is invalid'
+    }
+    $handle = [IntPtr][long]$Window.Current.NativeWindowHandle
+    [uint32]$targetProcess = 0
+    $targetThread = [AiCoreNativeComposerWindow]::GetWindowThreadProcessId($handle, [ref]$targetProcess)
+    if ($targetThread -eq 0 -or $targetProcess -ne [uint32]$Window.Current.ProcessId) {
+        throw 'Native foreground target identity changed'
+    }
+    $currentThread = [AiCoreNativeComposerWindow]::GetCurrentThreadId()
+    $foreground = [AiCoreNativeComposerWindow]::GetForegroundWindow()
+    [uint32]$foregroundProcess = 0
+    [uint32]$foregroundThread = 0
+    if ($foreground -ne [IntPtr]::Zero) {
+        $foregroundThread = [AiCoreNativeComposerWindow]::GetWindowThreadProcessId($foreground, [ref]$foregroundProcess)
+    }
+    $attachedForeground = $false
+    $attachedTarget = $false
+    try {
+        if ($foreground -ne $handle) {
+            if ($foregroundThread -ne 0 -and $foregroundThread -ne $currentThread) {
+                if (-not [AiCoreNativeComposerWindow]::AttachThreadInput($currentThread, $foregroundThread, $true)) {
+                    throw 'Native foreground input attachment failed'
+                }
+                $attachedForeground = $true
+            }
+            if ($targetThread -ne $currentThread -and $targetThread -ne $foregroundThread) {
+                if (-not [AiCoreNativeComposerWindow]::AttachThreadInput($currentThread, $targetThread, $true)) {
+                    throw 'Native target input attachment failed'
+                }
+                $attachedTarget = $true
+            }
+            [void][AiCoreNativeComposerWindow]::BringWindowToTop($handle)
+            [void][AiCoreNativeComposerWindow]::SetForegroundWindow($handle)
+        }
+        $Control.SetFocus()
+    } finally {
+        if ($attachedTarget) {
+            [void][AiCoreNativeComposerWindow]::AttachThreadInput($currentThread, $targetThread, $false)
+        }
+        if ($attachedForeground) {
+            [void][AiCoreNativeComposerWindow]::AttachThreadInput($currentThread, $foregroundThread, $false)
+        }
+    }
+    if ([AiCoreNativeComposerWindow]::GetForegroundWindow() -ne $handle -or -not $Control.Current.HasKeyboardFocus) {
+        throw 'Native foreground or keyboard focus could not be established'
+    }
+}
+
+function Set-AiCoreNativeFocus { param($State) Set-AiCoreNativeWindowForeground $State.Window $State.Composer }
 function Send-AiCoreNativeKeys { param([string]$Keys) [System.Windows.Forms.SendKeys]::SendWait($Keys) }
 function Get-AiCoreNativeSendControl {
     param($State)
@@ -405,7 +462,7 @@ function Resolve-AiCoreNativeReaderWindow {
     return $resolved
 }
 
-function Set-AiCoreNativeReaderFocus { param($State) $State.Address.SetFocus() }
+function Set-AiCoreNativeReaderFocus { param($State) Set-AiCoreNativeWindowForeground $State.Window $State.Address }
 function Set-AiCoreNativeReaderAddress {
     param($State, [string]$Address)
     $pattern = $null
