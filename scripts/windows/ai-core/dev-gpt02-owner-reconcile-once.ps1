@@ -26,12 +26,14 @@ $reconcileFence = 'gpt02-takeover-20261020T153448Z-88837a97c333'
 $reconcileCoordinator = 'chatgpt-root-88837a97c333'
 $reconcileWrapperSha = '375fbd8773a7899adb97efc8d3cafd303814c9285cc01202881d7e771c9d0637'
 $reconcilePriorSha = 'bf7304bc2a6dcb96ce0174f4dedd6e2cea57d09afb9e2c61694f0ddb4250ed2d'
+$reconcileSupervisionSha = '1608d9837afc8c1745c90dc9143307c295c9fafbb4f9caccdc6511bff2ffcff8'
 $reconcileHandoffSha = '3effead9795e45c824c367a6a01c74ce32d12a7784a7548021906ea91b2fd4fd'
 $reconcilePromptSha = '42f2d03e2e6375a1f6576005eb0459120a0b9377c1203c1d278db111451543e3'
 $reconcileModuleSha = '1c83bce21a937bc32bf26cc1086af8466c2061514ba3f1a880a167c5d040f816'
 $reconcileDraftSha = 'c0fae6a6c1582f13454101d3c2da4f5d951c84a31cff3f6206f6585b2ae6b747'
 $reconcilePriorInputStartedAt = '2026-10-20T15:18:45.8052018Z'
 $reconcilePriorUpdatedAt = '2026-10-20T15:18:46.3283691Z'
+$reconcileSupervisorTerminalAt = '2026-10-20T15:18:46.4155554Z'
 
 # These names deliberately match the reviewed wrapper declarations' scope.
 $ownerProfile = 'travelincars-dev'
@@ -75,12 +77,13 @@ $reconcileCleanupFailures = [Collections.Generic.List[string]]::new()
 
 $reconcileWrapperPath = Join-Path $reconcileBase 'send-owner-prompt-once-v2.ps1'
 $reconcilePriorPath = Join-Path $reconcileBase ($reconcileOperation + '.owner-ui-prompt.json')
+$reconcileSupervisionPath = Join-Path $reconcileBase ($reconcileOperation + '.owner-ui-supervision.jsonl')
 $reconcileHandoffPath = Join-Path $reconcileBase 'gpt02-trial2-owner-handoff-20261020T153448.json'
 $reconcilePromptPath = Join-Path $reconcileBase 'gpt02-trial2-owner-bootstrap.txt'
 $reconcileModulePath = Join-Path $reconcileLocalRoot 'AI-Core\dev-chatgpt-native-composer.psm1'
 $reconcileLeasePath = Join-Path $reconcileBase ($reconcileOperation + '.owner-ui-coordinator.lease.json')
 $reconcileMarkerPath = Join-Path $reconcileBase ($reconcileOperation + '.owner-ui-reconcile.json')
-$reconcileExpectedFocusPath = Join-Path $reconcileBase 'gpt02-trial2-foreground-recovery-result-20261020T1541.json'
+$reconcileExpectedFocusPath = Join-Path $reconcileBase 'gpt02-trial2-foreground-recovery-result-20261020T1555.json'
 
 function Get-ReconcileSha256 {
     param([byte[]]$Bytes)
@@ -183,6 +186,63 @@ function Assert-ReconcileDatabaseFresh {
     if ($age -lt 0 -or $age -gt 300) { throw 'OWNER_RECONCILE_DATABASE_EVIDENCE_NOT_FRESH' }
 }
 
+function Assert-ReconcileOriginalSupervision {
+    param([string]$Text)
+    # Hash verification occurs over the original bytes before JSONL parsing.
+    # This held journal binds the originally executed wrapper, not just the
+    # wrapper file that happens to exist during this continuation.
+    $lines = @([regex]::Split($Text,'\r\n|\n') | Where-Object { $_.Length -gt 0 })
+    if ($lines.Count -ne 3) { throw 'OWNER_RECONCILE_SUPERVISION_RECORD_COUNT_INVALID' }
+    $records = @($lines | ForEach-Object { ConvertFrom-ReconcileObject $_ })
+    $statuses = @('START_ATTEMPTING','CHILD_STARTED','CHILD_EXITED')
+    $previousUpdated = $null
+    $previousElapsed = -1
+    for ($index = 0; $index -lt 3; $index++) {
+        $record = $records[$index]
+        if ($record.schema -cne 'ai-core-owner-ui-supervision/v1' -or
+            $record.operationId -cne $reconcileOperation -or $record.wrapperSha256 -cne $reconcileWrapperSha -or
+            $record.status -cne $statuses[$index] -or
+            $record.startedAt -cne '2026-10-20T15:16:41.2885484Z' -or
+            $record.inputOutcome -cne 'CONSULT_AUTHORITATIVE_OWNER_RECEIPT' -or
+            ($record.totalLimitMs -isnot [int] -and $record.totalLimitMs -isnot [long]) -or $record.totalLimitMs -ne 760000 -or
+            ($record.elapsedMs -isnot [int] -and $record.elapsedMs -isnot [long]) -or
+            $record.elapsedMs -le $previousElapsed -or $record.elapsedMs -ge $record.totalLimitMs -or
+            -not ([string]$record.ownerReceiptPath).Equals($reconcilePriorPath,[StringComparison]::OrdinalIgnoreCase) -or
+            -not ([string]$record.supervisionReceiptPath).Equals($reconcileSupervisionPath,[StringComparison]::OrdinalIgnoreCase)) {
+            throw 'OWNER_RECONCILE_ORIGINAL_SUPERVISION_BINDING_INVALID'
+        }
+        foreach ($field in @('killAttempted','killCallReturned','timedOut','cancellationChecked','replayAllowed','deliveryVerified','realE2eVerified')) {
+            Assert-ReconcileBoolean $record.$field $false
+        }
+        $updated = ConvertFrom-ReconcileUtc $record.updatedAt
+        $started = ConvertFrom-ReconcileUtc $record.startedAt
+        if ($updated -lt $started -or ($null -ne $previousUpdated -and $updated -le $previousUpdated)) {
+            throw 'OWNER_RECONCILE_ORIGINAL_SUPERVISION_CHRONOLOGY_INVALID'
+        }
+        Assert-ReconcileBoolean $record.childStarted ($index -gt 0)
+        Assert-ReconcileBoolean $record.terminationConfirmed ($index -eq 2)
+        Assert-ReconcileBoolean $record.streamsClosed ($index -eq 2)
+        if ($index -eq 0) {
+            if ($null -ne $record.childProcessId) { throw 'OWNER_RECONCILE_ORIGINAL_CHILD_ID_INVALID' }
+        } elseif (($record.childProcessId -isnot [int] -and $record.childProcessId -isnot [long]) -or $record.childProcessId -ne 8412) {
+            throw 'OWNER_RECONCILE_ORIGINAL_CHILD_ID_INVALID'
+        }
+        if ($index -lt 2) {
+            if ($null -ne $record.exitCode) { throw 'OWNER_RECONCILE_ORIGINAL_CHILD_EXIT_INVALID' }
+        } elseif (($record.exitCode -isnot [int] -and $record.exitCode -isnot [long]) -or $record.exitCode -ne 1) {
+            throw 'OWNER_RECONCILE_ORIGINAL_CHILD_EXIT_INVALID'
+        }
+        $previousUpdated = $updated
+        $previousElapsed = $record.elapsedMs
+    }
+    $terminal = $records[2]
+    if ($terminal.updatedAt -cne $reconcileSupervisorTerminalAt -or
+        (ConvertFrom-ReconcileUtc $terminal.updatedAt) -le (ConvertFrom-ReconcileUtc $reconcilePriorUpdatedAt)) {
+        throw 'OWNER_RECONCILE_ORIGINAL_TERMINAL_SUPERVISION_INVALID'
+    }
+    return $terminal
+}
+
 function Assert-ReconcileOldExecutorsAbsent {
     foreach ($oldPid in @(8412,18316,10816)) {
         $old = $null
@@ -264,6 +324,7 @@ try {
 
     $wrapperFile = Read-ReconcilePinnedFile $reconcileWrapperPath $reconcileWrapperSha 262144
     $priorFile = Read-ReconcilePinnedFile $reconcilePriorPath $reconcilePriorSha 16384
+    $supervisionFile = Read-ReconcilePinnedFile $reconcileSupervisionPath $reconcileSupervisionSha 32768
     $handoffFile = Read-ReconcilePinnedFile $reconcileHandoffPath $reconcileHandoffSha 16384
     $promptFile = Read-ReconcilePinnedFile $reconcilePromptPath $reconcilePromptSha 4096
     $moduleFile = Read-ReconcilePinnedFile $reconcileModulePath $reconcileModuleSha 262144 $reconcileLocalRoot
@@ -296,6 +357,7 @@ try {
         Assert-ReconcileBoolean $prior.$field $false
     }
     Assert-ReconcileBoolean $prior.allowProviderLf $true
+    $supervisionTerminal = Assert-ReconcileOriginalSupervision $supervisionFile.Text
 
     if ($handoff.schema -cne 'ai-core-owner-explicit-handoff/v1' -or $handoff.eventId -cne $reconcileEvent -or
         $handoff.operationId -cne $reconcileOperation -or $handoff.conversationId -cne $ownerConversationId -or
@@ -390,6 +452,7 @@ try {
     $reconcileLease.terminalStatus = $null
     $reconcileLease.focusReceiptSha256 = $ExpectedFocusReceiptSha256
     $reconcileLease.priorReceiptSha256 = $reconcilePriorSha
+    $reconcileLease.priorSupervisionSha256 = $reconcileSupervisionSha
     $reconcileLease.continuationReceiptPath = $reconcileMarkerPath
     Assert-ReconcileBudget 5000
     Write-ReconcileLease
@@ -439,6 +502,10 @@ try {
         coordinatorId=$reconcileCoordinator; coordinatorFence=$reconcileFence; ownerPid=$PID;
         handoffSha256=$reconcileHandoffSha; priorWrapperSha256=$reconcileWrapperSha;
         priorReceiptPath=$reconcilePriorPath; priorReceiptSha256=$reconcilePriorSha;
+        priorSupervisionPath=$reconcileSupervisionPath; priorSupervisionSha256=$reconcileSupervisionSha;
+        priorWrapperExecutionBound=$true; priorSupervisorTerminalAt=$supervisionTerminal.updatedAt;
+        priorChildProcessId=$supervisionTerminal.childProcessId; priorChildExitCode=$supervisionTerminal.exitCode;
+        priorChildTerminationConfirmed=$supervisionTerminal.terminationConfirmed; priorChildStreamsClosed=$supervisionTerminal.streamsClosed;
         priorStatus=$prior.status; priorStage=$prior.stage; priorUpdatedAt=$prior.updatedAt;
         inputStartedAt=$prior.inputStartedAt; continuationInputStartedAt=$null;
         promptSha256=$reconcilePromptSha; promptBytes=$promptFile.Bytes.Length; composerModuleSha256=$reconcileModuleSha;
