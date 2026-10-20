@@ -733,8 +733,8 @@ function AiTaskWorkerPool({
           )}
 
           <p className="text-[10px] text-muted-foreground border-t border-border/30 pt-2">
-            Worker IDs come from AI Core, not from ChatGPT logins. GPT-02 and travelincars01@gmail.com
-            must have their exact authenticated account/profile bindings verified before automatic dispatch.
+            Worker IDs come from AI Core, not from ChatGPT logins. Each GPT account/profile (including GPT-02 and GPT-03)
+            must have an exact authenticated binding verified before automatic dispatch.
             A completed process is not a QA PASS or verified callback.
           </p>
         </>
