@@ -1,4 +1,12 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+// Handle cancelled GitHub workflow_run events
+type WorkflowRunEvent = { workflow_run?: { status?: string } };
+const incomingEvent = (global as any).githubEvent as WorkflowRunEvent;
+if (incomingEvent.workflow_run?.status === "cancelled") {
+  logger.warn("Workflow run cancelled. Skipping autonomous repair.");
+  return;
+}
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
