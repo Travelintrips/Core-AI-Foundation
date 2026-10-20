@@ -14,6 +14,18 @@ import {
   readLocalGitBlame,
   runAllowlistedVerificationCommand,
 } from "../localCodingEngineService.js";
+import { vi } from "vitest";
+import { executeWorkstreamAi } from "../localCodingWorkstreamAiExecutionService.js";
+
+describe("executeWorkstreamAi error handling", () => {
+  it("throws an error when provider returns bad request", async () => {
+    vi.mock("../localCodingWorkstreamAiExecutionService.js", () => ({
+      executeWorkstreamAi: vi.fn().mockRejectedValue({ code: "PROVIDER_BAD_REQUEST" }),
+    }));
+    await expect(executeWorkstreamAi({} as any)).rejects.toMatchObject({ code: "PROVIDER_BAD_REQUEST" });
+  });
+});
+
 
 const workspaces: string[] = [];
 
