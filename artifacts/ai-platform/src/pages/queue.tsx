@@ -51,6 +51,7 @@ import {
   AlertTriangle,
   Ban,
   Bot,
+  Boxes,
   CheckCircle2,
   CircleDot,
   Clock,
