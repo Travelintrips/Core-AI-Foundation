@@ -1490,4 +1490,12 @@ router.patch("/ai/coding/tasks/:id", async (req, res): Promise<void> => {
   res.json(UpdateCodingTaskResponse.parse(task));
 });
 
+
+// Error handler for provider bad request errors
+router.use((err, req, res, next) => {
+  if ((err as any).code === 'PROVIDER_BAD_REQUEST') {
+    return res.status(502).json({ message: 'Bad gateway. Please try again later.' });
+  }
+  next(err);
+});
 export default router;
