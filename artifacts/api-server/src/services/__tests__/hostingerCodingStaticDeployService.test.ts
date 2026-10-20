@@ -1,3 +1,4 @@
+// TODO: add unit tests for hostingerCodingStaticDeployService: successful deploy, env var error, retry logic, and logging
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
