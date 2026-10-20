@@ -39,6 +39,8 @@ function isAiCoreConnectorRoute(req: Request): boolean {
 const AI_TASK_BRIDGE_ROUTES = [
   { method: "POST", pattern: /^\/ai\/coding\/bridge\/commands$/ },
   { method: "POST", pattern: /^\/ai\/coding\/bridge\/ai-task-dispatch$/ },
+  { method: "POST", pattern: /^\/ai\/coding\/bridge\/ai-task-chatgpt-dispatch$/ },
+  { method: "GET", pattern: /^\/ai\/coding\/bridge\/ai-task-chatgpt-timeline$/ },
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/runtime-status$/ },
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/ai-task-timeline$/ },
 ] as const;
