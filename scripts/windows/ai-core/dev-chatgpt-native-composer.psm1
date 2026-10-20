@@ -1,7 +1,7 @@
 # Native input component. Importing the module performs no UI operation.
 # The caller must first resolve the exact local binding and the OpenClaw
-# profile's live PID, unique target tab and window. This module never navigates,
-# selects an account, evaluates page script or produces an assistant receipt.
+# profile's live PID, unique target tab and window. Navigation is limited to a
+# durably owned blank reader. No account selection, page script or receipt.
 Set-StrictMode -Version Latest
 
 function Get-AiCoreTextHash {
@@ -304,4 +304,134 @@ function Invoke-AiCoreNativeRefreshOnce {
     } finally { $stream.Dispose() }
 }
 
-Export-ModuleMember -Function Invoke-AiCoreNativeComposerOnce, Resolve-AiCoreNativeWindow, Invoke-AiCoreNativeRefreshOnce
+function Assert-AiCoreNativeReader {
+    param([hashtable]$Target, [hashtable]$Reader)
+    Assert-AiCoreNativeTarget $Target
+    if ($Reader.RawTargetId -isnot [string] -or $Reader.RawTargetId -cnotmatch '\A[A-Fa-f0-9]{32}\z' -or
+        $Reader.RawTargetId -ieq $Target.RawTargetId -or
+        ($Reader.WindowHandle -isnot [int] -and $Reader.WindowHandle -isnot [long]) -or $Reader.WindowHandle -le 0) {
+        throw 'Owned reader identity is invalid'
+    }
+}
+
+function Get-AiCoreNativeReaderState {
+    param([hashtable]$Target, [hashtable]$Reader, [string]$ExpectedAddress, [bool]$RequireFocus = $false)
+    Assert-AiCoreNativeReader $Target $Reader
+    if ($ExpectedAddress -cnotin @('about:blank', $Target.PageUrl)) { throw 'Owned reader destination is invalid' }
+    Initialize-AiCoreNativeUia
+    $handle = [IntPtr]$Reader.WindowHandle
+    [uint32]$actualProcess = 0
+    [void][AiCoreNativeComposerWindow]::GetWindowThreadProcessId($handle, [ref]$actualProcess)
+    $window = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
+    if ($null -eq $window -or $actualProcess -ne $Target.BrowserProcessId -or
+        $window.Current.ProcessId -ne $Target.BrowserProcessId -or $window.Current.IsOffscreen -or
+        -not $window.Current.IsEnabled -or $window.Current.Name -cne 'about:blank - Google Chrome' -or
+        ($RequireFocus -and [AiCoreNativeComposerWindow]::GetForegroundWindow() -ne $handle)) {
+        throw 'Owned reader window identity or foreground changed'
+    }
+    # Even after its omnibox contains the conversation URL, the active native
+    # document must still be the observed blank window. Background UIA Document
+    # elements are not reliable evidence of which browser tab is selected.
+    # Read-only resolution can start behind a terminal. Address.SetFocus must
+    # establish foreground and keyboard focus before SetValue or Enter.
+    $address = Find-AiCoreNativeControl $window 'Address and search bar' ([System.Windows.Automation.ControlType]::Edit)
+    if ((Get-AiCoreNativeValue $address) -cne $ExpectedAddress -or
+        ($RequireFocus -and -not $address.Current.HasKeyboardFocus)) {
+        throw 'Owned reader address or keyboard focus changed'
+    }
+    return @{ Window = $window; Address = $address }
+}
+
+function Resolve-AiCoreNativeReaderWindow {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Target, [Parameter(Mandatory)][hashtable]$Reader)
+    $checked = $Reader.Clone()
+    $checked.WindowHandle = 1
+    Assert-AiCoreNativeReader $Target $checked
+    Initialize-AiCoreNativeUia
+    $condition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$Target.BrowserProcessId)
+    $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+        [System.Windows.Automation.TreeScope]::Children, $condition)
+    $matched = [Collections.Generic.List[object]]::new()
+    foreach ($window in $windows) {
+        if ($window.Current.IsOffscreen -or -not $window.Current.IsEnabled -or $window.Current.NativeWindowHandle -le 0) { continue }
+        try {
+            $address = Find-AiCoreNativeControl $window 'Address and search bar' ([System.Windows.Automation.ControlType]::Edit)
+            if ((Get-AiCoreNativeValue $address) -ceq 'about:blank') { $matched.Add($window) }
+        } catch { continue }
+    }
+    if ($matched.Count -ne 1) { throw 'Owned blank native window is missing or ambiguous' }
+    $resolved = $Reader.Clone()
+    $resolved.WindowHandle = [long]$matched[0].Current.NativeWindowHandle
+    $null = Get-AiCoreNativeReaderState $Target $resolved 'about:blank'
+    return $resolved
+}
+
+function Set-AiCoreNativeReaderFocus { param($State) $State.Address.SetFocus() }
+function Set-AiCoreNativeReaderAddress {
+    param($State, [string]$Address)
+    $pattern = $null
+    if (-not $State.Address.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$pattern) -or
+        $pattern.Current.IsReadOnly) { throw 'Owned blank address is not writable' }
+    $pattern.SetValue($Address)
+}
+
+function Invoke-AiCoreNativeReaderNavigationOnce {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Target, [Parameter(Mandatory)][hashtable]$Reader,
+        [Parameter(Mandatory)][string]$MessageHash, [Parameter(Mandatory)][string]$ReceiptDirectory)
+    Assert-AiCoreNativeReader $Target $Reader
+    if ($MessageHash -cnotmatch '\A[a-f0-9]{64}\z') { throw 'Native message hash is invalid' }
+    $path = Join-Path $ReceiptDirectory ($Target.BindingFingerprint + '-' + $Target.EventId + '.native-reader.json')
+    # The caller has persisted a new raw ID and sole-blank inventory proof.
+    # The exclusive record fences uncertain SetValue/Enter outcomes forever.
+    $stream = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try {
+        if ($stream.Length -le 0 -or $stream.Length -gt 32768) { throw 'Owned reader record is invalid' }
+        $bytes = [byte[]]::new([int]$stream.Length)
+        if ($stream.Read($bytes, 0, $bytes.Length) -ne $bytes.Length) { throw 'Owned reader record could not be read' }
+        $stored = [Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json -ErrorAction Stop
+        $record = @{}
+        foreach ($property in $stored.PSObject.Properties) { $record[$property.Name] = $property.Value }
+        $expected = @{ version = 1; eventId = $Target.EventId; challenge = $Target.Challenge;
+            bindingFingerprint = $Target.BindingFingerprint; browserProfile = $Target.BrowserProfile;
+            conversationId = $Target.ConversationId; pageUrl = $Target.PageUrl; originalRawTargetId = $Target.RawTargetId;
+            browserProcessId = $Target.BrowserProcessId; accountAlias = $Target.AccountAlias; ownerChannel = $Target.OwnerChannel;
+            workerId = $Target.WorkerId; messageHash = $MessageHash; readerRawTargetId = $Reader.RawTargetId;
+            readerWindowHandle = $Reader.WindowHandle }
+        foreach ($key in $expected.Keys) {
+            if (-not $record.ContainsKey($key) -or $record[$key] -cne $expected[$key]) { throw 'Owned reader context mismatch' }
+        }
+        if ($record.status -cne 'BLANK_VERIFIED' -or $record.ContainsKey('navigationAttemptedAt')) {
+            throw 'Owned reader navigation was already attempted or not authorized'
+        }
+        if ($record.preopenTargetIds -isnot [array] -or $record.preopenTargetIds.Count -lt 1 -or
+            $record.preopenTargetIds.Count -gt 128 -or $record.preopenTargetIds -contains $Reader.RawTargetId -or
+            $record.preopenTargetIds -cnotcontains $Target.RawTargetId) { throw 'Owned reader was not a new tab' }
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+        foreach ($field in @('blankVerifiedAt', 'sendAttemptedAt')) {
+            if (-not $record.ContainsKey($field) -or
+                ($record[$field] -isnot [double] -and $record[$field] -isnot [decimal] -and
+                    $record[$field] -isnot [long] -and $record[$field] -isnot [int]) -or
+                [double]::IsNaN([double]$record[$field]) -or [double]::IsInfinity([double]$record[$field]) -or
+                $record[$field] -le 0 -or $record[$field] -gt $now) { throw 'Owned reader timestamp is unavailable' }
+        }
+        if ($now - $record.blankVerifiedAt -gt 30 -or $record.sendAttemptedAt -gt $record.blankVerifiedAt) {
+            throw 'Owned blank inventory proof is stale'
+        }
+        $state = Get-AiCoreNativeReaderState $Target $Reader 'about:blank'
+        Set-AiCoreNativeReaderFocus $state
+        $null = Get-AiCoreNativeReaderState $Target $Reader 'about:blank' $true
+        $record.navigationAttemptedAt = $now
+        Write-AiCoreNativeAttempt $stream $record 'NAVIGATION_ATTEMPTING'
+        $fresh = Get-AiCoreNativeReaderState $Target $Reader 'about:blank' $true
+        Set-AiCoreNativeReaderAddress $fresh $Target.PageUrl
+        $null = Get-AiCoreNativeReaderState $Target $Reader $Target.PageUrl $true
+        Send-AiCoreNativeKeys '{ENTER}'
+        Write-AiCoreNativeAttempt $stream $record 'NAVIGATION_INVOKED'
+        return @{ navigationInvoked = $true; rawTargetId = $Reader.RawTargetId; pageUrl = $Target.PageUrl }
+    } finally { $stream.Dispose() }
+}
+
+Export-ModuleMember -Function Invoke-AiCoreNativeComposerOnce, Resolve-AiCoreNativeWindow, Invoke-AiCoreNativeRefreshOnce, Resolve-AiCoreNativeReaderWindow, Invoke-AiCoreNativeReaderNavigationOnce

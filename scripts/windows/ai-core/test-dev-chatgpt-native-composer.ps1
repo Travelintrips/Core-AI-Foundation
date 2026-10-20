@@ -2,6 +2,9 @@
 # module scope before invocation; no window, account, clipboard or key is read.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($PSVersionTable.PSEdition -cne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5 -or
+    $PSVersionTable.PSVersion.Minor -ne 1) { throw 'Native component gate requires Windows PowerShell 5.1 Desktop' }
+$PSVersionTable | Format-Table -AutoSize | Out-String | Write-Output
 $modulePath = Join-Path $PSScriptRoot 'dev-chatgpt-native-composer.psm1'
 $parseErrors = $null
 $tokens = $null
@@ -30,7 +33,10 @@ $nativeModule = Get-Module 'dev-chatgpt-native-composer'
     function script:Send-AiCoreNativeKeys {
         param([string]$Keys)
         $script:Fake.Trace.Add('keys:' + $Keys)
-        if ($Keys -cne '^{END}' -and $Keys -cne '{F5}') {
+        if ($Keys -ceq '{ENTER}') {
+            $script:Fake.ReaderEnters++
+            if ($script:Fake.FailReaderEnter) { throw 'Synthetic unknown reader Enter' }
+        } elseif ($Keys -cne '^{END}' -and $Keys -cne '{F5}') {
             # Model a successful literal OS insertion independently of the
             # encoder assertions below. Keep any real prefix; never clear it.
             $script:Fake.Draft = $script:Fake.ActualPrefix + $script:Fake.Message + $script:Fake.ProviderSuffix
@@ -46,6 +52,26 @@ $nativeModule = Get-Module 'dev-chatgpt-native-composer'
         $script:Fake.Trace.Add('invoke')
         $script:Fake.Invokes++
         if ($script:Fake.FailInvoke) { throw 'Synthetic unknown Invoke result' }
+    }
+    function script:Get-AiCoreNativeReaderState {
+        param([hashtable]$Target, [hashtable]$Reader, [string]$ExpectedAddress, [bool]$RequireFocus = $false)
+        $script:Fake.ReaderReads++
+        if ($script:Fake.FailReaderRead -eq $script:Fake.ReaderReads) { throw 'Synthetic reader PID title or address changed' }
+        if ($script:Fake.ReaderAddress -cne $ExpectedAddress) { throw 'Synthetic reader address changed' }
+        if ($RequireFocus -and (-not $script:Fake.ReaderForeground -or -not $script:Fake.ReaderFocused)) { throw 'Synthetic reader focus lost' }
+        return @{ Address = 'synthetic-address-control' }
+    }
+    function script:Set-AiCoreNativeReaderFocus {
+        param($State)
+        $script:Fake.Trace.Add('reader-focus')
+        $script:Fake.ReaderFocused = -not $script:Fake.FailReaderFocus
+        $script:Fake.ReaderForeground = -not $script:Fake.FailReaderForeground
+    }
+    function script:Set-AiCoreNativeReaderAddress {
+        param($State, [string]$Address)
+        if ($script:Fake.ReaderReadOnly) { throw 'Synthetic address is not writable' }
+        $script:Fake.Trace.Add('reader-set')
+        $script:Fake.ReaderAddress = $Address
     }
 }
 
@@ -70,10 +96,35 @@ function New-NativeFixture {
     [void][IO.Directory]::CreateDirectory($directory)
     $fake = @{ Reads = 0; FailRead = 0; DriftRead = 0; Focused = $false; FailFocus = $false;
         FailSendControl = $false; FailInvoke = $false; Invokes = 0; ActualPrefix = ''; ProviderSuffix = '';
-        Draft = "Ask ChatGPT`n"; Message = 'Safe [ack] + 100%'; Trace = [Collections.Generic.List[string]]::new() }
+        Draft = "Ask ChatGPT`n"; Message = 'Safe [ack] + 100%'; Trace = [Collections.Generic.List[string]]::new();
+        ReaderReads = 0; FailReaderRead = 0; ReaderAddress = 'about:blank'; ReaderFocused = $false;
+        FailReaderFocus = $false; ReaderForeground = $false; FailReaderForeground = $false;
+        ReaderReadOnly = $false; ReaderEnters = 0; FailReaderEnter = $false }
     & $nativeModule { param($State) $script:Fake = $State } $fake
     return @{ Target = $target; Directory = $directory; Fake = $fake;
         Marker = (Join-Path $directory ($target.BindingFingerprint + '-' + $target.EventId + '.native-input.json')) }
+}
+
+function New-ReaderMarker {
+    param($Fixture)
+    $t = $Fixture.Target
+    $reader = @{ RawTargetId = ('B' * 32); WindowHandle = $t.WindowHandle }
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+    $record = @{ version = 1; status = 'BLANK_VERIFIED'; eventId = $t.EventId; challenge = $t.Challenge;
+        bindingFingerprint = $t.BindingFingerprint; browserProfile = $t.BrowserProfile; conversationId = $t.ConversationId;
+        pageUrl = $t.PageUrl; originalRawTargetId = $t.RawTargetId; browserProcessId = $t.BrowserProcessId;
+        accountAlias = $t.AccountAlias; ownerChannel = $t.OwnerChannel; workerId = $t.WorkerId;
+        messageHash = ('f' * 64); readerRawTargetId = $reader.RawTargetId; readerWindowHandle = $reader.WindowHandle;
+        preopenTargetIds = @($t.RawTargetId); blankVerifiedAt = $now; sendAttemptedAt = ($now - 5) }
+    $path = Join-Path $Fixture.Directory ($t.BindingFingerprint + '-' + $t.EventId + '.native-reader.json')
+    [IO.File]::WriteAllText($path, ($record | ConvertTo-Json -Compress))
+    return @{ Reader = $reader; Record = $record; Path = $path }
+}
+
+function Invoke-ReaderFixture {
+    param($Fixture, $Owned)
+    Invoke-AiCoreNativeReaderNavigationOnce -Target $Fixture.Target -Reader $Owned.Reader `
+        -MessageHash $Owned.Record.messageHash -ReceiptDirectory $Fixture.Directory
 }
 
 function Invoke-Fixture {
@@ -272,6 +323,82 @@ $cases = [ordered]@{
         [IO.File]::WriteAllText($f.Marker, $valid)
         $result = Invoke-AiCoreNativeRefreshOnce -Target $f.Target -ReceiptDirectory $f.Directory -MessageHash $record.messageHash
         Assert-True ($result.refreshInvoked) 'Observed Decimal timestamp was rejected'
+    }
+    'An initially background owned blank is focused and checked four times while retaining Send time' = {
+        $owned = New-ReaderMarker $f
+        Assert-True (-not $f.Fake.ReaderForeground -and -not $f.Fake.ReaderFocused) 'Fixture must begin in the background'
+        $result = Invoke-ReaderFixture $f $owned
+        Assert-True ($f.Fake.ReaderReads -eq 4) 'Reader state was not checked before every native action'
+        Assert-True ($f.Fake.ReaderForeground -and $f.Fake.ReaderFocused) 'Native focus was not restored before input'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'reader-focus|reader-set|keys:{ENTER}') 'Owned reader input order changed'
+        Assert-True ($result.navigationInvoked -and $result.rawTargetId -ceq $owned.Reader.RawTargetId) 'Reader navigation identity changed'
+        Assert-True ($f.Fake.Draft -ceq "Ask ChatGPT`n" -and $f.Fake.Invokes -eq 0) 'Original composer was touched'
+        $after = Get-Content -LiteralPath $owned.Path -Raw | ConvertFrom-Json
+        Assert-True ($after.status -ceq 'NAVIGATION_INVOKED' -and $after.sendAttemptedAt -eq $owned.Record.sendAttemptedAt) 'Original Send time or navigation record changed'
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'already attempted'
+        Assert-True ($f.Fake.ReaderEnters -eq 1) 'Owned reader navigation was repeated'
+    }
+    'A different native PID title or address after focus prevents address editing' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.FailReaderRead = 2
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'reader PID title or address changed'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'reader-focus') 'Changed blank received an address'
+        Assert-True ($f.Fake.ReaderAddress -ceq 'about:blank' -and $f.Fake.ReaderEnters -eq 0) 'Changed tab was navigated'
+    }
+    'Reader drift during durable marking prevents SetValue and cannot repeat' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.FailReaderRead = 3
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'reader PID title or address changed'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'reader-focus') 'Changed blank received an address after marking'
+        $after = Get-Content -LiteralPath $owned.Path -Raw | ConvertFrom-Json
+        Assert-True ($after.status -ceq 'NAVIGATION_ATTEMPTING') 'Uncertain reader attempt was not retained'
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'already attempted'
+    }
+    'Reader drift after address SetValue blocks Enter and retains the owned tab' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.FailReaderRead = 4
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'reader PID title or address changed'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'reader-focus|reader-set') 'Enter escaped its blank document guard'
+        Assert-True ($f.Fake.ReaderEnters -eq 0 -and $f.Fake.ReaderAddress -ceq $f.Target.PageUrl) 'Staged address was erased or navigated'
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'already attempted'
+    }
+    'Lost native reader focus and read-only address cannot reach Enter' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.FailReaderFocus = $true
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'reader focus lost'
+        Assert-True ($f.Fake.ReaderEnters -eq 0 -and $f.Fake.ReaderAddress -ceq 'about:blank') 'Focus loss reached reader input'
+        $f.Fake.FailReaderFocus = $false
+        $f.Fake.ReaderReadOnly = $true
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'not writable'
+        Assert-True ($f.Fake.ReaderEnters -eq 0 -and $f.Fake.ReaderAddress -ceq 'about:blank') 'Read-only address reached Enter'
+    }
+    'Address keyboard focus alone cannot authorize input without native foreground' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.FailReaderForeground = $true
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'reader focus lost'
+        Assert-True ($f.Fake.ReaderFocused -and -not $f.Fake.ReaderForeground) 'Fixture did not isolate foreground loss'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'reader-focus' -and $f.Fake.ReaderEnters -eq 0) 'Lost foreground reached address input'
+    }
+    'A preexisting reader raw ID or stale blank proof fails before native focus' = {
+        $owned = New-ReaderMarker $f
+        $owned.Record.preopenTargetIds = @($f.Target.RawTargetId, $owned.Reader.RawTargetId)
+        [IO.File]::WriteAllText($owned.Path, ($owned.Record | ConvertTo-Json -Compress))
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'not a new tab'
+        $owned.Record.preopenTargetIds = @($f.Target.RawTargetId)
+        $owned.Record.blankVerifiedAt -= 31
+        $owned.Record.sendAttemptedAt -= 40
+        [IO.File]::WriteAllText($owned.Path, ($owned.Record | ConvertTo-Json -Compress))
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'proof is stale'
+        Assert-True ($f.Fake.ReaderReads -eq 0 -and $f.Fake.Trace.Count -eq 0) 'Unproven ownership reached native focus'
+    }
+    'Unknown reader Enter is retained and never replayed' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.FailReaderEnter = $true
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'unknown reader Enter'
+        $after = Get-Content -LiteralPath $owned.Path -Raw | ConvertFrom-Json
+        Assert-True ($after.status -ceq 'NAVIGATION_ATTEMPTING' -and $f.Fake.ReaderEnters -eq 1) 'Unknown Enter was marked complete or forgotten'
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'already attempted'
+        Assert-True ($f.Fake.ReaderEnters -eq 1) 'Unknown Enter was replayed'
     }
 }
 

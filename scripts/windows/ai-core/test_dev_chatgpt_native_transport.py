@@ -14,6 +14,7 @@ from dev_chatgpt_native_transport import NativeTransport, native_options
 
 CHAT = "22222222-2222-4222-8222-222222222222"
 RAW = "A" * 32
+READER = "B" * 32
 EVENT = "b" * 64
 CHALLENGE = "c" * 64
 BINDING = {"version": 1, "accountAlias": "GPT02", "ownerChannel": "ai-engine-oauth:" + "d" * 64,
@@ -32,9 +33,26 @@ class FakeTransport(NativeTransport):
         self.calls = []
         self.submissions = 0
         self.captures = 0
+        self.opens = 0
+        self.navigations = 0
+        self.reader_tab = None
+        self.open_raw_id = READER
+        self.open_url = "about:blank"
+        self.open_fails = False
+        self.extra_blank = False
+        self.extra_blank_after_open = False
+        self.duplicate_after_capture = False
+        self.reader_url_after_capture = URL
+        self.reader_response_id = READER
+        self.bad_reader_window = False
+        self.capture_fails = False
+        self.use_real_listener = False
+        self.budget_after_requests = None
         self.visible = False
         self.duplicate = False
         self.wrong_pid = False
+        self.focus_ok = True
+        self.drift_after_focus = False
         self.drift_after_snapshot = False
         self.bad_response = False
         self.revoke_after_capture = False
@@ -64,7 +82,33 @@ class FakeTransport(NativeTransport):
                     "pid": 7654 if self.wrong_pid else 1234, "userDataDir": self.fake_user_data}
         if action == "tabs":
             tab = {"type": "page", "url": URL, "targetId": RAW, "tabId": "t1"}
-            return {"tabs": [tab, dict(tab)] if self.duplicate else [tab]}
+            tabs = [tab]
+            if self.duplicate:
+                tabs.append({**tab, "targetId": "D" * 32})
+            if self.reader_tab is not None:
+                tabs.append(dict(self.reader_tab))
+            if self.extra_blank:
+                tabs.append({"type": "page", "url": "about:blank", "targetId": "E" * 32})
+            return {"tabs": tabs}
+        if action == "open":
+            if args != ("about:blank", "--label", "aicore-reader-" + EVENT[:16]):
+                raise AssertionError("Only the owned blank reader may be opened")
+            durable = json.loads(self.reader_marker.read_text(encoding="utf-8"))
+            if durable["status"] != "OPEN_ATTEMPTING" or durable["preopenTargetIds"] != [RAW]:
+                raise AssertionError("Open was not durably fenced by the original inventory")
+            self.opens += 1
+            self.reader_tab = {"type": "page", "url": self.open_url, "targetId": self.open_raw_id}
+            if self.extra_blank_after_open:
+                self.extra_blank = True
+            if self.open_fails:
+                raise RuntimeError("Synthetic uncertain open")
+            return dict(self.reader_tab)
+        if action == "focus":
+            if args not in ((RAW,), (READER,)):
+                raise AssertionError("Focus must use an exact owned raw target")
+            if self.drift_after_focus:
+                self.wrong_pid = True
+            return {"ok": self.focus_ok}
         if action == "snapshot":
             text = '- textbox "Ask ChatGPT" [active] [ref=f239e430]:\n  - paragraph: Ask ChatGPT'
             if self.visible:
@@ -73,6 +117,8 @@ class FakeTransport(NativeTransport):
                 self.wrong_pid = True
             return text
         if action == "requests":
+            if self.budget_after_requests is not None:
+                self.deadline = time.monotonic() + self.budget_after_requests
             return {"ok": True, "targetId": RAW, "url": URL, "requests": [
                 {"method": "GET", "url": REQUEST, "timestamp": self.original_time, "status": 200, "ok": True}]}
         raise AssertionError("Unapproved synthetic CLI action: " + action)
@@ -92,6 +138,18 @@ class FakeTransport(NativeTransport):
         self.calls.append(("native:" + action, data))
         if action == "resolve":
             return {"windowHandle": 999, "browserProcessId": 1234, "rawTargetId": RAW, "pageUrl": URL}
+        if action == "reader-resolve":
+            return {"windowHandle": 999, "browserProcessId": 4321 if self.bad_reader_window else 1234,
+                    "rawTargetId": READER, "address": "about:blank"}
+        if action == "reader-navigate":
+            record = self._reader_record()
+            if record["status"] != "BLANK_VERIFIED" or data["reader"] != {"RawTargetId": READER, "WindowHandle": 999}:
+                raise AssertionError("Native navigation lost durable reader ownership")
+            self.navigations += 1
+            record = self._reader_update(record, status="NAVIGATION_ATTEMPTING", navigationAttemptedAt=time.time())
+            self.reader_tab["url"] = self.reader_url_after_capture
+            self._reader_update(record, status="NAVIGATION_INVOKED")
+            return {"navigationInvoked": True, "rawTargetId": READER, "pageUrl": URL}
         if action == "submit":
             self.submissions += 1
             self.assert_message = data["message"]
@@ -102,10 +160,20 @@ class FakeTransport(NativeTransport):
             return {"sendInvoked": True}
         raise AssertionError("Unexpected native action")
 
-    def _capture_response(self, request_url, message_hash):
+    def _listen_reader(self, request_url, message_hash, reader):
         self.captures += 1
         if request_url != REQUEST or message_hash != hashlib.sha256(MESSAGE.encode()).hexdigest():
             raise AssertionError("Capture context changed")
+        if self.use_real_listener:
+            return super()._listen_reader(request_url, message_hash, reader)
+        self._bridge("reader-navigate", reader=reader, messageHash=message_hash, receiptDirectory=str(self.directory))
+        if self.capture_fails:
+            raise RuntimeError("Synthetic uncertain capture")
+        return self._response_envelope()
+
+    def _response_envelope(self):
+        if self.duplicate_after_capture:
+            self.duplicate = True
         if self.revoke_after_capture:
             self.allowed = False
         body = {"conversation_id": CHAT, "current_node": "44444444-4444-4444-8444-444444444444", "messages": [
@@ -118,7 +186,7 @@ class FakeTransport(NativeTransport):
         ]}
         if self.bad_response:
             body["conversation_id"] = "55555555-5555-4555-8555-555555555555"
-        return {"ok": True, "targetId": RAW, "url": URL, "response": {"url": REQUEST, "status": 200,
+        return {"ok": True, "targetId": self.reader_response_id, "url": URL, "response": {"url": REQUEST, "status": 200,
                 "headers": {"unread-fixture": "must-not-be-output"}, "body": json.dumps(body)}}
 
 
@@ -153,7 +221,12 @@ class NativeTransportTests(unittest.TestCase):
         self.assertFalse(observed["alreadyVisible"])
         self.assertNotIn("headers", observed)
         self.assertNotIn("body", observed)
-        self.assertFalse(any(action in ("evaluate", "type", "open", "navigate") for action, _ in self.transport.calls))
+        self.assertEqual(observed["rawTargetId"], RAW)
+        self.assertEqual(observed["captureRawTargetId"], READER)
+        self.assertEqual(observed["readerDisposition"], "PRESERVED_RECONCILIATION_REQUIRED")
+        self.assertEqual(self.transport.opens, 1)
+        self.assertEqual(self.transport.navigations, 1)
+        self.assertFalse(any(action in ("evaluate", "type", "navigate", "close", "native:refresh") for action, _ in self.transport.calls))
 
     def test_original_attempt_is_reconciled_without_reinsertion_or_new_timestamp(self):
         self.transport._write_attempt("SEND_ATTEMPTING")
@@ -162,6 +235,25 @@ class NativeTransportTests(unittest.TestCase):
         self.assertTrue(observed["alreadyVisible"])
         self.assertEqual(observed["sendAttemptedAt"], self.transport.original_time)
         self.assertEqual(self.transport.submissions, 0)
+
+    def test_exact_target_focus_precedes_native_resolution(self):
+        self.transport.run(MESSAGE)
+        actions = [action for action, _ in self.transport.calls]
+        self.assertEqual(actions.count("focus"), 3)
+        self.assertLess(actions.index("focus"), actions.index("native:resolve"))
+        self.assertEqual(self.transport.calls[actions.index("focus")][1], (RAW,))
+        self.assertEqual([args for action, args in self.transport.calls if action == "focus"], [(RAW,), (READER,), (RAW,)])
+
+    def test_failed_focus_or_changed_profile_blocks_native_resolution(self):
+        for change in ({"focus_ok": False}, {"drift_after_focus": True}):
+            with tempfile.TemporaryDirectory() as root:
+                transport = FakeTransport(root)
+                for key, value in change.items():
+                    setattr(transport, key, value)
+                with self.subTest(change=change), self.assertRaises(RuntimeError):
+                    transport.run(MESSAGE)
+                self.assertFalse(any(action.startswith("native:") for action, _ in transport.calls))
+                self.assertEqual(transport.submissions, 0)
 
     def test_visible_marker_without_owned_attempt_never_authorizes_replay(self):
         self.transport.visible = True
@@ -223,6 +315,145 @@ class NativeTransportTests(unittest.TestCase):
         self.assertEqual(argv.count(REQUEST), 1)
         self.assertNotIn("openclaw.cmd", " ".join(argv))
         self.assertIn("&include_has_versions=true", argv[argv.index("responsebody") + 1])
+
+    def test_success_preserves_reader_and_original_timestamp_with_durable_reconciliation(self):
+        self.transport.run(MESSAGE)
+        record = json.loads(self.transport.reader_marker.read_text(encoding="utf-8"))
+        self.assertEqual(record["status"], "CAPTURE_VERIFIED")
+        self.assertEqual(record["disposition"], "PRESERVED_RECONCILIATION_REQUIRED")
+        self.assertTrue(record["originalFocusRestored"])
+        self.assertEqual(record["originalRawTargetId"], RAW)
+        self.assertEqual(record["readerRawTargetId"], READER)
+        self.assertEqual(record["preopenTargetIds"], [RAW])
+        self.assertEqual(record["sendAttemptedAt"], self.transport.original_time)
+        self.assertNotIn(MESSAGE, self.transport.reader_marker.read_text(encoding="utf-8"))
+        self.assertNotIn(FINAL, self.transport.reader_marker.read_text(encoding="utf-8"))
+        self.assertEqual(self.transport.reader_tab["url"], URL)
+        count = len(self.transport.calls)
+        with self.assertRaisesRegex(RuntimeError, "reconciliation"):
+            self.transport.run(MESSAGE)
+        self.assertEqual(len(self.transport.calls), count)
+
+    def test_uncertain_open_is_durable_and_cannot_create_another_reader_on_retry(self):
+        self.transport.open_fails = True
+        with self.assertRaisesRegex(RuntimeError, "uncertain open"):
+            self.transport.run(MESSAGE)
+        record = json.loads(self.transport.reader_marker.read_text(encoding="utf-8"))
+        self.assertEqual(record["status"], "OPEN_ATTEMPTING")
+        self.assertNotIn("readerRawTargetId", record)
+        self.assertIsNone(self.transport.reader_id)
+        self.transport.open_fails = False
+        with self.assertRaisesRegex(RuntimeError, "reconciliation"):
+            self.transport.run(MESSAGE)
+        self.assertEqual(self.transport.opens, 1)
+        self.assertEqual(self.transport.submissions, 1)
+        self.assertEqual(self.transport.navigations, 0)
+
+    def test_open_must_return_a_new_raw_id_and_exact_blank_url(self):
+        for change in ({"open_raw_id": RAW}, {"open_raw_id": RAW.lower()}, {"open_raw_id": "unknown"},
+                       {"open_url": "https://chatgpt.com/"}):
+            with tempfile.TemporaryDirectory() as folder:
+                transport = FakeTransport(folder)
+                for key, value in change.items():
+                    setattr(transport, key, value)
+                with self.subTest(change=change), self.assertRaisesRegex(RuntimeError, "open outcome"):
+                    transport.run(MESSAGE)
+                self.assertEqual(transport.opens, 1)
+                self.assertEqual(transport.navigations, 0)
+                self.assertFalse(any(action.startswith("native:reader") for action, _ in transport.calls))
+
+    def test_preexisting_blank_blocks_send_and_new_blank_ambiguity_blocks_navigation(self):
+        self.transport.extra_blank = True
+        with self.assertRaisesRegex(RuntimeError, "preexisting blank"):
+            self.transport.run(MESSAGE)
+        self.assertEqual(self.transport.submissions, 0)
+        self.assertEqual(self.transport.opens, 0)
+        self.transport.extra_blank = False
+        self.transport.extra_blank_after_open = True
+        with self.assertRaisesRegex(RuntimeError, "not uniquely identifiable"):
+            self.transport.run(MESSAGE)
+        self.assertEqual(self.transport.opens, 1)
+        self.assertEqual(self.transport.navigations, 0)
+
+    def test_owned_reader_does_not_exclude_an_unowned_duplicate_conversation(self):
+        self.transport.duplicate_after_capture = True
+        with self.assertRaisesRegex(RuntimeError, "exactly one"):
+            self.transport.run(MESSAGE)
+        self.assertEqual(self.transport.opens, 1)
+        self.assertEqual(self.transport.navigations, 1)
+        record = json.loads(self.transport.reader_marker.read_text(encoding="utf-8"))
+        self.assertEqual(record["status"], "NAVIGATION_INVOKED")
+
+    def test_reader_authwall_or_changed_conversation_is_preserved_without_proof(self):
+        for url in ("https://chatgpt.com/auth/login", "https://chatgpt.com/c/55555555-5555-4555-8555-555555555555"):
+            with tempfile.TemporaryDirectory() as folder:
+                transport = FakeTransport(folder)
+                transport.reader_url_after_capture = url
+                with self.subTest(url=url), self.assertRaisesRegex(RuntimeError, "Owned reader changed"):
+                    transport.run(MESSAGE)
+                self.assertEqual(transport.reader_tab["url"], url)
+                self.assertFalse(any(action in ("close", "navigate", "native:refresh") for action, _ in transport.calls))
+                self.assertEqual(json.loads(transport.reader_marker.read_text())["status"], "NAVIGATION_INVOKED")
+
+    def test_reader_native_pid_mismatch_blocks_navigation_and_preserves_blank(self):
+        self.transport.bad_reader_window = True
+        with self.assertRaisesRegex(RuntimeError, "native window is unproven"):
+            self.transport.run(MESSAGE)
+        self.assertEqual(self.transport.reader_tab["url"], "about:blank")
+        self.assertEqual(self.transport.navigations, 0)
+        self.assertEqual(json.loads(self.transport.reader_marker.read_text())["status"], "BLANK_CREATED")
+
+    def test_response_must_identify_the_reader_raw_target_not_the_original(self):
+        self.transport.reader_response_id = RAW
+        with self.assertRaises(ValueError):
+            self.transport.run(MESSAGE)
+        self.assertEqual(json.loads(self.transport.reader_marker.read_text())["status"], "NAVIGATION_INVOKED")
+
+    def test_capture_failure_cannot_repeat_input_open_or_navigation(self):
+        self.transport.capture_fails = True
+        with self.assertRaisesRegex(RuntimeError, "uncertain capture"):
+            self.transport.run(MESSAGE)
+        self.transport.capture_fails = False
+        with self.assertRaisesRegex(RuntimeError, "reconciliation"):
+            self.transport.run(MESSAGE)
+        self.assertEqual((self.transport.submissions, self.transport.opens, self.transport.navigations), (1, 1, 1))
+        self.assertFalse(any(action in ("close", "native:refresh") for action, _ in self.transport.calls))
+
+    def test_insufficient_budget_stops_before_send_or_reader_open(self):
+        self.transport.deadline = time.monotonic() + 100
+        with self.assertRaisesRegex(RuntimeError, "Insufficient"):
+            self.transport.run(MESSAGE)
+        self.assertEqual((self.transport.submissions, self.transport.opens), (0, 0))
+        self.transport.deadline = time.monotonic() + 225
+        self.transport.budget_after_requests = 130
+        with self.assertRaisesRegex(RuntimeError, "Insufficient"):
+            self.transport.run(MESSAGE)
+        self.assertEqual((self.transport.submissions, self.transport.opens), (1, 0))
+        self.assertFalse(self.transport.reader_marker.exists())
+
+    def test_future_listener_uses_reader_and_exact_observed_url_without_queued_cli_actions(self):
+        transport = self.transport
+        transport.use_real_listener = True
+        class Listener:
+            def __init__(self, argv):
+                transport.calls.append(("listener:start", argv))
+                self.argv = argv
+            def finish(self, timeout):
+                transport.calls.append(("listener:finish", timeout))
+                return json.dumps(transport._response_envelope())
+            def close(self):
+                transport.calls.append(("listener:close", ()))
+        with patch("dev_chatgpt_native_transport._Capture", Listener), \
+                patch("dev_chatgpt_native_transport.time.sleep", side_effect=lambda seconds: transport.calls.append(("listener:lead", seconds))):
+            observed = transport.run(MESSAGE)
+        self.assertEqual(observed["captureRawTargetId"], READER)
+        actions = [action for action, _ in transport.calls]
+        start, finish = actions.index("listener:start"), actions.index("listener:finish")
+        self.assertEqual(actions[start + 1:finish], ["listener:lead", "native:reader-navigate"])
+        argv = transport.calls[start][1]
+        self.assertEqual(argv[argv.index("--target-id") + 1], READER)
+        self.assertEqual(argv[argv.index("responsebody") + 1], REQUEST)
+        self.assertEqual(transport.calls[start + 1][1], 12)
 
 
 if __name__ == "__main__":
