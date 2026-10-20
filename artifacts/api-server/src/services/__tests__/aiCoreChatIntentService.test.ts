@@ -1,5 +1,26 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { vi } from "vitest";
+import { aiCoreChatIntentService as AiCoreChatIntentService } from "../aiCoreChatIntentService.js";
+import { WorkflowRunCancelledError } from "../../clients/workflowClient.js";
+
+describe("aiCoreChatIntentService handshake cancellation", () => {
+  it("retries on cancellation error and returns fallback response", async () => {
+    // Spy on console.warn
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Mock client handshake to fail once then succeed
+    const mockClient = { handshake: vi.fn()
+      .mockRejectedValueOnce(new WorkflowRunCancelledError("Cancelled by user"))
+      .mockResolvedValueOnce({ sessionId: "fallback-session" })
+    };
+    const service = new AiCoreChatIntentService(mockClient as any);
+    const result = await service.handshake({ userId: "user123" });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("cancelled"));
+    expect(result).toEqual({ sessionId: "fallback-session" });
+    warnSpy.mockRestore();
+  });
+});
+
 import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
