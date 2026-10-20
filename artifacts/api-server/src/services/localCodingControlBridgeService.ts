@@ -1228,9 +1228,16 @@ export async function getAiTaskBridgeTimeline(externalCommandId: string) {
     id: aiCodingBridgeResponsesTable.id,
     kind: aiCodingBridgeResponsesTable.kind,
     message: aiCodingBridgeResponsesTable.message,
+    checkpoint: aiCodingBridgeResponsesTable.checkpointJson,
+    metadata: aiCodingBridgeResponsesTable.metadataJson,
     createdAt: aiCodingBridgeResponsesTable.createdAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
     .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
-  return { commandId: command.id, status: command.status, responses };
+  return {
+    commandId: command.id,
+    status: command.status,
+    commandMetadata: command.metadataJson,
+    responses,
+  };
 }
