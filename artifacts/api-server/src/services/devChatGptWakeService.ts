@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { dispatchExternalAgentWork } from "./externalAgentDispatchService.js";
 import { deriveDevAssistantChallenge } from "./devAssistantAttestation.js";
+import { devWakeAttestationExpected } from "./devChatGptWakeEvidenceService.js";
 import { getVerifiedMcpHandshakeEvidenceForConversation } from "./localCodingControlBridgeService.js";
 import {
   DEV_WAKE_DELL_WORKER, isDevWakeRuntime, loadDevWakeRuntimeConfig, readDevWakeBinding,
@@ -99,6 +100,7 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, wo
       metadata["targetConversationId"] !== input.targetConversationId.toLowerCase() ||
       metadata["eventId"] !== input.eventId.toLowerCase() ||
       metadata["assistantAttestationChallenge"] !== challenge) return false;
+  if (worker === DEV_WAKE_DELL_WORKER && !devWakeAttestationExpected(metadata)) return false;
   if (input.watchCommandId !== undefined) {
     if (metadata["explicitWorkerTarget"] !== true) return false;
     const association = metadata["devContinuity"];

@@ -20,7 +20,16 @@ export function devWakeAttestationExpected(metadata: unknown): Parameters<typeof
       (wakeBinding && (wakeBinding.ownerChannel !== ownerChannel || wakeBinding.targetConversationId !== targetConversationId || wakeBinding.workerId !== worker))) return null;
   const continuity = metadata["devContinuity"];
   if (continuity !== undefined && !record(continuity)) return null;
-  if (record(continuity) && (continuity["ownerChannel"] !== ownerChannel || continuity["eventId"] !== eventId)) return null;
+  // The worker hashes the top-level context. Callback, retry and restore must
+  // reject a second, divergent representation before trusting either one.
+  if (record(continuity)) {
+    if (metadata["watchCommandId"] === undefined || metadata["jobId"] === undefined || metadata["checkpointRevision"] === undefined ||
+        continuity["ownerChannel"] !== ownerChannel || continuity["eventId"] !== eventId ||
+        continuity["parentWatchCommandId"] !== metadata["watchCommandId"] ||
+        continuity["jobId"] !== metadata["jobId"] ||
+        continuity["checkpointRevision"] !== metadata["checkpointRevision"] ||
+        continuity["assistantAttestationChallenge"] !== metadata["assistantAttestationChallenge"]) return null;
+  } else if (["watchCommandId", "jobId", "checkpointRevision"].some(key => metadata[key] !== undefined)) return null;
   const expected = {
     ownerChannel, targetConversationId, eventId, workerId: worker as DevAttestationWorker,
     ...(record(continuity) ? { watchCommandId: continuity["parentWatchCommandId"] as string,

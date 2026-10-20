@@ -41,6 +41,7 @@ const attestation = await import('../devAssistantAttestation.js');
 const evidence = await import('../devChatGptWakeEvidenceService.js');
 const wake = await import('../devChatGptWakeService.js');
 const bridge = await import('../localCodingControlBridgeService.js');
+const events = await import('../devContinuityWakeEvents.js');
 const legacy={ownerChannel:'ai-engine-oauth:'+'a'.repeat(64),targetConversationId:'11111111-1111-4111-8111-111111111111',workerId:binding.DEV_WAKE_DELL_WORKER};
 const entry={accountAlias:'GPT02',ownerChannel:'ai-engine-oauth:'+'d'.repeat(64),targetConversationId:'22222222-2222-4222-8222-222222222222',workerId:binding.DEV_WAKE_DELL_WORKER,browserProfile:'travelincars-dev',enabled:true};
 const raw = entries => JSON.stringify({version:1,bindings:entries??[entry]});
@@ -65,7 +66,7 @@ beforeEach(()=>{
   vi.stubEnv('APP_ENV', 'development');vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ENABLED', 'true');vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CHANNELS', legacy.ownerChannel);
   vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS', legacy.targetConversationId);vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_WORKER_ID', entry.workerId);
-  process.env.AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64=publicKey;
+  vi.stubEnv('AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64', publicKey);
   vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON', raw());
 });
 test('cross-language fingerprint and both challenge vectors',()=>{
@@ -146,4 +147,46 @@ test('handshake requires matching final ACK and signed bound profile',()=>{
   assert.equal(bridge.verifyMcpHandshakeEvidenceRow(legacy.ownerChannel,row,publicKey),null);
   assert.equal(bridge.verifyMcpHandshakeEvidenceRow(entry.ownerChannel,{...row,responseId:'wrong'},publicKey),null);
   assert.equal(bridge.verifyMcpHandshakeEvidenceRow(entry.ownerChannel,{...row,commandMetadata:{...row.commandMetadata,wakeBinding:undefined}},publicKey),null);
+});
+
+test('continuity context drift is rejected by receipt, callback, restore and retry', async () => {
+  const input = { ownerChannel:entry.ownerChannel, targetConversationId:entry.targetConversationId, eventId:expected.eventId,
+    watchCommandId:'55555555-5555-4555-8555-555555555555', jobId:'66666666-6666-4666-8666-666666666666',
+    checkpointRevision:7, expiresAt:'2099-01-01T00:00:00.000Z' };
+  await wake.queueDevBrowserWake(input);
+  const [key, command] = commands.entries().next().value;
+  const good = command.metadataJson;
+  const details = receipt(good);
+  const event = metadata => events.devContinuityResultFromCommittedCommand({ id:command.id, source:'ai-core',
+    commandType:'EXTERNAL_AGENT_WORK', authenticatedWorkerId:entry.workerId, status:'COMPLETED', details,
+    metadata:{...metadata, completedBy:entry.workerId} });
+  const verify = metadata => evidence.verifyDevWakeCommandReceipt({ metadata, details, publicKeyDerBase64:publicKey,
+    notBefore:new Date(Date.now()-1000).toISOString(), receivedAt:new Date().toISOString() }).verified;
+  assert.equal(verify(good), true);
+  assert.ok(event(good));
+  assert.equal((await wake.queueDevBrowserWake(input)).created, false);
+  const changed = [
+    {...good, watchCommandId:'77777777-7777-4777-8777-777777777777'},
+    {...good, jobId:'77777777-7777-4777-8777-777777777777'},
+    {...good, checkpointRevision:8},
+    {...good, watchCommandId:undefined, jobId:undefined, checkpointRevision:undefined},
+    {...good, devContinuity:undefined},
+    {...good, devContinuity:{...good.devContinuity, assistantAttestationChallenge:'f'.repeat(64)}},
+  ];
+  for (const metadata of changed) {
+    assert.equal(evidence.devWakeAttestationExpected(metadata), null);
+    assert.equal(verify(metadata), false);
+    assert.equal(event(metadata), null);
+    commands.set(key, {...command, metadataJson:metadata});
+    await assert.rejects(wake.queueDevBrowserWake(input), /RECONCILIATION_UNVERIFIED/);
+  }
+  assert.equal(evidence.devWakeAttestationExpected({...meta, watchCommandId:input.watchCommandId}), null);
+  assert.equal(evidence.devWakeAttestationExpected({...meta, devContinuity:{ownerChannel:entry.ownerChannel,
+    eventId:expected.eventId, assistantAttestationChallenge:meta.assistantAttestationChallenge}}), null);
+  callbackRow = { id:command.id, source:'ai-core', command_type:'EXTERNAL_AGENT_WORK', metadata_json:changed[0],
+    received_at:new Date(Date.now()-1000) };
+  const committedBefore = commits;
+  await assert.rejects(bridge.completeCodingBridgeCommand({ clientId:entry.workerId, commandId:command.id,
+    claimToken:'lease', status:'COMPLETED', message:'test', details }), /CALLBACK_ATTESTATION_INVALID/);
+  assert.equal(commits, committedBefore); assert.equal(inserts.length, 0); assert.equal(rollbacks, 1);
 });
