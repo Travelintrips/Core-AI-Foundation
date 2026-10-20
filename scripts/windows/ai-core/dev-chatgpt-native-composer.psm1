@@ -242,6 +242,15 @@ function Set-AiCoreNativeSubmitFocus {
     Assert-AiCoreNativeIdle $focused
     return $focused
 }
+function Set-AiCoreNativeComposerValue {
+    param($State, [string]$Value)
+    $pattern = $null
+    if (-not $State.Composer.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$pattern) -or
+        $pattern.Current.IsReadOnly) {
+        throw 'Native composer ValuePattern is unavailable or read-only'
+    }
+    $pattern.SetValue($Value)
+}
 function Send-AiCoreNativeKeys { param([string]$Keys) [System.Windows.Forms.SendKeys]::SendWait($Keys) }
 function Get-AiCoreNativeSendControl {
     param($State)
@@ -291,7 +300,9 @@ function Invoke-AiCoreNativeComposerOnce {
     )
     Assert-AiCoreNativeTarget $Target
     Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
-    $literal = ConvertTo-AiCoreLiteralKeys $Message
+    # Retain the bounded printable input contract even though exact composer
+    # insertion uses ValuePattern rather than process-global keyboard input.
+    $null = ConvertTo-AiCoreLiteralKeys $Message
     if (-not [IO.Directory]::Exists($ReceiptDirectory)) { throw 'Native receipt directory must already exist' }
     $path = Join-Path $ReceiptDirectory ($Target.BindingFingerprint + '-' + $Target.EventId + '.native-input.json')
     if ([IO.File]::Exists($path)) { throw 'Native input already attempted; reconciliation required' }
@@ -316,11 +327,12 @@ function Invoke-AiCoreNativeComposerOnce {
         $focused = Set-AiCoreNativeSubmitFocus $state $Target $LeaseExpiresTickCount64
         Assert-AiCoreNativeInsertableDraft $focused $Target.ComposerName
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
-        Send-AiCoreNativeKeys '^{END}'
-        $atEnd = Get-AiCoreNativeState $Target $true
-        Assert-AiCoreNativeInsertableDraft $atEnd $Target.ComposerName
+        # Re-read the exact paired composer immediately before mutation so a
+        # late user/provider draft can never be overwritten.
+        $prewrite = Get-AiCoreNativeState $Target $true
+        Assert-AiCoreNativeInsertableDraft $prewrite $Target.ComposerName
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
-        Send-AiCoreNativeKeys $literal
+        Set-AiCoreNativeComposerValue $prewrite $Message
         $readback = Get-AiCoreNativeState $Target $true
         Assert-AiCoreNativeReadback $readback $Message ([bool]$AllowProviderLf)
         $record.sendAttemptedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0

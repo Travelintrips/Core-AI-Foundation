@@ -48,6 +48,12 @@ $nativeModule = Import-Module $modulePath -Force -PassThru
         if (-not [object]::ReferenceEquals($Element, $script:Fake.Address)) { throw 'Unexpected model value read' }
         return $script:Fake.AddressValue
     }
+    function script:Set-AiCoreNativeComposerValue {
+        param($State, [string]$Value)
+        $script:Fake.Trace.Add('composer-set')
+        $script:Fake.Draft = $Value
+        if ($script:Fake.ExpireAfterTyping) { $script:Fake.Tick = 10000 }
+    }
     function script:Send-AiCoreNativeKeys {
         param([string]$Keys)
         $script:Fake.Trace.Add('keys:' + $Keys)
@@ -135,7 +141,7 @@ function Invoke-FocusFixture {
 }
 function Assert-NoKeysOrSend {
     param($Fixture)
-    Assert-True (@($Fixture.Fake.Trace | Where-Object { $_.StartsWith('keys:') -or $_ -ceq 'send' }).Count -eq 0) 'Failure reached keys or Send'
+    Assert-True (@($Fixture.Fake.Trace | Where-Object { $_.StartsWith('keys:') -or $_ -ceq 'composer-set' -or $_ -ceq 'send' }).Count -eq 0) 'Failure reached keys or Send'
 }
 function Assert-PreservedAttempt {
     param($Fixture)
@@ -152,7 +158,7 @@ $cases = [ordered]@{
     'Background composer recovers through one exact address focus, two readbacks and one Send' = {
         $result = Invoke-FocusFixture $f
         Assert-True ($f.Fake.ComposerCalls -eq 2 -and $f.Fake.AddressCalls -eq 1 -and $f.Fake.SendCalls -eq 1) 'Recovery repeated or skipped an action'
-        Assert-True (($f.Fake.Trace -join '|') -ceq 'composer-focus|address-focus|composer-focus|keys:^{END}|keys:Synthetic focus {[}ACK{]}|send') 'Focus did not precede literal input'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'composer-focus|address-focus|composer-focus|composer-set|send') 'Focus did not precede literal input'
         Assert-True ($f.Fake.Reads -eq 8 -and @($f.Fake.ReadDrafts | Where-Object { $_ -ceq $f.Fake.Message }).Count -eq 2) 'Two complete readbacks did not survive recovery'
         Assert-True ($result.sendInvoked -and -not $result.deliveryVerified -and -not $result.verifiedAssistantReply) 'Synthetic Send became delivery proof'
         Assert-PreservedAttempt $f

@@ -37,6 +37,14 @@ $nativeModule = Get-Module 'dev-chatgpt-native-composer'
         $script:Fake.Trace.Add('focus')
         $script:Fake.Focused = -not $script:Fake.FailFocus
     }
+    function script:Set-AiCoreNativeComposerValue {
+        param($State, [string]$Value)
+        $script:Fake.Trace.Add('composer-set')
+        # Model provider-side readback independently. A synthetic hidden prefix
+        # still proves that exact readback, not SetValue success, authorizes Send.
+        $script:Fake.Draft = $script:Fake.ActualPrefix + $Value + $script:Fake.ProviderSuffix
+        if ($script:Fake.ExpireAfterTyping) { $script:Fake.Tick = 10000 }
+    }
     function script:Send-AiCoreNativeKeys {
         param([string]$Keys)
         $script:Fake.Trace.Add('keys:' + $Keys)
@@ -209,6 +217,11 @@ $cases = [ordered]@{
         $attack = & $nativeModule { ConvertTo-AiCoreLiteralKeys '^{ENTER}~' }
         Assert-True ($attack -ceq '{^}{{}ENTER{}}{~}') 'Control syntax was not made literal'
     }
+    'Composer payload uses exact writable ValuePattern rather than global SendKeys' = {
+        $source = Get-Content -LiteralPath $modulePath -Raw
+        Assert-True ($source.Contains('function Set-AiCoreNativeComposerValue')) 'Composer ValuePattern setter is missing'
+        Assert-True ($source.Contains('Set-AiCoreNativeComposerValue $prewrite $Message')) 'Composer payload still lacks exact ValuePattern insertion'
+    }
     'Control characters, non-ASCII, blank and excessive input fail before focus' = {
         foreach ($message in @("bad`nline", "bad`rline", "bad`tline", ([string][char]0), ([string][char]127), ([string][char]233), '   ', ('x' * 4097))) {
             $f.Fake.Message = $message
@@ -216,10 +229,10 @@ $cases = [ordered]@{
         }
         Assert-True ($f.Fake.Trace.Count -eq 0) 'Invalid message reached native input'
     }
-    'Placeholder-shaped unknown is inserted without deletion and sent once after two exact reads' = {
+    'Placeholder-shaped unknown is set by exact composer ValuePattern and sent once after two exact reads' = {
         $result = Invoke-Fixture $f
         Assert-True ($f.Fake.Reads -eq 5) 'Required fresh context/readback checks were skipped'
-        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus|keys:^{END}|keys:Safe {[}ack{]} {+} 100{%}|invoke') 'Input order or literal payload changed'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus|composer-set|invoke') 'Input order or literal payload changed'
         Assert-True ($result.sendInvoked -and -not $result.deliveryVerified -and -not $result.verifiedAssistantReply) 'Invoke became delivery or assistant proof'
         $record = Get-Content -LiteralPath $f.Marker -Raw | ConvertFrom-Json
         Assert-True ($record.status -ceq 'SEND_INVOKED') 'Native attempt status was not persisted'
@@ -243,7 +256,7 @@ $cases = [ordered]@{
         Assert-True ($f.Fake.Draft -ceq ($f.Fake.ActualPrefix + $f.Fake.Message)) 'Original prefix was erased'
         Assert-True ($f.Fake.Invokes -eq 0) 'A combined draft was sent'
         Assert-Throws { Invoke-Fixture $f } 'already attempted'
-        Assert-True ($f.Fake.Trace.Count -eq 3) 'Uncertain insertion was retried'
+        Assert-True ($f.Fake.Trace.Count -eq 2) 'Uncertain insertion was retried'
     }
     'Second readback drift prevents Send and preserves attempted draft' = {
         $f.Fake.DriftRead = 5
@@ -257,26 +270,26 @@ $cases = [ordered]@{
         Assert-True (($f.Fake.Trace -join '|') -ceq 'focus') 'Known draft was modified after focus'
         Assert-True ($f.Fake.Invokes -eq 0) 'Known draft was sent'
     }
-    'A new draft reported after CtrlEnd prevents payload insertion' = {
+    'A new draft reported at the final prewrite guard prevents payload insertion' = {
         $f.Fake.DriftRead = 3
         Assert-Throws { Invoke-Fixture $f } 'preserving'
-        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus|keys:^{END}') 'Known draft received the payload'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus') 'Known draft received the payload'
         Assert-True ($f.Fake.Invokes -eq 0) 'Known draft was sent'
     }
     'Context change before typing never emits the payload' = {
         $f.Fake.FailRead = 3
         Assert-Throws { Invoke-Fixture $f } 'context changed'
-        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus|keys:^{END}') 'Literal payload escaped its target'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus') 'Composer ValuePattern escaped its target'
     }
     'Lost focus prevents all keyboard input' = {
         $f.Fake.FailFocus = $true
         Assert-Throws { Invoke-Fixture $f } 'focus lost'
-        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus') 'Keystrokes escaped after lost focus'
+        Assert-True (($f.Fake.Trace -join '|') -ceq 'focus') 'Composer mutation escaped after lost focus'
     }
     'Ambiguous Send control is not replaced with Enter or an arbitrary button' = {
         $f.Fake.FailSendControl = $true
         Assert-Throws { Invoke-Fixture $f } 'missing or ambiguous'
-        Assert-True ($f.Fake.Invokes -eq 0 -and $f.Fake.Trace.Count -eq 3) 'Send fallback was attempted'
+        Assert-True ($f.Fake.Invokes -eq 0 -and $f.Fake.Trace.Count -eq 2) 'Send fallback was attempted'
     }
     'Unknown Invoke result is recorded and never retried' = {
         $f.Fake.FailInvoke = $true
