@@ -3,11 +3,12 @@ import request from "supertest";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  dispatch: vi.fn(),
+  dispatch: vi.fn(), state: vi.fn(),
   record: vi.fn(), learning: vi.fn(), subscribe: vi.fn(),
   registerWatch: vi.fn(), updateWatch: vi.fn(), watchStatus: vi.fn(),
 }));
 // This route suite exercises the authenticated boundary, never a real business database.
+vi.mock("@workspace/db", () => ({ db: { execute: vi.fn(async () => ({ rows: [] })) } }));
 vi.mock("../services/aiCoreCodingPolicyGuardService.js", () => ({}));
 vi.mock("../services/mcpLocalServiceTokenService.js", () => ({ isAllowedLocalMcpServiceToken: () => false }));
 vi.mock("../services/aiCoreChatIntentService.js", () => ({
@@ -34,7 +35,7 @@ vi.mock("../services/aiCoreWhatsappChatService.js", () => ({
   resolveAiCoreInternalBaseUrl: () => "http://core-ai-dev:3000/api",
 }));
 vi.mock("../services/externalAgentDispatchService.js", () => ({
-  dispatchExternalAgentWork: mocks.dispatch, getExternalAgentWorkState: vi.fn(),
+  dispatchExternalAgentWork: mocks.dispatch, getExternalAgentWorkState: mocks.state,
 }));
 vi.mock("../services/localCodingControlBridgeService.js", () => ({
   acknowledgeCodingBridgeResponseForConversation: vi.fn(),
@@ -59,7 +60,7 @@ const watchMessage = "DEV_CHATGPT_WATCH_V1 conversation=" + conversation + " job
 const checkpointMessage = "DEV_CHATGPT_CHECKPOINT_V1 job=" + jobId + " revision=1 checkpoint=" + checkpointSha + " state=RUNNING";
 const statusMessage = "DEV_CHATGPT_WATCH_STATUS_V1 job=" + jobId;
 
-function call(wakeMessage: string, confirmed = true, token = "dev-relay-test-key") {
+function call(wakeMessage: string, confirmed = true, token = "dev-relay-test-key", owner = channel) {
   const app = express();
   app.use(express.json());
   app.use("/api", router);
@@ -67,7 +68,7 @@ function call(wakeMessage: string, confirmed = true, token = "dev-relay-test-key
     .set("Authorization", "Bearer " + token)
     .send({ jsonrpc: "2.0", id: 8, method: "tools/call",
       params: { name: "send_ai_core_command", arguments: {
-        message: wakeMessage, confirmed, conversationId: channel,
+        message: wakeMessage, confirmed, conversationId: owner,
       } } });
 }
 
@@ -78,6 +79,8 @@ describe("DEV chatgpt:wake permission boundary", () => {
     vi.stubEnv("AI_CORE_CHAT_CONNECTOR_KEY", "internal-connector-fixture");
     vi.stubEnv("AI_CORE_DEV_RELAY_KEY", "dev-relay-test-key");
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ENABLED", "true");
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", "");
+    vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", channel);
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", conversation);
     vi.stubEnv("AI_CORE_DEV_CONTINUITY_ENABLED", "true");
@@ -271,4 +274,38 @@ describe("DEV chatgpt:wake permission boundary", () => {
     expect(JSON.stringify(failure.body)).not.toContain("credentials");
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
+  it("queues a new configured account only for its exact relay owner and target", async () => {
+    const entry = { accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "d".repeat(64),
+      targetConversationId: "22222222-2222-4222-8222-222222222222", workerId: "openclaw-dell-chatgpt-wake-dev",
+      browserProfile: "travelincars-dev", enabled: true };
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({ version: 1, bindings: [entry] }));
+    mocks.dispatch.mockResolvedValue({ clientId: entry.workerId, command: { id: jobId }, created: true });
+    const wakeMessage = "DEV_CHATGPT_WAKE_V1 conversation=" + entry.targetConversationId + " event=" + eventId;
+    const denied = await call(wakeMessage);
+    expect(denied.body.result.structuredContent.reason).toBe("DEV_CHATGPT_WAKE_DENIED");
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    const accepted = await call(wakeMessage, true, "dev-relay-test-key", entry.ownerChannel);
+    expect(accepted.body.result.structuredContent).toMatchObject({ commandId: jobId, clientId: entry.workerId, browserWakeVerified: false });
+    expect(mocks.dispatch.mock.calls[0]![0].metadata.wakeBinding).toMatchObject({ accountAlias: "GPT02", ownerChannel: entry.ownerChannel, browserProfile: entry.browserProfile });
+  });
+
+  it("returns historical DELL progress only to the authenticated owner without dispatch", async () => {
+    const metadata = { conversationId: channel, targetConversationId: conversation, eventId,
+      assistantAttestationChallenge: challenge, capability: "chatgpt:wake", explicitWorkerTarget: true,
+      devOnly: true, assignedClientId: "openclaw-dell-chatgpt-wake-dev" };
+    mocks.state.mockResolvedValue({ command: { id: jobId, source: "ai-core", commandType: "EXTERNAL_AGENT_WORK", status: "COMPLETED", metadataJson: metadata }, latestResponse: null, callbackProcessingState: "COMPLETED" });
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const progress = (ownerConversationId: string) => request(app).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer dev-relay-test-key").send({ jsonrpc: "2.0", id: 9, method: "tools/call",
+        params: { name: "get_external_agent_command_progress", arguments: { commandId: jobId, ownerConversationId } } });
+    const own = await progress(channel);
+    expect(own.body.result.structuredContent).toMatchObject({ found: true, devWakeOwnerVerified: true, ownerConversationId: channel });
+    const other = await progress("ai-engine-oauth:" + "d".repeat(64));
+    expect(other.body.result.structuredContent).toMatchObject({ found: false, status: "NOT_FOUND" });
+    mocks.state.mockResolvedValue({ command: { id: jobId, source: "ai-core", commandType: "EXTERNAL_AGENT_WORK", status: "COMPLETED",
+      metadataJson: { ...metadata, assignedClientId: "openclaw-pc-worker-dell-browser" } }, latestResponse: null });
+    expect((await progress(channel)).body.result.structuredContent.found).toBe(false);
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
 });

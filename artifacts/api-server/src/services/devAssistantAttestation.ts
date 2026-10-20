@@ -1,6 +1,8 @@
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
+import { DEV_WAKE_BROWSER_PROFILE } from "./devChatGptWakeBindingService.js";
 
 export const DEV_ASSISTANT_ATTESTATION_VERSION = 1 as const;
+export const DEV_BOUND_ASSISTANT_ATTESTATION_VERSION = 2 as const;
 export const DEV_ASSISTANT_ATTESTATION_ALGORITHM = "Ed25519" as const;
 export const DEV_ASSISTANT_ATTESTATION_KEY_ID = "openclaw-travelintrips-dev-ed25519-v1" as const;
 export const DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID = "openclaw-dell-chatgpt-wake-dev-ed25519-v1" as const;
@@ -32,10 +34,12 @@ type ChallengeInput = {
   watchCommandId?: string;
   jobId?: string;
   checkpointRevision?: number;
+  bindingFingerprint?: string;
+  browserProfile?: string;
 };
 
 export type DevAssistantAttestation = {
-  version: 1;
+  version: 1 | 2;
   algorithm: "Ed25519";
   keyId: typeof DEV_ASSISTANT_ATTESTATION_KEY_ID | typeof DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID;
   workerId: DevAttestationWorker;
@@ -46,6 +50,8 @@ export type DevAssistantAttestation = {
   assistantResponseHash: string;
   observedAt: string;
   signature: string;
+  bindingFingerprint?: string;
+  browserProfile?: string;
 };
 
 export type DevAssistantAttestationVerification =
@@ -54,7 +60,12 @@ export type DevAssistantAttestationVerification =
 
 function validChallengeInput(input: ChallengeInput): boolean {
   const hasWatch = input.watchCommandId !== undefined || input.jobId !== undefined || input.checkpointRevision !== undefined;
-  return OWNER.test(input.ownerChannel) && UUID.test(input.targetConversationId) && DIGEST.test(input.eventId) &&
+  const hasBinding = input.bindingFingerprint !== undefined || input.browserProfile !== undefined;
+  return typeof input.ownerChannel === "string" && input.ownerChannel.length === 80 && OWNER.test(input.ownerChannel) &&
+    typeof input.targetConversationId === "string" && input.targetConversationId.length === 36 && UUID.test(input.targetConversationId) &&
+    typeof input.eventId === "string" && input.eventId.length === 64 && DIGEST.test(input.eventId) &&
+    (!hasBinding || (typeof input.bindingFingerprint === "string" && DIGEST.test(input.bindingFingerprint) &&
+      typeof input.browserProfile === "string" && input.browserProfile.trim() === input.browserProfile && DEV_WAKE_BROWSER_PROFILE.test(input.browserProfile))) &&
     (!hasWatch || (typeof input.watchCommandId === "string" && UUID.test(input.watchCommandId) &&
       typeof input.jobId === "string" && UUID.test(input.jobId) &&
       Number.isSafeInteger(input.checkpointRevision) && Number(input.checkpointRevision) >= 1));
@@ -63,19 +74,20 @@ function validChallengeInput(input: ChallengeInput): boolean {
 export function deriveDevAssistantChallenge(input: ChallengeInput): string {
   if (!validChallengeInput(input)) throw new Error("DEV_ASSISTANT_ATTESTATION_CONTEXT_INVALID");
   return createHash("sha256").update([
-    "dev-chatgpt-assistant-attestation/v1",
+    input.bindingFingerprint ? "dev-chatgpt-assistant-attestation/v2" : "dev-chatgpt-assistant-attestation/v1",
     input.ownerChannel,
     input.targetConversationId.toLowerCase(),
     input.eventId.toLowerCase(),
     input.watchCommandId?.toLowerCase() ?? "",
     input.jobId?.toLowerCase() ?? "",
     input.checkpointRevision === undefined ? "" : String(input.checkpointRevision),
+    ...(input.bindingFingerprint ? [input.bindingFingerprint] : []),
   ].join("|")).digest("hex");
 }
 
 export function devAssistantAttestationPayload(input: Omit<DevAssistantAttestation, "signature">): string {
   return [
-    "dev-chatgpt-assistant-attestation/v1",
+    input.version === 2 ? "dev-chatgpt-assistant-attestation/v2" : "dev-chatgpt-assistant-attestation/v1",
     "keyId=" + input.keyId,
     "workerId=" + input.workerId,
     "conversationId=" + input.conversationId.toLowerCase(),
@@ -84,6 +96,7 @@ export function devAssistantAttestationPayload(input: Omit<DevAssistantAttestati
     "assistantMessageId=" + input.assistantMessageId.toLowerCase(),
     "assistantResponseHash=" + input.assistantResponseHash.toLowerCase(),
     "observedAt=" + input.observedAt,
+    ...(input.version === 2 ? ["bindingFingerprint=" + input.bindingFingerprint, "browserProfile=" + input.browserProfile] : []),
   ].join("\n");
 }
 
@@ -103,6 +116,11 @@ export function verifyDevAssistantAttestation(input: {
   if (!row) return { verified: false, reason: "ATTESTATION_MISSING" };
   if (!input.publicKeyDerBase64) return { verified: false, reason: "ATTESTATION_PUBLIC_KEY_MISSING" };
 
+  if (!validChallengeInput(input.expected)) return { verified: false, reason: "ATTESTATION_CONTEXT_INVALID" };
+  const bound = input.expected.bindingFingerprint !== undefined;
+  if (bound && input.expected.workerId !== "openclaw-dell-chatgpt-wake-dev") {
+    return { verified: false, reason: "ATTESTATION_BOUND_WORKER_INVALID" };
+  }
   const challenge = deriveDevAssistantChallenge(input.expected);
   const candidate = {
     version: row["version"],
@@ -116,14 +134,19 @@ export function verifyDevAssistantAttestation(input: {
     assistantResponseHash: row["assistantResponseHash"],
     observedAt: row["observedAt"],
     signature: row["signature"],
+    bindingFingerprint: row["bindingFingerprint"],
+    browserProfile: row["browserProfile"],
   };
-  if (candidate.version !== DEV_ASSISTANT_ATTESTATION_VERSION ||
+  const version = bound ? DEV_BOUND_ASSISTANT_ATTESTATION_VERSION : DEV_ASSISTANT_ATTESTATION_VERSION;
+  if (candidate.version !== version ||
       candidate.algorithm !== DEV_ASSISTANT_ATTESTATION_ALGORITHM ||
       candidate.keyId !== devAttestationKeyId(input.expected.workerId) ||
       candidate.workerId !== input.expected.workerId ||
       candidate.conversationId !== input.expected.targetConversationId.toLowerCase() ||
       candidate.eventId !== input.expected.eventId.toLowerCase() ||
       candidate.challenge !== challenge ||
+      candidate.bindingFingerprint !== input.expected.bindingFingerprint ||
+      candidate.browserProfile !== input.expected.browserProfile ||
       typeof candidate.assistantMessageId !== "string" || !UUID.test(candidate.assistantMessageId) ||
       typeof candidate.assistantResponseHash !== "string" || !DIGEST.test(candidate.assistantResponseHash) ||
       typeof candidate.observedAt !== "string" || !ISO.test(candidate.observedAt) ||
@@ -157,7 +180,7 @@ export function verifyDevAssistantAttestation(input: {
   }
 
   const unsigned: Omit<DevAssistantAttestation, "signature"> = {
-    version: DEV_ASSISTANT_ATTESTATION_VERSION,
+    version,
     algorithm: DEV_ASSISTANT_ATTESTATION_ALGORITHM,
     keyId: devAttestationKeyId(input.expected.workerId),
     workerId: input.expected.workerId,
@@ -167,6 +190,7 @@ export function verifyDevAssistantAttestation(input: {
     assistantMessageId: candidate.assistantMessageId,
     assistantResponseHash: candidate.assistantResponseHash,
     observedAt: candidate.observedAt,
+    ...(bound ? { bindingFingerprint: input.expected.bindingFingerprint, browserProfile: input.expected.browserProfile } : {}),
   };
   const verified = verifySignature(null, Buffer.from(devAssistantAttestationPayload(unsigned), "utf8"), publicKey, signature);
   if (!verified) return { verified: false, reason: "ATTESTATION_SIGNATURE_INVALID" };

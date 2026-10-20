@@ -11,7 +11,7 @@ const result: ContinuityResult = { ownerChannel: OWNER, parentWatchCommandId: "p
   childCommandId: "child", eventId: "e".repeat(64), workerId: "openclaw-travelintrips-dev",
   status: "COMPLETED", details: { browserConfirmed: true } };
 
-function fixture(initial?: Partial<ContinuityWatch>) {
+function fixture(initial?: Partial<ContinuityWatch>, asyncAllowed?: () => boolean | Promise<boolean>) {
   let watch: ContinuityWatch = {
     commandId: "parent", ...input, revision: 1, state: "RUNNING",
     deadlineAt: new Date(BASE + 60_000).toISOString(), expiresAt: new Date(BASE + 900_000).toISOString(),
@@ -47,7 +47,7 @@ function fixture(initial?: Partial<ContinuityWatch>) {
   const queue = vi.fn(async () => ({ commandId: "child" }));
   const errors = vi.fn();
   const runtime = new DevContinuityWatchRuntime({ repository: repo, queue,
-    enabled: () => enabled, allowed: () => allowed, owners: () => [OWNER],
+    enabled: () => enabled, allowed: () => asyncAllowed ? asyncAllowed() : allowed, owners: async () => [OWNER],
     subscribe: callback => { listener = callback; return () => { listener = undefined; }; },
     onError: errors,
   });
@@ -168,4 +168,28 @@ describe("durable DEV progress deadline runtime", () => {
     await vi.advanceTimersByTimeAsync(900_000); await f.emit();
     expect(f.queue).not.toHaveBeenCalled(); expect(f.repo.recordResult).not.toHaveBeenCalled();
   });
+  it("awaits an asynchronous exact-binding denial before registering a watch", async () => {
+    const f = fixture(undefined, async () => false);
+    await expect(f.runtime.register(input)).rejects.toThrow("DEV_CONTINUITY_DENIED");
+    expect(f.repo.register).not.toHaveBeenCalled();
+    expect(f.queue).not.toHaveBeenCalled();
+  });
+
+  it("does not rearm after shutdown while the binding lookup is pending", async () => {
+    let release!: (value: boolean) => void;
+    let checking!: () => void;
+    const reached = new Promise<void>(resolve => { checking = resolve; });
+    const allowed = new Promise<boolean>(resolve => { release = resolve; });
+    const f = fixture(undefined, () => { checking(); return allowed; });
+    f.repo.restore.mockResolvedValueOnce([f.snapshot()]);
+    const starting = f.runtime.start();
+    await reached;
+    f.runtime.stop();
+    release(true);
+    await starting;
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(900_000);
+    expect(f.queue).not.toHaveBeenCalled();
+  });
+
 });

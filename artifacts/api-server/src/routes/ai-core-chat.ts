@@ -2541,8 +2541,9 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
 async function startSimpleChatGptWake(
   command: ChatGptWakeCommand,
   requestHost?: string,
+  expectedOwnerChannel?: string,
 ): Promise<Record<string, unknown>> {
-  const target = await resolveVerifiedDevWakeTarget(command.accountAlias, requestHost);
+  const target = await resolveVerifiedDevWakeTarget(command.accountAlias, requestHost, expectedOwnerChannel);
   const eventId = randomBytes(32).toString("hex");
   const jobLabel = command.jobAlias ?? "JOB";
   const correlationId =
@@ -2556,6 +2557,8 @@ async function startSimpleChatGptWake(
     instruction: command.instruction,
     jobAlias: command.jobAlias,
     requestHost,
+    expectedWorkerId: target.workerId,
+    ...(target.wakeBinding ? { expectedBindingFingerprint: target.wakeBinding.bindingFingerprint } : {}),
   });
   return {
     kind: "external_agent",
@@ -3785,7 +3788,8 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       ? parseChatGptWakeCommand(parsed.data.message)
       : null;
     if (simpleWakeCommand) {
-      writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand, req.hostname));
+      writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
+          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined));
       return;
     }
 
@@ -4007,7 +4011,8 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         : null;
     const result =
       simpleWakeCommand
-        ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname)
+        ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
+          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined)
         : directOpenClawPcCommand
         ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)
         : directConversationEvent

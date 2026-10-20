@@ -677,6 +677,7 @@ router.post(
     const result = await completeCodingBridgeCommand({
       commandId: commandId.data,
       ...parsed.data,
+      requestHost: req.hostname,
     });
     if (!result) {
       res.status(409).json({ error: "Work claim is missing, expired, or owned by another agent" });

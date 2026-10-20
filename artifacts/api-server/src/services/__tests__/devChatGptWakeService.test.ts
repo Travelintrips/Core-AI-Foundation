@@ -41,6 +41,7 @@ beforeEach(() => {
   mocks.dispatch.mockResolvedValue({ clientId: worker, command: existingCommand(), created: true });
   mocks.handshakeEvidence.mockResolvedValue(null);
   mocks.execute.mockResolvedValue({ rows: [] });
+  vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", "");
   mocks.rows.mockResolvedValue([existingCommand()]);
   mocks.transaction.mockImplementation(async callback => callback({ execute: mocks.execute,
     select: () => ({ from: () => ({ where: () => ({ limit: mocks.rows }) }) }) }));
@@ -89,20 +90,12 @@ describe("shared DEV browser wake queue", () => {
     });
   });
 
-  it("resolves GPT01 only from one currently verified owner/session binding", async () => {
-    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "openclaw-dell-chatgpt-wake-dev");
+  it("rejects legacy owner lists rather than constructing cross-account pairs", async () => {
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel + ",ai-engine-oauth:" + "c".repeat(64));
-    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", targetConversationId);
-    mocks.handshakeEvidence.mockImplementation(async channel => channel === ownerChannel ? {
-      ownerChannel,
-      targetConversationId,
-      workerId: "openclaw-dell-chatgpt-wake-dev",
-    } : null);
-    await expect(resolveVerifiedDevWakeTarget("gpt01")).resolves.toEqual({
-      ownerChannel,
-      targetConversationId,
-      workerId: "openclaw-dell-chatgpt-wake-dev",
-    });
+    mocks.handshakeEvidence.mockResolvedValue({ ownerChannel, targetConversationId, workerId: worker });
+    await expect(resolveVerifiedDevWakeTarget("gpt01")).rejects.toThrow("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
+    expect(await isDevBrowserWakeAllowed({ ownerChannel, targetConversationId })).toBe(false);
+    expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -146,7 +139,7 @@ describe("shared DEV browser wake queue", () => {
       targetConversationId,
       workerId: "openclaw-dell-chatgpt-wake-dev",
     });
-    expect(isDevBrowserWakeAllowed({
+    expect(await isDevBrowserWakeAllowed({
       ownerChannel,
       targetConversationId,
       requestHost: "dev-aicore.cstlogistic.co.id",
@@ -185,7 +178,7 @@ describe("shared DEV browser wake queue", () => {
     vi.stubEnv("APP_ENV", "production");
     await expect(resolveVerifiedDevWakeTarget("gpt01", "aicore.cstlogistic.co.id"))
       .rejects.toThrow("DEV_CHATGPT_DEV_HOST_REQUIRED");
-    expect(isDevBrowserWakeAllowed({
+    expect(await isDevBrowserWakeAllowed({
       ownerChannel,
       targetConversationId,
       requestHost: "aicore.cstlogistic.co.id",
@@ -204,7 +197,7 @@ describe("shared DEV browser wake queue", () => {
   });
 
   it("rechecks revocable gates when a previously registered timer eventually fires", async () => {
-    expect(isDevBrowserWakeAllowed(input)).toBe(true);
+    expect(await isDevBrowserWakeAllowed(input)).toBe(true);
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
     await expect(queueDevBrowserWake(input)).rejects.toThrow("DEV_CHATGPT_WAKE_DENIED");
     expect(mocks.dispatch).not.toHaveBeenCalled();
@@ -263,7 +256,7 @@ describe("shared DEV browser wake queue", () => {
     expect(await queueDevBrowserWake(input)).toEqual({ commandId: childId, clientId: worker, created: false });
     expect(mocks.dispatch).toHaveBeenCalledOnce();
     expect(mocks.transaction).toHaveBeenCalledOnce();
-    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledTimes(2);
     expect(mocks.rows).toHaveBeenCalledExactlyOnceWith(1);
   });
 
@@ -288,5 +281,77 @@ describe("shared DEV browser wake queue", () => {
     await expect(queueDevBrowserWake(input)).rejects.toBe(error);
     expect(mocks.dispatch).toHaveBeenCalledOnce();
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("new account dispatch uses the shared exact binding", () => {
+  const account = { accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "d".repeat(64),
+    targetConversationId: "22222222-2222-4222-8222-222222222222", workerId: "openclaw-dell-chatgpt-wake-dev",
+    browserProfile: "travelincars-dev", enabled: true };
+  const newInput = { ownerChannel: account.ownerChannel, targetConversationId: account.targetConversationId, eventId };
+  function configure(enabled = true) {
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({ version: 1, bindings: [{ ...account, enabled }] }));
+    mocks.dispatch.mockImplementation(async request => ({ clientId: request.clientId, created: true,
+      command: { id: childId, source: request.source, commandType: "EXTERNAL_AGENT_WORK", instruction: request.instruction,
+        metadataJson: { ...request.metadata, assignedClientId: request.clientId } } }));
+  }
+  it("does not dispatch while dormant, and never cross-pairs the existing account", async () => {
+    configure(false);
+    expect(await isDevBrowserWakeAllowed(newInput)).toBe(false);
+    await expect(queueDevBrowserWake(newInput)).rejects.toThrow("DEV_CHATGPT_WAKE_DENIED");
+    configure();
+    expect(await isDevBrowserWakeAllowed(newInput)).toBe(true);
+    for (const wrong of [{ ...newInput, ownerChannel }, { ...input, ownerChannel: account.ownerChannel }]) {
+      expect(await isDevBrowserWakeAllowed(wrong)).toBe(false);
+      await expect(queueDevBrowserWake(wrong)).rejects.toThrow("DEV_CHATGPT_WAKE_DENIED");
+    }
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+  it("binds the profile into the challenge and reconciles the same event without replay", async () => {
+    configure();
+    const first = await queueDevBrowserWake(newInput);
+    const request = mocks.dispatch.mock.calls[0]![0];
+    expect(request.metadata.wakeBinding).toMatchObject({ accountAlias: "GPT02", browserProfile: "travelincars-dev",
+      bindingFingerprint: "4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1" });
+    expect(request.metadata.assistantAttestationChallenge).toBe("2a4c9bcdf77cb321930750a835f29cd065d70c1ea8b20f8a4c302853b6267a2a");
+    const command = { id: first.commandId, source: request.source, commandType: "EXTERNAL_AGENT_WORK", instruction: request.instruction,
+      metadataJson: { ...request.metadata, assignedClientId: request.clientId } };
+    mocks.dispatch.mockResolvedValueOnce({ clientId: account.workerId, created: false, command });
+    expect(await queueDevBrowserWake(newInput)).toMatchObject({ commandId: first.commandId, created: false });
+    mocks.dispatch.mockResolvedValueOnce({ clientId: account.workerId, created: false,
+      command: { ...command, metadataJson: { ...command.metadataJson, wakeBinding: undefined } } });
+    await expect(queueDevBrowserWake(newInput)).rejects.toThrow("DEV_CHATGPT_WAKE_RECONCILIATION_UNVERIFIED");
+  });
+  it("requires account-specific verified evidence for aliases and rejects another OAuth owner", async () => {
+    configure();
+    await queueDevBrowserWake(newInput);
+    const wakeBinding = mocks.dispatch.mock.calls[0]![0].metadata.wakeBinding;
+    mocks.handshakeEvidence.mockResolvedValue({ ownerChannel: account.ownerChannel, targetConversationId: account.targetConversationId,
+      workerId: account.workerId, wakeBinding });
+    await expect(resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel)).resolves.toMatchObject({ wakeBinding });
+    await expect(resolveVerifiedDevWakeTarget("GPT02", undefined, ownerChannel)).rejects.toThrow("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
+    mocks.handshakeEvidence.mockResolvedValue({ ownerChannel: account.ownerChannel, targetConversationId: account.targetConversationId,
+      workerId: account.workerId });
+    await expect(resolveVerifiedDevWakeTarget("GPT02")).rejects.toThrow("DEV_CHATGPT_ALIAS_BINDING_UNVERIFIED");
+    await expect(queueDevBrowserWake({ ...newInput, expectedBindingFingerprint: "f".repeat(64) })).rejects.toThrow("DEV_CHATGPT_WAKE_BINDING_CHANGED");
+  });
+  it("uses the same central setting for preflight and queue, and lets explicit false revoke it", async () => {
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ENABLED", "");
+    mocks.execute.mockResolvedValue({ rows: [
+      { key: "dev.chatgpt_wake.enabled", value: "true" },
+      { key: "dev.chatgpt_wake.account_bindings", value: JSON.stringify({ version: 1, bindings: [account] }) },
+    ] });
+    expect(await isDevBrowserWakeAllowed(newInput)).toBe(true);
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ENABLED", "false");
+    expect(await isDevBrowserWakeAllowed(newInput)).toBe(false);
+    await expect(queueDevBrowserWake(newInput)).rejects.toThrow("DEV_CHATGPT_WAKE_DENIED");
+  });
+  it("preserves GPT01 when an additional binding is malformed or tries to redefine it", async () => {
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({ version: 1, bindings: [{ ...account, ownerChannel }] }));
+    expect(await isDevBrowserWakeAllowed(input)).toBe(true);
+    expect(await isDevBrowserWakeAllowed(newInput)).toBe(false);
+    await queueDevBrowserWake(input);
+    expect(mocks.dispatch.mock.calls[0]![0].metadata.wakeBinding).toBeUndefined();
   });
 });
