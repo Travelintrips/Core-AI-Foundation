@@ -1,7 +1,8 @@
 #requires -Version 5.1
 # DEV GPT02 trial2 OWNER bootstrap continuation, exactly once.
 # Run only as a reviewed, separately supervised PowerShell process. This helper
-# does not focus a window, clear a draft, dispatch MCP, sign, or acknowledge.
+# reasserts native composer focus once immediately before input; it never clears
+# a draft, dispatches MCP directly, signs, or acknowledges.
 # A supervisor must bound this process: UIA/SendWait/Flush cannot be preempted
 # by an in-process stopwatch. A killed/partial continuation marker is retained.
 [CmdletBinding()]
@@ -30,6 +31,9 @@ $reconcileSupervisionSha = '1608d9837afc8c1745c90dc9143307c295c9fafbb4f9caccdc65
 $reconcileHandoffSha = '3effead9795e45c824c367a6a01c74ce32d12a7784a7548021906ea91b2fd4fd'
 $reconcilePromptSha = '42f2d03e2e6375a1f6576005eb0459120a0b9377c1203c1d278db111451543e3'
 $reconcileModuleSha = '1c83bce21a937bc32bf26cc1086af8466c2061514ba3f1a880a167c5d040f816'
+$reconcilePreflightSupervisionSha = 'd9019387033db66b0f6f0270a06b60ca5f252c6d89ab2c478cde3a2412b46e71'
+$reconcilePreflightSourceSha = '2a747b54cfff38352c8e6d78708040b231f71c8088e99833b10d8445972f7a18'
+$reconcilePreflightLeaseSha = 'ca18efc4f31c27c91f3da6d672dfc93e094dea5b9a182567078ccdd4509fa4f5'
 $reconcileDraftSha = 'c0fae6a6c1582f13454101d3c2da4f5d951c84a31cff3f6206f6585b2ae6b747'
 $reconcileEmptyDraftSha = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 $reconcileHistoricalRawTargetId = '59AA1F162AC14EDC94078CDC18EE54B9'
@@ -93,6 +97,7 @@ $reconcileModulePath = Join-Path $reconcileLocalRoot 'AI-Core\dev-chatgpt-native
 $reconcileLeasePath = Join-Path $reconcileBase ($reconcileOperation + '.owner-ui-coordinator.lease.json')
 $reconcileMarkerPath = Join-Path $reconcileBase ($reconcileOperation + '.owner-ui-reconcile.json')
 $reconcileExpectedFocusPath = Join-Path $reconcileBase 'gpt02-trial2-foreground-recovery-result-20261020T1555.json'
+$reconcilePreflightSupervisionPath = Join-Path $reconcileBase 'gpt02-trial2-owner-reconcile-supervision-20261020T1656.json'
 
 function Get-ReconcileSha256 {
     param([byte[]]$Bytes)
@@ -288,6 +293,40 @@ function Assert-ReconcileOldExecutorsAbsent {
     if ($children.Count -gt 1) { throw 'OWNER_RECONCILE_PRIOR_COORDINATOR_CHILDREN_AMBIGUOUS' }
 }
 
+function Assert-ReconcilePreflightNoInput {
+    param($Proof)
+    # This exact hash-held, source-bound child exited before CreateNew and
+    # before any focus/key/Send. No general retry of a failed lease is allowed.
+    if ($Proof.schema -cne 'ai-core-owner-reconcile-supervision/v1' -or
+        $Proof.operationId -cne $reconcileOperation -or $Proof.status -cne 'CHILD_EXITED' -or
+        $Proof.sourceCommit -cne '112605af54c574ddcb50495182a8ef15e874609d' -or
+        $Proof.scriptSha256 -cne $reconcilePreflightSourceSha -or
+        $Proof.focusReceiptSha256 -cne $ExpectedFocusReceiptSha256 -or
+        $Proof.startedAt -cne '2026-10-20T16:55:52.9273320Z' -or
+        $Proof.updatedAt -cne '2026-10-20T16:56:21.6025099Z' -or
+        $Proof.childProcessId -ne 7924 -or $Proof.exitCode -ne 1 -or
+        $Proof.limitMs -ne 760000 -or $Proof.stderrLength -ne 0 -or
+        $null -ne $Proof.failureCode) { throw 'OWNER_RECONCILE_PREFLIGHT_NO_INPUT_PROOF_INVALID' }
+    foreach ($field in @('childStarted','createNoWindow','terminationConfirmed','streamsClosed')) {
+        Assert-ReconcileBoolean $Proof.$field $true
+    }
+    foreach ($field in @('timedOut','killAttempted','deliveryVerified','realE2eVerified')) {
+        Assert-ReconcileBoolean $Proof.$field $false
+    }
+    $result = $Proof.childResult
+    if ($result -isnot [pscustomobject] -or $result.operationId -cne $reconcileOperation -or
+        $result.eventId -cne $reconcileEvent -or $result.status -cne 'FAILED_RECONCILIATION_REQUIRED' -or
+        $result.stage -cne 'NATIVE_UNCHANGED_INITIAL_DRAFT_READ' -or
+        $result.failureCode -cne 'OWNER_RECONCILE_GUARD_OR_NATIVE_ACTION_FAILED' -or
+        -not ([string]$result.receiptPath).Equals($reconcileMarkerPath,[StringComparison]::OrdinalIgnoreCase) -or
+        @($result.cleanupFailures).Count -ne 0) { throw 'OWNER_RECONCILE_PREFLIGHT_NO_INPUT_PROOF_INVALID' }
+    Assert-ReconcileBoolean $result.coordinatorLeaseReleasePersisted $true
+    foreach ($field in @('ok','cleanupFailed','continuationMarkerOwned','thisInvocationKeyboardInputInvoked',
+        'thisInvocationSendInvoked','replayAllowed','deliveryVerified','mcpDispatchVerified','realE2eVerified')) {
+        Assert-ReconcileBoolean $result.$field $false
+    }
+}
+
 function Assert-ReconcileBudget {
     param([long]$ReserveMilliseconds = 1)
     Assert-OwnerTimeBudget $ReserveMilliseconds
@@ -356,10 +395,12 @@ try {
     $moduleFile = Read-ReconcilePinnedFile $reconcileModulePath $reconcileModuleSha 262144 $reconcileLocalRoot
     $focusFile = Read-ReconcilePinnedFile $FocusReceiptFile $ExpectedFocusReceiptSha256 32768
     $databaseFile = Read-ReconcilePinnedFile $DatabaseEvidenceFile $ExpectedDatabaseEvidenceSha256 16384
+    $preflightFile = Read-ReconcilePinnedFile $reconcilePreflightSupervisionPath $reconcilePreflightSupervisionSha 32768
     $prior = ConvertFrom-ReconcileObject $priorFile.Text
     $handoff = ConvertFrom-ReconcileObject $handoffFile.Text
     $focusEvidence = ConvertFrom-ReconcileObject $focusFile.Text
     $reconcileDatabase = ConvertFrom-ReconcileObject $databaseFile.Text
+    Assert-ReconcilePreflightNoInput (ConvertFrom-ReconcileObject $preflightFile.Text)
 
     $reconcileStage = 'VERIFYING_PRIOR_TERMINAL_NO_SEND'
     if ($prior.schema -cne 'ai-core-owner-ui-prompt/v1' -or $prior.purpose -cne 'TARGET_OWNER_UI_PROMPT' -or
@@ -470,18 +511,26 @@ try {
     $ownerTarget = @{ ConversationId=$ownerConversationId; PageUrl=$ownerPageUrl; ComposerName=$ComposerName;
         WindowHandle=$ExpectedWindowHandle; BrowserProcessId=$ExpectedBrowserProcessId }
 
-    # Open existing lease with an exclusive writer handle. The focus-only
-    # predecessor must have released it successfully and exited. Never delete
+    # Open the existing lease with an exclusive writer handle. Its predecessor
+    # is the exact supervised no-input preflight above. Never delete
     # the lease, accept another fence, or extend the fixed continuation expiry.
     $reconcileStage = 'CLAIMING_EXISTING_COORDINATOR_LEASE'
     $null = Assert-ReconcilePath $reconcileLeasePath $reconcileBase
     $reconcileLeaseStream = [IO.File]::Open($reconcileLeasePath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::Read)
     $null = Assert-ReconcilePath $reconcileLeasePath $reconcileBase
     $leaseBytes = Read-ReconcileBytes $reconcileLeaseStream 32768
+    if ((Get-ReconcileSha256 $leaseBytes) -cne $reconcilePreflightLeaseSha) {
+        throw 'OWNER_RECONCILE_PREFLIGHT_LEASE_CHANGED'
+    }
     $leaseObject = ConvertFrom-ReconcileObject ([Text.UTF8Encoding]::new($false,$true).GetString($leaseBytes))
     if ($leaseObject.schema -cne 'ai-core-owner-coordinator-lease/v1' -or $leaseObject.fenceToken -cne $reconcileFence -or
         $leaseObject.coordinatorId -cne $reconcileCoordinator -or $leaseObject.eventId -cne $reconcileEvent -or
-        $leaseObject.phase -cne 'FOCUS_ONLY' -or $leaseObject.terminalStatus -cne 'FOREGROUND_ONLY_VERIFIED_NO_INPUT' -or
+        $leaseObject.phase -cne 'OWNER_RECONCILIATION' -or $leaseObject.terminalStatus -cne 'FAILED_RECONCILIATION_REQUIRED' -or
+        $leaseObject.ownerPid -ne 7924 -or $leaseObject.previousOwnerPid -ne 18592 -or
+        $leaseObject.previousTerminalStatus -cne 'FOREGROUND_ONLY_VERIFIED_NO_INPUT' -or
+        $leaseObject.focusReceiptSha256 -cne $ExpectedFocusReceiptSha256 -or
+        $leaseObject.priorReceiptSha256 -cne $reconcilePriorSha -or
+        $leaseObject.priorSupervisionSha256 -cne $reconcileSupervisionSha -or
         ($leaseObject.ownerPid -isnot [int] -and $leaseObject.ownerPid -isnot [long]) -or
         $leaseObject.ownerPid -lt 1 -or $leaseObject.ownerPid -gt [int]::MaxValue -or $leaseObject.ownerPid -eq $PID) {
         throw 'OWNER_RECONCILE_COORDINATOR_LEASE_NOT_TRANSFERABLE'
@@ -509,6 +558,8 @@ try {
     $reconcileLease.focusReceiptSha256 = $ExpectedFocusReceiptSha256
     $reconcileLease.priorReceiptSha256 = $reconcilePriorSha
     $reconcileLease.priorSupervisionSha256 = $reconcileSupervisionSha
+    $reconcileLease.preflightNoInputSupervisionSha256 = $reconcilePreflightSupervisionSha
+    $reconcileLease.preflightNoInputLeaseSha256 = $reconcilePreflightLeaseSha
     $reconcileLease.continuationReceiptPath = $reconcileMarkerPath
     Assert-ReconcileBudget 5000
     Write-ReconcileLease
@@ -529,8 +580,8 @@ try {
     Assert-ReconcileCurrentBrowserGeneration
     Assert-ReconcileBudget ($ownerSubmitMilliseconds + $ownerNativeGuardMilliseconds)
 
-    # Identity/snapshot reads only. Focus repair belongs to the completed
-    # foreground helper; this continuation never calls focus or SetFocus.
+    # CLI checks may leave a terminal in foreground. Reassert native composer
+    # focus once, after these reads and before keys, under the same held locks.
     $reconcileStage = 'OC_IDENTITY_READ'
     Assert-OwnerSession
     $reconcileStage = 'OC_IDLE_READ'
@@ -544,7 +595,7 @@ try {
     Assert-ReconcileBudget ($ownerSubmitMilliseconds + $ownerNativeGuardMilliseconds)
     $ownerNativeDeadlineMilliseconds = $ownerClock.ElapsedMilliseconds + $ownerSubmitMilliseconds + $ownerNativeGuardMilliseconds
     $reconcileStage = 'NATIVE_UNCHANGED_INITIAL_DRAFT_READ'
-    $state = & $ownerModule { param($Target) Get-AiCoreNativeState $Target $true } $ownerTarget
+    $state = & $ownerModule { param($Target) Get-AiCoreNativeState $Target } $ownerTarget
     Assert-ReconcileUnchangedInitialDraft $state
     Assert-ReconcileDatabaseFresh
     Assert-ReconcileOldExecutorsAbsent
@@ -563,6 +614,8 @@ try {
         priorWrapperExecutionBound=$true; priorSupervisorTerminalAt=$supervisionTerminal.updatedAt;
         priorChildProcessId=$supervisionTerminal.childProcessId; priorChildExitCode=$supervisionTerminal.exitCode;
         priorChildTerminationConfirmed=$supervisionTerminal.terminationConfirmed; priorChildStreamsClosed=$supervisionTerminal.streamsClosed;
+        preflightNoInputSupervisionSha256=$reconcilePreflightSupervisionSha; preflightNoInputLeaseSha256=$reconcilePreflightLeaseSha;
+        preflightNoInputVerified=$true; preflightChildProcessId=7924;
         priorStatus=$prior.status; priorStage=$prior.stage; priorUpdatedAt=$prior.updatedAt;
         priorRawTargetId=$prior.rawTargetId; priorBrowserProcessId=$prior.browserProcessId; priorWindowHandle=$prior.windowHandle;
         priorInitialDraftClass=$prior.initialDraftClass;
@@ -578,6 +631,7 @@ try {
         databaseEvidencePath=$databaseFile.Path; databaseEvidenceSha256=$ExpectedDatabaseEvidenceSha256;
         databaseObservedAt=$reconcileDatabase.observedAt; leaseExpiresAt=$reconcileLease.expiresAt;
         createdAt=[DateTimeOffset]::UtcNow.ToString('o'); status='CONTINUATION_RESERVED'; stage=$reconcileStage;
+        focusAttemptedAt=$null; focusInvoked=$false; strictFocusedReadPassed=$false;
         keyEndAttemptedAt=$null; keyEndInvoked=$false; literalInputAttemptedAt=$null; literalInputInvoked=$false;
         sendAttemptedAt=$null; sendInvoked=$false; sendInvocationReturned=$false; exactWholeReadbacks=0;
         replayAllowed=$false; deliveryVerified=$false; mcpDispatchVerified=$false;
@@ -585,6 +639,27 @@ try {
     }
     $reconcileMarkerStream = [IO.File]::Open($reconcileMarkerPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
     Write-ReconcileReceipt 'CONTINUATION_RESERVED'
+
+    $reconcileStage = 'NATIVE_FOCUS_INTENT'
+    $reconcileRecord.focusAttemptedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    $reconcileRecord.focusInvoked = $null
+    Write-ReconcileReceipt 'FOCUS_ATTEMPTING'
+    Assert-ReconcileBudget 5000
+    $beforeFocus = & $ownerModule { param($Target) Get-AiCoreNativeState $Target } $ownerTarget
+    Assert-ReconcileUnchangedInitialDraft $beforeFocus
+    Assert-ReconcileCurrentBrowserGeneration
+    Assert-ReconcileBudget 5000
+    Assert-ReconcileDatabaseFresh
+    & $ownerModule { param($State) Set-AiCoreNativeFocus $State } $beforeFocus
+    $reconcileRecord.focusInvoked = $true
+    $reconcileRecord.focusReturnedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    $reconcileStage = 'NATIVE_STRICT_FOCUS_READ'
+    Write-ReconcileReceipt 'FOCUS_RETURNED'
+    Assert-ReconcileBudget 5000
+    $focused = & $ownerModule { param($Target) Get-AiCoreNativeState $Target $true } $ownerTarget
+    Assert-ReconcileUnchangedInitialDraft $focused
+    $reconcileRecord.strictFocusedReadPassed = $true
+    Write-ReconcileReceipt 'FOCUS_VERIFIED'
 
     $reconcileStage = 'NATIVE_END_KEY_INTENT'
     $reconcileRecord.continuationInputStartedAt = [DateTimeOffset]::UtcNow.ToString('o')
