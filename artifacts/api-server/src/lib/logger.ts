@@ -18,3 +18,17 @@ export const logger = pino({
         },
       }),
 });
+// Instrumentation for detailed debug statements
+if (!isProduction) {
+  ['trace','debug','info','warn','error','fatal'].forEach((level) => {
+    const orig = (logger as any)[level];
+    (logger as any)[level] = (...args: any[]) => {
+      const start = Date.now();
+      const res = orig(...args);
+      const duration = Date.now() - start;
+      orig('LOGGER_INSTRUMENT', { level, duration, args, stack: new Error().stack });
+      return res;
+    };
+  });
+}
+
