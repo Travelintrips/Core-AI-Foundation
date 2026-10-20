@@ -90,11 +90,21 @@ describe("shared DEV browser wake queue", () => {
     });
   });
 
-  it("rejects legacy owner lists rather than constructing cross-account pairs", async () => {
-    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel + ",ai-engine-oauth:" + "c".repeat(64));
-    mocks.handshakeEvidence.mockResolvedValue({ ownerChannel, targetConversationId, workerId: worker });
-    await expect(resolveVerifiedDevWakeTarget("gpt01")).rejects.toThrow("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
-    expect(await isDevBrowserWakeAllowed({ ownerChannel, targetConversationId })).toBe(false);
+  it("preserves every existing GPT01 owner and resolves aliases only for the exact caller", async () => {
+    const otherOwner = "ai-engine-oauth:" + "c".repeat(64);
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel + "," + otherOwner);
+    mocks.handshakeEvidence.mockImplementation(async channel => ({ ownerChannel: channel, targetConversationId, workerId: worker }));
+    for (const channel of [ownerChannel, otherOwner]) {
+      expect(await isDevBrowserWakeAllowed({ ownerChannel: channel, targetConversationId })).toBe(true);
+      await expect(resolveVerifiedDevWakeTarget("gpt01", undefined, channel)).resolves.toEqual({
+        ownerChannel: channel, targetConversationId, workerId: worker,
+      });
+      expect(mocks.handshakeEvidence).toHaveBeenLastCalledWith(channel, expect.any(Object));
+    }
+    await expect(resolveVerifiedDevWakeTarget("gpt01")).rejects.toThrow("DEV_CHATGPT_ALIAS_OWNER_REQUIRED");
+    await expect(resolveVerifiedDevWakeTarget("gpt01", undefined, "ai-engine-oauth:" + "d".repeat(64)))
+      .rejects.toThrow("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
+    expect(mocks.handshakeEvidence).toHaveBeenCalledTimes(2);
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 

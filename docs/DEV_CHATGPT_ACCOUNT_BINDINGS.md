@@ -27,11 +27,16 @@ Each additional entry requires all of these fields:
 
 Aliases, owners, conversations and profiles must be unique, including disabled
 entries. Profile uniqueness is case-insensitive because DELL uses Windows;
-runtime matching is exact. The legacy profile `openclaw`, GPT01 alias, legacy
-owner and legacy conversation cannot be redefined by additional entries.
+runtime matching is exact. The legacy profile `openclaw`, GPT01 alias, every
+existing legacy owner and the legacy conversation cannot be redefined by additions.
 Unknown fields and malformed or conflicting entries disable all additions while
-retaining a valid GPT01 baseline. Legacy configuration must identify exactly one
-owner and one conversation. Lists no longer authorize every possible pairing.
+retaining a valid GPT01 baseline. Legacy configuration may contain several exact
+OAuth owners for the same single GPT01 conversation and worker. All existing
+owners are retained, including when no additional binding is configured. Multiple
+legacy conversations are rejected; no cross-product of target lists is created.
+GPT01 alias lookup selects the authenticated caller's exact owner. A lookup
+without a caller is allowed only for a single legacy owner; it never picks the
+first owner from a multi-owner configuration.
 
 Every raw wake, REST wake, alias lookup and continuity registration/deadline uses
 the same resolver. OAuth channel derivation and relay authentication are
@@ -90,8 +95,11 @@ the generic dispatch allowlist, grant shell access, or enable a wake.
    its actual server-derived owner channel, conversation ID and dedicated
    OpenClaw profile. A normal Chrome profile or an installed connector without
    its own OAuth tools is insufficient browser execution evidence.
-3. Prepare the DELL local configuration with an explicit legacy GPT01 tuple and
-   the exact new binding. Verify profile login and isolated composer state. The
+3. Prepare the DELL local configuration with every existing GPT01 owner and
+   the exact new binding. Use mutually exclusive `legacyBinding` for one owner or
+   `legacyBindings` for multiple owners of the same GPT01 target, worker and
+   `openclaw` profile; do not remove an existing owner during migration. Verify
+   profile login and isolated composer state. The
    worker upgrade has a separate legacy-config migration gate; this server patch
    does not modify that file or the existing attestation key.
 4. Review and separately authorize narrowly scoped DEV database policies for the

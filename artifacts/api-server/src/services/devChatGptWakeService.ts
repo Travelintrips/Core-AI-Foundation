@@ -28,7 +28,15 @@ export async function resolveVerifiedDevWakeTarget(
   if (!config.enabled) throw new Error("DEV_CHATGPT_WAKE_DISABLED");
   const alias = normalizeDevWakeAccountAlias(accountAlias);
   const binding = config.bindings.find(value => value.accountAlias === alias);
-  const target: DevWakeTarget | null = alias === "GPT01" ? config.legacyTarget :
+  if (alias === "GPT01" && expectedOwnerChannel === undefined && config.legacyTargets.length > 1) {
+    throw new Error("DEV_CHATGPT_ALIAS_OWNER_REQUIRED");
+  }
+  const legacyTarget = expectedOwnerChannel === undefined ? config.legacyTargets[0] :
+    config.legacyTargets.find(value => value.ownerChannel === expectedOwnerChannel);
+  if (alias === "GPT01" && expectedOwnerChannel !== undefined && config.legacyTargets.length && !legacyTarget) {
+    throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
+  }
+  const target: DevWakeTarget | null = alias === "GPT01" ? legacyTarget ?? null :
     binding ? { ownerChannel: binding.ownerChannel, targetConversationId: binding.targetConversationId,
       workerId: binding.workerId, wakeBinding: binding } : null;
   if (!target) throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");

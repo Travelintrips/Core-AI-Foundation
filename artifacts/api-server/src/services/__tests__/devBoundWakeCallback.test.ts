@@ -81,6 +81,82 @@ test('exact pair only, dormant config and protected GPT01',async()=>{
   vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON', raw([{...entry,enabled:false}]));assert.equal(await wake.isDevBrowserWakeAllowed(entry),false);
   vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON', raw([{...entry,ownerChannel:legacy.ownerChannel}]));assert.equal(await wake.isDevBrowserWakeAllowed(entry),false);assert.equal(await wake.isDevBrowserWakeAllowed(legacy),true);
 });
+test('keeps both existing legacy owners with no additional binding configured',async()=>{
+  const other={...legacy,ownerChannel:'ai-engine-oauth:'+'c'.repeat(64)};
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CHANNELS',legacy.ownerChannel+','+other.ownerChannel);
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON','');
+  // The existing environment list takes precedence over the single central owner.
+  settings=[{key:'dev.chatgpt_wake.owner_channel',value:legacy.ownerChannel}];
+  assert.equal(await wake.isDevBrowserWakeAllowed(legacy),true);
+  assert.equal(await wake.isDevBrowserWakeAllowed(other),true);
+  assert.deepEqual(await binding.allowedDevWakeOwners(),[legacy.ownerChannel,other.ownerChannel]);
+  assert.equal(await wake.isDevBrowserWakeAllowed(entry),false);
+  assert.equal(await wake.isDevBrowserWakeAllowed({...legacy,ownerChannel:entry.ownerChannel}),false);
+});
+test('two legacy owners keep separate v1 receipts while the additional account remains isolated',async()=>{
+  const other={...legacy,ownerChannel:'ai-engine-oauth:'+'c'.repeat(64)};
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CHANNELS',legacy.ownerChannel+','+other.ownerChannel);
+  const legacyMetadata=[];
+  for(const owner of [legacy,other]){
+    await wake.queueDevBrowserWake({...owner,eventId:expected.eventId});
+    const request=dispatches.at(-1);
+    assert.equal(request.metadata.conversationId,owner.ownerChannel);
+    assert.equal(request.metadata.wakeBinding,undefined);
+    legacyMetadata.push({...request.metadata,assignedClientId:owner.workerId});
+  }
+  await wake.queueDevBrowserWake({...entry,eventId:expected.eventId});
+  assert.deepEqual(dispatches.at(-1).metadata.wakeBinding,wb);
+  assert.equal(commands.size,3);
+  for(const owner of [legacy,other])assert.equal(await wake.isDevBrowserWakeAllowed({...entry,ownerChannel:owner.ownerChannel}),false);
+  assert.equal(await wake.isDevBrowserWakeAllowed({...legacy,ownerChannel:entry.ownerChannel}),false);
+  const [first,second]=legacyMetadata;
+  assert.notEqual(first.assistantAttestationChallenge,second.assistantAttestationChallenge);
+  const args={metadata:second,notBefore:new Date(Date.now()-1000).toISOString(),receivedAt:new Date().toISOString(),publicKeyDerBase64:publicKey};
+  assert.equal(evidence.verifyDevWakeCommandReceipt({...args,details:receipt(first,false)}).verified,false);
+  const details=receipt(second,false);
+  assert.equal(evidence.verifyDevWakeCommandReceipt({...args,details}).verified,true);
+  callbackRow={id:'88888888-8888-4888-8888-888888888888',source:'ai-core',command_type:'EXTERNAL_AGENT_WORK',metadata_json:second,received_at:new Date(Date.now()-1000)};
+  const result=await bridge.completeCodingBridgeCommand({clientId:other.workerId,commandId:callbackRow.id,claimToken:'lease',status:'COMPLETED',message:'test',details});
+  assert.equal(result.status,'COMPLETED');assert.equal(commits,1);assert.equal(inserts.length,1);
+});
+test('reserves every legacy owner and never expands multiple target lists',async()=>{
+  const other={...legacy,ownerChannel:'ai-engine-oauth:'+'c'.repeat(64)};
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CHANNELS',legacy.ownerChannel+','+other.ownerChannel);
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON',raw([{...entry,ownerChannel:other.ownerChannel}]));
+  assert.equal(await wake.isDevBrowserWakeAllowed(legacy),true);
+  assert.equal(await wake.isDevBrowserWakeAllowed(other),true);
+  assert.equal(await wake.isDevBrowserWakeAllowed(entry),false);
+  assert.equal(await wake.isDevBrowserWakeAllowed({...entry,ownerChannel:other.ownerChannel}),false);
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON',raw());
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS',legacy.targetConversationId+','+entry.targetConversationId);
+  for(const target of [legacy,other,entry])assert.equal(await wake.isDevBrowserWakeAllowed(target),false);
+  assert.equal(dispatches.length,0);
+});
+test('legacy aliases require the exact caller and its signed final ACK',async()=>{
+  const other={...legacy,ownerChannel:'ai-engine-oauth:'+'c'.repeat(64)};
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CHANNELS',legacy.ownerChannel+','+other.ownerChannel);
+  await assert.rejects(wake.resolveVerifiedDevWakeTarget('GPT01'),/ALIAS_OWNER_REQUIRED/);
+  await assert.rejects(wake.resolveVerifiedDevWakeTarget('GPT01',undefined,entry.ownerChannel),/ALIAS_OWNER_MISMATCH/);
+  assert.equal(commits,0);
+  for(const target of [legacy,other]){
+    await wake.queueDevBrowserWake({...target,eventId:expected.eventId});
+    const metadata={...dispatches.at(-1).metadata,assignedClientId:target.workerId};
+    const responseId='77777777-7777-4777-8777-777777777777';
+    callbackRow={command_id:'88888888-8888-4888-8888-888888888888',command_received_at:new Date(Date.now()-1000),
+      command_metadata_json:{...metadata,completedBy:target.workerId,mcpAckConversationId:target.ownerChannel,
+        deliveryCode:'DELIVERY_CONFIRMED',e2eCode:'MCP_ACK_VERIFIED',mcpAckResponseId:responseId},
+      response_id:responseId,response_metadata_json:{...receipt(metadata,false),deliveryCode:'DELIVERY_CONFIRMED',e2eCode:'E2E_VERIFIED'},
+      response_created_at:new Date(),acknowledged_at:new Date()};
+    assert.deepEqual(await wake.resolveVerifiedDevWakeTarget('GPT01',undefined,target.ownerChannel),target);
+    const wrongOwner=target.ownerChannel===legacy.ownerChannel?other.ownerChannel:legacy.ownerChannel;
+    await assert.rejects(wake.resolveVerifiedDevWakeTarget('GPT01',undefined,wrongOwner),/ALIAS_TARGET_UNVERIFIED/);
+  }
+  // Revoking one owner does not revoke the other or expose its receipt to GPT02.
+  vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CHANNELS',other.ownerChannel);
+  assert.deepEqual(await wake.resolveVerifiedDevWakeTarget('GPT01'),other);
+  assert.equal(await wake.isDevBrowserWakeAllowed(legacy),false);
+  await assert.rejects(wake.resolveVerifiedDevWakeTarget('GPT02',undefined,entry.ownerChannel),/ALIAS_TARGET_UNVERIFIED/);
+});
 test('strict schema, aliases, case-insensitive profile conflict and malformed values',()=>{
   for(const change of [{accountAlias:'GPT01'},{browserProfile:'OPENCLAW'},{ownerChannel:entry.ownerChannel+'\n'},{browserProfile:'../unsafe'},{enabled:undefined},{targetConversationId:''}])assert.throws(()=>binding.parseDevWakeAccountBindings(raw([{...entry,...change}]),legacy));
   assert.throws(()=>binding.parseDevWakeAccountBindings(raw([entry,{...entry,accountAlias:'GPT03',ownerChannel:'ai-engine-oauth:'+'e'.repeat(64),targetConversationId:'33333333-3333-4333-8333-333333333333',browserProfile:'TRAVELINCARS-DEV'}]),legacy));

@@ -25,7 +25,7 @@ export type DevWakeTarget = {
 };
 export type DevWakeRuntimeConfig = {
   enabled: boolean;
-  legacyTarget: DevWakeTarget | null;
+  legacyTargets: DevWakeTarget[];
   bindings: DevWakeBinding[];
   bindingConfigInvalid: boolean;
   attestationPublicKeyDerB64?: string;
@@ -68,9 +68,10 @@ export function readDevWakeBinding(value: unknown): DevWakeBinding | null {
   return devWakeBindingFingerprint(binding) === binding.bindingFingerprint ? { ...binding } : null;
 }
 
-/** Reserve GPT01 and its owner/target/profile. Reject all conflicting additions. */
-export function parseDevWakeAccountBindings(raw: string | undefined, legacy: DevWakeTarget | null): DevWakeBinding[] {
+/** Reserve GPT01 and every existing owner of its one target/profile. */
+export function parseDevWakeAccountBindings(raw: string | undefined, legacy: DevWakeTarget | DevWakeTarget[] | null): DevWakeBinding[] {
   if (!raw?.trim()) return [];
+  const legacyTargets = Array.isArray(legacy) ? legacy : legacy ? [legacy] : [];
   const config: unknown = JSON.parse(raw);
   if (!record(config) || config["version"] !== 1 || !Array.isArray(config["bindings"]) ||
       config["bindings"].length > 16 || Object.keys(config).some(key => !["version", "bindings"].includes(key))) {
@@ -84,7 +85,7 @@ export function parseDevWakeAccountBindings(raw: string | undefined, legacy: Dev
         !validTuple({ ...row, version: 1 })) throw new Error("DEV_CHATGPT_BINDING_CONFIG_INVALID");
     const tuple = { version: 1, accountAlias: row["accountAlias"], ownerChannel: row["ownerChannel"],
       targetConversationId: row["targetConversationId"], workerId: row["workerId"], browserProfile: row["browserProfile"] } as Omit<DevWakeBinding, "bindingFingerprint">;
-    if (tuple.ownerChannel === legacy?.ownerChannel || tuple.targetConversationId === legacy?.targetConversationId ||
+    if (legacyTargets.some(target => tuple.ownerChannel === target.ownerChannel || tuple.targetConversationId === target.targetConversationId) ||
         tuple.browserProfile.toLowerCase() === "openclaw") throw new Error("DEV_CHATGPT_BINDING_LEGACY_CONFLICT");
     // Profile directory names on DELL are case-insensitive. Metadata remains exact.
     const keys = ["alias:" + tuple.accountAlias, "owner:" + tuple.ownerChannel,
@@ -121,25 +122,25 @@ async function loadCentralDevWakeSettings(requestHost?: string): Promise<Record<
 export async function loadDevWakeRuntimeConfig(requestHost?: string): Promise<DevWakeRuntimeConfig> {
   const central = await loadCentralDevWakeSettings(requestHost);
   const setting = (env: string, key: string): string => process.env[env]?.trim() || central[key]?.trim() || "";
-  const channels = setting("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", "dev.chatgpt_wake.owner_channel").split(",").map(x => x.trim()).filter(Boolean);
+  const channels = [...new Set(setting("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", "dev.chatgpt_wake.owner_channel").split(",").map(x => x.trim()).filter(Boolean))];
   const conversations = setting("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", "dev.chatgpt_wake.gpt01_conversation_id").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   const configuredWorker = setting("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "dev.chatgpt_wake.worker_id") || DEV_WAKE_DEFAULT_WORKER;
   if (configuredWorker !== DEV_WAKE_DEFAULT_WORKER && configuredWorker !== DEV_WAKE_DELL_WORKER) throw new Error("DEV_CHATGPT_WAKE_WORKER_INVALID");
   const aliasTarget = process.env["AI_CORE_DEV_CHATGPT_ALIAS_GPT01_CONVERSATION_ID"]?.trim().toLowerCase();
-  // Legacy lists describe exactly one pair, never the Cartesian product of lists.
-  const legacyTarget: DevWakeTarget | null = channels.length === 1 && conversations.length === 1 &&
-    OWNER.test(channels[0]!) && UUID.test(conversations[0]!) && (!aliasTarget || aliasTarget === conversations[0])
-    ? { ownerChannel: channels[0]!, targetConversationId: conversations[0]!, workerId: configuredWorker } : null;
+  // Existing owners may share GPT01. Preserve each exact owner, but never expand multiple targets.
+  const legacyTargets: DevWakeTarget[] = channels.length > 0 && conversations.length === 1 &&
+    channels.every(channel => OWNER.test(channel)) && UUID.test(conversations[0]!) && (!aliasTarget || aliasTarget === conversations[0])
+    ? channels.map(ownerChannel => ({ ownerChannel, targetConversationId: conversations[0]!, workerId: configuredWorker })) : [];
   let bindings: DevWakeBinding[] = [];
   let bindingConfigInvalid = false;
   try {
-    bindings = parseDevWakeAccountBindings(setting("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", "dev.chatgpt_wake.account_bindings"), legacyTarget);
+    bindings = parseDevWakeAccountBindings(setting("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", "dev.chatgpt_wake.account_bindings"), legacyTargets);
     // Do not activate additions if the protected baseline cannot be identified.
-    if (bindings.length && !legacyTarget) { bindings = []; bindingConfigInvalid = true; }
+    if (bindings.length && !legacyTargets.length) { bindings = []; bindingConfigInvalid = true; }
   } catch { bindingConfigInvalid = true; }
   return {
     enabled: isDevWakeRuntime(requestHost) && setting("AI_CORE_DEV_BROWSER_WAKE_ENABLED", "dev.chatgpt_wake.enabled") === "true",
-    legacyTarget, bindings, bindingConfigInvalid,
+    legacyTargets, bindings, bindingConfigInvalid,
     attestationPublicKeyDerB64: setting("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "dev.chatgpt_wake.dell_attestation_public_key_der_b64") || undefined,
   };
 }
@@ -150,7 +151,8 @@ export function resolveConfiguredDevWakeTarget(config: DevWakeRuntimeConfig, inp
   if (!config.enabled || typeof input.ownerChannel !== "string" || input.ownerChannel.length !== 80 || !OWNER.test(input.ownerChannel) ||
       typeof input.targetConversationId !== "string" || input.targetConversationId.length !== 36 || !UUID.test(input.targetConversationId.toLowerCase())) return null;
   const target = input.targetConversationId.toLowerCase();
-  if (config.legacyTarget?.ownerChannel === input.ownerChannel && config.legacyTarget.targetConversationId === target) return config.legacyTarget;
+  const legacy = config.legacyTargets.find(value => value.ownerChannel === input.ownerChannel && value.targetConversationId === target);
+  if (legacy) return legacy;
   const wakeBinding = config.bindings.find(binding => binding.ownerChannel === input.ownerChannel && binding.targetConversationId === target);
   return wakeBinding ? { ownerChannel: wakeBinding.ownerChannel, targetConversationId: target, workerId: wakeBinding.workerId, wakeBinding } : null;
 }
@@ -167,7 +169,7 @@ export function commandMatchesDevWakeTarget(metadata: unknown, target: DevWakeTa
 export async function allowedDevWakeOwners(requestHost?: string): Promise<string[]> {
   try {
     const config = await loadDevWakeRuntimeConfig(requestHost);
-    return config.enabled ? [...(config.legacyTarget ? [config.legacyTarget.ownerChannel] : []), ...config.bindings.map(binding => binding.ownerChannel)] : [];
+    return config.enabled ? [...config.legacyTargets.map(target => target.ownerChannel), ...config.bindings.map(binding => binding.ownerChannel)] : [];
   } catch { return []; }
 }
 

@@ -17,7 +17,7 @@ describe("exact DEV account binding", () => {
   it("agrees with the worker fingerprint and keeps the legacy pair separate", () => {
     const bindings = parseDevWakeAccountBindings(raw(), legacy);
     expect(bindings[0]!.bindingFingerprint).toBe("4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1");
-    const config: DevWakeRuntimeConfig = { enabled: true, legacyTarget: legacy, bindings, bindingConfigInvalid: false };
+    const config: DevWakeRuntimeConfig = { enabled: true, legacyTargets: [legacy], bindings, bindingConfigInvalid: false };
     expect(resolveConfiguredDevWakeTarget(config, legacy)).toEqual(legacy);
     expect(resolveConfiguredDevWakeTarget(config, entry)?.wakeBinding).toEqual(bindings[0]);
     expect(resolveConfiguredDevWakeTarget(config, { ...entry, ownerChannel: legacy.ownerChannel })).toBeNull();
