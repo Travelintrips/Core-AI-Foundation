@@ -27,6 +27,26 @@ import {
 } from "../services/externalAgentDispatchService.js";
 import { queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../services/devChatGptWakeService.js";
 const router=Router(); const Uuid=z.string().uuid();
+
+async function resolveAiTaskGptOwnerChannel(): Promise<string | undefined> {
+  try {
+    const { db } = await import("@workspace/db");
+    const { sql } = await import("drizzle-orm");
+    const result = await db.execute(sql`
+      SELECT value FROM ai_platform.ai_settings
+      WHERE is_secret IS FALSE
+        AND category = 'guardrail'
+        AND key = 'dev.chatgpt_wake.owner_channel'
+      LIMIT 1
+    `);
+    const value = result.rows?.[0]?.["value"];
+    return typeof value === "string" && /^ai-engine-oauth:[a-f0-9]{64}$/.test(value.trim())
+      ? value.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  const externalCommandId=String(req.query["externalCommandId"]??"");
  if(!/^ai-task:[a-zA-Z0-9_-]{1,100}:[1-9][0-9]*$/.test(externalCommandId)){res.status(400).json({error:"INVALID_EXTERNAL_COMMAND_ID"});return;}
@@ -45,7 +65,14 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
  }).strict().safeParse(req.body);
  if(!p.success){res.status(400).json({error:p.error.message});return;}
  try{
-  const target=await resolveVerifiedDevWakeTarget(p.data.accountAlias,req.hostname);
+  const expectedOwnerChannel=p.data.accountAlias==="GPT01"
+   ? await resolveAiTaskGptOwnerChannel()
+   : undefined;
+  const target=await resolveVerifiedDevWakeTarget(
+   p.data.accountAlias,
+   req.hostname,
+   expectedOwnerChannel,
+  );
   const eventId=randomBytes(32).toString("hex");
   const queued=await queueDevBrowserWake({
    ownerChannel:target.ownerChannel,
