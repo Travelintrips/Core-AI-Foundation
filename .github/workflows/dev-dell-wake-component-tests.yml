@@ -10,6 +10,7 @@ on:
       - scripts/windows/ai-core/test_dev_chatgpt_wake_once.py
       - scripts/windows/ai-core/dev-chatgpt-native-composer.psm1
       - scripts/windows/ai-core/test-dev-chatgpt-native-composer.ps1
+      - scripts/windows/ai-core/test-dev-chatgpt-native-focus-activation.ps1
       - scripts/windows/ai-core/dev-chatgpt-native-bridge.ps1
       - scripts/windows/ai-core/dev_chatgpt_native_*.py
       - scripts/windows/ai-core/test_dev_chatgpt_native_*.py
@@ -23,6 +24,7 @@ on:
       - scripts/windows/ai-core/test_dev_chatgpt_wake_once.py
       - scripts/windows/ai-core/dev-chatgpt-native-composer.psm1
       - scripts/windows/ai-core/test-dev-chatgpt-native-composer.ps1
+      - scripts/windows/ai-core/test-dev-chatgpt-native-focus-activation.ps1
       - scripts/windows/ai-core/dev-chatgpt-native-bridge.ps1
       - scripts/windows/ai-core/dev_chatgpt_native_*.py
       - scripts/windows/ai-core/test_dev_chatgpt_native_*.py
@@ -65,3 +67,6 @@ jobs:
       - name: Validate native composer guards without a live browser
         shell: powershell
         run: scripts/windows/ai-core/test-dev-chatgpt-native-composer.ps1
+      - name: Validate bounded native focus recovery without a live browser
+        shell: powershell
+        run: scripts/windows/ai-core/test-dev-chatgpt-native-focus-activation.ps1

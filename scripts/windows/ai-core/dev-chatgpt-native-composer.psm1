@@ -185,6 +185,63 @@ function Assert-AiCoreNativeBlankProofFresh {
 }
 
 function Set-AiCoreNativeFocus { param($State) $State.Composer.SetFocus() }
+
+
+function Get-AiCoreNativeForegroundWindow {
+    # Existing read-only Win32 primitive; isolated here for component tests.
+    return [AiCoreNativeComposerWindow]::GetForegroundWindow()
+}
+
+function Assert-AiCoreNativeIdle {
+    param($State)
+    $condition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+    foreach ($button in $State.Window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+        if ($button.Current.IsEnabled -and -not $button.Current.IsOffscreen -and
+            $button.Current.Name -match '(?i)\A(?:Stop(?: generating| responding| streaming)?|Hentikan(?: pembuatan| respons| jawaban)?)\z') {
+            throw 'Native generation is active; preserve the attempt'
+        }
+    }
+}
+
+function Set-AiCoreNativeSubmitFocus {
+    param($State, [hashtable]$Target, [long]$LeaseExpiresTickCount64)
+    # Keep the existing first composer focus. Chrome can acknowledge keyboard
+    # focus while a different browser window remains the OS foreground window.
+    Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
+    Set-AiCoreNativeFocus $State
+    try { $focused = Get-AiCoreNativeState $Target $true }
+    catch {
+        if ($_.Exception.Message -cne 'Native composer lost foreground or keyboard focus') { throw }
+        $fresh = Get-AiCoreNativeState $Target
+        Assert-AiCoreNativeIdle $fresh
+        Assert-AiCoreNativeInsertableDraft $fresh $Target.ComposerName
+        if ((Get-AiCoreNativeForegroundWindow) -eq [IntPtr]$Target.WindowHandle -or
+            -not $fresh.Composer.Current.HasKeyboardFocus -or -not $fresh.Composer.Current.IsKeyboardFocusable) {
+            throw 'Native focus recovery requires the observed background composer state'
+        }
+        $address = Find-AiCoreNativeControl $fresh.Window 'Address and search bar' ([System.Windows.Automation.ControlType]::Edit)
+        Assert-AiCoreNativeAddress $Target (Get-AiCoreNativeValue $address)
+        if (-not $address.Current.IsKeyboardFocusable) { throw 'Native address is not keyboard focusable' }
+        # Focus only: no ValuePattern.SetValue, navigation, keys or Send. The
+        # existing exclusive input marker and worker lease still fence actions.
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
+        $address.SetFocus()
+        $fresh = Get-AiCoreNativeState $Target
+        Assert-AiCoreNativeIdle $fresh
+        Assert-AiCoreNativeInsertableDraft $fresh $Target.ComposerName
+        $address = Find-AiCoreNativeControl $fresh.Window 'Address and search bar' ([System.Windows.Automation.ControlType]::Edit)
+        Assert-AiCoreNativeAddress $Target (Get-AiCoreNativeValue $address)
+        if ((Get-AiCoreNativeForegroundWindow) -ne [IntPtr]$Target.WindowHandle -or -not $address.Current.HasKeyboardFocus) {
+            throw 'Native address did not establish foreground and keyboard focus'
+        }
+        Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
+        Set-AiCoreNativeFocus $fresh
+        $focused = Get-AiCoreNativeState $Target $true
+    }
+    Assert-AiCoreNativeIdle $focused
+    return $focused
+}
 function Send-AiCoreNativeKeys { param([string]$Keys) [System.Windows.Forms.SendKeys]::SendWait($Keys) }
 function Get-AiCoreNativeSendControl {
     param($State)
@@ -256,8 +313,7 @@ function Invoke-AiCoreNativeComposerOnce {
     try {
         Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
-        Set-AiCoreNativeFocus $state
-        $focused = Get-AiCoreNativeState $Target $true
+        $focused = Set-AiCoreNativeSubmitFocus $state $Target $LeaseExpiresTickCount64
         Assert-AiCoreNativeInsertableDraft $focused $Target.ComposerName
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         Send-AiCoreNativeKeys '^{END}'
