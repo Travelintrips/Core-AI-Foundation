@@ -1,0 +1,49 @@
+name: DEV DELL wake component gate
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - scripts/dev/dell-wake-executor.mjs
+      - scripts/dev/test-dell-wake-executor.mjs
+      - scripts/windows/ai-core/dev-chatgpt-wake-once.py
+      - scripts/windows/ai-core/test_dev_chatgpt_wake_once.py
+      - .github/workflows/dev-dell-wake-component-tests.yml
+  push:
+    branches: [develop]
+    paths:
+      - scripts/dev/dell-wake-executor.mjs
+      - scripts/dev/test-dell-wake-executor.mjs
+      - scripts/windows/ai-core/dev-chatgpt-wake-once.py
+      - scripts/windows/ai-core/test_dev_chatgpt_wake_once.py
+      - .github/workflows/dev-dell-wake-component-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-dell-wake-component-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  component-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install isolated Python test dependency
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dell-wake-tests"
+          "$RUNNER_TEMP/dell-wake-tests/bin/python" -m pip install cryptography==50.0.2
+      - name: Validate executor binding and receipt gates
+        run: |
+          node --check scripts/dev/dell-wake-executor.mjs
+          node scripts/dev/test-dell-wake-executor.mjs
+      - name: Validate helper routing, idempotency and signatures
+        run: |
+          "$RUNNER_TEMP/dell-wake-tests/bin/python" -m py_compile scripts/windows/ai-core/dev-chatgpt-wake-once.py
+          "$RUNNER_TEMP/dell-wake-tests/bin/python" -m unittest discover -s scripts/windows/ai-core -p 'test_dev_chatgpt_wake_once.py' -v

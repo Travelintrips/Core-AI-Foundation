@@ -19,11 +19,108 @@ PATTERN_V1 = re.compile(
 PATTERN_V2 = re.compile(
     r"\ADEV_CHATGPT_WAKE_V2 conversation=([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) "
     r"event=([0-9a-f]{64}) challenge=([0-9a-f]{64}) task=([A-Za-z0-9_-]{1,4096})\Z", re.I)
-CLI = [os.environ.get("AI_CORE_OPENCLAW_CMD", "openclaw.cmd" if os.name == "nt" else "openclaw"), "browser", "--browser-profile", os.environ.get("AI_CORE_DEV_WAKE_BROWSER_PROFILE", "chrome")]
+BROWSER_PROFILE = os.environ.get("AI_CORE_DEV_WAKE_BROWSER_PROFILE", "chrome")
+CLI = [os.environ.get("AI_CORE_OPENCLAW_CMD", "openclaw.cmd" if os.name == "nt" else "openclaw"), "browser", "--browser-profile", BROWSER_PROFILE]
 WORKER = os.environ.get("AI_CORE_DEV_WAKE_WORKER_ID", "openclaw-travelintrips-dev")
 KEY_ID = os.environ.get("AI_CORE_DEV_WAKE_KEY_ID", "openclaw-travelintrips-dev-ed25519-v1")
 ALLOWLIST_FILE = os.environ.get("AI_CORE_DEV_WAKE_ALLOWLIST_FILE", "chatgpt-wake-dev-allowlist.json")
 PRIVATE_KEY_FILE = os.environ.get("AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE", "dev-assistant-attestation-ed25519.pem")
+DELL_WORKER = "openclaw-dell-chatgpt-wake-dev"
+UUID = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}")
+DIGEST = re.compile(r"[a-f0-9]{64}")
+OWNER = re.compile(r"ai-engine-oauth:[a-f0-9]{64}")
+PROFILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+ALIAS = re.compile(r"GPT[0-9]{2,4}")
+
+
+def _matches(pattern, value):
+    return isinstance(value, str) and pattern.fullmatch(value) is not None
+
+
+def binding_fingerprint(binding):
+    return hashlib.sha256("|".join([
+        "dev-chatgpt-wake-binding/v1", binding["accountAlias"], binding["ownerChannel"],
+        binding["targetConversationId"], binding["workerId"], binding["browserProfile"],
+    ]).encode("utf-8")).hexdigest()
+
+
+def _valid_binding(value):
+    return (isinstance(value, dict) and value.get("version") == 1 and
+            type(value.get("version")) is int and _matches(ALIAS, value.get("accountAlias")) and
+            _matches(OWNER, value.get("ownerChannel")) and _matches(UUID, value.get("targetConversationId")) and
+            value.get("workerId") == DELL_WORKER and _matches(PROFILE, value.get("browserProfile")) and
+            ("bindingFingerprint" not in value or value["bindingFingerprint"] == binding_fingerprint(value)))
+
+
+def local_bindings(data):
+    if not isinstance(data, dict) or data.get("enabled") is not True or not isinstance(data.get("bindings", []), list):
+        raise RuntimeError("DEV wake pairing disabled or malformed")
+    entries = []
+    if "legacyBinding" in data:
+        legacy = data["legacyBinding"]
+        if (not _valid_binding(legacy) or type(legacy.get("enabled")) is not bool or
+                legacy["accountAlias"] != "GPT01" or legacy["browserProfile"] != "openclaw" or
+                data.get("allowedConversationIds") != [legacy["targetConversationId"]]):
+            raise RuntimeError("Explicit GPT01 legacy pairing required")
+        entries.append({**legacy, "legacy": True})
+    for value in data.get("bindings", []):
+        if not _valid_binding(value) or type(value.get("enabled")) is not bool or value["accountAlias"] == "GPT01":
+            raise RuntimeError("Invalid additional DEV wake binding")
+        entries.append({**value, "legacy": False})
+    for field in ("accountAlias", "ownerChannel", "targetConversationId", "browserProfile"):
+        values = [entry[field].lower() if field == "browserProfile" else entry[field] for entry in entries]
+        if len(set(values)) != len(values):
+            raise RuntimeError("Conflicting DEV wake bindings")
+    return entries
+
+
+def assistant_challenge(metadata, fingerprint=None):
+    watch, job, revision = (metadata.get("watchCommandId"), metadata.get("jobId"), metadata.get("checkpointRevision"))
+    has_watch = any(key in metadata for key in ("watchCommandId", "jobId", "checkpointRevision"))
+    if (not _matches(OWNER, metadata.get("conversationId")) or not _matches(UUID, metadata.get("targetConversationId")) or
+            not _matches(DIGEST, metadata.get("eventId")) or (has_watch and
+            (not isinstance(watch, str) or not _matches(UUID, watch.lower()) or
+             not isinstance(job, str) or not _matches(UUID, job.lower()) or type(revision) is not int or
+             not 1 <= revision <= 9007199254740991))):
+        raise RuntimeError("Invalid DEV wake challenge context")
+    fields = [
+        "dev-chatgpt-assistant-attestation/v" + ("2" if fingerprint else "1"),
+        metadata["conversationId"], metadata["targetConversationId"], metadata["eventId"],
+        watch.lower() if watch else "", job.lower() if job else "", "" if revision is None else str(revision),
+    ]
+    if fingerprint:
+        fields.append(fingerprint)
+    return hashlib.sha256("|".join(fields).encode("utf-8")).hexdigest()
+
+
+def resolve_dell_binding(metadata, data, conversation, event, challenge):
+    if (not isinstance(metadata, dict) or metadata.get("assignedClientId") != DELL_WORKER or
+            metadata.get("targetConversationId") != conversation or metadata.get("eventId") != event or
+            metadata.get("assistantAttestationChallenge") != challenge or metadata.get("capability") != "chatgpt:wake" or
+            metadata.get("explicitWorkerTarget") is not True or metadata.get("devOnly") is not True or
+            metadata.get("source") != "authorized-dev-browser-wake" or not _matches(OWNER, metadata.get("conversationId"))):
+        raise RuntimeError("Wake binding mismatch")
+    entries = local_bindings(data)
+    bound = "wakeBinding" in metadata
+    binding = metadata.get("wakeBinding")
+    if bound:
+        if (not _valid_binding(binding) or not _matches(DIGEST, binding.get("bindingFingerprint")) or
+                binding["accountAlias"] == "GPT01" or binding["ownerChannel"] != metadata["conversationId"] or
+                binding["targetConversationId"] != conversation):
+            raise RuntimeError("Invalid command wake binding")
+        selected = next((entry for entry in entries if not entry["legacy"] and entry["enabled"] and
+                         all(entry[field] == binding[field] for field in
+                             ("accountAlias", "ownerChannel", "targetConversationId", "workerId", "browserProfile"))), None)
+    else:
+        selected = next((entry for entry in entries if entry["legacy"] and entry["enabled"] and
+                         entry["ownerChannel"] == metadata["conversationId"] and entry["targetConversationId"] == conversation), None)
+    if selected is None:
+        raise RuntimeError("Exact local DEV wake binding not enabled")
+    if selected["browserProfile"] != BROWSER_PROFILE:
+        raise RuntimeError("Selected browser profile does not match local binding")
+    if assistant_challenge(metadata, binding["bindingFingerprint"] if bound else None) != challenge:
+        raise RuntimeError("Wake challenge does not match binding")
+    return binding if bound else None
 
 
 def browser(*args, timeout=55):
@@ -52,12 +149,9 @@ def config(base=None):
     root = Path(base or (Path(os.environ["LOCALAPPDATA"]) / "AI-Core"))
     p = root / ALLOWLIST_FILE
     data = json.loads(p.read_text(encoding="utf-8"))
-    allowed = data.get("allowedConversationIds")
-    if data.get("enabled") is not True or not isinstance(allowed, list):
+    if not isinstance(data, dict) or data.get("enabled") is not True:
         raise RuntimeError("DEV ChatGPT wake pairing disabled")
-    if not all(isinstance(v, str) and re.fullmatch(r"[0-9a-f-]{36}", v, re.I) for v in allowed):
-        raise RuntimeError("Invalid DEV wake pairing allowlist")
-    return root, set(v.lower() for v in allowed)
+    return root, data
 
 
 def find_tab(url):
@@ -143,9 +237,9 @@ def _assistant_probe(tab, expected_url, marker, challenge):
             "assistantMessageId": id_match.group(0).lower() if id_match else None,
             "assistantText": text, "ackVisible": ack_visible}
 
-def _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at):
-    return "\n".join([
-        "dev-chatgpt-assistant-attestation/v1",
+def _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at, binding=None):
+    fields = [
+        "dev-chatgpt-assistant-attestation/v" + ("2" if binding else "1"),
         "keyId=" + KEY_ID,
         "workerId=" + WORKER,
         "conversationId=" + conversation,
@@ -154,10 +248,13 @@ def _attestation_payload(conversation, event, challenge, message_id, response_ha
         "assistantMessageId=" + message_id,
         "assistantResponseHash=" + response_hash,
         "observedAt=" + observed_at,
-    ])
+    ]
+    if binding:
+        fields.extend(["bindingFingerprint=" + binding["bindingFingerprint"], "browserProfile=" + binding["browserProfile"]])
+    return "\n".join(fields)
 
 
-def wait_for_assistant_attestation(root, tab, expected_url, conversation, event, challenge):
+def wait_for_assistant_attestation(root, tab, expected_url, conversation, event, challenge, binding=None):
     key = _private_key(root)
     if key is None:
         return None
@@ -171,20 +268,21 @@ def wait_for_assistant_attestation(root, tab, expected_url, conversation, event,
                 raise RuntimeError("Assistant response identity invalid")
             response_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
             observed_at = _iso_now()
-            payload = _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at)
+            payload = _attestation_payload(conversation, event, challenge, message_id, response_hash, observed_at, binding)
             signature = base64.b64encode(key.sign(payload.encode("utf-8"))).decode("ascii")
             return {
-                "version": 1, "algorithm": "Ed25519", "keyId": KEY_ID, "workerId": WORKER,
+                "version": 2 if binding else 1, "algorithm": "Ed25519", "keyId": KEY_ID, "workerId": WORKER,
                 "conversationId": conversation, "eventId": event, "challenge": challenge,
                 "assistantMessageId": message_id, "assistantResponseHash": response_hash,
                 "assistantResponseText": text[:4000],
                 "observedAt": observed_at, "signature": signature,
+                **({"bindingFingerprint": binding["bindingFingerprint"], "browserProfile": binding["browserProfile"]} if binding else {}),
             }
         time.sleep(2)
     return None
 
 
-def submit_once(instruction, worker_id, base=None):
+def submit_once(instruction, worker_id, base=None, metadata=None):
     raw = str(instruction).strip()
     match = PATTERN_V2.fullmatch(raw)
     task_instruction = None
@@ -202,9 +300,18 @@ def submit_once(instruction, worker_id, base=None):
     if not match or worker_id != WORKER:
         raise RuntimeError("Unauthorized DEV browser wake command or worker")
     conversation, event, challenge = (match.group(1).lower(), match.group(2).lower(), match.group(3).lower())
-    root, allowlist = config(base)
-    if conversation not in allowlist:
-        raise RuntimeError("ChatGPT conversation is not paired/allowlisted")
+    root, data = config(base)
+    binding = None
+    if WORKER == DELL_WORKER:
+        binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
+    else:
+        # Preserve the original Travelintrips-only helper; DELL never falls back to this list.
+        allowed = data.get("allowedConversationIds")
+        if metadata is not None or not isinstance(allowed, list) or not all(
+                isinstance(value, str) and re.fullmatch(r"[0-9a-f-]{36}", value, re.I) for value in allowed):
+            raise RuntimeError("Invalid DEV wake pairing allowlist")
+        if conversation not in {value.lower() for value in allowed}:
+            raise RuntimeError("ChatGPT conversation is not paired/allowlisted")
     url = "https://chatgpt.com/c/" + conversation
     marker = "AI_CORE_WAKE:" + event
     tab = find_tab(url)
@@ -215,22 +322,29 @@ def submit_once(instruction, worker_id, base=None):
         raise RuntimeError("ChatGPT is still responding; cannot wake now")
     receipt_dir = root / "chatgpt-wake-dev-receipts"
     receipt_dir.mkdir(parents=True, exist_ok=True)
-    receipt = receipt_dir / (event + ".json")
+    receipt = receipt_dir / ((binding["bindingFingerprint"] + "-" if binding else "") + event + ".json")
+    receipt_context = {"conversationId": conversation, "eventId": event, "challenge": challenge,
+                       "browserProfile": BROWSER_PROFILE,
+                       **({"bindingFingerprint": binding["bindingFingerprint"]} if binding else {})}
+    if binding and receipt.exists():
+        previous = json.loads(receipt.read_text(encoding="utf-8"))
+        if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in receipt_context.items()):
+            raise RuntimeError("Wake event receipt context mismatch; reconciliation required")
     if state["markerVisible"]:
         # Reconcile an existing wake without submitting a duplicate message.
-        attestation = wait_for_assistant_attestation(root, tab, url, conversation, event, challenge)
+        attestation = wait_for_assistant_attestation(root, tab, url, conversation, event, challenge, binding)
         fingerprint = hashlib.sha256((conversation + "|" + event + "|" + challenge + "|" + tab).encode()).hexdigest()
         with receipt.open("w", encoding="utf-8") as f:
-            json.dump({"status": "ASSISTANT_ATTESTED" if attestation else "BROWSER_CONFIRMED",
+            json.dump({**receipt_context, "status": "ASSISTANT_ATTESTED" if attestation else "BROWSER_CONFIRMED",
                        "evidenceFingerprint": fingerprint, "attestation": attestation}, f)
         return {"chatgptSubmitted": True, "browserConfirmed": True,
                 "alreadyVisible": True, "browserPairingVerified": True,
                 "verifiedAssistantReply": attestation is not None,
                 "attestation": attestation, "evidenceFingerprint": fingerprint,
-                "conversationId": conversation, "eventId": event, "challenge": challenge}
+                **receipt_context}
     try:
         with receipt.open("x", encoding="utf-8") as f:
-            json.dump({"status": "ATTEMPTING", "conversationId": conversation, "challenge": challenge}, f)
+            json.dump({**receipt_context, "status": "ATTEMPTING"}, f)
             f.flush()
             os.fsync(f.fileno())
     except FileExistsError:
@@ -258,22 +372,22 @@ def submit_once(instruction, worker_id, base=None):
     if not visible:
         raise RuntimeError("ChatGPT message delivery not visibly verified")
     fingerprint = hashlib.sha256((conversation + "|" + event + "|" + challenge + "|" + tab).encode()).hexdigest()
-    attestation = wait_for_assistant_attestation(root, tab, url, conversation, event, challenge)
+    attestation = wait_for_assistant_attestation(root, tab, url, conversation, event, challenge, binding)
     with receipt.open("w", encoding="utf-8") as f:
-        json.dump({"status": "ASSISTANT_ATTESTED" if attestation else "BROWSER_CONFIRMED",
+        json.dump({**receipt_context, "status": "ASSISTANT_ATTESTED" if attestation else "BROWSER_CONFIRMED",
                    "evidenceFingerprint": fingerprint, "attestation": attestation}, f)
     return {"chatgptSubmitted": True, "browserConfirmed": True,
             "alreadyVisible": False, "browserPairingVerified": True,
             "verifiedAssistantReply": attestation is not None,
             "attestation": attestation, "evidenceFingerprint": fingerprint,
             "assistantResponseText": attestation.get("assistantResponseText") if isinstance(attestation, dict) else None,
-            "conversationId": conversation, "eventId": event, "challenge": challenge}
+            **receipt_context}
 
 
 def main():
     try:
         payload = json.load(sys.stdin)
-        result = submit_once(payload.get("instruction", ""), payload.get("workerId", ""))
+        result = submit_once(payload.get("instruction", ""), payload.get("workerId", ""), metadata=payload.get("metadata"))
         print(json.dumps({"ok": True, **result}, separators=(",", ":")))
     except (KeyError, OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as err:
         print(json.dumps({"ok": False, "reason": type(err).__name__,
@@ -283,3 +397,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
