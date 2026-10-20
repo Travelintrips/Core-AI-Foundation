@@ -104,7 +104,7 @@ function runId(message: string): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-export function requestedCommitSha(message: string): string | null {
+export export function requestedCommitSha(message: string): string | null {
   return message.match(
     /\b(?:exact\s+)?(?:commit|sha)\s*[:=#]?\s*([0-9a-f]{7,40})\b/i,
   )?.[1]?.toLowerCase() ?? null;
