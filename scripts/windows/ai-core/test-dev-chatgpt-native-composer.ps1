@@ -2,6 +2,9 @@
 # module scope before invocation; no window, account, clipboard or key is read.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($PSVersionTable.PSEdition -cne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5 -or
+    $PSVersionTable.PSVersion.Minor -ne 1) { throw 'Native component gate requires Windows PowerShell 5.1 Desktop' }
+$PSVersionTable | Format-Table -AutoSize | Out-String | Write-Output
 $modulePath = Join-Path $PSScriptRoot 'dev-chatgpt-native-composer.psm1'
 $parseErrors = $null
 $tokens = $null
