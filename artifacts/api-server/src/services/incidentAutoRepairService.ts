@@ -3,7 +3,14 @@ import { and, asc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import { aiCodingRunsTable, aiCodingTasksTable, aiIncidentsTable, db } from "@workspace/db";
 import { startCodingOrchestration } from "./codingOrchestratorService.js";
 import { publishSafe } from "./aiEventBusService.js";
-import { logger } from "../lib/logger.js";
+import { logger } from "../lib/logger.js";/**
+ * Detects if an error originates from provider bad request in AI workstream.
+ * @param err The error object to inspect.
+ */
+function isProviderBadRequestError(err: unknown): boolean {
+  return typeof err === 'object' && err != null && (err as any).code === 'PROVIDER_BAD_REQUEST';
+}
+
 import { codingTaskPresentationStatus } from "./codingTaskPresentationService.js";
 
 export type IncidentSource = "github" | "supabase" | "hostinger" | "system";
