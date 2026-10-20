@@ -298,15 +298,14 @@ class NativeTransport:
         # full context guards fence input, capture and final proof separately.
         self.authorize()
         snapshot = self._cli("snapshot", "--target-id", self.context["rawTargetId"], json_output=False)
+        # Idle and no-replay checks require the whole visible snapshot. A
+        # matching composer in a retained prefix cannot prove that the omitted
+        # tail contains neither Stop nor a prior wake. Fail before any native
+        # action, and preserve the same completeness requirement during proof.
+        if snapshot.rstrip().endswith("[...TRUNCATED - page too large]"):
+            raise RuntimeError("Native ChatGPT snapshot is truncated; complete evidence is required")
         names = re.findall(r'^[ \t]*- textbox "(Ask ChatGPT|Tanya ChatGPT)"[^\r\n]*$', snapshot, re.M)
-        truncated = snapshot.rstrip().endswith("[...TRUNCATED - page too large]")
-        # Long conversations can make the supported OpenClaw accessibility
-        # snapshot truncate before the bottom composer. Zero composer rows are
-        # acceptable only with that explicit truncation marker: the following
-        # native resolver still requires the configured exact Edit role/name
-        # before any input, and any visible wrong/duplicate locale remains a
-        # hard failure.
-        if (names and names != [self.options["composerName"]]) or (not names and not truncated):
+        if names != [self.options["composerName"]]:
             raise RuntimeError("Native ChatGPT composer role or locale is ambiguous")
         return snapshot
 

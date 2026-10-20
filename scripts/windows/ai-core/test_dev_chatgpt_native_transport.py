@@ -265,11 +265,65 @@ class NativeTransportTests(unittest.TestCase):
                 self.assertFalse(any(action.startswith("native:") for action, _ in transport.calls))
                 self.assertEqual(transport.submissions, 0)
 
-    def test_explicit_truncated_snapshot_can_defer_composer_check_to_native_resolver(self):
-        self.transport.context = {"rawTargetId": RAW}
-        self.transport.truncate_snapshot = True
-        snapshot = self.transport._snapshot()
-        self.assertTrue(snapshot.rstrip().endswith("[...TRUNCATED - page too large]"))
+    def test_truncated_preflight_cannot_hide_stop_or_an_existing_wake(self):
+        for composer_in_prefix in (False, True):
+            for hidden in ('- button "Stop generating"', '- paragraph: ' + MESSAGE):
+                with tempfile.TemporaryDirectory() as root, self.subTest(
+                        composer_in_prefix=composer_in_prefix, hidden=hidden):
+                    transport = FakeTransport(root)
+                    prefix = '- paragraph: synthetic long conversation'
+                    composer = '\n- textbox "Ask ChatGPT" [active]'
+                    if composer_in_prefix:
+                        prefix += composer
+                    full_snapshot = prefix + '\n' + hidden
+                    if not composer_in_prefix:
+                        full_snapshot += composer
+                    truncated = full_snapshot[:len(prefix)] + "\n[...TRUNCATED - page too large]"
+                    self.assertNotIn(hidden, truncated)
+                    original_cli = transport._cli
+
+                    def limited_snapshot(action, *args, **kwargs):
+                        result = original_cli(action, *args, **kwargs)
+                        if action == "snapshot" and transport.submissions == 0:
+                            return truncated
+                        return result
+
+                    with patch.object(transport, "_cli", side_effect=limited_snapshot):
+                        with self.assertRaisesRegex(RuntimeError, "snapshot is truncated"):
+                            transport.run(MESSAGE)
+                    self.assertEqual(transport.submissions, 0)
+                    self.assertEqual(transport.opens, 0)
+                    self.assertEqual(transport.captures, 0)
+                    self.assertFalse(transport.marker.exists())
+                    self.assertFalse(transport.reader_marker.exists())
+                    self.assertFalse(any(action == "focus" or action.startswith("native:")
+                                         for action, _ in transport.calls))
+
+    def test_truncated_readiness_preserves_the_original_send_without_capture(self):
+        original_cli = self.transport._cli
+
+        def truncated_after_submit(action, *args, **kwargs):
+            result = original_cli(action, *args, **kwargs)
+            if action == "snapshot" and self.transport.submissions == 1:
+                return result + "\n[...TRUNCATED - page too large]"
+            return result
+
+        with patch.object(self.transport, "_cli", side_effect=truncated_after_submit):
+            with self.assertRaisesRegex(RuntimeError, "snapshot is truncated"):
+                self.transport.run(MESSAGE)
+        original_marker = self.transport.marker.read_bytes()
+        self.assertEqual(self.transport.submissions, 1)
+        self.assertEqual(self.transport.opens, 0)
+        self.assertEqual(self.transport.captures, 0)
+        self.assertFalse(self.transport.reader_marker.exists())
+        self.assertEqual(json.loads(original_marker)["status"], "SEND_INVOKED")
+        self.assertEqual(json.loads(original_marker)["sendAttemptedAt"], self.transport.original_time)
+
+        with patch.object(self.transport, "_cli", side_effect=truncated_after_submit):
+            with self.assertRaisesRegex(RuntimeError, "snapshot is truncated"):
+                self.transport.run(MESSAGE)
+        self.assertEqual(self.transport.submissions, 1)
+        self.assertEqual(self.transport.marker.read_bytes(), original_marker)
 
     def test_missing_composer_without_truncation_remains_fail_closed(self):
         self.transport.context = {"rawTargetId": RAW}
