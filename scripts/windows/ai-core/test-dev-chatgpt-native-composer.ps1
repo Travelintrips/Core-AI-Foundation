@@ -236,6 +236,7 @@ $cases = [ordered]@{
         Assert-True ($result.sendInvoked -and -not $result.deliveryVerified -and -not $result.verifiedAssistantReply) 'Invoke became delivery or assistant proof'
         $record = Get-Content -LiteralPath $f.Marker -Raw | ConvertFrom-Json
         Assert-True ($record.status -ceq 'SEND_INVOKED') 'Native attempt status was not persisted'
+        Assert-True ($record.diagnosticStage -ceq 'SEND_INVOKED') 'Native diagnostic stage did not reach terminal Send'
         Assert-True ($record.inputStartedAt -gt 0 -and $record.sendAttemptedAt -ge $record.inputStartedAt) 'Original attempt timestamps were not persisted'
         Assert-True ($result.sendAttemptedAt -eq $record.sendAttemptedAt -and $record.challenge -ceq $f.Target.Challenge) 'Returned attempt context differs from durable context'
         Assert-True (-not ((Get-Content -LiteralPath $f.Marker -Raw).Contains($f.Fake.Message))) 'Raw message leaked into native marker'

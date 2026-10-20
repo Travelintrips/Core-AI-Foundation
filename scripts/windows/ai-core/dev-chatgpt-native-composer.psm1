@@ -317,7 +317,8 @@ function Invoke-AiCoreNativeComposerOnce {
         accountAlias = $Target.AccountAlias; ownerChannel = $Target.OwnerChannel; workerId = $Target.WorkerId;
         pageUrl = $Target.PageUrl; rawTargetId = $Target.RawTargetId; challenge = $Target.Challenge;
         messageHash = (Get-AiCoreTextHash $Message); allowProviderLf = [bool]$AllowProviderLf;
-        inputStartedAt = ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0); sendAttemptedAt = $null }
+        inputStartedAt = ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0); sendAttemptedAt = $null;
+        diagnosticStage = 'INPUT_MARKED' }
     # Exclusive creation also blocks a second insertion after a timeout. Hold
     # this file open through Invoke; neither input nor uncertain Send is retried.
     $attempt = [IO.File]::Open($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
@@ -325,23 +326,39 @@ function Invoke-AiCoreNativeComposerOnce {
         Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         $focused = Set-AiCoreNativeSubmitFocus $state $Target $LeaseExpiresTickCount64
+        $record.diagnosticStage = 'FOCUS_VERIFIED'
+        Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
         Assert-AiCoreNativeInsertableDraft $focused $Target.ComposerName
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
         # Re-read the exact paired composer immediately before mutation so a
         # late user/provider draft can never be overwritten.
         $prewrite = Get-AiCoreNativeState $Target $true
+        $record.diagnosticStage = 'PREWRITE_STATE_VERIFIED'
+        Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
         Assert-AiCoreNativeInsertableDraft $prewrite $Target.ComposerName
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
+        $record.diagnosticStage = 'SETVALUE_ATTEMPTING'
+        Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
         Set-AiCoreNativeComposerValue $prewrite $Message
+        $record.diagnosticStage = 'VALUE_SET'
+        Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
         $readback = Get-AiCoreNativeState $Target $true
         Assert-AiCoreNativeReadback $readback $Message ([bool]$AllowProviderLf)
+        $record.diagnosticStage = 'FIRST_READBACK_VERIFIED'
+        Write-AiCoreNativeAttempt $attempt $record 'INPUT_ATTEMPTING'
         $record.sendAttemptedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+        $record.diagnosticStage = 'SEND_ATTEMPTING'
         Write-AiCoreNativeAttempt $attempt $record 'SEND_ATTEMPTING'
         $fresh = Get-AiCoreNativeState $Target $true
         Assert-AiCoreNativeReadback $fresh $Message ([bool]$AllowProviderLf)
+        $record.diagnosticStage = 'SECOND_READBACK_VERIFIED'
+        Write-AiCoreNativeAttempt $attempt $record 'SEND_ATTEMPTING'
         $send = Get-AiCoreNativeSendControl $fresh
         Assert-AiCoreNativeLeaseDeadline $LeaseExpiresTickCount64
+        $record.diagnosticStage = 'SEND_INVOKING'
+        Write-AiCoreNativeAttempt $attempt $record 'SEND_ATTEMPTING'
         Invoke-AiCoreNativeSend $send
+        $record.diagnosticStage = 'SEND_INVOKED'
         Write-AiCoreNativeAttempt $attempt $record 'SEND_INVOKED'
         return @{ sendInvoked = $true; deliveryVerified = $false; verifiedAssistantReply = $false;
             bindingFingerprint = $Target.BindingFingerprint; eventId = $Target.EventId;
