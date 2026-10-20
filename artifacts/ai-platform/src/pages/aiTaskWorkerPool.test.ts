@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { assessPoolWorker, selectPoolCandidate, summarizePool, type WorkerPoolRecord } from "./aiTaskWorkerPool";
+import { assessCodingDashboardWorker, assessPoolWorker, selectPoolCandidate, summarizePool, type WorkerPoolRecord } from "./aiTaskWorkerPool";
 
 const now = Date.parse("2026-10-20T12:00:00Z");
 const worker = (overrides: Partial<WorkerPoolRecord> = {}): WorkerPoolRecord => ({
@@ -49,5 +49,26 @@ describe("AI Task worker pool evidence", () => {
     expect(selectPoolCandidate([
       worker({ status: "busy", runningJobs: 1, availableSlots: 0, leaseValid: false }),
     ], "coding_workstream", now)).toBeNull();
+  });
+});
+
+describe("AI Coding dashboard worker status", () => {
+  const dashboard = {
+    status: "online",
+    healthy: true,
+    runningJobs: 0,
+    capacity: 1,
+    lastHeartbeat: "2026-10-20T11:59:40Z",
+    leaseExpiresAt: "2026-10-20T12:01:00Z",
+  };
+  it("distinguishes verified idle and busy workers without inventing ChatGPT bindings", () => {
+    expect(assessCodingDashboardWorker(dashboard, now).state).toBe("available");
+    expect(assessCodingDashboardWorker({ ...dashboard, runningJobs: 1 }, now).state).toBe("busy");
+  });
+  it("fails closed if lease, heartbeat or evidence is missing", () => {
+    expect(assessCodingDashboardWorker({ ...dashboard, leaseExpiresAt: null }, now).state).toBe("unverified");
+    expect(assessCodingDashboardWorker({ ...dashboard, healthy: false }, now).state).toBe("unverified");
+    expect(assessCodingDashboardWorker({ ...dashboard, capacity: -1 }, now).state).toBe("unverified");
+    expect(assessCodingDashboardWorker({ ...dashboard, status: "offline" }, now).state).toBe("unavailable");
   });
 });
