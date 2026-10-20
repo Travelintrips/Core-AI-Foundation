@@ -39,6 +39,14 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+// Utility: ensure a value is not null or undefined
+function assertDefined<T>(value: T | null | undefined, name: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`${name} is null or undefined`);
+  }
+  return value;
+}
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
