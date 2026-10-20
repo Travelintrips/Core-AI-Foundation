@@ -2,6 +2,18 @@ import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js"
 import { getProviderApiKey } from "./aiSecretService.js";
 import { checkZeroLlmHealth, readZeroLlmLocalConfig } from "./zeroLlmLocalService.js";
 
+// Input validation to ensure request payload meets provider API requirements
+function validateProductionCodingModelRequest(request: any): void {
+  if (!request.prompt || typeof request.prompt !== "string") {
+    throw new Error("Invalid request: 'prompt' is required and must be a string.");
+  }
+  if (request.prompt.length < 1 || request.prompt.length > 10000) {
+    throw new Error(`Invalid request: 'prompt' length must be between 1 and 10000 characters. Received length: ${request.prompt.length}`);
+  }
+  // TODO: Add other required parameter validations as needed
+}
+
+
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 60_000;
