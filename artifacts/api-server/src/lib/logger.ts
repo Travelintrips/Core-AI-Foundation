@@ -18,3 +18,14 @@ export const logger = pino({
         },
       }),
 });
+
+// Global error handlers for unhandled rejections and exceptions
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled Rejection');
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error({ error }, 'Uncaught Exception');
+  process.exit(1);
+});
+
