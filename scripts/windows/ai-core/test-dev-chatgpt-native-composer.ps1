@@ -16,6 +16,7 @@ Import-Module $modulePath -Force
 $nativeModule = Get-Module 'dev-chatgpt-native-composer'
 
 & $nativeModule {
+    function script:Assert-AiCoreNativeIdle { param($State) }
     function script:Get-AiCoreNativeTickCount64 { return [long]$script:Fake.Tick }
     function script:Get-AiCoreNativeUnixSeconds {
         if ($script:Fake.UnixNow -eq 0) { $script:Fake.UnixNow = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0 }
