@@ -468,6 +468,15 @@ $cases = [ordered]@{
         Assert-Throws { Invoke-ReaderFixture $f $owned } 'already attempted'
         Assert-True ($f.Fake.ReaderEnters -eq 1) 'Unknown Enter was replayed'
     }
+    'Background worker foreground handoff is exact and shared by composer and reader' = {
+        $source = Get-Content -LiteralPath $modulePath -Raw
+        foreach ($needle in @('AttachThreadInput', 'SetForegroundWindow', 'BringWindowToTop',
+                'function Set-AiCoreNativeWindowForeground',
+                'Set-AiCoreNativeWindowForeground $State.Window $State.Composer',
+                'Set-AiCoreNativeWindowForeground $State.Window $State.Address')) {
+            Assert-True ($source.Contains($needle)) ('Foreground handoff source contract missing: ' + $needle)
+        }
+    }
 }
 
 $passed = 0
