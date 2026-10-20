@@ -1241,3 +1241,34 @@ export async function getAiTaskBridgeTimeline(externalCommandId: string) {
     responses,
   };
 }
+
+
+/** Read-only AI Task ChatGPT wake timeline, scoped to the exact DEV correlation. */
+export async function getAiTaskChatGptBridgeTimeline(commandId: string, correlationId: string) {
+  await ensureCodingControlBridgeTables();
+  const [command] = await db.select().from(aiCodingBridgeCommandsTable).where(and(
+    eq(aiCodingBridgeCommandsTable.id, commandId),
+    eq(aiCodingBridgeCommandsTable.source, "ai-core"),
+    eq(aiCodingBridgeCommandsTable.commandType, "EXTERNAL_AGENT_WORK"),
+    sql`${aiCodingBridgeCommandsTable.metadataJson} ->> 'correlationId' = ${correlationId}::text`,
+    sql`${aiCodingBridgeCommandsTable.metadataJson} ->> 'capability' = 'chatgpt:wake'`,
+    sql`COALESCE((${aiCodingBridgeCommandsTable.metadataJson} ->> 'devOnly')::boolean, false) = true`,
+  )).limit(1);
+  if (!command) return null;
+  const responses = await db.select({
+    id: aiCodingBridgeResponsesTable.id,
+    kind: aiCodingBridgeResponsesTable.kind,
+    message: aiCodingBridgeResponsesTable.message,
+    checkpoint: aiCodingBridgeResponsesTable.checkpointJson,
+    metadata: aiCodingBridgeResponsesTable.metadataJson,
+    createdAt: aiCodingBridgeResponsesTable.createdAt,
+  }).from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
+    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
+  return {
+    commandId: command.id,
+    status: command.status,
+    commandMetadata: command.metadataJson,
+    responses,
+  };
+}
