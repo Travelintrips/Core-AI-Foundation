@@ -44,7 +44,7 @@ const AI_TASK_BRIDGE_ROUTES = [
 
 function hasValidAiTaskBridgeKey(req: Request): boolean {
   if (!AI_TASK_BRIDGE_ROUTES.some((rule) => rule.method === req.method && rule.pattern.test(req.path))) return false;
-  const configured = process.env["AI_TASK_ENGINE_SERVICE_KEY"]?.trim();
+  const configured = process.env["AI_TASK_ENGINE_SERVICE_KEY"]?.trim() || process.env["AI_TASK_BRIDGE_TOKEN"]?.trim();
   const supplied = req.headers["x-ai-task-engine-key"];
   if (!configured || typeof supplied !== "string" || !supplied.trim()) return false;
   return safeEqualSecret(supplied.trim(), configured);
