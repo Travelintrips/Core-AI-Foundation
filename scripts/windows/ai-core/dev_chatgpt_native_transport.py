@@ -299,7 +299,14 @@ class NativeTransport:
         self.authorize()
         snapshot = self._cli("snapshot", "--target-id", self.context["rawTargetId"], json_output=False)
         names = re.findall(r'^[ \t]*- textbox "(Ask ChatGPT|Tanya ChatGPT)"[^\r\n]*$', snapshot, re.M)
-        if names != [self.options["composerName"]]:
+        truncated = snapshot.rstrip().endswith("[...TRUNCATED - page too large]")
+        # Long conversations can make the supported OpenClaw accessibility
+        # snapshot truncate before the bottom composer. Zero composer rows are
+        # acceptable only with that explicit truncation marker: the following
+        # native resolver still requires the configured exact Edit role/name
+        # before any input, and any visible wrong/duplicate locale remains a
+        # hard failure.
+        if (names and names != [self.options["composerName"]]) or (not names and not truncated):
             raise RuntimeError("Native ChatGPT composer role or locale is ambiguous")
         return snapshot
 
