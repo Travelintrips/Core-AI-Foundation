@@ -46,7 +46,11 @@ import {
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
-import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
+import { buildLocalCodingAiPrompt
+// TODO: Catch PROVIDER_BAD_REQUEST errors from the model provider here:
+// - Log a sanitized, non-sensitive message
+// - Return a controlled error response object to the orchestrator
+ } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
 import {
   isSensitiveRepositoryPath,
