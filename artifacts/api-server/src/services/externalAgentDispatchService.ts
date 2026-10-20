@@ -31,6 +31,7 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
   "openclaw-dell-chatgpt-wake-dev": "tools:bounded",
+  "openclaw-dell-admcst001-dev": "tools:bounded",
   "openclaw-pc-worker-dell-browser": "tools:bounded",
   "openclaw-pc-worker-dell-recovery": "tools:bounded",
   "openclaw-pc-worker-dell-verifier": "tools:bounded",
@@ -44,6 +45,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
 }> = [
   // Host-specific requests must take precedence over the generic OpenClaw alias.
   { clientId: "openclaw-dell-chatgpt-wake-dev", agent: /\bopenclaw-dell-chatgpt-wake-dev\b/i },
+  { clientId: "openclaw-dell-admcst001-dev", agent: /\bopenclaw-dell-admcst001-dev\b/i },
   { clientId: OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, agent: /openclaw-travelintrips-dev|openclaw[\s-]*travelintrips[\s-]*dev|travelintrips[\s-]*dev/i },
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
   { clientId: "openclaw-pc-worker-dell-recovery", agent: /\b(?:openclaw-pc-worker-dell-recovery|dell-recovery)\b/i },
