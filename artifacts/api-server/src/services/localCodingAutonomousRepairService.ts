@@ -11,6 +11,8 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+// TODO: Instrument handshake operation: capture request IDs, timestamps, error codes, and attempt counts; log as structured JSON for efficient parsing.
+
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
