@@ -16,9 +16,15 @@ Import-Module $modulePath -Force
 $nativeModule = Get-Module 'dev-chatgpt-native-composer'
 
 & $nativeModule {
+    function script:Get-AiCoreNativeTickCount64 { return [long]$script:Fake.Tick }
+    function script:Get-AiCoreNativeUnixSeconds {
+        if ($script:Fake.UnixNow -eq 0) { $script:Fake.UnixNow = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0 }
+        return $script:Fake.UnixNow
+    }
     function script:Get-AiCoreNativeState {
         param([hashtable]$Target, [bool]$RequireFocus = $false)
         $script:Fake.Reads++
+        if ($script:Fake.ExpireAtRead -eq $script:Fake.Reads) { $script:Fake.Tick = 10000 }
         if ($script:Fake.FailRead -eq $script:Fake.Reads) { throw 'Synthetic native context changed' }
         if ($RequireFocus -and -not $script:Fake.Focused) { throw 'Synthetic focus lost' }
         $draft = $script:Fake.Draft
@@ -40,6 +46,7 @@ $nativeModule = Get-Module 'dev-chatgpt-native-composer'
             # Model a successful literal OS insertion independently of the
             # encoder assertions below. Keep any real prefix; never clear it.
             $script:Fake.Draft = $script:Fake.ActualPrefix + $script:Fake.Message + $script:Fake.ProviderSuffix
+            if ($script:Fake.ExpireAfterTyping) { $script:Fake.Tick = 10000 }
         }
     }
     function script:Get-AiCoreNativeSendControl {
@@ -56,6 +63,7 @@ $nativeModule = Get-Module 'dev-chatgpt-native-composer'
     function script:Get-AiCoreNativeReaderState {
         param([hashtable]$Target, [hashtable]$Reader, [string]$ExpectedAddress, [bool]$RequireFocus = $false)
         $script:Fake.ReaderReads++
+        if ($script:Fake.AgeProofAtReaderRead -eq $script:Fake.ReaderReads) { $script:Fake.UnixNow += 31 }
         if ($script:Fake.FailReaderRead -eq $script:Fake.ReaderReads) { throw 'Synthetic reader PID title or address changed' }
         if ($script:Fake.ReaderAddress -cne $ExpectedAddress) { throw 'Synthetic reader address changed' }
         if ($RequireFocus -and (-not $script:Fake.ReaderForeground -or -not $script:Fake.ReaderFocused)) { throw 'Synthetic reader focus lost' }
@@ -72,6 +80,8 @@ $nativeModule = Get-Module 'dev-chatgpt-native-composer'
         if ($script:Fake.ReaderReadOnly) { throw 'Synthetic address is not writable' }
         $script:Fake.Trace.Add('reader-set')
         $script:Fake.ReaderAddress = $Address
+        if ($script:Fake.ExpireAfterAddress) { $script:Fake.Tick = 10000 }
+        if ($script:Fake.AgeProofAfterAddress) { $script:Fake.UnixNow += 31 }
     }
 }
 
@@ -99,7 +109,9 @@ function New-NativeFixture {
         Draft = "Ask ChatGPT`n"; Message = 'Safe [ack] + 100%'; Trace = [Collections.Generic.List[string]]::new();
         ReaderReads = 0; FailReaderRead = 0; ReaderAddress = 'about:blank'; ReaderFocused = $false;
         FailReaderFocus = $false; ReaderForeground = $false; FailReaderForeground = $false;
-        ReaderReadOnly = $false; ReaderEnters = 0; FailReaderEnter = $false }
+        ReaderReadOnly = $false; ReaderEnters = 0; FailReaderEnter = $false;
+        Tick = 1000; ExpireAtRead = 0; ExpireAfterTyping = $false; ExpireAfterAddress = $false;
+        UnixNow = 0; AgeProofAtReaderRead = 0; AgeProofAfterAddress = $false }
     & $nativeModule { param($State) $script:Fake = $State } $fake
     return @{ Target = $target; Directory = $directory; Fake = $fake;
         Marker = (Join-Path $directory ($target.BindingFingerprint + '-' + $target.EventId + '.native-input.json')) }
@@ -122,18 +134,74 @@ function New-ReaderMarker {
 }
 
 function Invoke-ReaderFixture {
-    param($Fixture, $Owned)
+    param($Fixture, $Owned, [long]$LeaseExpiresTickCount64 = 0)
     Invoke-AiCoreNativeReaderNavigationOnce -Target $Fixture.Target -Reader $Owned.Reader `
-        -MessageHash $Owned.Record.messageHash -ReceiptDirectory $Fixture.Directory
+        -MessageHash $Owned.Record.messageHash -ReceiptDirectory $Fixture.Directory `
+        -LeaseExpiresTickCount64 $LeaseExpiresTickCount64
 }
 
 function Invoke-Fixture {
-    param($Fixture, [switch]$AllowProviderLf)
+    param($Fixture, [switch]$AllowProviderLf, [long]$LeaseExpiresTickCount64 = 0)
     Invoke-AiCoreNativeComposerOnce -Target $Fixture.Target -Message $Fixture.Fake.Message `
-        -ReceiptDirectory $Fixture.Directory -AllowProviderLf:$AllowProviderLf
+        -ReceiptDirectory $Fixture.Directory -AllowProviderLf:$AllowProviderLf `
+        -LeaseExpiresTickCount64 $LeaseExpiresTickCount64
 }
 
 $cases = [ordered]@{
+    'Expired or overlong worker lease stops before input and marker creation' = {
+        foreach ($expires in @(999, 1000, 301001)) {
+            Assert-Throws { Invoke-Fixture $f -LeaseExpiresTickCount64 $expires } 'lease is expired or invalid'
+        }
+        Assert-True ($f.Fake.Trace.Count -eq 0 -and -not [IO.File]::Exists($f.Marker)) 'Invalid lease reached input'
+    }
+    'Valid worker lease preserves both exact reads and single Send' = {
+        $result = Invoke-Fixture $f -LeaseExpiresTickCount64 10000
+        Assert-True ($result.sendInvoked -and $f.Fake.Reads -eq 5 -and $f.Fake.Invokes -eq 1) 'Leased input changed exact readbacks'
+    }
+    'Lease expiry after typing blocks Send and preserves uncertain attempt' = {
+        $f.Fake.ExpireAfterTyping = $true
+        Assert-Throws { Invoke-Fixture $f -LeaseExpiresTickCount64 10000 } 'lease is expired or invalid'
+        $record = Get-Content -LiteralPath $f.Marker -Raw | ConvertFrom-Json
+        Assert-True ($f.Fake.Invokes -eq 0 -and $f.Fake.Draft -ceq $f.Fake.Message) 'Expired input was sent or erased'
+        Assert-True ($record.status -ceq 'SEND_ATTEMPTING') 'Expired Send lost its durable marker'
+    }
+    'Lease expiry after address staging blocks Enter without erasing address' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.ExpireAfterAddress = $true
+        Assert-Throws { Invoke-ReaderFixture $f $owned -LeaseExpiresTickCount64 10000 } 'lease is expired or invalid'
+        $record = Get-Content -LiteralPath $owned.Path -Raw | ConvertFrom-Json
+        Assert-True ($f.Fake.ReaderEnters -eq 0 -and $f.Fake.ReaderAddress -ceq $f.Target.PageUrl) 'Expired navigation was sent or erased'
+        Assert-True ($record.status -ceq 'NAVIGATION_ATTEMPTING') 'Expired Enter lost its durable marker'
+    }
+    'Lease expiry during refresh marking prevents F5 and preserves original Send' = {
+        $null = Invoke-Fixture $f
+        $before = Get-Content -LiteralPath $f.Marker -Raw | ConvertFrom-Json
+        $f.Fake.Draft = ''
+        $f.Fake.ExpireAtRead = $f.Fake.Reads + 3
+        Assert-Throws {
+            Invoke-AiCoreNativeRefreshOnce -Target $f.Target -MessageHash $before.messageHash `
+                -ReceiptDirectory $f.Directory -LeaseExpiresTickCount64 10000
+        } 'lease is expired or invalid'
+        $after = Get-Content -LiteralPath $f.Marker -Raw | ConvertFrom-Json
+        Assert-True (-not $f.Fake.Trace.Contains('keys:{F5}')) 'Expired refresh emitted F5'
+        Assert-True ($after.status -ceq 'REFRESH_ATTEMPTING' -and $after.sendAttemptedAt -eq $before.sendAttemptedAt) 'Expired refresh lost its original attempt'
+    }
+    'A blank proof aging during focus and durable marking blocks address staging' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.AgeProofAtReaderRead = 3
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'proof is stale'
+        $after = Get-Content -LiteralPath $owned.Path -Raw | ConvertFrom-Json
+        Assert-True ($f.Fake.ReaderAddress -ceq 'about:blank' -and $f.Fake.ReaderEnters -eq 0) 'Stale proof authorized address input'
+        Assert-True ($after.blankVerifiedAt -eq $owned.Record.blankVerifiedAt -and $after.status -ceq 'NAVIGATION_ATTEMPTING') 'Original proof was redated or forgotten'
+    }
+    'A blank proof aging after address staging blocks Enter and keeps the address' = {
+        $owned = New-ReaderMarker $f
+        $f.Fake.AgeProofAfterAddress = $true
+        Assert-Throws { Invoke-ReaderFixture $f $owned } 'proof is stale'
+        $after = Get-Content -LiteralPath $owned.Path -Raw | ConvertFrom-Json
+        Assert-True ($f.Fake.ReaderAddress -ceq $f.Target.PageUrl -and $f.Fake.ReaderEnters -eq 0) 'Stale proof authorized Enter or erased staged address'
+        Assert-True ($after.blankVerifiedAt -eq $owned.Record.blankVerifiedAt) 'Original blank proof was redated'
+    }
     'SendKeys reserved characters are literal, including protocol brackets' = {
         $literal = & $nativeModule { ConvertTo-AiCoreLiteralKeys '+^%~(){}[]' }
         Assert-True ($literal -ceq '{+}{^}{%}{~}{(}{)}{{}{}}{[}{]}') 'Reserved character encoding changed'

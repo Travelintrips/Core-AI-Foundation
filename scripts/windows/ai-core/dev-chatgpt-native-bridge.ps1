@@ -8,6 +8,11 @@ try {
     $inputText = [Console]::In.ReadToEnd()
     if ($inputText.Length -gt 16384) { throw 'Native request exceeds limit' }
     $request = $inputText | ConvertFrom-Json -ErrorAction Stop
+    $leaseProperty = $request.PSObject.Properties['leaseExpiresTickCount64']
+    if ($null -eq $leaseProperty -or
+        ($leaseProperty.Value -isnot [int] -and $leaseProperty.Value -isnot [long]) -or
+        $leaseProperty.Value -le 0) { throw 'Native worker lease deadline is required' }
+    $leaseExpires = [long]$leaseProperty.Value
     $target = @{}
     foreach ($field in @('AccountAlias', 'OwnerChannel', 'ConversationId', 'BrowserProfile', 'BindingFingerprint',
             'EventId', 'WorkerId', 'ComposerName', 'PageUrl', 'RawTargetId', 'Challenge', 'BrowserProcessId', 'WindowHandle')) {
@@ -32,12 +37,13 @@ try {
             if ($request.message -isnot [string] -or $request.receiptDirectory -isnot [string] -or
                 $request.allowProviderLf -isnot [bool]) { throw 'Native request is invalid' }
             $result = Invoke-AiCoreNativeComposerOnce -Target $target -Message $request.message `
-                -ReceiptDirectory $request.receiptDirectory -AllowProviderLf:$request.allowProviderLf
+                -ReceiptDirectory $request.receiptDirectory -AllowProviderLf:$request.allowProviderLf `
+                -LeaseExpiresTickCount64 $leaseExpires
         }
         'refresh' {
             if ($request.messageHash -isnot [string] -or $request.receiptDirectory -isnot [string]) { throw 'Native request is invalid' }
             $result = Invoke-AiCoreNativeRefreshOnce -Target $target -MessageHash $request.messageHash `
-                -ReceiptDirectory $request.receiptDirectory
+                -ReceiptDirectory $request.receiptDirectory -LeaseExpiresTickCount64 $leaseExpires
         }
         'reader-resolve' {
             $resolved = Resolve-AiCoreNativeReaderWindow -Target $target -Reader $reader
@@ -47,7 +53,7 @@ try {
         'reader-navigate' {
             if ($request.messageHash -isnot [string] -or $request.receiptDirectory -isnot [string]) { throw 'Native request is invalid' }
             $result = Invoke-AiCoreNativeReaderNavigationOnce -Target $target -Reader $reader -MessageHash $request.messageHash `
-                -ReceiptDirectory $request.receiptDirectory
+                -ReceiptDirectory $request.receiptDirectory -LeaseExpiresTickCount64 $leaseExpires
         }
         default { throw 'Native action is invalid' }
     }

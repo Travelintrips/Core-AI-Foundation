@@ -2,12 +2,13 @@
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -559,11 +560,87 @@ class DellBindingTests(WakeTestCase):
         key.assert_not_called()
         legacy.assert_not_called()
 
+    def test_lease_revocation_after_observation_blocks_key_access(self):
+        import dev_chatgpt_native_transport as native
+        self.config["bindings"][0]["nativeTransport"] = {
+            "version": 1, "enabled": True, "composerName": "Ask ChatGPT", "allowProviderLf": False}
+        self.write_config(self.config)
+        metadata = self.metadata()
+        guard = Mock()
+
+        def revoke(_message):
+            guard.authorize.side_effect = RuntimeError("lease revoked")
+            return {}
+
+        with patch.object(native.NativeTransport, "run", side_effect=revoke), \
+             patch.object(self.wake, "_private_key") as key:
+            with self.assertRaisesRegex(RuntimeError, "lease revoked"):
+                self.wake.submit_once(self.command(metadata), DELL, self.root, metadata, lease_guard=guard)
+        key.assert_not_called()
+
+    def test_lease_loss_between_key_read_and_signature_blocks_signing(self):
+        text = "synthetic exact reply"
+        observed = {"userFound": True, "assistantFound": True, "ackVisible": True, "responding": False,
+                    "assistantMessageId": "44444444-4444-4444-8444-444444444444", "assistantText": text,
+                    "assistantResponseHash": hashlib.sha256(text.encode()).hexdigest()}
+        key = Mock()
+        authorize = Mock(side_effect=[None, RuntimeError("lease revoked before sign")])
+        with patch.object(self.wake, "_private_key", return_value=key), \
+             self.assertRaisesRegex(RuntimeError, "lease revoked before sign"):
+            self.wake._attest_bound_observation(self.root, self.binding, CHAT_TWO, EVENT, CHALLENGE, observed, authorize)
+        key.sign.assert_not_called()
+
     def test_v1_payload_stays_compatible_and_has_no_profile_fields(self):
         payload = self.wake._attestation_payload(CHAT, EVENT, CHALLENGE, CHAT_TWO, "f" * 64, "2026-10-20T00:00:00.000Z")
         self.assertTrue(payload.startswith("dev-chatgpt-assistant-attestation/v1\n"))
         self.assertNotIn("bindingFingerprint=", payload)
         self.assertNotIn("browserProfile=", payload)
+
+
+class HelperLeaseEntrypointTests(unittest.TestCase):
+    def test_bound_metadata_cannot_use_legacy_eof_protocol(self):
+        payload = {"instruction": "fixture", "workerId": DELL, "metadata": {"wakeBinding": {}}}
+        with patch.object(wake.sys, "argv", [str(MODULE_PATH)]), \
+             patch.object(wake.sys, "stdin", io.StringIO(json.dumps(payload))), \
+             patch.object(wake.sys, "stdout", io.StringIO()) as output, \
+             patch.object(wake, "submit_once") as submit:
+            with self.assertRaises(SystemExit) as exited:
+                wake.main()
+        self.assertEqual(exited.exception.code, 1)
+        self.assertFalse(json.loads(output.getvalue())["ok"])
+        submit.assert_not_called()
+
+    def test_bound_jsonl_uses_guard_and_flushes_result_before_process_exit(self):
+        import dev_chatgpt_native_lease as native
+        guard = Mock()
+        payload = {"instruction": "fixture", "workerId": DELL, "metadata": {"wakeBinding": {}}}
+        input_stream = io.TextIOWrapper(io.BytesIO(b"synthetic input only\n"))
+        output = io.StringIO()
+        exits = []
+
+        def exit_after_flush(status):
+            exits.append((status, json.loads(output.getvalue())))
+
+        with patch.object(wake.sys, "argv", [str(MODULE_PATH), native.BOUND_ARGUMENT]), \
+             patch.object(wake.sys, "stdin", input_stream), patch.object(wake.sys, "stdout", output), \
+             patch.object(native.NativeLease, "from_stdin", return_value=(guard, payload)) as initialize, \
+             patch.object(wake, "submit_once", return_value={"synthetic": True}) as submit, \
+             patch.object(wake.os, "_exit", side_effect=exit_after_flush):
+            wake.main()
+        initialize.assert_called_once_with(input_stream.buffer)
+        submit.assert_called_once_with("fixture", DELL, metadata=payload["metadata"], lease_guard=guard)
+        self.assertEqual(guard.authorize.call_count, 2)
+        self.assertEqual(exits, [(0, {"ok": True, "synthetic": True})])
+        guard.job.close.assert_not_called()
+
+    def test_expired_guard_blocks_work_before_config_or_browser(self):
+        guard = Mock()
+        guard.authorize.side_effect = RuntimeError("expired lease")
+        with patch.object(wake, "config") as config, patch.object(wake, "browser") as browser:
+            with self.assertRaisesRegex(RuntimeError, "expired lease"):
+                wake.submit_once(COMMAND, WORKER, lease_guard=guard)
+        config.assert_not_called()
+        browser.assert_not_called()
 
 
 if __name__ == "__main__":

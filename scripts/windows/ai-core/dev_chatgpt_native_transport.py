@@ -5,7 +5,6 @@ All process output stays in memory; failures expose fixed messages only.
 """
 
 from contextlib import contextmanager
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import math
@@ -24,7 +23,27 @@ RAW_TARGET = re.compile(r"[A-Fa-f0-9]{32}")
 STOP = re.compile(r'\bbutton\s+"Stop(?: generating)?"', re.I)
 READER_STATES = frozenset(("OPEN_ATTEMPTING", "BLANK_CREATED", "BLANK_VERIFIED",
                            "NAVIGATION_ATTEMPTING", "NAVIGATION_INVOKED", "CAPTURE_VERIFIED"))
-LISTENER_STARTUP_SECONDS = 12
+CLI_SECONDS = 75
+NATIVE_SECONDS = 45
+TRANSPORT_SECONDS = 1950
+READINESS_SECONDS = 120
+LISTENER_STARTUP_SECONDS = 25
+LISTENER_CAPTURE_SECONDS = 90
+# These are sums of bounded remaining phases, not renewed-lease durations.
+# Final proof: snapshot, original focus, status, tabs and native resolution.
+FINAL_PROOF_SECONDS = 4 * CLI_SECONDS + NATIVE_SECONDS
+# After the pre-open guard: open, focus, status, tabs, native blank proof,
+# listener lead, native navigation, capture and final proof.
+READER_AFTER_GUARD_SECONDS = (4 * CLI_SECONDS + 2 * NATIVE_SECONDS +
+                              LISTENER_STARTUP_SECONDS + LISTENER_CAPTURE_SECONDS + FINAL_PROOF_SECONDS)
+POST_READINESS_SECONDS = 3 * CLI_SECONDS + READER_AFTER_GUARD_SECONDS
+
+
+def native_submit_seconds(message):
+    # Policy allowance from actual 38s/1126-character native input, with a
+    # 1.51x per-character margin plus 30s for setup/guards. It is an upper
+    # execution bound, never a promise that input or delivery will succeed.
+    return min(240, max(60, math.ceil((30 + 0.051 * len(message)) / 5) * 5))
 
 
 def native_options(data, binding):
@@ -118,39 +137,61 @@ class _Capture:
 
 
 class NativeTransport:
-    def __init__(self, root, binding, event, challenge, options, authorize):
+    def __init__(self, root, binding, event, challenge, options, authorize, lease_guard=None):
         self.root = Path(root)
         self.binding = dict(binding)
         self.event = event
         self.challenge = challenge
         self.options = dict(options)
         self.authorize = authorize
+        self.lease_guard = lease_guard
         self.page_url = "https://chatgpt.com/c/" + binding["targetConversationId"]
         self.directory = self.root / "chatgpt-wake-dev-receipts"
         self.marker = self.directory / (binding["bindingFingerprint"] + "-" + event + ".native-input.json")
         self.reader_marker = self.directory / (binding["bindingFingerprint"] + "-" + event + ".native-reader.json")
-        # A bound helper is capped at 240s by the executor, within its existing
-        # 300s claim. Leave time for key/receipt work and a result callback.
-        self.deadline = time.monotonic() + 225
+        # The parent renews the existing 300s claim while a bounded helper runs.
+        # Renewal never extends this fixed total observation deadline.
+        self.deadline = time.monotonic() + TRANSPORT_SECONDS
+        self.phase_deadline = None
+        self.phase = "initializing"
         self.context = None
         self.target = None
         self.reader_id = None
         self.reader_identity = None
         self.last_tabs = None
+        self.last_tabs_observed_at = None
 
-    def _remaining(self, cap=30):
+    def _remaining(self, cap=CLI_SECONDS):
         remaining = min(cap, self.deadline - time.monotonic())
+        if self.phase_deadline is not None:
+            remaining = min(remaining, self.phase_deadline - time.monotonic())
+        if self.lease_guard is not None:
+            remaining = min(remaining, self.lease_guard.remaining(cap))
         if remaining <= 0:
             raise RuntimeError("Native wake observation deadline exceeded")
         return remaining
 
     def _reserve(self, seconds):
-        if self.deadline - time.monotonic() < seconds:
+        remaining = self.deadline - time.monotonic()
+        if self.lease_guard is not None:
+            remaining = min(remaining, self.lease_guard.total_remaining())
+        if remaining < seconds:
             raise RuntimeError("Insufficient native observation budget; preserve the attempt")
+
+    def _sleep(self, seconds):
+        self.authorize()
+        if self.lease_guard is not None:
+            self.lease_guard.sleep(seconds)
+        else:
+            time.sleep(seconds)
+        self.authorize()
 
     def _runtime(self):
         if os.name != "nt":
             raise RuntimeError("Native bound transport requires Windows")
+        if self.lease_guard is None:
+            raise RuntimeError("Native bound transport requires an active leased process guard")
+        self.lease_guard.authorize()
         local = os.environ.get("LOCALAPPDATA")
         user = os.environ.get("USERPROFILE")
         system = os.environ.get("SystemRoot")
@@ -174,8 +215,14 @@ class NativeTransport:
         return command + ["--timeout", "60000", action, *args]
 
     def _cli(self, action, *args, json_output=True):
-        timeout = self._remaining(30)
-        raw = _Capture(self._argv(action, *args, json_output=json_output)).finish(timeout)
+        self.authorize()
+        timeout = self._remaining(CLI_SECONDS)
+        started = time.monotonic()
+        try:
+            raw = _Capture(self._argv(action, *args, json_output=json_output)).finish(timeout)
+        except RuntimeError as error:
+            elapsed = round(time.monotonic() - started, 1)
+            raise RuntimeError("Native " + self.phase + "/" + action + " after " + str(elapsed) + "s: " + str(error)) from None
         if not json_output:
             if len(raw) > 200000:
                 raise RuntimeError("Native snapshot exceeds the evidence limit")
@@ -189,9 +236,14 @@ class NativeTransport:
         return value
 
     def _bridge(self, action, **data):
-        timeout = self._remaining(25)
+        self.authorize()
+        if self.lease_guard is None:
+            raise RuntimeError("Native action requires an active leased process guard")
+        timeout = self._remaining(native_submit_seconds(data["message"]) if action == "submit" else NATIVE_SECONDS)
+        lease_expiry = self.lease_guard.expiry_tick_count64()
         raw = _Capture([str(self.powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-File", str(self.bridge),
-                        "-Action", action], json.dumps({"target": self.target, **data}, separators=(",", ":")).encode("utf-8"))
+                        "-Action", action], json.dumps({"target": self.target, **data,
+                            "leaseExpiresTickCount64": lease_expiry}, separators=(",", ":")).encode("utf-8"))
         try:
             value = json.loads(raw.finish(timeout))
         except (ValueError, RecursionError):
@@ -202,13 +254,11 @@ class NativeTransport:
 
     def _session(self, reader_url=None):
         self.authorize()
-        # Independent reads share no mutable result. Parallel CLI startup saves
-        # about one cold start at each action fence; no browser action or future
-        # response listener is running while this pair is requested.
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            status_future = pool.submit(self._cli, "status")
-            tabs_future = pool.submit(self._cli, "tabs")
-            status, tab_envelope = status_future.result(), tabs_future.result()
+        # Actual same-profile parallel startup exceeded 30s and did not return
+        # a usable inventory. Serialized reads preserve both identity fences.
+        status = self._cli("status")
+        tab_envelope = self._cli("tabs")
+        tabs_observed_at = time.time()
         if (status.get("profile") != self.binding["browserProfile"] or status.get("running") is not True or
                 type(status.get("pid")) is not int or status["pid"] <= 0 or status.get("userDataDir") != self.expected_user_data):
             raise RuntimeError("OpenClaw managed profile identity is unavailable")
@@ -234,6 +284,7 @@ class NativeTransport:
         if len(matching) != 1 or not isinstance(matching[0].get("targetId"), str) or not RAW_TARGET.fullmatch(matching[0]["targetId"]):
             raise RuntimeError("Expected exactly one native bound ChatGPT tab")
         self.last_tabs = tabs
+        self.last_tabs_observed_at = tabs_observed_at
         return {"profile": status["profile"], "pid": status["pid"], "userDataDir": status["userDataDir"],
                 "rawTargetId": matching[0]["targetId"], "pageUrl": self.page_url}
 
@@ -372,8 +423,9 @@ class NativeTransport:
         # native navigation timed out before returning its outcome.
         if self.reader_marker.exists():
             raise RuntimeError("Owned reader was already attempted; reconcile it before another capture")
+        self.phase = "reader_preopen"
         self._guard()
-        self._reserve(135)
+        self._reserve(READER_AFTER_GUARD_SECONDS)
         if any(tab.get("type") == "page" and tab.get("url") == "about:blank" for tab in self.last_tabs):
             raise RuntimeError("A preexisting blank tab prevents unique native reader ownership")
         original = self._attempt(message_hash)
@@ -412,24 +464,31 @@ class NativeTransport:
                 resolved.get("browserProcessId") != self.context["pid"] or
                 resolved.get("rawTargetId") != self.reader_id or resolved.get("address") != "about:blank"):
             raise RuntimeError("Owned blank native window is unproven; preserve it")
+        # Preserve when the sole-blank inventory was actually observed. A slow
+        # native resolve must never make that earlier raw-ID proof look newer.
         record = self._reader_update(record, status="BLANK_VERIFIED", readerWindowHandle=resolved["windowHandle"],
-                                     blankVerifiedAt=time.time())
+                                     blankVerifiedAt=self.last_tabs_observed_at, blankNativeVerifiedAt=time.time())
         reader = {"RawTargetId": self.reader_id, "WindowHandle": resolved["windowHandle"]}
         return self._listen_reader(request_url, message_hash, reader)
 
     def _listen_reader(self, request_url, message_hash, reader):
-        listener = _Capture(self._argv("responsebody", request_url, "--target-id", self.reader_id,
-                                      "--max-chars", "200000", "--timeout-ms", "45000"))
+        self.phase = "reader_listener"
+        argv = self._argv("responsebody", request_url, "--target-id", self.reader_id,
+                          "--max-chars", "200000", "--timeout-ms", "180000")
+        argv[argv.index("--timeout") + 1] = "210000"
+        listener = _Capture(argv)
         try:
             # The pinned CLI supplies no readiness acknowledgment. This bounded
-            # lead covers the measured ~10s startup but cannot prove listener
-            # registration. A lost race is a timeout, never a second navigation.
-            self._reserve(LISTENER_STARTUP_SECONDS + 35)
-            time.sleep(LISTENER_STARTUP_SECONDS)
+            # lead accommodates measured 22-24s command startup, but cannot
+            # prove registration. Keep the original 30s blank proof freshness;
+            # never re-date old inventory after waiting. A lost race fails once.
+            self._reserve(LISTENER_STARTUP_SECONDS + NATIVE_SECONDS + LISTENER_CAPTURE_SECONDS + FINAL_PROOF_SECONDS)
+            self._sleep(LISTENER_STARTUP_SECONDS)
             # Do not enqueue another same-profile OpenClaw command behind the
             # waiting listener. The native adapter rechecks HWND/PID/address
             # independently; local revocation is still checked immediately.
             self.authorize()
+            self._reserve(NATIVE_SECONDS + LISTENER_CAPTURE_SECONDS + FINAL_PROOF_SECONDS)
             navigation = self._bridge("reader-navigate", reader=reader, messageHash=message_hash,
                                       receiptDirectory=str(self.directory))
             if (navigation.get("navigationInvoked") is not True or navigation.get("rawTargetId") != self.reader_id or
@@ -440,10 +499,10 @@ class NativeTransport:
                 raise RuntimeError("Owned reader navigation record is unavailable; do not retry")
             # Leave time for the original snapshot, exact original focus and
             # final identity check. Closing a loaded reader is never attempted.
-            capture_budget = self.deadline - time.monotonic() - 35
+            capture_budget = self.deadline - time.monotonic() - FINAL_PROOF_SECONDS
             if capture_budget <= 0:
                 raise RuntimeError("Owned reader capture exhausted its observation budget")
-            raw = listener.finish(min(60, capture_budget))
+            raw = listener.finish(self._remaining(min(LISTENER_CAPTURE_SECONDS, capture_budget)))
             try:
                 return json.loads(raw)
             except (ValueError, RecursionError):
@@ -465,6 +524,7 @@ class NativeTransport:
         with self._exclusive():
             if self.reader_marker.exists():
                 raise RuntimeError("Owned reader was already attempted; reconciliation is required")
+            self.phase = "preflight"
             self.context = self._session()
             before = self._snapshot()
             existing = self.marker.exists()
@@ -477,24 +537,30 @@ class NativeTransport:
                     raise RuntimeError("Visible wake has no original input record; do not replay")
             self._resolve()
             if not existing:
-                self._reserve(155)
+                self._reserve(native_submit_seconds(message) + READINESS_SECONDS + POST_READINESS_SECONDS)
                 if any(tab.get("type") == "page" and tab.get("url") == "about:blank" for tab in self.last_tabs):
                     raise RuntimeError("A preexisting blank tab prevents unique native reader ownership")
                 self.authorize()
+                self.phase = "native_submit"
                 result = self._bridge("submit", message=message, receiptDirectory=str(self.directory),
                                       allowProviderLf=self.options["allowProviderLf"])
                 if result.get("sendInvoked") is not True:
                     raise RuntimeError("Native Send outcome is unknown; do not replay")
                 record = self._attempt(message_hash)
-            snapshot = self._snapshot()
-            readiness_deadline = min(self.deadline - 155, time.monotonic() + 70)
-            while not self._ready(snapshot, message) and time.monotonic() < readiness_deadline:
-                time.sleep(min(2, self._remaining(2)))
+            self.phase = "assistant_readiness"
+            self.phase_deadline = min(self.deadline - POST_READINESS_SECONDS, time.monotonic() + READINESS_SECONDS)
+            try:
                 snapshot = self._snapshot()
+                while not self._ready(snapshot, message) and time.monotonic() < self.phase_deadline:
+                    self._sleep(min(2, self._remaining(2)))
+                    snapshot = self._snapshot()
+            finally:
+                self.phase_deadline = None
             if not self._ready(snapshot, message):
                 raise RuntimeError("Native assistant reply is not visibly ready")
             if "refreshAttemptedAt" in record:
                 raise RuntimeError("Native response capture was already attempted; do not refresh again")
+            self.phase = "observed_requests"
             requests = self._cli("requests", "--target-id", self.context["rawTargetId"],
                                  "--filter", self.binding["targetConversationId"])
             request_url = select_observed_request(requests, page_url=self.page_url,
@@ -502,6 +568,8 @@ class NativeTransport:
                                                  conversation_id=self.binding["targetConversationId"])
             envelope = self._capture_response(request_url, message_hash)
             captured_at = time.time()
+            self.phase = "final_proof"
+            self._reserve(FINAL_PROOF_SECONDS)
             snapshot = self._snapshot()
             observed = validate_native_response(envelope, page_url=self.page_url, request_url=request_url,
                                                 raw_target_id=self.reader_id,
