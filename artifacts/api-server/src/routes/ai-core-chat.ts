@@ -14,6 +14,7 @@ import {
 import { startCodingOrchestration } from "../services/codingOrchestratorService.js";
 import { mirrorAiTaskLedgerJob, notifyAiTaskLedgerSourceState } from "../services/aiTaskLedgerBridgeService.js";
 import { logger } from "../lib/logger.js";
+logger.debug("auto-repair: ai-core-chat route loaded");
 import {
   createConstrainedCodingProviderAdapter,
 } from "../services/localCodingAiExecutionGateService.js";
