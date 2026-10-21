@@ -195,6 +195,17 @@ describe("adminAuthWithExceptions", () => {
       expect(res.statusCode).toBeUndefined();
     });
 
+    it.each(routes)("handles Express originalUrl with the /api mount prefix for %s", (path) => {
+      process.env["APP_ENV"] = "development";
+      const req = makeReq("POST", "/api" + path, { authorization: "Bearer scoped-worker-token" });
+      Object.assign(req, { originalUrl: "/api" + path + "?source=worker" });
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.statusCode).toBeUndefined();
+    });
+
     it.each(routes)("keeps %s behind admin auth outside DEV", (path) => {
       delete process.env["APP_ENV"];
       const req = makeReq("POST", path, { authorization: "Bearer scoped-worker-token" });
