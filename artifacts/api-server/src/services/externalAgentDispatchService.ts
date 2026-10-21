@@ -222,7 +222,8 @@ export async function dispatchExternalAgentWork(input: {
   const isDevChatGptWake = isDevChatGptWakeInstruction(input.instruction);
   const isDedicatedDevWakeWorker =
     resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
-    resolvedClientId === "openclaw-dell-chatgpt-wake-dev";
+    resolvedClientId === "openclaw-dell-chatgpt-wake-dev" ||
+    resolvedClientId === OPENCLAW_PC2_CLIENT_ID;
   if (isDedicatedDevWakeWorker &&
       (!isDevChatGptWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||
