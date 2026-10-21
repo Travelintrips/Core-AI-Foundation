@@ -1,8 +1,19 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, aiSettingsTable } from "@workspace/db";
-import { isDevWakeRuntime, loadDevWakeRuntimeConfig } from "../services/devChatGptWakeBindingService.js";
+import {
+  DEV_WAKE_DELL_WORKER,
+  DEV_WAKE_DEFAULT_WORKER,
+  isDevWakeRuntime,
+  loadDevWakeRuntimeConfig,
+} from "../services/devChatGptWakeBindingService.js";
 import { stageDevChatGptAccountBinding } from "../services/devChatGptAccountProvisioningService.js";
+import {
+  activateDevChatGptSessionBinding,
+  issueDevChatGptSessionChallenge,
+  sessionRegistrationReceiptFingerprint,
+  verifyAndConsumeDevChatGptSessionChallenge,
+} from "../services/devChatGptSessionActivationService.js";
 import { logAudit } from "../services/aiAuditService.js";
 
 const router = Router();
@@ -19,12 +30,18 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
       typeof body["ownerChannel"] !== "string" ||
       typeof body["targetConversationId"] !== "string" ||
       (body["accountAlias"] !== undefined && typeof body["accountAlias"] !== "string") ||
-      (body["browserProfile"] !== undefined && typeof body["browserProfile"] !== "string")) {
+      (body["browserProfile"] !== undefined && typeof body["browserProfile"] !== "string") ||
+      (body["workerId"] !== undefined && typeof body["workerId"] !== "string")) {
     res.status(400).json({ error: "Invalid provisioning request" });
     return;
   }
 
   try {
+    const workerId = body["workerId"];
+    if (workerId !== undefined && workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER) {
+      res.status(400).json({ error: "DEV_CHATGPT_PROVISIONING_WORKER_INVALID" });
+      return;
+    }
     const runtime = await loadDevWakeRuntimeConfig(req.hostname);
     const [existing] = await db.select().from(aiSettingsTable)
       .where(eq(aiSettingsTable.key, REGISTRY_KEY))
@@ -35,6 +52,7 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
       targetConversationId: body["targetConversationId"],
       ...(typeof body["accountAlias"] === "string" ? { accountAlias: body["accountAlias"] } : {}),
       ...(typeof body["browserProfile"] === "string" ? { browserProfile: body["browserProfile"] } : {}),
+      ...(workerId === DEV_WAKE_DELL_WORKER || workerId === DEV_WAKE_DEFAULT_WORKER ? { workerId } : {}),
     }, existing?.value, runtime.legacyTargets);
 
     if (!staged.alreadyStaged) {
@@ -68,15 +86,108 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
       enabled: false,
       next: [
         "Login the target ChatGPT account in the dedicated browser profile.",
-        "Complete its own OAuth/MCP pairing.",
-        "Run one correlated DEV E2E verification.",
-        "Enable only after assistant attestation, callback, and final ACK are verified.",
+        "Run the trusted worker session-registration helper.",
+        "The helper verifies the exact ChatGPT conversation and signs a one-time DEV challenge.",
+        "The session becomes eligible only after Ed25519 verification succeeds.",
       ],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "DEV_CHATGPT_PROVISIONING_FAILED";
     const conflict = /CONFLICT|LEGACY_CONFLICT|ALIAS|OWNER|CONVERSATION|PROFILE|REGISTRY/.test(message);
     res.status(conflict ? 409 : 500).json({ error: message });
+  }
+});
+
+router.post("/ai/core-chat/dev/accounts/session/challenge", async (req, res): Promise<void> => {
+  if (!isDevWakeRuntime(req.hostname)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const body = req.body as Record<string, unknown> | null;
+  if (!body || typeof body["bindingFingerprint"] !== "string") {
+    res.status(400).json({ error: "Invalid session challenge request" });
+    return;
+  }
+  try {
+    const runtime = await loadDevWakeRuntimeConfig(req.hostname);
+    const [existing] = await db.select().from(aiSettingsTable)
+      .where(eq(aiSettingsTable.key, REGISTRY_KEY)).limit(1);
+    const challenge = issueDevChatGptSessionChallenge({
+      rawRegistry: existing?.value,
+      bindingFingerprint: body["bindingFingerprint"],
+      legacyTargets: runtime.legacyTargets,
+    });
+    res.status(201).json({
+      challengeId: challenge.challengeId,
+      nonce: challenge.nonce,
+      accountAlias: challenge.accountAlias,
+      ownerChannel: challenge.ownerChannel,
+      targetConversationId: challenge.targetConversationId,
+      workerId: challenge.workerId,
+      browserProfile: challenge.browserProfile,
+      bindingFingerprint: challenge.bindingFingerprint,
+      expiresAt: new Date(challenge.expiresAt).toISOString(),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "DEV_CHATGPT_SESSION_CHALLENGE_FAILED";
+    res.status(/NOT_FOUND/.test(message) ? 404 : 409).json({ error: message });
+  }
+});
+
+router.post("/ai/core-chat/dev/accounts/session/activate", async (req, res): Promise<void> => {
+  if (!isDevWakeRuntime(req.hostname)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const body = req.body as Record<string, unknown> | null;
+  if (!body || typeof body["challengeId"] !== "string" ||
+      typeof body["nonce"] !== "string" ||
+      typeof body["observedAt"] !== "string" ||
+      typeof body["signature"] !== "string" ||
+      typeof body["keyId"] !== "string") {
+    res.status(400).json({ error: "Invalid session activation request" });
+    return;
+  }
+  try {
+    const verified = verifyAndConsumeDevChatGptSessionChallenge({
+      challengeId: body["challengeId"],
+      nonce: body["nonce"],
+      observedAt: body["observedAt"],
+      signature: body["signature"],
+      keyId: body["keyId"],
+    });
+    const runtime = await loadDevWakeRuntimeConfig(req.hostname);
+    const [existing] = await db.select().from(aiSettingsTable)
+      .where(eq(aiSettingsTable.key, REGISTRY_KEY)).limit(1);
+    if (!existing) throw new Error("DEV_CHATGPT_SESSION_REGISTRY_MISSING");
+    const activated = activateDevChatGptSessionBinding({
+      rawRegistry: existing.value,
+      bindingFingerprint: verified.bindingFingerprint,
+      legacyTargets: runtime.legacyTargets,
+    });
+    await db.update(aiSettingsTable).set({
+      value: activated.registryJson,
+      valueType: "json",
+      category: "guardrail",
+      isSecret: false,
+      description: "DEV ChatGPT account bindings with Ed25519-verified active sessions.",
+    }).where(eq(aiSettingsTable.key, REGISTRY_KEY));
+    const receiptFingerprint = sessionRegistrationReceiptFingerprint({
+      bindingFingerprint: verified.bindingFingerprint,
+      signature: body["signature"],
+    });
+    await logAudit("ai_core", "activate_dev_chatgpt_session", verified.accountAlias, "chatgpt_account_session");
+    res.status(200).json({
+      status: "SESSION_ACTIVE",
+      accountAlias: verified.accountAlias,
+      workerId: verified.workerId,
+      browserProfile: verified.browserProfile,
+      bindingFingerprint: verified.bindingFingerprint,
+      receiptFingerprint,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "DEV_CHATGPT_SESSION_ACTIVATION_FAILED";
+    res.status(/SIGNATURE|CRYPTO|CHALLENGE|KEY_ID|TIME|UNTRUSTED/.test(message) ? 403 : 409).json({ error: message });
   }
 });
 

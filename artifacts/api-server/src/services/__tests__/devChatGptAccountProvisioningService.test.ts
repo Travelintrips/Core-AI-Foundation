@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stageDevChatGptAccountBinding } from "../devChatGptAccountProvisioningService.js";
-import { DEV_WAKE_DELL_WORKER } from "../devChatGptWakeBindingService.js";
+import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER } from "../devChatGptWakeBindingService.js";
 
 const legacy = [{
   ownerChannel: "ai-engine-oauth:" + "1".repeat(64),
@@ -57,6 +57,28 @@ describe("devChatGptAccountProvisioningService", () => {
 
     expect(result.accountAlias).toBe("GPT03");
     expect(result.browserProfile).toBe("openclaw-gpt03");
+  });
+
+  it("allows the same account identity to stage a second trusted worker session", () => {
+    const first = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02",
+      ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
+      targetConversationId: "22222222-2222-2222-2222-222222222222",
+      workerId: DEV_WAKE_DELL_WORKER,
+      browserProfile: "admcst001-dev",
+    }, undefined, legacy);
+
+    const second = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02",
+      ownerChannel: first.ownerChannel,
+      targetConversationId: first.targetConversationId,
+      workerId: DEV_WAKE_DEFAULT_WORKER,
+      browserProfile: "gpt02-travelintrips",
+    }, first.registryJson, legacy);
+
+    expect(second.workerId).toBe(DEV_WAKE_DEFAULT_WORKER);
+    expect(second.accountAlias).toBe("GPT02");
+    expect(JSON.parse(second.registryJson).bindings).toHaveLength(2);
   });
 
   it("rejects attempts to reuse the legacy GPT01 conversation", () => {
