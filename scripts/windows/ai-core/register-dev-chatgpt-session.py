@@ -31,11 +31,30 @@ def env(name):
     return value
 
 
+def load_worker_env_file():
+    path = os.environ.get("AI_CORE_DEV_WORKER_ENV_FILE", "").strip()
+    if not path:
+        return
+    allowed = {"AI_CORE_SCOPED_AGENT_TOKEN", "AI_CORE_OPENCLAW_CLIENT_ID"}
+    for raw in Path(path).read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"\s*([A-Z][A-Z0-9_]*)=(.*)\s*", raw)
+        if not match or match.group(1) not in allowed:
+            continue
+        value = match.group(2).strip().strip('"').strip("'")
+        if value and not os.environ.get(match.group(1)):
+            os.environ[match.group(1)] = value
+
+
 def post(base, path, body):
+    token = env("AI_CORE_SCOPED_AGENT_TOKEN")
     request = urllib.request.Request(
         base.rstrip("/") + path,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": "Bearer " + token,
+        },
         method="POST",
     )
     try:
@@ -94,6 +113,7 @@ def payload(challenge, observed_at):
 
 
 def register_once():
+    load_worker_env_file()
     base = env("AI_CORE_BASE_URL")
     if base.rstrip("/") != "https://dev.cstlogistic.co.id/api":
         raise RuntimeError("Refusing non-canonical DEV AI Core base URL")
@@ -101,6 +121,8 @@ def register_once():
     owner = env("AI_CORE_DEV_CHATGPT_OWNER_CHANNEL")
     conversation = env("AI_CORE_DEV_CHATGPT_CONVERSATION_ID").lower()
     worker = env("AI_CORE_DEV_WAKE_WORKER_ID")
+    if env("AI_CORE_OPENCLAW_CLIENT_ID") != worker:
+        raise RuntimeError("Worker env identity mismatch")
     profile = env("AI_CORE_DEV_WAKE_BROWSER_PROFILE")
     key_file = env("AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE")
     if not ALIAS.fullmatch(alias) or alias == "GPT01":

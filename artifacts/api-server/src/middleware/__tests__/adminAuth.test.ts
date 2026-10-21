@@ -45,6 +45,7 @@ describe("adminAuthWithExceptions", () => {
     delete process.env["ADMIN_API_KEY"];
     delete process.env["AI_CORE_CHAT_CONNECTOR_KEY"];
     delete process.env["NODE_ENV"];
+    delete process.env["APP_ENV"];
   });
 
   const publicRoutes: { method: string; path: string }[] = [
@@ -174,6 +175,49 @@ describe("adminAuthWithExceptions", () => {
       adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
       expect(next).toHaveBeenCalledTimes(1);
       expect(res.statusCode).toBeUndefined();
+    });
+  });
+
+  describe("DEV ChatGPT session worker-auth routes", () => {
+    const routes = [
+      "/ai/core-chat/dev/accounts/stage",
+      "/ai/core-chat/dev/accounts/session/challenge",
+      "/ai/core-chat/dev/accounts/session/activate",
+    ];
+
+    it.each(routes)("lets exact DEV POST %s reach route-level worker authentication", (path) => {
+      process.env["APP_ENV"] = "development";
+      const req = makeReq("POST", path, { authorization: "Bearer scoped-worker-token" });
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.statusCode).toBeUndefined();
+    });
+
+    it.each(routes)("keeps %s behind admin auth outside DEV", (path) => {
+      delete process.env["APP_ENV"];
+      const req = makeReq("POST", path, { authorization: "Bearer scoped-worker-token" });
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("does not widen the bypass to adjacent paths or methods", () => {
+      process.env["APP_ENV"] = "development";
+      for (const req of [
+        makeReq("GET", "/ai/core-chat/dev/accounts/session/challenge"),
+        makeReq("POST", "/ai/core-chat/dev/accounts/session/challenge/extra"),
+        makeReq("POST", "/ai/core-chat/dev/accounts"),
+      ]) {
+        const res = makeRes();
+        const next = vi.fn();
+        adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(401);
+      }
     });
   });
 

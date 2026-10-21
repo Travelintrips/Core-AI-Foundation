@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { eq } from "drizzle-orm";
 import { db, aiSettingsTable } from "@workspace/db";
 import {
@@ -14,12 +14,21 @@ import {
   sessionRegistrationReceiptFingerprint,
   verifyAndConsumeDevChatGptSessionChallenge,
 } from "../services/devChatGptSessionActivationService.js";
+import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logAudit } from "../services/aiAuditService.js";
 
 const router = Router();
 const REGISTRY_KEY = "dev.chatgpt_wake.account_bindings";
 
-router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> => {
+function requireDevRuntime(req: Request, res: Response, next: NextFunction): void {
+  if (!isDevWakeRuntime(req.hostname)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  next();
+}
+
+router.post("/ai/core-chat/dev/accounts/stage", requireDevRuntime, requireAgentServiceScope("agent:work"), async (req, res): Promise<void> => {
   if (!isDevWakeRuntime(req.hostname)) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -40,6 +49,11 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
     const workerId = body["workerId"];
     if (workerId !== undefined && workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER) {
       res.status(400).json({ error: "DEV_CHATGPT_PROVISIONING_WORKER_INVALID" });
+      return;
+    }
+    const authenticatedWorker = (res.locals["aiAgentService"] as { name?: unknown } | undefined)?.name;
+    if (typeof workerId !== "string" || authenticatedWorker !== workerId) {
+      res.status(403).json({ error: "Worker credential does not match requested session worker" });
       return;
     }
     const runtime = await loadDevWakeRuntimeConfig(req.hostname);
@@ -98,7 +112,7 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
   }
 });
 
-router.post("/ai/core-chat/dev/accounts/session/challenge", async (req, res): Promise<void> => {
+router.post("/ai/core-chat/dev/accounts/session/challenge", requireDevRuntime, requireAgentServiceScope("agent:work"), async (req, res): Promise<void> => {
   if (!isDevWakeRuntime(req.hostname)) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -112,10 +126,16 @@ router.post("/ai/core-chat/dev/accounts/session/challenge", async (req, res): Pr
     const runtime = await loadDevWakeRuntimeConfig(req.hostname);
     const [existing] = await db.select().from(aiSettingsTable)
       .where(eq(aiSettingsTable.key, REGISTRY_KEY)).limit(1);
+    const authenticatedWorker = (res.locals["aiAgentService"] as { name?: unknown } | undefined)?.name;
+    if (typeof authenticatedWorker !== "string") {
+      res.status(403).json({ error: "Authenticated worker identity is missing" });
+      return;
+    }
     const challenge = issueDevChatGptSessionChallenge({
       rawRegistry: existing?.value,
       bindingFingerprint: body["bindingFingerprint"],
       legacyTargets: runtime.legacyTargets,
+      expectedWorkerId: authenticatedWorker,
     });
     res.status(201).json({
       challengeId: challenge.challengeId,
@@ -134,7 +154,7 @@ router.post("/ai/core-chat/dev/accounts/session/challenge", async (req, res): Pr
   }
 });
 
-router.post("/ai/core-chat/dev/accounts/session/activate", async (req, res): Promise<void> => {
+router.post("/ai/core-chat/dev/accounts/session/activate", requireDevRuntime, requireAgentServiceScope("agent:work"), async (req, res): Promise<void> => {
   if (!isDevWakeRuntime(req.hostname)) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -149,12 +169,18 @@ router.post("/ai/core-chat/dev/accounts/session/activate", async (req, res): Pro
     return;
   }
   try {
+    const authenticatedWorker = (res.locals["aiAgentService"] as { name?: unknown } | undefined)?.name;
+    if (typeof authenticatedWorker !== "string") {
+      res.status(403).json({ error: "Authenticated worker identity is missing" });
+      return;
+    }
     const verified = verifyAndConsumeDevChatGptSessionChallenge({
       challengeId: body["challengeId"],
       nonce: body["nonce"],
       observedAt: body["observedAt"],
       signature: body["signature"],
       keyId: body["keyId"],
+      expectedWorkerId: authenticatedWorker,
     });
     const runtime = await loadDevWakeRuntimeConfig(req.hostname);
     const [existing] = await db.select().from(aiSettingsTable)
