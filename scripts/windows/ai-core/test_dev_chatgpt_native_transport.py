@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from dev_chatgpt_native_transport import (NativeTransport, native_options, native_submit_seconds,
+                                         openclaw_runtime_paths,
                                          TRANSPORT_SECONDS, LISTENER_STARTUP_SECONDS,
                                          READER_AFTER_GUARD_SECONDS, POST_READINESS_SECONDS,
                                          READINESS_SECONDS, CLI_SECONDS, NATIVE_SECONDS)
@@ -362,6 +363,19 @@ class NativeTransportTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaises(RuntimeError):
                 self.transport.run(message)
         self.assertEqual(self.transport.calls, [])
+
+    def test_openclaw_runtime_override_requires_node_and_entry_together(self):
+        with patch.dict("os.environ", {
+            "AI_CORE_OPENCLAW_NODE": r"C:\Program Files\nodejs\node.exe",
+            "AI_CORE_OPENCLAW_ENTRY": r"C:\Users\fixture\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs",
+        }, clear=False):
+            node, entry = openclaw_runtime_paths(r"C:\Users\fixture\AppData\Local")
+        self.assertEqual(str(node), r"C:\Program Files\nodejs\node.exe")
+        self.assertEqual(str(entry), r"C:\Users\fixture\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs")
+
+        with patch.dict("os.environ", {"AI_CORE_OPENCLAW_NODE": r"C:\node.exe", "AI_CORE_OPENCLAW_ENTRY": ""}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "provide node and entry together"):
+                openclaw_runtime_paths(r"C:\Users\fixture\AppData\Local")
 
     def test_request_url_is_a_direct_node_argument_not_shell_text(self):
         self.transport._runtime()

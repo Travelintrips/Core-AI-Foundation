@@ -257,7 +257,8 @@ function helperEnvironment(root, browserProfile) {
     AI_CORE_DEV_WAKE_KEY_ID: keyId,
     AI_CORE_DEV_WAKE_ALLOWLIST_FILE: allowlistFileName,
     AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE: privateKeyFileName,
-    AI_CORE_OPENCLAW_CMD: path.join(process.env.LOCALAPPDATA || path.dirname(root), "OpenClaw", "deps", "portable-node", "openclaw.cmd"),
+    AI_CORE_OPENCLAW_CMD: process.env.AI_CORE_OPENCLAW_CMD?.trim() ||
+      path.join(process.env.LOCALAPPDATA || path.dirname(root), "OpenClaw", "deps", "portable-node", "openclaw.cmd"),
     AI_CORE_DEV_WAKE_BROWSER_PROFILE: browserProfile,
   };
 }
