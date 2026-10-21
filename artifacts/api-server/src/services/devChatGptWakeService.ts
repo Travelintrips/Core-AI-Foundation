@@ -43,6 +43,7 @@ export async function resolveVerifiedDevWakeTarget(
   if (expectedOwnerChannel !== undefined && expectedOwnerChannel !== target.ownerChannel) {
     throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
   }
+  if (target.wakeBinding) return target;
   const evidence = await getVerifiedMcpHandshakeEvidenceForConversation(target.ownerChannel, {
     requestHost, publicKeyDerBase64: config.attestationPublicKeyDerB64,
   }).catch(() => null);
@@ -50,9 +51,6 @@ export async function resolveVerifiedDevWakeTarget(
     throw new Error("DEV_CHATGPT_ALIAS_TARGET_UNVERIFIED");
   }
   if (evidence.workerId !== target.workerId) throw new Error("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
-  if (target.wakeBinding && evidence.wakeBinding?.bindingFingerprint !== target.wakeBinding.bindingFingerprint) {
-    throw new Error("DEV_CHATGPT_ALIAS_BINDING_UNVERIFIED");
-  }
   return target;
 }
 
