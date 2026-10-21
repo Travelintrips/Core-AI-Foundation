@@ -18,9 +18,13 @@ const keyId = workerId === DELL_WORKER_ID
     ? "openclaw-pc-worker-2-ed25519-v1"
     : "openclaw-travelintrips-dev-ed25519-v1";
 const allowlistFileName = process.env.AI_CORE_DEV_WAKE_ALLOWLIST_FILE?.trim() ||
-  (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-allowlist.json" : "chatgpt-wake-dev-allowlist.json");
+  (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-allowlist.json"
+    : workerId === PC2_WORKER_ID ? "pc2-chatgpt-wake-allowlist.json"
+    : "chatgpt-wake-dev-allowlist.json");
 const privateKeyFileName = process.env.AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE?.trim() ||
-  (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-attestation-ed25519.pem" : "dev-assistant-attestation-ed25519.pem");
+  (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-attestation-ed25519.pem"
+    : workerId === PC2_WORKER_ID ? "pc2-chatgpt-wake-attestation-ed25519.pem"
+    : "dev-assistant-attestation-ed25519.pem");
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
