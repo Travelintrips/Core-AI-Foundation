@@ -46,6 +46,7 @@ describe("adminAuthWithExceptions", () => {
     delete process.env["AI_CORE_CHAT_CONNECTOR_KEY"];
     delete process.env["NODE_ENV"];
     delete process.env["APP_ENV"];
+    delete process.env["AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"];
   });
 
   const publicRoutes: { method: string; path: string }[] = [
@@ -184,10 +185,14 @@ describe("adminAuthWithExceptions", () => {
       "/ai/core-chat/dev/accounts/session/challenge",
       "/ai/core-chat/dev/accounts/session/activate",
     ];
+    const registrationToken = "dev-session-registration-token-789";
 
-    it.each(routes)("lets exact DEV POST %s reach route-level worker authentication", (path) => {
+    it.each(routes)("allows exact DEV POST %s only with the scoped registration token", (path) => {
       process.env["APP_ENV"] = "development";
-      const req = makeReq("POST", path, { authorization: "Bearer scoped-worker-token" });
+      process.env["AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"] = registrationToken;
+      const req = makeReq("POST", path, {
+        "x-ai-core-dev-session-registration-key": registrationToken,
+      });
       const res = makeRes();
       const next = vi.fn();
       adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
@@ -197,7 +202,10 @@ describe("adminAuthWithExceptions", () => {
 
     it.each(routes)("handles Express originalUrl with the /api mount prefix for %s", (path) => {
       process.env["APP_ENV"] = "development";
-      const req = makeReq("POST", "/api" + path, { authorization: "Bearer scoped-worker-token" });
+      process.env["AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"] = registrationToken;
+      const req = makeReq("POST", "/api" + path, {
+        "x-ai-core-dev-session-registration-key": registrationToken,
+      });
       Object.assign(req, { originalUrl: "/api" + path + "?source=worker" });
       const res = makeRes();
       const next = vi.fn();
@@ -206,9 +214,29 @@ describe("adminAuthWithExceptions", () => {
       expect(res.statusCode).toBeUndefined();
     });
 
-    it.each(routes)("keeps %s behind admin auth outside DEV", (path) => {
+    it.each(routes)("rejects missing or wrong scoped token on %s", (path) => {
+      process.env["APP_ENV"] = "development";
+      process.env["AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"] = registrationToken;
+      for (const headers of [
+        {},
+        { "x-ai-core-dev-session-registration-key": "wrong-registration-token" },
+        { authorization: "Bearer scoped-worker-token" },
+      ]) {
+        const req = makeReq("POST", path, headers);
+        const res = makeRes();
+        const next = vi.fn();
+        adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(401);
+      }
+    });
+
+    it.each(routes)("keeps %s behind admin auth outside DEV even with the scoped token", (path) => {
       delete process.env["APP_ENV"];
-      const req = makeReq("POST", path, { authorization: "Bearer scoped-worker-token" });
+      process.env["AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"] = registrationToken;
+      const req = makeReq("POST", path, {
+        "x-ai-core-dev-session-registration-key": registrationToken,
+      });
       const res = makeRes();
       const next = vi.fn();
       adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
@@ -216,12 +244,15 @@ describe("adminAuthWithExceptions", () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it("does not widen the bypass to adjacent paths or methods", () => {
+    it("does not widen the scoped token to adjacent paths, methods, or admin routes", () => {
       process.env["APP_ENV"] = "development";
+      process.env["AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"] = registrationToken;
+      const headers = { "x-ai-core-dev-session-registration-key": registrationToken };
       for (const req of [
-        makeReq("GET", "/ai/core-chat/dev/accounts/session/challenge"),
-        makeReq("POST", "/ai/core-chat/dev/accounts/session/challenge/extra"),
-        makeReq("POST", "/ai/core-chat/dev/accounts"),
+        makeReq("GET", "/ai/core-chat/dev/accounts/session/challenge", headers),
+        makeReq("POST", "/ai/core-chat/dev/accounts/session/challenge/extra", headers),
+        makeReq("POST", "/ai/core-chat/dev/accounts", headers),
+        makeReq("GET", "/ai/core-chat/databases/metadata", headers),
       ]) {
         const res = makeRes();
         const next = vi.fn();
