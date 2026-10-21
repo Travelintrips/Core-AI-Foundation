@@ -12,7 +12,7 @@ const expectedConversationId = String(process.env.AI_CORE_CHATGPT_EXPECTED_CONVE
 
 if (job.mode !== "chatgpt_continue") throw new Error("Unsupported job mode");
 if (!/^[A-Za-z0-9_-]{8,90}$/.test(String(job.jobId || ""))) throw new Error("Invalid job id");
-if (typeof job.message !== "string" || job.message.length < 8 || job.message.length > 3000) throw new Error("Invalid job message");
+if (typeof job.message !== "string" || job.message.trim().length < 1 || job.message.length > 3000) throw new Error("Invalid job message");
 if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(profile)) throw new Error("Invalid profile");
 if (!Number.isInteger(cdpPort) || cdpPort < 1024 || cdpPort > 65535) throw new Error("Invalid CDP port");
 if (!/^[A-Za-z0-9-]{30,64}$/.test(expectedConversationId)) throw new Error("Invalid expected conversation");
