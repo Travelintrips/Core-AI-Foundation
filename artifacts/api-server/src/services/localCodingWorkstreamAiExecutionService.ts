@@ -42,6 +42,7 @@ import {
 import { codingWorkstreamOwnsFile } from "./localCodingMultiWorkerExecutionService.js";
 import {
   invokeProductionCodingAiProposal,
+// TODO: wrap invokeProductionCodingAiProposal call in try/catch to specifically handle PROVIDER_BAD_REQUEST errors and return a structured error result
   LocalCodingAiExecutionGateError,
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
