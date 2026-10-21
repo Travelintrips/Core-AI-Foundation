@@ -43,11 +43,14 @@ export function isDevWakeRuntime(requestHost?: string): boolean {
   return process.env["APP_ENV"] === "development" || isTrustedDevWakeRequestHost(requestHost);
 }
 
-/** Canonical cross-language contract. Every field excludes the pipe separator. */
+/**
+ * Stable account identity. Worker/profile are runtime session locations and must
+ * not change the account fingerprint when the same ChatGPT account moves PCs.
+ */
 export function devWakeBindingFingerprint(binding: Omit<DevWakeBinding, "bindingFingerprint">): string {
   return createHash("sha256").update([
-    "dev-chatgpt-wake-binding/v1", binding.accountAlias, binding.ownerChannel,
-    binding.targetConversationId, binding.workerId, binding.browserProfile,
+    "dev-chatgpt-account-binding/v2", binding.accountAlias, binding.ownerChannel,
+    binding.targetConversationId,
   ].join("|")).digest("hex");
 }
 
@@ -80,7 +83,7 @@ export function parseDevWakeAccountBindings(raw: string | undefined, legacy: Dev
     throw new Error("DEV_CHATGPT_BINDING_CONFIG_INVALID");
   }
   const active: DevWakeBinding[] = [];
-  const byAlias = new Map<string, { ownerChannel: string; targetConversationId: string }>();
+  const aliases = new Set<string>();
   const ownerToAlias = new Map<string, string>();
   const targetToAlias = new Map<string, string>();
   const sessionKeys = new Set<string>();
@@ -93,13 +96,10 @@ export function parseDevWakeAccountBindings(raw: string | undefined, legacy: Dev
     if (legacyTargets.some(target => tuple.ownerChannel === target.ownerChannel || tuple.targetConversationId === target.targetConversationId) ||
         tuple.browserProfile.toLowerCase() === "openclaw") throw new Error("DEV_CHATGPT_BINDING_LEGACY_CONFLICT");
 
-    // Account identity is stable; worker/profile are replaceable session locations.
-    // Multiple sessions for one alias must prove the same owner + conversation.
-    const identity = byAlias.get(tuple.accountAlias);
-    if (identity && (identity.ownerChannel !== tuple.ownerChannel || identity.targetConversationId !== tuple.targetConversationId)) {
-      throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
-    }
-    byAlias.set(tuple.accountAlias, { ownerChannel: tuple.ownerChannel, targetConversationId: tuple.targetConversationId });
+    // One registry row represents one stable account identity. Re-registration
+    // replaces its runtime worker/profile instead of creating a new identity.
+    if (aliases.has(tuple.accountAlias)) throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
+    aliases.add(tuple.accountAlias);
 
     const ownerAlias = ownerToAlias.get(tuple.ownerChannel);
     const targetAlias = targetToAlias.get(tuple.targetConversationId);
@@ -198,7 +198,13 @@ export function commandMatchesDevWakeTarget(metadata: unknown, target: DevWakeTa
       metadata["capability"] !== "chatgpt:wake" || metadata["explicitWorkerTarget"] !== true) return false;
   if (!target.wakeBinding) return metadata["wakeBinding"] === undefined;
   const binding = readDevWakeBinding(metadata["wakeBinding"]);
-  return !!binding && binding.bindingFingerprint === target.wakeBinding.bindingFingerprint;
+  return !!binding &&
+    binding.bindingFingerprint === target.wakeBinding.bindingFingerprint &&
+    binding.accountAlias === target.wakeBinding.accountAlias &&
+    binding.ownerChannel === target.wakeBinding.ownerChannel &&
+    binding.targetConversationId === target.wakeBinding.targetConversationId &&
+    binding.workerId === target.wakeBinding.workerId &&
+    binding.browserProfile === target.wakeBinding.browserProfile;
 }
 
 export async function allowedDevWakeOwners(requestHost?: string): Promise<string[]> {
