@@ -1,0 +1,43 @@
+name: Hostinger WWW Redirect Canary
+
+on:
+  push:
+    branches:
+      - infra/hostinger-runtime-cleanup-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Configure DEV www forwarding canary
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${HOSTINGER_API_TOKEN:-}" || { echo "HOSTINGER_API_TOKEN missing"; exit 2; }
+          base="https://developers.hostinger.com/api"
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          host="www.dev-bizportal.cstlogistic.co.id"
+          target="https://dev-bizportal.cstlogistic.co.id"
+
+          before=$(curl -fsS --connect-timeout 8 --max-time 25 -H "$auth" "$base/domains/v1/forwarding/$host")
+          echo "before=$(echo "$before" | jq -c '{domain,redirect_type,redirect_url}')"
+
+          body=$(jq -nc --arg t "$target" '{redirect_type:"301",redirect_url:$t}')
+          curl -fsS --connect-timeout 8 --max-time 25             -X PUT -H "$auth" -H "Content-Type: application/json"             --data-binary "$body" "$base/domains/v1/forwarding/$host"             -o /tmp/forwarding.json
+
+          echo "after_api=$(jq -c '{domain,redirect_type,redirect_url}' /tmp/forwarding.json)"
+          sleep 20
+
+          code=$(curl -k -sS -o /dev/null -D /tmp/headers.txt -w "%{http_code}" --max-time 12 "https://$host/")
+          loc=$(awk 'BEGIN{IGNORECASE=1}/^location:/{sub(/^[^:]+:[ ]*/,"");sub(/\r$/,"");print;exit}' /tmp/headers.txt)
+          canon=$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 12 "$target/")
+          echo "www_http=$code location=$loc canonical_http=$canon"
+          [ "$canon" = "200" ]
+          [ "$code" = "301" ] || [ "$code" = "302" ]
+          case "$loc" in "$target"* ) : ;; * ) echo "Unexpected redirect location"; exit 4;; esac
