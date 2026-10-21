@@ -1,3 +1,4 @@
+// Auto-repair: placeholder comment
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
