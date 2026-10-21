@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import {
@@ -6,6 +6,11 @@ import {
   ExternalAgentDispatchError,
 } from "./externalAgentDispatchService.js";
 import { getExternalAgentRegistrySnapshot } from "./externalAgentRegistryService.js";
+import {
+  queueDevBrowserWake,
+  resolveVerifiedDevWakeTarget,
+  type DevWakeTarget,
+} from "./devChatGptWakeService.js";
 
 export const DIRECT_CHATGPT_ACCOUNT_BINDINGS = {
   travelincars: {
@@ -112,7 +117,7 @@ async function activeJobCounts(): Promise<Map<string, number>> {
       COUNT(*)::int AS active_jobs
     FROM ai_platform.ai_coding_bridge_commands
     WHERE status IN ('RECEIVED', 'PROCESSING')
-      AND metadata_json ->> 'assignedClientId' IN ('openclaw-pc-worker-dev', 'openclaw-pc-worker-2')
+      AND metadata_json ->> 'assignedClientId' IS NOT NULL
     GROUP BY metadata_json ->> 'assignedClientId'
   `);
   const counts = new Map<string, number>();
@@ -147,29 +152,67 @@ export async function dispatchDirectChatGptAccountWork(input: {
   projectName?: string;
   repository?: string;
   branch?: string;
+  requestHost?: string;
+  expectedOwnerChannel?: string;
 }) {
   assertDevRuntime();
 
   const registry = await getExternalAgentRegistrySnapshot();
   const counts = await activeJobCounts();
-  const bindings = Object.values(DIRECT_CHATGPT_ACCOUNT_BINDINGS);
+  const travelincars = DIRECT_CHATGPT_ACCOUNT_BINDINGS.travelincars;
+  const travelincarsWorker = registry.find((item) => item.clientId === travelincars.workerId);
+  const travelincarsEligible =
+    travelincarsWorker?.eligible === true && travelincarsWorker.reportedHealth === "healthy";
 
-  const eligible = bindings.filter((binding) => {
-    const worker = registry.find((item) => item.clientId === binding.workerId);
-    return worker?.eligible === true && worker.reportedHealth === "healthy";
-  });
+  let personalTarget: DevWakeTarget | null = null;
+  try {
+    personalTarget = await resolveVerifiedDevWakeTarget(
+      "GPT02",
+      input.requestHost,
+      input.expectedOwnerChannel,
+    );
+  } catch (error) {
+    if (input.target === "personal" || input.target === "both") throw error;
+  }
 
-  let selected: typeof bindings;
+  const personalBinding = personalTarget?.wakeBinding ?? null;
+  const candidates = [
+    ...(travelincarsEligible
+      ? [{
+          account: "travelincars" as const,
+          kind: "direct" as const,
+          workerId: travelincars.workerId,
+          browserProfile: travelincars.browserProfile,
+          conversationId: travelincars.conversationId,
+        }]
+      : []),
+    ...(personalTarget && personalBinding
+      ? [{
+          account: "personal" as const,
+          kind: "wake" as const,
+          workerId: personalTarget.workerId,
+          browserProfile: personalBinding.browserProfile,
+          conversationId: personalTarget.targetConversationId,
+          wakeTarget: personalTarget,
+        }]
+      : []),
+  ];
+
+  let selected: typeof candidates;
   if (input.target === "both") {
-    if (eligible.length !== bindings.length) {
+    if (!candidates.some((item) => item.account === "travelincars") ||
+        !candidates.some((item) => item.account === "personal")) {
       throw new ExternalAgentDispatchError(
         "AGENT_UNAVAILABLE",
-        "Both bound DEV ChatGPT workers must be healthy before dual-account routing. No partial dispatch was performed.",
+        "Both DEV ChatGPT accounts require a healthy verified session before dual-account routing. No partial dispatch was performed.",
       );
     }
-    selected = bindings;
+    selected = [
+      candidates.find((item) => item.account === "travelincars")!,
+      candidates.find((item) => item.account === "personal")!,
+    ];
   } else if (input.target === "auto") {
-    const picked = [...eligible].sort((a, b) => {
+    const picked = [...candidates].sort((a, b) => {
       const load = (counts.get(a.workerId) ?? 0) - (counts.get(b.workerId) ?? 0);
       if (load !== 0) return load;
       return a.workerId.localeCompare(b.workerId);
@@ -177,35 +220,67 @@ export async function dispatchDirectChatGptAccountWork(input: {
     if (!picked) {
       throw new ExternalAgentDispatchError(
         "AGENT_UNAVAILABLE",
-        "No healthy bound DEV ChatGPT worker is available.",
+        "No healthy verified DEV ChatGPT session is available.",
       );
     }
     selected = [picked];
   } else {
-    const binding = DIRECT_CHATGPT_ACCOUNT_BINDINGS[input.target];
-    if (!eligible.some((item) => item.workerId === binding.workerId)) {
+    const picked = candidates.find((item) => item.account === input.target);
+    if (!picked) {
       throw new ExternalAgentDispatchError(
         "AGENT_UNAVAILABLE",
-        `Bound DEV ChatGPT worker ${binding.workerId} is unavailable.`,
+        input.target === "personal"
+          ? "GPT02 has no healthy verified DEV session."
+          : `Bound DEV ChatGPT worker ${travelincars.workerId} is unavailable.`,
       );
     }
-    selected = [binding];
+    selected = [picked];
   }
 
   const dispatched = [];
-  for (const binding of selected) {
-    const encoded = buildEncodedInstruction(binding, input.instruction);
+  for (const candidate of selected) {
+    if (candidate.kind === "wake") {
+      const eventId = randomBytes(32).toString("hex");
+      const correlationId = `gpt02:direct:${randomUUID()}`;
+      const queued = await queueDevBrowserWake({
+        ownerChannel: candidate.wakeTarget.ownerChannel,
+        targetConversationId: candidate.wakeTarget.targetConversationId,
+        eventId,
+        correlationId,
+        instruction: input.instruction,
+        requestHost: input.requestHost,
+        expectedWorkerId: candidate.wakeTarget.workerId,
+        expectedBindingFingerprint: candidate.wakeTarget.wakeBinding!.bindingFingerprint,
+      });
+      dispatched.push({
+        account: candidate.account,
+        workerId: queued.clientId,
+        browserProfile: candidate.browserProfile,
+        conversationId: candidate.conversationId,
+        commandId: queued.commandId,
+        externalCommandId: null,
+        status: queued.created ? "RECEIVED" : "ALREADY_QUEUED",
+        created: queued.created,
+        activeJobsBeforeDispatch: counts.get(candidate.workerId) ?? 0,
+        jobId: correlationId,
+        portableAccountBinding: true,
+        bindingFingerprint: candidate.wakeTarget.wakeBinding!.bindingFingerprint,
+      });
+      continue;
+    }
+
+    const encoded = buildEncodedInstruction(travelincars, input.instruction);
     const result = await dispatchExternalAgentWork({
-      clientId: binding.workerId,
+      clientId: candidate.workerId,
       instruction: encoded.encodedInstruction,
       source: input.source ?? "ai-core-chat",
-      externalCommandId: `ai-core-chat-account-${binding.key}-${randomUUID()}`,
+      externalCommandId: `ai-core-chat-account-${candidate.account}-${randomUUID()}`,
       metadata: {
         explicitWorkerTarget: true,
         directChatGptAccountRouter: true,
-        accountAlias: binding.key,
-        browserProfile: binding.browserProfile,
-        conversationId: binding.conversationId,
+        accountAlias: candidate.account,
+        browserProfile: candidate.browserProfile,
+        conversationId: candidate.conversationId,
         jobId: encoded.jobId,
         purpose: "ai-core-chat-direct-account",
         ...(input.projectName ? { projectName: input.projectName } : {}),
@@ -214,16 +289,17 @@ export async function dispatchDirectChatGptAccountWork(input: {
       },
     });
     dispatched.push({
-      account: binding.key,
+      account: candidate.account,
       workerId: result.clientId,
-      browserProfile: binding.browserProfile,
-      conversationId: binding.conversationId,
+      browserProfile: candidate.browserProfile,
+      conversationId: candidate.conversationId,
       commandId: result.command.id,
       externalCommandId: result.command.externalCommandId,
       status: result.command.status,
       created: result.created,
-      activeJobsBeforeDispatch: counts.get(binding.workerId) ?? 0,
+      activeJobsBeforeDispatch: counts.get(candidate.workerId) ?? 0,
       jobId: encoded.jobId,
+      portableAccountBinding: false,
     });
   }
 
