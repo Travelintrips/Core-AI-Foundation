@@ -277,12 +277,22 @@ export function adminAuthWithExceptions(req: Request, res: Response, next: NextF
   // This exact DEV-only route authenticates OAuth and enforces owner/allowlist
   // inside its handler. Never let the global admin API-key gate consume its
   // Bearer OAuth token; do not relax any other admin-protected endpoint.
-  if (process.env["APP_ENV"] === "development" && req.method === "POST" && (
-      req.path === "/ai/dev/chatgpt-wake/jobs" ||
-      req.path === "/ai/core-chat/dev/accounts/stage" ||
-      req.path === "/ai/core-chat/dev/accounts/session/challenge" ||
-      req.path === "/ai/core-chat/dev/accounts/session/activate"
-    )) {
+  const mountedPath = req.path;
+  const originalUrl = typeof req.originalUrl === "string" && req.originalUrl.length
+    ? req.originalUrl
+    : mountedPath;
+  const originalPath = originalUrl.split("?", 1)[0] ?? originalUrl;
+  const normalizedApiPath = originalPath.startsWith("/api/")
+    ? originalPath.slice(4)
+    : originalPath;
+  const devScopedWorkerRoutes = new Set([
+    "/ai/dev/chatgpt-wake/jobs",
+    "/ai/core-chat/dev/accounts/stage",
+    "/ai/core-chat/dev/accounts/session/challenge",
+    "/ai/core-chat/dev/accounts/session/activate",
+  ]);
+  if (process.env["APP_ENV"] === "development" && req.method === "POST" &&
+      (devScopedWorkerRoutes.has(mountedPath) || devScopedWorkerRoutes.has(normalizedApiPath))) {
     next();
     return;
   }
