@@ -1,0 +1,75 @@
+name: Recover DEV BizPortal Environment
+
+on:
+  push:
+    branches:
+      - infra/hostinger-runtime-cleanup-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    environment: ai-workers-vps
+    timeout-minutes: 8
+    env:
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+      SSH_HOST: ${{ secrets.AI_WORKERS_SSH_HOST }}
+      SSH_USER: ${{ secrets.AI_WORKERS_SSH_USER }}
+    steps:
+      - name: Configure protected VPS SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AI_WORKERS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.AI_WORKERS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/ai-workers"
+          chmod 600 "$HOME/.ssh/ai-workers"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Restore verified DEV BizPortal env and restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOSTINGER_API_TOKEN"
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+
+          ssh -i "$HOME/.ssh/ai-workers" -o BatchMode=yes -o StrictHostKeyChecking=yes             "$SSH_USER@$SSH_HOST"             "sudo cat /var/lib/cst-infra-monitor/dev-bizportal-env-recovery.json"             > /tmp/recovery.json
+
+          jq -e '.env_vars|type=="array" and length==7 and
+            ([.[]|.key]|sort)==(["APP_ENV","DEV_RECONCILIATION_SCHEDULERS_ENABLED","FLEET_EMBEDDED_REMINDER_ENABLED","NODE_ENV","PORT","QRIS_AUTO_CANDIDATE_INTERVAL_MS","SUPABASE_DATABASE_URL_DEV"]|sort) and
+            all(.env_vars[]; (.value|type=="string") and (.value|length>0))'             /tmp/recovery.json >/dev/null
+          echo "recovery_payload=VALID count=7"
+
+          base="https://developers.hostinger.com/api"
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          env_url="$base/hosting/v1/accounts/u684045296/websites/dev-bizportal.cstlogistic.co.id/nodejs/builds/settings/env"
+          restart_url="$base/hosting/v1/accounts/u684045296/websites/dev-bizportal.cstlogistic.co.id/nodejs/server/restart"
+
+          pcode=$(curl -sS --connect-timeout 8 --max-time 25 -X PUT             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/recovery.json -o /tmp/put.json -w "%{http_code}" "$env_url")
+          echo "restore_put_http=$pcode"
+          [ "$pcode" = "200" ] || [ "$pcode" = "202" ] || [ "$pcode" = "204" ]
+
+          rcode=$(curl -sS --connect-timeout 8 --max-time 25 -X POST             -H "$auth" -o /tmp/restart.json -w "%{http_code}" "$restart_url")
+          echo "restart_http=$rcode"
+          [ "$rcode" = "200" ] || [ "$rcode" = "202" ] || [ "$rcode" = "204" ]
+
+          ok=false
+          for i in $(seq 1 15); do
+            code=$(curl -k -sS -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10               "https://dev-bizportal.cstlogistic.co.id/" || true)
+            echo "health_attempt=$i http=${code:-000}"
+            if [ "$code" = "200" ]; then ok=true; break; fi
+            sleep 8
+          done
+          [ "$ok" = "true" ]
+          echo "RECOVERY_PASS"
+
+          ssh -i "$HOME/.ssh/ai-workers" -o BatchMode=yes -o StrictHostKeyChecking=yes             "$SSH_USER@$SSH_HOST"             "sudo rm -f /var/lib/cst-infra-monitor/dev-bizportal-env-recovery.json"
+          rm -f /tmp/recovery.json "$HOME/.ssh/ai-workers"
