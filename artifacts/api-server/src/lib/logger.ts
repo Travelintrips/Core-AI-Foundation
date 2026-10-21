@@ -8,7 +8,7 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
-  ],
+  ],  timestamp: pino.stdTimeFunctions.isoTime,
   ...(isProduction
     ? {}
     : {
